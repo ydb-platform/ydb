@@ -4,6 +4,6 @@
 
 namespace NYql::NFmr {
 
-IYtJobService::TPtr MakeMockYtJobService(const std::unordered_map<TString, TString>& inputTables, std::unordered_map<TYtTableRef, TString>& outputTables);
+IYtJobService::TPtr MakeMockYtJobService(const std::unordered_map<TString, TString>& inputTables, std::unordered_map<TString, TString>& outputTables);
 
 } // namespace NYql::NFmr

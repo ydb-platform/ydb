@@ -113,11 +113,10 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
 
     std::pair<ui64, ui64> GetVolumesColumnWithCompression(const std::optional<NKikimrConfig::TColumnShardConfig>& CSConfig = {}) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        NKikimrConfig::TAppConfig appConfig;
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         if (CSConfig.has_value()) {
-            *appConfig.MutableColumnShardConfig() = CSConfig.value();
+            *settings.AppConfig.MutableColumnShardConfig() = CSConfig.value();
         }
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TTestHelper testHelper(settings);
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
         TTestHelper::TCompression plainCompression =

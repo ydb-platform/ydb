@@ -1,11 +1,10 @@
 #pragma once
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
-#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/program/program.h>
 
+#include <ydb/library/formats/arrow/permutations.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -22,9 +21,7 @@ public:
     TPartialSourceAddress(const ui32 sourceId, const ui32 sourceIdx, const ui32 syncPointIndex)
         : SourceId(sourceId)
         , SourceIdx(sourceIdx)
-        , SyncPointIndex(syncPointIndex)
-    {
-    
+        , SyncPointIndex(syncPointIndex) {
     }
 };
 
@@ -40,34 +37,36 @@ private:
     std::shared_ptr<IScanCursor> ScanCursor;
     YDB_READONLY_DEF(std::optional<TPartialSourceAddress>, NotFinishedInterval);
     const NColumnShard::TCounterGuard Guard;
+    bool Extracted = false;
 
 public:
     void Cut(const ui32 limit) {
+        AFL_VERIFY(!Extracted);
         ResultBatch.Cut(limit);
     }
 
     const arrow::Table& GetResultBatch() const {
+        AFL_VERIFY(!Extracted);
         return *ResultBatch.GetRecordBatch();
     }
 
-    const std::shared_ptr<arrow::Table>& GetResultBatchPtrVerified() const {
-        AFL_VERIFY(ResultBatch.GetRecordBatch());
-        return ResultBatch.GetRecordBatch();
-    }
-
-    ui64 GetMemorySize() const {
-        return ResultBatch.GetMemorySize();
-    }
-
     ui64 GetRecordsCount() const {
+        AFL_VERIFY(!Extracted);
         return ResultBatch.GetRecordsCount();
+    }
+
+    std::shared_ptr<arrow::Schema> GetResultSchema() const {
+        AFL_VERIFY(!Extracted);
+        return ResultBatch.GetResultSchema();
     }
 
     static std::vector<std::shared_ptr<TPartialReadResult>> SplitResults(
         std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult);
 
-    const NArrow::TShardedRecordBatch& GetShardedBatch() const {
-        return ResultBatch;
+    NArrow::TShardedRecordBatch ExtractShardedBatch() {
+        AFL_VERIFY(!Extracted);
+        Extracted = true;
+        return std::move(ResultBatch);
     }
 
     const std::shared_ptr<IScanCursor>& GetScanCursor() const {
@@ -75,13 +74,13 @@ public:
     }
 
     explicit TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
-        const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, const NArrow::TShardedRecordBatch& batch,
-        const std::shared_ptr<IScanCursor>& scanCursor, const std::shared_ptr<TReadContext>& context,
+        const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, NArrow::TShardedRecordBatch&& batch,
+        std::shared_ptr<IScanCursor>&& scanCursor, const std::shared_ptr<TReadContext>& context,
         const std::optional<TPartialSourceAddress> notFinishedInterval);
 
-    explicit TPartialReadResult(const NArrow::TShardedRecordBatch& batch, const std::shared_ptr<IScanCursor>& scanCursor,
+    explicit TPartialReadResult(NArrow::TShardedRecordBatch&& batch, std::shared_ptr<IScanCursor>&& scanCursor,
         const std::shared_ptr<TReadContext>& context, const std::optional<TPartialSourceAddress> notFinishedInterval)
-        : TPartialReadResult({}, nullptr, batch, scanCursor, context, notFinishedInterval) {
+        : TPartialReadResult({}, nullptr, std::move(batch), std::move(scanCursor), context, notFinishedInterval) {
     }
 };
 

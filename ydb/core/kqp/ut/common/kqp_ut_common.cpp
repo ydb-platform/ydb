@@ -144,6 +144,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
+    ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -203,8 +204,7 @@ TKikimrRunner::TKikimrRunner(const TVector<NKikimrKqp::TKqpSetting>& kqpSettings
 
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const TString& authToken,
     const TString& domainRoot, ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings()
-        .SetAppConfig(appConfig)
+    : TKikimrRunner(TKikimrSettings(appConfig)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
         .SetNodeCount(nodeCount)) {}
@@ -212,8 +212,7 @@ TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig, const T
 TKikimrRunner::TKikimrRunner(const NKikimrConfig::TAppConfig& appConfig,
     const TVector<NKikimrKqp::TKqpSetting>& kqpSettings, const TString& authToken, const TString& domainRoot,
     ui32 nodeCount)
-    : TKikimrRunner(TKikimrSettings()
-        .SetAppConfig(appConfig)
+    : TKikimrRunner(TKikimrSettings(appConfig)
         .SetKqpSettings(kqpSettings)
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)

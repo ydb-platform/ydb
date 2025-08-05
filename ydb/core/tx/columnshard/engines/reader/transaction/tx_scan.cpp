@@ -1,7 +1,6 @@
 #include "tx_scan.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_scheduler_service.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
@@ -52,7 +51,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const TString table = request.GetTablePath();
     const auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
-    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(request.GetLocalPathId());
+    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
     NConveyorComposite::TCPULimitsConfig cpuLimits;
     cpuLimits.DeserializeFromProto(request).Validate();
     if (scanGen > 1) {
@@ -66,6 +65,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
         TReadDescription read(Self->TabletID(), snapshot, sorting);
+        read.DeduplicationPolicy = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled() ? EDeduplicationPolicy::PREVENT_DUPLICATES
+                                                                                                 : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.TxId = txId;
         if (request.HasLockTxId()) {
             read.LockId = request.GetLockTxId();
@@ -81,7 +82,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 read.TableMetadataAccessor = accConclusion.DetachResult();
             }
             if (auto pathId = read.TableMetadataAccessor->GetPathId()) {
-                Self->Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId->GetInternalPathId())->OnReadEvent();
+                Self->Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId->GetInternalPathIdOptional().value_or(TInternalPathId::FromRawValue(0)))->OnReadEvent();
             }
         }
 
@@ -172,12 +173,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
-    const auto& scheduler = AppData(ctx)->ComputeScheduler;
-    auto schedulableTask = scheduler ? scheduler->CreateSchedulableTaskFactory()(txId) : nullptr;
-
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout,
-        readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits, std::move(schedulableTask)));
+        Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy, scanId, txId, scanGen,
+        requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

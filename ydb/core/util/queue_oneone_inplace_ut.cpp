@@ -52,7 +52,26 @@ Y_UNIT_TEST_SUITE(TOneOneQueueTests) {
             UNIT_ASSERT_VALUES_EQUAL(5u, p.use_count());
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(1, p.use_count());
+        UNIT_ASSERT_VALUES_EQUAL(1u, p.use_count());
+    }
+
+    Y_UNIT_TEST(DeleteInDestructor) {
+        using TQueueType = TOneOneQueueInplace<std::shared_ptr<bool> *, 32, TDelete>;
+
+        std::shared_ptr<bool> p(new bool(true));
+        UNIT_ASSERT_VALUES_EQUAL(1u, p.use_count());
+
+        {
+            TQueueType queue;
+            queue.Push(new std::shared_ptr<bool>(p));
+            queue.Push(new std::shared_ptr<bool>(p));
+            queue.Push(new std::shared_ptr<bool>(p));
+            queue.Push(new std::shared_ptr<bool>(p));
+
+            UNIT_ASSERT_VALUES_EQUAL(5u, p.use_count());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(1u, p.use_count());
     }
 
     Y_UNIT_TEST(ReadIterator) {

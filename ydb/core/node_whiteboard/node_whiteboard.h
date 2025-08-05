@@ -24,7 +24,7 @@ using TTabletId = ui64;
 using TFollowerId = ui32;
 using TNodeId = ui32;
 
-struct TEvWhiteboard{
+struct TEvWhiteboard {
     enum EEv {
         EvTabletStateUpdate = EventSpaceBegin(TKikimrEvents::ES_NODE_WHITEBOARD),
         EvTabletStateRequest,
@@ -65,6 +65,9 @@ struct TEvWhiteboard{
         EvVDiskDropDonors,
         EvClockSkewUpdate,
         EvMemoryStatsUpdate,
+        EvBridgeInfoUpdate,
+        EvBridgeInfoRequest,
+        EvBridgeInfoResponse,
         EvEnd
     };
 
@@ -328,6 +331,12 @@ struct TEvWhiteboard{
                 Record.SetBlobDepotId(*groupInfo->BlobDepotId);
             }
             Record.SetGroupSizeInUnits(groupInfo->GroupSizeInUnits);
+            if (const auto& bridgeProxyGroupId = groupInfo->GetBridgeProxyGroupId()) {
+                bridgeProxyGroupId->CopyToProto(&Record, &decltype(Record)::SetBridgeProxyGroupId);
+            }
+            if (const auto& bridgePileId = groupInfo->GetBridgePileId()) {
+                bridgePileId->CopyToProto(&Record, &decltype(Record)::SetBridgePileId);
+            }
         }
     };
 
@@ -473,6 +482,10 @@ struct TEvWhiteboard{
 
     struct TEvSignalBodyRequest : TEventPB<TEvSignalBodyRequest, NKikimrWhiteboard::TEvSignalBodyRequest, EvSignalBodyRequest> {};
     struct TEvSignalBodyResponse : TEventPB<TEvSignalBodyResponse, NKikimrWhiteboard::TEvSignalBodyResponse, EvSignalBodyResponse> {};
+
+    struct TEvBridgeInfoUpdate : public TEventPB<TEvBridgeInfoUpdate, NKikimrWhiteboard::TBridgeInfo, EvBridgeInfoUpdate> {};
+    struct TEvBridgeInfoRequest : public TEventPB<TEvBridgeInfoRequest, NKikimrWhiteboard::TEvBridgeInfoRequest, EvBridgeInfoRequest> {};
+    struct TEvBridgeInfoResponse : public TEventPB<TEvBridgeInfoResponse, NKikimrWhiteboard::TEvBridgeInfoResponse, EvBridgeInfoResponse> {};
 };
 
 inline TActorId MakeNodeWhiteboardServiceId(ui32 node) {

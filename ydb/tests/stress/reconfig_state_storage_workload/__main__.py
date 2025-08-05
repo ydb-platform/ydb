@@ -16,6 +16,11 @@ if __name__ == "__main__":
     parser.add_argument("--config_name", default="StateStorage", help="Can be StateStorage / StateStorageBoard / SchemeBoard")
     parser.add_argument("--duration", default=10 ** 9, type=lambda x: int(x), help="A duration of workload in seconds.")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(levelname)s - %(name)s:%(lineno)d - %(funcName)s: %(message)s"
+    )
     logger = logging.getLogger("reconfig_state_storage_workload")
 
     with WorkloadRunner(args.grpc_endpoint, args.http_endpoint, args.database, args.path, args.duration, args.config_name) as runner:

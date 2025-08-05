@@ -1,6 +1,6 @@
 #pragma once
 
-#include "extension_context.h"
+#include "extension.h"
 
 namespace NMVP::NOIDC {
 
@@ -8,15 +8,15 @@ struct TExtensionManager {
     TIntrusivePtr<TExtensionContext> ExtensionCtx;
     const TOpenIdConnectSettings Settings;
     TString AuthHeader;
-    bool EnrichmentExtension = false;
+    TDuration Timeout;
 
 public:
     TExtensionManager(const TActorId sender,
                       const TOpenIdConnectSettings& settings,
                       const TCrackedPage& protectedPage,
                       const TString authHeader);
+    void SetExtensionTimeout(TDuration timeout);
     void ArrangeExtensions(const NHttp::THttpIncomingRequestPtr& request);
-    bool HasEnrichmentExtension();
     void StartExtensionProcess(NHttp::THttpIncomingRequestPtr request,
                                NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event = nullptr);
 
@@ -26,7 +26,7 @@ private:
     bool NeedExtensionWhoami(const NHttp::THttpIncomingRequestPtr& request) const;
     void AddExtensionWhoami();
     void AddExtensionFinal();
-    void AddExtension(const NActors::TActorId& stage);
+    void AddExtension(std::unique_ptr<IExtension> ext);
 };
 
 } // NMVP::NOIDC

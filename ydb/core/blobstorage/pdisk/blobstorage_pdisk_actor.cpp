@@ -699,7 +699,9 @@ public:
     }
 
     void InitHandle(NPDisk::TEvYardResize::TPtr &ev) {
-        Y_UNUSED(ev);
+        PDisk->Mon.YardResize.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvYardResizeResult(NKikimrProto::CORRUPTED, {}, StateErrorReason));
+        PDisk->Mon.YardResize.CountResponse();
     }
 
     void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
@@ -841,7 +843,9 @@ public:
     }
 
     void ErrorHandle(NPDisk::TEvYardResize::TPtr &ev) {
-        Y_UNUSED(ev);
+        PDisk->Mon.YardResize.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvYardResizeResult(NKikimrProto::CORRUPTED, {}, StateErrorReason));
+        PDisk->Mon.YardResize.CountResponse();
     }
 
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
@@ -985,6 +989,7 @@ public:
     }
 
     void Handle(NPDisk::TEvYardResize::TPtr &ev) {
+        PDisk->Mon.YardResize.CountRequest();
         TYardResize* request = PDisk->ReqCreator.CreateFromEv<TYardResize>(*ev->Get(), ev->Sender);
         PDisk->InputRequest(request);
     }

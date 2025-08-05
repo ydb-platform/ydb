@@ -19,13 +19,13 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
         LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
     }
     if (!owner->GetIndexOptional()) {
-        SourcesConstructor = std::make_unique<NReader::NSimple::TNotSortedPortionsSources>();
+        SourcesConstructor = NReader::NSimple::TPortionsSources::BuildEmpty();
         SourcesConstructor->InitCursor(nullptr);
         return TConclusionStatus::Success();
     }
 
     ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified());
-    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, !!LockId, isPlain);
+    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, owner->GetOperationsManager(), isPlain);
     if (!SourcesConstructor) {
         return TConclusionStatus::Fail("cannot build sources constructor for " + readDescription.TableMetadataAccessor->GetTablePath());
     }

@@ -182,10 +182,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), controller.GetDataAccessorsManager(),
-        std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), TabletId);
+    NColumnShard::TTablesManager tablesManager(
+        controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), TabletId);
 
-    if (!tablesManager.InitFromDB(db)) {
+    if (!tablesManager.InitFromDB(db, nullptr)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
     }
@@ -270,10 +270,10 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
         if (itIndexes != Indexes.end()) {
             indexes = std::move(itIndexes->second);
         }
-        TPortionDataAccessor accessor =
+        std::shared_ptr<TPortionDataAccessor> accessor =
             TPortionAccessorConstructor::BuildForLoading(i.second->Build(), std::move(itRecords->second), std::move(indexes));
         THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
-        accessor.FillBlobIdsByStorage(blobIdsByStorage, tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex());
+        accessor->FillBlobIdsByStorage(blobIdsByStorage, tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex());
         auto it = blobIdsByStorage.find(NBlobOperations::TGlobal::DefaultStorageId);
         if (it == blobIdsByStorage.end()) {
             continue;

@@ -1176,7 +1176,7 @@ private:
         } else if (auto maybeList = TMaybeNode<TCoAtomList>(node)) {
             auto listPtr = maybeList.Cast().Ptr();
             size_t listSize = listPtr->Children().size();
-            if (listSize == 3) {
+            if (listSize == 3 || listSize == 4 /*OpType optional field*/) {
                 THashMap<TString, TString> strComp = {
                     {"eq", " == "},
                     {"neq", " != "},
@@ -2961,6 +2961,11 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["FinishedTasks"] = (*stat)->GetFinishedTasksCount();
                 if (auto updateTimeUs = (*stat)->GetUpdateTimeMs(); updateTimeUs) {
                     stats["UpdateTimeMs"] = updateTimeUs;
+                }
+
+                auto& introspections = stats.InsertValue("Introspections", NJson::JSON_ARRAY);
+                for (const auto& intro : (*stat)->GetIntrospections()) {
+                    introspections.AppendValue(intro);
                 }
 
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();

@@ -557,7 +557,7 @@ ui32 TPDisk::GetTotalChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) 
 ui32 TPDisk::GetFreeChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const {
     Y_UNUSED(ownerGroupType);
     // TODO(cthulhu): use ownerGroupType for logs
-    return Max<i64>(0, Keeper.GetOwnerFree(ownerId));
+    return Max<i64>(0, Keeper.GetOwnerFree(ownerId, false));
 }
 
 ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const {
@@ -1109,7 +1109,7 @@ TVector<TChunkIdx> TPDisk::LockChunksForOwner(TOwner owner, const ui32 count, TS
     TGuard<TMutex> guard(StateMutex);
 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
-    i64 ownerFree = Keeper.GetOwnerFree(owner);
+    i64 ownerFree = Keeper.GetOwnerFree(owner, false);
     double occupancy;
     auto color = Keeper.EstimateSpaceColor(owner, count, &occupancy);
 
@@ -1351,7 +1351,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
     Y_VERIFY_DEBUG_S(IsOwnerUser(req->Owner), PCtx->PDiskLogPrefix);
 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
-    i64 ownerFree = Keeper.GetOwnerFree(req->Owner);
+    i64 ownerFree = Keeper.GetOwnerFree(req->Owner, false);
     double occupancy;
     auto color = Keeper.EstimateSpaceColor(req->Owner, count, &occupancy);
 
@@ -1576,7 +1576,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         const auto& state = static_cast<NKikimrBlobStorage::TPDiskState::E>(Mon.PDiskState->Val());
         pdiskState.SetState(state);
         pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
-        pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog)));
+        pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog, {})));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
         pdiskState.SetNumActiveSlots(GetNumActiveSlots());
         pdiskState.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
@@ -1585,16 +1585,12 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         }
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
-        i64 minSlotSize = Max<i64>();
-        for (const auto& [_, owner] : VDiskOwners) {
-            minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) * Format.ChunkSize);
-        }
 
         for (const auto& [vdiskId, owner] : VDiskOwners) {
             const TOwnerData &data = OwnerData[owner];
             // May be less than 0 if owner exceeded his quota
             i64 ownerAllocated = (i64)Keeper.GetOwnerUsed(owner) * Format.ChunkSize;
-            i64 ownerFree = Max<i64>(0, minSlotSize - ownerAllocated);
+            i64 ownerFree = Max<i64>(0, Keeper.GetOwnerFree(owner, true) * Format.ChunkSize);
 
             reportResult->VDiskStateVect.emplace_back(data.WhiteboardProxyId, NKikimrWhiteboard::TVDiskStateInfo());
             auto& vdiskInfo = std::get<1>(reportResult->VDiskStateVect.back());
@@ -1625,11 +1621,20 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
         pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
         pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
+
+        i64 minSlotSize = Max<i64>();
+        for (const auto& [_, owner] : VDiskOwners) {
+            minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) / Keeper.GetOwnerWeight(owner) * Format.ChunkSize);
+        }
         if (minSlotSize != Max<i64>()) {
             pDiskMetrics.SetEnforcedDynamicSlotSize(minSlotSize);
             pdiskState.SetEnforcedDynamicSlotSize(minSlotSize);
         }
         pDiskMetrics.SetState(state);
+        pDiskMetrics.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
+        if (ExpectedSlotCount) {
+            pDiskMetrics.SetSlotCount(ExpectedSlotCount);
+        }
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);
@@ -2071,6 +2076,7 @@ void TPDisk::YardResize(TYardResize &ev) {
     TStringStream errorReason;
     NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(&ev, errorReason);
     if (errStatus != NKikimrProto::OK) {
+        Mon.YardResize.CountResponse();
         PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvYardResizeResult(errStatus, {}, errorReason.Str()));
         return;
     }
@@ -2083,9 +2089,10 @@ void TPDisk::YardResize(TYardResize &ev) {
 
     auto result = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
     if (Cfg->ReadOnly) {
+        Mon.YardResize.CountResponse();
         PCtx->ActorSystem->Send(ev.Sender, result.release());
     } else {
-        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release()),
+        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release(), Mon.YardResize.Results),
             TReqId(TReqId::YardResize, 0), {});
     }
 }
@@ -2330,7 +2337,7 @@ void TPDisk::Slay(TSlay &evSlay) {
         TVDiskID vDiskId = evSlay.VDiskId;
         vDiskId.GroupGeneration = -1;
         auto it = VDiskOwners.find(vDiskId);
-        
+
         for (auto& pendingInit : PendingYardInits) {
             if (vDiskId == pendingInit->VDiskIdWOGeneration()) {
                 TStringStream str;
@@ -2999,7 +3006,7 @@ NKikimrProto::EReplyStatus TPDisk::CheckOwnerAndRound(TRequestBase* req, TString
 
     if (!IsOwnerUser(req->Owner)) {
         if (req->Owner == OwnerUnallocated && req->OwnerRound == 0) {
-            return NKikimrProto::OK; 
+            return NKikimrProto::OK;
         }
         err << "  ownerId# " << req->Owner << " < Begin# " << (ui32)OwnerBeginUser
             << " or >= End# " << (ui32)OwnerEndUser << " Marker# BPD72";
@@ -4343,7 +4350,7 @@ void TPDisk::ProgressShredState() {
                     << " ShredGeneration# " << ShredGeneration
                     << " ShredState# " << (ui32)ShredState);
                 // Send/schedule a request to retry
-                THolder<TCompletionEventSender> completion(new TCompletionEventSender(this, PCtx->PDiskActor, new NPDisk::TEvContinueShred())); 
+                THolder<TCompletionEventSender> completion(new TCompletionEventSender(this, PCtx->PDiskActor, new NPDisk::TEvContinueShred()));
                 if (ReleaseUnusedLogChunks(completion.Get())) {
                     ContinueShredsInFlight++;
                     WriteSysLogRestorePoint(completion.Release(), TReqId(TReqId::ShredPDisk, 0), {});
@@ -4367,7 +4374,7 @@ void TPDisk::ProgressShredState() {
             }
         }
         // Looks good, but there still can be chunks that need to be shredded still int transition between states.
-        // For example, log chunks are removed from the log chunk list on log cut but added to free chunk list on log cut 
+        // For example, log chunks are removed from the log chunk list on log cut but added to free chunk list on log cut
         // write operation completion. So, walk through the whole chunk list and check.
         for (ui32 chunkIdx = Format.SystemChunkCount; chunkIdx < ChunkState.size(); ++chunkIdx) {
             TChunkState &state = ChunkState[chunkIdx];
@@ -4382,7 +4389,7 @@ void TPDisk::ProgressShredState() {
                         << ", there are already ContinueShredsInFlight# " << ContinueShredsInFlight.load()
                         << " so just wait for it to arrive. "
                         << " ShredGeneration# " << ShredGeneration);
-                    return; 
+                    return;
                 } else {
                     LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
                         "PDisk# " << PCtx->PDiskId

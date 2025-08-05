@@ -99,6 +99,7 @@ public:
     {}
 
     NSQLTranslation::TTranslationSettings Build(NYql::TExprContext& ctx);
+    TKqpTranslationSettingsBuilder& SetFromConfig(const NYql::TKikimrConfiguration& config);
 
     TKqpTranslationSettingsBuilder& SetUsePgParser(const TMaybe<bool> value) {
         UsePgParser = value;
@@ -150,6 +151,11 @@ public:
         return *this;
     }
 
+    TKqpTranslationSettingsBuilder& SetLangVer(ui32 langVer) {
+        LangVer = langVer;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     const ui16 KqpYqlSyntaxVersion;
@@ -168,6 +174,8 @@ private:
     TMaybe<TString> ApplicationName = {};
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameters = {};
     TMaybe<ui16> SqlVersion = {};
+    NYql::TLangVersion LangVer = NYql::MinLangVersion;
+    NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
 };
 
 NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode);

@@ -261,7 +261,7 @@ private:
 
             with_lock(Self.Alloc) {
                 const auto rowType = Self.ProgramBuilder->NewMultiType(columnTypes);
-                DataPacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType);
+                DataPacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
             }
             return TStatus::Success();
         }

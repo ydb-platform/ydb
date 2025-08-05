@@ -13,6 +13,15 @@
 namespace NKikimr::NCms {
 
 struct TCmsSentinelConfig {
+    struct TStateStorageSelfHealConfig {
+        bool Enable;
+        ui32 NodeBadStateLimit;
+        ui32 NodeGoodStateLimit;
+        ui32 NodePrettyGoodStateLimit;
+        TDuration WaitForConfigStep;
+        TDuration RelaxTime;
+    };
+
     bool Enable = true;
     bool DryRun = false;
 
@@ -37,6 +46,8 @@ struct TCmsSentinelConfig {
 
     TMaybeFail<EPDiskStatus> EvictVDisksStatus;
 
+    TStateStorageSelfHealConfig StateStorageSelfHealConfig;
+
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
         config.SetDryRun(DryRun);
@@ -48,6 +59,15 @@ struct TCmsSentinelConfig {
         config.SetChangeStatusRetries(ChangeStatusRetries);
         config.SetDefaultStateLimit(DefaultStateLimit);
         config.SetGoodStateLimit(GoodStateLimit);
+
+        auto* ssConfig = config.MutableStateStorageSelfHealConfig();
+        ssConfig->SetEnable(StateStorageSelfHealConfig.Enable);
+        ssConfig->SetWaitForConfigStep(StateStorageSelfHealConfig.WaitForConfigStep.GetValue());
+        ssConfig->SetRelaxTime(StateStorageSelfHealConfig.RelaxTime.GetValue());
+        ssConfig->SetNodeBadStateLimit(StateStorageSelfHealConfig.NodeBadStateLimit);
+        ssConfig->SetNodeGoodStateLimit(StateStorageSelfHealConfig.NodeGoodStateLimit);
+        ssConfig->SetNodePrettyGoodStateLimit(StateStorageSelfHealConfig.NodePrettyGoodStateLimit);
+
         config.SetDataCenterRatio(DataCenterRatio);
         config.SetRoomRatio(RoomRatio);
         config.SetRackRatio(RackRatio);
@@ -74,6 +94,14 @@ struct TCmsSentinelConfig {
         RackRatio = config.GetRackRatio();
         PileRatio = config.GetPileRatio();
         FaultyPDisksThresholdPerNode = config.GetFaultyPDisksThresholdPerNode();
+
+        auto& ssConfig = config.GetStateStorageSelfHealConfig();
+        StateStorageSelfHealConfig.Enable = ssConfig.GetEnable();
+        StateStorageSelfHealConfig.NodeBadStateLimit = ssConfig.GetNodeBadStateLimit();
+        StateStorageSelfHealConfig.NodeGoodStateLimit = ssConfig.GetNodeGoodStateLimit();
+        StateStorageSelfHealConfig.NodePrettyGoodStateLimit = ssConfig.GetNodePrettyGoodStateLimit();
+        StateStorageSelfHealConfig.WaitForConfigStep = TDuration::MicroSeconds(ssConfig.GetWaitForConfigStep());
+        StateStorageSelfHealConfig.RelaxTime = TDuration::MicroSeconds(ssConfig.GetRelaxTime());
 
         auto newStateLimits = LoadStateLimits(config);
         StateLimits.swap(newStateLimits);

@@ -174,7 +174,7 @@ namespace NKikimr::NBsController {
             cur = std::move(storagePool); // update existing storage pool
         } else {
             // enable bridge mode by default for new pools (when bridge mode is enabled cluster-wide)
-            const bool bridgeMode = AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize();
+            const bool bridgeMode = AppData()->BridgeModeEnabled;
             Y_DEBUG_ABORT_UNLESS(bridgeMode == static_cast<bool>(BridgeInfo));
             spIt->second.BridgeMode = bridgeMode;
         }

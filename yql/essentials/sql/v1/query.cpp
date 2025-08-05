@@ -1476,32 +1476,44 @@ public:
         if (Params_.AlterColumns) {
             auto columns = Y();
             for (auto& col : Params_.AlterColumns) {
-                if (col.TypeOfChange == TColumnSchema::ETypeOfChange::DropNotNullConstraint) {
-                    auto columnDesc = Y();
-                    columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+                switch (col.TypeOfChange) {
+                    case TColumnSchema::ETypeOfChange::SetNotNullConstraint:
+                    case TColumnSchema::ETypeOfChange::DropNotNullConstraint: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
 
-                    auto columnConstraints = Y();
-                    columnConstraints = L(columnConstraints, Q(Y(Q("drop_not_null"))));
-                    columnDesc = L(columnDesc, Q(Y(Q("changeColumnConstraints"), Q(columnConstraints))));
-                    columns = L(columns, Q(columnDesc));
-                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetNotNullConstraint) {
-                    // todo flown4qqqq
-                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::SetFamily) {
-                    auto columnDesc = Y();
-                    columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
-                    auto familiesDesc = Y();
-                    for (const auto& family : col.Families) {
-                        familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
+                        auto columnConstraints = Y();
+                        if (col.TypeOfChange == TColumnSchema::ETypeOfChange::DropNotNullConstraint) {
+                            columnConstraints = L(columnConstraints, Q(Y(Q("drop_not_null"))));
+                        } else {
+                            columnConstraints = L(columnConstraints, Q(Y(Q("set_not_null"))));
+                        }
+                        columnDesc = L(columnDesc, Q(Y(Q("changeColumnConstraints"), Q(columnConstraints))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
                     }
+                    case TColumnSchema::ETypeOfChange::SetFamily: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+                        auto familiesDesc = Y();
+                        for (const auto& family : col.Families) {
+                            familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
+                        }
 
-                    columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
-                    columns = L(columns, Q(columnDesc));
-                } else if (col.TypeOfChange == TColumnSchema::ETypeOfChange::Nothing) {
-                    // do nothing
-                } else {
-                    ctx.Error(Pos_) << " action is not supported";
+                        columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
+                    case TColumnSchema::ETypeOfChange::Nothing: {
+                        // do nothing
+
+                        break;
+                    }
                 }
             }
+
             actions = L(actions, Q(Y(Q("alterColumns"), Q(columns))));
         }
 
@@ -3298,6 +3310,11 @@ public:
                 if (ctx.Engine) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos_, "Engine"), BuildQuotedAtom(Pos_, *ctx.Engine))));
+                }
+
+                if (ctx.DebugPositions) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos_, "DebugPositions"))));
                 }
             }
         }

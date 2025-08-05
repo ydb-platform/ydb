@@ -11595,6 +11595,88 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(AlterTopicOverDiskSpaceQuotas) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        opts.EnableTopicDiskSubDomainQuota(true);
+
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 100;
+
+        // Subdomain with a 1-byte data size quota
+        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                        Name: "USER_1"
+                        PlanResolution: 50
+                        Coordinators: 1
+                        Mediators: 1
+                        TimeCastBucketsPerMediator: 2
+                        StoragePools {
+                            Name: "name_USER_0_kind_hdd-1"
+                            Kind: "hdd-1"
+                        }
+                        StoragePools {
+                            Name: "name_USER_0_kind_hdd-2"
+                            Kind: "hdd-2"
+                        }
+                        DatabaseQuotas {
+                            data_size_hard_quota: 100
+                        }
+                )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot/USER_1", R"(
+            Name: "Topic1"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 1
+                    WriteSpeedInBytesPerSecond : 100
+                }
+                MeteringMode: METERING_MODE_REQUEST_UNITS
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 topicId = DescribePath(runtime, "/MyRoot/USER_1/Topic1").GetPathDescription().GetSelf().GetPathId();
+
+        ui64 generation = 1;
+        ui64 round = 1;
+
+        // Now topic use 50 bytes of the storage
+        SendTEvPeriodicTopicStats(runtime, topicId, generation, ++round, 50, 0);
+
+        // Now we reserve 150 bytes but limit 100 bytes
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", R"(
+            Name: "Topic1"
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 1
+                    WriteSpeedInBytesPerSecond : 150
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )", {{TEvSchemeShard::EStatus::StatusResourceExhausted, "database size limit exceeded"}});
+        env.TestWaitNotification(runtime, txId);
+
+        // Now we reserve 100 bytes and limit 100 bytes
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", R"(
+            Name: "Topic1"
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 1
+                    WriteSpeedInBytesPerSecond : 100
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(CreateSystemColumn) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -20,9 +20,7 @@ const bool DisableOpt = true;
 const bool EnableOpt = false;
 
 TKikimrRunner GetKikimrRunner() {
-    NKikimrConfig::TAppConfig appConfig;
-    auto serverSettings = TKikimrSettings()
-        .SetAppConfig(appConfig);
+    TKikimrSettings serverSettings;
     return {serverSettings};
 }
 

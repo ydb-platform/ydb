@@ -1,6 +1,7 @@
 #include "plain_read_data.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -9,13 +10,14 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
     auto constructor = SpecialReadContext->GetReadMetadata()->ExtractSelectInfo();
     constructor->FillReadStats(GetReadMetadata()->ReadStats);
+    SpecialReadContext->RegisterActors(*constructor);
     Scanner =
         std::make_shared<TScanHead>(std::move(constructor), SpecialReadContext);
     auto& stats = GetReadMetadata()->ReadStats;
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
 }
 
-std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {
+std::vector<std::unique_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) {
     auto result = std::move(PartialResults);
     PartialResults.clear();
     //    auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch);
@@ -28,17 +30,17 @@ std::vector<std::shared_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyR
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractReadyResults")("result", result.size())("count", count)(
         "finished", Scanner->IsFinished());
-    return result;
+    return std::move(result);
 }
 
 TConclusion<bool> TPlainReadData::DoReadNextInterval() {
     return Scanner->BuildNextInterval();
 }
 
-void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result) {
+void TPlainReadData::OnIntervalResult(std::unique_ptr<TPartialReadResult>&& result) {
     //    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
     ReadyResultsCount += result->GetRecordsCount();
-    PartialResults.emplace_back(result);
+    PartialResults.emplace_back(std::move(result));
 }
 
 void TPlainReadData::OnSentDataFromInterval(const TPartialSourceAddress& sourceAddress) {

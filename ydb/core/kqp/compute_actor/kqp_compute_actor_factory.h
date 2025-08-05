@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/actors/core/actor.h>
@@ -128,9 +128,10 @@ public:
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<IKqpNodeState> State = nullptr;
-        TSchedulableOptions SchedulableOptions;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
+
+        NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     };
 
     typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;
@@ -142,7 +143,6 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        NScheduler::TSchedulableTaskFactory schedulableTaskFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup);
 
 } // namespace NKikimr::NKqp::NComputeActor

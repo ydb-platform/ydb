@@ -41,6 +41,7 @@ enum class ENodeFields : ui8 {
     NetworkUtilization,
     ClockSkew,
     PingTime,
+    PileName,
     COUNT
 };
 
@@ -258,6 +259,13 @@ class TJsonNodes : public TViewerPipeClient {
                 return NodeInfo.Location.GetRackId();
             }
             return SystemState.GetLocation().GetRack();
+        }
+
+        TString GetPileName() const {
+            if (NodeInfo.Location.GetBridgePileName()) {
+                return NodeInfo.Location.GetBridgePileName().value_or("");
+            }
+            return SystemState.GetLocation().GetBridgePileName();
         }
 
         void Cleanup() {
@@ -671,6 +679,9 @@ class TJsonNodes : public TViewerPipeClient {
                 case ENodeFields::PingTime:
                     groupName = GetPingTimeForGroup();
                     break;
+                case ENodeFields::PileName:
+                    groupName = GetPileName();
+                    break;
                 default:
                     break;
             }
@@ -706,6 +717,8 @@ class TJsonNodes : public TViewerPipeClient {
                     return static_cast<int>(abs(ClockSkewUs) / 1000);
                 case ENodeFields::PingTime:
                     return PingTimeUs;
+                case ENodeFields::PileName:
+                    return GetPileName();
                 default:
                     return TString();
             }
@@ -761,7 +774,8 @@ class TJsonNodes : public TViewerPipeClient {
                                                     .set(+ENodeFields::NodeId)
                                                     .set(+ENodeFields::HostName)
                                                     .set(+ENodeFields::DC)
-                                                    .set(+ENodeFields::Rack);
+                                                    .set(+ENodeFields::Rack)
+                                                    .set(+ENodeFields::PileName);
     const TFieldsType FieldsSystemState = TFieldsType().set(+ENodeFields::SystemState)
                                                        .set(+ENodeFields::Database)
                                                        .set(+ENodeFields::NodeName)
@@ -899,6 +913,8 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::PingTime;
         } else if (field == "ClockSkew") {
             result = ENodeFields::ClockSkew;
+        } else if (field == "PileName") {
+            result = ENodeFields::PileName;
         }
         return result;
     }
@@ -1406,6 +1422,7 @@ public:
                 case ENodeFields::DC:
                 case ENodeFields::Rack:
                 case ENodeFields::Uptime:
+                case ENodeFields::PileName:
                     GroupCollection();
                     SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.SortKey; });
                     NeedGroup = false;
@@ -1530,7 +1547,7 @@ public:
                     NeedSort = false;
                     break;
                 case ENodeFields::ClockSkew:
-                    SortCollection(NodeView, [](const TNode* node) { return node->ClockSkewUs; }, ReverseSort);
+                    SortCollection(NodeView, [](const TNode* node) { return abs(node->ClockSkewUs); }, ReverseSort);
                     NeedSort = false;
                     break;
                 case ENodeFields::Peers:
@@ -1539,6 +1556,10 @@ public:
                     break;
                 case ENodeFields::ReversePeers:
                     SortCollection(NodeView, [](const TNode* node) { return node->ReversePeers.size(); }, ReverseSort);
+                    NeedSort = false;
+                    break;
+                case ENodeFields::PileName:
+                    SortCollection(NodeView, [](const TNode* node) { return node->GetPileName(); }, ReverseSort);
                     NeedSort = false;
                     break;
                 case ENodeFields::NodeInfo:
@@ -3224,8 +3245,13 @@ public:
                 if (FieldsAvailable.test(+ENodeFields::ReceiveThroughput) && FieldsRequested.test(+ENodeFields::ReceiveThroughput)) {
                     jsonNode.SetReceiveThroughput(node->ReceiveThroughput);
                 }
-                if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && FieldsRequested.test(+ENodeFields::SystemState)) {
+                if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && (FieldsRequested & FieldsSystemState).any()) {
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
+                }
+                if (FieldsAvailable.test(+ENodeFields::PileName) && FieldsRequested.test(+ENodeFields::PileName)) {
+                    if (node->GetPileName()) {
+                        jsonNode.SetPileName(node->GetPileName());
+                    }
                 }
                 if (FieldsAvailable.test(+ENodeFields::PDisks) && FieldsRequested.test(+ENodeFields::PDisks)) {
                     std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {

@@ -11,6 +11,8 @@ class TSourceData: public NReader::NSimple::IDataSource {
 private:
     using TBase = NReader::NSimple::IDataSource;
     YDB_READONLY(ui64, TabletId, 0);
+    const NCommon::TReplaceKeyAdapter Start;
+    const NCommon::TReplaceKeyAdapter Finish;
 
     virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NReader::NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
@@ -22,7 +24,7 @@ private:
     }
 
     virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
+        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
         return false;
     }
 
@@ -33,12 +35,12 @@ private:
         for (auto&& i : columns->GetColumnIds()) {
             if (i == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || i == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
                 i == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
-                MutableStageData().GetTable()->AddVerified(i,
+                MutableStageData().MutableTable().AddVerified(i,
                     std::make_shared<NArrow::NAccessor::TTrivialArray>(
                         NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)),
                     true);
             } else {
-                MutableStageData().GetTable()->AddVerified(
+                MutableStageData().MutableTable().AddVerified(
                     i, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(i, recordsCount)), true);
             }
         }
@@ -47,21 +49,6 @@ private:
     virtual bool DoStartFetchingColumns(const std::shared_ptr<NReader::NCommon::IDataSource>& /*sourcePtr*/,
         const NReader::NCommon::TFetchingScriptCursor& /*step*/, const NReader::NCommon::TColumnsSetIds& /*columns*/) override {
         return false;
-    }
-
-    virtual void DoAssembleAccessor(
-        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& /*subColumnName*/) override {
-        const ui32 recordsCount = GetRecordsCount();
-        if (columnId == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || columnId == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
-            columnId == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
-            context.GetResources()->AddVerified(columnId,
-                std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                    NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)),
-                true);
-        } else {
-            context.GetResources()->AddVerified(
-                columnId, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(columnId, recordsCount)), true);
-        }
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
@@ -76,18 +63,18 @@ private:
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            return GetFinish().GetValue();
+            return Finish.GetValue();
         } else {
-            return GetStart().GetValue();
+            return Start.GetValue();
         }
     }
 
     virtual NArrow::TSimpleRow GetMinPK() const override {
-        return GetStart().GetValue();
+        return Start.GetValue();
     }
 
     virtual NArrow::TSimpleRow GetMaxPK() const override {
-        return GetFinish().GetValue();
+        return Finish.GetValue();
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
@@ -158,21 +145,34 @@ private:
         return TConclusionStatus::Fail("incorrect method usage DoCheckHeader");
     }
 
-    virtual ui32 GetRecordsCountVirtual() const override {
-        if (HasStageData()) {
-            return GetStageData().GetPortionAccessor().GetRecordsVerified().size() +
-                   GetStageData().GetPortionAccessor().GetIndexesVerified().size();
+protected:
+    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override {
+        const ui32 recordsCount = GetRecordsCount();
+        AFL_VERIFY(!subColumnName);
+        if (columnId == (ui64)IIndexInfo::ESpecialColumn::PLAN_STEP || columnId == (ui64)IIndexInfo::ESpecialColumn::TX_ID ||
+            columnId == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
+            context.MutableResources().AddVerified(columnId,
+                std::make_shared<NArrow::NAccessor::TTrivialArray>(
+                    NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)),
+                true);
         } else {
-            return GetStageResult().GetBatch()->GetRecordsCount();
+            context.MutableResources().AddVerified(
+                columnId, std::make_shared<NArrow::NAccessor::TTrivialArray>(BuildArrayAccessor(columnId, recordsCount)), true);
         }
     }
 
 public:
+    static bool CheckTypeCast(const EType type) {
+        return type == NCommon::IDataSource::EType::SimpleSysInfo;
+    }
+
     TSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot,
         const NOlap::TSnapshot& maxSnapshot, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
-        const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
-        : TBase(sourceId, sourceIdx, context, std::move(start), std::move(finish), minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
-        , TabletId(tabletId) {
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
+        : TBase(EType::SimpleSysInfo, sourceId, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
+        , TabletId(tabletId)
+        , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
+        , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted()) {
     }
 };
 
@@ -188,7 +188,7 @@ public:
 
     TTabletSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
         const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
-        const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context) {
     }
 };
@@ -205,7 +205,7 @@ public:
 
     TPathSourceData(const ui32 sourceId, const ui32 sourceIdx, const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId,
         NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot,
-        const NOlap::TSnapshot& maxSnapshot, const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context)
+        const NOlap::TSnapshot& maxSnapshot, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context)
         , UnifiedPathId(pathId) {
     }

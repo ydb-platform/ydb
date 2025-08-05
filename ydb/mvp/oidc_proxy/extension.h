@@ -1,30 +1,48 @@
 #pragma once
 
+#include "cracked_page.h"
 #include "openid_connect.h"
+
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/http/http_proxy.h>
+
+#include <util/generic/strbuf.h>
+#include <util/generic/string.h>
+#include <util/generic/queue.h>
 
 namespace NMVP::NOIDC {
 
-class TExtension : public NActors::TActorBootstrapped<TExtension> {
-protected:
-    const TOpenIdConnectSettings Settings;
-    TIntrusivePtr<TExtensionContext> Context;
+class IExtension;
 
+struct TProxiedResponseParams {
+    NHttp::THttpIncomingRequestPtr Request;
+    THolder<TCrackedPage> ProtectedPage;
+    TString ResponseError;
+
+    TString StatusOverride;
+    TString MessageOverride;
+    TString BodyOverride;
+    THolder<NHttp::THeadersBuilder> HeadersOverride;
+};
+
+struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {
+    std::unique_ptr<IExtension> Next();
+};
+
+struct TExtensionContext : public TThrRefBase {
+    TActorId Sender;
+    TExtensionsSteps Steps;
+    THolder<TProxiedResponseParams> Params;
+
+    void Reply(NHttp::THttpOutgoingResponsePtr httpResponse);
+    void Reply();
+    void Continue();
+};
+
+class IExtension {
 public:
-    TExtension(const TOpenIdConnectSettings& settings)
-        : Settings(settings)
-    {}
-    virtual void Bootstrap();
-    virtual void Handle(TEvPrivate::TEvExtensionRequest::TPtr event) = 0;
-    void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
-    void ReplyAndPassAway();
-    void ContinueAndPassAway();
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvExtensionRequest, Handle);
-        }
-    }
-
+    virtual ~IExtension() = default;
+    virtual void Execute(TIntrusivePtr<TExtensionContext> ctx) = 0;
 };
 
 } // NMVP::NOIDC

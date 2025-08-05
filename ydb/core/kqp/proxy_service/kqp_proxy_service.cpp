@@ -286,11 +286,9 @@ public:
                 MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
         }
 
-        auto scheduler = AppData()->ComputeScheduler = std::make_shared<NScheduler::TComputeScheduler>(Counters);
-
         ResourceManager_ = GetKqpResourceManager();
         CaFactory_ = NComputeActor::MakeKqpCaFactory(
-            TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, scheduler->CreateSchedulableTaskFactory(), FederatedQuerySetup);
+            TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, FederatedQuerySetup);
 
         KqpNodeService = TActivationContext::Register(CreateKqpNodeService(TableServiceConfig, ResourceManager_, CaFactory_, Counters, AsyncIoFactory, FederatedQuerySetup));
         TActivationContext::ActorSystem()->RegisterLocalService(
@@ -301,11 +299,18 @@ public:
             MakeKqpWorkloadServiceId(SelfId().NodeId()), KqpWorkloadService);
 
         NScheduler::TOptions schedulerOptions {
-            .UpdateFairSharePeriod = TDuration::MicroSeconds(500'000),
+            .Counters = Counters,
+            .DelayParams = {
+                .MaxDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
+                .MinDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMinTaskDelayUs()),
+                .AttemptBonus = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
+                .MaxRandomDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
+            },
+            .UpdateFairSharePeriod = TDuration::MilliSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetUpdateFairShareMs()),
         };
-        auto kqpSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(scheduler, schedulerOptions));
+        KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(schedulerOptions));
         TActivationContext::ActorSystem()->RegisterLocalService(
-            MakeKqpSchedulerServiceId(SelfId().NodeId()), kqpSchedulerService);
+            MakeKqpSchedulerServiceId(SelfId().NodeId()), KqpComputeSchedulerService);
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -402,6 +407,7 @@ public:
         Send(KqpNodeService, new TEvents::TEvPoison);
 
         Send(KqpWorkloadService, new TEvents::TEvPoison());
+        Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -572,12 +578,10 @@ public:
             return;
         }
 
-#if defined(USE_HDRF_SCHEDULER)
         // TODO: not the best place for adding database.
         auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
         addDatabaseEvent->Id = ev->Get()->GetDatabaseId();
         Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
-#endif
 
         const TString& database = ev->Get()->GetDatabase();
         const TString& traceId = ev->Get()->GetTraceId();
@@ -1440,7 +1444,7 @@ private:
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         const auto& databaseId = ev->Get()->GetDatabaseId();
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || (ev->Get()->IsInternalCall() && WorkloadManagerConfig.GetEnabled())) {
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall()) {
             ev->Get()->SetPoolId("");
             return true;
         }
@@ -1474,10 +1478,8 @@ private:
             ev->Get()->SetPoolConfig(poolConfig);
         }
 
-#if defined(USE_HDRF_SCHEDULER)
         Y_ASSERT(!poolId.empty());
         Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
-#endif
 
         return true;
     }
@@ -1501,7 +1503,7 @@ private:
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 
-    void HanleDelayedRequestError(EDelayedRequestType requestType, THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
+    void HandleDelayedRequestError(EDelayedRequestType requestType, THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         switch (requestType) {
             case EDelayedRequestType::QueryRequest: {
                 auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
@@ -1543,13 +1545,15 @@ private:
         if (!AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
             NYql::TIssues issues;
             issues.AddIssue("ExecuteScript feature is not enabled");
-            HanleDelayedRequestError(requestType, std::move(ev), Ydb::StatusIds::UNSUPPORTED, std::move(issues));
+            HandleDelayedRequestError(requestType, std::move(ev), Ydb::StatusIds::UNSUPPORTED, std::move(issues));
             return false;
         }
 
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(requestType), ActorContext())) {
             return false;
         }
+
+        // TODO: add database to scheduler
 
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
@@ -1565,7 +1569,7 @@ private:
                 } else {
                     NYql::TIssues issues;
                     issues.AddIssue("Too many queued requests");
-                    HanleDelayedRequestError(requestType, std::move(ev), Ydb::StatusIds::OVERLOADED, std::move(issues));
+                    HandleDelayedRequestError(requestType, std::move(ev), Ydb::StatusIds::OVERLOADED, std::move(issues));
                 }
                 return false;
             case EScriptExecutionsCreationStatus::Finished:
@@ -1590,7 +1594,7 @@ private:
             if (ev->Get()->Success) {
                 Send(std::move(delayedEvent.Event));
             } else {
-                HanleDelayedRequestError(static_cast<EDelayedRequestType>(delayedEvent.RequestType), std::move(delayedEvent.Event), Ydb::StatusIds::INTERNAL_ERROR, {rootIssue});
+                HandleDelayedRequestError(static_cast<EDelayedRequestType>(delayedEvent.RequestType), std::move(delayedEvent.Event), Ydb::StatusIds::INTERNAL_ERROR, {rootIssue});
             }
             DelayedEventsQueue.pop_front();
         }
@@ -1598,25 +1602,25 @@ private:
 
     void Handle(NKqp::TEvForgetScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ForgetScriptExecutionOperation)) {
-            Register(CreateForgetScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateForgetScriptExecutionOperationActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvGetScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::GetScriptExecutionOperation)) {
-            Register(CreateGetScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateGetScriptExecutionOperationActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ListScriptExecutionOperations)) {
-            Register(CreateListScriptExecutionOperationsActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateListScriptExecutionOperationsActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::CancelScriptExecutionOperation)) {
-            Register(CreateCancelScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateCancelScriptExecutionOperationActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
@@ -1724,10 +1728,11 @@ private:
             ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->DatabaseId, ev->Get()->Serverless);
         }
         DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
+        // TODO: update info for compute scheduler too
     }
 
     void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {
-        HanleDelayedRequestError(static_cast<EDelayedRequestType>(ev->Cookie), std::move(ev->Get()->RequestEvent), ev->Get()->Status, std::move(ev->Get()->Issues));
+        HandleDelayedRequestError(static_cast<EDelayedRequestType>(ev->Cookie), std::move(ev->Get()->RequestEvent), ev->Get()->Status, std::move(ev->Get()->Issues));
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -1779,6 +1784,7 @@ private:
     TActorId SpillingService;
     TActorId WhiteBoardService;
     TActorId KqpWorkloadService;
+    TActorId KqpComputeSchedulerService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

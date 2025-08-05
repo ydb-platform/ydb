@@ -34,7 +34,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
     , DefaultHugeGarbagePerMille(300, 1, 1000)
     , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
-    , MaxChunksToDefragInflight(10, 1, 50)
+    , MaxChunksToDefragInflight(10, 1, 1000)
     , FreshCompMaxInFlightWrites(10, 1, 1000)
     , FreshCompMaxInFlightReads(10, 1, 1000)
     , HullCompMaxInFlightWrites(10, 1, 1000)
@@ -473,6 +473,7 @@ void TNodeWarden::Bootstrap() {
     auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
     const bool success = DeriveStorageConfig(appConfig, config.get(), &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
+    TDistributedConfigKeeper::GenerateBridgeInitialState(*Cfg, config.get());
     TDistributedConfigKeeper::UpdateFingerprint(config.get());
     StorageConfig = std::move(config);
 
@@ -1550,18 +1551,13 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         } else if (node.HasWalleLocation()) {
             r->MutableLocation()->CopyFrom(node.GetWalleLocation());
         }
+        const auto& bridgePileName = TNodeLocation(r->GetLocation()).GetBridgePileName();
         if (!piles.empty()) {
-            if (!node.HasBridgePileName()) {
+            if (!bridgePileName) {
                 *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
                 return false;
             }
-            const auto it = piles.find(node.GetBridgePileName());
-            if (it == piles.end()) {
-                *errorReason = TStringBuilder() << "incorrect pile name " << node.GetBridgePileName();
-                return false;
-            }
-            it->second.CopyToProto(r, &NKikimrBlobStorage::TNodeIdentifier::SetBridgePileId);
-        } else if (node.HasBridgePileName()) {
+        } else if (bridgePileName) {
             *errorReason = "pile name can't be specified when Bridge mode is not enabled";
             return false;
         }

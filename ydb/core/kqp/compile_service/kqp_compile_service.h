@@ -79,6 +79,7 @@ public:
         return ByteSize;
     }
 
+    THashSet<TKqpCompileResult::TConstPtr> GetSnapshot() const;
     size_t EraseExpiredQueries();
 
     void Clear();
@@ -134,6 +135,7 @@ private:
     ui64 ByteSize = 0;
     TDuration Ttl;
 
+    THashSet<TKqpCompileResult::TConstPtr> Snapshot;
     TAdaptiveLock Lock;
 };
 

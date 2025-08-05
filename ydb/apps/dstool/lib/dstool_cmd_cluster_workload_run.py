@@ -26,6 +26,8 @@ def add_options(p):
     p.add_argument('--no-fail-model-check', action='store_true', help='Do not check VDisk states before taking action')
     p.add_argument('--enable-soft-switch-piles', action='store_true', help='Enable soft switch pile with PROMOTE')
     p.add_argument('--enable-hard-switch-piles', action='store_true', help='Enable hard switch pile with setting PRIMARY')
+    p.add_argument('--enable-disconnect-piles', action='store_true', help='Enable disconnect pile')
+    p.add_argument('--fixed-pile-for-disconnect', type=int, help='Pile to disconnect')
 
 
 def fetch_start_time_map(base_config):
@@ -76,6 +78,17 @@ def do(args):
     pdisk_key_versions = {}
 
     config_retries = None
+
+    if args.enable_soft_switch_piles or args.enable_hard_switch_piles or args.enable_disconnect_piles:
+        base_config = common.fetch_base_config()
+        pile_name_to_node_id = common.build_pile_to_node_id_map(base_config)
+        piles_count = len(pile_name_to_node_id)
+        node_id_to_endpoints = common.fetch_node_to_endpoint_map()
+        pile_names = list(sorted(pile_name_to_node_id.keys()))
+        pile_id_to_endpoints = {
+            idx: [node_id_to_endpoints[node_id] for node_id in pile_name_to_node_id[pile_name]]
+            for idx, pile_name in enumerate(pile_names)
+        }
 
     while True:
         common.flush_cache()
@@ -286,6 +299,14 @@ def do(args):
             print(f"Switching primary pile to {pile_id} with setting PRIMARY")
             common.set_primary_pile(pile_id, [x for x in all_piles if x != pile_id])
 
+        def do_disconnect_pile(pile_id, pile_id_to_endpoints):
+            print(f"Disconnecting pile {pile_id}")
+            common.disconnect_pile(pile_id, pile_id_to_endpoints)
+
+        def do_connect_pile(pile_id, pile_id_to_hosts):
+            print(f"Connecting pile {pile_id}")
+            common.connect_pile(pile_id, pile_id_to_hosts)
+
         ################################################################################################################
 
         now = datetime.now(timezone.utc)
@@ -371,14 +392,16 @@ def do(args):
         if restarts:
             possible_actions.append(('restart', (pick, restarts)))
 
-        has_pile_operations = args.enable_soft_switch_piles or args.enable_hard_switch_piles
+        has_pile_operations = args.enable_soft_switch_piles or args.enable_hard_switch_piles or args.enable_disconnect_piles
         if has_pile_operations:
             piles_info = common.get_piles_info()
-            piles_count = len(piles_info.per_pile_state)
+            print(piles_info)
+
             primary_pile = None
             synchronized_piles = []
             promoted_piles = []
             non_synchronized_piles = []
+            disconnected_piles = []
             for idx, pile_state in enumerate(piles_info.per_pile_state):
                 if pile_state.state == ydb_bridge.PileState.PRIMARY:
                     primary_pile = idx
@@ -386,6 +409,8 @@ def do(args):
                     synchronized_piles.append(idx)
                 elif pile_state.state == ydb_bridge.PileState.PROMOTE:
                     promoted_piles.append(idx)
+                elif pile_state.state == ydb_bridge.PileState.DISCONNECTED:
+                    disconnected_piles.append(idx)
                 else:
                     non_synchronized_piles.append(idx)
 
@@ -396,6 +421,11 @@ def do(args):
                 possible_actions.append(('soft-switch-pile', (do_soft_switch_pile, random.choice(synchronized_piles))))
             if args.enable_hard_switch_piles and can_hard_switch:
                 possible_actions.append(('hard-switch-pile', (do_hard_switch_pile, random.choice(promoted_piles + synchronized_piles), [primary_pile] + promoted_piles + synchronized_piles)))
+            if len(disconnected_piles) > 0:
+                possible_actions.append(('connect-pile', (do_connect_pile, random.choice(disconnected_piles), pile_id_to_endpoints)))
+            if args.enable_disconnect_piles and len(synchronized_piles) > 0:
+                pile_to_disconnect = args.fixed_pile_for_disconnect if args.fixed_pile_for_disconnect is not None else random.choice([primary_pile] + synchronized_piles)
+                possible_actions.append(('disconnect-pile', (do_disconnect_pile, pile_to_disconnect, pile_id_to_endpoints)))
 
         if not possible_actions:
             common.print_if_not_quiet(args, 'Waiting for the next round...', file=sys.stdout)

@@ -662,7 +662,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                     return nullptr;
                 }
 
-                if (!node->Child(i)->IsCallable("DependsOn")) {
+                if (!NNodes::TCoDependsOnBase::Match(node->Child(i))) {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Child(i)->Pos()), "Expected DependsOn"));
                     return nullptr;
                 }

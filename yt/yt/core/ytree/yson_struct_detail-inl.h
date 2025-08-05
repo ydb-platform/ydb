@@ -120,6 +120,7 @@ template <CNodePtr TNodePtr>
 struct TYsonSourceTraits<TNodePtr>
 {
     static constexpr bool IsValid = true;
+    static constexpr bool IsPullParser = false;
 
     static INodePtr AsNode(TNodePtr& source)
     {
@@ -163,6 +164,7 @@ template <>
 struct TYsonSourceTraits<NYson::TYsonPullParserCursor*>
 {
     static constexpr bool IsValid = true;
+    static constexpr bool IsPullParser = true;
 
     static INodePtr AsNode(NYson::TYsonPullParserCursor*& source)
     {
@@ -240,7 +242,11 @@ void LoadFromSource(
     using TTraits = TYsonSourceTraits<TSource>;
 
     try {
-        Deserialize(parameter, TTraits::AsNode(source));
+        if constexpr (TTraits::IsPullParser && NYson::ArePullParserDeserializable<T>()) {
+            Deserialize(parameter, source);
+        } else {
+            Deserialize(parameter, TTraits::AsNode(source));
+        }
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", pathGetter())
             << ex;

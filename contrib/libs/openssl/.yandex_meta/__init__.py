@@ -45,7 +45,7 @@ def post_install(self):
 
     OPENSOURCE_EXPORT_REPLACEMENT(
         CMAKE OpenSSL
-        CMAKE_TARGET OpenSSL::OpenSSL
+        CMAKE_TARGET openssl::openssl
         CONAN openssl/${OPENSOURCE_REPLACE_OPENSSL}
     )
 

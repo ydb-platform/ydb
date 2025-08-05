@@ -39,6 +39,7 @@ public:
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , AllowInconsistentReads(settings.GetAllowInconsistentReads())
         , UseFollowers(settings.GetAllowUseFollowers())
+        , IsTableImmutable(settings.GetIsTableImmutable())
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
@@ -158,6 +159,7 @@ private:
     struct TShardState {
         ui64 RetryAttempts = 0;
         std::unordered_set<ui64> Reads;
+        bool HasPipe = false;
     };
 
     struct TReads {
@@ -172,8 +174,8 @@ private:
             return Reads.find(readId);
         }
 
-        void insert(TReadState&& read) {
-            const auto [readIt, succeeded] = Reads.insert({read.Id, std::move(read)});
+        void insert(ui64 readId, TReadState&& read) {
+            const auto [readIt, succeeded] = Reads.insert({readId, std::move(read)});
             YQL_ENSURE(succeeded);
             ReadsPerShard[readIt->second.ShardId].Reads.emplace(readIt->second.Id);
         }
@@ -221,6 +223,18 @@ private:
             }
 
             return result;
+        }
+
+        bool NeedToCreatePipe(ui64 shardId) {
+            return !ReadsPerShard[shardId].HasPipe;
+        }
+
+        void SetPipeCreated(ui64 shardId) {
+            ReadsPerShard[shardId].HasPipe = true;
+        }
+
+        void SetPipeDestroyed(ui64 shardId) {
+            ReadsPerShard[shardId].HasPipe = false;
         }
     };
 
@@ -420,7 +434,7 @@ private:
 
         if (UseFollowers) {
             YQL_ENSURE(Locks.empty());
-            if (!record.GetFinished()) {
+            if (!record.GetFinished() && !IsTableImmutable) {
                 RuntimeError("read from follower returned partial data.", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                 return;
             }
@@ -498,8 +512,17 @@ private:
             request->Record.SetMaxRows(defaultSettings.GetMaxRows());
             request->Record.SetMaxBytes(defaultSettings.GetMaxBytes());
 
-            Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), read.ShardId, true),
+            const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
+
+            Send(PipeCacheId,
+                new TEvPipeCache::TEvForward(
+                    request.Release(), read.ShardId, TEvPipeCache::TEvForwardOptions{
+                        .AutoConnect = needToCreatePipe,
+                        .Subscribe = needToCreatePipe,
+                    }),
                 IEventHandle::FlagTrackDelivery);
+
+            Reads.SetPipeCreated(read.ShardId);
 
             CA_LOG_D("TEvReadAck was sent to shard: " << read.ShardId);
 
@@ -521,6 +544,8 @@ private:
         CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
 
         const auto& tabletId = ev->Get()->TabletId;
+
+        Reads.SetPipeDestroyed(tabletId);
 
         TVector<TReadState*> toRetry;
         for (auto* read : Reads.GetShardReads(tabletId)) {
@@ -560,6 +585,7 @@ private:
 
         if ((read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) || read.State == EReadState::Blocked) {
             if (ev->Get()->InstantStart) {
+                auto guard = BindAllocator();
                 auto requests = StreamLookupWorker->RebuildRequest(read.Id, ReadId);
                 for (auto& request : requests) {
                     StartTableRead(read.ShardId, std::move(request));
@@ -630,14 +656,27 @@ private:
             << ", lockTxId=" << record.GetLockTxId()
             << ", lockNodeId=" << record.GetLockNodeId());
 
-        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), shardId, true),
-            IEventHandle::FlagTrackDelivery, 0, LookupActorSpan.GetTraceId());
+        const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
+
+        Send(PipeCacheId,
+            new TEvPipeCache::TEvForward(
+                request.Release(),
+                shardId,
+                TEvPipeCache::TEvForwardOptions{
+                    .AutoConnect = needToCreatePipe,
+                    .Subscribe = needToCreatePipe,
+                }),
+            IEventHandle::FlagTrackDelivery,
+            0,
+            LookupActorSpan.GetTraceId());
+
+        Reads.SetPipeCreated(read.ShardId);
 
         read.State = EReadState::Running;
 
         auto readId = read.Id;
         auto lastSeqNo = read.LastSeqNo;
-        Reads.insert(std::move(read));
+        Reads.insert(readId, std::move(read));
 
         if (auto delay = ShardTimeout()) {
             TlsActivationContext->Schedule(
@@ -669,6 +708,7 @@ private:
 
         auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
         if (delay == TDuration::Zero()) {
+            auto guard = BindAllocator();
             auto requests = StreamLookupWorker->RebuildRequest(failedRead.Id, ReadId);
             for (auto& request : requests) {
                 StartTableRead(failedRead.ShardId, std::move(request));
@@ -753,6 +793,7 @@ private:
     IKqpGateway::TKqpSnapshot Snapshot;
     const bool AllowInconsistentReads;
     const bool UseFollowers;
+    const bool IsTableImmutable;
     const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;

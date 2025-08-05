@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 import copy
+import os
 import pytest
-import yatest
 import time
+import yatest
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
@@ -23,15 +24,15 @@ def string_version_to_tuple(s):
     return tuple(result)
 
 
-current_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target")
+current_binary_path = os.environ.get('YDB_CURRENT_BINARY_PATH', yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target"))
 current_name = 'current'
 if current_binary_path is not None:
     with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target-name")) as f:
         current_name = f.read().strip()
 current_binary_version = string_version_to_tuple(current_name)
 
-inter_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter")
-init_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init")
+inter_stable_binary_path = os.environ.get('YDB_INTER_BINARY_PATH', yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter"))
+init_stable_binary_path = os.environ.get('YDB_INIT_BINARY_PATH', yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init"))
 
 inter_stable_version = None
 init_stable_version = None
@@ -102,7 +103,7 @@ class RestartToAnotherVersionFixture:
                 endpoint=self.endpoint
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         yield
         self.cluster.stop()
 
@@ -117,7 +118,7 @@ class RestartToAnotherVersionFixture:
                 endpoint=self.endpoint
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         # TODO: remove sleep
         # without sleep there are errors like
         # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
@@ -161,7 +162,7 @@ class MixedClusterFixture:
                 endpoint=self.endpoint
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         yield
         self.cluster.stop()
 
@@ -192,7 +193,7 @@ class RollingUpgradeAndDowngradeFixture:
                     endpoint=self.endpoints[0]
                 )
             )
-            self.driver.wait()
+            self.driver.wait(timeout=60)
 
         query = """
             CREATE TABLE `test_readiness` (
@@ -239,13 +240,15 @@ class RollingUpgradeAndDowngradeFixture:
         for i in range(1, len(self.cluster.nodes) + 1):
             self.endpoints.append("grpc://%s:%s" % ('localhost', self.cluster.nodes[i].port))
 
+        self.endpoint = self.endpoints[0]
+
         self.driver = ydb.Driver(
             ydb.DriverConfig(
                 self.endpoints[0],
                 database='/Root'
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
         yield
         self.cluster.stop()
 

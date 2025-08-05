@@ -8,34 +8,31 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPeriodicYielder::TPeriodicYielder(TDuration period)
-    : Period_(DurationToCpuDuration(period))
-    , Disabled_(false)
+TPeriodicYielderGuard::TPeriodicYielderGuard(std::optional<TDuration> period)
+    : TContextSwitchGuard(
+        [this] () noexcept { Stop(); },
+        [this] () noexcept { Restart(); })
+    , CpuPeriod_(period ? std::optional(DurationToCpuDuration(*period)) : std::nullopt)
 { }
 
-bool TPeriodicYielder::TryYield()
+bool TPeriodicYielderGuard::NeedYield() const
 {
-    if (Disabled_) {
-        return false;
-    }
+    return CpuPeriod_ && *CpuPeriod_ < GetElapsedCpuTime();
+}
 
-    if (GetCpuInstant() - LastYieldTime_ > Period_) {
+bool TPeriodicYielderGuard::TryYield() const
+{
+    if (NeedYield()) {
         Yield();
-        LastYieldTime_ = GetCpuInstant();
         return true;
     }
 
     return false;
 }
 
-void TPeriodicYielder::SetDisabled(bool value)
+TPeriodicYielderGuard CreatePeriodicYielder(std::optional<TDuration> period)
 {
-    Disabled_ = value;
-}
-
-void TPeriodicYielder::SetPeriod(TDuration value)
-{
-    Period_ = DurationToCpuDuration(value);
+    return {period};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

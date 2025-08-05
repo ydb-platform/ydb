@@ -296,3 +296,25 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         finally:
             if os.path.exists(seed_nodes_file.name):
                 os.unlink(seed_nodes_file.name)
+
+    def test_invalid_host_config_id(self):
+        fetched_config = fetch_config(self.config_client)
+        dumped_fetched_config = yaml.safe_load(fetched_config)
+
+        # replace config with invalid host config id
+        dumped_fetched_config['metadata']['version'] = 1
+        dumped_fetched_config["config"]["host_configs"][0]["host_config_id"] = 1000
+        replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        logger.debug(f"replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
+
+    def test_invalid_change_host_config_disk(self):
+        fetched_config = fetch_config(self.config_client)
+        dumped_fetched_config = yaml.safe_load(fetched_config)
+
+        # replace config with invalid host config disk path
+        dumped_fetched_config["config"]["host_configs"][0]["drive"].append(dumped_fetched_config["config"]["host_configs"][0]["drive"][0])
+        dumped_fetched_config['metadata']['version'] = 1
+        replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        logger.debug(f"replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)

@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
@@ -27,31 +28,41 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
     FetchingPlan = fetching;
 }
 
-void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr) {
+void IDataSource::StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     AFL_VERIFY(FetchingPlan);
-    if (!ProcessingStarted) {
-        InitStageData(std::make_unique<TFetchedData>(
-            GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
-        ProcessingStarted = true;
-        SourceGroupGuard = GetContext()->GetProcessScopeGuard()->BuildGroupGuard();
-        SetMemoryGroupId(SourceGroupGuard->GetGroupId());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", GetSourceIdx());
-        //    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
-    }
     TFetchingScriptCursor cursor(FetchingPlan, 0);
     const auto& commonContext = *GetContext()->GetCommonContext();
-    auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
+    auto sourceCopy = sourcePtr;
+    auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
     NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
 }
 
-void IDataSource::ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr) {
+void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+    if (!ProcessingStarted) {
+        AFL_VERIFY(FetchingPlan);
+        InitStageData(std::make_unique<TFetchedData>(
+            GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
+        if (HasPortionAccessor()) {
+            InitUsedRawBytes();
+        }
+        ProcessingStarted = true;
+        SourceGroupGuard = GetContext()->GetProcessScopeGuard()->BuildGroupGuard(GetSequentialMemoryGroupIdx());
+        SetMemoryGroupId(SourceGroupGuard->GetGroupId());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())(
+            "memory_source_idx", GetSequentialMemoryGroupIdx());
+        //    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
+    }
+}
+
+void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
     AFL_VERIFY(!!ScriptCursor)("source_id", GetSourceId());
     if (ScriptCursor->Next()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "ContinueCursor");
         auto cursor = std::move(*ScriptCursor);
         ScriptCursor.reset();
         const auto& commonContext = *GetContext()->GetCommonContext();
-        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
+        auto sourceCopy = sourcePtr;
+        auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "CannotContinueCursor");
@@ -80,9 +91,9 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(!GetStageData().IsEmptyWithData());
     if (memoryLimit && !IsSourceInMemory()) {
-        const auto accessor = GetStageData().GetPortionAccessor();
+        const auto accessor = ExtractPortionAccessor();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
-        StageResult->SetPages(accessor.BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
+        StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
     } else {
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
@@ -100,7 +111,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
     ui32 fetchedChunks = 0;
     ui32 nullChunks = 0;
     for (auto&& i : columnIds) {
-        auto columnChunks = GetStageData().GetPortionAccessor().GetColumnChunksPointers(i);
+        auto columnChunks = GetPortionAccessor().GetColumnChunksPointers(i);
         if (columnChunks.empty()) {
             continue;
         }
@@ -111,7 +122,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
-                reading->AddRange(GetStageData().GetPortionAccessor().RestoreBlobRange(c->BlobRange));
+                reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
             } else {
                 defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
@@ -167,7 +178,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
     TReadActionsCollection readActions;
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    NCommon::TFetchingResultContext contextFetch(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+    NCommon::TFetchingResultContext contextFetch(context.MutableResources(), *GetStageData().GetIndexes(), source);
     for (auto&& i : fetchersExt) {
         i->Start(readActions, contextFetch);
     }
@@ -192,6 +203,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
 
 TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDataSource::DoStartFetchIndex(
     const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& indexContext) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
     THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> indexInfo;
     for (auto&& i : indexContext.GetOperationsBySubColumn().GetData()) {
         NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), i.first);
@@ -240,7 +252,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
 
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(meta->GetIndexId())) {
         auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-        NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+        NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
         fetcher->OnDataCollected(fetchContext);
     }
 
@@ -265,7 +277,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
             GetContext()->GetCommonContext()->GetCounters().OnDeniedByIndex(i.GetRecordsCount());
         }
     }
-    return filter.And(GetStageData().GetTable()->GetFilter());
+    return filter.And(context.GetResources().GetFilter());
 }
 
 void TPortionDataSource::DoAbort() {
@@ -273,13 +285,14 @@ void TPortionDataSource::DoAbort() {
 
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchHeader(
     const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
-    if (context.GetResources()->GetAccessorOptional(fetchContext.GetColumnId())) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
+    if (context.GetResources().GetAccessorOptional(fetchContext.GetColumnId())) {
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
     std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
     const ui32 columnId = fetchContext.GetColumnId();
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    if (GetStageData().GetPortionAccessor().GetColumnChunksPointers(columnId).size() &&
+    if (GetPortionAccessor().GetColumnChunksPointers(columnId).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(columnId)->GetAccessorConstructor()->GetType() ==
             NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
         return std::make_shared<NCommon::TSubColumnsFetchLogic>(columnId, source, std::vector<TString>());
@@ -294,7 +307,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     {
         if (auto fetcher = MutableStageData().ExtractFetcherOptional(fetchContext.GetColumnId())) {
-            NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+            NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
             fetcher->OnDataCollected(fetchContext);
         } else {
             NYDBTest::TControllers::GetColumnShardController()->OnHeaderSelectProcessed({});
@@ -302,7 +315,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
         }
     }
 
-    auto acc = context.GetResources()->GetAccessorVerified(fetchContext.GetColumnId());
+    auto acc = context.GetResources().GetAccessorVerified(fetchContext.GetColumnId());
     NArrow::NAccessor::IChunkedArray::VisitDataOwners<bool>(acc, [&](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arrData) {
         bool isAllowed = false;
         if (arrData->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
@@ -329,9 +342,9 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
 
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchData(
     const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) {
-    std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    if (addr.HasSubColumns() && GetStageData().GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
+    if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
             NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
         return std::make_shared<NCommon::TSubColumnsFetchLogic>(
@@ -344,7 +357,7 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
 void TPortionDataSource::DoAssembleAccessor(
     const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& /*subColumnName*/) {
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+    NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(columnId)) {
         fetcher->OnDataCollected(fetchContext);
     }
@@ -363,8 +376,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
         }
     }
 
-    auto batch = GetStageData()
-                     .GetPortionAccessor()
+    auto batch = GetPortionAccessor()
                      .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
                      .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                      .DetachResult();
@@ -372,60 +384,36 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
 
-namespace {
-class TPortionAccessorFetchingSubscriber: public IDataAccessorRequestsSubscriber {
-private:
-    TFetchingScriptCursor Step;
-    std::shared_ptr<IDataSource> Source;
-    const NColumnShard::TCounterGuard Guard;
-    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        return Source->GetContext()->GetCommonContext()->GetAbortionFlag();
-    }
-
-    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("facc"));
-        if (result.HasErrors()) {
-            Source->GetContext()->GetCommonContext()->AbortWithError("has errors on portion accessors restore");
-            return;
-        }
-        AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
-        Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
-        Source->InitUsedRawBytes();
-        AFL_VERIFY(Step.Next());
-        const auto& commonContext = *Source->GetContext()->GetCommonContext();
-        auto task = std::make_shared<TStepAction>(Source, std::move(Step), commonContext.GetScanActorId(), false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
-    }
-
-public:
-    TPortionAccessorFetchingSubscriber(const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
-        : Step(step)
-        , Source(source)
-        , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard()) {
-    }
-};
-
-}   // namespace
-
-bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
-    AFL_VERIFY(!GetStageData().HasPortionAccessor());
+bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
+    AFL_VERIFY(!HasPortionAccessor());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
-    std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
+    std::shared_ptr<TDataAccessorsRequest> request =
+        std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
     request->AddPortion(Portion);
     request->SetColumnIds(GetContext()->GetAllUsageColumns()->GetColumnIds());
-    request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(step, sourcePtr));
+    request->RegisterSubscriber(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber>(step, sourcePtr));
     GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
     return true;
 }
 
 TPortionDataSource::TPortionDataSource(
-    const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
-    : TBase(portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
-          portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
-          portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
+    const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
+    : TBase(EType::SimplePortion, portion->GetPortionId(), sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
+          portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
+          portion->GetMeta().GetDeletionsCount())
     , Portion(portion)
-    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
+    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
+    , Start(TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()))
+    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata())) {
+    AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
+    if (context->GetReadMetadata()->IsDescSorted()) {
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Finish.GetValue(), Start.GetValue());
+    } else {
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Start.GetValue(), Finish.GetValue());
+    }
+    AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())("finish", Finish.DebugString());
 }
 
 TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
@@ -449,7 +437,7 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
 
     THashMap<ui32, TEntitySize> sizeByColumn;
     for (auto&& [_, info] : columns) {
-        auto chunks = GetStageData().GetPortionAccessor().GetColumnChunksPointers(info.GetColumnId());
+        auto chunks = GetPortionAccessor().GetColumnChunksPointers(info.GetColumnId());
         auto& sizes = sizeByColumn[info.GetColumnId()];
         for (auto&& i : chunks) {
             sizes.Add(i->GetBlobRange().GetSize(), i->GetMeta().GetRawBytes());

@@ -45,6 +45,6 @@ hosts:
     rack: '1'
 ```
 
-## Kubernetes-specific Details {#hosts-k8s}
+## Kubernetes-Specific Details {#hosts-k8s}
 
 When deploying {{ ydb-short-name }} with a Kubernetes operator, the entire `hosts` section is generated automatically, replacing any user-specified content in the configuration passed to the operator. All Storage nodes use `host_config_id` = `1`, for which the [correct configuration](host_configs.md#host-configs-k8s) must be specified.

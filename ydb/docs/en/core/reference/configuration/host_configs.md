@@ -1,6 +1,6 @@
 # host_configs
 
-A {{ ydb-short-name }} cluster consists of multiple nodes, and one or more typical server configurations are usually used for their deployment. To avoid repeating its description for each node, there is a `host_configs` section in the configuration file that lists the used configurations and assigned IDs.
+A {{ ydb-short-name }} cluster consists of multiple nodes, and one or more typical server configurations are usually used for their deployment. To avoid repeating their description for each node, there is a `host_configs` section in the configuration file that lists the used configurations and assigned IDs.
 
 ## Syntax
 
@@ -52,7 +52,7 @@ host_configs:
     type: SSD
 ```
 
-## Kubernetes features {#host-configs-k8s}
+## Kubernetes Features {#host-configs-k8s}
 
 The {{ ydb-short-name }} Kubernetes operator mounts NBS disks for Storage nodes at the path `/dev/kikimr_ssd_00`. To use them, the following `host_configs` configuration must be specified:
 

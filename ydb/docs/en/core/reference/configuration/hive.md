@@ -1,6 +1,6 @@
 # hive_config
 
-[Hive](../../concepts/glossary.md#hive) is a YDB component responsible for launching [tablets](../../concepts/glossary.md#tablet). In various situations and under different load patterns, you might need to configure its behavior. Hive behavior is configured in the `hive_config` section of the {{ ydb-short-name }} [configuration](../../reference/configuration/hive.md). Some configuration options are also available for editing through the [Hive web-viewer](../embedded-ui/hive.md#settings) interface. Settings configured through the interface take priority over those specified in the configuration. Below are all available options, with the corresponding option name in the interface indicated if the option can be edited through the interface.
+[Hive](../../concepts/glossary.md#hive) is a YDB component responsible for launching [tablets](../../concepts/glossary.md#tablet). In various situations and under different load patterns, you might need to configure its behavior. Hive behavior is configured in the `hive_config` section of the {{ ydb-short-name }} cluster configuration. Some configuration options are also available for editing through the [Hive web-viewer](../embedded-ui/hive.md#settings) interface. Settings configured through the interface take priority over those specified in the configuration. Below are all available options, with the corresponding option name in the interface indicated if the option can be edited through the interface.
 
 ## Tablet Boot Options {#boot}
 
@@ -23,7 +23,7 @@ These options allow you to control the speed at which [tablets are booted](../..
 * `HIVE_BOOT_STRATEGY_BALANCED` — when the `max_tablets_scheduled` limit is reached on one node, stops starting new tablets on all nodes.
 * `HIVE_BOOT_STRATEGY_FAST` — when the `max_tablets_scheduled` limit is reached on one node, continues starting tablets on other nodes.
 
-If when starting a large number of tablets one node starts tablets slightly slower than others, then using `HIVE_BOOT_STRATEGY_FAST` will result in fewer tablets being started on that node than on the others. Using `HIVE_BOOT_STRATEGY_BALANCED` in the same situation will distribute tablets evenly across nodes, but their startup will take longer.
+If one node starts tablets slightly slower than others when starting a large number of tablets, then using `HIVE_BOOT_STRATEGY_FAST` will result in fewer tablets being started on that node than on the others. Using `HIVE_BOOT_STRATEGY_BALANCED` in the same situation will distribute tablets evenly across nodes, but their startup will take longer.
 
 | `HIVE_BOOT_STRATEGY_BALANCED` ||
 || `default_tablet_limit` | — | Nested section | Limits on starting tablets of various types on a single node. Specified as a list format where each element has `type` and `max_count` fields. | Empty section ||
@@ -72,7 +72,7 @@ hive_config:
           - "dc-3"
 ```
 
-## Auto-balancing Options {#autobalancing}
+## Auto-Balancing Options {#autobalancing}
 
 These options control the [auto-balancing](../../contributor/hive.md#autobalancing) process: in which situations it starts, how many tablets it moves at what intervals, how it selects nodes and tablets. Some options are presented in two variations: for "emergency balancing," i.e., balancing when one or more nodes are overloaded, and for all other types of balancing.
 

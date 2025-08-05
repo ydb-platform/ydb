@@ -32,7 +32,7 @@ grpc_config:
    ca: "/opt/ydb/certs/ca.crt"
 ```
 
-### PostgreSQL wire protocol
+### PostgreSQL Wire Protocol
 
 {{ ydb-short-name }} exposes a separate network port for the [PostgreSQL wire protocol](../../postgresql/intro.md). This protocol is used for external communication with client applications initially designed to work with [PostgreSQL](https://www.postgresql.org/).
 
@@ -43,7 +43,7 @@ local_pg_wire_config:
     ssl_certificate: "/opt/ydb/certs/node.crt"
 ```
 
-### Kafka wire protocol
+### Kafka Wire Protocol
 
 {{ ydb-short-name }} exposes a separate network port for the [Kafka wire protocol](../../reference/kafka-api/index.md). This protocol is used for external communication with client applications initially designed to work with [Apache Kafka](https://kafka.apache.org/).
 
@@ -103,7 +103,7 @@ auth_config:
   scheme: "ldaps"
 ```
 
-### Federated queries
+### Federated Queries
 
 [Federated queries](../../concepts/federated_query/index.md) allow {{ ydb-short-name }} to query various external data sources. Whether these queries occur over TLS-encrypted connections is controlled by the `USE_TLS` setting of `CREATE EXTERNAL DATA SOURCE` queries. No changes to the server-side configuration are required.
 
@@ -121,7 +121,7 @@ tracing_config:
       service_name: ydb
 ```
 
-## Asynchronous replication
+## Asynchronous Replication
 
 [Asynchronous replication](../../concepts/async-replication.md) synchronizes data between two {{ ydb-short-name }} databases, where one serves as a client to the other. Whether this communication uses TLS-encrypted connections is controlled by the `CONNECTION_STRING` setting of [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md) queries. Use the `grpcs://` protocol for TLS connections. No changes to the server-side configuration are required.
 

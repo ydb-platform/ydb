@@ -11,13 +11,13 @@ Examples of components managed by the memory controller:
 
 Memory limits can be configured to control overall memory usage, ensuring the database operates efficiently within the available resources.
 
-## Hard memory limit {#hard-memory-limit}
+## Hard Memory Limit {#hard-memory-limit}
 
-The hard memory limit specifies the total amount of memory available to {{ ydb-short-name }} process.
+The hard memory limit specifies the total amount of memory available to the {{ ydb-short-name }} process.
 
-By default, the hard memory limit for {{ ydb-short-name }} process is set to its [cgroups](https://en.wikipedia.org/wiki/Cgroups) memory limit.
+By default, the hard memory limit for the {{ ydb-short-name }} process is set to its [cgroups](https://en.wikipedia.org/wiki/Cgroups) memory limit.
 
-In environments without a cgroups memory limit, the default hard memory limit equals to the host's total available memory. This configuration allows the database to utilize all available resources but may lead to resource competition with other processes on the same host. Although the memory controller attempts to account for this external consumption, such a setup is not recommended.
+In environments without a cgroups memory limit, the default hard memory limit equals the host's total available memory. This configuration allows the database to utilize all available resources but may lead to resource competition with other processes on the same host. Although the memory controller attempts to account for this external consumption, such a setup is not recommended.
 
 Additionally, the hard memory limit can be specified in the configuration. Note that the database process may still exceed this limit. Therefore, it is highly recommended to use cgroups memory limits in production environments to enforce strict memory control.
 
@@ -30,21 +30,21 @@ memory_controller_config:
   hard_limit_bytes: 16106127360
 ```
 
-## Soft memory limit {#soft-memory-limit}
+## Soft Memory Limit {#soft-memory-limit}
 
-The soft memory limit specifies a dangerous threshold that should not be exceeded by {{ ydb-short-name }} process under normal circumstances.
+The soft memory limit specifies a dangerous threshold that should not be exceeded by the {{ ydb-short-name }} process under normal circumstances.
 
 If the soft limit is exceeded, {{ ydb-short-name }} gradually reduces the [shared cache](../../concepts/glossary.md#shared-cache) size to zero. Therefore, more database nodes should be added to the cluster as soon as possible, or per-component memory limits should be reduced.
 
-## Target memory utilization {#target-memory-utilization}
+## Target Memory Utilization {#target-memory-utilization}
 
-The target memory utilization specifies a threshold for {{ ydb-short-name }} process memory usage that is considered optimal.
+The target memory utilization specifies a threshold for the {{ ydb-short-name }} process memory usage that is considered optimal.
 
 Flexible cache sizes are calculated according to their limit thresholds to keep process consumption around this value.
 
 For example, in a database that consumes a little memory on query execution, caches consume memory around this threshold, and other memory stays free. If query execution consumes more memory, caches start to reduce their sizes to their minimum threshold.
 
-## Per-component memory limits
+## Per-Component Memory Limits
 
 There are two different types of components within {{ ydb-short-name }}.
 
@@ -54,7 +54,7 @@ The second type, known as activity components, allocates memory for specific act
 
 Many other auxiliary components and processes operate alongside the {{ ydb-short-name }} process, consuming memory. Currently, these components do not have any memory limits.
 
-### Cache components memory limits
+### Cache Components Memory Limits
 
 The cache components include:
 
@@ -75,7 +75,7 @@ memory_controller_config:
   shared_cache_max_percent: 30
 ```
 
-### Activity components memory limits
+### Activity Components Memory Limits
 
 The activity components include:
 
@@ -94,7 +94,7 @@ memory_controller_config:
   query_execution_limit_percent: 25
 ```
 
-## Configuration parameters
+## Configuration Parameters
 
 Each configuration parameter applies within the context of a single database node.
 

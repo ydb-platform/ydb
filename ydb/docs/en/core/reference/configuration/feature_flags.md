@@ -8,7 +8,7 @@ feature_flags:
   enable_topic_autopartitioning_for_cdc: true
 ```
 
-## Feature flags
+## Feature Flags
 
 | Flag          | Feature |
 |---------------------------| ----------------------------------------------------|

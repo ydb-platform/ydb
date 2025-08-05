@@ -25,7 +25,7 @@ Formally, the `domain` field can contain many elements as it is a list. However,
 
 {% endnote %}
 
-## Blob Storage configuration {#domains-blob}
+## Blob Storage Configuration {#domains-blob}
 
 {% note info %}
 
@@ -33,7 +33,7 @@ Not required for clusters with [automatic configuration](../../devops/configurat
 
 {% endnote %}
 
-This section defines one or more types of storage pools available in the cluster for the data in the databases with the following configuration options:
+This section defines one or more types of storage pools available in the cluster for database data with the following configuration options:
 
 - Storage pool name
 - Device properties (for example, disk type)
@@ -68,7 +68,7 @@ The following [fault tolerance modes](../../concepts/topology.md) are available:
 
 Each database in the cluster is assigned at least one of the available storage pools selected in the database creation operation. The names of storage pools among those assigned can be used in the `DATA` attribute when defining column groups in YQL operators [`CREATE TABLE`](../../yql/reference/syntax/create_table/family.md)/[`ALTER TABLE`](../../yql/reference/syntax/alter_table/family.md).
 
-## State Storage configuration {#domains-state}
+## State Storage Configuration {#domains-state}
 
 {% note info %}
 
@@ -106,9 +106,9 @@ Each State Storage client (for example, DataShard tablet) uses `nto_select` node
 
 Odd numbers must be used for `nto_select` because using even numbers does not improve fault tolerance in comparison to the nearest smaller odd number.
 
-## Complete configuration examples
+## Complete Configuration Examples
 
-### Single data center with `block-4-2` erasure
+### Single Data Center with `block-4-2` Erasure
 
 ```yaml
 domains_config:
@@ -131,7 +131,7 @@ domains_config:
     ssid: 1
 ```
 
-### Multi data center with `mirror-3-dc` erasure
+### Multi Data Center with `mirror-3-dc` Erasure
 
 ```yaml
 domains_config:
@@ -154,7 +154,7 @@ domains_config:
     ssid: 1
 ```
 
-### No fault tolerance (`none`) - for testing
+### No Fault Tolerance (`none`) - For Testing
 
 ```yaml
 domains_config:
@@ -177,7 +177,7 @@ domains_config:
     ssid: 1
 ```
 
-### Multiple storage pool types
+### Multiple Storage Pool Types
 
 ```yaml
 domains_config:

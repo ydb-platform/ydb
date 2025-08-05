@@ -2,7 +2,7 @@
 
 The cluster configuration is specified in the YAML file passed in the `--yaml-config` parameter when the cluster nodes are run. This article provides an overview of the main configuration sections and links to detailed documentation for each section.
 
-Each configuration section serves a specific purpose in defining how {{ ydb-short-name }} cluster operates, from hardware resource allocation to security settings and feature flags. The configuration is organized into logical groups that correspond to different aspects of cluster management and operation.
+Each configuration section serves a specific purpose in defining how the {{ ydb-short-name }} cluster operates, from hardware resource allocation to security settings and feature flags. The configuration is organized into logical groups that correspond to different aspects of cluster management and operation.
 
 ## Configuration Sections
 
@@ -25,6 +25,6 @@ The following top-level configuration sections are available, listed in alphabet
 - [{#T}](security_config.md) — Security configuration settings
 - [{#T}](tls.md) — TLS configuration for secure connections
 
-## Sample cluster configurations
+## Sample Cluster Configurations
 
 You can find model cluster configurations for deployment in the [repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/). Check them out before deploying a cluster.

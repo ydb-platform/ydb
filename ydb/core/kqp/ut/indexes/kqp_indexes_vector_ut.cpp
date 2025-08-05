@@ -457,6 +457,23 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT(result.IsSuccess());
         }
 
+        // BulkUpsert to the table with index should fail
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("pk").Int64(11)
+                .AddMember("emb").String("\x77\x77\x03")
+                .AddMember("data").String("43")
+                .EndStruct();
+            rows.EndList();
+            auto result = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+            auto issues = result.GetIssues().ToString();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SCHEME_ERROR, result.GetStatus());
+            UNIT_ASSERT_C(issues.contains("Only async-indexed tables are supported by BulkUpsert"), issues);
+        }
+
         const TString postingTable1 = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
         
         // First index is not updated

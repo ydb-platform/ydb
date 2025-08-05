@@ -133,7 +133,7 @@ timeout = 60
 
 {% list tabs %}
 
-- 3 узла
+- Три узла
 
   ```yaml
   all:

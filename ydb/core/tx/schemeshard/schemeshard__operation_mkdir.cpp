@@ -269,6 +269,11 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        const TString& name = Transaction.GetMkDir().GetName();
+        NSchemeShard::TPath dstPath = parentPath.Child(name);
+        dstPath.DomainInfo()->DecPathsInside(context.SS);
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                   "MkDir AbortPropose"
                        << ", opId: " << OperationId
@@ -276,6 +281,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        const TString& name = Transaction.GetMkDir().GetName();
+        NSchemeShard::TPath dstPath = parentPath.Child(name);
+        dstPath.DomainInfo()->DecPathsInside(context.SS);
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TMkDir AbortUnsafe"
                          << ", opId: " << OperationId

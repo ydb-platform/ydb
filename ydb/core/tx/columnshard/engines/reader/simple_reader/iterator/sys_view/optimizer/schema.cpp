@@ -3,12 +3,13 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NOptimizer {
 
-NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TSchemeShardLocalPathId& pathId, const ui64 tabletId, const ui64 taskId) {
+NArrow::TSimpleRowContent TSchemaAdapter::GetPKSimpleRow(
+    const NColumnShard::TSchemeShardLocalPathId& pathId, const ui64 tabletId, const ui64 taskId) {
     NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 3);
     writer.Append<ui64>(pathId.GetRawValue());
     writer.Append<ui64>(tabletId);
     writer.Append<ui64>(taskId);
-    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
+    return NArrow::TSimpleRowContent(writer.Finish());
 }
 
 const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {

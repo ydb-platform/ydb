@@ -9,13 +9,15 @@ template <class TObject>
 class TOrderedObjects {
 private:
     const ERequestSorting Sorting;
+    const std::shared_ptr<arrow::Schema> PKSchema;
     std::deque<TObject> HeapObjects;
     YDB_READONLY_DEF(std::deque<TObject>, AlreadySorted);
     bool Initialized = false;
 
 public:
-    TOrderedObjects(const ERequestSorting sorting)
-        : Sorting(sorting) {
+    TOrderedObjects(const ERequestSorting sorting, const std::shared_ptr<arrow::Schema>& pkSchema)
+        : Sorting(sorting)
+        , PKSchema(pkSchema) {
     }
 
     ERequestSorting GetSorting() const {
@@ -43,7 +45,7 @@ public:
         Initialized = true;
         if (Sorting != ERequestSorting::NONE) {
             HeapObjects = std::move(objects);
-            std::make_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting));
+            std::make_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting, PKSchema.get()));
         } else {
             AlreadySorted = std::move(objects);
         }
@@ -52,7 +54,7 @@ public:
     void PrepareOrdered(const ui32 count) {
         if (Sorting != ERequestSorting::NONE) {
             while (AlreadySorted.size() < count && HeapObjects.size()) {
-                std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting));
+                std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting, PKSchema.get()));
                 AlreadySorted.emplace_back(std::move(HeapObjects.back()));
                 HeapObjects.pop_back();
             }
@@ -67,7 +69,7 @@ public:
             return result;
         }
         AFL_VERIFY(HeapObjects.size());
-        std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting));
+        std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TComparator(Sorting, PKSchema.get()));
         auto result = std::move(HeapObjects.back());
         HeapObjects.pop_back();
         return result;
@@ -242,8 +244,8 @@ public:
         return result;
     }
 
-    TSourcesConstructorWithAccessors(const ERequestSorting sorting)
-        : Constructors(sorting) {
+    TSourcesConstructorWithAccessors(const ERequestSorting sorting, const std::shared_ptr<arrow::Schema>& pkSchema)
+        : Constructors(sorting, pkSchema) {
     }
 
     void InitializeConstructors(std::deque<TConstructor>&& objects) {

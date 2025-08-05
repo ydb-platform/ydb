@@ -55,13 +55,13 @@ public:
     }
 
     bool IsUsed(const TPortionInfo& info) const {
-        return IsUsed(info.IndexKeyStart(), info.IndexKeyEnd());
+        return IsUsed(info.IndexKeyStart().GetView(), info.IndexKeyEnd().GetView());
     }
 
-    bool IsUsed(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const {
+    bool IsUsed(const NArrow::TSimpleRowView& start, const NArrow::TSimpleRowView& end) const {
         return GetUsageClass(start, end) != TPKRangeFilter::EUsageClass::NoUsage;
     }
-    TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const;
+    TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TSimpleRowView& start, const NArrow::TSimpleRowView& end) const;
     bool CheckPoint(const NArrow::TSimpleRow& point) const;
 
     NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;

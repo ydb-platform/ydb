@@ -451,6 +451,7 @@ public:
     void InitializeRecordsCount(const ui32 count) {
         AFL_VERIFY(!HasData());
         RecordsCountActual = count;
+        RecordsCountOriginal = count;
     }
 
     void AddFilter(const TColumnFilter& filter) {

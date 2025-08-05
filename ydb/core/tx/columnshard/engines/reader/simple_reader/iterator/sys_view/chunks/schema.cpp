@@ -8,7 +8,7 @@ std::shared_ptr<ITableMetadataAccessor> TSchemaAdapter::BuildMetadataAccessor(
     return std::make_shared<TAccessor>(tableName, pathId);
 }
 
-NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(
+NArrow::TSimpleRowContent TSchemaAdapter::GetPKSimpleRow(
     const NColumnShard::TUnifiedPathId pathId, const ui64 tabletId, const ui64 portionId, const ui32 entityId, const ui64 chunkIdx) {
     NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 4 + sizeof(ui32));
     writer.Append<ui64>(pathId.SchemeShardLocalPathId.GetRawValue());
@@ -16,7 +16,7 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(
     writer.Append<ui64>(portionId);
     writer.Append<ui32>(entityId);
     writer.Append<ui64>(chunkIdx);
-    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
+    return NArrow::TSimpleRowContent(writer.Finish());
 }
 
 const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {

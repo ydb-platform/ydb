@@ -19,7 +19,7 @@ public:
         return Max<ui64>() - presetId;
     }
 
-    static NArrow::TSimpleRow GetPKSimpleRow(
+    static NArrow::TSimpleRowContent GetPKSimpleRow(
         const NColumnShard::TUnifiedPathId pathId, const ui64 tabletId, const ui64 portionId, const ui32 entityId, const ui64 chunkIdx);
 
     static const std::shared_ptr<arrow::Schema>& GetPKSchema();

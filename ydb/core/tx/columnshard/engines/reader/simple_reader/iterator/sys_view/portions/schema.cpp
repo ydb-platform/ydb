@@ -3,13 +3,12 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 
-NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TUnifiedPathId pathId, const ui64 tabletId, const ui64 portionId) {
+NArrow::TSimpleRowContent TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TUnifiedPathId pathId, const ui64 tabletId, const ui64 portionId) {
     NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 3);
     writer.Append<ui64>(pathId.SchemeShardLocalPathId.GetRawValue());
     writer.Append<ui64>(tabletId);
     writer.Append<ui64>(portionId);
-
-    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
+    return NArrow::TSimpleRowContent(writer.Finish());
 }
 
 const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {

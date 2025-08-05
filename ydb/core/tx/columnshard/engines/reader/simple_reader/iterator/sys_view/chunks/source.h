@@ -62,7 +62,7 @@ private:
 
 public:
     TSourceData(const ui32 sourceId, const ui32 sourceIdx, const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId,
-        TPortionInfo::TConstPtr&& portion, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
+        TPortionInfo::TConstPtr&& portion, NArrow::TSimpleRowContent&& start, NArrow::TSimpleRowContent&& finish,
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context, ISnapshotSchema::TPtr&& schema)
         : TBase(sourceId, sourceIdx, pathId, tabletId, std::move(start), std::move(finish), std::nullopt, portion->RecordSnapshotMin(),
               portion->RecordSnapshotMin(), context)

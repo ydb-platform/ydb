@@ -18,10 +18,10 @@ public:
         : TBase(tabletId, schemas.front()->GetIndexInfo().GetPresetId() + 1,
               TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.front()->GetIndexInfo().GetPresetId(), schemas.front()->GetVersion()),
               TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.back()->GetIndexInfo().GetPresetId(), schemas.back()->GetVersion()))
-        , Schemas(std::move(schemas))
-    {
+        , Schemas(std::move(schemas)) {
         if (Schemas.size() > 1) {
-            AFL_VERIFY(GetStart() < GetFinish())("start", GetStart().DebugString())("finish", GetFinish().DebugString());
+            AFL_VERIFY(GetStart().GetView(*TSchemaAdapter::GetPKSchema()) < GetFinish().GetView(*TSchemaAdapter::GetPKSchema()))("start", GetStart().GetView(*TSchemaAdapter::GetPKSchema()).DebugString())(
+                    "finish", GetFinish().GetView(*TSchemaAdapter::GetPKSchema()).DebugString());
         }
     }
 

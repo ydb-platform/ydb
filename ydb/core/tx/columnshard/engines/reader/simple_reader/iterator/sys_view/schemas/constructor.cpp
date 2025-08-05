@@ -1,4 +1,5 @@
 #include "constructor.h"
+#include "schema.h"
 
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
@@ -6,7 +7,7 @@ namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
 
 TConstructor::TConstructor(
     const IColumnEngine& engine, const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting)
-    : TBase(sorting, tabletId) {
+    : TBase(sorting, tabletId, TSchemaAdapter::GetPKSchema()) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     std::vector<ISnapshotSchema::TPtr> schemasAll;
     for (auto&& i : engineImpl->GetVersionedSchemas().GetPresetVersionedIndex()) {
@@ -23,7 +24,8 @@ TConstructor::TConstructor(
     for (auto&& i : schemasAll) {
         if (current.size() && current.back()->GetIndexInfo().GetPresetId() != i->GetIndexInfo().GetPresetId()) {
             constructors.emplace_back(TabletId, std::move(current));
-            if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
+            if (!pkFilter->IsUsed(constructors.back().GetStart().GetView(*TSchemaAdapter::GetPKSchema()),
+                    constructors.back().GetFinish().GetView(*TSchemaAdapter::GetPKSchema()))) {
                 constructors.pop_back();
             }
             current.clear();
@@ -32,7 +34,8 @@ TConstructor::TConstructor(
     }
     if (current.size()) {
         constructors.emplace_back(TabletId, std::move(current));
-        if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
+        if (!pkFilter->IsUsed(constructors.back().GetStart().GetView(*TSchemaAdapter::GetPKSchema()),
+                constructors.back().GetFinish().GetView(*TSchemaAdapter::GetPKSchema()))) {
             constructors.pop_back();
         }
         current.clear();

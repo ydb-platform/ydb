@@ -793,22 +793,23 @@ void TExecutor::TranslateCacheTouchesToSharedCache() {
 
 void TExecutor::RequestInMemPagesForDatabase(bool pendingOnly) {
     const auto& scheme = Scheme();
-    for (auto& pr : scheme.Tables) {
-        const ui32 tid = pr.first;
-        if (pendingOnly && !pr.second.PendingCacheUpdate) {
+    for (const auto& [tid, table] : scheme.Tables) {
+        if (pendingOnly && !table.PendingCacheEnable && !table.PendingCacheModeChanges) {
             continue;
         }
         const auto& cacheTies = GetCacheModes(tid);
         const auto& stickyColumns = GetStickyColumns(tid);
+        bool needRequestStickyColumns = table.PendingCacheEnable && stickyColumns;
 
         auto subset = Database->Subset(tid, NTable::TEpoch::Max(), { } , { });
         for (auto& partView: subset->Flatten) {
             UpdateCacheModesForPartStore(partView, cacheTies);
-            if (stickyColumns) {
+            if (needRequestStickyColumns) {
                 RequestInMemPagesForPartStore(partView, stickyColumns);
             }
         }
-        pr.second.PendingCacheUpdate = false;
+        table.PendingCacheEnable = false;
+        table.PendingCacheModeChanges = false;
     }
 }
 

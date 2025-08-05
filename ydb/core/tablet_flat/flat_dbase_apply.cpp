@@ -99,7 +99,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
         Y_ENSURE(ui32(cache) <= 2, "Invalid pages cache policy value");
         if (family.Cache != cache && cache == ECache::Ever) {
-            ChangeTableSetting(table, tableInfo.PendingCacheUpdate, true);
+            ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
         }
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
@@ -109,7 +109,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         if (delta.HasCacheMode()) {
             Y_ENSURE(delta.GetCacheMode() <= 1, "Invalid cache mode value");
             if (ChangeTableSetting(table, family.CacheMode, static_cast<ECacheMode>(delta.GetCacheMode()))) {
-                ChangeTableSetting(table, tableInfo.PendingCacheUpdate, true);
+                ChangeTableSetting(table, tableInfo.PendingCacheModeChanges, true);
                 changes |= true;
             }
         }

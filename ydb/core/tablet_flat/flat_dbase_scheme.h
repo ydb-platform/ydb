@@ -88,8 +88,9 @@ public:
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
 
-        // When true this table has an in-memory caching changes that has not been processed yet
-        mutable bool PendingCacheUpdate = false;
+        // When true this table has an in-memory caching enabled that has not been processed yet
+        mutable bool PendingCacheEnable = false;
+        mutable bool PendingCacheModeChanges = false; // the same but for any CacheMode changes
     };
 
     struct TRedo {

@@ -220,7 +220,7 @@ public:
     bool ShouldGenerateOneRetryableError = false;
     bool isUserAuthenticated = true;
 
-    THashSet<TString> AllowedServiceAuthTokens {"Bearer ydb-service-account"};
+    THashSet<TString> AllowedServiceAuthTokens;
     THashSet<TString> UnavailableUserPermissions;
     THashSet<TString> AllowedResourceIds;
     THashSet<TString> AllowedUserPermissions = {

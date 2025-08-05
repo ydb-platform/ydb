@@ -205,7 +205,7 @@ void ToProto(
     const NApi::TMultiTablePartition& multiTablePartition);
 
 void ToProto(
-    TProtoStringType* protoCookie,
+    TProtobufString* protoCookie,
     const TTablePartitionCookiePtr& cookie);
 
 void FromProto(
@@ -218,7 +218,7 @@ void FromProto(
 
 void FromProto(
     TTablePartitionCookiePtr* cookie,
-    const TProtoStringType& protoCookie);
+    const TProtobufString& protoCookie);
 
 void ToProto(
     NProto::TRowBatchReadOptions* proto,

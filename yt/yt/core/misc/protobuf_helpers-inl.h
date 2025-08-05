@@ -102,7 +102,7 @@ inline void FromProto(std::string* original, std::string serialized)
 template <>
 struct TProtoTraits<std::string>
 {
-    using TSerialized = TProtoStringType;
+    using TSerialized = TProtobufString;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

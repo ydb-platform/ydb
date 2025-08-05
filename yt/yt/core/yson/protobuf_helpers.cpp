@@ -4,17 +4,17 @@ namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ToProto(TProtoStringType* serialized, TYsonStringBuf original)
+void ToProto(TProtobufString* serialized, TYsonStringBuf original)
 {
-    *serialized = TProtoStringType(original.AsStringBuf());
+    *serialized = TProtobufString(original.AsStringBuf());
 }
 
-void ToProto(TProtoStringType* serialized, const TYsonString& original)
+void ToProto(TProtobufString* serialized, const TYsonString& original)
 {
     *serialized = original.ToString();
 }
 
-void FromProto(TYsonString* original, const TProtoStringType& serialized)
+void FromProto(TYsonString* original, const TProtobufString& serialized)
 {
     *original = TYsonString(serialized);
 }

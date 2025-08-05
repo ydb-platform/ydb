@@ -73,7 +73,7 @@ public:
 
     TSharedRef ConvertFrom(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& /*formatOptionsYson*/) override
     {
-        TProtoStringType protoBuffer;
+        TProtobufString protoBuffer;
         {
             google::protobuf::io::StringOutputStream output(&protoBuffer);
             auto converter = CreateProtobufWriter(&output, messageType);
@@ -108,7 +108,7 @@ public:
 
     TSharedRef ConvertFrom(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& formatOptionsYson) override
     {
-        TProtoStringType protoBuffer;
+        TProtobufString protoBuffer;
         {
             google::protobuf::io::StringOutputStream output(&protoBuffer);
             auto converter = CreateProtobufWriter(&output, messageType);

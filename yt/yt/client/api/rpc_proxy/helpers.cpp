@@ -1245,7 +1245,7 @@ void ToProto(
 }
 
 void ToProto(
-    TProtoStringType* protoCookie,
+    TProtobufString* protoCookie,
     const TTablePartitionCookiePtr& cookie)
 {
     auto cookieBytes = ConvertToYsonString(cookie);
@@ -1283,7 +1283,7 @@ void FromProto(
 
 void FromProto(
     TTablePartitionCookiePtr* cookie,
-    const TProtoStringType& protoCookie)
+    const TProtobufString& protoCookie)
 {
     *cookie = ConvertTo<TTablePartitionCookiePtr>(TYsonStringBuf(protoCookie));
 }

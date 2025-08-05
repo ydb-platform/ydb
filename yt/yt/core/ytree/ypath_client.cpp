@@ -278,13 +278,13 @@ TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader&
         : TYPathMaybeRef(ypathExt.target_path());
 }
 
-const google::protobuf::RepeatedPtrField<TProtoStringType>& GetRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)
+const google::protobuf::RepeatedPtrField<TProtobufString>& GetRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)
 {
     const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
     return ypathExt.additional_paths();
 }
 
-const google::protobuf::RepeatedPtrField<TProtoStringType>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)
+const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header)
 {
     const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
     return ypathExt.original_additional_paths_size() > 0
@@ -295,7 +295,7 @@ const google::protobuf::RepeatedPtrField<TProtoStringType>& GetOriginalRequestAd
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path)
 {
     auto* ypathExt = header->MutableExtension(NProto::TYPathHeaderExt::ypath_header_ext);
-    ypathExt->set_target_path(TProtoStringType(path));
+    ypathExt->set_target_path(TProtobufString(path));
 }
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header)

@@ -29,7 +29,7 @@ private:
     TFetchers Fetchers;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
     std::unique_ptr<NArrow::NAccessor::TAccessorsCollection> Table;
-    YDB_READONLY_DEF(std::shared_ptr<NIndexes::TIndexesCollection>, Indexes);
+    std::unique_ptr<NIndexes::TIndexesCollection> Indexes;
     YDB_READONLY(bool, Aborted, false);
 
     THashMap<NArrow::NSSA::IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
@@ -57,6 +57,30 @@ public:
     void ReturnTable(std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& table) {
         AFL_VERIFY(!Table);
         Table = std::move(table);
+    }
+
+    bool HasIndexes() const {
+        return !!Indexes;
+    }
+
+    const NIndexes::TIndexesCollection& GetIndexes() const {
+        AFL_VERIFY(!!Indexes);
+        return *Indexes;
+    }
+
+    NIndexes::TIndexesCollection& MutableIndexes() {
+        AFL_VERIFY(!!Indexes);
+        return *Indexes;
+    }
+
+    std::unique_ptr<NIndexes::TIndexesCollection> ExtractIndexes() {
+        AFL_VERIFY(!!Indexes);
+        return std::move(Indexes);
+    }
+
+    void ReturnIndexes(std::unique_ptr<NIndexes::TIndexesCollection>&& indexes) {
+        AFL_VERIFY(!Indexes);
+        Indexes = std::move(indexes);
     }
 
     void AddRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr, const std::shared_ptr<NIndexes::IIndexMeta>& index) {
@@ -108,13 +132,12 @@ public:
             Table.reset(new NArrow::NAccessor::TAccessorsCollection());
         }
         MutableTable().SetFilterUsage(useFilter);
-        Indexes = std::make_shared<NIndexes::TIndexesCollection>();
+        Indexes = std::make_unique<NIndexes::TIndexesCollection>();
     }
 
     void InitRecordsCount(const ui32 recordsCount) {
         AFL_VERIFY(!!Table);
-        AFL_VERIFY(!Table->HasData());
-        Table.reset(new NArrow::NAccessor::TAccessorsCollection(recordsCount));
+        Table->InitializeRecordsCount(recordsCount);
     }
 
     void SetUseFilter(const bool value) {

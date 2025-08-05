@@ -7,8 +7,11 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& sourceInput, TPlainReadData& reader) {
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("aborted", AbortFlag)(
-        "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId())("prepared_source_id", sourceInput->GetSourceId());
+    std::optional<NActors::TLogContextGuard> gLogging;
+    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN)) {
+        gLogging.emplace(NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("aborted", AbortFlag)(
+            "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId())("prepared_source_id", sourceInput->GetSourceId()));
+    }
     if (AbortFlag) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourceInput->AddEvent("a" + GetShortPointName()));
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sync_point_aborted");
@@ -93,8 +96,11 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
 }
 
 void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "add_source")(
-        "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
+    std::optional<NActors::TLogContextGuard> gLogging;
+    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN)) {
+        gLogging.emplace(NActors::TLogContextBuilder::Build()("sync_point", GetPointName())("event", "add_source")(
+            "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId()));
+    }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", source->GetSourceId());
     AFL_VERIFY(!AbortFlag);
     source->MutableAs<IDataSource>()->SetPurposeSyncPointIndex(GetPointIndex());

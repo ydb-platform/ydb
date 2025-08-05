@@ -142,9 +142,14 @@ private:
     THashSet<ui32> FilterColumns;
     YDB_READONLY_DEF(std::shared_ptr<TNode>, ResultRoot);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TNode>>, FilterRoot);
+    std::vector<std::shared_ptr<TNode>> RootNodes;
     bool IsFilterRoot(const ui32 identifier) const;
 
 public:
+    ui32 GetNodesCountReserve() const {
+        return NodesCountReserve;
+    }
+
     std::shared_ptr<IResourcesAggregator> GetResultsAggregationProcessor() const {
         if (ResultRoot->GetProcessor()->GetProcessorType() != EProcessorType::Projection) {
             return nullptr;
@@ -197,7 +202,7 @@ public:
         std::vector<std::shared_ptr<TCompiledGraph::TNode>> GraphNodes;
         std::shared_ptr<TCompiledGraph::TNode> CurrentGraphNode;
         ui32 CurrentGraphNodeIdx = 0;
-        std::deque<TCompiledGraph::TNode*> NodesStack;
+        std::vector<TCompiledGraph::TNode*> NodesStack;
         std::vector<ENodeStatus> Statuses;
         TCompiledGraph::TNode* CurrentNode = nullptr;
         std::unique_ptr<IVisitor> Visitor;

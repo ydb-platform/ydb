@@ -14,7 +14,7 @@ private:
     using TBase = NAbstract::TPathSourceData;
     YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
     ISnapshotSchema::TPtr Schema;
-    std::shared_ptr<NArrow::NAccessor::TAccessorsCollection> OriginalData;
+    std::unique_ptr<NArrow::NAccessor::TAccessorsCollection> OriginalData;
 
     virtual TString GetColumnStorageId(const ui32 columnId) const override {
         return GetPortionAccessor().GetPortionInfo().GetColumnStorageId(columnId, Schema->GetIndexInfo());

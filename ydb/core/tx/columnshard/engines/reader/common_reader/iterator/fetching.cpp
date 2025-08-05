@@ -60,8 +60,8 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
     }
     auto& iterator = source->GetExecutionContext().MutableProgramIteratorVerified();
     if (!started) {
+        source->MutableExecutionContext().OnFinishProgramStepExecution(GetSignals(iterator.GetCurrentNodeId()));
         iterator.Next();
-        source->MutableExecutionContext().OnFinishProgramStepExecution();
     }
     while (iterator.IsValid()) {
         {
@@ -78,20 +78,21 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
             continue;
         }
         AFL_VERIFY(source->GetExecutionContext().MutableExecutionVisitorVerified().GetExecutionNode()->GetIdentifier() == iterator.GetCurrentNodeId());
-        source->MutableExecutionContext().OnStartProgramStepExecution(iterator.GetCurrentNodeId(), GetSignals(iterator.GetCurrentNodeId()));
-        auto signals = GetSignals(iterator.GetCurrentNodeId());
+        const auto& signals = GetSignals(iterator.GetCurrentNodeId());
+        source->MutableExecutionContext().OnStartProgramStepExecution(iterator.GetCurrentNodeId());
         const TMonotonic start = TMonotonic::Now();
         auto conclusion = source->GetExecutionContext().MutableExecutionVisitorVerified().Execute();
-        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(TMonotonic::Now() - start);
-        signals->AddExecutionDuration(TMonotonic::Now() - start);
+        const TMonotonic finish = TMonotonic::Now();
+        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(finish - start);
+        signals->AddExecutionDuration(finish - start);
         if (conclusion.IsFail()) {
-            source->MutableExecutionContext().OnFailedProgramStepExecution();
+            source->MutableExecutionContext().OnFailedProgramStepExecution(signals);
             return conclusion;
         } else if (*conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
             return false;
         }
-        source->MutableExecutionContext().OnFinishProgramStepExecution();
-        GetSignals(iterator.GetCurrentNodeId())->OnExecuteGraphNode(source->GetRecordsCount());
+        source->MutableExecutionContext().OnFinishProgramStepExecution(signals);
+        signals->OnExecuteGraphNode(source->GetRecordsCount());
         source->GetContext()->GetCommonContext()->GetCounters().OnExecuteGraphNode(iterator.GetCurrentNode().GetIdentifier());
         if (source->GetExecutionContext().MutableExecutionVisitorVerified().MutableContext().GetResources().GetRecordsCountActualOptional() == 0) {
             source->GetExecutionContext().MutableExecutionVisitorVerified().MutableContext().MutableResources().Clear();
@@ -107,9 +108,9 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
 }
 
 const std::shared_ptr<TFetchingStepSignals>& TProgramStep::GetSignals(const ui32 nodeId) const {
-    auto it = Signals.find(nodeId);
-    AFL_VERIFY(it != Signals.end())("node_id", nodeId);
-    return it->second;
+    AFL_VERIFY(nodeId < Signals.size());
+    AFL_VERIFY(!!Signals[nodeId]);
+    return Signals[nodeId];
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

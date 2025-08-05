@@ -178,7 +178,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
     TReadActionsCollection readActions;
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    NCommon::TFetchingResultContext contextFetch(context.MutableResources(), *GetStageData().GetIndexes(), source);
+    NCommon::TFetchingResultContext contextFetch(context.MutableResources(), MutableStageData().MutableIndexes(), source);
     for (auto&& i : fetchersExt) {
         i->Start(readActions, contextFetch);
     }
@@ -208,7 +208,7 @@ TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDat
     for (auto&& i : indexContext.GetOperationsBySubColumn().GetData()) {
         NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), i.first);
         for (auto&& op : i.second) {
-            auto indexMeta = MutableStageData().GetIndexes()->FindIndexFor(addr, op);
+            auto indexMeta = MutableStageData().GetIndexes().FindIndexFor(addr, op);
             TCheckIndexContext checkAddr(indexContext.GetColumnId(), i.first, op);
             if (!indexMeta) {
                 const auto indexesMeta = GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, op);
@@ -252,14 +252,14 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
 
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(meta->GetIndexId())) {
         auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-        NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
+        NCommon::TFetchingResultContext fetchContext(context.MutableResources(), MutableStageData().MutableIndexes(), source);
         fetcher->OnDataCollected(fetchContext);
     }
 
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
 
     const std::optional<ui64> cat = meta->CalcCategory(fetchContext.GetSubColumnName());
-    const NIndexes::TIndexColumnChunked* infoPointer = GetStageData().GetIndexes()->GetIndexDataOptional(meta->GetIndexId());
+    const NIndexes::TIndexColumnChunked* infoPointer = GetStageData().GetIndexes().GetIndexDataOptional(meta->GetIndexId());
     if (!infoPointer) {
         GetContext()->GetCommonContext()->GetCounters().OnNoIndexBlobs(GetRecordsCount());
         return filter;
@@ -307,7 +307,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     {
         if (auto fetcher = MutableStageData().ExtractFetcherOptional(fetchContext.GetColumnId())) {
-            NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
+            NCommon::TFetchingResultContext fetchContext(context.MutableResources(), MutableStageData().MutableIndexes(), source);
             fetcher->OnDataCollected(fetchContext);
         } else {
             NYDBTest::TControllers::GetColumnShardController()->OnHeaderSelectProcessed({});
@@ -357,7 +357,7 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
 void TPortionDataSource::DoAssembleAccessor(
     const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& /*subColumnName*/) {
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    NCommon::TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
+    NCommon::TFetchingResultContext fetchContext(context.MutableResources(), MutableStageData().MutableIndexes(), source);
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(columnId)) {
         fetcher->OnDataCollected(fetchContext);
     }

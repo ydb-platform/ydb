@@ -117,6 +117,8 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             Nodes.erase(i);
         }
     }
+    RootNodes = FilterRoot;
+    RootNodes.emplace_back(ResultRoot);
     THashMap<ui32, TResourceUsageInfo> usage;
     std::vector<TNode*> sortedNodes;
     {
@@ -160,8 +162,6 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             node->SetRemoveResourceIds(i.second.GetLastUsageResources());
         }
     }
-    RootNodes = FilterRoot;
-    RootNodes.emplace_back(ResultRoot);
     AFL_TRACE(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", DebugDOT());
     //    Cerr << DebugDOT() << Endl;
 }

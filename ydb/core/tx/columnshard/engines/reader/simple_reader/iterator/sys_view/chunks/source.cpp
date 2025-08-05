@@ -215,12 +215,12 @@ TConclusion<bool> TSourceData::DoStartFetchImpl(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
     AFL_VERIFY(fetchersExt.size());
     if (!OriginalData) {
-        OriginalData = std::make_shared<NArrow::NAccessor::TAccessorsCollection>();
+        OriginalData = std::make_unique<NArrow::NAccessor::TAccessorsCollection>();
     }
 
     TReadActionsCollection readActions;
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    NCommon::TFetchingResultContext contextFetch(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+    NCommon::TFetchingResultContext contextFetch(*OriginalData, MutableStageData().MutableIndexes(), source, nullptr);
     for (auto&& i : fetchersExt) {
         i->Start(readActions, contextFetch);
     }
@@ -268,7 +268,7 @@ void TSourceData::DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& cont
         for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
             if (auto fetcher = MutableStageData().ExtractFetcherOptional(i.GetEntityId())) {
                 AFL_VERIFY(OriginalData);
-                NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+                NCommon::TFetchingResultContext fetchContext(*OriginalData, MutableStageData().MutableIndexes(), source, nullptr);
                 fetcher->OnDataCollected(fetchContext);
             }
         }

@@ -14,22 +14,22 @@ void TAccessorsCollection::Upsert(const ui32 columnId, const std::shared_ptr<ICh
     AddVerified(columnId, data, withFilter);
 }
 
-void TAccessorsCollection::AddCalculated(const ui32 columnId, const arrow::Datum& data) {
+void TAccessorsCollection::AddCalculated(const ui32 columnId, arrow::Datum&& data) {
     if (data.is_scalar()) {
-        AddConstantVerified(columnId, data.scalar());
+        AddConstantVerified(columnId, std::move(data));
         RecordsCountActual = 1;
     } else {
-        AddVerified(columnId, TAccessorCollectedContainer(data), false);
+        AddVerified(columnId, TAccessorCollectedContainer(std::move(data)), false);
     }
 }
 
-void TAccessorsCollection::AddInput(const ui32 columnId, const arrow::Datum& data, const bool withFilter) {
+void TAccessorsCollection::AddInput(const ui32 columnId, arrow::Datum&& data, const bool withFilter) {
     if (data.is_scalar()) {
         AFL_VERIFY(!withFilter);
         AddConstantVerified(columnId, data.scalar());
         RecordsCountActual = 1;
     } else {
-        AddVerified(columnId, TAccessorCollectedContainer(data), withFilter);
+        AddVerified(columnId, TAccessorCollectedContainer(std::move(data)), withFilter);
     }
 }
 
@@ -139,19 +139,19 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(const
 std::shared_ptr<IChunkedArray> TAccessorsCollection::GetConstantVerified(const ui32 columnId, const ui32 recordsCount) const {
     auto it = Constants.find(columnId);
     AFL_VERIFY(it != Constants.end());
-    return std::make_shared<TTrivialArray>(NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*it->second, recordsCount)));
+    return std::make_shared<TTrivialArray>(NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*it->second.scalar(), recordsCount)));
 }
 
 const std::shared_ptr<arrow::Scalar>& TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
     auto it = Constants.find(columnId);
     AFL_VERIFY(it != Constants.end())("id", columnId);
-    return it->second;
+    return it->second.scalar();
 }
 
 const std::shared_ptr<arrow::Scalar>& TAccessorsCollection::GetConstantScalarOptional(const ui32 columnId) const {
     auto it = Constants.find(columnId);
     if (it != Constants.end()) {
-        return it->second;
+        return it->second.scalar();
     } else {
         return Default<std::shared_ptr<arrow::Scalar>>();
     }
@@ -240,7 +240,7 @@ std::optional<TAccessorsCollection> TAccessorsCollection::SelectOptional(const s
             if (itConst == Constants.end()) {
                 return std::nullopt;
             } else {
-                result.AddConstantVerified(i, itConst->second);
+                result.AddConstantVerified(i, itConst->second.scalar());
             }
         } else {
             result.AddVerified(i, it->second, false);
@@ -267,7 +267,7 @@ void TAccessorsCollection::AddBatch(
     }
 }
 
-TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& data) {
+TAccessorCollectedContainer::TAccessorCollectedContainer(arrow::Datum&& data) {
     if (data.is_array()) {
         Data = std::make_shared<TTrivialArray>(data.make_array());
     } else if (data.is_arraylike()) {

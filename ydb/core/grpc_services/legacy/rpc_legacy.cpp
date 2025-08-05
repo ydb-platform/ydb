@@ -242,6 +242,11 @@ void DoInterconnectDebug(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProv
     f.RegisterActor(CreateMessageBusInterconnectDebug(ctx));
 }
 
+void DoTabletStateRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_TABLET_STATE_REQUEST);
+    f.RegisterActor(CreateMessageBusTabletStateRequest(ctx));
+}
+
 } // namespace NLegacyGrpcService
 
 } // namespace NKikimr::NGRpcService

@@ -195,35 +195,33 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TInterconnectDebug, NKikim
 {
 };
 
+template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TTabletStateRequest, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TTabletStateRequest>
+    , NPrivate::TResponseLegacyCommonTraits
+{
+};
+
 // Requests that should be forwarded to msg bus proxy
 using TCreateActorCallback = std::function<void(std::unique_ptr<IRequestNoOpCtx>, const IFacilityProvider&)>;
 
 TCreateActorCallback DoSchemeOperation(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
 void DoSchemeOperationStatus(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 TCreateActorCallback DoSchemeDescribe(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
-
 void DoChooseProxy(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-
 TCreateActorCallback DoPersQueueRequest(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
-
 TCreateActorCallback DoSchemeInitRoot(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
-
 void DoResolveNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoFillNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoDrainNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-
 void DoBlobStorageConfig(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-
 void DoHiveCreateTablet(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-
 void DoTestShardControl(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-
 void DoRegisterNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-
 void DoCmsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
-
 void DoInterconnectDebug(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+void DoTabletStateRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 } // namespace NLegacyGrpcService
 } // namespace NKikimr::NGRpcService

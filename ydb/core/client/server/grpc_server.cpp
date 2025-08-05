@@ -430,25 +430,6 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    (new TSimpleRequest<NKikimrClient::IN, NKikimrClient::OUT>(this, &Service_, CQ, \
-        [this](IRequestContext *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
-            ACTION; \
-        }, &NKikimrClient::TGRpcServer::AsyncService::Request ## NAME, \
-        *ActorSystem, #NAME, getCounterBlock("legacy", #NAME)))->Start();
-
-#define ADD_ACTOR_REQUEST(NAME, TYPE, MTYPE) \
-    ADD_REQUEST(NAME, TYPE, TResponse, { \
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE)); \
-        NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
-        RegisterRequestActor(CreateMessageBus ## NAME(msg)); \
-    })
-
-
-    // actor requests
-    ADD_ACTOR_REQUEST(TabletStateRequest,        TTabletStateRequest,               MTYPE_CLIENT_TABLET_STATE_REQUEST)
-
     using namespace ::NKikimr::NGRpcService;
     using namespace ::NKikimr::NGRpcService::NLegacyGrpcService;
 
@@ -497,6 +478,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_SERVER_METHOD(CmsRequest, TCmsRequest, TCmsResponse, DoCmsRequest, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_SERVER_METHOD(ConsoleRequest, TConsoleRequest, TConsoleResponse, DoConsoleRequest, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_SERVER_METHOD(InterconnectDebug, TInterconnectDebug, TResponse, DoInterconnectDebug, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
+    SETUP_SERVER_METHOD(TabletStateRequest, TTabletStateRequest, TResponse, DoTabletStateRequest, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
 }
 
 }

@@ -557,7 +557,7 @@ ui32 TPDisk::GetTotalChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) 
 ui32 TPDisk::GetFreeChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const {
     Y_UNUSED(ownerGroupType);
     // TODO(cthulhu): use ownerGroupType for logs
-    return Max<i64>(0, Keeper.GetOwnerFree(ownerId));
+    return Max<i64>(0, Keeper.GetOwnerFree(ownerId, false));
 }
 
 ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const {
@@ -1109,7 +1109,7 @@ TVector<TChunkIdx> TPDisk::LockChunksForOwner(TOwner owner, const ui32 count, TS
     TGuard<TMutex> guard(StateMutex);
 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
-    i64 ownerFree = Keeper.GetOwnerFree(owner);
+    i64 ownerFree = Keeper.GetOwnerFree(owner, false);
     double occupancy;
     auto color = Keeper.EstimateSpaceColor(owner, count, &occupancy);
 
@@ -1351,7 +1351,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
     Y_VERIFY_DEBUG_S(IsOwnerUser(req->Owner), PCtx->PDiskLogPrefix);
 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
-    i64 ownerFree = Keeper.GetOwnerFree(req->Owner);
+    i64 ownerFree = Keeper.GetOwnerFree(req->Owner, false);
     double occupancy;
     auto color = Keeper.EstimateSpaceColor(req->Owner, count, &occupancy);
 
@@ -1576,7 +1576,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         const auto& state = static_cast<NKikimrBlobStorage::TPDiskState::E>(Mon.PDiskState->Val());
         pdiskState.SetState(state);
         pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
-        pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog)));
+        pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog, {})));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
         pdiskState.SetNumActiveSlots(GetNumActiveSlots());
         pdiskState.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
@@ -1585,16 +1585,12 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         }
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
-        i64 minSlotSize = Max<i64>();
-        for (const auto& [_, owner] : VDiskOwners) {
-            minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) * Format.ChunkSize);
-        }
 
         for (const auto& [vdiskId, owner] : VDiskOwners) {
             const TOwnerData &data = OwnerData[owner];
             // May be less than 0 if owner exceeded his quota
             i64 ownerAllocated = (i64)Keeper.GetOwnerUsed(owner) * Format.ChunkSize;
-            i64 ownerFree = Max<i64>(0, minSlotSize - ownerAllocated);
+            i64 ownerFree = Max<i64>(0, Keeper.GetOwnerFree(owner, true) * Format.ChunkSize);
 
             reportResult->VDiskStateVect.emplace_back(data.WhiteboardProxyId, NKikimrWhiteboard::TVDiskStateInfo());
             auto& vdiskInfo = std::get<1>(reportResult->VDiskStateVect.back());
@@ -1625,6 +1621,11 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
         pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
         pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
+
+        i64 minSlotSize = Max<i64>();
+        for (const auto& [_, owner] : VDiskOwners) {
+            minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) / Keeper.GetOwnerWeight(owner) * Format.ChunkSize);
+        }
         if (minSlotSize != Max<i64>()) {
             pDiskMetrics.SetEnforcedDynamicSlotSize(minSlotSize);
             pdiskState.SetEnforcedDynamicSlotSize(minSlotSize);

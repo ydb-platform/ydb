@@ -63,7 +63,8 @@ TNodePtr TSqlCallExpr::BuildCall() {
 
             return BuildSqlCall(Ctx_, Pos_, udf_node->GetModule(), udf_node->GetFunction(),
                                 args, positional_args, named_args, custom_user_type,
-                                udf_node->GetTypeConfig(), udf_node->GetRunConfig(), options);
+                                udf_node->GetTypeConfig(), udf_node->GetRunConfig(), options,
+                                udf_node->GetDepends());
         }
 
         if (Node_ && (!Node_->FuncName() || Node_->IsScript())) {

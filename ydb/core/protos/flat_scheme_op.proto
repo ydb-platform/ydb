@@ -1886,7 +1886,7 @@ message TChangeConstraintSetting {
     }
 
     optional string TableName = 1;
-    optional string ColumnName = 2;
+    repeated string ColumnName = 2;
     optional EChangeConstraintAction Action = 3;
 }
 

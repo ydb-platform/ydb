@@ -20,6 +20,9 @@ namespace NKikimr {
             {}
 
             bool IsEnable() const {
+                if (!(ui32) Config->HullCompFullCompPeriodSec) {
+                    return true;
+                }
                 return (TActivationContext::Now() - LastUpdateTime).Seconds() > (ui32) Config->HullCompFullCompPeriodSec; 
             }
 

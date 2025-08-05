@@ -464,7 +464,7 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
         auto& extension = extensionSet.Extensions.emplace_back();
         extension.Tag = extensionDescriptor->Tag;
 
-        TProtobufString serializedExtension;
+        TProtoStringType serializedExtension;
         StringOutputStream stream(&serializedExtension);
 
         auto writer = CreateProtobufWriter(
@@ -493,7 +493,7 @@ TString DumpProto(::google::protobuf::Message& message)
 {
     ::google::protobuf::TextFormat::Printer printer;
     printer.SetSingleLineMode(true);
-    TProtobufString result;
+    TProtoStringType result;
     YT_VERIFY(printer.PrintToString(message, &result));
     return FromProto<TString>(std::move(result));
 }

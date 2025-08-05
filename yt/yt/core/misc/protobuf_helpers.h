@@ -508,16 +508,8 @@ google::protobuf::Timestamp GetProtoNow();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TODO(gritukan): This is a hack that allows to use proper string type in the protobuf-related code.
-// In Arcadia, protobuf is patched and TString is used as a string in it.
-// In vanilla protobuf, std::string is used.
-// TProtobufString is a type that you should use in code that works both with
-// Arcadia and vanilla protobuf.
-// It is an alias for TString in Arcadia and for std::string in vanilla protobuf.
-using TProtobufString = decltype(std::declval<::google::protobuf::MessageLite>().GetTypeName());
-
-constexpr bool IsVanillaProtobuf = std::is_same_v<TProtobufString, std::string>;
-constexpr bool IsArcadiaProtobuf = std::is_same_v<TProtobufString, TString>;
+constexpr bool IsVanillaProtobuf = std::same_as<TProtoStringType, std::string>;
+constexpr bool IsArcadiaProtobuf = std::same_as<TProtoStringType, TString>;
 
 // If this assert fails, something went very wrong. Refer to a comment above.
 static_assert(IsVanillaProtobuf || IsArcadiaProtobuf, "Unknown protobuf string type");

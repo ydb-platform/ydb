@@ -258,7 +258,7 @@ void DeserializeProtobufMessage(
     NYson::TYsonPullParserCursor* cursor,
     const NYson::TProtobufWriterOptions& options)
 {
-    TProtobufString wireBytes;
+    TProtoStringType wireBytes;
     google::protobuf::io::StringOutputStream outputStream(&wireBytes);
     auto protobufWriter = CreateProtobufWriter(&outputStream, type, options);
 

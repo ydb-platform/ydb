@@ -95,7 +95,7 @@ TOneofOption OneofFlagToOption(EWrapperOneofFlag::Enum flag)
     Y_ABORT();
 }
 
-TProtobufString OptionToFieldFlagName(TFieldOption option)
+TProtoStringType OptionToFieldFlagName(TFieldOption option)
 {
     using EFlag = EWrapperFieldFlag;
     struct TVisitor
@@ -165,7 +165,7 @@ TProtobufString OptionToFieldFlagName(TFieldOption option)
     return EWrapperFieldFlag_Enum_Name(std::visit(TVisitor(), option));
 }
 
-TProtobufString OptionToMessageFlagName(TMessageOption option)
+TProtoStringType OptionToMessageFlagName(TMessageOption option)
 {
     using EFlag = EWrapperMessageFlag;
     struct TVisitor
@@ -185,7 +185,7 @@ TProtobufString OptionToMessageFlagName(TMessageOption option)
     return EWrapperMessageFlag_Enum_Name(std::visit(TVisitor(), option));
 }
 
-TProtobufString OptionToOneofFlagName(TOneofOption option)
+TProtoStringType OptionToOneofFlagName(TOneofOption option)
 {
     using EFlag = EWrapperOneofFlag;
     struct TVisitor

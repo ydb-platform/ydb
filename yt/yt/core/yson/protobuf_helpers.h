@@ -8,9 +8,9 @@ namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ToProto(TProtobufString* serialized, TYsonStringBuf original);
-void ToProto(TProtobufString* serialized, const TYsonString& original);
-void FromProto(TYsonString* original, const TProtobufString& serialized);
+void ToProto(TProtoStringType* serialized, TYsonStringBuf original);
+void ToProto(TProtoStringType* serialized, const TYsonString& original);
+void FromProto(TYsonString* original, const TProtoStringType& serialized);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -24,13 +24,13 @@ namespace NYT {
 template <>
 struct TProtoTraits<NYson::TYsonString>
 {
-    using TSerialized = TProtobufString;
+    using TSerialized = TProtoStringType;
 };
 
 template <>
 struct TProtoTraits<NYson::TYsonStringBuf>
 {
-    using TSerialized = TProtobufString;
+    using TSerialized = TProtoStringType;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

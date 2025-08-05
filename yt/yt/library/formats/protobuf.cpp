@@ -121,7 +121,7 @@ public:
     void AddError(
         int line,
         ::google::protobuf::io::ColumnNumber column,
-        const TProtobufString& message) override
+        const TProtoStringType& message) override
     {
         if (std::ssize(Errors_) < ErrorCountLimit) {
             Errors_.push_back(TError("%v", message)
@@ -145,11 +145,11 @@ class TDescriptorPoolErrorCollector
 {
 public:
     void AddError(
-        const TProtobufString& fileName,
-        const TProtobufString& elementName,
+        const TProtoStringType& fileName,
+        const TProtoStringType& elementName,
         const Message* /*descriptor*/,
         DescriptorPool::ErrorCollector::ErrorLocation /*location*/,
-        const TProtobufString& message) override
+        const TProtoStringType& message) override
     {
         if (std::ssize(Errors_) < ErrorCountLimit) {
             Errors_.push_back(TError("%v", message)

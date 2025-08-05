@@ -37,13 +37,13 @@ using NYT::ToProto;
 struct TCacheKey
 {
     TYPath Path;
-    TProtobufString Method;
+    TProtoStringType Method;
     TSharedRef RequestBody;
     TChecksum RequestBodyHash;
 
     TCacheKey(
         const TYPath& path,
-        const TProtobufString& method,
+        const TProtoStringType& method,
         const TSharedRef& requestBody)
         : Path(path)
         , Method(method)

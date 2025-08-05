@@ -1168,7 +1168,7 @@ private:
     const TProtobufMessageType* const RootType_;
     const TProtobufWriterOptions Options_;
 
-    TProtobufString BodyString_;
+    TProtoStringType BodyString_;
     google::protobuf::io::StringOutputStream BodyOutputStream_;
     google::protobuf::io::CodedOutputStream BodyCodedStream_;
 
@@ -1222,7 +1222,7 @@ private:
     TStringOutput YsonStringStream_;
     TBufferedBinaryYsonWriter YsonStringWriter_;
 
-    TProtobufString SerializedMessage_;
+    TProtoStringType SerializedMessage_;
     TString BytesString_;
 
     TString UnknownYsonFieldKey_;
@@ -3266,7 +3266,7 @@ TString YsonStringToProto(
     const TProtobufMessageType* payloadType,
     TProtobufWriterOptions options)
 {
-    TProtobufString serializedProto;
+    TProtoStringType serializedProto;
     google::protobuf::io::StringOutputStream protobufStream(&serializedProto);
     auto protobufWriter = CreateProtobufWriter(&protobufStream, payloadType, std::move(options));
     ParseYsonStringBuffer(ysonString.AsStringBuf(), EYsonType::Node, protobufWriter.get());

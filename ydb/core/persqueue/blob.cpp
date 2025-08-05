@@ -64,20 +64,19 @@ void TClientBlob::CheckBlob(const TKey& key, const TString& blob)
 
 void TClientBlob::SerializeTo(TBuffer& res) const
 {
-  ui32 totalSize = GetBlobSize();
-  ui32 psize = res.Size();
-  res.Reserve(res.Size() + totalSize);
-  res.Append((const char *)&totalSize, sizeof(ui32));
-  res.Append((const char *)&SeqNo, sizeof(ui64));
-  ui8 outputUncompressedSize = UncompressedSize == 0 ? 0 : HAS_US;
-  ui8 outputKinesisData = PartitionKey.empty() ? 0 : HAS_KINESIS;
-  if (PartData) {
-    ui8 hasPartDataAndTS = HAS_PARTDATA + HAS_TS + HAS_TS2 +
-                           outputUncompressedSize + outputKinesisData; // mask
-    res.Append((const char *)&hasPartDataAndTS, sizeof(char));
-    res.Append((const char *)&(PartData->PartNo), sizeof(ui16));
-    res.Append((const char *)&(PartData->TotalParts), sizeof(ui16));
-    res.Append((const char *)&(PartData->TotalSize), sizeof(ui32));
+    ui32 totalSize = GetBlobSize();
+    ui32 psize = res.Size();
+    res.Reserve(res.Size() + totalSize);
+    res.Append((const char*)&totalSize, sizeof(ui32));
+    res.Append((const char*)&SeqNo, sizeof(ui64));
+    ui8 outputUncompressedSize = UncompressedSize == 0 ? 0 : HAS_US;
+    ui8 outputKinesisData = PartitionKey.empty() ? 0 : HAS_KINESIS;
+    if (PartData) {
+        ui8 hasPartDataAndTS = HAS_PARTDATA + HAS_TS + HAS_TS2 + outputUncompressedSize + outputKinesisData; //mask
+        res.Append((const char*)&hasPartDataAndTS, sizeof(char));
+        res.Append((const char*)&(PartData->PartNo), sizeof(ui16));
+        res.Append((const char*)&(PartData->TotalParts), sizeof(ui16));
+        res.Append((const char*)&(PartData->TotalSize), sizeof(ui32));
     } else {
         ui8 hasTS = HAS_TS + HAS_TS2 + outputUncompressedSize + outputKinesisData; //mask
         res.Append((const char*)&hasTS, sizeof(char));
@@ -91,7 +90,6 @@ void TClientBlob::SerializeTo(TBuffer& res) const
         res.Append((const char*)&(hashKeySize), sizeof(ui8));
         res.Append(ExplicitHashKey.data(), ExplicitHashKey.size());
     }
-
 
     ui64 writeTimestampMs = WriteTimestamp.MilliSeconds();
     ui64 createTimestampMs = CreateTimestamp.MilliSeconds();
@@ -222,6 +220,7 @@ void TBatch::Pack() {
         return;
     Packed = true;
     PackedData.Clear();
+
     bool hasUncompressed = false;
     bool hasKinesis = false;
     for (ui32 i = 0; i < Blobs.size(); ++i) {
@@ -232,9 +231,9 @@ void TBatch::Pack() {
             hasKinesis = true;
         }
     }
+
     Header.SetFormat(NKikimrPQ::TBatchHeader::ECompressed);
     Header.SetHasKinesis(hasKinesis);
-
     ui32 totalCount = Blobs.size();
     Y_ABORT_UNLESS(totalCount == Header.GetCount() + Header.GetInternalPartsCount());
     ui32 cnt = 0;
@@ -348,7 +347,7 @@ void TBatch::Pack() {
         {
             ui32 sizeOffset = WriteTemporaryChunkSize(PackedData);
             auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(PackedData);
-            for (const auto& p : pos) {
+            for (const auto &p : pos) {
                 chunk->AddData(Blobs[p].PartitionKey.data(), Blobs[p].PartitionKey.size());
             }
             chunk->Seal();
@@ -358,7 +357,7 @@ void TBatch::Pack() {
         {
             ui32 sizeOffset = WriteTemporaryChunkSize(PackedData);
             auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(PackedData);
-            for (const auto& p : pos) {
+            for (const auto &p : pos) {
                 chunk->AddData(Blobs[p].ExplicitHashKey.data(), Blobs[p].ExplicitHashKey.size());
             }
             chunk->Seal();
@@ -404,6 +403,7 @@ void TBatch::Pack() {
         EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
     }
 
+
     TVector<TClientBlob> tmp;
     Blobs.swap(tmp);
     InternalPartsPos.resize(0);
@@ -445,7 +445,7 @@ void TBatch::UnpackTo(TVector<TClientBlob> *blobs) const
     };
 }
 
-NScheme::TDataRef GetChunk(const char*& data, const char* end)
+NScheme::TDataRef GetChunk(const char*& data, const char *end)
 {
     ui32 size = ReadUnaligned<ui32>(data);
     data += sizeof(ui32) + size;

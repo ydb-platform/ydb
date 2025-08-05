@@ -152,11 +152,6 @@ inline void FillChunkDataFromReq(
     }
     proto.SetData(msg.data());
     auto* msgMeta = proto.MutableMessageMeta();
-    for (const auto& item : msg.metadata_items()) {
-        auto* res = msgMeta->Add();
-        res->set_key(item.key());
-        res->set_value(item.value());
-    }
     *msgMeta = msg.metadata_items();
 }
 

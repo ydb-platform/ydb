@@ -3,10 +3,9 @@
 #include "key.h"
 
 #include <util/datetime/base.h>
-#include <util/generic/maybe.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
-#include <ydb/core/base/appdata.h>
 
 #include <deque>
 
@@ -32,7 +31,6 @@ struct TClientBlob {
     static const ui8 HAS_TS2 = 4;
     static const ui8 HAS_US = 8;
     static const ui8 HAS_KINESIS = 16;
-    static const ui8 HAS_MESSAGE_KEY = 32;
 
     TString SourceId;
     ui64 SeqNo;
@@ -79,8 +77,7 @@ struct TClientBlob {
     }
 
     ui32 GetBlobSize() const {
-        return GetPartDataSize() + OVERHEAD + SourceId.size() + Data.size() + (UncompressedSize == 0 ? 0 : sizeof(ui32)) +
-        GetKinesisSize();
+        return GetPartDataSize() + OVERHEAD + SourceId.size() + Data.size() + (UncompressedSize == 0 ? 0 : sizeof(ui32)) + GetKinesisSize();
     }
 
     ui16 GetPartNo() const {
@@ -146,12 +143,12 @@ struct TBatch {
         Y_ABORT_UNLESS(!blobs.empty());
         TBatch batch(offset, blobs.front().GetPartNo());
         for (auto& b : blobs) {
-          batch.AddBlob(b);
+            batch.AddBlob(b);
         }
         return batch;
     }
 
-    void AddBlob(const TClientBlob& b) {
+    void AddBlob(const TClientBlob &b) {
         ui32 count = GetCount();
         ui32 unpackedSize = GetUnpackedSize();
         ui32 i = Blobs.size();

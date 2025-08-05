@@ -253,7 +253,8 @@ protected:
     void SendInfoRangeResponse(ui32 partition,
                                const TVector<TCreateConsumerParams>& consumers);
     void WaitDataRangeRequest();
-    void SendDataRangeResponse(ui32 partitionId, ui64 begin, ui64 end, bool isHead, ui64 size = 684);
+    void SendDataRangeResponse(ui32 partitionId,
+                               ui64 begin, ui64 end, bool isHead);
     void WaitDataReadRequest();
     void SendDataReadResponse();
 
@@ -952,7 +953,7 @@ void TPartitionFixture::WaitDataRangeRequest()
 }
 
 void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
-                                              ui64 begin, ui64 end, bool isHead, ui64 size)
+                                              ui64 begin, ui64 end, bool isHead)
 {
     Y_ABORT_UNLESS(begin <= end);
 
@@ -965,8 +966,7 @@ void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
     NPQ::TKey key(NPQ::TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0, isHead);
     pair->SetStatus(NKikimrProto::OK);
     pair->SetKey(key.ToString());
-    pair->SetKey(key.Data(), key.Size());
-    pair->SetValueSize(size);
+    pair->SetValueSize(684);
     pair->SetCreationUnixTime(TInstant::Now().Seconds());
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));

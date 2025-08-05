@@ -1333,6 +1333,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         }
         curOffset = poffset;
     }
+
     if (p.Msg.PartNo == 0) { //create new PartitionedBlob
         //there could be parts from previous owner, clear them
         if (!parameters.OldPartsCleared) {
@@ -1466,7 +1467,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp, p.Msg.ProducerEpoch);
 
         ++curOffset;
-        PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize, 0);
+        PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
     }
     return true;
 }

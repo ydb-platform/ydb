@@ -482,10 +482,15 @@ public:
     TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
+<<<<<<< HEAD
                const TActorId& writeQuoterActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                const NKikimrConfig::TFeatureFlags& featureFlags,
                bool newPartition = false);
+=======
+               const TActorId& writeQuoterActorId, bool newPartition = false,
+               TVector<TTransaction> distrTxs = {});
+>>>>>>> 3cc532af417 (Cleanup)
 
     void Bootstrap(const TActorContext& ctx);
 

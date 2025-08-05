@@ -34,7 +34,7 @@ The `{{ ydb-cli }} import s3` command is used to recover data from a backup crea
 
 {% note info %}
 
-The speed of backup and recovery operations to/from S3-compatible storage is configured to minimize impact on user workload. To control the speed of operations, configure limits for the corresponding queue in the [resource broker](../reference/configuration/index.md#resource-broker-config).
+The speed of backup and recovery operations to/from S3-compatible storage is configured to minimize impact on user workload. To control the speed of operations, configure limits for the corresponding queue in the [resource broker](../reference/configuration/resource_broker_config.md#resource-broker-config).
 
 {% endnote %}
 

@@ -1,4 +1,4 @@
-# `log_config` configuration section
+# log_config
 
 The `log_config` section controls how {{ ydb-short-name }} server processes and manages its logs. It allows you to customize logging levels for different components, as well as global log formats and output methods.
 

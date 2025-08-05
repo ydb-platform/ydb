@@ -1,4 +1,4 @@
-# `security_config` configuration section
+# security_config
 
 The `security_config` section defines [authentication](../../security/authentication.md) modes, the initial configuration of local [users](../../concepts/glossary.md#access-user) and [groups](../../concepts/glossary.md#access-group), and their [access rights](../../concepts/glossary.md#access-right).
 
@@ -114,7 +114,7 @@ flowchart TD
 
 The `default_users`, `default_groups`, and `default_access` parameters affect the initial {{ ydb-short-name }} cluster configuration that occurs when {{ ydb-short-name }} starts for the first time. During subsequent runs, the initial configuration is not repeated, and these parameters are ignored.
 
-See [{#T}](../../security/builtin-security.md) and the related [`domains_config`](index.md#domains-config) parameters.
+See [{#T}](../../security/builtin-security.md) and the related [`domains_config`](domains_config.md) parameters.
 
 #|
 || Parameter | Description ||

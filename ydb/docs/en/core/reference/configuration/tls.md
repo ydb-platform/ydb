@@ -1,6 +1,6 @@
-# TLS configuration
+# tls
 
-{{ ydb-short-name }} supports [data-in-transit encryption](../../security/encryption/data-in-transit.md), and each network protocol can have different [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) settings. This documentation section provides a reference for configuring TLS in {{ ydb-short-name }}.
+The `tls` section configures [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) settings for [data-in-transit encryption](../../security/encryption/data-in-transit.md) in {{ ydb-short-name }}. Each network protocol can have different TLS settings to secure communication between cluster components and clients.
 
 ## Interconnect
 

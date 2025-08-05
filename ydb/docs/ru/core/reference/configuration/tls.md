@@ -1,6 +1,6 @@
-# Настройка TLS
+# tls
 
-{{ ydb-short-name }} поддерживает [шифрование данных при передаче по сети](../../security/encryption/data-in-transit.md), и каждый сетевой протокол может иметь свои настройки [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security). Этот раздел документации предоставляет справочную информацию по настройке TLS в {{ ydb-short-name }}.
+Секция `tls` настраивает параметры [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security) для [шифрования данных при передаче по сети](../../security/encryption/data-in-transit.md) в {{ ydb-short-name }}. Каждый сетевой протокол может иметь различные настройки TLS для обеспечения безопасной связи между компонентами кластера и клиентами.
 
 ## Interconnect
 

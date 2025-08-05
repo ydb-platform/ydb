@@ -27,7 +27,7 @@ namespace NKikimr::NStorage {
         void CalculateRingsParameters();
         bool PickNodesSimpleStrategy(TNodeGroup& group, ui32 stateLimit, bool ignoreRacks);
         void PickNodes(TNodeGroup& group);
-        ui32 CalcNodeState(ui32 nodeId, bool disconnected);
+        ui32 CalcNodeState(ui32 nodeId, bool disconnected) const;
 
         const std::optional<TBridgePileId> PileId;
         const std::unordered_map<ui32, ui32>& SelfHealNodesState;
@@ -37,6 +37,5 @@ namespace NKikimr::NStorage {
         ui32 RingsInGroupCount = 1;
         ui32 ReplicasInRingCount = 1;
         ui32 NToSelect = 1;
-        bool GoodConfig = true;
     };
 }

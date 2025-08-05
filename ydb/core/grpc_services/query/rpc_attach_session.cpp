@@ -99,7 +99,7 @@ private:
             event.GetResponse().GetClosed() &&
             event.GetStatus() == Ydb::StatusIds::SUCCESS)
         {
-            ReplyFinishStream(Ydb::StatusIds::SUCCESS);
+            ReplyFinishStream(Ydb::StatusIds::BAD_SESSION);
         } else {
             InternalError("unexpected TEvCloseSessionResponse response");
         }
@@ -161,6 +161,7 @@ private:
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status) {
+        Request->ReplyWithYdbStatus(status);
         Request->FinishStream(status);
         this->PassAway();
     }

@@ -306,10 +306,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
             auto res = proto.AddMessageMeta();
             res->set_key("__key");
             res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
-            if (record.Key->size() <= std::numeric_limits<ui16>::max())
-                w->SetMessageKey(res->value());
         }
-
         if (record.Value) {
             proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
         }

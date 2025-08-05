@@ -1333,7 +1333,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         }
         curOffset = poffset;
     }
-    const bool saveMessageKey = AppData()->FeatureFlags.GetEnableTopicMessageKeySaving();
     if (p.Msg.PartNo == 0) { //create new PartitionedBlob
         //there could be parts from previous owner, clear them
         if (!parameters.OldPartsCleared) {
@@ -1355,7 +1354,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         }
         PartitionedBlob = TPartitionedBlob(Partition, curOffset, p.Msg.SourceId, p.Msg.SeqNo,
                                             p.Msg.TotalParts, p.Msg.TotalSize, Head, NewHead,
-                                            parameters.HeadCleared, needCompactHead, MaxBlobSize, saveMessageKey);
+                                            parameters.HeadCleared, needCompactHead, MaxBlobSize);
     }
 
     PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition
@@ -1396,7 +1395,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(p.Msg.SourceId, p.Msg.SeqNo, std::move(p.Msg.Data), std::move(partData), WriteTimestampEstimate,
                         TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
-                        p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey, p.Msg.MessageKey); //remove curOffset when LB will report CTime
+                        p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey); //remove curOffset when LB will report CTime
 
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
@@ -1445,10 +1444,10 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 ++countOfLastParts;
             }
             Y_ABORT_UNLESS(!NewHead.GetLastBatch().Packed);
-            NewHead.AddBlob(x, saveMessageKey);
-            NewHead.PackedSize += x.GetBlobSize(saveMessageKey);
+            NewHead.AddBlob(x);
+            NewHead.PackedSize += x.GetBlobSize();
             if (NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
-                NewHead.MutableLastBatch().Pack(saveMessageKey);
+                NewHead.MutableLastBatch().Pack();
                 NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
 
                 NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
@@ -1467,7 +1466,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp, p.Msg.ProducerEpoch);
 
         ++curOffset;
-        PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize, saveMessageKey);
+        PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize, 0);
     }
     return true;
 }
@@ -1845,7 +1844,6 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
                 .UncompressedSize = 0,
                 .PartitionKey = {},
                 .ExplicitHashKey = {},
-                .MessageKey = {},
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
@@ -1862,7 +1860,7 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
     UpdateWriteBufferIsFullState(ctx.Now());
 
     if (!NewHead.GetBatches().empty() && !NewHead.GetLastBatch().Packed) {
-        NewHead.MutableLastBatch().Pack(AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
+        NewHead.MutableLastBatch().Pack();
         NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
 
         NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound

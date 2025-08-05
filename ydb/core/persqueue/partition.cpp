@@ -295,7 +295,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteInflightSize(0)
     , Tablet(tablet)
     , BlobCache(blobCache)
-    , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB, featureFlags.GetEnableTopicMessageKeySaving())
+    , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB)
     , NewHeadKey{TKey{}, 0, TInstant::Zero(), 0}
     , BodySize(0)
     , MaxWriteResponsesSize(0)
@@ -1430,7 +1430,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         WriteKeysSizeEstimate += tx.WriteInfo->SrcIdInfo.size();
         WriteKeysSizeEstimate += tx.WriteInfo->BlobsFromHead.size();
         for (const auto& blob : tx.WriteInfo->BlobsFromHead) {
-            WriteCycleSizeEstimate += blob.GetBlobSize(AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
+            WriteCycleSizeEstimate += blob.GetBlobSize();
         }
     }
 
@@ -2627,8 +2627,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            NewHead,
                                            Parameters->HeadCleared,  // headCleared
                                            needCompactHead,          // needCompactHead
-                                           MaxBlobSize,
-                                           AppData()->FeatureFlags.GetEnableTopicMessageKeySaving());
+                                           MaxBlobSize);
 
         for (auto& k : t.WriteInfo->BodyKeys) {
             PQ_LOG_D("add key " << k.Key.ToString());

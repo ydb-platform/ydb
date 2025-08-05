@@ -479,9 +479,9 @@ public:
             DiskSpace = NKikimrViewer::EFlag::Grey;
             DiskSpaceUsage = 0;
             for (const TVDisk& vdisk : VDisks) {
+                available += vdisk.AvailableSize;
                 auto itPDisk = pDisks.find(vdisk.VSlotId);
                 if (itPDisk != pDisks.end()) {
-                    available += std::min(itPDisk->second.GetSlotTotalSize() - vdisk.AllocatedSize, vdisk.AvailableSize);
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
                 }

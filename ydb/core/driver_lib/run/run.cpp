@@ -132,6 +132,7 @@
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/malloc/api/malloc.h>
 
+#include <ydb/core/util/failure_injection.h>
 #include <ydb/core/util/sig.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -487,7 +488,7 @@ void TKikimrRunner::InitializeMonitoringLogin(const TKikimrRunConfig&)
 void TKikimrRunner::InitializeControlBoard(const TKikimrRunConfig& runConfig)
 {
     if (Monitoring) {
-        Monitoring->RegisterActorPage(ActorsMonPage, "icb", "Immediate Control Board", false, ActorSystem.Get(), MakeIcbId(runConfig.NodeId));
+        Monitoring->RegisterActorPage(ActorsMonPage, "icb", "Immediate Control Board", false, ActorSystem.Get(), MakeIcbId(runConfig.NodeId), true, true, TImmediateControlActor::IcbAuditResolver);
     }
 }
 
@@ -1315,7 +1316,10 @@ void TKikimrRunner::InitializeActorSystem(
                 "Logger",
                 false,
                 ActorSystem.Get(),
-                LogSettings->LoggerActorId);
+                LogSettings->LoggerActorId,
+                true,
+                true,
+                LoggerAuditResolver);
         }
 
         if (servicesMask.EnableProfiler) {
@@ -1325,7 +1329,10 @@ void TKikimrRunner::InitializeActorSystem(
                 "Profiler",
                 false,
                 ActorSystem.Get(),
-                MakeProfilerID(runConfig.NodeId));
+                MakeProfilerID(runConfig.NodeId)
+                true,
+                true,
+                ProfilerAuditResolver);
         }
 
         if (servicesMask.EnableLoadService) {
@@ -1335,7 +1342,10 @@ void TKikimrRunner::InitializeActorSystem(
                 "Load",
                 false,
                 ActorSystem.Get(),
-                MakeLoadServiceID(runConfig.NodeId));
+                MakeLoadServiceID(runConfig.NodeId)
+                true,
+                true,
+                LoadServiceAuditResolver);
         }
 
         if (servicesMask.EnableFailureInjectionService) {
@@ -1345,7 +1355,10 @@ void TKikimrRunner::InitializeActorSystem(
                 "Failure Injection",
                 false,
                 ActorSystem.Get(),
-                MakeBlobStorageFailureInjectionID(runConfig.NodeId));
+                MakeBlobStorageFailureInjectionID(runConfig.NodeId),
+                true,
+                true,
+                FailureInjectionAuditResolver);
         }
 
         Monitoring->RegisterActorPage(

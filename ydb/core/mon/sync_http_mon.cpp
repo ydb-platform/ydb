@@ -82,6 +82,7 @@ namespace NActors {
             fields.ActorId,
             fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
             fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+            fields.AuditableResolver ? fields.AuditableResolver : DefaultActorPageAuditableResolver,
             fields.MonServiceName);
         if (fields.Index) {
             fields.Index->Register(page);

@@ -227,6 +227,21 @@ public:
         SecureWipeBuffer((ui8*)MainKey.Keys.data(), sizeof(NPDisk::TKey) * MainKey.Keys.size());
     }
 
+    static NActors::NAudit::EAuditableAction PDiskAuditResolver(const NMonitoring::IMonHttpRequest& request) {
+        const TCgiParameters &cgi = request.GetPostParams();
+        if (cgi.Has("chunkLockByCount") || cgi.Has("chunkLockByColor")) {
+            return NActors::NAudit::EAuditableAction::PDiskChunkLock;
+        } else if (cgi.Has("chunkUnlock")) {
+            return NActors::NAudit::EAuditableAction::PDiskChunkUnlock;
+        } else if (cgi.Has("restartPDisk")) {
+            return NActors::NAudit::EAuditableAction::PDiskRestart;
+        } else if (cgi.Has("stopPDisk")) {
+            return NActors::NAudit::EAuditableAction::PDiskStop;
+        }
+
+        return NActors::NAudit::EAuditableAction::Unknown;
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Actor handlers
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -242,7 +257,7 @@ public:
             TString path = Sprintf("pdisk%09" PRIu32, (ui32)Cfg->PDiskId);
             TString name = Sprintf("PDisk%09" PRIu32, (ui32)Cfg->PDiskId);
             mon->RegisterActorPage(pdisksMonPage, path, name, false, ctx.ExecutorThread.ActorSystem,
-                SelfId());
+                SelfId(), true, true, PDiskAuditResolver);
         }
         NodeWhiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
         NodeWardenServiceId = MakeBlobStorageNodeWardenID(SelfId().NodeId());

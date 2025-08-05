@@ -132,7 +132,7 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
 }
 
 IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
-    const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth, bool sortPages) {
+    const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth, bool sortPages, TMon::TActorPageAuditableResolver auditableResolver) {
     return RegisterActorPage({
         .Title = title,
         .RelPath = relPath,
@@ -142,6 +142,7 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
         .ActorId = actorId,
         .UseAuth = useAuth,
         .SortPages = sortPages,
+        .AuditableResolver = auditableResolver
     });
 }
 

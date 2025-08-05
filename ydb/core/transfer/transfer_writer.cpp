@@ -27,7 +27,8 @@ namespace {
 
 enum class ETag {
     FlushTimeout,
-    RetryFlush
+    RetryFlush,
+    LeaveOnBatchSizeExceed
 };
 
 } // anonymous namespace
@@ -281,7 +282,7 @@ private:
             try {
                 auto result = ProgramHolder->GetProgram()->Apply(NYql::NPureCalc::StreamFromVector(TVector{input}));
                 while (auto* m = result->Fetch()) {
-                    if (ProcessingError) {
+                    if (ProcessingError || RequiredFlush) {
                         // We must get all the messages from the result, otherwise we will fall with an error inside yql
                         continue;
                     }
@@ -304,20 +305,24 @@ private:
                         tablePath = DefaultTablePath;
                     }
 
-                    TableState->AddData(std::move(tablePath), m->Data);
+                    if (!TableState->AddData(std::move(tablePath), m->Data, m->EstimateSize)) {
+                        RequiredFlush = true;
+                    }
                 }
 
-                LastProcessedOffset = message.GetOffset();
+                if (!ProcessingError && !RequiredFlush) {
+                    LastProcessedOffset = message.GetOffset();
+                }
             } catch (const yexception& e) {
                 setError(e.what());
             }
 
-            if (ProcessingError) {
+            if (ProcessingError || RequiredFlush) {
                 break;
             }
         }
 
-        if (!ProcessingError && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval)) {
+        if (!ProcessingError && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval || RequiredFlush)) {
             if (TableState->Flush()) {
                 LastWriteTime.reset();
                 return Become(&TThis::StateWrite);
@@ -372,7 +377,14 @@ private:
             return LogCritAndLeave(*ProcessingError);
         }
 
-        Send(Worker, new TEvWorker::TEvCommit(LastProcessedOffset + 1));
+        if (LastProcessedOffset) {
+            Send(Worker, new TEvWorker::TEvCommit(LastProcessedOffset.value() + 1));
+        }
+
+        if (RequiredFlush) {
+            return Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(ui32(ETag::LeaveOnBatchSizeExceed)));
+        }
+
         if (!PollSent) {
             PollSent = true;
             Send(Worker, new TEvWorker::TEvPoll());
@@ -393,6 +405,9 @@ private:
             case ETag::RetryFlush:
                 TableState->Flush();
                 break;
+            case ETag::LeaveOnBatchSizeExceed:
+                auto status = LastProcessedOffset ? TEvWorker::TEvGone::OVERLOAD : TEvWorker::TEvGone::SCHEME_ERROR;
+                return Leave(status, "Overloaded: max batch size exceeded");
         }
     }
 
@@ -419,7 +434,7 @@ private:
     }
 
     void Leave(TEvWorker::TEvGone::EStatus status, const TString& message) {
-        LOG_I("Leave");
+        LOG_I("Leave: " << message);
 
         if (Worker) {
             Send(Worker, new TEvWorker::TEvGone(status, message));
@@ -496,6 +511,7 @@ private:
 
     mutable bool WakeupScheduled = false;
     mutable bool PollSent = false;
+    mutable bool RequiredFlush = false;
     mutable std::optional<TInstant> LastWriteTime;
 
     mutable TMaybe<TString> LogPrefix;
@@ -506,7 +522,7 @@ private:
     ui32 PendingPartitionId = 0;
     std::optional<TVector<TTopicMessage>> PendingRecords;
 
-    size_t LastProcessedOffset = 0;
+    std::optional<size_t> LastProcessedOffset;
 
     ui32 Attempt = 0;
     TDuration Delay = MinRetryDelay;

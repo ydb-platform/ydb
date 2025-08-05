@@ -63,7 +63,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
     class TQuery : public TTreeElementBase, public TSnapshotSwitch<NSnapshot::TQueryPtr> {
     public:
-        explicit TQuery(const TQueryId& id, const TStaticAttributes& attrs = {});
+        TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStaticAttributes& attrs = {});
 
         const TId& GetId() const override {
             return Id;
@@ -75,6 +75,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> WaitingTasksTime = 0; // sum of average execution time for all throttled tasks
 
         NMonitoring::THistogramPtr Delay; // TODO: hacky counter for delays from queries - initialize from pool
+        const TDelayParams* const DelayParams; // owned by scheduler
 
     private:
         const TId Id;

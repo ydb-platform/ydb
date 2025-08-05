@@ -200,7 +200,7 @@ public:
         }
         Cerr << sb << Endl;
         Sleep(TDuration::Seconds(15));
-        AFL_VERIFY(NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val() == 4)("count", NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val());
+        AFL_VERIFY(NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val() == 5)("count", NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val());
 
         actorSystem.Stop();
         actorSystem.Cleanup();

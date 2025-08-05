@@ -12,6 +12,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -19,6 +20,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -344,6 +346,13 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
     const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+
+    if (IIndexInfo::IsSpecialColumn(addr.GetColumnId())) {
+        return std::make_shared<TSpecialColumnFetchLogic>(addr.GetColumnId(), source->GetRecordsCount(), 
+            source->GetContext()->GetReadMetadata()->GetRequestSnapshot().GetTxId(),
+            source->GetContext()->GetCommonContext()->GetStoragesManager());
+    }
+
     if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
             NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {

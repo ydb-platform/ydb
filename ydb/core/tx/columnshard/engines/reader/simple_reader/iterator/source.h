@@ -13,9 +13,13 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/comparable.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <util/string/join.h>
 
@@ -33,6 +37,46 @@ class TPlainReadData;
 class IFetchTaskConstructor;
 class IFetchingStep;
 class TBuildFakeSpec;
+
+class TSpecialColumnFetchLogic: public NCommon::IKernelFetchLogic {
+private:
+    ui32 RecordsCount;
+    ui64 TxId;
+
+public:
+    TSpecialColumnFetchLogic(ui32 columnId, ui32 recordsCount, ui64 txId, const std::shared_ptr<IStoragesManager>& storagesManager)
+        : IKernelFetchLogic(columnId, storagesManager)
+        , RecordsCount(recordsCount)
+        , TxId(txId) {
+    }
+
+    void DoStart(TReadActionsCollection& /*nextRead*/, NCommon::TFetchingResultContext& /*context*/) override {
+    }
+
+    void DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& /*blobs*/) override {
+    }
+
+    void DoOnDataCollected(NCommon::TFetchingResultContext& context) override {
+        std::shared_ptr<arrow::Scalar> defaultValue;
+        if (GetEntityId() == (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP) {
+            defaultValue =
+                std::make_shared<arrow::UInt64Scalar>(context.GetSource()->GetContext()->GetReadMetadata()->GetRequestSnapshot().GetPlanStep());
+        } else if (GetEntityId() == (ui32)IIndexInfo::ESpecialColumn::TX_ID) {
+            defaultValue = std::make_shared<arrow::UInt64Scalar>(TxId);
+        } else if (GetEntityId() == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID) {
+            defaultValue = std::make_shared<arrow::UInt64Scalar>(0);
+        } else if (GetEntityId() == (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG) {
+            defaultValue = std::make_shared<arrow::BooleanScalar>(false);
+        } else {
+            AFL_VERIFY(false)("unknown_special_column", GetEntityId());
+        }
+
+        auto array = std::make_shared<NArrow::NAccessor::TTrivialArray>(
+            NArrow::TThreadSimpleArraysCache::GetConst(defaultValue->type, defaultValue, RecordsCount));
+
+        context.GetAccessors().AddVerified(GetEntityId(), array, true);
+    }
+};
 
 class TPortionPage {
 private:

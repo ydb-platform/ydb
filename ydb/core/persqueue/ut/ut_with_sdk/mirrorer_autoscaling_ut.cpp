@@ -10,6 +10,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
+
 namespace NKikimr::NPersQueueTests {
 
     namespace {
@@ -146,9 +148,30 @@ namespace NKikimr::NPersQueueTests {
 
     Y_UNIT_TEST_SUITE(TPersQueueMirrorerWith) {
         Y_UNIT_TEST(TestBasicRemote) {
-            auto pqSettings = NKikimr::NPersQueueTests::PQSettings();
+            auto pqSettings = NKikimr::NPersQueueTests::PQSettings(0, 2);
             pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
             NPersQueue::TTestServer server(pqSettings);
+
+            auto omniObserver = [&](TAutoPtr<IEventHandle>& ev) {
+                ui32 type = ev->GetTypeRewrite();
+                Cerr << (TStringBuilder() << "Captured event " << type << " " << Hex(type) << " " << ev->GetTypeName() << " " << LabeledOutput(ev->Sender.ToString(), ev->Recipient.ToString())
+                                          << "\n"
+                                          << ev->ToString()
+                                          << Endl);
+
+                if (auto* msg = ev->CastAsLocal<TEvPQ::TEvPartitionScaleStatusChanged>()) {
+                    Cerr << "Captured TEvPQ::TEvPartitionScaleStatusChanged event from " << ev->Sender.ToString() << Endl;
+                    return TTestActorRuntimeBase::EEventAction::PROCESS;
+                }
+
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+
+            auto prevObserver = server.CleverServer->GetRuntime()->SetObserverFunc(omniObserver);
+            Y_DEFER {
+                auto prev = server.CleverServer->GetRuntime()->SetObserverFunc(prevObserver);
+                Cerr << "prevObserver: " << (const void*)(prev.target<decltype(omniObserver)>()) << Endl;
+            };
 
             const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
 
@@ -244,27 +267,27 @@ namespace NKikimr::NPersQueueTests {
             THashMap<TString, size_t> messagesPerSourceId;
             for (ui32 partition = 0; partition < partitionsCount; ++partition) {
                 try {
-                const ui32 targetPartition = partition == 0 ? 1 : 4;
-                const TString sourceId = "some_sourceid_" + ToString(partition);
-                const std::unordered_map<std::string, std::string> sessionMeta = {
-                    {"partition", ToString(partition)},
-                };
-                auto writer = CreateSimpleWriter(*driver, srcTopic, sourceId, targetPartition, std::nullopt, std::nullopt, sessionMeta);
+                    const ui32 targetPartition = partition == 0 ? 1 : 4;
+                    const TString sourceId = "some_sourceid_" + ToString(partition);
+                    const std::unordered_map<std::string, std::string> sessionMeta = {
+                        {"partition", ToString(partition)},
+                    };
+                    auto writer = CreateSimpleWriter(*driver, srcTopic, sourceId, targetPartition, std::nullopt, std::nullopt, sessionMeta);
 
-                ui64 seqNo = writer->GetInitSeqNo();
+                    ui64 seqNo = writer->GetInitSeqNo();
 
-                for (ui32 i = 1; i <= 10 + partition; ++i) {
-                    auto res = writer->Write(TStringBuilder() << "[[[" << LabeledOutput(i, partition, seqNo) << "]]]", ++seqNo);
+                    for (ui32 i = 1; i <= 10 + partition; ++i) {
+                        auto res = writer->Write(TStringBuilder() << "[[[" << LabeledOutput(i, partition, seqNo) << "]]]", ++seqNo);
+                        UNIT_ASSERT(res);
+                        messagesPerPartition[partition] += 1;
+                        messagesPerSourceId[sourceId] += 1;
+                    }
+                    auto res = writer->Close(TDuration::Seconds(10));
                     UNIT_ASSERT(res);
-                    messagesPerPartition[partition] += 1;
-                    messagesPerSourceId[sourceId] += 1;
+                } catch (const std::exception& e) {
+                    UNIT_FAIL("Unable to write to partition " << partition << ": " << CurrentExceptionMessage());
                 }
-                auto res = writer->Close(TDuration::Seconds(10));
-                UNIT_ASSERT(res);
-            } catch (const std::exception& e) {
-                UNIT_FAIL("Unable to write to partition " << partition << ": " << CurrentExceptionMessage());
             }
-        }
 
             constexpr TDuration nextMessageTimeout = TDuration::Seconds(2);
             auto createReader = [&](const TString& topic, ui32 partition) {
@@ -289,7 +312,7 @@ namespace NKikimr::NPersQueueTests {
                     if (!dstEvent) {
                         break;
                     }
-                    const std::vector dstMessages =  dstEvent->GetMessages();
+                    const std::vector dstMessages = dstEvent->GetMessages();
                     for (const auto& dstMessage : dstMessages) {
                         const auto& dstMeta = dstMessage.GetMeta()->Fields;
 
@@ -298,7 +321,7 @@ namespace NKikimr::NPersQueueTests {
                             messagesPerSourceIdRead[dstMessage.GetProducerId()] += 1;
                         }
                     }
-                   // dstEvent->Commit();
+                    // dstEvent->Commit();
                 }
             }
 
@@ -311,15 +334,14 @@ namespace NKikimr::NPersQueueTests {
                     if (!dstEvent) {
                         break;
                     }
-                    const std::vector dstMessages =  dstEvent->GetMessages();
+                    const std::vector dstMessages = dstEvent->GetMessages();
                     for (const auto& dstMessage : dstMessages) {
                         const auto& dstMeta = dstMessage.GetMeta()->Fields;
                         Cerr << "READ " << LabeledOutput(partition, dstMessage.GetOffset(), dstMessage.GetProducerId(), dstMessage.GetMessageGroupId(), dstMessage.GetSeqNo(), dstMessage.GetData().size(), dstMeta.contains("precharge")) << "\n";
                     }
-                   // dstEvent->Commit();
+                    // dstEvent->Commit();
                 }
             }
-
 
             TSet<TString> ids;
             for (const auto& [id, count] : messagesPerSourceId) {
@@ -336,8 +358,6 @@ namespace NKikimr::NPersQueueTests {
             for (const auto& id : ids) {
                 UNIT_ASSERT_VALUES_EQUAL_C(messagesPerSourceId.Value(id, 0), messagesPerSourceIdRead.Value(id, 0), id);
             }
-
-
 
             return;
             for (ui32 partition = 0; partition < partitionsCount; ++partition) {

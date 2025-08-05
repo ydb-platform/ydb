@@ -2,9 +2,6 @@
 
 import asyncio
 import logging
-
-# Временное логирование для диагностики
-print("=== BRIDGE_PILE.PY LOADED ===")
 import collections
 import random
 import time
@@ -14,6 +11,9 @@ from ydb.tests.library.clients.kikimr_bridge_client import bridge_client_factory
 from ydb.tests.tools.nemesis.library.base import AbstractMonitoredNemesis
 from ydb.tests.library.nemesis.nemesis_core import Nemesis, Schedule
 
+
+logger = logging.getLogger("bridge_pile")
+logger.info("=== BRIDGE_PILE.PY LOADED ===")
 
 class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
     """
@@ -404,7 +404,7 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
                 # Schedule recovery and block routes in one pass
                 recovery_tasks = []
                 unreach_tasks = []
-                
+
                 for other_node in other_nodes:
                     self.logger.info("Processing host %s for current pile %d", other_node.host, self._current_pile_id)
                     for node in self._current_nodes:
@@ -412,7 +412,7 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
                         if ip is None:
                             self.logger.error("Failed to resolve hostname %s to IP address", node.host)
                             raise Exception("Failed to resolve hostname to IP address")
-                        
+
                         # Schedule automatic recovery first
                         recovery_cmd = f"sudo /usr/bin/ip -6 ro del unreach {ip}"
                         at_cmd = f"echo '{recovery_cmd}' | sudo at now + {self._duration} seconds"
@@ -422,16 +422,16 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
                             recovery_tasks.append(at_task)
                         except Exception as e:
                             self.logger.warning("Failed to schedule automatic recovery for IP %s on host %s: %s", ip, other_node.host, str(e))
-                        
+
                         # Then block the route
                         block_cmd = self._block_cmd_template.format(ip, ip)
                         block_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_cmd, raise_on_error=True))
                         unreach_tasks.append(block_task)
-                
+
                 # Wait for recovery scheduling to complete first
                 if recovery_tasks:
                     await asyncio.gather(*recovery_tasks, return_exceptions=True)
-                
+
                 # Then wait for blocking operations to complete
                 await asyncio.gather(*unreach_tasks, return_exceptions=True)
 
@@ -455,7 +455,7 @@ def bridge_pile_nemesis_list(cluster):
     logger.info("=== BRIDGE_PILE_NEMESIS_LIST CALLED ===")
     logger.info("Creating bridge pile nemesis list")
     logger.info("Cluster: %s", cluster)
-    
+
     try:
         bridge_nemesis_list = [
             BridgePileStopNodesNemesis(cluster),

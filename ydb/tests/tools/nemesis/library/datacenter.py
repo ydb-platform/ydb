@@ -9,9 +9,8 @@ from ydb.tests.library.nemesis.nemesis_core import Nemesis, Schedule
 from ydb.tests.tools.nemesis.library import base
 
 logger = logging.getLogger("datacenter")
-
-# Временное логирование для диагностики
 logger.info("=== DATACENTER.PY LOADED ===")
+
 
 class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
     def __init__(self, cluster, schedule=(300, 900), duration=60):
@@ -27,10 +26,9 @@ class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._interval_schedule = Schedule.from_tuple_or_int(duration)
 
     def next_schedule(self):
-        # Если nemesis отключен, возвращаем None (не добавляется в очередь)
         if hasattr(self, '_disabled') and self._disabled:
             return None
-        
+
         if self._current_dc is not None:
             return next(self._interval_schedule)
         return super(AbstractDataCenterNemesis, self).next_schedule()
@@ -60,7 +58,6 @@ class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._dc_cycle_iterator = self._create_dc_cycle()
 
     def inject_fault(self):
-        # Если nemesis отключен, ничего не делаем
         if hasattr(self, '_disabled') and self._disabled:
             self.logger.info("DataCenterNemesis is disabled due to insufficient datacenters")
             return
@@ -307,7 +304,7 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
                 # Schedule recovery and block routes in one pass
                 recovery_tasks = []
                 unreach_tasks = []
-                
+
                 for other_node in other_nodes:
                     self.logger.info("Processing host %s for current dc %s", other_node.host, self._current_dc)
                     for node in self._current_nodes:
@@ -315,7 +312,7 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
                         if ip is None:
                             self.logger.error("Failed to resolve hostname %s to IP address", node.host)
                             raise Exception("Failed to resolve hostname to IP address")
-                        
+
                         # Schedule automatic recovery first
                         recovery_cmd = f"sudo /usr/bin/ip -6 ro del unreach {ip}"
                         at_cmd = f"echo '{recovery_cmd}' | sudo at now + {self._duration} seconds"
@@ -325,16 +322,16 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
                             recovery_tasks.append(at_task)
                         except Exception as e:
                             self.logger.warning("Failed to schedule automatic recovery for IP %s on host %s: %s", ip, other_node.host, str(e))
-                        
+
                         # Then block the route
                         block_cmd = self._block_cmd_template.format(ip, ip)
                         block_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_cmd, raise_on_error=True))
                         unreach_tasks.append(block_task)
-                
+
                 # Wait for recovery scheduling to complete first
                 if recovery_tasks:
                     await asyncio.gather(*recovery_tasks, return_exceptions=True)
-                
+
                 # Then wait for blocking operations to complete
                 await asyncio.gather(*unreach_tasks, return_exceptions=True)
 
@@ -353,11 +350,10 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
 
 
 def datacenter_nemesis_list(cluster):
-    # Для функций модуля используем глобальный логгер
     logger.debug("=== DATACENTER_NEMESIS_LIST CALLED ===")
     logger.info("Creating datacenter nemesis list")
     logger.info("Cluster: %s", cluster)
-    
+
     try:
         datacenter_nemesis_list = [
             DataCenterStopNodesNemesis(cluster),

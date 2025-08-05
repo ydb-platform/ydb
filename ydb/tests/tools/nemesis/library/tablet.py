@@ -85,7 +85,6 @@ class KillSystemTabletByTypeNemesis(AbstractTabletByTypeNemesis):
     def inject_fault(self):
         self.logger.info("=== INJECT_FAULT START: %s ===", str(self))
         self.logger.info("Available tablet_ids: %s (count: %d)", self.tablet_ids, len(self.tablet_ids))
-        
 
         if self.tablet_ids:
             tablet_id = random.choice(self.tablet_ids)
@@ -123,8 +122,7 @@ class KillSystemTabletByTypeNemesis(AbstractTabletByTypeNemesis):
             self.logger.warning("No tablet_ids available, calling prepare_state()")
             self.prepare_state()
             self.logger.info("After prepare_state, tablet_ids: %s (count: %d)", self.tablet_ids, len(self.tablet_ids))
-            
-                
+
             if self.tablet_ids:
                 self.logger.info("Retrying inject_fault after prepare_state")
                 self.inject_fault()

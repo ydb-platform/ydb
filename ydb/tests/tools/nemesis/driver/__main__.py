@@ -7,20 +7,16 @@ import tempfile
 import signal
 import sys
 import time
-
 import logging
 
-# Настраиваем базовое логирование сразу при импорте модуля
-if not logging.getLogger().handlers:  # Проверяем, что handlers еще не настроены
-    # Перенаправляем stdout в stderr для journald
+
+if not logging.getLogger().handlers:
     sys.stdout = sys.stderr
-    
-    # Используем basicConfig для настройки одного handler
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.StreamHandler(sys.stderr)  # Только stderr для journald
+            logging.StreamHandler(sys.stderr)
         ]
     )
 
@@ -123,12 +119,10 @@ class SshAgent(object):
         p = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, stdin=sp.PIPE if stdin else None)
         stdout, stderr = p.communicate(stdin)
 
-        # Listing keys from empty ssh-agent results in exit code 1
         if stdout.decode('utf-8', errors='ignore').strip() == "The agent has no identities.":
             return ""
 
         if p.returncode:
-            # Декодируем bytes в строки перед конкатенацией
             stderr_str = stderr.decode('utf-8', errors='ignore').strip()
             stdout_str = stdout.decode('utf-8', errors='ignore').strip()
             message = stderr_str + "\n" + stdout_str
@@ -162,31 +156,27 @@ class Key(object):
 
 def nemesis_logic(arguments):
     logger = logging.getLogger(__name__)
-    
-    # Добавляем файловый handler если указан log_file
+
     if arguments.log_file:
-        # Проверяем, не добавлен ли уже файловый handler
         existing_handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
         if not existing_handlers:
             file_handler = logging.FileHandler(arguments.log_file)
             file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-            # Добавляем handler только к текущему logger, а не к root
             logger.addHandler(file_handler)
             logger.info("Added file handler for: %s", arguments.log_file)
         else:
             logger.info("File handler already exists for: %s", arguments.log_file)
-    
+
     logger.info("Starting nemesis logic")
     logger.info("Arguments: %s", arguments)
-    
+
     ssh_username = os.getenv('NEMESIS_USER', 'robot-nemesis')
     logger.info("SSH username: %s", ssh_username)
-    
+
     yaml_config = arguments.yaml_config
     logger.info("YAML config: %s", yaml_config)
-    
+
     try:
-        # Создаем nemesis процесс
         if yaml_config is not None:
             logger.info("Creating cluster with YAML config")
             cluster = ExternalKiKiMRCluster(
@@ -204,42 +194,39 @@ def nemesis_logic(arguments):
                 kikimr_path=arguments.ydb_binary_path,
                 ssh_username=ssh_username,
             )
-        
+
         logger.info("Cluster created successfully: %s", cluster)
         logger.info("Cluster hostnames: %s", cluster.hostnames if hasattr(cluster, 'hostnames') else 'N/A')
-        
+
         nemesis = catalog.nemesis_factory(
             cluster,
             ssh_username=ssh_username,
             enable_nemesis_list_filter_by_hostname=arguments.enable_nemesis_list_filter_by_hostname,
         )
         logger.info("Nemesis factory created successfully")
-        
+
     except Exception as e:
         logger.error("Failed to create nemesis: %s", e)
         raise
-    
-    # Функция для graceful shutdown
+
     def signal_handler(signum, frame):
-        logger.info("Получен сигнал %d (SIGTERM/SIGINT), начинаем graceful shutdown", signum)
+        logger.info("Catched %d (SIGTERM/SIGINT), starting graceful shutdown", signum)
         try:
             nemesis.stop()
         except Exception as e:
-            logger.error("Ошибка при остановке nemesis: %s", e)
+            logger.error("Shutdown failed: %s", e)
         sys.exit(0)
-    
-    # Устанавливаем обработчики сигналов в главном потоке
+
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    
+
     try:
         nemesis.start()
-        flask_thread = monitor.setup_page(arguments.mon_host, arguments.mon_port)
-        
-        # Ждем завершения nemesis процесса
+        monitor.setup_page(arguments.mon_host, arguments.mon_port)
+
         while nemesis.is_alive():
             time.sleep(1)
-            
+
     except Exception as e:
         logger.error("Ошибка в nemesis_logic: %s", e)
         raise
@@ -253,7 +240,7 @@ def nemesis_logic(arguments):
 def main():
     logger = logging.getLogger(__name__)
     logger.info("Starting nemesis driver")
-    
+
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--ydb-cluster-template', required=True, help='Path to the YDB cluster template')
     parser.add_argument('--ydb-binary-path', required=True, help='Path to the YDB binary')

@@ -49,7 +49,7 @@ def monitor():
 
 def setup_page(host, port):
     logger.info("Setting up monitoring page on %s:%d", host, port)
-    
+
     def run_flask():
         try:
             logger.info("Starting Flask app on %s:%d", host, port)
@@ -58,10 +58,9 @@ def setup_page(host, port):
         except Exception as e:
             logger.error("Failed to start Flask app: %s", e)
             raise
-    
-    # Запускаем Flask в отдельном потоке
+
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     logger.info("Flask thread started")
-    
+
     return flask_thread

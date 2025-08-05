@@ -1704,6 +1704,111 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_VALUES_EQUAL(restoredProducts, expectedProductsForRestore);
     }
 
+    Y_UNIT_TEST(DropBackupCollectionSqlPathResolution) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+            .SetEnableRealSystemViewPaths(false)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        // Create backup collection using SQL
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `TestCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'false'
+              );
+            )", false);
+
+        // Add sleep to ensure create operation completes
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Drop backup collection using SQL - this should resolve the path correctly
+        // The key issue is that when using SQL (no explicit WorkingDir), 
+        // the system must resolve "TestCollection" to "/Root/.backups/collections/TestCollection"
+        ExecSQL(server, edgeActor, R"(DROP BACKUP COLLECTION `TestCollection`;)", false);
+
+        // Verify collection was deleted by trying to drop it again (should fail)
+        ExecSQL(server, edgeActor, R"(DROP BACKUP COLLECTION `TestCollection`;)", 
+                false, Ydb::StatusIds::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(DropBackupCollectionSqlWithDatabaseLikeNames) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+            .SetEnableRealSystemViewPaths(false)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        // Test with collection name that could be confused with database name
+        const TString collectionName = "Root";
+        
+        ExecSQL(server, edgeActor, Sprintf(R"(
+            CREATE BACKUP COLLECTION `%s`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'false'
+              );
+            )", collectionName.c_str()), false);
+
+        // Add sleep to ensure create operation completes
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Drop backup collection - should not be confused with database path
+        ExecSQL(server, edgeActor, Sprintf(R"(DROP BACKUP COLLECTION `%s`;)", collectionName.c_str()), false);
+
+        // Verify collection was deleted by trying to drop it again (should fail)
+        ExecSQL(server, edgeActor, Sprintf(R"(DROP BACKUP COLLECTION `%s`;)", collectionName.c_str()), 
+                false, Ydb::StatusIds::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(DropBackupCollectionSqlNonExistent) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+            .SetEnableRealSystemViewPaths(false)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+
+        // Try to drop non-existent collection - should fail with proper error
+        // This test ensures the path resolution logic correctly identifies when
+        // a collection doesn't exist vs when path resolution fails
+        ExecSQL(server, edgeActor, R"(DROP BACKUP COLLECTION `NonExistentCollection`;)", 
+                false, Ydb::StatusIds::SCHEME_ERROR);
+    }
+
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)
 
 } // NKikimr

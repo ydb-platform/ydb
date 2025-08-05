@@ -64,7 +64,7 @@ public:
         TIdWrapper old = *this;
         operator++();
         return old;
-  }
+    }
 
     friend std::ostream &operator<<(std::ostream &out, TIdWrapper &id) {
         return out << id.Raw;
@@ -74,23 +74,28 @@ public:
         return out << id.Raw;
     }
 
-    constexpr auto operator<=>(const TIdWrapper &) const = default;
+    friend std::strong_ordering operator<=>(const TIdWrapper&, const TIdWrapper&) = default;
 
     T GetRawId() const { return Raw; }
+
+    static const TIdWrapper Min() { return FromValue(::Min<T>()); }
+    static const TIdWrapper Max() { return FromValue(::Max<T>()); }
 
     friend std::hash<TIdWrapper<T, Tag>>;
 
     friend THash<TIdWrapper<T, Tag>>;
 };
 
-template <typename T, typename Tag> struct std::hash<TIdWrapper<T, Tag>> {
+template<typename T, typename Tag>
+struct std::hash<TIdWrapper<T, Tag>> {
     std::size_t operator()(const TIdWrapper<T, Tag> &id) const {
         return std::hash<T>{}(id.Raw);
     }
 };
 
-template <typename T, typename Tag> struct THash<TIdWrapper<T, Tag>> {
+template<typename T, typename Tag>
+struct THash<TIdWrapper<T, Tag>> {
     std::size_t operator()(const TIdWrapper<T, Tag> &id) const {
-        return THash<T>()(id.Raw);
+        return THash<T>{}(id.Raw);
     }
 };

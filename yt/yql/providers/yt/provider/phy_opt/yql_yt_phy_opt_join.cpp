@@ -12,6 +12,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NYql {
 
@@ -326,6 +327,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EarlyMergeJoin(TExprBase node, TExprContext& ctx) const {
     if (State_->Configuration->JoinMergeTablesLimit.Get()) {
         auto equiJoin = node.Cast<TYtEquiJoin>();
+
+        const bool waitAllInputs = State_->Configuration->JoinWaitAllInputs.Get().GetOrElse(false);
+        if (waitAllInputs && !AreJoinInputsReady(equiJoin)) {
+            return node;
+        }
+
         const auto tree = ImportYtEquiJoin(equiJoin, ctx);
         if (State_->Configuration->JoinMergeForce.Get() || tree->LinkSettings.ForceSortedMerge) {
             const auto rewriteStatus = RewriteYtEquiJoinLeaves(equiJoin, *tree, State_, ctx);
@@ -345,6 +352,131 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EarlyMergeJoin(TExprBas
     return node;
 }
 
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AddPruneKeys(TExprBase node, TExprContext& ctx) const {
+    // Analogue to flow2 core EquiJoin optimizer with PushPruneKeysIntoYtOperation optimizer
+    static const char optName[] = "EmitPruneKeys";
+    if (!IsOptimizerEnabled<optName>(*State_->Types) || IsOptimizerDisabled<optName>(*State_->Types)) {
+        return node;
+    }
+    auto equiJoin = node.Cast<TYtEquiJoin>();
+    if (HasSetting(equiJoin.JoinOptions().Ref(), "prune_keys_added")) {
+        return node;
+    }
+
+    THashMap<TStringBuf, THashSet<TStringBuf>> columnsForPruneKeysExtractor;
+    GetPruneKeysColumnsForJoinLeaves(equiJoin.Joins().Cast<TCoEquiJoinTuple>(), columnsForPruneKeysExtractor);
+
+    TExprNode::TListType children;
+    bool hasChanges = false;
+
+    for (const auto& input : equiJoin.Input()) {
+        auto section = input.Cast<TYtSection>();
+
+        auto joinLabel = NYql::GetSetting(section.Settings().Ref(), EYtSettingType::JoinLabel);
+        if (!joinLabel) {
+            children.push_back(input.Ptr());
+            continue;
+        }
+
+        bool hasTable = false;
+        THashSet<TString> columns;
+        if (joinLabel->Child(1)->IsAtom()) {
+            if (auto itemNames = columnsForPruneKeysExtractor.find(joinLabel->Child(1)->Content());
+                itemNames != columnsForPruneKeysExtractor.end() && !itemNames->second.empty()) {
+                hasTable = true;
+                for (const auto& elem : itemNames->second) {
+                    columns.insert(TString(elem));
+                }
+            }
+        } else {
+            for (const auto& child : joinLabel->Child(1)->Children()) {
+                if (auto itemNames = columnsForPruneKeysExtractor.find(child->Content());
+                    itemNames != columnsForPruneKeysExtractor.end() && !itemNames->second.empty()) {
+                    hasTable = true;
+                    for (const auto& elem : itemNames->second) {
+                        columns.insert(FullColumnName(itemNames->first, elem));
+                    }
+                }
+            }
+        }
+
+        if (!hasTable) {
+            children.push_back(input.Ptr());
+            continue;
+        }
+
+        if (IsAlreadyDistinct(section.Ref(), columns)) {
+            children.push_back(input.Ptr());
+            continue;
+        }
+        bool isOrdered = IsOrdered(section.Ref(), columns);
+
+        auto cluster = GetClusterFromSection(section);
+        YQL_ENSURE(cluster);
+
+        auto outItemType = section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        auto inputSection = Build<TYtSection>(ctx, section.Pos())
+            .InitFrom(section)
+            .Settings(NYql::RemoveSettings(section.Settings().Ref(), EYtSettingType::JoinLabel | EYtSettingType::StatColumns, ctx))
+            .Done();
+
+        auto pruneKeysCallable = isOrdered ? "PruneAdjacentKeys" : "PruneKeys";
+        YQL_CLOG(DEBUG, Core) << "Add " << pruneKeysCallable << " to YtEquiJoin input";
+
+        auto map = BuildMapForPruneKeys(
+            section,
+            MakePruneKeysExtractorLambda(node.Ref(), columns, ctx),
+            isOrdered,
+            cluster,
+            ctx.NewWorld(section.Pos()),
+            Build<TYtSectionList>(ctx, section.Pos())
+                .Add(inputSection)
+                .Done(),
+            outItemType,
+            ctx,
+            State_);
+
+        children.push_back(Build<TYtSection>(ctx, section.Pos())
+            .Paths()
+                .Add()
+                    .Table<TYtOutput>()
+                        .InitFrom(map.Cast<TYtOutput>())
+                    .Build()
+                    .Columns<TCoVoid>().Build()
+                    .Ranges<TCoVoid>().Build()
+                    .Stat<TCoVoid>().Build()
+                .Build()
+            .Build()
+            .Settings(section.Settings())
+            .Done()
+            .Ptr());
+        hasChanges = true;
+    }
+
+    if (!hasChanges) {
+        return node;
+    }
+
+    auto result = ctx.ChangeChild(
+        node.Ref(),
+        TYtEquiJoin::idx_Input,
+        Build<TYtSectionList>(ctx, equiJoin.Input().Pos())
+            .Add(children)
+            .Done().Ptr());
+
+    result = ctx.ChangeChild(
+        *result,
+        TYtEquiJoin::idx_JoinOptions,
+        AddSetting(
+            equiJoin.JoinOptions().Ref(),
+            equiJoin.JoinOptions().Pos(),
+            "prune_keys_added",
+            nullptr,
+            ctx));
+
+    return TExprBase(result);
+}
+
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBase node, TExprContext& ctx) const {
     auto equiJoin = node.Cast<TYtEquiJoin>();
 
@@ -353,19 +485,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBa
         && !HasSetting(equiJoin.JoinOptions().Ref(), "cbo_passed");
 
     const bool waitAllInputs = State_->Configuration->JoinWaitAllInputs.Get().GetOrElse(false) || tryReorder;
-
-    if (waitAllInputs) {
-        for (auto section: equiJoin.Input()) {
-            for (auto path: section.Paths()) {
-                TYtPathInfo pathInfo(path);
-                if (!pathInfo.Table->Stat) {
-                    return node;
-                }
-            }
-        }
+    if (waitAllInputs && !AreJoinInputsReady(equiJoin)) {
+        return node;
     }
-    const auto tree = ImportYtEquiJoin(equiJoin, ctx);
 
+    const auto tree = ImportYtEquiJoin(equiJoin, ctx);
     if (tryReorder) {
         YQL_CLOG(INFO, ProviderYt) << "Collecting cbo stats for equiJoin";
         auto collectStatus = CollectCboStats(*tree, State_, ctx);

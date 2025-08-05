@@ -60,6 +60,7 @@ class PythranBuildExtMixIn(object):
                 'preprocessor': None,
                 'compiler_cxx': None,
                 'compiler_so': None,
+                'compiler_so_cxx': None,
                 'compiler': None,
                 'linker_exe': None,
                 'linker_so': None,
@@ -72,7 +73,6 @@ class PythranBuildExtMixIn(object):
                 prev[key] = get_value(self.compiler, key)
             else:
                 del prev[key]
-
         # try hard to modify the compiler
         if getattr(ext, 'cxx', None) is not None:
             for comp in prev:
@@ -92,7 +92,7 @@ class PythranBuildExtMixIn(object):
                     return find_exe(exe, *args, **kwargs)
 
                 msvc._find_exe = _find_exe
-            except ImportError:
+            except (AttributeError, ImportError):
                 pass
 
         # In general, distutils uses -Wstrict-prototypes, but this option
@@ -175,7 +175,6 @@ class PythranExtension(Extension):
             # Inserting at head so that user-specified config in CLI takes
             # precedence.
             kwargs['config'] = ['compiler.blas=none'] + kwargs.get('config', [])
-
         cfg_ext = cfg.make_extension(python=True, **kwargs)
         self.cxx = cfg_ext.pop('cxx', None)
         self.cc = cfg_ext.pop('cc', None)

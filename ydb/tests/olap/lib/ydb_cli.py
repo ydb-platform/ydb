@@ -29,18 +29,21 @@ class CheckCanonicalPolicy(Enum):
 
 class YdbCliHelper:
     @staticmethod
+    def get_cli_path() -> str:
+        cli = get_external_param('ydb-cli', 'main')
+        if cli == 'git':
+            return yatest.common.work_path('ydb')
+        if cli == 'main':
+            return yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))
+        return cli
+
+    @staticmethod
     def get_cli_command() -> list[str]:
-        args = [
+        return [
+            YdbCliHelper.get_cli_path(),
             '-e', YdbCluster.ydb_endpoint,
             '-d', f'/{YdbCluster.ydb_database}'
         ]
-        cli = get_external_param('ydb-cli', 'main')
-        if cli == 'git':
-            return [yatest.common.work_path('ydb')] + args
-        elif cli == 'main':
-            return [yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))] + args
-        else:
-            return [cli] + args
 
     class QueryPlan:
         def __init__(self) -> None:
@@ -79,6 +82,8 @@ class YdbCliHelper:
             self.stderr: str = ''
             self.error_message: str = ''
             self.warning_message: str = ''
+            self.errors: list[str] = []
+            self.warnings: list[str] = []
             self.plans: Optional[list[YdbCliHelper.QueryPlan]] = None
             self.explain = YdbCliHelper.Iteration()
             self.iterations: dict[int, YdbCliHelper.Iteration] = {}
@@ -87,13 +92,13 @@ class YdbCliHelper:
 
         @property
         def success(self) -> bool:
-            return len(self.error_message) == 0
+            return len(self.errors) == 0
 
         def get_stats(self, test: str) -> dict[str, dict[str, Any]]:
             result = self._stats.get(test, {})
             result.update({
-                'with_warrnings': bool(self.warning_message),
-                'with_errors': bool(self.error_message),
+                'with_warnings': bool(self.warnings) or bool(self.warning_message),
+                'with_errors': bool(self.errors) or bool(self.error_message),
                 'errors': self.get_error_stats()
             })
             return result
@@ -116,6 +121,7 @@ class YdbCliHelper:
 
         def add_error(self, msg: Optional[str]) -> bool:
             if msg:
+                self.errors.append(msg)
                 if len(self.error_message) > 0:
                     self.error_message += f'\n\n{msg}'
                 else:
@@ -125,6 +131,7 @@ class YdbCliHelper:
 
         def add_warning(self, msg: Optional[str]):
             if msg:
+                self.warnings.append(msg)
                 if len(self.warning_message) > 0:
                     self.warning_message += f'\n\n{msg}'
                 else:
@@ -144,7 +151,9 @@ class YdbCliHelper:
                      scale: Optional[int],
                      query_prefix: Optional[str],
                      external_path: str,
-                     threads: int):
+                     threads: int,
+                     float_mode: str,
+                     ):
             self.result = YdbCliHelper.WorkloadRunResult()
             self.iterations = iterations
             self.check_canonical = check_canonical
@@ -164,6 +173,7 @@ class YdbCliHelper:
             self.__plan_path = f'{self.__prefix}.plan'
             self.__query_output_path = f'{self.__prefix}.result'
             self.json_path = f'{self.__prefix}.stats.json'
+            self.float_mode = float_mode
 
         def get_plan_path(self, query_name: str, plan_name: Any) -> str:
             return f'{self.__plan_path}.{query_name}.{plan_name}'
@@ -173,7 +183,7 @@ class YdbCliHelper:
 
         def __get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [
-                'workload', str(self.workload_type), '--path', self.db_path]
+                'workload', str(self.workload_type), '--path', YdbCluster.get_tables_path(self.db_path)]
             cmd += ['run']
             if self.external_path:
                 cmd += ['--suite-path', self.external_path]
@@ -196,6 +206,8 @@ class YdbCliHelper:
                 cmd += ['--scale', str(self.scale)]
             if self.threads > 0:
                 cmd += ['--threads', str(self.threads)]
+            if self.float_mode:
+                cmd += ['--float-mode', self.float_mode]
             return cmd
 
         def run(self) -> YdbCliHelper.WorkloadRunResult:
@@ -335,7 +347,7 @@ class YdbCliHelper:
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_names: list[str], iterations: int = 5,
                      timeout: float = 100., check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO, query_syntax: str = '',
-                     scale: Optional[int] = None, query_prefix=None, external_path='', threads: int = 0) -> dict[str, YdbCliHelper.WorkloadRunResult]:
+                     scale: Optional[int] = None, query_prefix=None, external_path='', threads: int = 0, float_mode: str = '') -> dict[str, YdbCliHelper.WorkloadRunResult]:
         runner = YdbCliHelper.WorkloadRunner(
             workload_type,
             path,
@@ -347,7 +359,8 @@ class YdbCliHelper:
             scale,
             query_prefix=query_prefix,
             external_path=external_path,
-            threads=threads
+            threads=threads,
+            float_mode=float_mode,
         )
         extended_query_names = query_names + ["Sum", "Avg", "GAvg"]
         if runner.run():

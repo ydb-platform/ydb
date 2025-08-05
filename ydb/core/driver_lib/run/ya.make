@@ -37,6 +37,7 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/actorlib_impl
     ydb/core/audit
+    ydb/core/audit/audit_config
     ydb/core/backup/controller
     ydb/core/base
     ydb/core/blob_depot
@@ -106,10 +107,12 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/columnshard
     ydb/core/tx/conveyor/service
+    ydb/core/tx/general_cache
+    ydb/core/tx/columnshard/data_accessor/cache_policy
+    ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/coordinator
     ydb/core/tx/datashard
     ydb/core/tx/limiter/grouped_memory/usage
-    ydb/core/tx/limiter/service
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/mediator
@@ -140,14 +143,15 @@ PEERDIR(
     ydb/library/grpc/server/actors
     ydb/library/pdisk_io
     ydb/library/security
-    ydb/library/signal_backtrace
     ydb/library/yql/providers/pq/cm_client
+    ydb/library/slide_limiter/service
     ydb/library/yql/providers/s3/actors
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/services/auth
     ydb/services/backup
+    ydb/services/bridge
     ydb/services/cms
     ydb/services/config
     ydb/services/datastreams
@@ -177,6 +181,12 @@ PEERDIR(
     yt/yql/providers/yt/comp_nodes/dq/llvm16
     yt/yql/providers/yt/comp_nodes/llvm16
 )
+
+IF (NOT OS_WINDOWS)
+    PEERDIR(
+        ydb/library/signal_backtrace
+    )
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

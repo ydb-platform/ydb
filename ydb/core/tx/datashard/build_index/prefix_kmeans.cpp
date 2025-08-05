@@ -51,7 +51,7 @@ using namespace NKMeans;
  *     - Prefix: records the (prefix key, parent cluster ID) mapping
  */
 
-class TPrefixKMeansScanBase: public TActor<TPrefixKMeansScanBase>, public IActorExceptionHandler, public NTable::IScan {
+class TPrefixKMeansScan: public TActor<TPrefixKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -80,6 +80,7 @@ protected:
     TBufferData* PrefixBuf = nullptr;
 
     const ui32 Dimensions = 0;
+    const ui32 K = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
 
@@ -103,7 +104,7 @@ protected:
 
     bool IsExhausted = false;
 
-    virtual TString Debug() const = 0;
+    std::unique_ptr<IClusters> Clusters;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -111,10 +112,9 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TPrefixKMeansScanBase(ui64 tabletId, const TUserTable& table,
-                          const NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
-                          const TActorId& responseActorId,
-                          TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response)
+    TPrefixKMeansScan(ui64 tabletId, const TUserTable& table, const NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
+        const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response,
+        std::unique_ptr<IClusters>&& clusters)
         : TActor{&TThis::StateWork}
         , Parent{request.GetChild()}
         , Child{Parent + 1}
@@ -125,12 +125,16 @@ public:
         , BuildId{request.GetId()}
         , Uploader(request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
+        , K(request.GetK())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
         , PrefixColumns{request.GetPrefixColumns()}
         , DataColumnCount{(ui32)request.GetDataColumns().size()}
+        , Clusters(std::move(clusters))
     {
+        LOG_I("Create " << Debug());
+
         const auto& embedding = request.GetEmbeddingColumn();
         TVector<TString> data{request.GetDataColumns().begin(), request.GetDataColumns().end()};
         for (auto & col: request.GetSourcePrimaryKeyColumns()) {
@@ -186,7 +190,7 @@ public:
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
-        
+
         return {EScan::Feed, {}};
     }
 
@@ -199,9 +203,10 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) final
     {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
-        
+        record.MutableMeteringStats()->SetReadRows(ReadRows);
+        record.MutableMeteringStats()->SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
+
         Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -236,6 +241,73 @@ public:
         return EScan::Feed;
     }
 
+    EScan Seek(TLead& lead, ui64 seq) final
+    {
+        LOG_T("Seek " << seq << " " << Debug());
+
+        if (IsExhausted) {
+            return Uploader.CanFinish()
+                ? EScan::Final
+                : EScan::Sleep;
+        }
+
+        lead = Lead;
+
+        return EScan::Feed;
+    }
+
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
+    {
+        // LOG_T("Feed " << Debug());
+
+        ++ReadRows;
+        ReadBytes += CountRowCellBytes(key, *row);
+
+        if (Prefix && !TCellVectorsEquals{}(Prefix.GetCells(), key.subspan(0, PrefixColumns))) {
+            if (!FinishPrefix()) {
+                // scan current prefix rows with a new state again
+                return EScan::Reset;
+            }
+        }
+
+        if (!Prefix) {
+            Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
+
+            // write {Prefix..., Parent} row to PrefixBuf:
+            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
+            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
+            pk.push_back(TCell::Make(Parent));
+
+            PrefixBuf->AddRow(pk, {});
+        }
+
+        if (IsFirstPrefixFeed && IsPrefixRowsValid) {
+            PrefixRows.AddRow(key, *row);
+            if (PrefixRows.HasReachedLimits(ScanSettings)) {
+                PrefixRows.Clear();
+                IsPrefixRowsValid = false;
+            }
+        }
+
+        Feed(key, *row);
+
+        return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+    }
+
+    EScan Exhausted() final
+    {
+        LOG_T("Exhausted " << Debug());
+
+        if (!FinishPrefix()) {
+            return EScan::Reset;
+        }
+
+        IsExhausted = true;
+
+        // call Seek to wait uploads
+        return EScan::Reset;
+    }
+
 protected:
     STFUNC(StateWork)
     {
@@ -243,7 +315,7 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() 
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
                     << " event: " << ev->ToString() << " " << Debug());
         }
     }
@@ -281,14 +353,9 @@ protected:
 
         Driver->Touch(EScan::Final);
     }
-};
 
-template <typename TMetric>
-class TPrefixKMeansScan final : public TPrefixKMeansScanBase {
-    TClusters<TMetric> Clusters;
-    
     void StartNewPrefix() {
-        Parent = Child + Clusters.GetK();
+        Parent = Child + K;
         Child = Parent + 1;
         State = EState::SAMPLE;
         Lead.To(Prefix.GetCells(), NTable::ESeek::Upper); // seek to (prefix, inf)
@@ -297,7 +364,7 @@ class TPrefixKMeansScan final : public TPrefixKMeansScanBase {
         IsPrefixRowsValid = true;
         PrefixRows.Clear();
         Sampler.Finish();
-        Clusters.Clear();
+        Clusters->Clear();
     }
 
     TString Debug() const
@@ -306,98 +373,21 @@ class TPrefixKMeansScan final : public TPrefixKMeansScanBase {
             << " State: " << State
             << " Parent: " << Parent << " Child: " << Child
             << " " << Sampler.Debug()
-            << " " << Clusters.Debug()
+            << " " << Clusters->Debug()
             << " " << Uploader.Debug();
     }
 
-public:
-    TPrefixKMeansScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
-                      const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response)
-        : TPrefixKMeansScanBase{tabletId, table, request, responseActorId, std::move(response)}
-        , Clusters(request.GetK(), request.GetSettings().vector_dimension(), request.GetNeedsRounds())
-    {
-        LOG_I("Create " << Debug());
-    }
-
-    EScan Seek(TLead& lead, ui64 seq) final
-    {
-        LOG_D("Seek " << seq << " " << Debug());
-
-        if (IsExhausted) {
-            return Uploader.CanFinish()
-                ? EScan::Final
-                : EScan::Sleep;
-        }
-
-        lead = Lead;
-
-        return EScan::Feed;
-    }
-
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
-    {
-        LOG_T("Feed " << Debug());
-
-        ++ReadRows;
-        ReadBytes += CountBytes(key, row);
-
-        if (Prefix && !TCellVectorsEquals{}(Prefix.GetCells(), key.subspan(0, PrefixColumns))) {
-            if (!FinishPrefix()) {
-                // scan current prefix rows with a new state again
-                return EScan::Reset;
-            }
-        }
-
-        if (!Prefix) {
-            Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
-
-            // write {Prefix..., Parent} row to PrefixBuf:
-            auto pk = TSerializedCellVec::Serialize(Prefix.GetCells());
-            std::array<TCell, 1> cells;
-            cells[0] = TCell::Make(Parent);
-            TSerializedCellVec::UnsafeAppendCells(cells, pk);
-            PrefixBuf->AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize({}));
-        }
-
-        if (IsFirstPrefixFeed && IsPrefixRowsValid) {
-            PrefixRows.AddRow(TSerializedCellVec{key}, TSerializedCellVec::Serialize(*row));
-            if (HasReachedLimits(PrefixRows, ScanSettings)) {
-                PrefixRows.Clear();
-                IsPrefixRowsValid = false;
-            }
-        }
-
-        Feed(key, *row);
-
-        return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
-    }
-
-    EScan Exhausted() final
-    {
-        LOG_D("Exhausted " << Debug());
-
-        if (!FinishPrefix()) {
-            return EScan::Reset;
-        }
-            
-        IsExhausted = true;
-        
-        // call Seek to wait uploads
-        return EScan::Reset;
-    }
-
-private:
     bool FinishPrefix()
     {
         if (FinishPrefixImpl()) {
             StartNewPrefix();
-            LOG_D("FinishPrefix finished " << Debug());
+            LOG_T("FinishPrefix finished " << Debug());
             return true;
         } else {
             IsFirstPrefixFeed = false;
-            
+
             if (IsPrefixRowsValid) {
-                LOG_D("FinishPrefix not finished, manually feeding " << PrefixRows.Size() << " saved rows " << Debug());
+                LOG_T("FinishPrefix not finished, manually feeding " << PrefixRows.GetRows() << " saved rows " << Debug());
                 for (ui64 iteration = 0; ; iteration++) {
                     for (const auto& [key, row_] : *PrefixRows.GetRowsData()) {
                         TSerializedCellVec row(row_);
@@ -405,14 +395,14 @@ private:
                     }
                     if (FinishPrefixImpl()) {
                         StartNewPrefix();
-                        LOG_D("FinishPrefix finished in " << iteration << " iterations " << Debug());
+                        LOG_T("FinishPrefix finished in " << iteration << " iterations " << Debug());
                         return true;
                     } else {
-                        LOG_D("FinishPrefix not finished in " << iteration << " iterations " << Debug());
+                        LOG_T("FinishPrefix not finished in " << iteration << " iterations " << Debug());
                     }
                 }
             } else {
-                LOG_D("FinishPrefix not finished, rescanning rows " << Debug());
+                LOG_T("FinishPrefix not finished, rescanning rows " << Debug());
             }
 
             return false;
@@ -423,16 +413,25 @@ private:
     {
         if (State == EState::SAMPLE) {
             State = EState::KMEANS;
-            if (!Clusters.InitAggregatedClusters(Sampler)) {
+            auto rows = Sampler.Finish().second;
+            if (rows.size() == 0) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this prefix
                 return true;
             }
+            if (rows.size() < K) {
+                // if this datashard have less than K valid embeddings for this parent
+                // lets make single centroid for it
+                rows.resize(1);
+            }
+            bool ok = Clusters->SetClusters(std::move(rows));
+            Y_ENSURE(ok);
+            Clusters->SetRound(1);
             return false; // do KMEANS
         }
 
         if (State == EState::KMEANS) {
-            if (Clusters.RecomputeClusters()) {
+            if (Clusters->NextRound()) {
                 FormLevelRows();
                 State = UploadState;
                 return false; // do UPLOAD_*
@@ -472,7 +471,7 @@ private:
     void FeedSample(TArrayRef<const TCell> row)
     {
         const auto embedding = row.at(EmbeddingPos).AsRef();
-        if (!IsExpectedSize<typename TMetric::TCoord_>(embedding, Dimensions)) {
+        if (!Clusters->IsExpectedSize(embedding)) {
             return;
         }
 
@@ -483,21 +482,21 @@ private:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            Clusters.AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
+        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
+            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }
     }
 
     void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             AddRowToData(*OutputBuf, Child + *pos, row.Slice(DataPos+DataColumnCount), row.Slice(0, DataPos+DataColumnCount), key, false);
         }
     }
 
     void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             AddRowToData(*OutputBuf, Child + *pos, row.Slice(DataPos+DataColumnCount), row.Slice(DataPos, DataColumnCount), key, true);
         }
     }
@@ -506,7 +505,7 @@ private:
     {
         const bool isPostingLevel = UploadState == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING;
 
-        for (NTable::TPos pos = 0; const auto& row : Clusters.GetClusters()) {
+        for (NTable::TPos pos = 0; const auto& row : Clusters->GetClusters()) {
             AddRowToLevel(*LevelBuf, Parent, Child + pos, row, isPostingLevel);
             ++pos;
         }
@@ -549,12 +548,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvPrefixKMeansResponse>();
-        response->Record.SetId(id);
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TPrefixKMeansScan TabletId: " << TabletID() 
+        LOG_N("Starting TPrefixKMeansScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
@@ -610,13 +606,13 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
             badRequest("Should be requested partition on at least two rows");
         }
 
-        if (!request.HasLevelName()) {
+        if (!request.GetLevelName()) {
             badRequest(TStringBuilder() << "Empty level table name");
         }
-        if (!request.HasOutputName()) {
+        if (!request.GetOutputName()) {
             badRequest(TStringBuilder() << "Empty output table name");
         }
-        if (!request.HasPrefixName()) {
+        if (!request.GetPrefixName()) {
             badRequest(TStringBuilder() << "Empty prefix table name");
         }
 
@@ -649,18 +645,17 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         }
 
         // 3. Validating vector index settings
-        TAutoPtr<NTable::IScan> scan;
-        auto createScan = [&]<typename T> {
-            scan = new TPrefixKMeansScan<T>{
-                TabletID(), userTable, request, ev->Sender, std::move(response),
-            };
-        };
-        MakeScan(request, createScan, badRequest);
-        if (!scan) {
+        TString error;
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error);
+        if (!clusters) {
+            badRequest(error);
             auto sent = trySendBadRequest();
             Y_ENSURE(sent);
             return;
         }
+        TAutoPtr<NTable::IScan> scan = new TPrefixKMeansScan(
+            TabletID(), userTable, request, ev->Sender, std::move(response), std::move(clusters)
+        );
 
         StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
     } catch (const std::exception& exc) {

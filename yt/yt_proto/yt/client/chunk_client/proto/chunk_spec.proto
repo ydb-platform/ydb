@@ -51,6 +51,7 @@ message TChunkSpec
     optional int64 row_count_override = 14;
     optional int64 data_weight_override = 15;
     optional int64 compressed_data_size_override = 27;
+    optional int64 uncompressed_data_size_override = 28;
 
     // Tag of the input data slice this chunk spec belongs to (if any).
     // It helps us restore the correspondence between data slices that

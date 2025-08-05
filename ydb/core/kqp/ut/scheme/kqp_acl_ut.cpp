@@ -22,7 +22,7 @@ void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TStr
     ).ExtractValueSync();
     AssertSuccessResult(result);
 
-    Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);    
+    Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);
 }
 
 void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
@@ -31,7 +31,7 @@ void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
     .SetDatabase("/Root")
     .SetAuthToken(subject));
 
-    NYdb::NQuery::TQueryClient client(driver);            
+    NYdb::NQuery::TQueryClient client(driver);
     while(true) {
         auto result = client.ExecuteScript("SELECT 1").ExtractValueSync();
         NYdb::EStatus scriptStatus = result.Status().GetStatus();
@@ -217,10 +217,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 primary key (id)
             ) WITH (STORE=%s);
         )", isOlap ? "COLUMN" : "ROW");
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(appConfig);
+        NKqp::TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
@@ -503,11 +502,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
     }
 
     Y_UNIT_TEST_QUAD(AclDml, UseSink, IsOlap) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
-        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(appConfig);
+        NKqp::TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
+        TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
@@ -628,11 +626,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
     }
 
     Y_UNIT_TEST_QUAD(AclRevoke, UseSink, IsOlap) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
-        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(appConfig);
+        NKqp::TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
+        TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
@@ -655,7 +652,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         }
 
         AddConnectPermission(kikimr, UserName);
-        
+
         for (const auto permission : {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"}) {
             AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"});
 
@@ -694,6 +691,355 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
             driver.Stop(true);
         }
+    }
+
+    NQuery::TSession CreateSession(NQuery::TQueryClient& client) {
+        auto result = client.GetSession().GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        return result.GetSession();
+    }
+
+    void AllowUserCreation(Tests::TClient& client, TString&& subject) {
+        client.TestGrant("/", "Root", subject, NACLib::EAccessRights::AlterSchema);
+    }
+
+    void AllowDatabaseAltering(Tests::TClient& client, TString&& subject) {
+        client.TestGrant("/Root", "Test", subject,
+            static_cast<NACLib::EAccessRights>(NACLib::EAccessRights::AlterSchema | NACLib::EAccessRights::CreateDatabase)
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(AlterDatabasePrivilegesRequiredToChangeSchemeLimits, AsClusterAdmin) {
+        /* Default Kikimr runner can not create extsubdomain. */
+        TTestExtEnv::TEnvSettings settings;
+        settings.FeatureFlags.SetEnableAlterDatabase(true);
+
+        TTestExtEnv env(settings);
+        env.CreateDatabase("Test");
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
+
+        runtime.GetAppData().AdministrationAllowedSIDs.emplace_back("cluster_admin@builtin");
+        NQuery::TQueryClient clusterAdmin(env.GetDriver(), NQuery::TClientSettings().AuthToken("cluster_admin@builtin"));
+        auto clusterAdminSession = CreateSession(clusterAdmin);
+
+        {
+            env.GetClient().SetSecurityToken("cluster_admin@builtin"); // must be a cluster admin
+            AllowUserCreation(env.GetClient(), "cluster_admin@builtin");
+
+            auto result = clusterAdminSession.ExecuteQuery(R"(
+                    CREATE USER databaseadmin ENCRYPTED PASSWORD 'secret_password';
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        NQuery::TQueryClient databaseAdmin(env.GetDriver(), NQuery::TClientSettings().CredentialsProviderFactory(
+            CreateLoginCredentialsProviderFactory({
+                .User = "databaseadmin",
+                .Password = "secret_password",
+            })
+        ));
+        auto databaseAdminSession = CreateSession(databaseAdmin);
+
+        {
+            auto result = clusterAdminSession.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` OWNER TO databaseadmin;
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TTableClient client(env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            CheckOwner(session, "/Root/Test", "databaseadmin");
+        }
+
+        {
+            if (AsClusterAdmin) {
+                AllowDatabaseAltering(env.GetClient(), "cluster_admin@builtin");
+            }
+
+            auto result = (AsClusterAdmin ? clusterAdminSession : databaseAdminSession).ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` SET (MAX_PATHS = 10, MAX_SHARDS = 20);
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+
+            if (AsClusterAdmin) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            }
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(AclTemporary, IsOlap, UseAdmin) {
+        auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        if (UseAdmin) {
+            kikimr.GetTestClient().GrantConnect("user_write@builtin");
+            kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+        }
+
+        const TString UserWriteName = "user_write@builtin";
+        const TString UserReadName = "root@builtin";
+
+        auto driverWriteConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken(UserWriteName)
+            .SetDatabase("/Root");
+        auto driverWrite = TDriver(driverWriteConfig);
+        auto clientWrite = NYdb::NQuery::TQueryClient(driverWrite);
+
+        auto sessionWrite = CreateSession(clientWrite);
+        auto sessionWriteOther = CreateSession(clientWrite);
+
+        auto driverReadConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken(UserReadName)
+            .SetDatabase("/Root");
+        auto driverRead = TDriver(driverReadConfig);
+        auto clientRead = NYdb::NQuery::TQueryClient(driverRead);
+
+        auto sessionRead = CreateSession(clientRead);
+
+        
+        {
+            const TString queryWrite = Sprintf(R"(
+                CREATE TEMPORARY TABLE `/Root/Test` (
+                    id Uint64 NOT NULL,
+                    name String,
+                    primary key (id)
+                ) WITH (STORE=%s);
+            )", IsOlap ? "COLUMN" : "ROW");
+
+            auto result = sessionWrite.ExecuteQuery(queryWrite, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // tmp table by session alias
+        const TString queryWithAlias = R"(
+            UPSERT INTO `/Root/Test` (id, name) VALUES
+                (10u, "One");
+        )";
+
+        {
+            auto result = sessionWrite.ExecuteQuery(queryWithAlias, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = sessionWriteOther.ExecuteQuery(queryWithAlias, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = sessionRead.ExecuteQuery(queryWithAlias, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // tmp table by real path
+        const TStringBuf sessionPrefix = "&id=";
+        const auto pos = sessionWrite.GetId().find(sessionPrefix);
+
+        const TString sessionTmpDir = TStringBuilder()
+            << "/Root/.tmp/sessions/"
+            << sessionWrite.GetId().substr(pos + sessionPrefix.size());
+
+        {
+            auto result = sessionWrite.ExecuteQuery(Sprintf(R"(
+                CREATE TABLE `%s/Test` (
+                    id Uint64 NOT NULL,
+                    name String,
+                    primary key (id)
+                );
+            )", sessionTmpDir.c_str()), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("path is temporary"), result.GetIssues().ToString());
+        }
+
+        const TString queryWithRealPath = Sprintf(R"(
+            UPSERT INTO `%s/Root/Test` (id, name) VALUES
+                (10u, "One");
+        )", sessionTmpDir.c_str());
+
+        const TString queryWithFakePath = Sprintf(R"(
+            UPSERT INTO `%s/Root/Test2` (id, name) VALUES
+                (10u, "One");
+        )", sessionTmpDir.c_str());
+
+        {
+            auto result = sessionWrite.ExecuteQuery(queryWithRealPath, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = sessionWriteOther.ExecuteQuery(queryWithRealPath, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = sessionRead.ExecuteQuery(queryWithRealPath, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions."), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = sessionRead.ExecuteQuery(queryWithFakePath, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions."), result.GetIssues().ToString());
+        }
+
+        auto schemeClientWrite = NYdb::NScheme::TSchemeClient(driverWrite);
+        auto schemeClientRead = NYdb::NScheme::TSchemeClient(driverRead);
+
+        {
+            auto result = schemeClientWrite.ListDirectory(sessionTmpDir).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = schemeClientRead.ListDirectory(sessionTmpDir).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientWrite.DescribePath(sessionTmpDir).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = schemeClientRead.DescribePath(sessionTmpDir).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientWrite.ListDirectory("/Root/.tmp").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientRead.ListDirectory("/Root/.tmp").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientWrite.DescribePath("/Root/.tmp").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientRead.DescribePath("/Root/.tmp").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientWrite.ListDirectory("/Root/.tmp/sessions").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientRead.ListDirectory("/Root/.tmp/sessions").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientWrite.DescribePath("/Root/.tmp/sessions").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientRead.DescribePath("/Root/.tmp/sessions").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+
+        {
+            auto result = schemeClientWrite.MakeDirectory("/Root/.tmp/test1").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientRead.MakeDirectory("/Root/.tmp/test2").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientWrite.MakeDirectory("/Root/.tmp/sessions/test1").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientRead.MakeDirectory("/Root/.tmp/sessions/test2").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientWrite.MakeDirectory(sessionTmpDir + "/test1").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "path is temporary",
+                result.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto result = schemeClientRead.MakeDirectory(sessionTmpDir + "/test2").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+
+        driverWrite.Stop(true);
+        driverRead.Stop(true);
     }
 }
 

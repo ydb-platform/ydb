@@ -1,4 +1,34 @@
 
+## 2.24.1 ##
+
+* Fixed a bug where the `ydb tools dump` command was skipping scheme objects of unsupported types without notification and leaving an empty directory for them.
+
+## 2.24.0 ##
+
+* Fixed a bug where executing the `ydb import file csv` command could hang.
+* Set default storage type as `column` (was `row`) and default datetime mode as `datetime32` (was `datetime64`) in `ydb workload * init` commands.
+* Added ability of `ydb workload tpch` and `ydb workload tpcds` commands to use fraction `--scale` option.
+* Added `ydb workload tpcc check` subcommand, which checks TPC-C data consistency.
+
+## 2.23.0 ##
+
+* Added connection check and hotkeys description in interactive mode.
+* Fixed `ydb tools restore` not being able to restore local backups on Windows.
+* Limited width of tables in benchmark reports.
+* Added `ydb workload vector select` to benchmark RPS and recall of vector index.
+* Added trivial columns completion in interactive mode.
+* Added the "ydb tools infer csv" command to generate a `CREATE TABLE` SQL query from a CSV file with data.
+* Fix inline hints
+* Added named expressions completion in interactive mode, cache schema responses.
+* Added processing of special values `null`, `/dev/null`, `stdout`, `cout`, `console`, `stderr` and `cerr` of `--output` option in `ydb workload * run` command.
+* Fixed bug when `ydb wokrload` commands did not work with absolute paths.
+* Added TPC-C benchmark as `ydb workload tpcc`.
+
+## 2.22.1 ##
+
+* Fixed bug with state working in commnads `ydb workload query import` and `ydb workload clickbench import files`.
+* Fixed bug with parsing certificate files from profile.
+
 ## 2.22.0 ##
 
 * Ignore empty directories in dumps when restoring it with `ydb tools restore`. Empty directories are created for unknown scheme objects when dumping with `ydb tools dump`.

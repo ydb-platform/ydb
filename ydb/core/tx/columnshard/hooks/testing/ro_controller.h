@@ -11,10 +11,9 @@ namespace NKikimr::NYDBTest::NColumnShard {
 
 class TReadOnlyController: public ICSController {
 private:
+    YDB_READONLY(TAtomicCounter, CleanupSchemasFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, TTLFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, TTLStartedCounter, 0);
-    YDB_READONLY(TAtomicCounter, InsertFinishedCounter, 0);
-    YDB_READONLY(TAtomicCounter, InsertStartedCounter, 0);
     YDB_READONLY(TAtomicCounter, CompactionFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, CompactionStartedCounter, 0);
     YDB_READONLY(TAtomicCounter, CleaningFinishedCounter, 0);
@@ -99,19 +98,6 @@ public:
         return count > 0;
     }
 
-    void WaitIndexation(const TDuration d) const {
-        TInstant start = TInstant::Now();
-        ui32 insertsStart = GetInsertStartedCounter().Val();
-        while (Now() - start < d) {
-            if (insertsStart != GetInsertStartedCounter().Val()) {
-                insertsStart = GetInsertStartedCounter().Val();
-                start = TInstant::Now();
-            }
-            Cerr << "WAIT_INDEXATION: " << GetInsertStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
-        }
-    }
-
     bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
         TInstant start = TInstant::Now();
         const ui32 countStart0 = GetCleaningStartedCounter().Val();
@@ -129,6 +115,25 @@ public:
             }
         }
         return GetCleaningStartedCounter().Val() != countStart0;
+    }
+
+    bool WaitCleaningSchemas(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
+        TInstant start = TInstant::Now();
+        const ui32 countStart0 = GetCleanupSchemasFinishedCounter().Val();
+        ui32 countStart = countStart0;
+        while (Now() - start < d) {
+            if (countStart != GetCleanupSchemasFinishedCounter().Val()) {
+                countStart = GetCleanupSchemasFinishedCounter().Val();
+                start = TInstant::Now();
+            }
+            Cerr << "WAIT_CLEANING_SCHEMAS: " << GetCleanupSchemasFinishedCounter().Val() << Endl;
+            if (testRuntime) {
+                testRuntime->SimulateSleep(TDuration::Seconds(1));
+            } else {
+                Sleep(TDuration::Seconds(1));
+            }
+        }
+        return GetCleanupSchemasFinishedCounter().Val() != countStart0;
     }
 
     void WaitTtl(const TDuration d) const {
@@ -174,6 +179,10 @@ public:
         AFL_VERIFY(!NeedActualizationCount.Val());
     }
 
+    virtual void OnCleanupSchemasFinished() override {
+        CleanupSchemasFinishedCounter.Inc();
+    }
+
     virtual void OnIndexSelectProcessed(const std::optional<bool> result) override {
         if (!result) {
             IndexesSkippedNoData.Inc();
@@ -193,6 +202,11 @@ public:
             HeadersSkippingOnSelect.Inc();
         }
     }
+
+    virtual bool IsForcedGenerateInternalPathId() const override {
+        return true;
+    }
+
 };
 
 }

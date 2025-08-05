@@ -113,13 +113,13 @@ namespace NSQLTranslationV1 {
         void SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action);
 
         const TString& Token(const NSQLv1Generated::TToken& token) {
-            Position.Row = token.GetLine();
-            Position.Column = token.GetColumn() + 1;
+            Position_.Row = token.GetLine();
+            Position_.Column = token.GetColumn() + 1;
             return token.GetValue();
         }
 
         TPosition TokenPosition(const NSQLv1Generated::TToken& token) {
-            TPosition pos = Position;
+            TPosition pos = Position_;
             pos.Row = token.GetLine();
             pos.Column = token.GetColumn() + 1;
             return pos;
@@ -141,7 +141,7 @@ namespace NSQLTranslationV1 {
         }
 
         TMaybe<TString> GetClusterProvider(const TString& cluster, TString& normalizedClusterName) const {
-            auto provider = ClusterMapping.GetClusterProvider(cluster, normalizedClusterName);
+            auto provider = ClusterMapping_.GetClusterProvider(cluster, normalizedClusterName);
             if (!provider) {
                 if (Settings.AssumeYdbOnClusterWithSlash && cluster.StartsWith('/')) {
                     normalizedClusterName = cluster;
@@ -170,11 +170,11 @@ namespace NSQLTranslationV1 {
         TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
 
         void BodyPart() {
-            IntoHeading = false;
+            IntoHeading_ = false;
         }
 
         bool IsParseHeading() const {
-            return IntoHeading;
+            return IntoHeading_;
         }
 
         bool IsAlreadyDeclared(const TString& varName) const;
@@ -190,44 +190,44 @@ namespace NSQLTranslationV1 {
         bool CheckColumnReference(TPosition pos, const TString& name) {
             const bool allowed = GetColumnReferenceState() != EColumnRefState::Deny;
             if (!allowed) {
-                Error(pos) << "Column reference \"" << name << "\" is not allowed " << NoColumnErrorContext;
+                Error(pos) << "Column reference \"" << name << "\" is not allowed " << NoColumnErrorContext_;
                 IncrementMonCounter("sql_errors", "ColumnReferenceInScopeIsNotAllowed");
             }
             return allowed;
         }
 
         EColumnRefState GetColumnReferenceState() const {
-            return ColumnReferenceState;
+            return ColumnReferenceState_;
         }
 
         EColumnRefState GetTopLevelColumnReferenceState() const {
-            return TopLevelColumnReferenceState;
+            return TopLevelColumnReferenceState_;
         }
 
         [[nodiscard]] TString GetMatchRecognizeDefineVar() const {
-            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
-                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
-                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState_
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState_
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState_,
                        "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
-            return MatchRecognizeDefineVar;
+            return MatchRecognizeDefineVar_;
         }
 
         TString ExtractMatchRecognizeAggrVar() {
-            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
-                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
-                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState_
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState_
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState_,
                        "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
-            return std::exchange(MatchRecognizeAggrVar, "");
+            return std::exchange(MatchRecognizeAggrVar_, "");
         }
 
         [[nodiscard]] bool SetMatchRecognizeAggrVar(TString var) {
-            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
-                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
-                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState_
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState_
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState_,
                        "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
-            if (MatchRecognizeAggrVar.empty()) {
-                MatchRecognizeAggrVar = std::move(var);
-            } else if (MatchRecognizeAggrVar != var) {
+            if (MatchRecognizeAggrVar_.empty()) {
+                MatchRecognizeAggrVar_ = std::move(var);
+            } else if (MatchRecognizeAggrVar_ != var) {
                 Error() << "Illegal use of aggregates or navigation operators in MATCH_RECOGNIZE";
                 return false;
             }
@@ -235,11 +235,11 @@ namespace NSQLTranslationV1 {
         }
 
         [[nodiscard]] auto& GetMatchRecognizeAggregations() {
-            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState
-                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState
-                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState,
+            YQL_ENSURE(EColumnRefState::MatchRecognizeMeasures == ColumnReferenceState_
+                    || EColumnRefState::MatchRecognizeDefine == ColumnReferenceState_
+                    || EColumnRefState::MatchRecognizeDefineAggregate == ColumnReferenceState_,
                        "MATCH_RECOGNIZE Var can only be accessed within processing of MATCH_RECOGNIZE lambdas");
-            return MatchRecognizeAggregations;
+            return MatchRecognizeAggregations_;
         }
 
         TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
@@ -253,28 +253,28 @@ namespace NSQLTranslationV1 {
         const TParsers Parsers;
 
     private:
-        NYql::TPosition Position;
-        THolder<TStringOutput> IssueMsgHolder;
-        NSQLTranslation::TClusterMapping ClusterMapping;
-        TString PathPrefix;
-        THashMap<TString, TString> ProviderPathPrefixes;
-        THashMap<TString, TString> ClusterPathPrefixes;
-        bool IntoHeading = true;
-        NSQLTranslation::TSQLHints SQLHints;
+        NYql::TPosition Position_;
+        THolder<TStringOutput> IssueMsgHolder_;
+        NSQLTranslation::TClusterMapping ClusterMapping_;
+        TString PathPrefix_;
+        THashMap<TString, TString> ProviderPathPrefixes_;
+        THashMap<TString, TString> ClusterPathPrefixes_;
+        bool IntoHeading_ = true;
+        NSQLTranslation::TSQLHints SqlHints_;
 
         friend class TColumnRefScope;
 
-        EColumnRefState ColumnReferenceState = EColumnRefState::Deny;
-        EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
-        TString MatchRecognizeDefineVar;
-        TString MatchRecognizeAggrVar;
+        EColumnRefState ColumnReferenceState_ = EColumnRefState::Deny;
+        EColumnRefState TopLevelColumnReferenceState_ = EColumnRefState::Deny;
+        TString MatchRecognizeDefineVar_;
+        TString MatchRecognizeAggrVar_;
         struct TMatchRecognizeAggregation {
             TString Var;
             TAggregationPtr Aggr;
         };
-        TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations;
-        TString NoColumnErrorContext = "in current scope";
-        TVector<TBlocks*> CurrentBlocks;
+        TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations_;
+        TString NoColumnErrorContext_ = "in current scope";
+        TVector<TBlocks*> CurrentBlocks_;
 
     public:
         THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
@@ -378,6 +378,8 @@ namespace NSQLTranslationV1 {
         bool FailOnGroupByExprOverride = false;
         bool EmitUnionMerge = false;
         bool OptimizeSimpleIlike = false;
+        bool PersistableFlattenAndAggrExprs = false;
+        bool DebugPositions = false;
         TVector<size_t> ForAllStatementsParts;
 
         TMaybe<TString> Engine;
@@ -386,16 +388,16 @@ namespace NSQLTranslationV1 {
     class TColumnRefScope {
     public:
         TColumnRefScope(TContext& ctx, EColumnRefState state, bool isTopLevelExpr = true, const TString& defineVar = "")
-            : PrevTop(ctx.TopLevelColumnReferenceState)
-            , Prev(ctx.ColumnReferenceState)
-            , PrevErr(ctx.NoColumnErrorContext)
-            , PrevDefineVar(ctx.MatchRecognizeDefineVar)
-            , Ctx(ctx)
+            : PrevTop_(ctx.TopLevelColumnReferenceState_)
+            , Prev_(ctx.ColumnReferenceState_)
+            , PrevErr_(ctx.NoColumnErrorContext_)
+            , PrevDefineVar_(ctx.MatchRecognizeDefineVar_)
+            , Ctx_(ctx)
         {
             if (isTopLevelExpr) {
-                Ctx.ColumnReferenceState = Ctx.TopLevelColumnReferenceState = state;
+                Ctx_.ColumnReferenceState_ = Ctx_.TopLevelColumnReferenceState_ = state;
             } else {
-                Ctx.ColumnReferenceState = state;
+                Ctx_.ColumnReferenceState_ = state;
             }
             YQL_ENSURE(
                 defineVar.empty()
@@ -404,25 +406,25 @@ namespace NSQLTranslationV1 {
                 || EColumnRefState::MatchRecognizeDefineAggregate == state,
                 "Internal logic error"
             );
-            ctx.MatchRecognizeDefineVar = defineVar;
+            ctx.MatchRecognizeDefineVar_ = defineVar;
         }
 
         void SetNoColumnErrContext(const TString& msg) {
-            Ctx.NoColumnErrorContext = msg;
+            Ctx_.NoColumnErrorContext_ = msg;
         }
 
         ~TColumnRefScope() {
-            Ctx.TopLevelColumnReferenceState = PrevTop;
-            Ctx.ColumnReferenceState = Prev;
-            std::swap(Ctx.NoColumnErrorContext, PrevErr);
-            std::swap(Ctx.MatchRecognizeDefineVar, PrevDefineVar);
+            Ctx_.TopLevelColumnReferenceState_ = PrevTop_;
+            Ctx_.ColumnReferenceState_ = Prev_;
+            std::swap(Ctx_.NoColumnErrorContext_, PrevErr_);
+            std::swap(Ctx_.MatchRecognizeDefineVar_, PrevDefineVar_);
         }
     private:
-        const EColumnRefState PrevTop;
-        const EColumnRefState Prev;
-        TString PrevErr;
-        TString PrevDefineVar;
-        TContext& Ctx;
+        const EColumnRefState PrevTop_;
+        const EColumnRefState Prev_;
+        TString PrevErr_;
+        TString PrevDefineVar_;
+        TContext& Ctx_;
     };
 
     TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex);
@@ -439,15 +441,15 @@ namespace NSQLTranslationV1 {
         IOutputStream& Error();
 
         const TString& Token(const NSQLv1Generated::TToken& token) {
-            return Ctx.Token(token);
+            return Ctx_.Token(token);
         }
 
         TString Identifier(const NSQLv1Generated::TToken& token) {
-            return IdContent(Ctx, Token(token));
+            return IdContent(Ctx_, Token(token));
         }
 
         TString Identifier(const TString& str) const {
-            return IdContent(Ctx, str);
+            return IdContent(Ctx_, str);
         }
 
         TNodePtr GetNamedNode(const TString& name);
@@ -474,7 +476,7 @@ namespace NSQLTranslationV1 {
         TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
 
     protected:
-        TContext& Ctx;
+        TContext& Ctx_;
     };
 
     void EnumerateSqlFlags(std::function<void(std::string_view)> callback);

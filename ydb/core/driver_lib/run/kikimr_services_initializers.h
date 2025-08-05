@@ -19,7 +19,6 @@
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
 #include <ydb/library/actors/core/defs.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/core/scheduler_actor.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
@@ -404,9 +403,15 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
+class TScanGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
 public:
-    TGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
+    TScanGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TCompGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
+public:
+    TCompGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
@@ -416,21 +421,21 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TCompConveyorInitializer: public IKikimrServicesInitializer {
+class TCompositeConveyorInitializer : public IKikimrServicesInitializer {
 public:
-    TCompConveyorInitializer(const TKikimrRunConfig& runConfig);
+    TCompositeConveyorInitializer(const TKikimrRunConfig& runConfig);
+	void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TGeneralCachePortionsMetadataInitializer: public IKikimrServicesInitializer {
+public:
+    TGeneralCachePortionsMetadataInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TScanConveyorInitializer: public IKikimrServicesInitializer {
+class TGeneralCacheColumnDataInitializer: public IKikimrServicesInitializer {
 public:
-    TScanConveyorInitializer(const TKikimrRunConfig& runConfig);
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
-class TInsertConveyorInitializer: public IKikimrServicesInitializer {
-public:
-    TInsertConveyorInitializer(const TKikimrRunConfig& runConfig);
+    TGeneralCacheColumnDataInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 

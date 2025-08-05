@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(DefaultPolicy) {
     Y_UNIT_TEST(CloudFunction) {
         TTestContext ctx;
         auto value = NUdf::TUnboxedValuePod(i64(540138));
-        auto policy = DefaultPolicy::getInstance().CloudFunction();
+        auto policy = DefaultPolicy::GetInstance().CloudFunction();
         auto json = WriteValueToExportJsonStr(value, TDataType::Create(NUdf::TDataType<i64>::Id, ctx.TypeEnv), policy);
         UNIT_ASSERT_VALUES_EQUAL(json, "\"540138\"");
     }

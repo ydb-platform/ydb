@@ -1,7 +1,7 @@
 #include "service.h"
 
 #include "auth_factory.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "executor.h"
 #include "garbage_collector.h"
 #include "local_rate_limiter_allocator.h"
@@ -13,6 +13,7 @@
 #include "user_settings_names.h"
 #include "user_settings_reader.h"
 #include "index_events_processor.h"
+#include "cloud_events/cloud_events.h"
 #include "node_tracker.h"
 #include "cleanup_queue_data.h"
 
@@ -429,6 +430,24 @@ void TSqsService::Bootstrap() {
         Y_ABORT_UNLESS(factory);
 
         MakeAndRegisterYcEventsProcessor();
+    }
+
+    if (Cfg().HasCloudEventsConfig()) {
+        const auto& cloudEvCfg = Cfg().GetCloudEventsConfig();
+        CloudEventsConfig.Enabled = cloudEvCfg.GetEnableCloudEvents();
+
+        if (cloudEvCfg.HasRetryTimeoutSeconds()) {
+            CloudEventsConfig.RetryTimeout = TDuration::Seconds(cloudEvCfg.GetRetryTimeoutSeconds());
+        } else {
+            CloudEventsConfig.RetryTimeout = TDuration::Seconds(10);
+        }
+
+        if (cloudEvCfg.HasTenantMode() && cloudEvCfg.GetTenantMode()) {
+            CloudEventsConfig.Database = Cfg().GetRoot();
+            CloudEventsConfig.TenantMode = true;
+        }
+
+        MakeAndRegisterCloudEventsProcessor();
     }
 }
 
@@ -1567,17 +1586,35 @@ void TSqsService::AnswerErrorToRequests(const TUserInfoPtr& user, TMultimap& map
 }
 
 void TSqsService::MakeAndRegisterYcEventsProcessor() {
-    if (!YcSearchEventsConfig.Enabled)
+    if (!YcSearchEventsConfig.Enabled) {
         return;
+    }
 
     auto root = YcSearchEventsConfig.TenantMode ? TString() : Cfg().GetRoot();
 
-    auto factory = AppData()->SqsEventsWriterFactory;
+    auto factory = AppData()->SqsEventsWriterFactory; // Why is factory here? Why can't we use default methods without insane abstractions?
     Y_ABORT_UNLESS(factory);
     Register(new TSearchEventsProcessor(
             root, YcSearchEventsConfig.ReindexInterval, YcSearchEventsConfig.RescanInterval,
             YcSearchEventsConfig.Database,
             factory->CreateEventsWriter(Cfg(), GetSqsServiceCounters(AppData()->Counters, "yc_unified_agent"))
+    ));
+}
+
+void TSqsService::MakeAndRegisterCloudEventsProcessor() {
+    if (!CloudEventsConfig.Enabled) {
+        return;
+    }
+
+    auto root = CloudEventsConfig.TenantMode ? TString() : Cfg().GetRoot();
+
+    auto factory = AppData()->SqsEventsWriterFactory; // Why is factory here? Why can't we use default methods without insane abstractions?
+    Y_ABORT_UNLESS(factory);
+    Register(new NCloudEvents::TProcessor(
+        root,
+        CloudEventsConfig.Database,
+        CloudEventsConfig.RetryTimeout,
+        factory->CreateCloudEventsWriter(Cfg(), GetSqsServiceCounters(AppData()->Counters, "yc_unified_agent"))
     ));
 }
 

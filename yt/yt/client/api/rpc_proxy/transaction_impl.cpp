@@ -56,7 +56,7 @@ TTransaction::TTransaction(
     , Timeout_(timeout)
     , PingAncestors_(pingAncestors)
     , PingPeriod_(pingPeriod)
-    , StickyProxyAddress_(stickyParameters ? std::move(stickyParameters->ProxyAddress) : TString())
+    , StickyProxyAddress_(stickyParameters ? std::optional(stickyParameters->ProxyAddress) : std::nullopt)
     , SequenceNumberSourceId_(sequenceNumberSourceId)
     , Logger(RpcProxyClientLogger().WithTag("TransactionId: %v, %v",
         Id_,
@@ -1120,7 +1120,8 @@ void TTransaction::DoValidateActive()
         THROW_ERROR_EXCEPTION(
             NTransactionClient::EErrorCode::InvalidTransactionState,
             "Transaction %v is not active",
-            GetId());
+            GetId())
+            << TErrorAttribute("state", State_);
     }
 }
 
@@ -1168,7 +1169,7 @@ TTransactionStartOptions TTransaction::PatchTransactionId(const TTransactionStar
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& TTransaction::GetStickyProxyAddress() const
+const std::optional<std::string>& TTransaction::GetStickyProxyAddress() const
 {
     return StickyProxyAddress_;
 }

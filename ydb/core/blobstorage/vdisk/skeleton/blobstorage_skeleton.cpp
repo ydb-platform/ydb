@@ -87,6 +87,7 @@ namespace NKikimr {
             // out of space
             const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(&satisfactionRank);
+            ev->Record.SetGroupSizeInUnits(Config->GroupSizeInUnits);
             const TInstant now = ctx.Now();
             const TInstant prev = std::exchange(WhiteboardUpdateTimestamp, now);
             const ui64 bytesRead = QueryCtx ? QueryCtx->PDiskReadBytes.exchange(0) : 0;
@@ -433,14 +434,18 @@ namespace NKikimr {
             NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
             NWilson::TTraceId TraceId;
             bool WrittenBeyondBarrier = false;
+            bool IssueKeepFlag = false;
+            bool IgnoreBlock = false;
 
             TVPutInfo(TLogoBlobID blobId, TRope &&buffer,
                     NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
-                    NWilson::TTraceId traceId)
+                    NWilson::TTraceId traceId, bool issueKeepFlag, bool ignoreBlock)
                 : Buffer(std::move(buffer))
                 , BlobId(blobId)
                 , HullStatus({NKikimrProto::UNKNOWN, "", false})
                 , TraceId(std::move(traceId))
+                , IssueKeepFlag(issueKeepFlag)
+                , IgnoreBlock(ignoreBlock)
             {
                 ExtraBlockChecks.Swap(extraBlockChecks);
             }
@@ -480,7 +485,7 @@ namespace NKikimr {
             // regions
 
             // prepare message to recovery log
-            TRcBuf dataToWrite = TPutRecoveryLogRecOpt::SerializeZeroCopy(Db->GType, id, TRope(buffer));
+            TRcBuf dataToWrite = TPutRecoveryLogRecOpt::SerializeZeroCopy(Db->GType, id, TRope(buffer), info.IssueKeepFlag);
             LOG_DEBUG_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix
                     << evPrefix << ": userDataSize# " << buffer.GetSize()
                     << " writtenSize# " << dataToWrite.size()
@@ -490,7 +495,8 @@ namespace NKikimr {
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
             auto loggedRec = new typename TLoggedRecType<TEvResult>::T(seg, confirmSyncLogAlso,
-                id, ingress, std::move(buffer), std::move(result), sender, cookie, std::move(info.TraceId), handleClass);
+                id, ingress, std::move(buffer), std::move(result), sender, cookie, std::move(info.TraceId), handleClass,
+                SelfVDiskId, Config, VCtx);
             intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
@@ -510,12 +516,12 @@ namespace NKikimr {
                 std::move(info.Buffer), *Arena, HullCtx->AddHeader);
             UpdatePDiskWriteBytes(info.Buffer.GetSize());
             return std::make_unique<TEvHullWriteHugeBlob>(sender, cookie, info.BlobId, info.Ingress,
-                    std::move(info.Buffer), ignoreBlock, handleClass, std::move(res), &info.ExtraBlockChecks,
-                    rewriteBlob);
+                std::move(info.Buffer), ignoreBlock, info.IssueKeepFlag, handleClass, std::move(res),
+                &info.ExtraBlockChecks, rewriteBlob);
         }
 
         THullCheckStatus ValidateVPut(const TActorContext &ctx, TString evPrefix,
-                TLogoBlobID id, ui64 bufSize, bool ignoreBlock,
+                TLogoBlobID id, ui64 bufSize, bool ignoreBlock, bool issueKeepFlag,
                 const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
                 bool *writtenBeyondBarrier)
         {
@@ -560,7 +566,7 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "empty TabletID"};
             }
 
-            auto status = Hull->CheckLogoBlob(ctx, id, ignoreBlock, extraBlockChecks, writtenBeyondBarrier);
+            auto status = Hull->CheckLogoBlob(ctx, id, ignoreBlock, issueKeepFlag, extraBlockChecks, writtenBeyondBarrier);
             if (status.Status != NKikimrProto::OK) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": failed to pass the Hull check;"
                         << " id# " << id
@@ -604,7 +610,6 @@ namespace NKikimr {
             }
 
             bool hasPostponed = false;
-            bool ignoreBlock = record.GetIgnoreBlock();
 
             TBatchedVec<TVPutInfo> putsInfo;
             ui64 lsnCount = 0;
@@ -612,8 +617,10 @@ namespace NKikimr {
                 auto &item = *record.MutableItems(itemIdx);
                 TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                 putsInfo.emplace_back(blobId, ev->Get()->GetItemBuffer(itemIdx), item.MutableExtraBlockChecks(),
-                    item.HasTraceId() ? item.GetTraceId() : NWilson::TTraceId());
+                    item.HasTraceId() ? item.GetTraceId() : NWilson::TTraceId(), item.GetIssueKeepFlag(),
+                    item.GetIgnoreBlock());
                 TVPutInfo &info = putsInfo.back();
+                const bool ignoreBlock = record.GetIgnoreBlock() || info.IgnoreBlock;
 
                 try {
                     info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID(), MinHugeBlobInBytes);
@@ -629,11 +636,12 @@ namespace NKikimr {
 
                 if (info.HullStatus.Status == NKikimrProto::UNKNOWN) {
                     info.HullStatus = ValidateVPut(ctx, "TEvVMultiPut", blobId, info.Buffer.GetSize(), ignoreBlock,
-                        info.ExtraBlockChecks, &info.WrittenBeyondBarrier);
+                        info.IssueKeepFlag, info.ExtraBlockChecks, &info.WrittenBeyondBarrier);
                 }
 
                 if (info.HullStatus.Status == NKikimrProto::OK) {
-                    auto ingressOpt = TIngress::CreateIngressWithLocal(VCtx->Top.get(), VCtx->ShortSelfVDisk, blobId);
+                    auto ingressOpt = TIngress::CreateIngressWithLocal(VCtx->Top.get(), VCtx->ShortSelfVDisk, blobId,
+                        info.IssueKeepFlag);
                     if (!ingressOpt) {
                         LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << "TEvVMultiPut: ingress mismatch;"
                                 << " id# " << blobId
@@ -755,12 +763,12 @@ namespace NKikimr {
             const TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
             LWTRACK(VDiskSkeletonVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
-            TVPutInfo info(id, ev->Get()->GetBuffer(), record.MutableExtraBlockChecks(), std::move(ev->TraceId));
+            TVPutInfo info(id, ev->Get()->GetBuffer(), record.MutableExtraBlockChecks(), std::move(ev->TraceId),
+                record.GetIssueKeepFlag(), record.GetIgnoreBlock());
             const ui64 bufSize = info.Buffer.GetSize();
 
             try {
-                info.IsHugeBlob = ev->Get()->RewriteBlob || // if we are rewriting a huge blob, keep it that way
-                    HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
+                info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
             } catch (yexception ex) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what()  << " Marker# BSVS41");
                 info.HullStatus = {NKikimrProto::ERROR, "", false};
@@ -782,14 +790,15 @@ namespace NKikimr {
                 return;
             }
 
-            info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, bufSize, ignoreBlock, info.ExtraBlockChecks,
-                ev->Get()->RewriteBlob ? nullptr : &info.WrittenBeyondBarrier);
+            info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, bufSize, ignoreBlock, info.IssueKeepFlag,
+                info.ExtraBlockChecks, ev->Get()->RewriteBlob ? nullptr : &info.WrittenBeyondBarrier);
             if (info.HullStatus.Status != NKikimrProto::OK) {
                 ReplyError(info.HullStatus, ev, ctx, now);
                 return;
             }
 
-            auto ingressOpt = TIngress::CreateIngressWithLocal(VCtx->Top.get(), VCtx->ShortSelfVDisk, id);
+            auto ingressOpt = TIngress::CreateIngressWithLocal(VCtx->Top.get(), VCtx->ShortSelfVDisk, id,
+                info.IssueKeepFlag);
             if (!ingressOpt) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << "TEvVPut: ingress mismatch; id# " << id
                         << " Marker# BSVS11");
@@ -829,7 +838,7 @@ namespace NKikimr {
             NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
             if (!info.IsHugeBlob) {
                 auto [logMsg, traceId] = CreatePutLogEvent(ctx, "TEvVPut", ev->Sender, ev->Cookie,
-                        std::move(ev->Get()->Orbit), handleClass, info, std::move(result));
+                    std::move(ev->Get()->Orbit), handleClass, info, std::move(result));
                 ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(traceId));
             } else if (info.Buffer) {
                 auto traceId = std::move(info.TraceId);
@@ -840,7 +849,8 @@ namespace NKikimr {
                 ctx.Send(Db->HugeKeeperID, hugeWrite.release(), 0, 0, std::move(traceId));
             } else {
                 ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, info.BlobId, info.Ingress, TDiskPart(), ignoreBlock,
-                    ev->Sender, ev->Cookie, handleClass, std::move(result), &info.ExtraBlockChecks), 0, 0, std::move(info.TraceId));
+                    info.IssueKeepFlag, ev->Sender, ev->Cookie, handleClass, std::move(result), &info.ExtraBlockChecks),
+                    0, 0, std::move(info.TraceId));
             }
         }
 
@@ -850,8 +860,8 @@ namespace NKikimr {
             // update hull write duration
             msg->Result->MarkHugeWriteTime();
             bool writtenBeyondBarrier = false;
-            auto status = Hull->CheckLogoBlob(ctx, msg->LogoBlobID, msg->IgnoreBlock, msg->ExtraBlockChecks,
-                msg->RewriteBlob ? nullptr : &writtenBeyondBarrier);
+            auto status = Hull->CheckLogoBlob(ctx, msg->LogoBlobID, msg->IgnoreBlock, msg->IssueKeepFlag,
+                msg->ExtraBlockChecks, msg->RewriteBlob ? nullptr : &writtenBeyondBarrier);
             if (status.Status != NKikimrProto::OK) {
                 msg->Result->UpdateStatus(status.Status); // modify status in result
                 LOG_DEBUG_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix
@@ -898,7 +908,8 @@ namespace NKikimr {
             // prepare TLoggedRecVPutHuge
             auto traceId = ev->TraceId.Clone();
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVPutHuge(seg, confirmSyncLogAlso, Db->HugeKeeperID, ev));
+            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVPutHuge(seg, confirmSyncLogAlso, Db->HugeKeeperID, ev,
+                    SelfVDiskId, Config, VCtx));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHugeLogoBlob, dataToWrite, seg,
@@ -1571,13 +1582,6 @@ namespace NKikimr {
         }
 
         void Handle(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
-            const bool postpone = OverloadHandler->PostponeEvent(ev);
-            if (!postpone) {
-                PrivateHandle(ev, ctx);
-            }
-        }
-
-        void PrivateHandle(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
             TInstant now = TAppData::TimeProvider->Now();
             SyncLogIFaceGroup.LocalSyncMsgs()++;
 
@@ -1627,22 +1631,6 @@ namespace NKikimr {
         }
 
         void Handle(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx) {
-            const bool postpone = OverloadHandler->PostponeEvent(ev);
-            if (!postpone) {
-                PrivateHandle(ev, ctx);
-            }
-        }
-
-        void ReplyError(const NKikimrProto::EReplyStatus status,
-                        const TString& /*errorReason*/,
-                        TEvAnubisOsirisPut::TPtr &ev,
-                        const TActorContext &ctx,
-                        const TInstant &now) {
-            std::unique_ptr<IEventBase> res(new TEvAnubisOsirisPutResult(status, now, IFaceMonGroup->PutResMsgsPtr(), nullptr));
-            SendReply(ctx, std::move(res), ev, BS_VDISK_PUT);
-        }
-
-        void PrivateHandle(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx) {
             const auto *msg = ev->Get();
 
             // update basic counters
@@ -1678,6 +1666,14 @@ namespace NKikimr {
             ctx.Send(Db->LoggerID, logMsg.release());
         }
 
+        void ReplyError(const NKikimrProto::EReplyStatus status,
+                const TString& /*errorReason*/,
+                TEvAnubisOsirisPut::TPtr &ev,
+                const TActorContext &ctx,
+                const TInstant &now) {
+            std::unique_ptr<IEventBase> res(new TEvAnubisOsirisPutResult(status, now, IFaceMonGroup->PutResMsgsPtr(), nullptr));
+            SendReply(ctx, std::move(res), ev, BS_VDISK_PUT);
+        }
 
         ////////////////////////////////////////////////////////////////////////
         // TAKE SNAPSHOT SECTOR
@@ -1702,16 +1698,8 @@ namespace NKikimr {
             if (Config->BaseInfo.DonorMode) {
                 return; // this is a race; donor disk can't answer TEvVSyncFull queries
             }
-
-            // run handler in the same mailbox
-            TInstant now = TAppData::TimeProvider->Now();
-
-            ui64 dbBirthLsn = 0;
-            const ui64 confirmedLsn = Db->LsnMngr->GetConfirmedLsnForHull();
-            dbBirthLsn = *DbBirthLsn;
-            auto aid = ctx.RegisterWithSameMailbox(CreateHullSyncFullHandler(Db, HullCtx, SelfVDiskId, ctx.SelfID, Hull,
-                IFaceMonGroup, ev, now, dbBirthLsn, confirmedLsn));
-            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            Y_VERIFY(Db->SyncFullHandlerID);
+            ctx.Send(ev->Forward(Db->SyncFullHandlerID));
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1764,10 +1752,10 @@ namespace NKikimr {
             TIngress ingress = *TIngress::CreateIngressWithLocal(VCtx->Top.get(), SelfVDiskId, id);
             if (buf) {
                 ctx.Send(Db->HugeKeeperID, new TEvHullWriteHugeBlob(ev->Sender, ev->Cookie, id, ingress, std::move(buf),
-                    true, NKikimrBlobStorage::EPutHandleClass::AsyncBlob, std::move(result), nullptr, false));
+                    true, false, NKikimrBlobStorage::EPutHandleClass::AsyncBlob, std::move(result), nullptr, false));
             } else {
-                ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, id, ingress, TDiskPart(), true, ev->Sender, ev->Cookie,
-                    NKikimrBlobStorage::EPutHandleClass::AsyncBlob, std::move(result), nullptr));
+                ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, id, ingress, TDiskPart(), true, false, ev->Sender,
+                    ev->Cookie, NKikimrBlobStorage::EPutHandleClass::AsyncBlob, std::move(result), nullptr));
             }
         }
 
@@ -1829,6 +1817,16 @@ namespace NKikimr {
         }
 
         void SkeletonIsUpAndRunning(const TActorContext &ctx, bool runRepl = false) {
+            // Now, if we obtained DbBirthLsn, we can create full sync handler actor
+            // run handler in the same mailbox
+            // We start Skeleton without DbBirthLsn only in DonorMode,
+            // which makes VDisk unable to sync with at all
+            if (DbBirthLsn) {
+                Db->SyncFullHandlerID.Set(ctx.RegisterWithSameMailbox(CreateHullSyncFullHandler(Db, HullCtx,
+                    SelfVDiskId, ctx.SelfID, Hull, IFaceMonGroup, FullSyncGroup, *DbBirthLsn)));
+                ActiveActors.Insert(Db->SyncFullHandlerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            }
+
             Become(&TThis::StateNormal);
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::OK);
             LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "SKELETON IS UP AND RUNNING"
@@ -1893,7 +1891,8 @@ namespace NKikimr {
                 Db->GetVDiskIncarnationGuid(),
                 Db->LsnMngr,
                 Db->LoggerID,
-                Db->LogCutterID);
+                Db->LogCutterID,
+                Config->EnableDeepScrubbing);
             ScrubId = ctx.Register(CreateScrubActor(std::move(scrubCtx), std::move(scrubEntrypoint), scrubEntrypointLsn));
             ActiveActors.Insert(ScrubId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
@@ -2025,16 +2024,10 @@ namespace NKikimr {
                 auto vMultiPutHandler = [this] (const TActorContext &ctx, TEvBlobStorage::TEvVMultiPut::TPtr ev) {
                     this->PrivateHandle(ev, ctx);
                 };
-                auto loc = [this] (const TActorContext &ctx, TEvLocalSyncData::TPtr ev) {
-                    this->PrivateHandle(ev, ctx);
-                };
-                auto aoput = [this] (const TActorContext &ctx, TEvAnubisOsirisPut::TPtr ev) {
-                    this->PrivateHandle(ev, ctx);
-                };
                 NMonGroup::TSkeletonOverloadGroup overloadMonGroup(VCtx->VDiskCounters, "subsystem", "emergency");
                 OverloadHandler = std::make_unique<TOverloadHandler>(Config, VCtx, PDiskCtx, Hull,
                     std::move(overloadMonGroup), std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
-                    std::move(vMultiPutHandler), std::move(loc), std::move(aoput));
+                    std::move(vMultiPutHandler));
                 ScheduleWakeupEmergencyPutQueue(ctx);
 
                 // actualize weights before we start
@@ -2289,6 +2282,10 @@ namespace NKikimr {
                                     TABLED() {str << Config->BaseInfo.PDiskId;}
                                 }
                                 TABLER() {
+                                    TABLED() {str << "GroupSizeInUnits";}
+                                    TABLED() {str << Config->GroupSizeInUnits;}
+                                }
+                                TABLER() {
                                     TABLED() {str << "BlobStorage GroupId (decimal)";}
                                     TABLED() {str << GInfo->GroupID;}
                                 }
@@ -2422,6 +2419,17 @@ namespace NKikimr {
             GInfo = msg->NewInfo;
             SelfVDiskId = msg->NewVDiskId;
 
+            if (Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
+                Config->GroupSizeInUnits = GInfo->GroupSizeInUnits;
+                UpdateWhiteboard(ctx);
+
+                ctx.Send(PDiskCtx->PDiskId,
+                    new NPDisk::TEvYardResize(
+                        PDiskCtx->Dsk->Owner,
+                        PDiskCtx->Dsk->OwnerRound,
+                        Config->GroupSizeInUnits));
+            }
+
             // clear VPatchCtx
             VPatchCtx = nullptr;
 
@@ -2441,6 +2449,9 @@ namespace NKikimr {
             }
             if (BalancingId) {
                 ctx.Send(BalancingId, ev->Get()->Clone());
+            }
+            if (Db->SyncFullHandlerID) {
+                ctx.Send(Db->SyncFullHandlerID, ev->Get()->Clone());
             }
 
             // FIXME: reconfigure handoff
@@ -2546,6 +2557,10 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvChunkForgetResult::TPtr ev) {
             CHECK_PDISK_RESPONSE(VCtx, ev, TActivationContext::AsActorContext());
+        }
+
+        void Handle(NPDisk::TEvYardResizeResult::TPtr &ev, const TActorContext &ctx) {
+            CHECK_PDISK_RESPONSE(VCtx, ev, ctx);
         }
 
         void Handle(TEvBlobStorage::TEvVTakeSnapshot::TPtr ev, const TActorContext& ctx) {
@@ -2810,6 +2825,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
@@ -2862,6 +2878,7 @@ namespace NKikimr {
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
@@ -2933,6 +2950,7 @@ namespace NKikimr {
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
             fFunc(TEvBlobStorage::EvReplDone, HandleReplDone)
@@ -2964,6 +2982,7 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(NPDisk::TEvYardResizeResult, Handle)
             CFunc(TEvBlobStorage::EvReplDone, Ignore)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
@@ -3012,6 +3031,8 @@ namespace NKikimr {
             , SyncLogIFaceGroup(VCtx->VDiskCounters, "subsystem", "synclog")
             , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(
                 VCtx->VDiskCounters, "subsystem", "interface"))
+            , FullSyncGroup(std::make_shared<NMonGroup::TFullSyncGroup>(
+                VCtx->VDiskCounters, "subsystem", "fullsync"))
             , EnableVPatch(cfg->EnableVPatch)
         {
             auto cpuGroup = VCtx->VDiskCounters->GetSubgroup("subsystem", "cpu");
@@ -3062,6 +3083,7 @@ namespace NKikimr {
         NMonGroup::TReplGroup ReplMonGroup;
         NMonGroup::TSyncLogIFaceGroup SyncLogIFaceGroup;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
+        std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
         bool ReplDone = false;
         bool ReplOnlyPhantomsRemain = false;
         TInstant WhiteboardUpdateTimestamp = TInstant::Zero();

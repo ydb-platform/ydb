@@ -179,12 +179,20 @@ class TestStress(MixedClusterFixture):
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
-    @pytest.mark.parametrize("store_type, date_args", [
-        pytest.param("row",    ["--datetime"], id="row"),
-        pytest.param("column", ["--datetime"], id="column"),
-        pytest.param("column", []            , id="column-date64")
+    @pytest.mark.parametrize("store_type, date64", [
+        pytest.param("row",    False, id="row"),
+        pytest.param("column", False, id="column"),
+        pytest.param("column", True,  id="column-date64")
     ])
-    def test_tpch1(self, store_type, date_args):
+    def test_tpch1(self, store_type, date64):
+        if date64 and min(self.versions) < (25, 1):
+            pytest.skip("date64 is not supported in 24-4")
+
+        if date64:
+            date_args = ["--datetime-types=dt64"]
+        else:
+            date_args = ["--datetime-types=dt32"]
+
         init_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
@@ -198,7 +206,7 @@ class TestStress(MixedClusterFixture):
             "init",
             "--store={}".format(store_type),
             "--partition-size=25",
-        ] + date_args  # use 32 bit dates instead of 64 (not supported in 24-4)]
+        ] + date_args
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
@@ -211,7 +219,7 @@ class TestStress(MixedClusterFixture):
             "tpch",
             "import",
             "generator",
-            "--scale=1",
+            "--scale=0.2",
         ]
         run_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -224,9 +232,7 @@ class TestStress(MixedClusterFixture):
             "-p",
             "tpch",
             "run",
-            "--scale=1",
-            "--exclude",
-            "17",  # not working for row tables
+            "--scale=0.2",
             "--check-canonical",
             "--retries",
             "5",  # in row tables we have to retry query by design
@@ -237,12 +243,20 @@ class TestStress(MixedClusterFixture):
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
     @pytest.mark.skip(reason="Not stabilized yet")
-    @pytest.mark.parametrize("store_type, date_args", [
-        pytest.param("row",    ["--datetime"], id="row"),
-        pytest.param("column", ["--datetime"], id="column"),
-        pytest.param("column", []            , id="column-date64")
+    @pytest.mark.parametrize("store_type, date64", [
+        pytest.param("row",    False, id="row"),
+        pytest.param("column", False, id="column"),
+        pytest.param("column", True,  id="column-date64")
     ])
-    def test_tpcds1(self, store_type, date_args):
+    def test_tpcds1(self, store_type, date64):
+        if date64 and min(self.versions) < (25, 1):
+            pytest.skip("date64 is not supported in 24-4")
+
+        if date64:
+            date_args = ["--datetime-types=dt64"]
+        else:
+            date_args = ["--datetime-types=dt32"]
+
         init_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
@@ -256,7 +270,7 @@ class TestStress(MixedClusterFixture):
             "init",
             "--store={}".format(store_type),
             "--partition-size=25",
-        ] + date_args  # use 32 bit dates instead of 64 (not supported in 24-4)]
+        ] + date_args
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",

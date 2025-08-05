@@ -169,10 +169,10 @@ public:
 
         struct TPartsState {
             bool IsOk = true;
-            TString DataErrorInfo;
+            TString DataInfo;
         };
 
-        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData) const = 0;
+        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -337,19 +337,24 @@ public:
 
     const std::vector<TGroupId>& GetBridgeGroupIds() const { return BridgeGroupIds; }
     bool IsBridged() const { return !BridgeGroupIds.empty(); }
+    std::optional<TGroupId> GetBridgeProxyGroupId() const { return BridgeProxyGroupId; }
+    std::optional<TBridgePileId> GetBridgePileId() const { return BridgePileId; }
 
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
     explicit TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain = 1,
             ui32 numFailDomains = 0, ui32 numFailRealms = 1, const TVector<TActorId> *vdiskIds = nullptr,
             EEncryptionMode encryptionMode = EEM_ENC_V1, ELifeCyclePhase lifeCyclePhase = ELCP_IN_USE,
-            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8), TGroupId groupId = TGroupId::Zero());
+            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8), TGroupId groupId = TGroupId::Zero(),
+            ui32 groupSizeInUnits = 0u);
 
     TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& rti, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType);
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType,
+        ui32 groupSizeInUnits = 0u);
 
     TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& rti, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope = {}, NPDisk::EDeviceType deviceType = NPDisk::DEVICE_TYPE_UNKNOWN);
+        TMaybe<TKikimrScopeId> acceptedScope = {}, NPDisk::EDeviceType deviceType = NPDisk::DEVICE_TYPE_UNKNOWN,
+        ui32 groupSizeInUnits = 0u);
 
     TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TVDiskID& vdiskId, const TActorId& actorId);
 
@@ -452,6 +457,8 @@ public:
     const ui32 GroupGeneration;
     // erasure primarily
     const TBlobStorageGroupType Type;
+    // the size to match PDisk.SlotSizeInUnits
+    ui32 GroupSizeInUnits;
     // virtual group BlobDepot tablet id
     std::optional<ui64> BlobDepotId;
     // assimilating group id
@@ -477,6 +484,8 @@ private:
     NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
     // bridge mode fields
     std::vector<TGroupId> BridgeGroupIds;
+    std::optional<TGroupId> BridgeProxyGroupId;
+    std::optional<TBridgePileId> BridgePileId;
 };
 
 // physical fail domain description

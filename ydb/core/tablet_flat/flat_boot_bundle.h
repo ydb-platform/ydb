@@ -58,7 +58,8 @@ namespace NBoot {
             LeftReads -= 1;
 
             if (msg.Status == NKikimrProto::OK) {
-                Loader->Save(msg.Cookie, msg.Pages);
+                Y_ENSURE(msg.Cookie == 0);
+                Loader->Save(std::move(msg.Pages));
 
                 TryFinalize();
 
@@ -108,8 +109,8 @@ namespace NBoot {
         void TryFinalize()
         {
             if (!LeftReads) {
-                for (auto req : Loader->Run({.PreloadIndex = true, .PreloadData = false})) {
-                    LeftReads += Logic->LoadPages(this, req);
+                if (auto fetch = Loader->Run({.PreloadIndex = true, .PreloadData = false})) {
+                    LeftReads += Logic->LoadPages(this, std::move(fetch));
                 }
             }
 

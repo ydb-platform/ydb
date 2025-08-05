@@ -123,7 +123,7 @@ class TSqlTranslation: public TTranslation {
 protected:
     TSqlTranslation(TContext& ctx, NSQLTranslation::ESqlMode mode)
         : TTranslation(ctx)
-        , Mode(mode)
+        , Mode_(mode)
     {
         /// \todo remove NSQLTranslation::ESqlMode params
         YQL_ENSURE(ctx.Settings.Mode == mode);
@@ -288,7 +288,7 @@ private:
     bool ValidateTableSettings(const TTableSettings& settings);
 
 protected:
-    NSQLTranslation::ESqlMode Mode;
+    NSQLTranslation::ESqlMode Mode_;
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);

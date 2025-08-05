@@ -28,7 +28,10 @@ namespace NKikimr {
             const TActorId &recipient,
             ui64 recipientCookie,
             NWilson::TTraceId traceId,
-            NKikimrBlobStorage::EPutHandleClass handleClass)
+            NKikimrBlobStorage::EPutHandleClass handleClass,
+            const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config,
+            const TVDiskContextPtr& vctx)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
@@ -41,6 +44,10 @@ namespace NKikimr {
     {
         if (Span) {
             Span.Attribute("blob_id", id.ToString());
+            Span.Attribute("group_id", vctx->GroupId.GetRawId());
+            Span.Attribute("vdisk_id", vdiskId.ToString());
+            Span.Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            Span.Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(handleClass));
         }
     }
 
@@ -75,7 +82,10 @@ namespace NKikimr {
             const TActorId &recipient,
             ui64 recipientCookie,
             NWilson::TTraceId traceId,
-            NKikimrBlobStorage::EPutHandleClass)
+            NKikimrBlobStorage::EPutHandleClass handleClass,
+            const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config,
+            const TVDiskContextPtr& vctx)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
@@ -87,6 +97,10 @@ namespace NKikimr {
     {
         if (Span) {
             Span.Attribute("blob_id", Id.ToString());
+            Span.Attribute("group_id", vctx->GroupId.GetRawId());
+            Span.Attribute("vdisk_id", vdiskId.ToString());
+            Span.Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            Span.Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(handleClass));
         }
     }
 
@@ -115,7 +129,10 @@ namespace NKikimr {
             TLsnSeg seg,
             bool confirmSyncLogAlso,
             const TActorId &hugeKeeperId,
-            TEvHullLogHugeBlob::TPtr ev)
+            TEvHullLogHugeBlob::TPtr ev,
+            const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config,
+            const TVDiskContextPtr& vctx)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , HugeKeeperId(hugeKeeperId)
         , Ev(ev)
@@ -123,6 +140,11 @@ namespace NKikimr {
     {
         if (Span) {
             Span.Attribute("blob_id", Ev->Get()->LogoBlobID.ToString());
+            Span.Attribute("group_id", vctx->GroupId.GetRawId());
+            Span.Attribute("vdisk_id", vdiskId.ToString());
+            Span.Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            Span.Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(
+                    Ev->Get()->HandleClass));
         }
     }
 

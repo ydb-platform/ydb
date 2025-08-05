@@ -1,9 +1,9 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_xxport__helpers.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for NTableIndex::CommonCheck
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/ydb_convert/table_settings.h>
 
@@ -116,7 +116,11 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
+                    //NOTE: empty userToken here means that index is forbidden from getting a name
+                    // thats system reserved or starts with a system reserved prefix.
+                    // Even an cluster admin or the system inself will not be able to force a reserved name for this index.
+                    // If that will become an issue at some point, then a real userToken should be passed here.
+                    .IsValidLeafName(/*userToken*/ nullptr)
                     .PathsLimit(2) // index and impl-table
                     .DirChildrenLimit();
 
@@ -246,6 +250,11 @@ private:
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
             buildInfo.KMeans.K = std::max<ui32>(2, vectorIndexKmeansTreeDescription.GetSettings().clusters());
             buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + std::max<ui32>(1, vectorIndexKmeansTreeDescription.GetSettings().levels());
+            buildInfo.KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
+            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorIndexKmeansTreeDescription.GetSettings().settings(), buildInfo.KMeans.Rounds, explain);
+            if (!buildInfo.Clusters) {
+                return false;
+            }
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:

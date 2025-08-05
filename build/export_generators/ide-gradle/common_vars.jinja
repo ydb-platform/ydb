@@ -34,4 +34,10 @@
 {#- Lombok -#}
 {%- set with_lombok_plugin = not(disable_lombok_plugin) and (all_targets|selectattr('use_annotation_processor')|map(attribute='use_annotation_processor')|sum|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) -%}
 
+{#- JNI -#}
+{%- set jnis = all_targets|selectattr(consumer)|map(attribute='consumer')|sum|selectattr('type', 'eq', 'dll')|selectattr('jar')|map(attribute='jar')|unique -%}
+
+{#- Flags -#}
+{%- set hasResources = all_targets|selectattr('resource_sets')|map(attribute='resource_sets')|sum|length -%}
+
 {%- include "[generator]/jdk.jinja" -%}

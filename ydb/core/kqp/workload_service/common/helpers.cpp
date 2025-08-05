@@ -43,4 +43,36 @@ ui64 SaturationSub(ui64 x, ui64 y) {
     return (x > y) ? x - y : 0;
 }
 
+NResourcePool::TPoolSettings PoolSettingsFromConfig(const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig) {
+    NResourcePool::TPoolSettings poolSettings;
+    if (workloadManagerConfig.HasResourceWeight()) {
+        poolSettings.ResourceWeight = workloadManagerConfig.GetResourceWeight();
+    }
+
+    if (workloadManagerConfig.HasConcurrentQueryLimit()) {
+        poolSettings.ConcurrentQueryLimit = workloadManagerConfig.GetConcurrentQueryLimit();
+    }
+
+    if (workloadManagerConfig.HasQueueSize()) {
+        poolSettings.QueueSize = workloadManagerConfig.GetQueueSize();
+    }
+
+    if (workloadManagerConfig.HasQueryCpuLimitPercentPerNode()) {
+        poolSettings.QueryCpuLimitPercentPerNode = workloadManagerConfig.GetQueryCpuLimitPercentPerNode();
+    }
+
+    if (workloadManagerConfig.HasQueryMemoryLimitPercentPerNode()) {
+        poolSettings.QueryMemoryLimitPercentPerNode = workloadManagerConfig.GetQueryMemoryLimitPercentPerNode();
+    }
+
+    if (workloadManagerConfig.HasTotalCpuLimitPercentPerNode()) {
+        poolSettings.TotalCpuLimitPercentPerNode = workloadManagerConfig.GetTotalCpuLimitPercentPerNode();
+    }
+
+    if (workloadManagerConfig.HasDatabaseLoadCpuThreshold()) {
+        poolSettings.DatabaseLoadCpuThreshold = workloadManagerConfig.GetDatabaseLoadCpuThreshold();
+    }
+    return poolSettings;
+}
+
 }  // NKikimr::NKqp::NWorkload

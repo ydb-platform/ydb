@@ -92,4 +92,17 @@ concept CDistinct = NDetail::DistinctImpl<Ts...>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T>
+concept CAssociative = requires(T) {
+    typename T::key_type;
+};
+
+template <class T>
+concept CMapping = requires(T) {
+    CAssociative<T>;
+    typename T::mapped_type;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NMpl

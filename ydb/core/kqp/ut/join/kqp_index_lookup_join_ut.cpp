@@ -101,10 +101,9 @@ void PrepareTables(TSession session) {
 Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 
 void Test(const TString& query, const TString& answer, size_t rightTableReads, bool useStreamLookup = false, size_t leftTableReads = 7) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookup);
+    auto settings = TKikimrSettings();
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookup);
 
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -216,10 +215,9 @@ Y_UNIT_TEST_TWIN(JoinWithSubquery, StreamLookup) {
         ORDER BY j.lValue;
     )";
 
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+    TKikimrSettings settings;
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
 
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -727,9 +725,8 @@ void TestKeyCast(const TKikimrSettings& settings, TSession session, const TStrin
 }
 
 Y_UNIT_TEST_QUAD(CheckCastInt32ToInt16, StreamLookupJoin, NotNull) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings settings;
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -766,9 +763,8 @@ Y_UNIT_TEST_QUAD(CheckCastInt32ToInt16, StreamLookupJoin, NotNull) {
 }
 
 Y_UNIT_TEST_QUAD(CheckCastUint32ToUint16, StreamLookupJoin, NotNull) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings settings;
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -805,9 +801,8 @@ Y_UNIT_TEST_QUAD(CheckCastUint32ToUint16, StreamLookupJoin, NotNull) {
 }
 
 Y_UNIT_TEST_QUAD(CheckCastUint64ToInt64, StreamLookupJoin, NotNull) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings settings;
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -846,9 +841,8 @@ Y_UNIT_TEST_QUAD(CheckCastUint64ToInt64, StreamLookupJoin, NotNull) {
 }
 
 Y_UNIT_TEST_QUAD(CheckCastInt64ToUint64, StreamLookupJoin, NotNull) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings settings;
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -885,9 +879,8 @@ Y_UNIT_TEST_QUAD(CheckCastInt64ToUint64, StreamLookupJoin, NotNull) {
 }
 
 Y_UNIT_TEST_QUAD(CheckCastUtf8ToString, StreamLookupJoin, NotNull) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings settings;
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -924,9 +917,8 @@ Y_UNIT_TEST_QUAD(CheckCastUtf8ToString, StreamLookupJoin, NotNull) {
 }
 
 Y_UNIT_TEST_TWIN(JoinByComplexKeyWithNullComponents, StreamLookupJoin) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings settings;
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -991,10 +983,79 @@ Y_UNIT_TEST_TWIN(JoinByComplexKeyWithNullComponents, StreamLookupJoin) {
     }
 }
 
-Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+Y_UNIT_TEST_TWIN(JoinInclusionTest, StreamLookupJoin) {
 
+    if (StreamLookupJoin) {
+        return;
+    }
+
+    TKikimrSettings serverSettings;
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+
+
+    TKikimrRunner kikimr(serverSettings);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    {  // create tables
+        const TString query = R"(
+            create table A (
+                a int32,  b int32,
+                primary key(a)
+            );
+
+            create table B (
+                a int32,  b int32,
+                primary key(a, b),
+                index BView global on(b)
+            );
+        )";
+        UNIT_ASSERT(session.ExecuteSchemeQuery(query).GetValueSync().IsSuccess());
+    }
+
+    {  // fill tables
+        const TString query = R"(
+            $a = AsList(
+                AsStruct(1 as a, 2 as b),
+                AsStruct(2 as a, 2 as b),
+                AsStruct(3 as a, 2 as b),
+                AsStruct(4 as a, 2 as b),
+            );
+
+            $b = AsList(
+                AsStruct(1 as a, 2 as b),
+                AsStruct(2 as a, 2 as b),
+                AsStruct(3 as a, 2 as b),
+                AsStruct(4 as a, 2 as b),
+
+            );
+
+            insert into B select * from AS_TABLE($b);
+            insert into A select * from AS_TABLE($a);
+            insert into B (a, b) values (5, null);
+
+        )";
+        UNIT_ASSERT(session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
+    }
+
+    {
+        TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        const TString query = R"(
+            select A.a, A.b, B.a, B.b from A
+            left join (select * from B where b is null) as B
+            on A.a = B.a and A.b = B.b
+        )";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        CompareYson(R"([
+            [[1];[2];#;#];[[2];[2];#;#];[[3];[2];#;#];[[4];[2];#;#]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
    TString stats = R"(
         {"/Root/Left":{"n_rows":3}, "/Root/Right":{"n_rows":3}}
     )";
@@ -1006,7 +1067,8 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
     setting.SetValue(stats);
     settings.push_back(setting);
 
-    TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(appConfig);;
+    TKikimrSettings serverSettings;
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     serverSettings.SetKqpSettings(settings);
 
     TKikimrRunner kikimr(serverSettings);
@@ -1169,9 +1231,8 @@ Y_UNIT_TEST_TWIN(JoinWithComplexCondition, StreamLookupJoin) {
 }
 
 Y_UNIT_TEST_TWIN(LeftSemiJoinWithDuplicatesInRightTable, StreamLookupJoin) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-    auto settings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings settings;
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();

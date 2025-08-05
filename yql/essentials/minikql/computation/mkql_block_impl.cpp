@@ -3,10 +3,12 @@
 #include "mkql_block_reader.h"
 
 #include <yql/essentials/minikql/arrow/mkql_functions.h>
+#include <yql/essentials/minikql/computation/mkql_datum_validate.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/arrow/mkql_bit_utils.h>
+#include <yql/essentials/minikql/mkql_type_helper.h>
 #include <yql/essentials/public/udf/arrow/args_dechunker.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
@@ -33,6 +35,7 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
+// TODO(YQL): This must be rewrited via traits dispatcher.
 template<typename T>
 arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& pool) {
     std::shared_ptr<arrow::DataType> arrowType;
@@ -40,15 +43,13 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
     if (!value) {
         return arrow::MakeNullScalar(arrowType);
     }
+    auto needWrapWithExternalOptional = NeedWrapWithExternalOptional(type);
 
-    bool isOptional = false;
     if (type->IsOptional()) {
         type = AS_TYPE(TOptionalType, type)->GetItemType();
-        isOptional = true;
     }
 
-    if (type->IsOptional() || (isOptional && type->IsPg())) {
-        // nested optionals
+    if (needWrapWithExternalOptional) {
         std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
         arrowValue.emplace_back(DoConvertScalar(type, value.GetOptionalValue(), pool).scalar());
         return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
@@ -186,6 +187,10 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         return NYql::MakePgScalar(AS_TYPE(TPgType, type), value, pool);
     }
 
+    if (IsSingularType(type)) {
+        return arrow::MakeNullScalar(arrowType);
+    }
+
     MKQL_ENSURE(false, "Unsupported type " << *type);
 }
 
@@ -247,19 +252,21 @@ NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const
     return holderFactory.CreateArrowBlock(arrow::Datum(count));
 }
 
-TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TComputationNodePtrVector&& argsNodes,
-    const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
-    std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder,
-    const arrow::compute::FunctionOptions* functionOptions)
+TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables, NYql::NUdf::EValidateDatumMode validateDatumMode, TStringBuf name, TComputationNodePtrVector&& argsNodes,
+                               const TVector<TType*>& argsTypes, TType* outputType, const arrow::compute::ScalarKernel& kernel,
+                               std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder,
+                               const arrow::compute::FunctionOptions* functionOptions)
     : TMutableComputationNode(mutables)
-    , StateIndex(mutables.CurValueIndex++)
-    , ArgsNodes(std::move(argsNodes))
-    , ArgsValuesDescr(ToValueDescr(argsTypes))
-    , Kernel(kernel)
-    , KernelHolder(std::move(kernelHolder))
-    , Options(functionOptions)
-    , ScalarOutput(GetResultShape(argsTypes) == TBlockType::EShape::Scalar)
-    , Name(name.starts_with("Block") ? name.substr(5) : name)
+    , ValidateDatumMode_(validateDatumMode)
+    , StateIndex_(mutables.CurValueIndex++)
+    , ArgsNodes_(std::move(argsNodes))
+    , ArgsValuesDescr_(ToValueDescr(argsTypes))
+    , OutValueDescr_(ToValueDescr(outputType))
+    , Kernel_(kernel)
+    , KernelHolder_(std::move(kernelHolder))
+    , Options_(functionOptions)
+    , ScalarOutput_(GetResultShape(argsTypes) == TBlockType::EShape::Scalar)
+    , Name_(name.starts_with("Block") ? name.substr(5) : name)
 {
 }
 
@@ -267,15 +274,15 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
     auto& state = GetState(ctx);
 
     std::vector<arrow::Datum> argDatums;
-    for (ui32 i = 0; i < ArgsNodes.size(); ++i) {
-        const auto& value = ArgsNodes[i]->GetValue(ctx);
+    for (ui32 i = 0; i < ArgsNodes_.size(); ++i) {
+        const auto& value = ArgsNodes_[i]->GetValue(ctx);
         argDatums.emplace_back(TArrowBlock::From(value).GetDatum());
-        ARROW_DEBUG_CHECK_DATUM_TYPES(ArgsValuesDescr[i], argDatums.back().descr());
+        ValidateDatum(argDatums.back(), ArgsValuesDescr_[i], ValidateDatumMode_);
     }
 
-    if (ScalarOutput) {
+    if (ScalarOutput_) {
         auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
-        ARROW_OK(executor->Init(&state.KernelContext, { &Kernel, ArgsValuesDescr, Options }));
+        ARROW_OK(executor->Init(&state.KernelContext, { &Kernel_, ArgsValuesDescr_, Options_ }));
 
         auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
         ARROW_OK(executor->Execute(argDatums, listener.get()));
@@ -289,7 +296,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
 
     while (dechunker.Next(chunk)) {
         auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
-        ARROW_OK(executor->Init(&state.KernelContext, { &Kernel, ArgsValuesDescr, Options }));
+        ARROW_OK(executor->Init(&state.KernelContext, { &Kernel_, ArgsValuesDescr_, Options_ }));
 
         arrow::compute::detail::DatumAccumulator listener;
         ARROW_OK(executor->Execute(chunk, &listener));
@@ -297,21 +304,22 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
 
         ForEachArrayData(output, [&](const auto& arr) { arrays.push_back(arr); });
     }
-
-    return ctx.HolderFactory.CreateArrowBlock(MakeArray(arrays));
+    auto resultArray = MakeArray(arrays);
+    ValidateDatum(resultArray, OutValueDescr_, ValidateDatumMode_);
+    return ctx.HolderFactory.CreateArrowBlock(std::move(resultArray));
 }
 
 
 void TBlockFuncNode::RegisterDependencies() const {
-    for (const auto& arg : ArgsNodes) {
+    for (const auto& arg : ArgsNodes_) {
         DependsOn(arg);
     }
 }
 
 TBlockFuncNode::TState& TBlockFuncNode::GetState(TComputationContext& ctx) const {
-    auto& result = ctx.MutableValues[StateIndex];
+    auto& result = ctx.MutableValues[StateIndex_];
     if (!result.HasValue()) {
-        result = ctx.HolderFactory.Create<TState>(Options, Kernel, ArgsValuesDescr, ctx);
+        result = ctx.HolderFactory.Create<TState>(Options_, Kernel_, ArgsValuesDescr_, ctx);
     }
 
     return *static_cast<TState*>(result.AsBoxed().Get());
@@ -326,28 +334,28 @@ TBlockFuncNode::TArrowNode::TArrowNode(const TBlockFuncNode* parent)
 {}
 
 TStringBuf TBlockFuncNode::TArrowNode::GetKernelName() const {
-    return Parent_->Name;
+    return Parent_->Name_;
 }
 
 const arrow::compute::ScalarKernel& TBlockFuncNode::TArrowNode::GetArrowKernel() const {
-    return Parent_->Kernel;
+    return Parent_->Kernel_;
 }
 
 const std::vector<arrow::ValueDescr>& TBlockFuncNode::TArrowNode::GetArgsDesc() const {
-    return Parent_->ArgsValuesDescr;
+    return Parent_->ArgsValuesDescr_;
 }
 
 const IComputationNode* TBlockFuncNode::TArrowNode::GetArgument(ui32 index) const {
-    MKQL_ENSURE(index < Parent_->ArgsNodes.size(), "Wrong index");
-    return Parent_->ArgsNodes[index];
+    MKQL_ENSURE(index < Parent_->ArgsNodes_.size(), "Wrong index");
+    return Parent_->ArgsNodes_[index];
 }
 
 TBlockState::TBlockState(TMemoryUsageInfo* memInfo, size_t width, i64 blockLengthIndex)
     : TBase(memInfo), Values(width), Deques(width), Arrays(width)
-    , BlockLengthIndex_(blockLengthIndex == LAST_COLUMN_MARKER ? width - 1 : blockLengthIndex)
+    , BlockLengthIndex(blockLengthIndex == LAST_COLUMN_MARKER ? width - 1 : blockLengthIndex)
 {
     MKQL_ENSURE(blockLengthIndex == LAST_COLUMN_MARKER || (0 <= blockLengthIndex && size_t(blockLengthIndex) < width), "Bad blockLengthIndex");
-    Pointer_ = Values.data();
+    Pointer = Values.data();
 }
 
 void TBlockState::ClearValues() {
@@ -356,14 +364,14 @@ void TBlockState::ClearValues() {
 
 void TBlockState::FillArrays() {
     MKQL_ENSURE(Count == 0, "All existing arrays have to be processed");
-    auto& counterDatum = TArrowBlock::From(Values[BlockLengthIndex_]).GetDatum();
+    auto& counterDatum = TArrowBlock::From(Values[BlockLengthIndex]).GetDatum();
     MKQL_ENSURE(counterDatum.is_scalar(), "Unexpected block length type (expecting scalar)");
     Count = counterDatum.scalar_as<arrow::UInt64Scalar>().value;
     if (!Count)
         return;
 
     for (size_t i = 0U; i < Deques.size(); ++i) {
-        if (i == BlockLengthIndex_) {
+        if (i == BlockLengthIndex) {
             continue;
         }
 
@@ -409,7 +417,7 @@ ui64 TBlockState::Slice() {
 }
 
 NUdf::TUnboxedValuePod TBlockState::Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const {
-    if (idx == BlockLengthIndex_)
+    if (idx == BlockLengthIndex)
         return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)));
 
     if (auto array = Arrays[idx])

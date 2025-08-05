@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/base/tablet_pipe.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -92,6 +93,7 @@ private:
     static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
     static constexpr i64 MAX_REQUEST_BYTES = 8ll << 20;
     static constexpr TDuration DEFAULT_READ_DEADLINE = TDuration::Seconds(30);
+    static constexpr ui64 DEFAULT_MAX_CACHE_DATA_SIZE = 1000ull << 20;
 
     TLRUCache<TBlobRange, TString> Cache;
     /// List of cached ranges by blob id.
@@ -100,6 +102,7 @@ private:
     THashMultiSet<TBlobRange, BlobRangeHash, BlobRangeEqual> CachedRanges;
 
     TControlWrapper MaxCacheDataSize;
+    const bool UseMaxCacheDataSizeFromConfig;
     TControlWrapper MaxInFlightDataSize;
     i64 CacheDataSize;              // Current size of all blobs in cache
     ui64 ReadCookie;
@@ -134,16 +137,19 @@ private:
     const TCounterPtr ReadRequests;
     const TCounterPtr ReadsInQueue;
 
+    TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
+
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::BLOB_CACHE_ACTOR;
     }
 
 public:
-    explicit TBlobCache(ui64 maxSize, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
+    explicit TBlobCache(const std::optional<ui64>& maxSize, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : TActorBootstrapped<TBlobCache>()
         , Cache(SIZE_MAX)
-        , MaxCacheDataSize(maxSize, 0, 1ull << 40)
+        , MaxCacheDataSize(maxSize.value_or(DEFAULT_MAX_CACHE_DATA_SIZE), 0, 1ull << 40)
+        , UseMaxCacheDataSizeFromConfig(maxSize.has_value())
         , MaxInFlightDataSize(Min<i64>(MaxCacheDataSize, MAX_IN_FLIGHT_BYTES), 0, 10ull << 30)
         , CacheDataSize(0)
         , ReadCookie(1)
@@ -178,6 +184,8 @@ public:
         LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize
             << " InFlightDataSize: " << (i64)InFlightDataSize);
 
+        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::ColumnTablesBlobCache));
+
         Become(&TBlobCache::StateFunc);
         ScheduleWakeup();
     }
@@ -194,6 +202,8 @@ private:
             HFunc(TEvBlobStorage::TEvGetResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(NMemory::TEvConsumerLimit, Handle);
         default:
             LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
@@ -331,6 +341,35 @@ private:
         }
 
         CachedRanges.erase(begin, end);
+
+        UpdateConsumption();
+    }
+
+    void Handle(NMemory::TEvConsumerRegistered::TPtr& ev, const TActorContext&) {
+        MemoryConsumer = std::move(ev->Get()->Consumer);
+    }
+
+    void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&) {
+        if (UseMaxCacheDataSizeFromConfig) {
+            return;
+        }
+
+        const i64 newMaxCacheDataSize = ev->Get()->LimitBytes;
+        if (newMaxCacheDataSize == (i64)MaxCacheDataSize) {
+            return;
+        }
+
+        LOG_S_DEBUG("Updating max cache data size: " << newMaxCacheDataSize);
+
+        MaxCacheDataSize = newMaxCacheDataSize;
+    }
+
+    void UpdateConsumption() {
+        if (!MemoryConsumer) {
+            return;
+        }
+
+        MemoryConsumer->SetConsumption(CacheDataSize);
     }
 
     void SendBatchReadRequestToDS(const std::vector<TBlobRange>& blobRanges, const ui64 cookie,
@@ -567,6 +606,8 @@ private:
             SizeBytes->Add(blobRange.Size);
             SizeBlobs->Inc();
         }
+
+        UpdateConsumption();
     }
 
     void Evict(const TActorContext&) {
@@ -591,12 +632,14 @@ private:
             SizeBytes->Set(CacheDataSize);
             SizeBlobs->Set(Cache.Size());
         }
+
+        UpdateConsumption();
     }
 };
 
 } // namespace
 
-NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
+NActors::IActor* CreateBlobCache(const std::optional<ui64>& maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     return new TBlobCache(maxBytes, counters);
 }
 

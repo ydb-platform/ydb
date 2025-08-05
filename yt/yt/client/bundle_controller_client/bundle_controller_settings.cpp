@@ -1,5 +1,7 @@
 #include "bundle_controller_settings.h"
 
+#include <yt/yt_proto/yt/client/bundle_controller/proto/bundle_controller_service.pb.h>
+
 namespace NYT::NBundleControllerClient {
 
 ////////////////////////////////////////////////////////////////////////////////

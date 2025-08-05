@@ -1,4 +1,5 @@
 #include "kqp_compute_actor.h"
+
 #include "kqp_scan_compute_actor.h"
 #include "kqp_scan_fetcher_actor.h"
 
@@ -13,7 +14,9 @@
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
-
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -59,6 +62,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return WrapKqpIndexLookupJoin(callable, ctx);
             }
 
+            if (name == "DqBlockHashJoin"sv) {
+                return WrapDqBlockHashJoin(callable, ctx);
+            }
+
             return nullptr;
         };
 }
@@ -87,6 +94,8 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
         }
 
         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
+        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, nullptr);
+        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, nullptr);
     }
 
     return factory;
@@ -136,7 +145,7 @@ TConclusionStatus TCPULimits::DeserializeFromProto(const NKikimrKqp::TEvStartKqp
     TVector<NActors::TExecutorThreadStats> threadsStats;
     TActivationContext::ActorSystem()->GetPoolStats(TActivationContext::AsActorContext().SelfID.PoolID(), poolStats, threadsStats);
     CPUGroupThreadsLimit = Max<ui64>(poolStats.MaxThreadCount, 1) * share;
-    CPUGroupName = config.GetSchedulerGroup();
+    CPUGroupName = config.GetPoolId();
     return TConclusionStatus::Success();
 }
 
@@ -151,19 +160,19 @@ using namespace NYql::NDqProto;
 IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
     TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NYql::NDq::TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
-    TIntrusivePtr<NActors::TProtoArenaHolder> arena, TComputeActorSchedulingOptions schedulingOptions,
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, NScheduler::TSchedulableActorOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode)
 {
-    return new NScanPrivate::TKqpScanComputeActor(std::move(schedulingOptions), executerId, txId, task, std::move(asyncIoFactory),
+    return new NScanPrivate::TKqpScanComputeActor(std::move(schedulableOptions), executerId, txId, task, std::move(asyncIoFactory),
         settings, memoryLimits, std::move(traceId), std::move(arena), mode);
 }
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
-    const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
-    const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId, TMaybe<NKikimrDataEvents::ELockMode> lockMode,
-    const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
-    const TCPULimits& cpuLimits) {
-    return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits);
+    const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings, const ui64 txId,
+    TMaybe<ui64> lockTxId, ui32 lockNodeId, TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
+    TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits) {
+    return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode, meta,
+        shardsScanningPolicy, counters, std::move(traceId), cpuLimits);
 }
 
-}
+} // namespace NKikimr::NKqp

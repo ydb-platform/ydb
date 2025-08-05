@@ -3,9 +3,12 @@
 #include <util/system/info.h>
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/counters.h>
@@ -13,6 +16,7 @@
 #include <ydb/core/util/tuples.h>
 
 #include <util/string/split.h>
+#include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
 
 using namespace NActors;
 
@@ -24,6 +28,7 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
         enum EEv {
             EvUpdateRuntimeStats = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvCleanupDeadTablets,
+            EvSendListNodes,
             EvEnd
         };
 
@@ -31,6 +36,7 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
 
         struct TEvUpdateRuntimeStats : TEventLocal<TEvUpdateRuntimeStats, EvUpdateRuntimeStats> {};
         struct TEvCleanupDeadTablets : TEventLocal<TEvCleanupDeadTablets, EvCleanupDeadTablets> {};
+        struct TEvSendListNodes : TEventLocal<TEvSendListNodes, EvSendListNodes> {};
     };
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -81,6 +87,13 @@ protected:
     std::unordered_map<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo;
     std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, THash<TVDiskID>> VDiskStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
+
+    bool IsBridgeCluster = false;
+    NKikimrWhiteboard::TBridgeInfo BridgeInfo;
+    NKikimrWhiteboard::TBridgeNodesInfo BridgeNodesInfo;
+    TInstant BridgeInfoChangeTime;
+    static constexpr TDuration SendListNodesPeriod = TDuration::Seconds(15);
+
     i64 MaxClockSkewWithPeerUs;
     ui32 MaxClockSkewPeerId;
     float MaxNetworkUtilization = 0.0;
@@ -555,6 +568,10 @@ protected:
         HFunc(TEvWhiteboard::TEvTraceLookupRequest, Handle);
         HFunc(TEvWhiteboard::TEvTraceRequest, Handle);
         HFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
+        HFunc(TEvWhiteboard::TEvBridgeInfoUpdate, Handle);
+        HFunc(TEvInterconnect::TEvNodesInfo, Handle);
+        HFunc(TEvWhiteboard::TEvBridgeInfoRequest, Handle);
+        HFunc(TEvPrivate::TEvSendListNodes, Handle);
         HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
         HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
     )
@@ -570,6 +587,16 @@ protected:
         }
     }
 
+    bool ShouldReportClockSkew(const NKikimrWhiteboard::TNodeStateInfo &info, const TActorContext &ctx) {
+        if (!info.GetSameScope()) {
+            return false;
+        }
+        if (!IsBridgeMode(ctx)) {
+            return true;
+        }
+        return SystemStateInfo.GetLocation().GetBridgePileName() == info.GetPeerBridgePileName();
+    }
+
     void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
         ui64 previousChangeTime = nodeStateInfo.GetChangeTime();
@@ -581,7 +608,7 @@ protected:
         } else {
             nodeStateInfo.ClearWriteThroughput();
         }
-        if (ev->Get()->Record.GetSameScope()) {
+        if (ShouldReportClockSkew(ev->Get()->Record, ctx)) {
             i64 skew = ev->Get()->Record.GetClockSkewUs();
             if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
                 MaxClockSkewWithPeerUs = skew;
@@ -692,6 +719,38 @@ protected:
         BSGroupStateInfo.erase(groupId);
     }
 
+    void Handle(TEvWhiteboard::TEvBridgeInfoUpdate::TPtr &ev, const TActorContext &ctx) {
+        BridgeInfo.Swap(&ev->Get()->Record);
+        BridgeInfoChangeTime = ctx.Now();
+        if (!IsBridgeCluster) {
+            ctx.Send(SelfId(), new TEvPrivate::TEvSendListNodes);
+        }
+        IsBridgeCluster = true;
+    }
+
+    void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
+        NKikimrWhiteboard::TBridgeNodesInfo newInfo;
+        const auto& pileMap = ev->Get()->PileMap;
+        if (!pileMap) {
+            return;
+        }
+        for (const auto& pile : *pileMap) {
+            auto* pileInfo = newInfo.MutablePiles()->Add();
+            for (const auto nodeId : pile) {
+                pileInfo->MutableNodeIds()->Add(nodeId);
+            }
+        }
+        if (!google::protobuf::util::MessageDifferencer::Equals(newInfo, BridgeNodesInfo)) {
+            BridgeNodesInfo.Swap(&newInfo);
+            BridgeInfoChangeTime = ctx.Now();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvSendListNodes::TPtr &, const TActorContext &ctx) {
+        ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes);
+        ctx.Schedule(SendListNodesPeriod, new TEvPrivate::TEvSendListNodes);
+    }
+
     void Handle(TEvWhiteboard::TEvSystemStateUpdate::TPtr &ev, const TActorContext &ctx) {
         if (CheckedMerge(SystemStateInfo, ev->Get()->Record)) {
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
@@ -770,16 +829,12 @@ protected:
         }
     }
 
-    void UpdateSystemState(const TActorContext &ctx) {
+    void UpdateSystemState() {
         NKikimrWhiteboard::EFlag eFlag = NKikimrWhiteboard::EFlag::Green;
-        NKikimrWhiteboard::EFlag pDiskFlag = NKikimrWhiteboard::EFlag::Green;
-        ui32 yellowFlags = 0;
+        ui32 badDisks = 0;
         double maxDiskUsage = 0;
         for (const auto& pr : PDiskStateInfo) {
-            if (!pr.second.HasState()) {
-                pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Yellow);
-                ++yellowFlags;
-            } else {
+            if (pr.second.HasState()) {
                 switch (pr.second.GetState()) {
                 case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
                 case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
@@ -787,11 +842,9 @@ protected:
                 case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
                 case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
                 case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
-                    pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Red);
-                    break;
                 case NKikimrBlobStorage::TPDiskState::OpenFileError:
-                    pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Yellow);
-                    ++yellowFlags;
+                    eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Yellow);
+                    ++badDisks;
                     break;
                 default:
                     break;
@@ -799,13 +852,10 @@ protected:
             }
             if (pr.second.HasAvailableSize() && pr.second.GetTotalSize() != 0) {
                 double avail = (double)pr.second.GetAvailableSize() / pr.second.GetTotalSize();
-                if (avail <= 0.06) {
-                    pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Red);
+                if (avail <= 0.04) {
+                    eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Orange);
                 } else if (avail <= 0.08) {
-                    pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Orange);
-                } else if (avail <= 0.15) {
-                    pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Yellow);
-                    ++yellowFlags;
+                    eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Yellow);
                 }
                 maxDiskUsage = std::max(maxDiskUsage, 1.0 - avail);
             }
@@ -813,29 +863,25 @@ protected:
         if (PDiskStateInfo.size() > 0) {
             SystemStateInfo.SetMaxDiskUsage(maxDiskUsage);
         }
-        if (pDiskFlag == NKikimrWhiteboard::EFlag::Yellow) {
-            switch (yellowFlags) {
-            case 1:
-                break;
-            case 2:
-                pDiskFlag = NKikimrWhiteboard::EFlag::Orange;
-                break;
-            case 3:
-                pDiskFlag = NKikimrWhiteboard::EFlag::Red;
-                break;
-            }
+        if (eFlag == NKikimrWhiteboard::EFlag::Yellow && badDisks > 1) {
+            eFlag = NKikimrWhiteboard::EFlag::Orange;
         }
-        eFlag = std::max(eFlag, pDiskFlag);
         for (const auto& pr : VDiskStateInfo) {
             eFlag = std::max(eFlag, pr.second.GetDiskSpace());
-            eFlag = std::max(eFlag, pr.second.GetSatisfactionRank().GetFreshRank().GetFlag());
-            eFlag = std::max(eFlag, pr.second.GetSatisfactionRank().GetLevelRank().GetFlag());
-        }
-        if (SystemStateInfo.HasMessageBusState()) {
-            eFlag = std::max(eFlag, SystemStateInfo.GetMessageBusState());
+            if (pr.second.GetDiskSpace() >= NKikimrWhiteboard::EFlag::Red) {
+                eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Orange);
+            } else if (pr.second.GetDiskSpace() > NKikimrWhiteboard::EFlag::Green) {
+                eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Yellow);
+            }
+            if (pr.second.GetSatisfactionRank().GetFreshRank().GetFlag() > NKikimrWhiteboard::EFlag::Green) {
+                eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Yellow);
+            }
+            if (pr.second.GetSatisfactionRank().GetLevelRank().GetFlag() > NKikimrWhiteboard::EFlag::Green) {
+                eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Yellow);
+            }
         }
         if (SystemStateInfo.HasGRpcState()) {
-            eFlag = std::max(eFlag, SystemStateInfo.GetGRpcState());
+            eFlag = std::max(eFlag, std::max(SystemStateInfo.GetGRpcState(), NKikimrWhiteboard::EFlag::Orange));
         }
         for (const auto& stats : SystemStateInfo.GetPoolStats()) {
             double usage = stats.GetUsage();
@@ -849,11 +895,18 @@ protected:
             } else  {
                 flag = NKikimrWhiteboard::EFlag::Green;
             }
-            eFlag = Max(eFlag, flag);
+            if (stats.GetName() == "User") {
+                flag = std::min(flag, NKikimrWhiteboard::EFlag::Orange);
+            } else if (stats.GetName() == "IO") {
+                flag = std::min(flag, NKikimrWhiteboard::EFlag::Yellow);
+            } else if (stats.GetName() == "Batch") {
+                flag = std::min(flag, NKikimrWhiteboard::EFlag::Green);
+            }
+            eFlag = std::max(eFlag, flag);
         }
         if (!SystemStateInfo.HasSystemState() || SystemStateInfo.GetSystemState() != eFlag) {
             SystemStateInfo.SetSystemState(eFlag);
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
     }
 
@@ -1015,6 +1068,23 @@ protected:
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
+    void Handle(TEvWhiteboard::TEvBridgeInfoRequest::TPtr &ev, const TActorContext &ctx) {
+        const auto& request = ev->Get()->Record;
+        std::unique_ptr<TEvWhiteboard::TEvBridgeInfoResponse> response(new TEvWhiteboard::TEvBridgeInfoResponse);
+        auto& record = response->Record;
+
+        record.SetIsBridgeCluster(IsBridgeCluster);
+        if (IsBridgeCluster) {
+            ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
+            if (BridgeInfoChangeTime.MilliSeconds() >= changedSince) {
+                record.MutableBridgeInfo()->CopyFrom(BridgeInfo);
+                record.MutableBridgeNodesInfo()->CopyFrom(BridgeNodesInfo);
+            }
+        }
+        record.SetResponseTime(ctx.Now().MilliSeconds());
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+    }
+
     void Handle(TEvWhiteboard::TEvSystemStateRequest::TPtr &ev, const TActorContext &ctx) {
         const auto& request = ev->Get()->Record;
         ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
@@ -1161,7 +1231,7 @@ protected:
                 threadInfo->MutableStates()->emplace(state.first, state.second);
             }
         }
-        UpdateSystemState(ctx);
+        UpdateSystemState();
         ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
     }
 

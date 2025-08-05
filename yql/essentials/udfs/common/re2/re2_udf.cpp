@@ -55,7 +55,7 @@ namespace {
             return true;
         }
         THashType hash = GetStringHash(regexp) % 100;
-        ui64 failProbability = GetFailProbability();
+        static ui64 failProbability = GetFailProbability();
         return hash < failProbability;
     }
 
@@ -107,11 +107,11 @@ namespace {
                 TSourcePosition pos,
                 NYql::TLangVersion currentlangVersion,
                 const TRegexpGroups& regexpGroups = TRegexpGroups())
-                : Mode(mode)
-                , OptionsSchema(optionsSchema)
+                : Mode_(mode)
+                , OptionsSchema_(optionsSchema)
                 , Pos_(pos)
-                , RegexpGroups(regexpGroups)
-                , CurrentLangVersion(currentlangVersion)
+                , RegexpGroups_(regexpGroups)
+                , CurrentLangVersion_(currentlangVersion)
             {
             }
 
@@ -123,19 +123,19 @@ namespace {
                     new TRe2Udf(
                         valueBuilder,
                         args[0],
-                        RegexpGroups,
-                        Mode,
+                        RegexpGroups_,
+                        Mode_,
                         posix,
-                        OptionsSchema,
+                        OptionsSchema_,
                         Pos_,
-                        CurrentLangVersion));
+                        CurrentLangVersion_));
             }
 
-            EMode Mode;
-            const TOptionsSchema OptionsSchema;
+            EMode Mode_;
+            const TOptionsSchema OptionsSchema_;
             TSourcePosition Pos_;
-            const TRegexpGroups RegexpGroups;
-            NYql::TLangVersion CurrentLangVersion;
+            const TRegexpGroups RegexpGroups_;
+            NYql::TLangVersion CurrentLangVersion_;
         };
 
         static const TStringRef& Name(EMode mode) {
@@ -172,12 +172,12 @@ namespace {
             const TOptionsSchema& optionsSchema,
             TSourcePosition pos,
             NYql::TLangVersion currentLangVersion)
-            : RegexpGroups(regexpGroups)
-            , Mode(mode)
-            , Captured()
-            , OptionsSchema(optionsSchema)
+            : RegexpGroups_(regexpGroups)
+            , Mode_(mode)
+            , Captured_()
+            , OptionsSchema_(optionsSchema)
             , Pos_(pos)
-            , CurrentLangVersion(currentLangVersion) {
+            , CurrentLangVersion_(currentLangVersion) {
             try {
                 auto patternValue = runConfig.GetElement(0);
                 auto optionsValue = runConfig.GetElement(1);
@@ -192,24 +192,24 @@ namespace {
                         : RE2::Options::Encoding::EncodingLatin1
                 );
                 if (optionsValue) {
-#define FIELD_HANDLE(name, index, type, defVal, setter, conv) options.setter(conv(optionsValue.GetElement(OptionsSchema.Indices[index]).Get<type>()));
+#define FIELD_HANDLE(name, index, type, defVal, setter, conv) options.setter(conv(optionsValue.GetElement(OptionsSchema_.Indices[index]).Get<type>()));
                     OPTIONS_MAP(FIELD_HANDLE)
 #undef FIELD_HANDLE
                     options.set_log_errors(false);
                 }
 
-                Regexp = std::make_unique<RE2>(StringPiece(pattern.data(), pattern.size()), options);
+                Regexp_ = std::make_unique<RE2>(StringPiece(pattern.data(), pattern.size()), options);
 
-                if (!Regexp->ok() && ShouldFailOnInvalidRegexp(pattern, CurrentLangVersion)) {
-                    throw yexception() << FormatRegexpError(*Regexp);
+                if (!Regexp_->ok() && ShouldFailOnInvalidRegexp(pattern, CurrentLangVersion_)) {
+                    throw yexception() << FormatRegexpError(*Regexp_);
                 }
 
                 if (mode == EMode::CAPTURE) {
-                    Captured = std::make_unique<StringPiece[]>(Regexp->NumberOfCapturingGroups() + 1);
+                    Captured_ = std::make_unique<StringPiece[]>(Regexp_->NumberOfCapturingGroups() + 1);
                 }
 
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -222,20 +222,20 @@ namespace {
                 const std::string_view input(args[0].AsStringRef());
                 const StringPiece piece(input.data(), input.size());
 
-                switch (Mode) {
+                switch (Mode_) {
                     case MATCH:
                         anchor = RE2::ANCHOR_BOTH;
                         [[fallthrough]];
                     case GREP:
-                        return TUnboxedValuePod(Regexp->Match(piece, 0, input.size(), anchor, nullptr, 0));
+                        return TUnboxedValuePod(Regexp_->Match(piece, 0, input.size(), anchor, nullptr, 0));
                     case CAPTURE: {
-                        const int count = Regexp->NumberOfCapturingGroups() + 1;
+                        const int count = Regexp_->NumberOfCapturingGroups() + 1;
                         TUnboxedValue* items = nullptr;
-                        const auto result = valueBuilder->NewArray(RegexpGroups.Names.size(), items);
-                        if (Regexp->Match(piece, 0, input.size(), anchor, Captured.get(), count)) {
+                        const auto result = valueBuilder->NewArray(RegexpGroups_.Names.size(), items);
+                        if (Regexp_->Match(piece, 0, input.size(), anchor, Captured_.get(), count)) {
                             for (int i = 0; i < count; ++i) {
-                                if (!Captured[i].empty()) {
-                                    items[RegexpGroups.Indexes[i]] = valueBuilder->SubString(args[0], std::distance(piece.begin(), Captured[i].begin()), Captured[i].size());
+                                if (!Captured_[i].empty()) {
+                                    items[RegexpGroups_.Indexes[i]] = valueBuilder->SubString(args[0], std::distance(piece.begin(), Captured_[i].begin()), Captured_[i].size());
                                 }
                             }
                         } else {
@@ -247,22 +247,22 @@ namespace {
                         const std::string_view rewriteRef(args[1].AsStringRef());
                         const StringPiece rewrite(rewriteRef.data(), rewriteRef.size());
                         TString rewriteError;
-                        if (!Regexp->CheckRewriteString(rewrite, &rewriteError)) {
-                            UdfTerminate((TStringBuilder() << Pos_ << " [rewrite error] " << rewriteError).data());
+                        if (!Regexp_->CheckRewriteString(rewrite, &rewriteError)) {
+                            UdfTerminate((TStringBuilder() << Pos_ << " [rewrite error] " << rewriteError).c_str());
                         }
                         std::string result(input);
-                        RE2::GlobalReplace(&result, *Regexp, rewrite);
+                        RE2::GlobalReplace(&result, *Regexp_, rewrite);
                         return input == result ? TUnboxedValue(args[0]) : valueBuilder->NewString(result);
                     }
                     case COUNT: {
                         std::string inputHolder(input);
-                        const ui32 result = RE2::GlobalReplace(&inputHolder, *Regexp, "");
+                        const ui32 result = RE2::GlobalReplace(&inputHolder, *Regexp_, "");
                         return TUnboxedValuePod(result);
                     }
                     case FIND_AND_CONSUME: {
                         StringPiece text(piece);
                         std::vector<TUnboxedValue> matches;
-                        for (StringPiece w; text.begin() < text.end() && RE2::FindAndConsume(&text, *Regexp, &w);) {
+                        for (StringPiece w; text.begin() < text.end() && RE2::FindAndConsume(&text, *Regexp_, &w);) {
                             if (w.size() == 0 && !text.empty()) {
                                 text.remove_prefix(1);
                             }
@@ -273,7 +273,7 @@ namespace {
                 }
                 Y_ABORT("Unexpected mode");
             } else {
-                switch (Mode) {
+                switch (Mode_) {
                     case MATCH:
                     case GREP:
                         return TUnboxedValuePod(false);
@@ -289,20 +289,20 @@ namespace {
                 Y_ABORT("Unexpected mode");
             }
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
-        std::unique_ptr<RE2> Regexp;
-        const TRegexpGroups RegexpGroups;
-        EMode Mode;
-        std::unique_ptr<StringPiece[]> Captured;
-        const TOptionsSchema OptionsSchema;
+        std::unique_ptr<RE2> Regexp_;
+        const TRegexpGroups RegexpGroups_;
+        EMode Mode_;
+        std::unique_ptr<StringPiece[]> Captured_;
+        const TOptionsSchema OptionsSchema_;
         TSourcePosition Pos_;
-        NYql::TLangVersion CurrentLangVersion;
+        NYql::TLangVersion CurrentLangVersion_;
 
         TUnboxedValue BuildEmptyStruct(const IValueBuilder* valueBuilder) const {
             TUnboxedValue* items = nullptr;
-            return valueBuilder->NewArray(RegexpGroups.Names.size(), items);
+            return valueBuilder->NewArray(RegexpGroups_.Names.size(), items);
         }
     };
 
@@ -392,7 +392,7 @@ namespace {
         if (hasEscape) {
             const std::string_view escapeRef(args[1].AsStringRef());
             if (escapeRef.size() != 1U) {
-                UdfTerminate((TStringBuilder() << GetPos() << " Escape should be single character").data());
+                UdfTerminate((TStringBuilder() << GetPos() << " Escape should be single character").c_str());
             }
             escape = escapeRef.front();
         }

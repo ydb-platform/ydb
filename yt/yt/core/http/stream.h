@@ -51,6 +51,8 @@ public:
     TSharedRef Feed(const TSharedRef& buf);
 
 private:
+    const http_parser_type ParserType_{};
+
     http_parser Parser_{};
 
     TStringBuilder FirstLine_;
@@ -232,7 +234,7 @@ private:
     bool HeadersLogged_ = false;
     TInstant LastProgressLogTime_;
 
-    static const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> FilteredHeaders_;
+    static const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualComparer> FilteredHeaders_;
 
     bool ConnectionClose_ = false;
 

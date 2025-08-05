@@ -1,4 +1,5 @@
 #include "test_env.h"
+
 #include "helpers.h"
 
 #include <ydb/core/base/tablet_resolver.h>
@@ -11,11 +12,13 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+
 #include <ydb/services/metadata/ds_table/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -614,6 +617,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
     app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
+    app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
+    app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
+    app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -676,12 +682,23 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         runtime.GetAppData().YdbDriver = YdbDriver.Get();
     }
 
+    // Create Observer to catch an event of system views update finished.
+    // For more info, see comments in ydb/core/testlib/test_client.cpp
+    if (app.FeatureFlags.GetEnableRealSystemViewPaths()) {
+        AddSysViewsRosterUpdateObserver(runtime);
+    }
+
     TActorId sender = runtime.AllocateEdgeActor();
     //CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(TTestTxConfig::DomainUid), TTabletTypes::BSController), &CreateFlatBsController);
     BootSchemeShard(runtime, schemeRoot);
     BootTxAllocator(runtime, txAllocator);
     BootFakeCoordinator(runtime, coordinator, CoordinatorState);
     BootFakeHive(runtime, hive, HiveState, &GetTabletCreationFunc);
+
+    // Wait until schemeshard completes creating system view paths
+    if (app.FeatureFlags.GetEnableRealSystemViewPaths()) {
+        WaitForSysViewsRosterUpdate(runtime);
+    }
 
     InitRootStoragePools(runtime, schemeRoot, sender, TTestTxConfig::DomainUid);
 
@@ -921,6 +938,41 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
     TestWaitShardDeletion(runtime, TTestTxConfig::SchemeShard, std::move(localIds));
 }
 
+void NSchemeShardUT_Private::TTestEnv::AddSysViewsRosterUpdateObserver(NActors::TTestActorRuntime& runtime) {
+    if (!runtime.IsRealThreads()) {
+        SysViewsRosterUpdateFinished = false;
+        SysViewsRosterUpdateObserver = runtime.AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
+            SysViewsRosterUpdateFinished = true;
+        });
+    }
+}
+
+void NSchemeShardUT_Private::TTestEnv::WaitForSysViewsRosterUpdate(NActors::TTestActorRuntime& runtime) {
+    if (!runtime.IsRealThreads()) {
+        runtime.WaitFor("SysViewsRoster update finished", [this] {
+            return SysViewsRosterUpdateFinished;
+        });
+        SysViewsRosterUpdateObserver.Remove();
+    }
+}
+
+void NSchemeShardUT_Private::TTestEnv::AddExtSubdomainCleanupObserver(NActors::TTestActorRuntime& runtime, const TPathId& subdomainPathId) {
+    Cerr << "TESTENV: subdomain cleanup, start waiting, subdomain " << subdomainPathId << Endl;
+    ExtSubdomainCleanupComplete.erase(subdomainPathId);
+    ExtSubdomainCleanupObserver = runtime.AddObserver<TEvPrivate::TEvTestNotifySubdomainCleanup>([this](const auto& ev) {
+        ExtSubdomainCleanupComplete.insert(ev->Get()->SubdomainPathId);
+    });
+}
+
+void NSchemeShardUT_Private::TTestEnv::WaitForExtSubdomainCleanup(NActors::TTestActorRuntime& runtime, const TPathId& subdomainPathId) {
+    runtime.WaitFor("ExtSubdomainCleanup", [this, &subdomainPathId] {
+        return ExtSubdomainCleanupComplete.contains(subdomainPathId);
+    });
+    ExtSubdomainCleanupComplete.erase(subdomainPathId);
+    ExtSubdomainCleanupObserver.Remove();
+    Cerr << "TESTENV: subdomain cleanup, wait complete, subdomain " << subdomainPathId << Endl;
+}
+
 void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {
     auto sender = runtime.AllocateEdgeActor();
     runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
@@ -1053,6 +1105,28 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     TabletIds.push_back(datashard+6);
     TabletIds.push_back(datashard+7);
     TabletIds.push_back(datashard+8);
+
+    // Events used exclusively by test frameworks.
+    // No need for reboots on these as they aren't used in real operation mode.
+    NoRebootEventTypes.insert(TEvPrivate::EvTestNotifySubdomainCleanup);
+    NoRebootEventTypes.insert(TEvFakeHive::EvSubscribeToTabletDeletion);
+    NoRebootEventTypes.insert(TEvFakeHive::EvNotifyTabletDeleted);
+    NoRebootEventTypes.insert(TEvFakeHive::EvRequestDomainInfo);
+    NoRebootEventTypes.insert(TEvFakeHive::EvRequestDomainInfoReply);
+
+    NoRebootEventTypes.insert(TEvSchemeShard::EvModifySchemeTransaction);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvDescribeScheme);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvNotifyTxCompletion);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvMeasureSelfResponseTime);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvWakeupToMeasureSelfResponseTime);
+    NoRebootEventTypes.insert(TEvTablet::EvLocalMKQL);
+    NoRebootEventTypes.insert(TEvFakeHive::EvSubscribeToTabletDeletion);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvCancelTx);
+    NoRebootEventTypes.insert(TEvExport::EvCreateExportRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvCreateRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvGetRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvCancelRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvForgetRequest);
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::Run(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
@@ -1087,31 +1161,48 @@ struct NSchemeShardUT_Private::TTestWithReboots::TFinalizer {
 };
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
-    RunTestWithReboots(TabletIds,
-                       [&]() {
-        return PassUserRequests;
-    },
-    [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(*this);
-        Prepare(dispatchName, setup, activeZone);
+    RunTestWithReboots(
+        TabletIds,
+        // filterFactory
+        [&]() {
+            return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                return PassUserRequests(runtime, event);
+            };
+        },
+        // testFunc
+        [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+            TFinalizer finalizer(*this);
+            Prepare(dispatchName, setup, activeZone);
 
-        activeZone = true;
-        testScenario(*Runtime, activeZone);
-    }, Max<ui32>(), Max<ui64>(), 0, 0, KillOnCommit);
+            activeZone = true;
+            testScenario(*Runtime, activeZone);
+        },
+        Max<ui32>(),
+        Max<ui64>(),
+        0,
+        0,
+        KillOnCommit
+    );
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithPipeResets(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
-    RunTestWithPipeResets(TabletIds,
-                          [&]() {
-        return PassUserRequests;
-    },
-    [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(*this);
-        Prepare(dispatchName, setup, activeZone);
+    RunTestWithPipeResets(
+        TabletIds,
+        // filterFactory
+        [&]() {
+            return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                return PassUserRequests(runtime, event);
+            };
+        },
+        // testFunc
+        [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+            TFinalizer finalizer(*this);
+            Prepare(dispatchName, setup, activeZone);
 
-        activeZone = true;
-        testScenario(*Runtime, activeZone);
-    });
+            activeZone = true;
+            testScenario(*Runtime, activeZone);
+        }
+    );
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithDelays(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
@@ -1172,22 +1263,7 @@ void NSchemeShardUT_Private::TTestWithReboots::Finalize() {
 
 bool NSchemeShardUT_Private::TTestWithReboots::PassUserRequests(TTestActorRuntimeBase &runtime, TAutoPtr<IEventHandle> &event) {
     Y_UNUSED(runtime);
-    return event->Type == TEvSchemeShard::EvModifySchemeTransaction ||
-           event->Type == TEvSchemeShard::EvDescribeScheme ||
-           event->Type == TEvSchemeShard::EvNotifyTxCompletion ||
-           event->Type == TEvSchemeShard::EvMeasureSelfResponseTime ||
-           event->Type == TEvSchemeShard::EvWakeupToMeasureSelfResponseTime ||
-           event->Type == TEvTablet::EvLocalMKQL ||
-           event->Type == TEvFakeHive::EvSubscribeToTabletDeletion ||
-           event->Type == TEvSchemeShard::EvCancelTx ||
-           event->Type == TEvExport::EvCreateExportRequest ||
-           event->Type == TEvIndexBuilder::EvCreateRequest ||
-           event->Type == TEvIndexBuilder::EvGetRequest ||
-           event->Type == TEvIndexBuilder::EvCancelRequest ||
-           event->Type == TEvIndexBuilder::EvForgetRequest ||
-           // without it, ut_vector_index_build_reboots test hangs on GetRequest on the very first reboot
-           event->Type == TEvTablet::EvCommitResult
-        ;
+    return NoRebootEventTypes.contains(event->Type);
 }
 
 NSchemeShardUT_Private::TTestEnvOptions& NSchemeShardUT_Private::TTestWithReboots::GetTestEnvOptions() {

@@ -139,7 +139,7 @@ namespace NKikimr::NStorage {
                 {"direct_bound_nodes", getDirectBoundNodes()},
                 {"root_state", TString(TStringBuilder() << RootState)},
                 {"error_reason", ErrorReason},
-                {"has_quorum", HasQuorum()},
+                {"has_quorum", GlobalQuorum},
                 {"scepter", Scepter ? NJson::TJsonMap{
                     {"id", Scepter->Id},
                 } : NJson::TJsonValue{NJson::JSON_NULL}},
@@ -160,6 +160,13 @@ namespace NKikimr::NStorage {
                     }
                     DIV_CLASS("panel-body") {
                         out << "Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "<br/>";
+                        out << "Self pile id: ";
+                        if (BridgeInfo) {
+                            out << BridgeInfo->SelfNodePile->BridgePileId;
+                        } else {
+                            out << "<none>";
+                        }
+                        out << "<br/>";
                     }
                 }
 
@@ -224,8 +231,10 @@ namespace NKikimr::NStorage {
                         if (ErrorReason) {
                            out << "ErrorReason: " << ErrorReason << "<br/>";
                         }
-                        out << "Quorum: " << (HasQuorum() ? "yes" : "no") << "<br/>";
+                        out << "Quorum: " << (GlobalQuorum ? "yes" : "no") << "<br/>";
                         out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
+                        out << "NodeIdsForOutgoingBinding: " << FormatList(NodeIdsForOutgoingBinding) << "<br/>";
+                        out << "NodeIdsForPrimaryPileOutgoingBinding: " << FormatList(NodeIdsForPrimaryPileOutgoingBinding) << "<br/>";
                     }
                 }
 
@@ -234,7 +243,7 @@ namespace NKikimr::NStorage {
                         out << "Static <-> dynamic node interaction";
                     }
                     DIV_CLASS("panel-body") {
-                        out << "IsSelfStatic: " << (IsSelfStatic ? "true" : "false") << "<br/>";
+                        out << "IsSelfStatic: " << (IsSelfStatic ? "yes" : "no") << "<br/>";
                         out << "ConnectedToStaticNode: " << ConnectedToStaticNode << "<br/>";
                         out << "StaticNodeSessionId: " << StaticNodeSessionId << "<br/>";
                         out << "ConnectedDynamicNodes: " << FormatList(ConnectedDynamicNodes) << "<br/>";
@@ -247,7 +256,11 @@ namespace NKikimr::NStorage {
                     }
                     DIV_CLASS("panel-body") {
                         DIV() {
-                            out << "AllBoundNodes count: " << AllBoundNodes.size();
+                            out << "AllBoundNodes count: " << AllBoundNodes.size() << "<br/>";
+                            out << "LocalPileQuorum: " << (LocalPileQuorum ? "yes" : "no") << "<br/>";
+                            out << "GlobalQuorum: " << (GlobalQuorum ? "yes" : "no") << "<br/>";
+                            out << "NodeIdsForIncomingBinding: " << FormatList(NodeIdsForIncomingBinding) << "<br/>";
+                            out << "ConnectedUnsyncedPiles: " << FormatList(ConnectedUnsyncedPiles) << "<br/>";
                         }
                         TABLE_CLASS("table table-condensed") {
                             TABLEHEAD() {

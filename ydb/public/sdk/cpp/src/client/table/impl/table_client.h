@@ -70,6 +70,7 @@ public:
     TAsyncDescribeTableResult DescribeTable(const std::string& sessionId, const std::string& path, const TDescribeTableSettings& settings);
     TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings);
     TAsyncDescribeExternalTableResult DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings);
+    TAsyncDescribeSystemViewResult DescribeSystemView(const std::string& path, const TDescribeSystemViewSettings& settings);
 
     template<typename TParamsType>
     TAsyncDataQueryResult ExecuteDataQuery(TSession& session, const std::string& query, const TTxControl& txControl,
@@ -138,7 +139,7 @@ public:
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
 
-    TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
+    TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings, bool canMove);
     TAsyncBulkUpsertResult BulkUpsert(const std::string& table, EDataFormat format,
         const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings);
 

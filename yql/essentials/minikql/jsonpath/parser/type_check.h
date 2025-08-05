@@ -53,7 +53,7 @@ public:
     void Error(const TAstNodePtr node, const TStringBuf message);
 
 private:
-    TIssues& Issues;
+    TIssues& Issues_;
 };
 
 }

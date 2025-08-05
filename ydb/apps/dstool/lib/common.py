@@ -23,6 +23,8 @@ import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.cms_pb2 as kikimr_cms
+import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
+from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
 from ydb.apps.dstool.lib.arg_parser import print_error_with_usage
 import typing
 
@@ -152,26 +154,58 @@ class ConnectionParams:
             location = endpoint.host_with_port
         return urllib.parse.urlunsplit((endpoint.protocol, location, path, urllib.parse.urlencode(params), ''))
 
-    def parse_token(self, token_file):
+    def parse_token(self, token_file, iam_token_file=None):
         if token_file:
-            self.token = token_file.readline().rstrip('\r\n')
+            self.token_type, self.token = self.read_token_from_file(token_file, 'OAuth')
             token_file.close()
-        if self.token is None:
-            self.token = os.getenv('YDB_TOKEN')
-            if self.token is not None:
-                self.token = self.token.strip()
-        if self.token is None:
-            try:
-                path = os.path.expanduser(os.path.join('~', '.ydb', 'token'))
-                with open(path) as f:
-                    self.token = f.readline().strip('\r\n')
-            except Exception:
-                pass
+            return
 
-        if self.token is not None and len(self.token.split(' ')) == 2:
-            self.token_type, self.token = self.token.split(' ')
+        if iam_token_file:
+            self.token_type, self.token = self.read_token_from_file(iam_token_file, 'Bearer')
+            iam_token_file.close()
+            return
+
+        token_value = os.getenv('YDB_TOKEN')
+        if token_value is not None:
+            self.token_type, self.token = self.parse_token_value(token_value, 'OAuth')
+            return
+
+        token_value = os.getenv('IAM_TOKEN')
+        if token_value is not None:
+            self.token_type, self.token = self.parse_token_value(token_value, 'Bearer')
+            return
+
+        default_token_paths = [
+            ('OAuth', os.path.expanduser(os.path.join('~', '.ydb', 'token'))),
+            ('Bearer', os.path.expanduser(os.path.join('~', '.ydb', 'iam_token'))),
+        ]
+        for token_type, token_file_path in default_token_paths:
+            self.token_type, self.token = self.read_token_file(token_file_path, token_type)
+            if self.token is not None:
+                return
+
+    def read_token_from_file(self, token_file, default_token_type):
+        if token_file is None:
+            return default_token_type, None
+        token_value = token_file.readline().rstrip('\r\n')
+        return self.parse_token_value(token_value, default_token_type)
+
+    def read_token_file(self, token_file_path, default_token_type):
+        if token_file_path is None:
+            return default_token_type, None
+        try:
+            return self.read_token_from_file_and_close(open(token_file_path, 'r'), default_token_type)
+        except Exception:
+            return default_token_type, None
+
+    def parse_token_value(self, token_value, default_token_type):
+        if token_value is None:
+            return default_token_type, None
+        splitted = token_value.strip().split(' ')
+        if len(splitted) == 2:
+            return splitted
         else:
-            self.token_type = 'OAuth'
+            return default_token_type, token_value
 
     def apply_args(self, args, with_localhost=True):
         self.args = args
@@ -199,7 +233,7 @@ class ConnectionParams:
         if 'http' not in protocols and 'https' in protocols:
             self.mon_protocol = 'https'
 
-        self.parse_token(args.token_file)
+        self.parse_token(args.token_file, args.iam_token_file)
         self.domain = 1
         self.verbose = args.verbose or args.debug
         self.debug = args.debug
@@ -218,7 +252,9 @@ class ConnectionParams:
             g.add_argument('--endpoint', '-e', metavar='[PROTOCOL://]HOST[:PORT]', type=str, required=True, action='append', help=ConnectionParams.ENDPOINT_HELP)
         g.add_argument('--grpc-port', type=int, default=2135, metavar='PORT', help='GRPC port to use for procedure invocation')
         g.add_argument('--mon-port', type=int, default=8765, metavar='PORT', help='HTTP monitoring port for viewer JSON access')
-        g.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
+        token_group = g.add_mutually_exclusive_group()
+        token_group.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
+        token_group.add_argument('--iam-token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to IAM token file')
         g.add_argument('--ca-file', metavar='PATH', dest='cafile', type=str, help='File containing PEM encoded root certificates for SSL/TLS connections. '
                                                                                   'If this parameter is empty, the default roots will be used.')
         g.add_argument('--http-timeout', type=int, default=5, help='Timeout for blocking socket I/O operations during HTTP(s) queries')
@@ -244,6 +280,15 @@ get_vdisk_id_short = attrgetter('FailRealmIdx', 'FailDomainIdx', 'VDiskIdx')
 
 def get_vslot_extended_id(vslot):
     return *get_vslot_id(vslot.VSlotId), *get_vdisk_id(vslot)
+
+
+def get_pdisk_inferred_settings(pdisk):
+    if (pdisk.PDiskMetrics.HasField('SlotCount')):
+        return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
+    elif (pdisk.InferPDiskSlotCountFromUnitSize != 0):
+        return 0, 0
+    else:
+        return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
 
 
 class Location(typing.NamedTuple):
@@ -362,6 +407,7 @@ def query_random_host_with_retry(retries=5, request_type=None):
             explicit_host = binded.arguments.pop('explicit_host', None)
             host = binded.arguments.pop('host', None)
             endpoint = binded.arguments.pop('endpoint', None)
+            endpoints = binded.arguments.pop('endpoints', None)
 
             if endpoint is not None or host is not None:
                 return func(*args, **kwargs)
@@ -381,6 +427,10 @@ def query_random_host_with_retry(retries=5, request_type=None):
             result = None
             if explicit_endpoint:
                 try_index, result = retry_query_with_endpoints(send_query, [explicit_endpoint] * retries, request_type, func.__name__, retries)
+                return result
+
+            if endpoints:
+                try_index, result = retry_query_with_endpoints(send_query, endpoints, request_type, func.__name__, retries)
                 return result
 
             if result is not None:
@@ -437,7 +487,7 @@ def query_random_host_with_retry(retries=5, request_type=None):
 
 @inmemcache('fetch', ['path', 'params', 'explicit_host', 'fmt'], 'cache')
 @query_random_host_with_retry(request_type='http')
-def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True, method=None, data=None, content_type=None, accept=None, endpoint=None):
+def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True, method=None, data=None, content_type=None, accept=None, endpoint=None, endpoints=None):
     if endpoint is None and host is not None:
         endpoint = connection_params.make_endpoint_info(f'{connection_params.mon_protocol}://{host}')
     if endpoint.protocol not in ('http', 'https'):
@@ -466,7 +516,7 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
 
 
 @query_random_host_with_retry(request_type='grpc')
-def invoke_grpc(func, *params, explicit_host=None, endpoint=None):
+def invoke_grpc(func, *params, explicit_host=None, endpoint=None, stub_factory=kikimr_grpc.TGRpcServerStub, endpoints=None):
     options = [
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
@@ -477,7 +527,7 @@ def invoke_grpc(func, *params, explicit_host=None, endpoint=None):
 
     def work(channel):
         try:
-            stub = kikimr_grpc.TGRpcServerStub(channel)
+            stub = stub_factory(channel)
             res = getattr(stub, func)(*params)
             if connection_params.debug:
                 print('INFO: result <<< %s >>>' % text_format.MessageToString(res, as_one_line=True), file=sys.stderr)
@@ -549,6 +599,73 @@ def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
         return None
     else:
         return '%s: %s' % (kikimr_cms.TStatus.ECode.Name(response.Status.Code), response.Status.Reason)
+
+
+def get_piles_info():
+    request = ydb_bridge.GetClusterStateRequest()
+    response = invoke_grpc('GetClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+    result = ydb_bridge.GetClusterStateResult()
+    response.operation.result.Unpack(result)
+    return result
+
+
+def promote_pile(pile_id):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.PROMOTE
+    ))
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+
+
+def set_primary_pile(primary_pile_id, synchronized_piles):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=primary_pile_id,
+        state=ydb_bridge.PileState.PRIMARY
+    ))
+    for pile_id in synchronized_piles:
+        request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+            pile_id=pile_id,
+            state=ydb_bridge.PileState.SYNCHRONIZED
+        ))
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+
+
+def disconnect_pile(pile_id, pile_to_endpoints):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.DISCONNECTED
+    ))
+    request.specific_pile_ids.append(pile_id)
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
+    other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.DISCONNECTED,
+    ))
+    request.specific_pile_ids.extend(other_pile_ids)
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
+
+
+def connect_pile(pile_id, pile_to_endpoints):
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
+    ))
+    request.specific_pile_ids.append(pile_id)
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
+    other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
+    request = ydb_bridge.UpdateClusterStateRequest()
+    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
+        pile_id=pile_id,
+        state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
+    ))
+    request.specific_pile_ids.extend(other_pile_ids)
+    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
 
 
 def create_bsc_request(args):
@@ -829,6 +946,13 @@ def build_node_fqdn_maps(base_config):
     return node_id_to_host, host_to_node_id
 
 
+def build_pile_to_node_id_map(base_config):
+    pile_to_node_id_map = defaultdict(list)
+    for node in base_config.Node:
+        pile_to_node_id_map[node.Location.BridgePileName].append(node.NodeId)
+    return pile_to_node_id_map
+
+
 def build_pdisk_map(base_config):
     pdisk_map = {
         get_pdisk_id(pdisk): pdisk
@@ -1036,6 +1160,20 @@ def fetch_node_mon_map(nodes=None):
         for ep in sysinfo.get('Endpoints', [])
         if ep['Name'] == 'http-mon'
     }
+
+
+def fetch_node_to_endpoint_map(nodes=None):
+    res = {}
+    for node_id, sysinfo in fetch_json_info('sysinfo', nodes).items():
+        grpc_port = None
+        mon_port = None
+        for ep in sysinfo.get('Endpoints', []):
+            if ep['Name'] == 'grpc':
+                grpc_port = int(ep['Address'][1:])
+            elif ep['Name'] == 'http-mon':
+                mon_port = int(ep['Address'][1:])
+        res[node_id] = EndpointInfo('grpc', sysinfo['Host'], grpc_port, mon_port)
+    return res
 
 
 def get_vslots_by_vdisk_ids(base_config, vdisk_ids):

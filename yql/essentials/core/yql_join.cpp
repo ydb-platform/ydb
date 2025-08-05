@@ -1,4 +1,5 @@
 #include "yql_join.h"
+#include "yql_expr_optimize.h"
 #include "yql_expr_type_annotation.h"
 #include "yql_opt_utils.h"
 
@@ -348,6 +349,18 @@ namespace {
         for (auto i = 0U; i < leftKeyTypes.size(); ++i) {
             auto leftKeyType = leftKeyTypes[i];
             auto rightKeyType = rightKeyTypes[i];
+            if (leftKeyType->HasErrors()) {
+                TErrorTypeVisitor visitor(ctx);
+                leftKeyType->Accept(visitor);
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (rightKeyType->HasErrors()) {
+                TErrorTypeVisitor visitor(ctx);
+                rightKeyType->Accept(visitor);
+                return IGraphTransformer::TStatus::Error;
+            }
+
             if (isMultiget) {
                 if (ETypeAnnotationKind::Optional == leftKeyType->GetKind()) {
                     leftKeyType = leftKeyType->Cast<TOptionalExprType>()->GetItemType();
@@ -1979,22 +1992,25 @@ void GatherAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& andT
     }
 }
 
-TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, bool isPg, TExprContext& ctx) {
+TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, TExprNode::TPtr&& replaceWith, bool isPg, TExprContext& ctx) {
     TExprNode::TPtr prevAndNode = nullptr;
     TNodeSet added;
-    for (const auto& otherAndTerm : andTerms) {
-        if (otherAndTerm == exclude) {
-            continue;
+    for (auto term : andTerms) {
+        if (term == exclude) {
+            if (!replaceWith) {
+                continue;
+            }
+            term = std::move(replaceWith);
         }
 
-        if (!added.insert(otherAndTerm.Get()).second) {
+        if (!added.insert(term.Get()).second) {
             continue;
         }
 
         if (!prevAndNode) {
-            prevAndNode = otherAndTerm;
+            prevAndNode = term;
         } else {
-            prevAndNode = ctx.NewCallable(position, "And", { prevAndNode, otherAndTerm });
+            prevAndNode = ctx.NewCallable(position, "And", { prevAndNode, term });
         }
     }
 
@@ -2034,6 +2050,16 @@ bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPt
     return false;
 }
 
+bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TExprNode::TPtr& leftMember, TExprNode::TPtr& rightMember) {
+    if (!IsEquality(predicate, leftMember, rightMember)) {
+        return false;
+    }
+
+    return
+        leftMember->IsCallable("Member") && &leftMember->Head() == &row &&
+        rightMember->IsCallable("Member") && &rightMember->Head() == &row;
+}
+
 void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
     const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields) {
@@ -2060,6 +2086,52 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
             break;
         }
     }
+}
+
+bool GatherJoinInputsForAllNodes(const TExprNode::TPtr& expr, const TExprNode& row,
+    const THashMap<TString, TString>& backRenameMap, const TJoinLabels& labels, TNodeMap<TSet<ui32>>& inputs
+){
+    bool memberOnly = true;
+    VisitExpr(
+        expr,
+        [&](const TExprNode::TPtr& node) {
+            if (!memberOnly) {
+                return false;
+            } else if (node->IsCallable("Member") && node->HeadPtr().Get() == &row) {
+                return false;
+            }
+
+            return true;
+        },
+        [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable("Member") && node->HeadPtr().Get() == &row) {
+                auto field = node->Tail().Content();
+                // rename used fields
+                if (auto renamed = backRenameMap.FindPtr(field)) {
+                    field = *renamed;
+                }
+
+                TStringBuf part1;
+                TStringBuf part2;
+                SplitTableName(field, part1, part2);
+                inputs[node.Get()] = {*labels.FindInputIndex(part1)};
+            } else if (node.Get() == &row) {
+                // non-Member usage of row struct
+                memberOnly = false;
+            } else {
+                TSet<ui32> usedInputs;
+                for (const auto& child : node->Children()) {
+                    auto& childUsedInputs = inputs[child.Get()];
+                    usedInputs.insert(childUsedInputs.begin(), childUsedInputs.end());
+                }
+                inputs[node.Get()] = std::move(usedInputs);
+            }
+
+            return true;
+        }
+    );
+
+    return memberOnly;
 }
 
 bool IsCachedJoinOption(TStringBuf name) {
@@ -2097,6 +2169,71 @@ void GetPruneKeysColumnsForJoinLeaves(const TCoEquiJoinTuple& joinTree, THashMap
             }
         }
     }
+}
+
+TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabels& labels, const THashMap<TStringBuf, THashSet<TStringBuf>>& keyColumnsByLabel, TExprContext& ctx) {
+    const auto& joinType = joinTree->Child(TCoEquiJoinTuple::idx_Type)->Content();
+    auto settings = GetEquiJoinLinkSettings(*joinTree->Child(TCoEquiJoinTuple::idx_Options));
+    bool settingsChanged = false;
+
+    auto canDropAny = [&](const TStringBuf& label, const TStringBuf& joinType, bool leftSide) {
+        auto input = labels.FindInput(label);
+        YQL_ENSURE(input.Defined());
+
+        auto it = keyColumnsByLabel.find(label);
+        YQL_ENSURE(it != keyColumnsByLabel.end());
+        auto& keyColumns = it->second;
+
+        if ((*input)->Distinct && (*input)->Distinct->ContainsCompleteSet({keyColumns.begin(), keyColumns.end()})) {
+            return true;
+        }
+
+        if ((*input)->Unique && (*input)->Unique->ContainsCompleteSet({keyColumns.begin(), keyColumns.end()})) {
+            if (joinType == "Inner" ||
+                (
+                    leftSide
+                    ? (joinType == "Right" || joinType == "RightSemi" || joinType == "RightOnly")
+                    : (joinType == "Left" || joinType == "LeftSemi" || joinType == "LeftOnly")
+                )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    auto left = joinTree->ChildPtr(TCoEquiJoinTuple::idx_LeftScope);
+    if (!left->IsAtom()) {
+        auto newLeaf = DropAnyOverJoinInputs(left, labels, keyColumnsByLabel, ctx);
+        if (newLeaf != left) {
+            joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_LeftScope, std::move(newLeaf));
+        }
+    } else {
+        if (settings.LeftHints.contains("any") && canDropAny(left->Content(), joinType, true)) {
+            settings.LeftHints.erase("any");
+            settingsChanged = true;
+        }
+    }
+
+    auto right = joinTree->ChildPtr(TCoEquiJoinTuple::idx_RightScope);
+    if (!right->IsAtom()) {
+        auto newLeaf = DropAnyOverJoinInputs(right, labels, keyColumnsByLabel, ctx);
+        if (newLeaf != right) {
+            joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_RightScope, std::move(newLeaf));
+        }
+    } else {
+        if (settings.RightHints.contains("any") && canDropAny(right->Content(), joinType, false)) {
+            settings.RightHints.erase("any");
+            settingsChanged = true;
+        }
+    }
+
+    if (settingsChanged) {
+        joinTree = ctx.ChangeChild(*joinTree, TCoEquiJoinTuple::idx_Options, BuildEquiJoinLinkSettings(settings, ctx));
+    }
+
+    return joinTree;
 }
 
 } // namespace NYql

@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet_1",
-                "PlanNodeId": 14,
+                "PlanNodeId": 12,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 12
+                                        "ExternalPlanNodeId": 10
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 13,
+                        "PlanNodeId": 11,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 12,
+                                "PlanNodeId": 10,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -60,7 +60,7 @@
                                                         "InternalOperatorId": 3
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 10
+                                                        "ExternalPlanNodeId": 8
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -71,11 +71,11 @@
                                                 "ToFlow": "precompute"
                                             }
                                         ],
-                                        "PlanNodeId": 11,
+                                        "PlanNodeId": 9,
                                         "Plans": [
                                             {
                                                 "Node Type": "Broadcast",
-                                                "PlanNodeId": 10,
+                                                "PlanNodeId": 8,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -84,28 +84,28 @@
                                                             {
                                                                 "Inputs": [
                                                                     {
-                                                                        "ExternalPlanNodeId": 8
+                                                                        "ExternalPlanNodeId": 6
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
                                                                 "Predicate": "Exist(item.id)"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 9,
+                                                        "PlanNodeId": 7,
                                                         "Plans": [
                                                             {
                                                                 "Columns": [
                                                                     "id"
                                                                 ],
-                                                                "E-Cost": "No estimate",
-                                                                "E-Rows": "No estimate",
-                                                                "E-Size": "No estimate",
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
                                                                 "LookupKeyColumns": [
                                                                     "id"
                                                                 ],
                                                                 "Node Type": "TableLookup",
                                                                 "Path": "/Root/postgres_jointest/join3.test_plan/qa",
-                                                                "PlanNodeId": 8,
+                                                                "PlanNodeId": 6,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
@@ -127,7 +127,7 @@
                                                                                 "Name": "PartitionByKey"
                                                                             }
                                                                         ],
-                                                                        "PlanNodeId": 7
+                                                                        "PlanNodeId": 5
                                                                     }
                                                                 ],
                                                                 "Table": "postgres_jointest/join3.test_plan/qa"
@@ -147,48 +147,32 @@
             {
                 "Node Type": "Precompute_0",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 5,
+                "PlanNodeId": 3,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
                         "Node Type": "Collect",
-                        "PlanNodeId": 4,
+                        "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 3,
-                                "PlanNodeType": "Connection",
-                                "Plans": [
+                                "Node Type": "TableFullScan",
+                                "Operators": [
                                     {
-                                        "Node Type": "Collect",
-                                        "PlanNodeId": 2,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "TableFullScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "Path": "/Root/postgres_jointest/join3.test_plan/qb",
-                                                        "ReadColumns": [
-                                                            "a_id",
-                                                            "id"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "id (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadRangesPointPrefixLen": "0",
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/join3.test_plan/qb"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Tables": [
-                                                    "postgres_jointest/join3.test_plan/qb"
-                                                ]
-                                            }
-                                        ]
+                                        "Inputs": [],
+                                        "Name": "TableFullScan",
+                                        "Path": "/Root/postgres_jointest/join3.test_plan/qb",
+                                        "ReadColumns": [
+                                            "id (-\u221e, +\u221e)",
+                                            "a_id"
+                                        ],
+                                        "ReadRangesPointPrefixLen": "0",
+                                        "Scan": "Parallel",
+                                        "Table": "postgres_jointest/join3.test_plan/qb"
                                     }
+                                ],
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "postgres_jointest/join3.test_plan/qb"
                                 ]
                             }
                         ]

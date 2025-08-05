@@ -15,9 +15,10 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher
     ydb/core/testlib
     ydb/core/testlib/actors
+    ydb/library/testlib/pq_helpers
+    ydb/library/yql/providers/pq/gateway/dummy
     ydb/tests/fq/pq_async_io
     yql/essentials/sql/pg_dummy
-    ydb/library/yql/providers/pq/gateway/dummy
 )
 
 SIZE(MEDIUM)

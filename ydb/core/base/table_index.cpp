@@ -192,7 +192,7 @@ bool IsBuildImplTable(std::string_view tableName) {
 
 static constexpr TClusterId PostingParentFlag = (1ull << 63ull);
 
-// Note: if cluster id is too big, something is wrong with cluster enumeration 
+// Note: if cluster id is too big, something is wrong with cluster enumeration
 void EnsureNoPostingParentFlag(TClusterId parent) {
     Y_ENSURE((parent & PostingParentFlag) == 0);
 }
@@ -212,6 +212,27 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& 
     return result;
 }
 
+TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // clusters are not human readable and can be large like 100Kb+
+    copy.ClearClusters();
+    result << copy.ShortDebugString();
+    result << " Clusters: " << record.ClustersSize();
+    return result;
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansResponse& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // clusters are not human readable and can be large like 100Kb+
+    copy.ClearClusters();
+    copy.ClearClusterSizes();
+    result << copy.ShortDebugString();
+    result << " Clusters: " << record.ClustersSize();
+    return result;
+}
+
 TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record) {
     auto copy = record;
     TStringBuilder result;
@@ -220,6 +241,14 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record)
     result << copy.ShortDebugString();
     result << " Rows: " << record.RowsSize();
     return result;
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexResponse& record) {
+    auto copy = record;
+    // keys are not human readable and contain user data
+    copy.ClearFirstIndexKey();
+    copy.ClearLastIndexKey();
+    return copy.ShortDebugString();
 }
 
 }

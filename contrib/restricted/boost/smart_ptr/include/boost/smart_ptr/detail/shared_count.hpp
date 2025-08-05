@@ -536,7 +536,7 @@ public:
 
     ~weak_count() /*noexcept*/
     {
-        if(pi_ != 0) pi_->weak_release();
+        if(pi_ != 0) pi_->weak_release(); // NOLINT
 #if defined(BOOST_SP_ENABLE_DEBUG_HOOKS)
         id_ = 0;
 #endif

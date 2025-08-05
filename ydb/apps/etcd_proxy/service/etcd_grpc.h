@@ -15,8 +15,8 @@ class TEtcdServiceBase
     : public NYdbGrpc::TGrpcServiceBase<TService>
 {
 public:
-    TEtcdServiceBase(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId watchtower, TSharedStuff::TPtr stuff)
-        : ActorSystem(actorSystem), Counters(std::move(counters)), Watchtower(std::move(watchtower)), Stuff(std::move(stuff))
+    TEtcdServiceBase(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId serviceActor, TSharedStuff::TPtr stuff)
+        : ActorSystem(actorSystem), Counters(std::move(counters)), ServiceActor(std::move(serviceActor)), Stuff(std::move(stuff))
     {
         if (!Stuff->ActorSystem)
             Stuff->ActorSystem = ActorSystem;
@@ -31,7 +31,7 @@ private:
 
     NActors::TActorSystem *const ActorSystem;
     const TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    const NActors::TActorId Watchtower;
+    const NActors::TActorId ServiceActor;
     const TSharedStuff::TPtr Stuff;
     grpc::ServerCompletionQueue* CQ = nullptr;
 };

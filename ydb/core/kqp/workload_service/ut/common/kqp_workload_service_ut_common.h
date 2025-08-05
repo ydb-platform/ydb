@@ -76,7 +76,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
     FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
     FLUENT_SETTING(NKikimrConfig::TWorkloadManagerConfig, WorkloadManagerConfig);
-    
+
 
     // Default pool settings
     FLUENT_SETTING_DEFAULT(TString, PoolId, "sample_pool_id");
@@ -127,6 +127,10 @@ public:
     virtual TTestActorRuntime* GetRuntime() const = 0;
     virtual const TYdbSetupSettings& GetSettings() const = 0;
     static void WaitFor(TDuration timeout, TString description, std::function<bool(TString&)> callback);
+
+    virtual TLocalPathId GetDedicatedTenantPathId() const = 0;
+    virtual TLocalPathId GetSharedTenantPathId() const = 0;
+    virtual TLocalPathId GetServerlessTenantPathId() const = 0;
 };
 
 // Test queries

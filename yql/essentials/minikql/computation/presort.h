@@ -22,8 +22,8 @@ public:
     void AddType(NUdf::EDataSlot slot, bool isOptional = false, bool isDesc = false);
 
 protected:
-    size_t Current = 0;
-    TVector<TTypeInfo> Types;
+    size_t Current_ = 0;
+    TVector<TTypeInfo> Types_;
 };
 
 class TPresortEncoder : public TPresortCodec {
@@ -36,7 +36,7 @@ public:
     TStringBuf Finish(); // user must copy
 
 private:
-    TVector<ui8> Output;
+    TVector<ui8> Output_;
 };
 
 class TPresortDecoder : public TPresortCodec {
@@ -48,8 +48,8 @@ public:
     void Finish();
 
 private:
-    TVector<ui8> Buffer;
-    TStringBuf Input;
+    TVector<ui8> Buffer_;
+    TStringBuf Input_;
 };
 
 class THolderFactory;
@@ -60,9 +60,9 @@ public:
     TStringBuf Encode(const NUdf::TUnboxedValue& value, bool desc); // user must copy
     NUdf::TUnboxedValue Decode(TStringBuf buf, bool desc, const THolderFactory& factory);
 private:
-    TType* Type;
-    TVector<ui8> Output;
-    TVector<ui8> Buffer;
+    TType* Type_;
+    TVector<ui8> Output_;
+    TVector<ui8> Buffer_;
 };
 
 } // NMiniKQL

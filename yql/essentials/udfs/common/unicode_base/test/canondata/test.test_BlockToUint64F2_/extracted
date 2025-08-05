@@ -3,6 +3,6 @@
     <tmp_path>/program.sql:<main>:10:1: Error: Execution of node: YtMap!
     	SELECT
 	^
-        <tmp_path>/program.sql:<main>:10:1: Error: Converted value falls out of Uint64 range
-        	SELECT
-	^
+        <tmp_path>/program.sql:<main>:14:14: Error: Converted value falls out of Uint64 range
+        	    Unicode::ToUint64(value),
+	             ^

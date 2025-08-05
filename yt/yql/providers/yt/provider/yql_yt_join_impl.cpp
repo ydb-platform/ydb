@@ -2783,7 +2783,7 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
         chopperSwitch = Build<TCoLambda>(ctx, pos)
             .Args({"key", "item"})
             .Body<TYtIsKeySwitch>()
-                .DependsOn()
+                .DependsOn<TCoDependsOn>()
                     .Input("item")
                 .Build()
             .Build()
@@ -5212,6 +5212,9 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
     if (!HasSetting(*joinSettings, "cbo_passed") && op.CostBasedOptPassed) {
         joinSettings = AddSetting(*joinSettings, joinSettings->Pos(), "cbo_passed", {}, ctx);
     }
+    if (sections.size() < equiJoin.Input().Size()) {
+        joinSettings = RemoveSetting(*joinSettings, "prune_keys_added", ctx);
+    }
 
     auto outItemType = GetSequenceItemType(equiJoin.Pos(),
                                            equiJoin.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1],
@@ -5239,6 +5242,19 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
     children.reserve(children.size() + premaps.size());
     std::transform(premaps.cbegin(), premaps.cend(), std::back_inserter(children), std::bind(&TExprBase::Ptr, std::placeholders::_1));
     return TExprBase(ctx.ChangeChildren(join.Ref(), std::move(children)));
+}
+
+bool AreJoinInputsReady(const TYtEquiJoin& equiJoin) {
+    for (auto section: equiJoin.Input()) {
+        for (auto path: section.Paths()) {
+            TYtPathInfo pathInfo(path);
+            if (!pathInfo.Table->Stat) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 }

@@ -429,6 +429,30 @@ public:
             default: return StateCommon(ev);
         }
     }
+
+    TActorId BridgeProxyId;
+
+    STFUNC(StateForward) {
+        switch (ev->GetTypeRewrite()) {
+            case TEvents::TSystem::Poison:
+                PassAway();
+                [[fallthrough]];
+            case TEvBlobStorage::EvConfigureProxy:
+            case TEvBlobStorage::EvPut:
+            case TEvBlobStorage::EvGet:
+            case TEvBlobStorage::EvGetBlock:
+            case TEvBlobStorage::EvBlock:
+            case TEvBlobStorage::EvDiscover:
+            case TEvBlobStorage::EvRange:
+            case TEvBlobStorage::EvCollectGarbage:
+            case TEvBlobStorage::EvStatus:
+            case TEvBlobStorage::EvPatch:
+            case TEvBlobStorage::EvAssimilate:
+            case TEvBlobStorage::EvCheckIntegrity:
+                TActivationContext::Send(IEventHandle::Forward(ev, BridgeProxyId));
+                break;
+        }
+    }
 };
 
 }

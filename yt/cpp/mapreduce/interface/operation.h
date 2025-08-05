@@ -2359,6 +2359,7 @@ enum class EOperationAttribute : int
     Spec              /* "spec" */,
     FullSpec          /* "full_spec" */,
     UnrecognizedSpec  /* "unrecognized_spec" */,
+    Alerts            /* "alerts" */,
 };
 
 ///
@@ -3320,6 +3321,10 @@ struct IOperation
     ///
     /// @return `Nothing()` if operation has no running jobs yet, e.g. when it is in "materializing" or "pending" state.
     virtual TMaybe<TOperationBriefProgress> GetBriefProgress() = 0;
+
+    ///
+    /// Get operation alerts.
+    virtual TMaybe<THashMap<TString, TYtError>> GetAlerts() = 0;
 
     ///
     /// @brief Abort operation.

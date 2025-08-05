@@ -197,10 +197,10 @@ void ReportError(TExprContext& ctx, const TIssue& issue);
 class TTypeAnnotationNode {
 protected:
     TTypeAnnotationNode(ETypeAnnotationKind kind, ui32 flags, ui64 hash, ui64 usedPgExtensions)
-        : Kind(kind)
-        , Flags(flags)
-        , Hash(hash)
-        , UsedPgExtensions(usedPgExtensions)
+        : Kind_(kind)
+        , Flags_(flags)
+        , Hash_(hash)
+        , UsedPgExtensions_(usedPgExtensions)
     {
     }
 
@@ -231,7 +231,7 @@ public:
     }
 
     ETypeAnnotationKind GetKind() const {
-        return Kind;
+        return Kind_;
     }
 
     bool ReturnsWorld() const;
@@ -322,15 +322,15 @@ public:
     }
 
     ui32 GetFlags() const {
-        return Flags;
+        return Flags_;
     }
 
     ui64 GetHash() const {
-        return Hash;
+        return Hash_;
     }
 
     ui64 GetUsedPgExtensions() const {
-        return UsedPgExtensions;
+        return UsedPgExtensions_;
     }
 
     bool Equals(const TTypeAnnotationNode& node) const;
@@ -354,6 +354,8 @@ public:
 
     typedef std::vector<const TTypeAnnotationNode*> TListType;
     typedef std::span<const TTypeAnnotationNode*> TSpanType;
+    typedef std::span<const TTypeAnnotationNode* const> TConstSpanType;
+
 protected:
     template <typename T>
     static ui32 CombineFlags(const T& items) {
@@ -376,10 +378,10 @@ protected:
     }
 
 private:
-    const ETypeAnnotationKind Kind;
-    const ui32 Flags;
-    const ui64 Hash;
-    const ui64 UsedPgExtensions;
+    const ETypeAnnotationKind Kind_;
+    const ui32 Flags_;
+    const ui64 Hash_;
+    const ui64 UsedPgExtensions_;
 };
 
 class TUnitExprType : public TTypeAnnotationNode {
@@ -408,7 +410,7 @@ public:
 
     TTupleExprType(ui64 hash, const TTypeAnnotationNode::TListType& items)
         : TTypeAnnotationNode(KindValue, CombineFlags(items), hash, CombinePgExtensions(items))
-        , Items(items)
+        , Items_(items)
     {
     }
 
@@ -423,11 +425,11 @@ public:
     }
 
     size_t GetSize() const {
-        return Items.size();
+        return Items_.size();
     }
 
     const TTypeAnnotationNode::TListType& GetItems() const {
-        return Items;
+        return Items_;
     }
 
     bool operator==(const TTupleExprType& other) const {
@@ -448,7 +450,7 @@ public:
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
 private:
-    TTypeAnnotationNode::TListType Items;
+    TTypeAnnotationNode::TListType Items_;
 };
 
 class TMultiExprType : public TTypeAnnotationNode {
@@ -457,7 +459,7 @@ public:
 
     TMultiExprType(ui64 hash, const TTypeAnnotationNode::TListType& items)
         : TTypeAnnotationNode(KindValue, CombineFlags(items), hash, CombinePgExtensions(items))
-        , Items(items)
+        , Items_(items)
     {
     }
 
@@ -472,11 +474,11 @@ public:
     }
 
     size_t GetSize() const {
-        return Items.size();
+        return Items_.size();
     }
 
     const TTypeAnnotationNode::TListType& GetItems() const {
-        return Items;
+        return Items_;
     }
 
     bool operator==(const TMultiExprType& other) const {
@@ -497,7 +499,7 @@ public:
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
 private:
-    TTypeAnnotationNode::TListType Items;
+    TTypeAnnotationNode::TListType Items_;
 };
 
 struct TExprContext;
@@ -512,8 +514,8 @@ public:
 
     TItemExprType(ui64 hash, const TStringBuf& name, const TTypeAnnotationNode* itemType)
         : TTypeAnnotationNode(KindValue, itemType->GetFlags(), hash, itemType->GetUsedPgExtensions())
-        , Name(name)
-        , ItemType(itemType)
+        , Name_(name)
+        , ItemType_(itemType)
     {
     }
 
@@ -528,13 +530,13 @@ public:
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
     const TStringBuf& GetName() const {
-        return Name;
+        return Name_;
     }
 
     TStringBuf GetCleanName(bool isVirtual) const;
 
     const TTypeAnnotationNode* GetItemType() const {
-        return ItemType;
+        return ItemType_;
     }
 
     bool operator==(const TItemExprType& other) const {
@@ -544,8 +546,8 @@ public:
     const TItemExprType* GetCleanItem(bool isVirtual, TExprContext& ctx) const;
 
 private:
-    const TStringBuf Name;
-    const TTypeAnnotationNode* ItemType;
+    const TStringBuf Name_;
+    const TTypeAnnotationNode* ItemType_;
 };
 
 class TStructExprType : public TTypeAnnotationNode {
@@ -568,7 +570,7 @@ public:
 
     TStructExprType(ui64 hash, const TVector<const TItemExprType*>& items)
         : TTypeAnnotationNode(KindValue, TypeNonComparable | CombineFlags(items), hash, CombinePgExtensions(items))
-        , Items(items)
+        , Items_(items)
     {
     }
 
@@ -587,20 +589,20 @@ public:
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
     size_t GetSize() const {
-        return Items.size();
+        return Items_.size();
     }
 
     const TVector<const TItemExprType*>& GetItems() const {
-        return Items;
+        return Items_;
     }
 
     TMaybe<ui32> FindItem(const TStringBuf& name) const {
-        auto it = LowerBound(Items.begin(), Items.end(), name, TItemLess());
-        if (it == Items.end() || (*it)->GetName() != name) {
+        auto it = LowerBound(Items_.begin(), Items_.end(), name, TItemLess());
+        if (it == Items_.end() || (*it)->GetName() != name) {
             return TMaybe<ui32>();
         }
 
-        return it - Items.begin();
+        return it - Items_.begin();
     }
 
     TMaybe<ui32> FindItemI(const TStringBuf& name, bool* isVirtual) const {
@@ -616,8 +618,8 @@ public:
             }
 
             TMaybe<ui32> ret;
-            for (ui32 i = 0; i < Items.size(); ++i) {
-                if (AsciiEqualsIgnoreCase(nameToSearch, Items[i]->GetName())) {
+            for (ui32 i = 0; i < Items_.size(); ++i) {
+                if (AsciiEqualsIgnoreCase(nameToSearch, Items_[i]->GetName())) {
                     if (ret) {
                         return Nothing();
                     }
@@ -635,8 +637,8 @@ public:
     }
 
     const TTypeAnnotationNode* FindItemType(const TStringBuf& name) const {
-        const auto it = LowerBound(Items.begin(), Items.end(), name, TItemLess());
-        if (it == Items.end() || (*it)->GetName() != name) {
+        const auto it = LowerBound(Items_.begin(), Items_.end(), name, TItemLess());
+        if (it == Items_.end() || (*it)->GetName() != name) {
             return nullptr;
         }
 
@@ -644,7 +646,7 @@ public:
     }
 
     TMaybe<TStringBuf> FindMistype(const TStringBuf& name) const {
-        for (const auto& item: Items) {
+        for (const auto& item: Items_) {
             if (NLevenshtein::Distance(name, item->GetName()) < DefaultMistypeDistance) {
                 return item->GetName();
             }
@@ -670,9 +672,9 @@ public:
     TString ToString() const {
         TStringBuilder sb;
 
-        for (std::size_t i = 0; i < Items.size(); i++) {
-            sb << i << ": " << Items[i]->GetName() << "(" << FormatType(Items[i]->GetItemType()) << ")";
-            if (i != Items.size() - 1) {
+        for (std::size_t i = 0; i < Items_.size(); i++) {
+            sb << i << ": " << Items_[i]->GetName() << "(" << FormatType(Items_[i]->GetItemType()) << ")";
+            if (i != Items_.size() - 1) {
                 sb << ", ";
             }
         }
@@ -681,7 +683,7 @@ public:
     }
 
 private:
-    TVector<const TItemExprType*> Items;
+    TVector<const TItemExprType*> Items_;
 };
 
 class TListExprType : public TTypeAnnotationNode {
@@ -690,7 +692,7 @@ public:
 
     TListExprType(ui64 hash, const TTypeAnnotationNode* itemType)
         : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeHasDynamicSize, hash, itemType->GetUsedPgExtensions())
-        , ItemType(itemType)
+        , ItemType_(itemType)
     {
     }
 
@@ -700,7 +702,7 @@ public:
     }
 
     const TTypeAnnotationNode* GetItemType() const {
-        return ItemType;
+        return ItemType_;
     }
 
     bool operator==(const TListExprType& other) const {
@@ -708,7 +710,7 @@ public:
     }
 
 private:
-    const TTypeAnnotationNode* ItemType;
+    const TTypeAnnotationNode* ItemType_;
 };
 
 class TStreamExprType : public TTypeAnnotationNode {
@@ -717,7 +719,7 @@ public:
 
     TStreamExprType(ui64 hash, const TTypeAnnotationNode* itemType)
         : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash, itemType->GetUsedPgExtensions())
-        , ItemType(itemType)
+        , ItemType_(itemType)
     {
     }
 
@@ -727,7 +729,7 @@ public:
     }
 
     const TTypeAnnotationNode* GetItemType() const {
-        return ItemType;
+        return ItemType_;
     }
 
     bool operator==(const TStreamExprType& other) const {
@@ -735,7 +737,7 @@ public:
     }
 
 private:
-    const TTypeAnnotationNode* ItemType;
+    const TTypeAnnotationNode* ItemType_;
 };
 
 class TFlowExprType : public TTypeAnnotationNode {
@@ -744,7 +746,7 @@ public:
 
     TFlowExprType(ui64 hash, const TTypeAnnotationNode* itemType)
         : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash, itemType->GetUsedPgExtensions())
-        , ItemType(itemType)
+        , ItemType_(itemType)
     {
     }
 
@@ -754,7 +756,7 @@ public:
     }
 
     const TTypeAnnotationNode* GetItemType() const {
-        return ItemType;
+        return ItemType_;
     }
 
     bool operator==(const TFlowExprType& other) const {
@@ -762,7 +764,7 @@ public:
     }
 
 private:
-    const TTypeAnnotationNode* ItemType;
+    const TTypeAnnotationNode* ItemType_;
 };
 
 class TBlockExprType : public TTypeAnnotationNode {
@@ -771,7 +773,7 @@ public:
 
     TBlockExprType(ui64 hash, const TTypeAnnotationNode* itemType)
         : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash, itemType->GetUsedPgExtensions())
-        , ItemType(itemType)
+        , ItemType_(itemType)
     {
     }
 
@@ -781,7 +783,7 @@ public:
     }
 
     const TTypeAnnotationNode* GetItemType() const {
-        return ItemType;
+        return ItemType_;
     }
 
     bool operator==(const TBlockExprType& other) const {
@@ -789,7 +791,7 @@ public:
     }
 
 private:
-    const TTypeAnnotationNode* ItemType;
+    const TTypeAnnotationNode* ItemType_;
 };
 
 class TScalarExprType : public TTypeAnnotationNode {
@@ -798,7 +800,7 @@ public:
 
     TScalarExprType(ui64 hash, const TTypeAnnotationNode* itemType)
         : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash, itemType->GetUsedPgExtensions())
-        , ItemType(itemType)
+        , ItemType_(itemType)
     {
     }
 
@@ -808,7 +810,7 @@ public:
     }
 
     const TTypeAnnotationNode* GetItemType() const {
-        return ItemType;
+        return ItemType_;
     }
 
     bool operator==(const TScalarExprType& other) const {
@@ -816,7 +818,7 @@ public:
     }
 
 private:
-    const TTypeAnnotationNode* ItemType;
+    const TTypeAnnotationNode* ItemType_;
 };
 
 class TDataExprType : public TTypeAnnotationNode {
@@ -825,7 +827,7 @@ public:
 
     TDataExprType(ui64 hash, EDataSlot slot)
         : TTypeAnnotationNode(KindValue, GetFlags(slot), hash, 0)
-        , Slot(slot)
+        , Slot_(slot)
     {
     }
 
@@ -864,25 +866,25 @@ public:
     }
 
     EDataSlot GetSlot() const {
-        return Slot;
+        return Slot_;
     }
 
     TStringBuf GetName() const {
-        return NUdf::GetDataTypeInfo(Slot).Name;
+        return NUdf::GetDataTypeInfo(Slot_).Name;
     }
 
     bool operator==(const TDataExprType& other) const {
-        return Slot == other.Slot;
+        return Slot_ == other.Slot_;
     }
 
 private:
-    EDataSlot Slot;
+    EDataSlot Slot_;
 };
 
 class TDataExprParamsType : public TDataExprType {
 public:
     TDataExprParamsType(ui64 hash, EDataSlot slot, const TStringBuf& one, const TStringBuf& two)
-        : TDataExprType(hash, slot), One(one), Two(two)
+        : TDataExprType(hash, slot), One_(one), Two_(two)
     {}
 
     static ui64 MakeHash(EDataSlot slot, const TStringBuf& one, const TStringBuf& two) {
@@ -895,11 +897,11 @@ public:
     }
 
     const TStringBuf& GetParamOne() const {
-        return One;
+        return One_;
     }
 
     const TStringBuf& GetParamTwo() const {
-        return Two;
+        return Two_;
     }
 
     bool operator==(const TDataExprParamsType& other) const {
@@ -910,7 +912,7 @@ public:
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
 private:
-    const TStringBuf One, Two;
+    const TStringBuf One_, Two_;
 };
 
 class TPgExprType : public TTypeAnnotationNode {
@@ -920,7 +922,7 @@ public:
     // TODO: TypeHasDynamicSize for Pg types
     TPgExprType(ui64 hash, ui32 typeId)
         : TTypeAnnotationNode(KindValue, GetFlags(typeId), hash, GetPgExtensionsMask(typeId))
-        , TypeId(typeId)
+        , TypeId_(typeId)
     {
     }
 
@@ -932,11 +934,11 @@ public:
     const TString& GetName() const;
 
     ui32 GetId() const {
-        return TypeId;
+        return TypeId_;
     }
 
     bool operator==(const TPgExprType& other) const {
-        return TypeId == other.TypeId;
+        return TypeId_ == other.TypeId_;
     }
 
 private:
@@ -944,7 +946,7 @@ private:
     ui64 GetPgExtensionsMask(ui32 typeId);
 
 private:
-    ui32 TypeId;
+    ui32 TypeId_;
 };
 
 ui64 MakePgExtensionMask(ui32 extensionIndex);
@@ -975,7 +977,7 @@ public:
 
     TOptionalExprType(ui64 hash, const TTypeAnnotationNode* itemType)
         : TTypeAnnotationNode(KindValue, GetFlags(itemType), hash, itemType->GetUsedPgExtensions())
-        , ItemType(itemType)
+        , ItemType_(itemType)
     {
     }
 
@@ -998,7 +1000,7 @@ public:
     }
 
     const TTypeAnnotationNode* GetItemType() const {
-        return ItemType;
+        return ItemType_;
     }
 
     bool operator==(const TOptionalExprType& other) const {
@@ -1006,7 +1008,7 @@ public:
     }
 
 private:
-    const TTypeAnnotationNode* ItemType;
+    const TTypeAnnotationNode* ItemType_;
 };
 
 class TVariantExprType : public TTypeAnnotationNode {
@@ -1015,7 +1017,7 @@ public:
 
     TVariantExprType(ui64 hash, const TTypeAnnotationNode* underlyingType)
         : TTypeAnnotationNode(KindValue, MakeFlags(underlyingType), hash, underlyingType->GetUsedPgExtensions())
-        , UnderlyingType(underlyingType)
+        , UnderlyingType_(underlyingType)
     {
     }
 
@@ -1025,7 +1027,7 @@ public:
     }
 
     const TTypeAnnotationNode* GetUnderlyingType() const {
-        return UnderlyingType;
+        return UnderlyingType_;
     }
 
     bool operator==(const TVariantExprType& other) const {
@@ -1038,7 +1040,7 @@ public:
     static ui32 MakeFlags(const TTypeAnnotationNode* underlyingType);
 
 private:
-    const TTypeAnnotationNode* UnderlyingType;
+    const TTypeAnnotationNode* UnderlyingType_;
 };
 
 class TTypeExprType : public TTypeAnnotationNode {
@@ -1047,7 +1049,7 @@ public:
 
     TTypeExprType(ui64 hash, const TTypeAnnotationNode* type)
         : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeNonComputable | (type->GetFlags() & TypeHasError), hash, 0)
-        , Type(type)
+        , Type_(type)
     {
     }
 
@@ -1057,7 +1059,7 @@ public:
     }
 
     const TTypeAnnotationNode* GetType() const {
-        return Type;
+        return Type_;
     }
 
     bool operator==(const TTypeExprType& other) const {
@@ -1065,7 +1067,7 @@ public:
     }
 
 private:
-    const TTypeAnnotationNode* Type;
+    const TTypeAnnotationNode* Type_;
 };
 
 class TDictExprType : public TTypeAnnotationNode {
@@ -1076,8 +1078,8 @@ public:
         : TTypeAnnotationNode(KindValue, TypeNonComparable | TypeHasDynamicSize |
                               keyType->GetFlags() | payloadType->GetFlags(), hash,
                               keyType->GetUsedPgExtensions() | payloadType->GetUsedPgExtensions())
-        , KeyType(keyType)
-        , PayloadType(payloadType)
+        , KeyType_(keyType)
+        , PayloadType_(payloadType)
     {
     }
 
@@ -1090,11 +1092,11 @@ public:
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
     const TTypeAnnotationNode* GetKeyType() const {
-        return KeyType;
+        return KeyType_;
     }
 
     const TTypeAnnotationNode* GetPayloadType() const {
-        return PayloadType;
+        return PayloadType_;
     }
 
     bool operator==(const TDictExprType& other) const {
@@ -1103,8 +1105,8 @@ public:
     }
 
 private:
-    const TTypeAnnotationNode* KeyType;
-    const TTypeAnnotationNode* PayloadType;
+    const TTypeAnnotationNode* KeyType_;
+    const TTypeAnnotationNode* PayloadType_;
 };
 
 class TVoidExprType : public TTypeAnnotationNode {
@@ -1166,15 +1168,15 @@ public:
     TCallableExprType(ui64 hash, const TTypeAnnotationNode* returnType, const TVector<TArgumentInfo>& arguments
         , size_t optionalArgumentsCount, const TStringBuf& payload)
         : TTypeAnnotationNode(KindValue, MakeFlags(arguments, returnType), hash, returnType->GetUsedPgExtensions())
-        , ReturnType(returnType)
-        , Arguments(arguments)
-        , OptionalArgumentsCount(optionalArgumentsCount)
-        , Payload(payload)
+        , ReturnType_(returnType)
+        , Arguments_(arguments)
+        , OptionalArgumentsCount_(optionalArgumentsCount)
+        , Payload_(payload)
     {
-        for (ui32 i = 0; i < Arguments.size(); ++i) {
-            const auto& arg = Arguments[i];
+        for (ui32 i = 0; i < Arguments_.size(); ++i) {
+            const auto& arg = Arguments_[i];
             if (!arg.Name.empty()) {
-                IndexByName.insert({ arg.Name, i });
+                IndexByName_.insert({ arg.Name, i });
             }
         }
     }
@@ -1198,23 +1200,23 @@ public:
     }
 
     const TTypeAnnotationNode* GetReturnType() const {
-        return ReturnType;
+        return ReturnType_;
     }
 
     size_t GetOptionalArgumentsCount() const {
-        return OptionalArgumentsCount;
+        return OptionalArgumentsCount_;
     }
 
     const TStringBuf& GetPayload() const {
-        return Payload;
+        return Payload_;
     }
 
     size_t GetArgumentsSize() const {
-        return Arguments.size();
+        return Arguments_.size();
     }
 
     const TVector<TArgumentInfo>& GetArguments() const {
-        return Arguments;
+        return Arguments_;
     }
 
     bool operator==(const TCallableExprType& other) const {
@@ -1243,8 +1245,8 @@ public:
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
     TMaybe<ui32> ArgumentIndexByName(const TStringBuf& name) const {
-        auto it = IndexByName.find(name);
-        if (it == IndexByName.end()) {
+        auto it = IndexByName_.find(name);
+        if (it == IndexByName_.end()) {
             return {};
         }
 
@@ -1263,11 +1265,11 @@ private:
     }
 
 private:
-    const TTypeAnnotationNode* ReturnType;
-    TVector<TArgumentInfo> Arguments;
-    const size_t OptionalArgumentsCount;
-    const TStringBuf Payload;
-    THashMap<TStringBuf, ui32> IndexByName;
+    const TTypeAnnotationNode* ReturnType_;
+    TVector<TArgumentInfo> Arguments_;
+    const size_t OptionalArgumentsCount_;
+    const TStringBuf Payload_;
+    THashMap<TStringBuf, ui32> IndexByName_;
 };
 
 class TGenericExprType : public TTypeAnnotationNode {
@@ -1295,7 +1297,7 @@ public:
 
     TResourceExprType(ui64 hash, const TStringBuf& tag)
         : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeHasManyValues, hash, 0)
-        , Tag(tag)
+        , Tag_(tag)
     {}
 
     static ui64 MakeHash(const TStringBuf& tag) {
@@ -1305,15 +1307,15 @@ public:
     }
 
     const TStringBuf& GetTag() const {
-        return Tag;
+        return Tag_;
     }
 
     bool operator==(const TResourceExprType& other) const {
-        return Tag == other.Tag;
+        return Tag_ == other.Tag_;
     }
 
 private:
-    const TStringBuf Tag;
+    const TStringBuf Tag_;
 };
 
 class TTaggedExprType : public TTypeAnnotationNode {
@@ -1322,8 +1324,8 @@ public:
 
     TTaggedExprType(ui64 hash, const TTypeAnnotationNode* baseType, const TStringBuf& tag)
         : TTypeAnnotationNode(KindValue, baseType->GetFlags(), hash, baseType->GetUsedPgExtensions())
-        , BaseType(baseType)
-        , Tag(tag)
+        , BaseType_(baseType)
+        , Tag_(tag)
     {}
 
     static ui64 MakeHash(const TTypeAnnotationNode* baseType, const TStringBuf& tag) {
@@ -1334,23 +1336,23 @@ public:
     }
 
     const TStringBuf& GetTag() const {
-        return Tag;
+        return Tag_;
     }
 
     const TTypeAnnotationNode* GetBaseType() const {
-        return BaseType;
+        return BaseType_;
     }
 
     bool operator==(const TTaggedExprType& other) const {
-        return Tag == other.Tag && GetBaseType() == other.GetBaseType();
+        return Tag_ == other.Tag_ && GetBaseType() == other.GetBaseType();
     }
 
     bool Validate(TPosition position, TExprContext& ctx) const;
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
 private:
-    const TTypeAnnotationNode* BaseType;
-    const TStringBuf Tag;
+    const TTypeAnnotationNode* BaseType_;
+    const TStringBuf Tag_;
 };
 
 class TErrorExprType : public TTypeAnnotationNode {
@@ -1359,7 +1361,7 @@ public:
 
     TErrorExprType(ui64 hash, const TIssue& error)
         : TTypeAnnotationNode(KindValue, TypeHasError, hash, 0)
-        , Error(error)
+        , Error_(error)
     {}
 
     static ui64 MakeHash(const TIssue& error) {
@@ -1367,15 +1369,15 @@ public:
     }
 
     const TIssue& GetError() const {
-        return Error;
+        return Error_;
     }
 
     bool operator==(const TErrorExprType& other) const {
-        return Error == other.Error;
+        return Error_ == other.Error_;
     }
 
 private:
-    const TIssue Error;
+    const TIssue Error_;
 };
 
 class TEmptyListExprType : public TTypeAnnotationNode {
@@ -1417,11 +1419,11 @@ public:
 };
 
 inline bool TTypeAnnotationNode::ReturnsWorld() const {
-    if (Kind == ETypeAnnotationKind::World) {
+    if (Kind_ == ETypeAnnotationKind::World) {
         return true;
     }
 
-    if (Kind == ETypeAnnotationKind::Tuple) {
+    if (Kind_ == ETypeAnnotationKind::Tuple) {
         auto tuple = static_cast<const TTupleExprType*>(this);
         if (tuple->GetSize() == 2 && tuple->GetItems()[0]->GetKind() == ETypeAnnotationKind::World) {
             return true;
@@ -1436,15 +1438,15 @@ inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
         return true;
     }
 
-    if (Hash != node.GetHash()) {
+    if (Hash_ != node.GetHash()) {
         return false;
     }
 
-    if (Kind != node.GetKind()) {
+    if (Kind_ != node.GetKind()) {
         return false;
     }
 
-    switch (Kind) {
+    switch (Kind_) {
     case ETypeAnnotationKind::Unit:
         return static_cast<const TUnitExprType&>(*this) == static_cast<const TUnitExprType&>(node);
 
@@ -1531,7 +1533,7 @@ inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
 }
 
 inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const {
-    switch (Kind) {
+    switch (Kind_) {
     case ETypeAnnotationKind::Unit:
         return visitor.Visit(static_cast<const TUnitExprType&>(*this));
     case ETypeAnnotationKind::Tuple:
@@ -1608,6 +1610,7 @@ public:
     typedef TIntrusivePtr<TExprNode> TPtr;
     typedef std::vector<TPtr> TListType;
     typedef TArrayRef<const TPtr> TChildrenType;
+    typedef std::span<const TPtr> TExprNodeSpan;
 
     struct TPtrHash : private std::hash<const TExprNode*> {
         size_t operator()(const TPtr& p) const {
@@ -1650,7 +1653,7 @@ public:
     };
 
     static TPtr GetResult(const TPtr& node) {
-        return node->Type() == Callable ? node->Result : node;
+        return node->Type() == Callable ? node->Result_ : node;
     }
 
     const TExprNode& GetResult() const {
@@ -1659,37 +1662,37 @@ public:
             return *this;
         }
 
-        YQL_ENSURE(Result);
-        return *Result;
+        YQL_ENSURE(Result_);
+        return *Result_;
     }
 
     bool HasResult() const {
         ENSURE_NOT_DELETED
-        return bool(Result);
+        return bool(Result_);
     }
 
     void SetResult(TPtr&& result) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Result = std::move(result);
+        Result_ = std::move(result);
     }
 
     const std::shared_ptr<TListType>& GetWorldLinks() const {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        return WorldLinks;
+        return WorldLinks_;
     }
 
     std::shared_ptr<TListType>& GetWorldLinks() {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        return WorldLinks;
+        return WorldLinks_;
     }
 
     void SetWorldLinks(std::shared_ptr<TListType>&& links) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        WorldLinks = std::move(links);
+        WorldLinks_ = std::move(links);
     }
 
     bool IsCallable(const std::string_view& name) const {
@@ -1775,13 +1778,13 @@ public:
 
     bool ForDisclosing() const {
         ENSURE_NOT_DELETED
-        return Type() == TExprNode::List && ShallBeDisclosed;
+        return Type() == TExprNode::List && ShallBeDisclosed_;
     }
 
     void SetDisclosing() {
         ENSURE_NOT_DELETED
         Y_ENSURE(Type() == TExprNode::List, "Must be list.");
-        ShallBeDisclosed = true;
+        ShallBeDisclosed_ = true;
     }
 
     ui32 GetFlagsToCompare() const {
@@ -1798,26 +1801,26 @@ public:
 
     bool StartsExecution() const {
         ENSURE_NOT_DELETED
-        return State == EState::ExecutionComplete
-            || State == EState::ExecutionInProgress
-            || State == EState::ExecutionRequired
-            || State == EState::ExecutionPending
+        return State_ == EState::ExecutionComplete
+            || State_ == EState::ExecutionInProgress
+            || State_ == EState::ExecutionRequired
+            || State_ == EState::ExecutionPending
             || HasResult();
     }
 
     bool IsComplete() const {
-        YQL_ENSURE(HasLambdaScope);
-        return !OuterLambda;
+        YQL_ENSURE(HasLambdaScope_);
+        return !OuterLambda_;
     }
 
     bool IsLiteralList() const {
         YQL_ENSURE(IsList());
-        return LiteralList;
+        return LiteralList_;
     }
 
     void SetLiteralList(bool literal) {
         YQL_ENSURE(IsList());
-        LiteralList = literal;
+        LiteralList_ = literal;
     }
 
     void Ref() {
@@ -1831,8 +1834,8 @@ public:
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
         if (!--RefCount_) {
-            Result.Reset();
-            WorldLinks.reset();
+            Result_.Reset();
+            WorldLinks_.reset();
             Children_.clear();
             Constraints_.Clear();
             MarkDead();
@@ -1981,52 +1984,52 @@ public:
 
     const TConstraintNode* GetConstraint(TStringBuf name) const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete);
+        Y_ENSURE(static_cast<EState>(State_) >= EState::ConstrComplete);
         return Constraints_.GetConstraint(name);
     }
 
     template <class TConstraintType>
     const TConstraintType* GetConstraint() const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete);
+        Y_ENSURE(static_cast<EState>(State_) >= EState::ConstrComplete);
         return Constraints_.GetConstraint<TConstraintType>();
     }
 
     const TConstraintNode::TListType& GetAllConstraints() const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete);
+        Y_ENSURE(static_cast<EState>(State_) >= EState::ConstrComplete);
         return Constraints_.GetAllConstraints();
     }
 
     const TConstraintSet& GetConstraintSet() const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete);
+        Y_ENSURE(static_cast<EState>(State_) >= EState::ConstrComplete);
         return Constraints_;
     }
 
     void AddConstraint(const TConstraintNode* node) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete);
-        Y_ENSURE(static_cast<EState>(State) < EState::ExecutionRequired);
+        Y_ENSURE(static_cast<EState>(State_) >= EState::TypeComplete);
+        Y_ENSURE(static_cast<EState>(State_) < EState::ExecutionRequired);
         Constraints_.AddConstraint(node);
-        State = EState::ConstrComplete;
+        State_ = EState::ConstrComplete;
     }
 
     void CopyConstraints(const TExprNode& node) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete);
+        Y_ENSURE(static_cast<EState>(State_) >= EState::TypeComplete);
         Constraints_ = node.Constraints_;
-        State = EState::ConstrComplete;
+        State_ = EState::ConstrComplete;
     }
 
     void SetConstraints(const TConstraintSet& constraints) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete);
+        Y_ENSURE(static_cast<EState>(State_) >= EState::TypeComplete);
         Constraints_ = constraints;
-        State = EState::ConstrComplete;
+        State_ = EState::ConstrComplete;
     }
 
     static TPtr NewAtom(ui64 uniqueId, TPositionHandle pos, const TStringBuf& content, ui32 flags) {
@@ -2108,7 +2111,7 @@ public:
 
     void SetTypeAnn(const TTypeAnnotationNode* typeAnn) {
         TypeAnnotation_ = typeAnn;
-        State = TypeAnnotation_ ? EState::TypeComplete : EState::Initial;
+        State_ = TypeAnnotation_ ? EState::TypeComplete : EState::Initial;
     }
 
     const TTypeAnnotationNode* GetTypeAnn() const {
@@ -2116,93 +2119,101 @@ public:
     }
 
     EState GetState() const {
-        return State;
+        return State_;
     }
 
     void SetState(EState state) {
-        State = state;
+        State_ = state;
     }
 
     ui32 GetArgIndex() const {
         YQL_ENSURE(Type() == EType::Argument);
-        return ArgIndex;
+        return ArgIndex_;
     }
 
     void SetArgIndex(ui32 argIndex) {
         YQL_ENSURE(Type() == EType::Argument);
         YQL_ENSURE(argIndex <= Max<ui16>());
-        ArgIndex = (ui16)argIndex;
+        ArgIndex_ = (ui16)argIndex;
     }
 
     ui64 GetHash() const {
-        Y_DEBUG_ABORT_UNLESS(HashAbove == HashBelow);
-        return HashAbove;
+        Y_DEBUG_ABORT_UNLESS(HashAbove_ == HashBelow_);
+        return HashAbove_;
     }
 
     void SetHash(ui64 hash) {
-        HashAbove = HashBelow = hash;
+        HashAbove_ = HashBelow_ = hash;
     }
 
     ui64 GetHashAbove() const {
-        return HashAbove;
+        return HashAbove_;
     }
 
     void SetHashAbove(ui64 hash) {
-        HashAbove = hash;
+        HashAbove_ = hash;
     }
 
     ui64 GetHashBelow() const {
-        return HashBelow;
+        return HashBelow_;
     }
 
     void SetHashBelow(ui64 hash) {
-        HashBelow = hash;
+        HashBelow_ = hash;
     }
 
     ui64 GetBloom() const {
-        return Bloom;
+        return Bloom_;
     }
 
     void SetBloom(ui64 bloom) {
-        Bloom = bloom;
+        Bloom_ = bloom;
     }
 
     // return pair of outer and inner lambda.
     std::optional<std::pair<const TExprNode*, const TExprNode*>> GetDependencyScope() const {
-        if (HasLambdaScope) {
-            return std::make_pair(OuterLambda, InnerLambda);
+        if (HasLambdaScope_) {
+            return std::make_pair(OuterLambda_, InnerLambda_);
         }
         return std::nullopt;
     }
 
     void SetDependencyScope(const TExprNode* outerLambda, const TExprNode* innerLambda) {
         Y_DEBUG_ABORT_UNLESS(outerLambda == innerLambda || outerLambda->GetLambdaLevel() < innerLambda->GetLambdaLevel(), "Wrong scope of closures.");
-        HasLambdaScope = 1;
-        OuterLambda = outerLambda;
-        InnerLambda = innerLambda;
+        HasLambdaScope_ = 1;
+        OuterLambda_ = outerLambda;
+        InnerLambda_ = innerLambda;
     }
 
-    ui16 GetLambdaLevel() const { return LambdaLevel; }
-    void SetLambdaLevel(ui16 lambdaLevel) { LambdaLevel = lambdaLevel; }
+    ui16 GetLambdaLevel() const { return LambdaLevel_; }
+    void SetLambdaLevel(ui16 lambdaLevel) { LambdaLevel_ = lambdaLevel; }
 
     bool IsUsedInDependsOn() const {
         YQL_ENSURE(Type() == EType::Argument);
-        return UsedInDependsOn;
+        return UsedInDependsOn_;
     }
 
     void SetUsedInDependsOn() {
         YQL_ENSURE(Type() == EType::Argument);
-        UsedInDependsOn = 1;
+        UsedInDependsOn_ = 1;
     }
 
     void SetUnorderedChildren() {
         YQL_ENSURE(Type() == EType::List || Type() == EType::Callable);
-        UnordChildren = 1;
+        UnordChildren_ = 1;
     }
 
     bool UnorderedChildren() const {
         YQL_ENSURE(Type() == EType::List || Type() == EType::Callable);
-        return bool(UnordChildren);
+        return bool(UnordChildren_);
+    }
+
+    void SetPosAware() {
+        PosAware_ = 1;
+    }
+
+    bool IsPosAware() const {
+        return PosAware_;
     }
 
     ~TExprNode() {
@@ -2229,16 +2240,17 @@ private:
         , Content_(content)
         , UniqueId_(uniqueId)
         , Position_(position)
-        , ContentSize(contentSize)
+        , ContentSize_(contentSize)
         , Type_(type)
         , Flags_(flags)
         , ExprFlags_(TExprFlags::Default)
-        , State(EState::Initial)
-        , HasLambdaScope(0)
-        , UsedInDependsOn(0)
-        , UnordChildren(0)
-        , ShallBeDisclosed(0)
-        , LiteralList(0)
+        , State_(EState::Initial)
+        , HasLambdaScope_(0)
+        , UsedInDependsOn_(0)
+        , UnordChildren_(0)
+        , ShallBeDisclosed_(0)
+        , LiteralList_(0)
+        , PosAware_(0)
     {}
 
     TExprNode(const TExprNode&) = delete;
@@ -2263,7 +2275,7 @@ private:
     }
 
     TStringBuf ContentUnchecked() const {
-        return TStringBuf(Content_, ContentSize);
+        return TStringBuf(Content_, ContentSize_);
     }
 
     TListType Children_;
@@ -2271,43 +2283,44 @@ private:
 
     const char* Content_ = nullptr;
 
-    const TExprNode* OuterLambda = nullptr;
-    const TExprNode* InnerLambda = nullptr;
+    const TExprNode* OuterLambda_ = nullptr;
+    const TExprNode* InnerLambda_ = nullptr;
 
-    TPtr Result;
+    TPtr Result_;
 
-    std::shared_ptr<TListType> WorldLinks;
+    std::shared_ptr<TListType> WorldLinks_;
 
-    ui64 HashAbove = 0ULL;
-    ui64 HashBelow = 0ULL;
-    ui64 Bloom = 0ULL;
+    ui64 HashAbove_ = 0ULL;
+    ui64 HashBelow_ = 0ULL;
+    ui64 Bloom_ = 0ULL;
 
     const ui64 UniqueId_;
     const TTypeAnnotationNode* TypeAnnotation_ = nullptr;
 
     const TPositionHandle Position_;
     ui32 RefCount_ = 0U;
-    const ui32 ContentSize;
+    const ui32 ContentSize_;
 
-    ui16 ArgIndex = ui16(-1);
-    ui16 LambdaLevel = 0; // filled together with OuterLambda
-    ui16 IntermediateHashesCount = 0;
+    ui16 ArgIndex_ = ui16(-1);
+    ui16 LambdaLevel_ = 0; // filled together with OuterLambda
+    ui16 IntermediateHashesCount_ = 0;
 
     static_assert(TypeMask <= 7, "EType wont fit in 3 bits, increase Type_ bitfield size");
     static_assert(TNodeFlags::FlagsMask <= 7, "TNodeFlags wont fit in 3 bits, increase Flags_ bitfield size");
     static_assert(TExprFlags::FlagsMask <= 3, "TExprFlags wont fit in 2 bits, increase ExprFlags_ bitfield size");
     static_assert(int(EState::Last) <= 16, "EState wont fit in 4 bits, increase State bitfield size");
     struct {
-        ui8 Type_           : 3;
-        ui8 Flags_          : 3;
-        ui8 ExprFlags_      : 2;
+        ui8 Type_           : 3; // NOLINT(readability-identifier-naming)
+        ui8 Flags_          : 3; // NOLINT(readability-identifier-naming)
+        ui8 ExprFlags_      : 2; // NOLINT(readability-identifier-naming)
 
-        EState State        : 4;
-        ui8 HasLambdaScope  : 1;
-        ui8 UsedInDependsOn : 1;
-        ui8 UnordChildren   : 1;
-        ui8 ShallBeDisclosed: 1;
-        ui8 LiteralList     : 1;
+        EState State_         : 4; // NOLINT(readability-identifier-naming)
+        ui8 HasLambdaScope_   : 1; // NOLINT(readability-identifier-naming)
+        ui8 UsedInDependsOn_  : 1; // NOLINT(readability-identifier-naming)
+        ui8 UnordChildren_    : 1; // NOLINT(readability-identifier-naming)
+        ui8 ShallBeDisclosed_ : 1; // NOLINT(readability-identifier-naming)
+        ui8 LiteralList_      : 1; // NOLINT(readability-identifier-naming)
+        ui8 PosAware_         : 1; // NOLINT(readability-identifier-naming)
     };
 };
 
@@ -2382,6 +2395,7 @@ struct TExprStep {
         LoadTablesMetadata,
         RewriteIO,
         Recapture,
+        NormalizeDependsOn,
         LastLevel
     };
 
@@ -2580,17 +2594,17 @@ struct TExprContext : private TNonCopyable {
         TFreezeGuard& operator=(const TFreezeGuard&) = delete;
 
         TFreezeGuard(TExprContext& ctx)
-            : Ctx(ctx)
+            : Ctx_(ctx)
         {
-            Ctx.Freeze();
+            Ctx_.Freeze();
         }
 
         ~TFreezeGuard() {
-            Ctx.UnFreeze();
+            Ctx_.UnFreeze();
         }
 
     private:
-        TExprContext& Ctx;
+        TExprContext& Ctx_;
     };
 
     TIssueManager IssueManager;
@@ -2840,8 +2854,8 @@ private:
     bool IsEqual(TPositionHandle a, TPositionHandle b) const;
     size_t GetHash(TPositionHandle p) const;
 
-    std::unordered_set<TPositionHandle, TPositionHandleHasher, TPositionHandleEqualPred> PositionSet;
-    std::deque<TPosition> Positions;
+    std::unordered_set<TPositionHandle, TPositionHandleHasher, TPositionHandleEqualPred> PositionSet_;
+    std::deque<TPosition> Positions_;
 };
 
 template <typename T, typename... Args>

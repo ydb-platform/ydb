@@ -115,8 +115,20 @@ public:
         return read;
     }
 
-    TMaybe<bool> CanWrite(const TExprNode&, TExprContext&) override {
-        YQL_ENSURE(false, "Unimplemented");
+    TMaybe<bool> CanWrite(const TExprNode& write, TExprContext&) override {
+        return TPqWriteTopic::Match(&write);
+    }
+
+    TExprNode::TPtr WrapWrite(const TExprNode::TPtr& writeNode, TExprContext& ctx) override {
+        TExprBase writeExpr(writeNode);
+        const auto write = writeExpr.Cast<TPqWriteTopic>();
+
+        return Build<TPqInsert>(ctx, write.Pos())
+            .World(write.World())
+            .DataSink(write.DataSink())
+            .Topic(write.Topic())
+            .Input(write.Input())
+            .Done().Ptr();
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
@@ -261,6 +273,12 @@ public:
                     srcDesc.SetSharedReading(true);
                 }
                 *srcDesc.MutableDisposition() = State_->Disposition;
+
+                for (const auto& [label, value] : State_->TaskSensorLabels) {
+                    auto taskSensorLabel = srcDesc.AddTaskSensorLabel();
+                    taskSensorLabel->SetLabel(label);
+                    taskSensorLabel->SetValue(value);
+                }
                 protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
@@ -315,6 +333,17 @@ public:
                 sinkType = "PqSink";
             }
         }
+    }
+
+    bool CanRead(const TExprNode& read, TExprContext&, bool) override {
+        return TPqReadTopic::Match(&read);
+    }
+
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
+        if (AllOf(read, [](const auto val) { return TPqReadTopic::Match(val); })) {
+            return 0ul; // TODO: return real size
+        }
+        return Nothing();
     }
 
     NNodes::TCoNameValueTupleList BuildTopicReadSettings(

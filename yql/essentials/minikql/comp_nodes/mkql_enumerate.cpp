@@ -81,19 +81,19 @@ public:
 
     private:
         ui64 GetListLength() const override {
-            if (!Length) {
-                Length = List.GetListLength();
+            if (!Length_) {
+                Length_ = List.GetListLength();
             }
 
-            return *Length;
+            return *Length_;
         }
 
         bool HasListItems() const override {
-            if (!HasItems) {
-                HasItems = List.HasListItems();
+            if (!HasItems_) {
+                HasItems_ = List.HasListItems();
             }
 
-            return *HasItems;
+            return *HasItems_;
         }
 
         NUdf::TUnboxedValue GetListIterator() const override {

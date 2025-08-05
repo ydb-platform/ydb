@@ -10,10 +10,10 @@
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-class YdbSdkSessionsPool : public ::testing::TestWithParam<ui32> {
+class YdbSdkSessionsPool : public ::testing::TestWithParam<std::uint32_t> {
 protected:
     void SetUp() override {
-        ui32 maxActiveSessions = GetParam();
+        std::uint32_t maxActiveSessions = GetParam();
         Driver = std::make_unique<NYdb::TDriver>(TDriverConfig().SetEndpoint(std::getenv("YDB_ENDPOINT")));
 
         auto clientSettings = TClientSettings().SessionPoolSettings(
@@ -35,16 +35,16 @@ protected:
 
 class YdbSdkSessionsPool1Session : public YdbSdkSessionsPool {};
 
-enum class EAction: ui8 {
+enum class EAction: std::uint8_t {
     CreateFuture,
     ExtractValue,
     Return
 };
-using TPlan = std::vector<std::pair<EAction, ui32>>;
+using TPlan = std::vector<std::pair<EAction, std::uint32_t>>;
 
 
 void CheckPlan(TPlan plan) {
-    std::unordered_map<ui32, EAction> sessions;
+    std::unordered_map<std::uint32_t, EAction> sessions;
     for (const auto& [action, sessionId]: plan) {
         if (action == EAction::CreateFuture) {
             ASSERT_FALSE(sessions.contains(sessionId));
@@ -69,10 +69,10 @@ void CheckPlan(TPlan plan) {
 }
 
 void RunPlan(const TPlan& plan, NYdb::NTable::TTableClient& client) {
-    std::unordered_map<ui32, NThreading::TFuture<NYdb::NTable::TCreateSessionResult>> sessionFutures;
-    std::unordered_map<ui32, NYdb::NTable::TCreateSessionResult> sessions;
+    std::unordered_map<std::uint32_t, NThreading::TFuture<NYdb::NTable::TCreateSessionResult>> sessionFutures;
+    std::unordered_map<std::uint32_t, NYdb::NTable::TCreateSessionResult> sessions;
 
-    ui32 requestedSessions = 0;
+    std::uint32_t requestedSessions = 0;
 
     for (const auto& [action, sessionId]: plan) {
         switch (action) {
@@ -100,8 +100,8 @@ void RunPlan(const TPlan& plan, NYdb::NTable::TTableClient& client) {
             }
         }
         ASSERT_LE(client.GetActiveSessionCount(), client.GetActiveSessionsLimit());
-        ASSERT_GE(client.GetActiveSessionCount(), static_cast<i64>(sessions.size()));
-        ASSERT_LE(client.GetActiveSessionCount(), static_cast<i64>(sessions.size() + sessionFutures.size()));
+        ASSERT_GE(client.GetActiveSessionCount(), static_cast<std::int64_t>(sessions.size()));
+        ASSERT_LE(client.GetActiveSessionCount(), static_cast<std::int64_t>(sessions.size() + sessionFutures.size()));
     }
 }
 
@@ -111,14 +111,14 @@ int GetRand(std::mt19937& rng, int min, int max) {
 }
 
 
-TPlan GenerateRandomPlan(ui32 numSessions) {
+TPlan GenerateRandomPlan(std::uint32_t numSessions) {
     TPlan plan;
     std::random_device dev;
     std::mt19937 rng(dev());
 
-    for (ui32 i = 0; i < numSessions; ++i) {
+    for (std::uint32_t i = 0; i < numSessions; ++i) {
         std::uniform_int_distribution<std::mt19937::result_type> dist(0, plan.size());
-        ui32 prevPos = 0;
+        std::uint32_t prevPos = 0;
         for (EAction action: {EAction::CreateFuture, EAction::ExtractValue, EAction::Return}) {
             int pos = GetRand(rng, prevPos, plan.size());
             plan.emplace(plan.begin() + pos, std::make_pair(action, i));
@@ -146,18 +146,18 @@ TEST_P(YdbSdkSessionsPool1Session, GetSession) {
     ASSERT_EQ(Client->GetCurrentPoolSize(), 1);
 }
 
-void TestWaitQueue(NYdb::NTable::TTableClient& client, ui32 activeSessionsLimit) {
+void TestWaitQueue(NYdb::NTable::TTableClient& client, std::uint32_t activeSessionsLimit) {
     std::vector<NThreading::TFuture<NYdb::NTable::TCreateSessionResult>> sessionFutures;
     std::vector<NYdb::NTable::TCreateSessionResult> sessions;
 
     // exhaust the pool
-    for (ui32 i = 0; i < activeSessionsLimit; ++i) {
+    for (std::uint32_t i = 0; i < activeSessionsLimit; ++i) {
         sessions.emplace_back(client.GetSession().ExtractValueSync());
     }
     ASSERT_EQ(client.GetActiveSessionCount(), activeSessionsLimit);
 
     // next should be in the wait queue
-    for (ui32 i = 0; i < activeSessionsLimit * 10; ++i) {
+    for (std::uint32_t i = 0; i < activeSessionsLimit * 10; ++i) {
         sessionFutures.emplace_back(client.GetSession());
     }
     ASSERT_EQ(client.GetActiveSessionCount(), activeSessionsLimit);
@@ -212,17 +212,17 @@ TEST_P(YdbSdkSessionsPool1Session, CustomPlan) {
     ASSERT_EQ(Client->GetActiveSessionCount(), 0);
 }
 
-ui32 RunStressTestSync(ui32 n, ui32 activeSessionsLimit, NYdb::NTable::TTableClient& client) {
+std::uint32_t RunStressTestSync(std::uint32_t n, std::uint32_t activeSessionsLimit, NYdb::NTable::TTableClient& client) {
     std::vector<NThreading::TFuture<NYdb::NTable::TCreateSessionResult>> sessionFutures;
     std::vector<NYdb::NTable::TCreateSessionResult> sessions;
     std::mt19937 rng(0);
-    ui32 successCount = 0;
+    std::uint32_t successCount = 0;
 
-    for (ui32 i = 0; i < activeSessionsLimit * 12; ++i) {
+    for (std::uint32_t i = 0; i < activeSessionsLimit * 12; ++i) {
         sessionFutures.emplace_back(client.GetSession());
     }
 
-    for (ui32 i = 0; i < n; ++i) {
+    for (std::uint32_t i = 0; i < n; ++i) {
         switch (static_cast<EAction>(GetRand(rng, 0, 2))) {
             case EAction::CreateFuture: {
                 sessionFutures.emplace_back(client.GetSession());
@@ -259,7 +259,7 @@ ui32 RunStressTestSync(ui32 n, ui32 activeSessionsLimit, NYdb::NTable::TTableCli
 }
 
 TEST_P(YdbSdkSessionsPool, StressTestSync) {
-    ui32 activeSessionsLimit = GetParam();
+    std::uint32_t activeSessionsLimit = GetParam();
 
     RunStressTestSync(1000, activeSessionsLimit, *Client);
 
@@ -269,13 +269,13 @@ TEST_P(YdbSdkSessionsPool, StressTestSync) {
     ASSERT_EQ(Client->GetCurrentPoolSize(), activeSessionsLimit);
 }
 
-ui32 RunStressTestAsync(ui32 n, ui32 nThreads, NYdb::NTable::TTableClient& client) {
-    std::atomic<ui32> successCount(0);
-    std::atomic<ui32> jobIndex(0);
+std::uint32_t RunStressTestAsync(std::uint32_t n, std::uint32_t nThreads, NYdb::NTable::TTableClient& client) {
+    std::atomic<std::uint32_t> successCount(0);
+    std::atomic<std::uint32_t> jobIndex(0);
 
     auto job = [&client, &successCount, &jobIndex, n]() mutable {
         std::mt19937 rng(++jobIndex);
-        for (ui32 i = 0; i < n; ++i) {
+        for (std::uint32_t i = 0; i < n; ++i) {
             std::this_thread::sleep_for(std::chrono::milliseconds(GetRand(rng, 1, 100)));
             auto sessionFuture = client.GetSession();
             std::this_thread::sleep_for(std::chrono::milliseconds(GetRand(rng, 1, 100)));
@@ -286,7 +286,7 @@ ui32 RunStressTestAsync(ui32 n, ui32 nThreads, NYdb::NTable::TTableClient& clien
     };
 
     std::vector<std::thread> threads;
-    for (ui32 i = 0; i < nThreads; i++) {
+    for (std::uint32_t i = 0; i < nThreads; i++) {
         threads.emplace_back(job);
     }
     for (auto& thread: threads) {
@@ -297,8 +297,8 @@ ui32 RunStressTestAsync(ui32 n, ui32 nThreads, NYdb::NTable::TTableClient& clien
 }
 
 TEST_P(YdbSdkSessionsPool, StressTestAsync) {
-    ui32 activeSessionsLimit = GetParam();
-    ui32 iterations = (activeSessionsLimit == 1) ? 100 : 1000;
+    std::uint32_t activeSessionsLimit = GetParam();
+    std::uint32_t iterations = (activeSessionsLimit == 1) ? 100 : 1000;
 
     RunStressTestAsync(iterations, 10, *Client);
 
@@ -308,16 +308,16 @@ TEST_P(YdbSdkSessionsPool, StressTestAsync) {
     ASSERT_EQ(Client->GetCurrentPoolSize(), activeSessionsLimit);
 }
 
-void TestPeriodicTask(ui32 activeSessionsLimit, NYdb::NTable::TTableClient& client) {
+void TestPeriodicTask(std::uint32_t activeSessionsLimit, NYdb::NTable::TTableClient& client) {
     std::vector<NThreading::TFuture<NYdb::NTable::TCreateSessionResult>> sessionFutures;
     std::vector<NYdb::NTable::TCreateSessionResult> sessions;
 
-    for (ui32 i = 0; i < activeSessionsLimit; ++i) {
+    for (std::uint32_t i = 0; i < activeSessionsLimit; ++i) {
         sessions.emplace_back(client.GetSession().ExtractValueSync());
         ASSERT_TRUE(sessions.back().IsSuccess());
     }
 
-    for (ui32 i = 0; i < activeSessionsLimit; ++i) {
+    for (std::uint32_t i = 0; i < activeSessionsLimit; ++i) {
         sessionFutures.emplace_back(client.GetSession());
     }
 

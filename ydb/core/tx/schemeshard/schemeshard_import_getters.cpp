@@ -1,17 +1,19 @@
 #include "schemeshard_import_getters.h"
+
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
+
+#include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
-#include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -347,10 +349,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             if (IsTable(SchemeKey)) {
                 // try search for a view
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
+                SchemeFileType = NBackup::EBackupFileType::ViewCreate;
                 HeadObject(SchemeKey);
             } else if (IsView(SchemeKey)) {
                 // try search for a topic
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
+                SchemeFileType = NBackup::EBackupFileType::TopicCreate;
                 HeadObject(SchemeKey);
             } else {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
@@ -475,7 +479,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         TString content;
-        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableSchema)) {
+        if (!MaybeDecrypt(msg.Body, content, SchemeFileType)) {
             return;
         }
 
@@ -834,6 +838,7 @@ private:
 
     const TString MetadataKey;
     TString SchemeKey;
+    NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;

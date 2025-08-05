@@ -1,0 +1,76 @@
+--- contrib/restricted/abseil-cpp-tstring/y_absl/base/config.h  (index)
++++ contrib/restricted/abseil-cpp-tstring/y_absl/base/config.h  (working tree)
+@@ -936,6 +930,13 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
+ #define Y_ABSL_INTERNAL_HAVE_ARM_NEON 1
+ #endif
+
++#ifdef __NVCC__
++#undef Y_ABSL_INTERNAL_HAVE_SSE
++#undef Y_ABSL_INTERNAL_HAVE_SSE2
++#undef Y_ABSL_INTERNAL_HAVE_SSSE3
++#undef Y_ABSL_INTERNAL_HAVE_ARM_NEON
++#endif
++
+ // Y_ABSL_HAVE_CONSTANT_EVALUATED is used for compile-time detection of
+ // constant evaluation support through `y_absl::is_constant_evaluated`.
+ #ifdef Y_ABSL_HAVE_CONSTANT_EVALUATED
+--- contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/btree.h	(index)
++++ contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/btree.h	(working tree)
+@@ -1208,7 +1208,9 @@ class btree_iterator : private btree_iterator_generation_info {
+   }
+ 
+  private:
++  #ifndef __NVCC__
+   friend iterator;
++  #endif
+   friend const_iterator;
+   template <typename Params>
+   friend class btree;
+@@ -1316,7 +1318,7 @@ class btree {
+   // in order to avoid branching in begin()/end().
+   struct EmptyNodeType : node_type {
+     using field_type = typename node_type::field_type;
+-    node_type *parent;
++    btree_node<Params> *parent;
+ #ifdef Y_ABSL_BTREE_ENABLE_GENERATIONS
+     uint32_t generation = 0;
+ #endif
+--- contrib/restricted/abseil-cpp-tstring/y_absl/crc/crc32c.h	(index)
++++ contrib/restricted/abseil-cpp-tstring/y_absl/crc/crc32c.h	(working tree)
+@@ -180,9 +180,11 @@ crc32c_t RemoveCrc32cSuffix(crc32c_t full_string_crc, crc32c_t suffix_crc,
+ // operator<<
+ //
+ // Streams the CRC32C value `crc` to the stream `os`.
++#ifndef __NVCC__
+ inline std::ostream& operator<<(std::ostream& os, crc32c_t crc) {
+   return os << y_absl::StreamFormat("%08x", static_cast<uint32_t>(crc));
+ }
++#endif
+ 
+ Y_ABSL_NAMESPACE_END
+ }  // namespace y_absl
+--- contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format/checker.h	(index)
++++ contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format/checker.h	(working tree)
+@@ -30,7 +30,7 @@
+ // more details.
+ #if Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__) && \
+     !defined(__INTELLISENSE__)
+-#define Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER 1
++//#define Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER 1
+ #endif  // Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__) &&
+         // !defined(__INTELLISENSE__)
+ #endif  // Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+ 
+--- contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format/bind.h
++++ contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format/bind.h
+@@ -172,8 +172,10 @@
+   template <FormatConversionCharSet... C>
+   FormatSpecTemplate(const ExtendedParsedFormat<C...>& pc)  // NOLINT
+       : Base(&pc) {
++#ifndef __NVCC__
+     CheckArity<sizeof...(C), sizeof...(Args)>();
+     CheckMatches<C...>(y_absl::make_index_sequence<sizeof...(C)>{});
++#endif
+   }
+ };
+

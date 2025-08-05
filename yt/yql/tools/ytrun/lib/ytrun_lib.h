@@ -37,6 +37,8 @@ protected:
     TString FmrCoordinatorServerUrl_;
     bool DisableLocalFmrWorker_ = false;
     TString FmrOperationSpecFilePath_;
+    TString TableDataServiceDiscoveryFilePath_;
+    TString FmrJobBin_;
 };
 
 } // NYql

@@ -7,7 +7,7 @@
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_processing.h>

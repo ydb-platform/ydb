@@ -1,5 +1,32 @@
 OpenLDAP 2.6 Change Log
 
+OpenLDAP 2.6.10 Release (2025/05/22)
+	Added slapd microsecond timestamp format for local logging (ITS#10140)
+	Fixed libldap ldap_result behavior with LDAP_MSG_RECEIVED (ITS#10229)
+	Fixed lloadd handling of starttls critical (ITS#10323)
+	Fixed slapd syncrepl when used with slapo-rwm (ITS#10290)
+	Fixed slapd regression with certain searches (ITS#10307)
+	Fixed slapo-autoca olcAutoCAserverClass object (ITS#10288)
+	Fixed slapo-pcache caching behaviors (ITS#10270)
+	Minor Cleanup
+		ITS#7080
+		ITS#7249
+		ITS#9934
+		ITS#10020
+		ITS#10168
+		ITS#10226
+		ITS#10279
+		ITS#10299
+		ITS#10302
+		ITS#10309
+		ITS#10312
+		ITS#10320
+		ITS#10325
+		ITS#10327
+		ITS#10328
+		ITS#10331
+		ITS#10336
+
 OpenLDAP 2.6.9 Release (2024/11/26)
 	Fixed libldap TLS connection timeout handling (ITS#8047)
 	Fixed libldap GnuTLS incompatible pointer type (ITS#10253)

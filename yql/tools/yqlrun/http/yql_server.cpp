@@ -1,4 +1,5 @@
 #include "yql_server.h"
+#include "sql_tokens_servlet.h"
 
 #include <yql/essentials/core/cbo/simple/cbo_simple.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -655,6 +656,7 @@ TAutoPtr<TYqlServer> CreateYqlServer(
     server->RegisterAction<TYqlActionOptimizeOrValidateFile>("/api/yql/peephole");
 
     server->RegisterServlet("/js/yql-functions.js", new TYqlFunctoinsServlet());
+    server->RegisterServlet("/js/sql-tokens.js", new TSqlTokensServlet());
 
     server->RegisterAction<TYqlActionFileRun>("/api/yql/lineage");
     server->RegisterAction<TYqlActionFileRun>("/api/yql/run");

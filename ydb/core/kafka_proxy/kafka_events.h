@@ -230,7 +230,12 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
 struct PartitionConsumerOffset {
     ui64 PartitionIndex;
     ui64 Offset;
-    TString Metadata;
+    std::optional<TString> Metadata = std::nullopt;
+
+    PartitionConsumerOffset(ui64 partitionIndex, ui64 offset, std::optional<TString> metadata = std::nullopt) :
+                                                PartitionIndex(partitionIndex),
+                                                Offset(offset),
+                                                Metadata(metadata) {}
 };
 
 struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse>
@@ -343,13 +348,15 @@ struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> 
 Event sent from TIintProducerActor to TKafkaTransactionRouter to notify that producer id will be obtained by client
  */
 struct TEvSaveTxnProducerRequest : public NActors::TEventLocal<TEvSaveTxnProducerRequest, EvSaveTxnProducerRequest> {
-    TEvSaveTxnProducerRequest(const TString& transactionalId, const TProducerInstanceId& producerState) :
+    TEvSaveTxnProducerRequest(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, ui64 txnTimeoutMs) :
         TransactionalId(transactionalId),
-        ProducerState(producerState)
+        ProducerInstanceId(producerInstanceId),
+        TxnTimeoutMs(txnTimeoutMs)
     {}
 
     const TString TransactionalId;
-    const TProducerInstanceId ProducerState;
+    const TProducerInstanceId ProducerInstanceId;
+    const ui64 TxnTimeoutMs;
 };
 
 /*

@@ -4,15 +4,15 @@ option java_package = "ru.yandex.kikimr.proto";
 message TWorkloadManagerConfig {
     optional bool Enabled = 1 [default = false];
     // Inflight
-    optional int32 ConcurrentQueryLimit = 2 [default = 5];
-    optional int32 QueueSize = 3 [default = 30];
-    optional double DatabaseLoadCpuThreshold = 4 [default = 70];
+    optional int32 ConcurrentQueryLimit = 2;
+    optional int32 QueueSize = 3;
+    optional double DatabaseLoadCpuThreshold = 4;
 
     // Cpu
-    optional double TotalCpuLimitPercentPerNode = 5 [default = 70];
-    optional double QueryCpuLimitPercentPerNode = 6 [default = 100];
-    optional double ResourceWeight = 7 [default = -1];
+    optional double TotalCpuLimitPercentPerNode = 5;
+    optional double QueryCpuLimitPercentPerNode = 6;
+    optional double ResourceWeight = 7;
 
     // Memory
-    optional double QueryMemoryLimitPercentPerNode = 8 [default = -1];
+    optional double QueryMemoryLimitPercentPerNode = 8;
 };

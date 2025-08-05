@@ -17,21 +17,19 @@ $all_suites = (
 $launch_times = (
     SELECT 
         launch_times_raw.*,
-        all_suites.*
+        all_suites.*,
+        SubString(CAST(launch_times_raw.Version AS String), 0U, FIND(CAST(launch_times_raw.Version AS String), '.')) As Branch
     FROM (
         SELECT
             Db,
-            Branch,
             Version,
             LunchId,
             CAST(Min(RunId / 1000UL) AS Timestamp) AS Run_start_timestamp,
-            ROW_NUMBER() OVER (PARTITION BY Db, Version ORDER BY Min(RunId) ASC) AS Run_number_in_version,
-            ROW_NUMBER() OVER (PARTITION BY Db, Branch ORDER BY Min(RunId) DESC) AS Run_number_in_branch_desc
+            ROW_NUMBER() OVER (PARTITION BY Db, Version ORDER BY Min(RunId) ASC) AS Run_number_in_version
         FROM `perfomance/olap/tests_results`
         WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
         GROUP BY
             Db,
-            Unicode::SplitToList(JSON_VALUE(Info, "$.cluster.version"), '.')[0] As Branch,
             JSON_VALUE(Info, "$.cluster.version") AS Version,
             JSON_VALUE(Info, "$.ci_launch_id") AS LunchId
     ) AS launch_times_raw
@@ -68,7 +66,6 @@ SELECT
     Test,
     Run_start_timestamp,
     Run_number_in_version,
-    Run_number_in_branch_desc,
     MaxDuration,
     MeanDuration,
     MedianDuration,
@@ -87,7 +84,36 @@ SELECT
     max(RunTs) OVER (PARTITION  by Db, Run_start_timestamp, Suite) AS RunTs,
     YdbSumMeans IS NULL AS errors,
     max(Report) OVER (PARTITION  by Db, Run_start_timestamp, Suite) IS NULL AS Suite_not_runned,
-    Color
+    Color,
+    CASE
+        WHEN Db LIKE '%sas%' THEN 'sas'
+        WHEN Db LIKE '%vla%' THEN 'vla'
+        ELSE 'other'
+    END AS DbDc,
+
+    CASE
+        WHEN Db LIKE '%load%' THEN 'column'
+        WHEN Db LIKE '%/s3%' THEN 's3'
+        WHEN Db LIKE '%/row%' THEN 'row'
+        ELSE 'other'
+    END AS DbType,
+
+    CASE
+        WHEN Db LIKE '%sas-daily%' THEN 'sas_small_'
+        WHEN Db LIKE '%sas-perf%' THEN 'sas_big_'
+        WHEN Db LIKE '%sas%' THEN 'sas_'
+        WHEN Db LIKE '%vla-acceptance%' THEN 'vla_small_'
+        WHEN Db LIKE '%vla-perf%' THEN 'vla_big_'
+        WHEN Db LIKE '%vla4-8154%' THEN 'vla_8154_'
+        WHEN Db LIKE '%vla4-8161%' THEN 'vla_8161_'
+        WHEN Db LIKE '%vla%' THEN 'vla_'
+        ELSE 'new_db_'
+    END || CASE
+        WHEN Db LIKE '%load%' THEN 'column'
+        WHEN Db LIKE '%/s3%' THEN 's3'
+        WHEN Db LIKE '%/row%' THEN 'row'
+        ELSE 'other'
+    END AS DbAlias,
 FROM (
     SELECT
         null_template.Db AS Db,  --only from null_template
@@ -102,7 +128,6 @@ FROM (
         COALESCE(real_data.RunTs, null_template.RunTs) AS RunTs,
         null_template.Run_number_in_version AS Run_number_in_version,  --only from null_template
         null_template.Run_start_timestamp AS Run_start_timestamp,  --only from null_template
-        COALESCE(real_data.Run_number_in_branch_desc, null_template.Run_number_in_branch_desc) AS Run_number_in_branch_desc,
         COALESCE(real_data.Success, null_template.Success) AS Success,
         null_template.Suite AS Suite,  --only from null_template
         null_template.Test AS Test,  --only from null_template
@@ -143,7 +168,6 @@ FROM (
             real_data.RunTs AS RunTs,
             real_data.Run_number_in_version AS Run_number_in_version,
             real_data.Run_start_timestamp AS Run_start_timestamp,
-            real_data.Run_number_in_branch_desc AS Run_number_in_branch_desc,
             --real_data.Stats AS Stats,
             real_data.Success AS Success,
             real_data.Suite AS Suite,

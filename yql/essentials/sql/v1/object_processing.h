@@ -6,7 +6,7 @@ namespace NSQLTranslationV1 {
 
 class TObjectOperatorContext {
 protected:
-    TScopedStatePtr Scoped;
+    TScopedStatePtr Scoped_;
 public:
     TString ServiceId;
     TDeferredAtom Cluster;
@@ -17,8 +17,8 @@ public:
 class TObjectProcessorImpl: public TAstListNode, public TObjectOperatorContext {
 protected:
     using TBase = TAstListNode;
-    TString ObjectId;
-    TString TypeId;
+    TString ObjectId_;
+    TString TypeId_;
 
     virtual INode::TPtr BuildOptions() const = 0;
     virtual INode::TPtr FillFeatures(INode::TPtr options) const = 0;
@@ -36,17 +36,17 @@ public:
 class TCreateObject: public TObjectProcessorImpl {
 private:
     using TBase = TObjectProcessorImpl;
-    std::map<TString, TDeferredAtom> Features;
-    std::set<TString> FeaturesToReset;
+    std::map<TString, TDeferredAtom> Features_;
+    std::set<TString> FeaturesToReset_;
 protected:
-    bool ExistingOk = false;
-    bool ReplaceIfExists = false;
+    bool ExistingOk_ = false;
+    bool ReplaceIfExists_ = false;
 protected:
     virtual INode::TPtr BuildOptions() const override {
         TString mode;
-        if (ExistingOk) {
+        if (ExistingOk_) {
             mode = "createObjectIfNotExists";
-        } else if (ReplaceIfExists) {
+        } else if (ReplaceIfExists_) {
             mode = "createObjectOrReplace";
         } else {
             mode = "createObject";
@@ -60,10 +60,10 @@ public:
     TCreateObject(TPosition pos, const TString& objectId,
         const TString& typeId, bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
         : TBase(pos, objectId, typeId, context)
-        , Features(std::move(features))
-        , FeaturesToReset(std::move(featuresToReset))
-        , ExistingOk(existingOk)
-        , ReplaceIfExists(replaceIfExists) {
+        , Features_(std::move(features))
+        , FeaturesToReset_(std::move(featuresToReset))
+        , ExistingOk_(existingOk)
+        , ReplaceIfExists_(replaceIfExists) {
         }
 };
 
@@ -93,7 +93,7 @@ class TDropObject final: public TCreateObject {
 private:
     using TBase = TCreateObject;
     bool MissingOk() const {
-        return ExistingOk; // Because we were derived from TCreateObject
+        return ExistingOk_; // Because we were derived from TCreateObject
     }
 protected:
     virtual INode::TPtr BuildOptions() const override {

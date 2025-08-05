@@ -33,8 +33,6 @@ TCSCounters::TCSCounters()
 
     IndexMetadataLimitBytes = TBase::GetValue("IndexMetadata/Limit/Bytes");
 
-    OverloadInsertTableBytes = TBase::GetDeriviative("Overload/InsertTable/Bytes");
-    OverloadInsertTableCount = TBase::GetDeriviative("Overload/InsertTable/Count");
     OverloadMetadataBytes = TBase::GetDeriviative("Overload/Metadata/Bytes");
     OverloadMetadataCount = TBase::GetDeriviative("Overload/Metadata/Count");
     OverloadCompactionBytes = TBase::GetDeriviative("Overload/Compaction/Bytes");

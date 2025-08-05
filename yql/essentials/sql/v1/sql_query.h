@@ -13,7 +13,7 @@ class TSqlQuery: public TSqlTranslation {
 public:
     TSqlQuery(TContext& ctx, NSQLTranslation::ESqlMode mode, bool topLevel)
         : TSqlTranslation(ctx, mode)
-        , TopLevel(topLevel)
+        , TopLevel_(topLevel)
     {
     }
 
@@ -43,10 +43,11 @@ private:
     void AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to& node, TAlterTableParameters& params);
     bool AlterTableAlterIndex(const TRule_alter_table_alter_index& node, TAlterTableParameters& params);
     bool AlterSequenceAction(const TRule_alter_sequence_action& node, TSequenceParameters& params);
-    TNodePtr PragmaStatement(const TRule_pragma_stmt& stmt, bool& success);
+    TMaybe<TNodePtr> PragmaStatement(const TRule_pragma_stmt& stmt);
     void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
     bool ParseTableStoreFeatures(std::map<TString, TDeferredAtom> & result, const TRule_alter_table_store_action & actions);
     bool AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_column_drop_not_null& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params);
 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 
@@ -62,7 +63,7 @@ private:
         humanStatementName.clear();
         const auto& descr = AltDescription(node);
         TVector<TString> parts;
-        if (!Ctx.Settings.Antlr4Parser) {
+        if (!Ctx_.Settings.Antlr4Parser) {
             const auto pos = descr.find(": ");
             Y_DEBUG_ABORT_UNLESS(pos != TString::npos);
             Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts);
@@ -81,7 +82,7 @@ private:
         }
     }
 
-    const bool TopLevel;
+    const bool TopLevel_;
 };
 
 void EnumeratePragmas(std::function<void(std::string_view)> callback);

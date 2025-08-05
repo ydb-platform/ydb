@@ -5,7 +5,7 @@
 #include "erfinv.h"
 
 template <size_t N>
-static double polEval(double x, const std::array<double, N>& coef) {
+static double PolEval(double x, const std::array<double, N>& coef) {
     static_assert(N > 0, "Array coef[] should not be empty.");
     return std::accumulate(coef.crbegin() + 1, coef.crend(), coef[N - 1],
                            [x] (auto init, auto cur) {
@@ -97,14 +97,14 @@ double ErfInv(double x) {
     double ans;
     if (x <= 0.85) {
         double r = 0.180625 - 0.25 * x * x;
-        ans = x * polEval(r, a) / polEval(r, b);
+        ans = x * PolEval(r, a) / PolEval(r, b);
     } else {
         double r = std::sqrt(M_LN2 - log(1. - x)) - 1.6;
         if (r <= 3.4) {
-            ans = polEval(r, c) / polEval(r, d);
+            ans = PolEval(r, c) / PolEval(r, d);
         } else {
             r -= 3.4;
-            ans = polEval(r, e) / polEval(r, f);
+            ans = PolEval(r, e) / PolEval(r, f);
         }
     }
 

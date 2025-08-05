@@ -13,45 +13,68 @@ import time
 import re
 
 
-cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags={
+config = KikimrConfigGenerator(extra_feature_flags={
     'enable_alter_database_create_hive_first': True,
     'enable_topic_transfer': True,
     'enable_script_execution_operations': True,
-    }))
+    },
+    enable_static_auth=True)
+config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False
+config.yaml_config['domains_config']['security_config']['enforce_user_token_check_requirement'] = True
+config.yaml_config['domains_config']['security_config']['database_allowed_sids'] = ['database']
+config.yaml_config['domains_config']['security_config']['viewer_allowed_sids'] = ['viewer']
+config.yaml_config['domains_config']['security_config']['monitoring_allowed_sids'] = ['monitoring', 'root']
+config.yaml_config['domains_config']['security_config']['administration_allowed_sids'] = ['root']
+cluster = KiKiMR(config)
 cluster.start()
+
+
+def login_user(request):
+    return requests.post("http://localhost:%s/login" % cluster.nodes[1].mon_port, json=request)
+
+
+root_session_id = login_user({'user': 'root', 'password': '1234'}).cookies.get('ydb_session_id')
+root_token = 'Login ' + root_session_id
+database_session_id = ''
+viewer_session_id = ''
+monitoring_session_id = ''
 domain_name = '/' + cluster.domain_name
 dedicated_db = domain_name + "/dedicated_db"
 shared_db = domain_name + "/shared_db"
 serverless_db = domain_name + "/serverless_db"
-print('Creating database %s' % dedicated_db)
 cluster.create_database(dedicated_db,
                         storage_pool_units_count={
                             'hdd': 1
-                        })
+                        },
+                        token=root_token)
 cluster.register_and_start_slots(dedicated_db, count=1)
-cluster.wait_tenant_up(dedicated_db)
+cluster.wait_tenant_up(dedicated_db, token=root_token)
 cluster.create_hostel_database(shared_db,
                                storage_pool_units_count={
                                    'hdd': 1
-                               })
+                               },
+                               token=root_token)
 cluster.register_and_start_slots(shared_db, count=1)
-cluster.wait_tenant_up(shared_db)
-cluster.create_serverless_database(serverless_db, shared_db)
-cluster.wait_tenant_up(serverless_db)
+cluster.wait_tenant_up(shared_db, token=root_token)
+cluster.create_serverless_database(serverless_db, shared_db, token=root_token)
+cluster.wait_tenant_up(serverless_db, token=root_token)
 databases = [domain_name, dedicated_db, shared_db, serverless_db]
+default_headers = {
+    'Cookie': 'ydb_session_id=' + root_session_id,
+}
 
 
-def call_viewer_api_get(url, headers=None):
+def call_viewer_api_get(url, headers=default_headers):
     port = cluster.nodes[1].mon_port
     return requests.get("http://localhost:%s%s" % (port, url), headers=headers)
 
 
-def call_viewer_api_post(url, body=None, headers=None):
+def call_viewer_api_post(url, body=None, headers=default_headers):
     port = cluster.nodes[1].mon_port
     return requests.post("http://localhost:%s%s" % (port, url), json=body, headers=headers)
 
 
-def call_viewer_api_delete(url, headers=None):
+def call_viewer_api_delete(url, headers=default_headers):
     port = cluster.nodes[1].mon_port
     return requests.delete("http://localhost:%s%s" % (port, url), headers=headers)
 
@@ -62,19 +85,19 @@ def get_result(result):
     return {"status_code": result.status_code, "text": result.text}
 
 
-def call_viewer(url, params=None, headers=None):
+def call_viewer(url, params=None, headers=default_headers):
     if params is None:
         params = {}
     return get_result(call_viewer_api_get(url + '?' + urlencode(params), headers))
 
 
-def call_viewer_post(url, params=None, body=None, headers=None):
+def call_viewer_post(url, params=None, body=None, headers=default_headers):
     if params is None:
         params = {}
     return get_result(call_viewer_api_post(url + '?' + urlencode(params), body, headers))
 
 
-def call_viewer_delete(url, params=None, headers=None):
+def call_viewer_delete(url, params=None, headers=default_headers):
     if params is None:
         params = {}
     return get_result(call_viewer_api_delete(url + '?' + urlencode(params), headers))
@@ -114,16 +137,16 @@ def get_viewer_db_not_domain(url, params=None):
     return call_viewer_db_not_domain(url, params)
 
 
-def get_viewer(url, params=None):
+def get_viewer(url, params=None, headers=default_headers):
     if params is None:
         params = {}
-    return call_viewer(url, params)
+    return call_viewer(url, params, headers)
 
 
-def post_viewer(url, params=None, body=None):
+def post_viewer(url, params=None, body=None, headers=default_headers):
     if params is None:
         params = {}
-    return call_viewer_post(url, params, body)
+    return call_viewer_post(url, params, body, headers)
 
 
 def delete_viewer(url, params=None):
@@ -140,16 +163,21 @@ max_wait_time = 300
 def wait_for_cluster_ready():
     global wait_time
     global wait_good
+    global default_headers
+    global database_session_id
+    global viewer_session_id
+    global monitoring_session_id
+
     for node_id, node in cluster.nodes.items():
         while wait_time < max_wait_time:
             all_good = False
             while True:
                 try:
                     print("Waiting for node %s to be ready" % node_id)
-                    result_counter = get_result(requests.get("http://localhost:%s/viewer/simple_counter?max_counter=1&period=1" % node.mon_port))  # check that handlers are ready
+                    result_counter = get_result(requests.get("http://localhost:%s/viewer/simple_counter?max_counter=1&period=1" % node.mon_port, headers=default_headers))
                     if result_counter['status_code'] != 200:
                         break
-                    result = get_result(requests.get("http://localhost:%s/viewer/sysinfo?node_id=." % node.mon_port))  # check that stats are ready
+                    result = get_result(requests.get("http://localhost:%s/viewer/sysinfo?node_id=." % node.mon_port, headers=default_headers))
                     if 'status_code' in result and result.status_code != 200:
                         break
                     if 'SystemStateInfo' not in result or len(result['SystemStateInfo']) == 0:
@@ -171,6 +199,21 @@ def wait_for_cluster_ready():
                 break
             time.sleep(1)
             wait_time += 1
+    call_viewer("/viewer/query", {
+        'database': domain_name,
+        'query': 'create user database password "2345"'
+    })
+    call_viewer("/viewer/query", {
+        'database': domain_name,
+        'query': 'create user viewer password "3456"'
+    })
+    call_viewer("/viewer/query", {
+        'database': domain_name,
+        'query': 'create user monitoring password "4567"'
+    })
+    database_session_id = login_user({'user': 'database', 'password': '2345'}).cookies.get('ydb_session_id')
+    viewer_session_id = login_user({'user': 'viewer', 'password': '3456'}).cookies.get('ydb_session_id')
+    monitoring_session_id = login_user({'user': 'monitoring', 'password': '4567'}).cookies.get('ydb_session_id')
     for database in databases:
         if database != domain_name:
             call_viewer("/viewer/query", {
@@ -198,12 +241,12 @@ def wait_for_cluster_ready():
             all_good = False
             print("Waiting for database %s to be ready" % database)
             while True:
-                result = get_result(requests.get("http://localhost:%s/viewer/tenantinfo?database=%s" % (cluster.nodes[1].mon_port, database)))  # force connect between nodes
+                result = get_result(requests.get("http://localhost:%s/viewer/tenantinfo?database=%s" % (cluster.nodes[1].mon_port, database), headers=default_headers))  # force connect between nodes
                 if 'status_code' in result and result['status_code'] != 200:
                     break
                 if 'CoresUsed' not in result['TenantInfo'][0]:
                     break
-                result = get_result(requests.get("http://localhost:%s/viewer/healthcheck?database=%s" % (cluster.nodes[1].mon_port, database)))  # force connect between nodes
+                result = get_result(requests.get("http://localhost:%s/viewer/healthcheck?database=%s" % (cluster.nodes[1].mon_port, database), headers=default_headers))  # force connect between nodes
                 if 'status_code' in result and result['status_code'] != 200:
                     break
                 if result['self_check_result'] != 'GOOD':
@@ -229,12 +272,12 @@ def wait_for_cluster_ready():
                     bad += 1
             if bad > 0:
                 break
-            result = get_result(requests.get("http://localhost:%s/storage/groups?fields_required=all" % (cluster.nodes[1].mon_port)))  # force connect between nodes
+            result = get_result(requests.get("http://localhost:%s/storage/groups?fields_required=all" % (cluster.nodes[1].mon_port), headers=default_headers))  # force connect between nodes
             if 'status_code' in result and result['status_code'] != 200:
                 break
             if len(result['StorageGroups']) < 5:
                 break
-            result = get_result(requests.get("http://localhost:%s/viewer/cluster" % (cluster.nodes[1].mon_port)))  # force connect between nodes
+            result = get_result(requests.get("http://localhost:%s/viewer/cluster" % (cluster.nodes[1].mon_port), headers=default_headers))  # force connect between nodes
             if 'status_code' in result and result['status_code'] != 200:
                 break
             if 'StorageTotal' not in result or result['StorageTotal'] == 0:
@@ -256,6 +299,28 @@ wait_for_cluster_ready()
 
 def test_wait_for_cluster_ready():
     return {"wait_good": wait_good}
+
+
+def test_whoami_root():
+    return get_viewer_normalized("/viewer/whoami")
+
+
+def test_whoami_database():
+    return get_viewer_normalized("/viewer/whoami", headers={
+        'Cookie': 'ydb_session_id=' + database_session_id,
+    })
+
+
+def test_whoami_viewer():
+    return get_viewer_normalized("/viewer/whoami", headers={
+        'Cookie': 'ydb_session_id=' + viewer_session_id,
+    })
+
+
+def test_whoami_monitoring():
+    return get_viewer_normalized("/viewer/whoami", headers={
+        'Cookie': 'ydb_session_id=' + monitoring_session_id,
+    })
 
 
 def test_counter():
@@ -457,7 +522,8 @@ def normalize_result_schema(result):
                                           'EffectiveACL',
                                           'CreateTxId',
                                           'PathId',
-                                          'size_bytes',
+                                          'PublicKeys',
+                                          'OriginalUserToken',
                                           ])
 
 
@@ -494,6 +560,7 @@ def normalize_result(result):
                                      'ReadThroughput',
                                      'Read',
                                      'Write',
+                                     'size_bytes',
                                      ])
     result = wipe_values_by_key(result, ['LatencyGetFast',
                                          'LatencyPutTabletLog',
@@ -510,8 +577,8 @@ def normalize_result(result):
     return result
 
 
-def get_viewer_normalized(url, params=None):
-    return normalize_result(get_viewer(url, params))
+def get_viewer_normalized(url, params=None, headers=default_headers):
+    return normalize_result(get_viewer(url, params, headers))
 
 
 def get_viewer_db_normalized(url, params=None):
@@ -706,6 +773,7 @@ def test_pqrb_tablet():
         'query': 'CREATE TOPIC topic1(CONSUMER consumer1)',
         'schema': 'multi'
     })
+
     response_tablet_info = call_viewer("/viewer/tabletinfo", {
         'database': dedicated_db,
         'path': dedicated_db + '/topic1',
@@ -767,11 +835,14 @@ def test_operations_list_page_bad():
 
 
 def test_scheme_directory():
+
     result = {}
     result["1-get"] = get_viewer_normalized("/scheme/directory", {
         'database': dedicated_db,
         'path': dedicated_db
         })
+    logging.info("Result 1: {}".format(result["1-get"]))
+
     result["2-post"] = post_viewer("/scheme/directory", {
         'database': dedicated_db,
         'path': dedicated_db + '/test_dir'
@@ -796,7 +867,7 @@ def test_topic_data():
 
     call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': 'CREATE TOPIC topic1',
+        'query': 'CREATE TOPIC topic2',
         'schema': 'multi'
     })
 
@@ -810,7 +881,7 @@ def test_topic_data():
         if close:
             writer.close()
 
-    writer = driver.topic_client.writer('topic1', producer_id="12345")
+    writer = driver.topic_client.writer('topic2', producer_id="12345")
     write(writer, "message", False)
 
     # Also write one messagewith metadata
@@ -818,36 +889,30 @@ def test_topic_data():
     writer.write(message_w_meta)
     writer.close()
 
-    writer_compressed = driver.topic_client.writer('topic1', producer_id="12345", codec=2)
+    writer_compressed = driver.topic_client.writer('topic2', producer_id="12345", codec=2)
     write(writer_compressed, "compressed-message")
+    writer_compressed.close()
+
+    topic_path = '{}/topic2'.format(dedicated_db)
 
     response = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '0',
-        'limit': '5'
-    })
-
-    response_cut_by_last_offset = call_viewer("/viewer/topic_data", {
-        'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
-        'partition': '0',
-        'offset': '0',
-        'last_offset': '3',
         'limit': '5'
     })
 
     response_w_meta = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '10',
         'limit': '1'
     })
     response_compressed = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '11',
         'limit': '5'
@@ -855,7 +920,7 @@ def test_topic_data():
 
     response_last = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '20',
         'limit': '5'
@@ -863,7 +928,7 @@ def test_topic_data():
 
     response_short_msg = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '20',
         'limit': '1',
@@ -872,24 +937,33 @@ def test_topic_data():
 
     response_no_part = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'offset': '20'
     })
 
     response_both_offset_and_ts = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '20',
         'read_timestamp': '20'
     })
 
+    response_cut_by_last_offset = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': topic_path,
+        'partition': '0',
+        'offset': '0',
+        'last_offset': '3',
+        'limit': '10'
+    })
+
     def replace_values(resp):
         res = replace_values_by_key(resp, ['CreateTimestamp',
                                            'WriteTimestamp',
-                                           'TimestampDiff',
                                            'ProducerId',
                                            ])
+        res = replace_types_by_key(res, ['TimestampDiff'])
         logging.info(res)
         return res
 
@@ -1119,4 +1193,116 @@ def test_viewer_query_long_multipart():
 
     result['fetch_error_stream_response'] = normalize_multipart_response(response_fetch_error_stream)
 
+    return result
+
+
+def test_security():
+    result = {}
+    result['database_nodes_root'] = get_viewer_normalized("/viewer/nodes", params={
+        'database': dedicated_db,
+        'fields_required': 'NodeId',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + root_session_id,
+    })
+    result['database_nodes_monitoring'] = get_viewer_normalized("/viewer/nodes", params={
+        'database': dedicated_db,
+        'fields_required': 'NodeId',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + monitoring_session_id,
+    })
+    result['database_nodes_viewer'] = get_viewer_normalized("/viewer/nodes", params={
+        'database': dedicated_db,
+        'fields_required': 'NodeId',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + viewer_session_id,
+    })
+    result['database_nodes_database'] = get_viewer_normalized("/viewer/nodes", params={
+        'database': dedicated_db,
+        'fields_required': 'NodeId',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + database_session_id,
+    })
+
+    result['cluster_nodes_root'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + root_session_id,
+    })
+    result['cluster_nodes_monitoring'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + monitoring_session_id,
+    })
+    result['cluster_nodes_viewer'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + viewer_session_id,
+    })
+    result['cluster_nodes_database'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + database_session_id,
+    })
+
+    result['down_node_root'] = get_viewer("/tablets/app", params={
+        'TabletID': '72057594037968897',
+        'page': 'SetDown',
+        'node': '1',
+        'down': '0',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + root_session_id,
+    })
+    result['down_node_monitoring'] = get_viewer("/tablets/app", params={
+        'TabletID': '72057594037968897',
+        'page': 'SetDown',
+        'node': '1',
+        'down': '0',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + monitoring_session_id,
+    })
+    result['down_node_viewer'] = get_viewer("/tablets/app", params={
+        'TabletID': '72057594037968897',
+        'page': 'SetDown',
+        'node': '1',
+        'down': '0',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + viewer_session_id,
+    })
+    result['down_node_database'] = get_viewer("/tablets/app", params={
+        'TabletID': '72057594037968897',
+        'page': 'SetDown',
+        'node': '1',
+        'down': '0',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + database_session_id,
+    })
+
+    result['restart_pdisk_root'] = replace_values_by_key(post_viewer("/pdisk/restart", body={
+        'node_id': '1',
+        'pdisk_id': '1',
+        'force': '1',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + root_session_id,
+    }), ['debugMessage'])
+    result['restart_pdisk_monitoring'] = post_viewer("/pdisk/restart", body={
+        'node_id': '1',
+        'pdisk_id': '1',
+        'force': '1',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + monitoring_session_id,
+    })
+    result['restart_pdisk_viewer'] = post_viewer("/pdisk/restart", body={
+        'node_id': '1',
+        'pdisk_id': '1',
+        'force': '1',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + viewer_session_id,
+    })
+    result['restart_pdisk_database'] = post_viewer("/pdisk/restart", body={
+        'node_id': '1',
+        'pdisk_id': '1',
+        'force': '1',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + database_session_id,
+    })
     return result

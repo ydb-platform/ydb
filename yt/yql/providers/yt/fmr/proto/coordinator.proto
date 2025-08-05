@@ -14,6 +14,7 @@ message THeartbeatRequest {
 message THeartbeatResponse {
     repeated TTask TasksToRun = 1;
     repeated string TaskToDeleteIds = 2;
+    bool NeedToRestart = 3;
 }
 
 message TStartOperationRequest {
@@ -49,3 +50,11 @@ message TGetFmrTableInfoResponse {
     TTableStats TableStats = 1;
     repeated TFmrError ErrorMessages = 2;
 }
+
+message TClearSessionRequest {
+    string SessionId = 1;
+}
+
+message TClearSessionResponse {
+    EOperationStatus Status = 1;
+};

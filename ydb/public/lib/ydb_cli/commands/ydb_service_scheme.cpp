@@ -280,12 +280,16 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeCoordinationNode(driver);
     case NScheme::ESchemeEntryType::Replication:
         return DescribeReplication(driver);
+    case NScheme::ESchemeEntryType::Transfer:
+        return DescribeTransfer(driver);
     case NScheme::ESchemeEntryType::View:
         return DescribeView(driver);
     case NScheme::ESchemeEntryType::ExternalDataSource:
         return DescribeExternalDataSource(driver);
     case NScheme::ESchemeEntryType::ExternalTable:
         return DescribeExternalTable(driver);
+    case NScheme::ESchemeEntryType::SysView:
+        return DescribeSystemView(driver);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -516,6 +520,26 @@ static TStringBuf SkipDatabasePrefix(TStringBuf value, TStringBuf prefix) {
     return value;
 }
 
+void PrintConnectionParams(const NReplication::TConnectionParams& connParams) {
+    bool isLocal = connParams.GetDiscoveryEndpoint().empty();
+    if (isLocal) {
+        return;
+    }
+
+    Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
+    Cout << Endl << "Database: " << connParams.GetDatabase();
+
+    switch (connParams.GetCredentials()) {
+    case NReplication::TConnectionParams::ECredentials::Static:
+        Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
+        Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
+        break;
+    case NReplication::TConnectionParams::ECredentials::OAuth:
+        Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
+        break;
+    }
+}
+
 int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const {
     const auto& desc = result.GetReplicationDescription();
 
@@ -545,18 +569,7 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     const auto& srcDatabase = connParams.GetDatabase();
     const auto& dstDatabase = Database;
 
-    Cout << Endl << "Endpoint: " << connParams.GetDiscoveryEndpoint();
-    Cout << Endl << "Database: " << connParams.GetDatabase();
-
-    switch (connParams.GetCredentials()) {
-    case NReplication::TConnectionParams::ECredentials::Static:
-        Cout << Endl << "User: " << connParams.GetStaticCredentials().User;
-        Cout << Endl << "Password (SECRET): " << connParams.GetStaticCredentials().PasswordSecretName;
-        break;
-    case NReplication::TConnectionParams::ECredentials::OAuth:
-        Cout << Endl << "OAuth token (SECRET): " << connParams.GetOAuthCredentials().TokenSecretName;
-        break;
-    }
+    PrintConnectionParams(connParams);
 
     Cout << Endl << "Consistency level: " << desc.GetConsistencyLevel();
     switch (desc.GetConsistencyLevel()) {
@@ -594,6 +607,35 @@ int TCommandDescribe::PrintReplicationResponsePretty(const NYdb::NReplication::T
     return EXIT_SUCCESS;
 }
 
+int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDescribeTransferResult& result) const {
+    const auto& desc = result.GetTransferDescription();
+
+    Cout << Endl << "State: ";
+    switch (desc.GetState()) {
+    case NReplication::TTransferDescription::EState::Running:
+        Cout << desc.GetState();
+        break;
+    case NReplication::TTransferDescription::EState::Error:
+        Cout << "Error: " << desc.GetErrorState().GetIssues().ToOneLineString();
+        break;
+    default:
+        break;
+    }
+
+    const auto& connParams = desc.GetConnectionParams();
+    PrintConnectionParams(connParams);
+
+    Cout << Endl << "Source path: " << desc.GetSrcPath();
+    Cout << Endl << "Destination path: " << desc.GetDstPath();
+    Cout << Endl << "Consumer: " << desc.GetConsumerName();
+    Cout << Endl << "Transformation lambda: " << desc.GetTransformationLambda();
+    Cout << Endl << "Batch size, bytes: " << desc.GetBatchingSettings().SizeBytes;
+    Cout << Endl << "Batch flush interval: " << desc.GetBatchingSettings().FlushInterval;
+
+    Cout << Endl;
+    return EXIT_SUCCESS;
+}
+
 int TCommandDescribe::DescribeReplication(const TDriver& driver) {
     NReplication::TReplicationClient client(driver);
     auto settings = NReplication::TDescribeReplicationSettings()
@@ -601,8 +643,15 @@ int TCommandDescribe::DescribeReplication(const TDriver& driver) {
 
     auto result = client.DescribeReplication(Path, settings).ExtractValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
+}
+
+int TCommandDescribe::DescribeTransfer(const TDriver& driver) {
+    NReplication::TReplicationClient client(driver);
+
+    auto result = client.DescribeTransfer(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintTransferResponsePretty);
 }
 
 int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {
@@ -648,8 +697,20 @@ int TCommandDescribe::DescribeExternalTable(const TDriver& driver) {
     return PrintDescription(this, OutputFormat, result.GetExternalTableDescription(), &TCommandDescribe::PrintExternalTableResponsePretty);
 }
 
+int TCommandDescribe::DescribeSystemView(const TDriver& driver) {
+    NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    const auto result = sessionResult.GetSession().DescribeSystemView(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    const auto desc = result.GetSystemViewDescription();
+    return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintSystemViewResponsePretty);
+}
+
 namespace {
-    void PrintColumns(const NTable::TTableDescription& tableDescription) {
+    template<typename TTableLikeObjectDescription>
+    void PrintColumns(const TTableLikeObjectDescription& tableDescription) {
         if (!tableDescription.GetTableColumns().size()) {
             return;
         }
@@ -788,7 +849,8 @@ namespace {
         Cout << table;
     }
 
-    void PrintAttributes(const NTable::TTableDescription& tableDescription) {
+    template<typename TTableLikeObjectDescription>
+    void PrintAttributes(const TTableLikeObjectDescription& tableDescription) {
         if (tableDescription.GetAttributes().empty()) {
             return;
         }
@@ -1001,6 +1063,14 @@ int TCommandDescribe::PrintTableResponsePretty(const NTable::TTableDescription& 
     if (ShowKeyShardBoundaries || ShowPartitionStats) {
         PrintPartitionInfo(tableDescription, ShowKeyShardBoundaries, ShowPartitionStats);
     }
+
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::PrintSystemViewResponsePretty(const NYdb::NTable::TSystemViewDescription& result) const {
+    Cout << "Id: "  << result.GetSysViewId() << " (" << result.GetSysViewName() <<  ")" << Endl;
+    PrintColumns(result);
+    PrintAttributes(result);
 
     return EXIT_SUCCESS;
 }

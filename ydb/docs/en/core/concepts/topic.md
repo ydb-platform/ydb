@@ -78,15 +78,15 @@ The following constraints apply when using autopartitioning:
 2. When autopartitioning is enabled for a topic, it is impossible to read from or write to it using the [Kafka API](../reference/kafka-api/index.md).
 3. Autopartitioning can only be enabled on topics that use the reserved capacity mode.
 
-## Message Sources and Groups {#producer-id}
+## Message Sources {#producer-id}
 
-Messages are ordered using the `producer_id` and `message_group_id`. The order of written messages is maintained within pairs: `<producer ID, message group ID>`.
+Messages are ordered using the `producer_id`. The order of written messages is maintained within `producer_id`.
 
-When used for the first time, a pair of `<producer ID, message group ID>` is linked to a topic's [partition](#partitioning) using the round-robin algorithm and all messages with this pair of IDs get into the same partition. The link is removed if there are no new messages using this producer ID for 14 days.
+When used for the first time, a `producer_id` is linked to a topic's [partition](#partitioning) using the round-robin algorithm and all messages with `producer_id` get into the same partition. The link is removed if there are no new messages using this producer ID for 14 days.
 
 {% note warning %}
 
-The recommended maximum number of `<producer ID, message group ID>` pairs is up to 100 thousand per partition in the last 14 days.
+The recommended maximum number of `producer_id` pairs is up to 100 thousand per partition in the last 14 days.
 
 {% endnote %}
 
@@ -104,7 +104,7 @@ To accurately calculate the balance, the message processing order is crucial. If
 
 When several application instances read messages from a stream, a message about account top-ups can be received by one instance and a message about debiting by another. In this case, there's no guaranteed instance with accurate balance information. To avoid this issue, you can, for example, save data in the DBMS, share information between application instances, and implement a distributed cache.
 
-{{ ydb-short-name }} can write data so that messages from one source (for example, about transactions from one account) arrive at the same application instance. The source of a message is identified by the source_id, while the sequence number of a message from the source is used to ensure there are no duplicate messages. {{ydb-short-name}} arranges data streams so that messages from the same source arrive at the same partition. As a result, transaction messages for a given account will always arrive at the same partition and be processed by the application instance linked to this partition. Each of the instances processes its own subset of partitions and there's no need to synchronize the instances.
+{{ ydb-short-name }} can write data so that messages from a single source are delivered to the same application instance. Each source writes messages with its own unique `producer_id`, and a sequence number (`seqno`) is used to prevent duplicate processing. {{ ydb-short-name }} routes all messages with the same `producer_id` to the same partition. When reading from a topic, each reader instance handles its own subset of partitions, eliminating the need for synchronization between instances. For example, this approach could allow all transactions from a given account to be processed by the application instance associated with it.
 
 Below is an example when all transactions on accounts with even IDs are transferred to the first instance of the application, and with odd ones — to the second.
 
@@ -114,37 +114,9 @@ Below is an example when all transactions on accounts with even IDs are transfer
 
 For some tasks, the message processing order is not critical. For example, it's sometimes important to simply deliver data that will then be ordered by the storage system.
 
-For such tasks, the 'no-deduplication' mode can be used. In this scenario, neither [`producer_id`](#producer-id) nor [`source_id`](#source-id) are specified in write session setup and [`sequence numbers`](#seqno) are also not used for messages. The no-deduplication mode offers better performance and requires fewer server resources, but there is no message ordering or deduplication on the server side, which means that a message sent to the server multiple times (for example, due to network instability or writer process crash) may also be written to the topic multiple times.
-
-{% note warning %}
-
-We strongly recommend that you don't use random or pseudo-random source IDs. We recommend using a maximum of 100 thousand different source IDs per partition.
-
-{% endnote %}
+For such tasks, the "no-deduplication" mode can be used. In this scenario, [`producer_id`](#producer-id) isn't specified in the write session setup, and [`sequence numbers`](#seqno) aren't used for messages. The no-deduplication mode offers better performance and requires fewer server resources; however, there is no message ordering or deduplication on the server side. This means that a message sent to the server multiple times (for example, due to network instability or a writer process crash) may be written to the topic multiple times.
 
 {% endcut %}
-
-#### Source ID {#source-id}
-
-A source ID is an arbitrary string up to 2048 characters long. This is usually the ID of a file server or some other ID.
-
-#### Sample Source IDs {#source-id-examples}
-
-| Type         | ID | Description                                                                                                                                                                                                                                 |
-|--------------| --- |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| File         | Server ID | Files are used to store application logs. In this case, it's convenient to use the server ID as a source ID.                                                                                                                                |
-| User actions | ID of the class of user actions, such as "viewing a page", "making a purchase", and so on. | It's important to handle user actions in the order they were performed by the user. At the same time, there is no need to handle every single user action in one application. In this case, it's convenient to group user actions by class. |
-
-### Message Group ID {#group-id}
-
-A message group ID is an arbitrary string up to 2048 characters long. This is usually a file name or user ID.
-
-#### Sample Message Group IDs {#group-id-examples}
-
-| Type         | ID | Description                                                                                                                              |
-|--------------| --- |------------------------------------------------------------------------------------------------------------------------------------------|
-| File         | Full file path | All data from the server and the file it hosts will be sent to the same partition.                                                       |
-| User actions | User ID | It's important to handle user actions in the order they were performed. In this case, it's convenient to use the user ID as a source ID. |
 
 ## Message Sequence Numbers {#seqno}
 
@@ -161,7 +133,7 @@ Sequence numbers are not used if [no-deduplication mode](#no-dedup) is enabled.
 
 ## Message Retention Period {#retention-time}
 
-The message retention period is set for each topic. After it expires, messages are automatically deleted. An exception is data that hasn't been read by an [important](#important-consumer) consumer: this data will be stored until it's read.
+The message retention period is set for each topic. After it expires, messages are automatically deleted. An exception is data that hasn't been committed by an [important](#important-consumer) consumer: this data will be stored until it's read.
 
 ## Data Compression {#message-codec}
 

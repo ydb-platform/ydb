@@ -22,7 +22,13 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         : Sources(sources)
         , AllExternalDataSourcesAreAvailable(allExternalDataSourcesAreAvailable)
         , AvailableExternalDataSources(availableExternalDataSources)
-    {}
+    {
+        for (const auto& [type, source] : sources) {
+            if (AvailableExternalDataSources.contains(type)) {
+                AvailableProviders.insert(source->GetName());
+            }
+        }
+    }
 
     IExternalSource::TPtr GetOrCreate(const TString& type) const override {
         auto it = Sources.find(type);
@@ -35,10 +41,18 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         return it->second;
     }
 
+    bool IsAvailableProvider(const TString& provider) const override {
+        if (AllExternalDataSourcesAreAvailable) {
+            return true;
+        }
+        return AvailableProviders.contains(provider);
+    }
+
 private:
     const TMap<TString, IExternalSource::TPtr> Sources;
     bool AllExternalDataSourcesAreAvailable;
     const std::set<TString> AvailableExternalDataSources;
+    std::set<TString> AvailableProviders;
 };
 
 }
@@ -115,7 +129,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Ydb),
-            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC", "SERVICE_ACCOUNT"}, {"database_name", "use_tls", "database_id"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN"}, {"database_name", "use_tls", "database_id"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),
@@ -139,7 +153,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Solomon),
-            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {"use_ssl", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN", "SERVICE_ACCOUNT"}, {"use_tls", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::Iceberg),
@@ -156,6 +170,14 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::MongoDB),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls", "reading_mode", "unexpected_type_display_mode", "unsupported_type_display_mode"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::OpenSearch),
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(YdbTopicsType),
+            CreateExternalDataSource(TString{NYql::PqProviderName}, {"NONE", "BASIC", "TOKEN"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
         }
     },
     allExternalDataSourcesAreAvailable,

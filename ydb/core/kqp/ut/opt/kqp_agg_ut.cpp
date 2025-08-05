@@ -192,11 +192,8 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
     }
 
     Y_UNIT_TEST_TWIN(AggHashShuffle, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         TKikimrRunner kikimr(settings);
         {
@@ -243,6 +240,99 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
             //UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[2u]]");
         }
        
+    }
+
+    Y_UNIT_TEST(AggWithSqlIn) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64	NOT NULL,
+                b Int32,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+       res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+                b Int32,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t3` (
+                a Int64	NOT NULL,
+                b Int32,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        auto insertRes = session2.ExecuteQuery(R"(
+            INSERT INTO `/Root/t1` (a, b) VALUES (1, 1);
+            INSERT INTO `/Root/t2` (a, b) VALUES (1, 1);
+            INSERT INTO `/Root/t3` (a, b) VALUES (1, 1);
+            INSERT INTO `/Root/t1` (a, b) VALUES (2, 1);
+            INSERT INTO `/Root/t2` (a, b) VALUES (2, 1);
+            INSERT INTO `/Root/t3` (a, b) VALUES (2, 1);
+            INSERT INTO `/Root/t1` (a, b) VALUES (3, 1);
+            INSERT INTO `/Root/t2` (a, b) VALUES (3, 1);
+            INSERT INTO `/Root/t3` (a, b) VALUES (3, 1);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(insertRes.IsSuccess());
+
+        std::vector<TString> queries = {
+            R"(
+                SELECT sum(CASE WHEN (t1.a IN (SELECT t2.a FROM t2)) THEN 1 ELSE 0 END),
+                       sum(CASE WHEN (t1.a IN (SELECT t3.a FROM t3)) THEN 1 ELSE 0 END)
+                FROM t1;
+            )",
+           R"(
+                SELECT sum(CASE WHEN (t1.a IN (SELECT t2.a FROM t2)) THEN 1 ELSE 0 END),
+                       sum(CASE WHEN (t1.a IN (SELECT t3.a FROM t3)) THEN 1 ELSE 0 END)
+                FROM t1 left outer join t2 on t1.a = t2.a
+                        left outer join t3 on t1.a = t3.a;
+            )",
+        };
+
+        std::vector<TString> results = {
+            R"([[[3];[3]]])",
+            R"([[[3];[3]]])",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            TString output = FormatResultSetYson(result.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
     }
 }
 

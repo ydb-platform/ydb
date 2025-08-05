@@ -2,6 +2,7 @@
 #include "logging.h"
 
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
@@ -77,7 +78,7 @@ private:
         }
         Y_VERIFY_S(record.GetErrorCode() == NPersQueue::NErrorCode::OK, "Unimplemented!");
         Y_VERIFY_S(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdGetClientOffsetResult(), "Unimplemented!");
-        auto resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
+        const auto& resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
         Offset = resp.GetOffset();
         SentOffset = Offset;
 
@@ -122,11 +123,16 @@ private:
         auto& record = ev->Get()->Record;
         LOG_D("Handle " << ev->Get()->ToString());
 
-        const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
-
-        if (!readResult.ResultSize()) {
+        TString error;
+        if (!NPQ::BasicCheck(record, error)) {
             Y_ABORT_UNLESS(PQTablet);
             Send(PQTablet, CreateReadRequest().Release());
+            return;
+        }
+
+        const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
+        if (!readResult.ResultSize()) {
+            Send(Worker, new TEvWorker::TEvDataEnd(Partition, {}, {}));
             return;
         }
 

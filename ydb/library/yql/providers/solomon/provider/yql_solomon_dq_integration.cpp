@@ -292,15 +292,11 @@ public:
         
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
-            auto labelValues = NSo::ExtractSelectorValues(selectors);
-            if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-                labelValues.insert({ "service", settings.Project().StringValue() });
-                labelValues.insert({ "cluster", source.GetCluster() });
-            } else {
-                labelValues.insert({ "project", source.GetProject() });
+            std::map<TString, TString> selectorValues;
+            if (auto error = NSo::BuildSelectorValues(source, selectors, selectorValues)) {
+                throw yexception() << *error;
             }
-
-            source.MutableSelectors()->insert(labelValues.begin(), labelValues.end());
+            source.MutableSelectors()->insert(selectorValues.begin(), selectorValues.end());
         }
 
         auto program = settings.Program().StringValue();
@@ -343,20 +339,26 @@ public:
         auto& solomonConfig = State_->Configuration;
         auto& sourceSettings = *source.MutableSettings();
 
-        auto metricsQueuePageSize = solomonConfig->MetricsQueuePageSize.Get().OrElse(5000);
+        auto metricsQueuePageSize = solomonConfig->MetricsQueuePageSize.Get().OrElse(2000);
         sourceSettings.insert({"metricsQueuePageSize", ToString(metricsQueuePageSize)});
 
-        auto metricsQueuePrefetchSize = solomonConfig->MetricsQueuePrefetchSize.Get().OrElse(10000);
+        auto metricsQueuePrefetchSize = solomonConfig->MetricsQueuePrefetchSize.Get().OrElse(4000);
         sourceSettings.insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
 
-        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(250);
+        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(10);
         sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
 
         auto solomonClientDefaultReplica = solomonConfig->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);
         sourceSettings.insert({"solomonClientDefaultReplica", ToString(solomonClientDefaultReplica)});
 
-        auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(1000);
+        auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
         sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
+
+        auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(301);
+        sourceSettings.insert({"truePointsFindRange", ToString(truePointsFindRange)});
+
+        auto maxApiInflight = solomonConfig->MaxApiInflight.Get().OrElse(40);
+        sourceSettings.insert({"maxApiInflight", ToString(maxApiInflight)});
 
         if (!selectors.empty()) {
             ui64 totalMetricsCount;

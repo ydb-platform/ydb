@@ -2,6 +2,8 @@
 #include "node_warden_impl.h"
 #include "node_warden_events.h"
 
+#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
+
 #include <ydb/core/blob_depot/agent/agent.h>
 
 #include <ydb/core/util/random.h>
@@ -115,16 +117,9 @@ namespace NKikimr::NStorage {
 
         // forget pending queries
         if (fromController) {
-            group.GetGroupRequestPending = false;
             group.ProposeRequestPending = false;
-        } else if (fromResolver) {
-            group.GetGroupRequestPending = false;
         }
-
-        if (group.GroupResolver && !group.GetGroupRequestPending) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
-            group.GroupResolver = {};
-        }
+        group.GetGroupRequestPending = false;
 
         // update group content and encryption stuff
         bool groupChanged = false; // did the 'Group' field change somehow?
@@ -238,6 +233,9 @@ namespace NKikimr::NStorage {
                 for (auto& vdisk : group.VDisksOfGroup) {
                     UpdateGroupInfoForDisk(vdisk, info);
                 }
+                for (const auto& [targetBridgePileId, actorId] : group.WorkingSyncers) {
+                    Send(actorId, new TEvBlobStorage::TEvConfigureProxy(info, nullptr, nullptr));
+                }
             }
 
             if (const auto it = GroupPendingQueue.find(groupId); it != GroupPendingQueue.end()) {
@@ -260,6 +258,11 @@ namespace NKikimr::NStorage {
                 GroupPendingQueue.erase(it);
             }
         }
+
+        if (group.GroupResolver && group.Info) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+            group.GroupResolver = {};
+        }
     }
 
     void TNodeWarden::RequestGroupConfig(ui32 groupId, TGroupRecord& group) {
@@ -273,6 +276,7 @@ namespace NKikimr::NStorage {
             SendToController(std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(LocalNodeId, &groupId, &groupId + 1));
             group.GroupResolver = RegisterWithSameMailbox(CreateGroupResolverActor(groupId));
             group.GetGroupRequestPending = true;
+            Send(SelfId(), new TEvNodeWardenQueryCache(Sprintf("G%08" PRIx32, groupId), true));
         }
     }
 
@@ -316,6 +320,41 @@ namespace NKikimr::NStorage {
                 it->second.EncryptionParams.GetLifeCyclePhase() == TBlobStorageGroupInfo::ELCP_IN_TRANSITION) {
             RequestGroupConfig(it->first, it->second);
         }
+    }
+
+    void TNodeWarden::HandleManageSyncers(TEvNodeWardenManageSyncers::TPtr ev) {
+        for (const auto& item : ev->Get()->RunSyncers) {
+            const ui32 groupId = item.GroupId.GetRawId();
+
+            if (item.NodeId == LocalNodeId) {
+                auto& group = Groups[groupId];
+                if (TActorId& actorId = group.WorkingSyncers[item.TargetBridgePileId]; !actorId) {
+                    STLOG(PRI_DEBUG, BS_NODE, NW64, "starting syncer actor", (GroupId, item.GroupId),
+                        (TargetBridgePileId, item.TargetBridgePileId));
+                    actorId = Register(NBridge::CreateSyncerActor(NeedGroupInfo(groupId), item.TargetBridgePileId,
+                        item.GroupId));
+                }
+            } else if (const auto it = Groups.find(groupId); it != Groups.end()) {
+                TGroupRecord& group = it->second;
+                if (const auto jt = group.WorkingSyncers.find(item.TargetBridgePileId); jt != group.WorkingSyncers.end()) {
+                    STLOG(PRI_DEBUG, BS_NODE, NW65, "stopping syncer actor", (GroupId, item.GroupId),
+                        (TargetBridgePileId, item.TargetBridgePileId));
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, jt->second, SelfId(), nullptr, 0));
+                    group.WorkingSyncers.erase(jt);
+                }
+            }
+        }
+
+        std::vector<TEvNodeWardenManageSyncersResult::TSyncer> workingSyncers;
+        for (const auto& [groupId, group] : Groups) {
+            for (const auto& [targetBridgePileId, actorId] : group.WorkingSyncers) {
+                workingSyncers.push_back({
+                    .GroupId = TGroupId::FromValue(groupId),
+                    .TargetBridgePileId = targetBridgePileId,
+                });
+            }
+        }
+        Send(ev->Sender, new TEvNodeWardenManageSyncersResult(std::move(workingSyncers)), 0, ev->Cookie);
     }
 
 } // NKikimr::NStorage

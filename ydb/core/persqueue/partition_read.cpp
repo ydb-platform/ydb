@@ -2,7 +2,7 @@
 #include "mirrorer.h"
 #include "partition_log.h"
 #include "partition_util.h"
-#include "partition.h"
+#include "partition_common.h"
 #include "read.h"
 #include "dread_cache_service/caching_service.h"
 
@@ -126,21 +126,7 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
     if (cookie) {
         res->Record.SetCookie(*cookie);
     }
-    res->Record.SetReadingFinished(readingFinished);
-    if (readingFinished) {
-        ui32 partitionId = Partition.OriginalPartitionId;
-
-        auto* node = PartitionGraph.GetPartition(partitionId);
-        for (auto* child : node->DirectChildren) {
-            res->Record.AddChildPartitionIds(child->Id);
-
-            for (auto* p : child->DirectParents) {
-                if (p->Id != partitionId) {
-                    res->Record.AddAdjacentPartitionIds(p->Id);
-                }
-            }
-        }
-    }
+    GetResultPostProcessor<NKikimrPQ::THasDataInfoResponse>()(readingFinished, res->Record);
 
     return res;
 }
@@ -319,7 +305,7 @@ void TPartition::Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext
     ui64 offset = Max<i64>(userInfo.Offset, 0);
     auto ts = GetTime(userInfo, offset);
     TabletCounters.Cumulative()[COUNTER_PQ_GET_CLIENT_OFFSET_OK].Increment(1);
-    ReplyGetClientOffsetOk(ctx, ev->Get()->Cookie, userInfo.Offset, ts.first, ts.second, userInfo.AnyCommits);
+    ReplyGetClientOffsetOk(ctx, ev->Get()->Cookie, userInfo.Offset, ts.first, ts.second, userInfo.AnyCommits, userInfo.CommittedMetadata);
 }
 
 void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx) {
@@ -534,7 +520,8 @@ TReadAnswer TReadInfo::FormAnswer(
     const ui64 sizeLag,
     const TActorId& tablet,
     const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
-    const bool isActive
+    const bool isActive,
+    const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
 ) {
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
@@ -564,7 +551,7 @@ TReadAnswer TReadInfo::FormAnswer(
     PQ_LOG_D("FormAnswer for " << Blobs.size() << " blobs");
 
     if (!isActive && response->GetBlobs().empty()) {
-        readResult->SetReadingFinished(true);
+        postProcessor(true, *readResult);
     }
 
     AddResultDebugInfo(response, readResult);
@@ -683,7 +670,8 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     if (!res)
         return;
     TReadAnswer answer = res->FormAnswer(
-            ctx, nullptr, CompactionBlobEncoder.StartOffset, res->Offset, Partition, nullptr, res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive()
+            ctx, nullptr, CompactionBlobEncoder.StartOffset, res->Offset, Partition, nullptr,
+            res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
     );
     ctx.Send(Tablet, answer.Event.Release());
     PQ_LOG_D(" waiting read cookie " << ev->Get()->Cookie

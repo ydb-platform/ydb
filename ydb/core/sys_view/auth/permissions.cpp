@@ -20,10 +20,11 @@ public:
     using TScanBase = TScanActorBase<TPermissionsScan>;
     using TAuthBase = TAuthScanBase<TPermissionsScan>;
 
-    TPermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TPermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), false, true)
+        : TAuthBase(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken), false, true)
         , Effective(effective)
     {
     }
@@ -99,11 +100,13 @@ private:
     const bool Effective;
 };
 
-THolder<NActors::IActor> CreatePermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+THolder<NActors::IActor> CreatePermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TPermissionsScan>(effective, ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
+    return MakeHolder<TPermissionsScan>(effective, ownerId, scanId, sysViewInfo, tableRange, columns,
+        std::move(userToken));
 }
 
 }

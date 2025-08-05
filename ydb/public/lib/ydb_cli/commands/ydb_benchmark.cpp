@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <library/cpp/json/json_writer.h>
+#include <util/stream/null.h>
 #include <util/string/printf.h>
 #include <util/folder/path.h>
 #include <util/random/shuffle.h>
@@ -456,7 +457,21 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
         ui32 failsCount = 0;
         ui32 diffsCount = 0;
         std::optional<TString> prevResult;
-        TOFStream outFStream(TStringBuilder() << OutFilePath << "." << queryName << ".out");
+        THolder<IOutputStream> outFStreamHolder;
+        IOutputStream& outFStream = [&]() -> IOutputStream& {
+            if (TSet<TString>{"cout", "stdout", "console"}.contains(OutFilePath)) {
+                return Cout;
+            }
+            if (TSet<TString>{"cerr", "stderr"}.contains(OutFilePath)) {
+                return Cerr;
+            }
+            if (TSet<TString>{"", "/dev/null", "null"}.contains(OutFilePath)) {
+                outFStreamHolder = MakeHolder<TNullOutput>();
+            } else {
+                outFStreamHolder = MakeHolder<TOFStream>(TStringBuilder() << OutFilePath << "." << queryName << ".out");
+            }
+            return *outFStreamHolder;
+        }();
         for (const auto& iterExec: queryExec) {
             if (Threads > 0) {
                 iterExec->PrintQueryHeader();
@@ -549,7 +564,7 @@ void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmar
     TResultSetPrinter printer(TResultSetPrinter::TSettings()
         .SetOutput(&out)
         .SetMaxRowsCount(std::max(StringSplitter(expected.c_str()).Split('\n').Count(), (size_t)100))
-        .SetFormat(EDataFormat::Pretty).SetMaxWidth(120)
+        .SetFormat(EDataFormat::Pretty).SetMaxWidth(GetBenchmarkTableWidth())
     );
     for (const auto& [i, rr]: res.GetRawResults()) {
         for(const auto& r: rr) {
@@ -569,7 +584,7 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
     if (res.GetQueryPlan()) {
         {
             TFileOutput out(planFName + "table");
-            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out);
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out, GetBenchmarkTableWidth());
             queryPlanPrinter.Print(res.GetQueryPlan());
         }
         {

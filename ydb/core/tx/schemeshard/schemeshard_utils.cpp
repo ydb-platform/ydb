@@ -1,15 +1,16 @@
-#include <ydb/core/base/table_vector_index.h>
-#include <ydb/core/persqueue/utils.h>
+#include "schemeshard_utils.h"
 
 #include "schemeshard_info_types.h"
 
-#include "schemeshard_utils.h"
+#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/persqueue/utils.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
-PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions) {
-    Storage = partitions * NPQ::TopicPartitionReserveSize(tabletConfig);
+PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions, ui64 currentStorageUsage) {
+    Storage = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS == tabletConfig.GetMeteringMode()
+        ? currentStorageUsage : partitions * NPQ::TopicPartitionReserveSize(tabletConfig);
     Throughput = partitions * NPQ::TopicPartitionReserveThroughput(tabletConfig);
 }
 

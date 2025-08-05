@@ -38,7 +38,7 @@ What's currently not supported:
 | `Bool` | ☓ | ☓ |
 | `Date` | ✓ | ✓ |
 | `Datetime` | ✓ | ✓ |
-| `Decimal` | ☓ | ☓ |
+| `Decimal` | ✓ | ☓ |
 | `Double` | ✓ | ☓ |
 | `Float` | ✓ | ☓ |
 | `Int16` | ✓ | ☓ |

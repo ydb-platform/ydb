@@ -1,28 +1,52 @@
 #include "brotli.h"
 #include "output_queue_impl.h"
 
+#include <contrib/libs/brotli/c/include/brotli/decode.h>
+#include <contrib/libs/brotli/c/include/brotli/encode.h>
+
 #include <util/generic/size_literals.h>
-#include <yql/essentials/utils/exceptions.h>
-#include <yql/essentials/utils/yql_panic.h>
-#include <contrib/libs/brotli/include/brotli/encode.h>
+
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 
-namespace NYql {
+#include <yql/essentials/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
 
-namespace NBrotli {
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
+
+namespace NYql::NBrotli {
 
 namespace {
-    struct TAllocator {
-        static void* Allocate(void* /* opaque */, size_t size) {
-            return ::operator new(size);
-        }
 
-        static void Deallocate(void* /* opaque */, void* ptr) noexcept {
-            ::operator delete(ptr);
-        }
-    };
+struct TAllocator {
+    static void* Allocate(void* /* opaque */, size_t size) {
+        return ::operator new(size);
+    }
 
-}
+    static void Deallocate(void* /* opaque */, void* ptr) noexcept {
+        ::operator delete(ptr);
+    }
+};
+
+class TReadBuffer : public NDB::ReadBuffer {
+public:
+    TReadBuffer(NDB::ReadBuffer& source);
+    ~TReadBuffer();
+private:
+    bool nextImpl() final;
+
+    NDB::ReadBuffer& Source_;
+    std::vector<char> InBuffer, OutBuffer;
+
+    BrotliDecoderState* DecoderState_;
+
+    bool SubstreamFinished_ = false;
+    bool InputExhausted_ = false;
+    size_t InputAvailable_ = 0;
+    size_t InputSize_ = 0;
+
+    void InitDecoder();
+    void FreeDecoder();
+};
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     : NDB::ReadBuffer(nullptr, 0ULL), Source_(source)
@@ -107,8 +131,6 @@ void TReadBuffer::FreeDecoder() {
     BrotliDecoderDestroyInstance(DecoderState_);
 }
 
-namespace {
-
 class TCompressor : public TOutputQueue<> {
 public:
     TCompressor(int quiality)
@@ -188,11 +210,14 @@ private:
     bool IsFirstBlock = true;
 };
 
+} // anonymous namespace
+
+std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
+    return std::make_unique<TReadBuffer>(source);
 }
+
 IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
     return std::make_unique<TCompressor>(cLevel.value_or(BROTLI_DEFAULT_QUALITY));
 }
 
-}
-
-}
+} // namespace NYql::NBrotli

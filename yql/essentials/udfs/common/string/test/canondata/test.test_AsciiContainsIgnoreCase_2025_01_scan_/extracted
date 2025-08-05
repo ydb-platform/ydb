@@ -25,26 +25,8 @@
         	SELECT
 	^
             <tmp_path>/program.sql:<main>:10:13: Error: At function: Apply, At function: Udf
-            	    String::AsciiStartsWithIgnoreCase(value, "AS") AS icstarts,
-	            ^
-                <tmp_path>/program.sql:<main>:10:13: Error: UDF 'String.AsciiStartsWithIgnoreCase' is not available before version 2025.02
-                	    String::AsciiStartsWithIgnoreCase(value, "AS") AS icstarts,
-	            ^
-        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem, At lambda
-        	SELECT
-	^
-            <tmp_path>/program.sql:<main>:12:13: Error: At function: Apply, At function: Udf
-            	    String::AsciiEndsWithIgnoreCase(value, "AS") AS icends,
-	            ^
-                <tmp_path>/program.sql:<main>:12:13: Error: UDF 'String.AsciiEndsWithIgnoreCase' is not available before version 2025.02
-                	    String::AsciiEndsWithIgnoreCase(value, "AS") AS icends,
-	            ^
-        <tmp_path>/program.sql:<main>:2:1: Error: At function: SqlProjectItem, At lambda
-        	SELECT
-	^
-            <tmp_path>/program.sql:<main>:14:13: Error: At function: Apply, At function: Udf
             	    String::AsciiEqualsIgnoreCase(value, "FDSA") AS icequals,
 	            ^
-                <tmp_path>/program.sql:<main>:14:13: Error: UDF 'String.AsciiEqualsIgnoreCase' is not available before version 2025.02
+                <tmp_path>/program.sql:<main>:10:13: Error: UDF 'String.AsciiEqualsIgnoreCase' is not available before version 2025.02
                 	    String::AsciiEqualsIgnoreCase(value, "FDSA") AS icequals,
 	            ^

@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.13.0)
+VERSION(0.13.3)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-mqtt/archive/v0.13.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-mqtt/archive/v0.13.3.tar.gz)
 
 PEERDIR(
     contrib/restricted/aws/aws-c-common

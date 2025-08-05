@@ -122,10 +122,26 @@ struct TEvPrivate {
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase  {
     static constexpr bool StaticDiscovery = true;
     struct TMetrics {
-        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
+        TMetrics(
+            const TTxId& txId,
+            ui64 taskId,
+            const ::NMonitoring::TDynamicCounterPtr& counters,
+            const ::NMonitoring::TDynamicCounterPtr& taskCounters,
+            const NPq::NProto::TDqPqTopicSource& sourceParams)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
-            , Counters(counters) {
-            SubGroup = Counters->GetSubgroup("source", "PqRead");
+            , Counters(counters)
+            , TaskCounters(taskCounters) {
+            if (counters) {
+                SubGroup = Counters->GetSubgroup("source", "PqRead");
+            } else if (taskCounters) {
+                SubGroup = TaskCounters->GetSubgroup("source", "PqRead");
+            } else {
+                SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            }
+
+            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
             auto source = SubGroup->GetSubgroup("tx_id", TxId);
             auto task = source->GetSubgroup("task_id", ToString(taskId));
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
@@ -137,11 +153,14 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         }
 
         ~TMetrics() {
-            SubGroup->RemoveSubgroup("tx_id", TxId);
+            if (SubGroup) {
+                SubGroup->RemoveSubgroup("tx_id", TxId);
+            }
         }
 
         TString TxId;
         ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
         ::NMonitoring::TDynamicCounterPtr SubGroup;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
@@ -178,21 +197,24 @@ public:
         ui64 taskId,
         const THolderFactory& holderFactory,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
-        NPq::NProto::TDqReadTaskParams&& readParams,
+        TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         const ::NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& taskCounters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway)
+        const IPqGateway::TPtr& pqGateway,
+        ui32 topicPartitionsCount)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
-        , Metrics(txId, taskId, counters)
+        , Metrics(txId, taskId, counters, taskCounters, SourceParams)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , PqGateway(pqGateway)
+        , TopicPartitionsCount(topicPartitionsCount)
     {
         Y_UNUSED(TDuration::TryParse(SourceParams.GetReconnectPeriod(), ReconnectPeriod));
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
@@ -324,13 +346,13 @@ private:
 
     void Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
         for (auto& clusterState : Clusters) {
-            SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << ", Reconnect epoch: " << Metrics.ReconnectRate->Val());
+            SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << ", Reconnect epoch: " << (Metrics.ReconnectRate ? Metrics.ReconnectRate->Val() : 0));
             if (clusterState.ReadSession) {
                 clusterState.ReadSession->Close(TDuration::Zero());
                 clusterState.ReadSession.reset();
             }
         }
-        ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
+        Reconnected = true;
         Metrics.ReconnectRate->Inc();
 
         Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
@@ -381,10 +403,10 @@ private:
                             .Endpoint = federatedCluster.GetEndpoint(),
                             .Path = federatedCluster.GetDatabase(),
                         },
-                        ReadParams.GetPartitioningParams().GetTopicPartitionsCount()
+                        TopicPartitionsCount
                     );
                     if (cluster.PartitionsCount == 0) {
-                        cluster.PartitionsCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                        cluster.PartitionsCount = TopicPartitionsCount;
                         SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
                     }
                 }
@@ -395,7 +417,7 @@ private:
                             .Endpoint = SourceParams.GetEndpoint(),
                             .Path =SourceParams.GetDatabase()
                     },
-                    ReadParams.GetPartitioningParams().GetTopicPartitionsCount()
+                    TopicPartitionsCount
                 );
             }
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
@@ -491,6 +513,7 @@ private:
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
+        // called with bound allocator
         Metrics.InFlyAsyncInputData->Set(0);
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
@@ -501,6 +524,11 @@ private:
             Metrics.ReconnectRate->Inc();
             Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
             InflightReconnect = true;
+        }
+
+        if (Reconnected) {
+            Reconnected = false;
+            ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
         }
 
         i64 usedSpace = 0;
@@ -563,10 +591,12 @@ private:
     std::vector<ui64> GetPartitionsToRead(TClusterState& clusterState) const {
         std::vector<ui64> res;
 
-        ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
-        while (currentPartition < clusterState.PartitionsCount) {
-            res.emplace_back(currentPartition); // 0-based in topic API
-            currentPartition += ReadParams.GetPartitioningParams().GetDqPartitionsCount();
+        for (const auto& readParams : ReadParams) {
+            ui64 currentPartition = readParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
+            while (currentPartition < clusterState.PartitionsCount) {
+                res.emplace_back(currentPartition); // 0-based in topic API
+                currentPartition += readParams.GetPartitioningParams().GetDqPartitionsCount();
+            }
         }
 
         return res;
@@ -601,10 +631,16 @@ private:
 
         auto settings = NYdb::NTopic::TReadSessionSettings();
         settings
-            .AppendTopics(topicReadSettings)
-            .ConsumerName(SourceParams.GetConsumerName())
-            .MaxMemoryUsageBytes(BufferSize)
-            .ReadFromTimestamp(StartingMessageTimestamp);
+        .AppendTopics(topicReadSettings)
+        .MaxMemoryUsageBytes(BufferSize)
+        .ReadFromTimestamp(StartingMessageTimestamp);
+        
+        TString consumer(SourceParams.GetConsumerName());
+        if (!consumer.empty()) {
+            settings.ConsumerName(consumer);
+        } else {
+            settings.WithoutConsumer();
+        }
         return settings;
     }
 
@@ -643,6 +679,7 @@ private:
         THashMap<NYdb::NTopic::TPartitionSession::TPtr, std::pair<std::string, TList<std::pair<ui64, ui64>>>> OffsetRanges; // [start, end)
     };
 
+    // must be called with bound allocator
     bool MaybeReturnReadyBatch(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, i64& usedSpace) {
         if (ReadyBuffer.empty()) {
             SubscribeOnNextEvent();
@@ -679,6 +716,7 @@ private:
         return true;
     }
 
+    // must be called with bound allocator
     void PushWatermarkToReady(TInstant watermark) {
         SRC_LOG_D("SessionId: " << GetSessionId() << " New watermark " << watermark << " was generated");
 
@@ -690,6 +728,7 @@ private:
         ReadyBuffer.back().Watermark = watermark;
     }
 
+    // must be called (visited) with bound allocator
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
@@ -823,6 +862,7 @@ private:
 private:
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
+    bool Reconnected = false;
     TMetrics Metrics;
     const i64 BufferSize;
     const THolderFactory& HolderFactory;
@@ -838,7 +878,36 @@ private:
     TMaybe<TInstant> NextIdlenesCheckAt;
     IPqGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
+    ui32 TopicPartitionsCount = 0;
 };
+
+ui32 ExtractPartitionsFromParams(
+    TVector<NPq::NProto::TDqReadTaskParams>& readTaskParamsMsg,
+    const THashMap<TString, TString>& taskParams, // partitions are here in dq
+    const TVector<TString>& readRanges            // partitions are here in kqp
+    ) {
+    ui32 partitionCount = 0;
+    if (!readRanges.empty()) {
+        for (const auto& readRange : readRanges) {
+            NPq::NProto::TDqReadTaskParams params;
+            YQL_ENSURE(params.ParseFromString(readRange), "Failed to parse DqPqRead task params");
+            if (!partitionCount) {
+                partitionCount = params.GetPartitioningParams().GetTopicPartitionsCount();
+            }
+            YQL_ENSURE(partitionCount == params.GetPartitioningParams().GetTopicPartitionsCount(),
+                "Different partition count " << partitionCount << ", " << params.GetPartitioningParams().GetTopicPartitionsCount());
+            readTaskParamsMsg.emplace_back(std::move(params));
+        }
+    } else {
+        auto taskParamsIt = taskParams.find("pq");
+        YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
+        NPq::NProto::TDqReadTaskParams params;
+        YQL_ENSURE(params.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
+        partitionCount = params.GetPartitioningParams().GetTopicPartitionsCount();
+        readTaskParamsMsg.emplace_back(std::move(params));
+    }
+    return partitionCount;
+}
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
@@ -848,20 +917,19 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
+    const TVector<TString>& readRanges,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& taskCounters,
     IPqGateway::TPtr pqGateway,
     i64 bufferSize
     )
 {
-    auto taskParamsIt = taskParams.find("pq");
-    YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
-
-    NPq::NProto::TDqReadTaskParams readTaskParamsMsg;
-    YQL_ENSURE(readTaskParamsMsg.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
+    TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
+    ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, taskParams, readRanges);
 
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -879,8 +947,10 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         counters,
+        taskCounters,
         bufferSize,
-        pqGateway
+        pqGateway,
+        topicPartitionsCount
     );
 
     return {actor, actor};
@@ -907,11 +977,13 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 args.TaskId,
                 args.SecureParams,
                 args.TaskParams,
+                args.ReadRanges,
                 driver,
                 credentialsFactory,
                 args.ComputeActorId,
                 args.HolderFactory,
                 counters,
+                args.TaskCounters,
                 pqGateway,
                 PQReadDefaultFreeSpace);
         }

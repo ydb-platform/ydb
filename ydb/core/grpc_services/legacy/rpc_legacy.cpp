@@ -149,6 +149,11 @@ void DoHiveCreateTablet(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvi
     f.RegisterActor(CreateMessageBusHiveCreateTablet(ctx));
 }
 
+void DoTestShardControl(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_TEST_SHARD_CONTROL);
+    f.RegisterActor(CreateMessageBusTestShardControl(ctx));
+}
+
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST);
     f.RegisterActor(CreateMessageBusConsoleRequest(ctx));

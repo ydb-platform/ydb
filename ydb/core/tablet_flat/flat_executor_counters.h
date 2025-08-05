@@ -71,7 +71,7 @@ namespace NTabletFlatExecutor {
     XX(DB_REMOVED_TX_COUNT, "DbRemovedTxCount") \
     XX(DB_REMOVED_COMMITTED_TXS, "DbRemovedCommittedTxs") \
     XX(TABLET_LAST_START_TIME_US, "LastStartTimeUs") \
-    XX(CACHE_TOTAL_TRY_KEEP_IN_MEMORY_TIER, "CacheTotalTryKeepInMemoryTier") \
+    XX(CACHE_TOTAL_TRY_KEEP_IN_MEMORY_MODE, "CacheTotalTryKeepInMemoryMode") \
 
 // don't change order!
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \

@@ -59,8 +59,8 @@ struct TCollection {
     TMap<TPageId, TPendingRequests> PendingRequests;
     TDeque<TPageId> DroppedPages;
 
-    ECacheTier GetCacheTier() {
-        return InMemoryOwners ? ECacheTier::TryKeepInMemory : ECacheTier::Regular;
+    ECacheMode GetCacheMode() {
+        return InMemoryOwners ? ECacheMode::TryKeepInMemory : ECacheMode::Regular;
     }
 };
 
@@ -216,12 +216,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             page->CacheId = id;
         }
 
-        static ECacheTier GetTier(TPage* page) {
-            return page->CacheTier;
-        }
-
-        static void SetTier(TPage* page, ECacheTier tier) {
-            page->CacheTier = tier;
+        static ui32 GetTier(TPage* page) {
+            return static_cast<ui32>(page->CacheMode);
         }
     };
 
@@ -378,15 +374,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Attach page collection " << pageCollectionId
             << " owner " << ev->Sender
-            << " cache tier " << msg->CacheTier);
+            << " cache mode " << msg->CacheMode);
 
         TCollection& collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
-        switch (msg->CacheTier) {
-        case ECacheTier::Regular:
-            TryMoveToRegularCacheTier(collection, ev->Sender);
+        switch (msg->CacheMode) {
+        case ECacheMode::Regular:
+            TryMoveToRegularCache(collection, ev->Sender);
             break;
-        case ECacheTier::TryKeepInMemory:
-            TryMoveToTryKeepInMemoryCacheTier(collection, std::move(msg->PageCollection), ev->Sender);
+        case ECacheMode::TryKeepInMemory:
+            TryMoveToTryKeepInMemoryCache(collection, std::move(msg->PageCollection), ev->Sender);
             break;
         }
 
@@ -427,7 +423,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const bool doTraceLog = DoTraceLog();
 
         TCollection &collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
-        ECacheTier cacheTier = collection.GetCacheTier();
+        ECacheMode cacheMode = collection.GetCacheMode();
 
         TStackVec<std::pair<TPageId, ui32>> pendingPages; // pageId, reqIdx
         ui32 pagesToRequestCount = 0;
@@ -451,7 +447,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         for (const ui32 reqIdx : xrange(msg->Pages.size())) {
             const TPageId pageId = msg->Pages[reqIdx];
-            auto* page = EnsurePage(pageCollection, collection, pageId, cacheTier);
+            auto* page = EnsurePage(pageCollection, collection, pageId, cacheMode);
             TryLoadEvictedPage(page);
 
             Counters.RequestedPages->Inc();
@@ -769,7 +765,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Y_ENSURE(erased);
             Counters.PageCollectionOwners->Dec();
 
-            TryMoveToRegularCacheTier(*collection, ev->Sender);
+            TryMoveToRegularCache(*collection, ev->Sender);
 
             TryDropExpiredCollection(*collection);
         }
@@ -808,7 +804,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ownerIt->second.erase(collectionIt);
         Counters.PageCollectionOwners->Dec();
 
-        TryMoveToRegularCacheTier(*collection, ev->Sender);
+        TryMoveToRegularCache(*collection, ev->Sender);
 
         TryDropExpiredCollection(*collection);
 
@@ -869,7 +865,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         DoGC();
     }
 
-    TPage* EnsurePage(const NPageCollection::IPageCollection& pageCollection, TCollection& collection, const TPageId pageId, ECacheTier initialTier) {
+    TPage* EnsurePage(const NPageCollection::IPageCollection& pageCollection, TCollection& collection, const TPageId pageId, ECacheMode initialMode) {
         Y_ENSURE(pageId < collection.PageMap.size(),
             "Page collection " << pageCollection.Label()
             << " requested page " << pageId
@@ -878,7 +874,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         if (!page) {
             Y_ENSURE(collection.PageMap.emplace(pageId, (page = new TPage(pageId, pageCollection.Page(pageId).Size, &collection))));
-            page->CacheTier = initialTier;
+            page->CacheMode = initialMode;
         }
 
         return page;
@@ -1161,7 +1157,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TryDropExpiredCollection(collection);
     }
 
-    void TryMoveToRegularCacheTier(TCollection& collection, const TActorId& owner) {
+    void TryMoveToRegularCache(TCollection& collection, const TActorId& owner) {
         if (!collection.InMemoryOwners.erase(owner)) {
             return;
         }
@@ -1169,8 +1165,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change tier of page collection " << collection.Id
-            << " to " << ECacheTier::Regular);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change mode of page collection " << collection.Id
+            << " to " << ECacheMode::Regular);
         Y_ENSURE(TryKeepInMemoryBytes >= collection.TotalSize);
         TryKeepInMemoryBytes -= collection.TotalSize;
         Counters.TryKeepInMemoryBytes->Set(TryKeepInMemoryBytes);
@@ -1178,11 +1174,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // TODO: move pages async and batched
         for (const auto& kv : collection.PageMap) {
             auto* page = kv.second.Get();
-            TryMovePageToTier(page, ECacheTier::Regular);
+            TryChangeCacheMode(page, ECacheMode::Regular);
         }
     }
 
-    void TryMoveToTryKeepInMemoryCacheTier(TCollection& collection, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
+    void TryMoveToTryKeepInMemoryCache(TCollection& collection, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
         if (!collection.InMemoryOwners.insert(owner).second) {
             return;
         }
@@ -1190,8 +1186,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change tier of page collection " << collection.Id
-            << " to " << ECacheTier::TryKeepInMemory);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change mode of page collection " << collection.Id
+            << " to " << ECacheMode::TryKeepInMemory);
         TryKeepInMemoryBytes += collection.TotalSize;
         Counters.TryKeepInMemoryBytes->Set(TryKeepInMemoryBytes);
         ActualizeCacheSizeLimit();
@@ -1199,8 +1195,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TVector<TPageId> pagesToRequest(::Reserve(pageCollection->Total()));
         ui64 pagesToRequestBytes = 0;
         for (const auto& pageId : xrange(pageCollection->Total())) {
-            auto* page = EnsurePage(*pageCollection, collection, pageId, ECacheTier::TryKeepInMemory);
-            TryMovePageToTier(page, ECacheTier::TryKeepInMemory);
+            auto* page = EnsurePage(*pageCollection, collection, pageId, ECacheMode::TryKeepInMemory);
+            TryChangeCacheMode(page, ECacheMode::TryKeepInMemory);
 
             switch (page->State) {
             case PageStateEvicted:
@@ -1225,17 +1221,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void TryMovePageToTier(TPage* page, ECacheTier targetTier) {
-        if (page->CacheTier != targetTier) {
+    void TryChangeCacheMode(TPage* page, ECacheMode targetMode) {
+        if (page->CacheMode != targetMode) {
             switch (page->State) {
             case PageStateLoaded:
                 Cache.Erase(page);
                 page->EnsureNoCacheFlags();
-                page->CacheTier = targetTier;
+                page->CacheMode = targetMode;
                 Evict(Cache.Touch(page));
                 break;
             default:
-                page->CacheTier = targetTier;
+                page->CacheMode = targetMode;
                 break;
             }
         }

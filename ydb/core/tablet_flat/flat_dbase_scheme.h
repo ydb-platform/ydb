@@ -2,7 +2,6 @@
 
 #include "flat_table_column.h"
 #include "flat_page_iface.h"
-#include "shared_cache_tiers.h"
 #include "util_basics.h"
 
 #include <ydb/core/base/localdb.h>
@@ -46,14 +45,14 @@ public:
 
     struct TFamily /* group of columns configuration */ {
         using ECodec = NPage::ECodec;
-        using ECacheTier = NSharedCache::ECacheTier;
+        using ECacheMode = NPage::ECacheMode;
 
         ui32 Room = DefaultRoom;
         ECache Cache = ECache::None;    /* How to cache data pages      */
         ECodec Codec = ECodec::Plain;   /* How to encode data pages     */
         ui32 Small = Max<ui32>();       /* When pack values to outer blobs  */
         ui32 Large = Max<ui32>();       /* When keep values in single blobs */
-        ECacheTier CacheTier = ECacheTier::Regular;
+        ECacheMode CacheMode = ECacheMode::Regular;
     };
 
     using TColumn = NTable::TColumn;
@@ -211,7 +210,7 @@ class TAlter {
 public:
     using ECodec = NPage::ECodec;
     using ECache = NPage::ECache;
-    using ECacheTier = NSharedCache::ECacheTier;
+    using ECacheMode = NPage::ECacheMode;
 
     TAlter(IAlterSink* sink = nullptr)
         : Sink(sink)
@@ -233,7 +232,7 @@ public:
     TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);
     TAlter& AddColumnToKey(ui32 table, ui32 column);
-    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec, ECacheTier cacheTier);
+    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec, ECacheMode cacheMode);
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
     TAlter& SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);

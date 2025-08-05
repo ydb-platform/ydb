@@ -122,21 +122,21 @@ public:
             StickyPagesSize = 0;
         }
 
-        bool UpdateCacheTier(ECacheTier newCacheTier) {
-            bool changed = std::exchange(CacheTier, newCacheTier) != newCacheTier;
-            if (changed && newCacheTier == ECacheTier::TryKeepInMemory) {
+        bool UpdateCacheMode(ECacheMode newCacheMode) {
+            bool changed = std::exchange(CacheMode, newCacheMode) != newCacheMode;
+            if (changed && newCacheMode == ECacheMode::TryKeepInMemory) {
                 // TODO: count only pages allocated in SharedCache
-                TryKeepInMemoryTierSize = PageCollection->BackingSize();
+                TryKeepInMemoryModeSize = PageCollection->BackingSize();
             }
             return changed;
         }
 
-        ECacheTier GetCacheTier() const noexcept {
-            return CacheTier;
+        ECacheMode GetCacheMode() const noexcept {
+            return CacheMode;
         }
 
-        ui64 GetTryKeepInMemoryTierSize() const noexcept {
-            return TryKeepInMemoryTierSize;
+        ui64 GetTryKeepInMemoryModeSize() const noexcept {
+            return TryKeepInMemoryModeSize;
         }
 
         const TLogoBlobID Id;
@@ -150,8 +150,8 @@ public:
         // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
         THashMap<TPageId, TSharedPageRef> StickyPages;
         ui64 StickyPagesSize = 0;
-        ECacheTier CacheTier = ECacheTier::Regular;
-        ui64 TryKeepInMemoryTierSize = 0;
+        ECacheMode CacheMode = ECacheMode::Regular;
+        ui64 TryKeepInMemoryModeSize = 0;
     };
 
 public:

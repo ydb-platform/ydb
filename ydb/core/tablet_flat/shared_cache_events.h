@@ -55,11 +55,11 @@ namespace NKikimr::NSharedCache {
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-        ECacheTier CacheTier;
+        ECacheMode CacheMode;
 
-        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheTier cacheTier)
+        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheMode cacheMode)
             : PageCollection(std::move(pageCollection))
-            , CacheTier(cacheTier)
+            , CacheMode(cacheMode)
         {
         }
     };

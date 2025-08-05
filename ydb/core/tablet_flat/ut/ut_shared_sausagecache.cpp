@@ -47,7 +47,7 @@ struct TTxInitSchema : public ITransaction {
             .SetCompactionPolicy(TableId, *CompactionPolicy);
 
         if (TryKeepInMemory) {
-            txc.DB.Alter().SetFamily(TableId, 0, NTable::NPage::ECache::Once, NTable::NPage::ECodec::Plain, ECacheTier::TryKeepInMemory);
+            txc.DB.Alter().SetFamily(TableId, 0, NTable::NPage::ECache::Once, NTable::NPage::ECodec::Plain, NTable::NPage::ECacheMode::TryKeepInMemory);
         }
 
         return true;
@@ -173,7 +173,7 @@ struct TTxTryKeepInMemory : public ITransaction {
     {
         using namespace NTable::NPage;
 
-        txc.DB.Alter().SetFamily(TableId, 0, ECache::Once, ECodec::Plain, TryKeepInMemory ? ECacheTier::TryKeepInMemory : ECacheTier::Regular);
+        txc.DB.Alter().SetFamily(TableId, 0, ECache::Once, ECodec::Plain, TryKeepInMemory ? ECacheMode::TryKeepInMemory : ECacheMode::Regular);
 
         return true;
     }
@@ -1146,7 +1146,7 @@ Y_UNIT_TEST(ZeroCache_FlatIndex) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 202);
 }
 
-Y_UNIT_TEST(TryKeepInMemoryTier_Basics) {
+Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
@@ -1261,7 +1261,7 @@ Y_UNIT_TEST(TryKeepInMemoryTier_Basics) {
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
 }
 
-Y_UNIT_TEST(TryKeepInMemoryTier_Enabling) {
+Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
@@ -1378,7 +1378,7 @@ Y_UNIT_TEST(TryKeepInMemoryTier_Enabling) {
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
 }
 
-Y_UNIT_TEST(TryKeepInMemoryTier_Disabling) {
+Y_UNIT_TEST(TryKeepInMemoryMode_Disabling) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);

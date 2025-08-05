@@ -29,7 +29,7 @@ namespace NFake {
 
                 if (Compress) { /* setup default family for page compression */
                     delta.AddFamily(table, 0, 0);
-                    delta.SetFamily(table, 0, NPage::ECache::None, NPage::ECodec::LZ4, NSharedCache::ECacheTier::Regular);
+                    delta.SetFamily(table, 0, NPage::ECache::None, NPage::ECodec::LZ4, NPage::ECacheMode::Regular);
                 } else {
                     delta.AddFamily(table, 0, 0);
                     delta.SetFamilyBlobs(table, 0, 6500, 7000);

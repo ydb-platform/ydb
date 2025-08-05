@@ -106,9 +106,9 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         changes |= ChangeTableSetting(table, family.Small, small);
         changes |= ChangeTableSetting(table, family.Large, large);
 
-        if (delta.HasCacheTier()) {
-            Y_ENSURE(delta.GetCacheTier() <= 1, "Invalid cache tier value");
-            if (ChangeTableSetting(table, family.CacheTier, static_cast<NSharedCache::ECacheTier>(delta.GetCacheTier()))) {
+        if (delta.HasCacheMode()) {
+            Y_ENSURE(delta.GetCacheMode() <= 1, "Invalid cache mode value");
+            if (ChangeTableSetting(table, family.CacheMode, static_cast<ECacheMode>(delta.GetCacheMode()))) {
                 ChangeTableSetting(table, tableInfo.PendingCacheUpdate, true);
                 changes |= true;
             }

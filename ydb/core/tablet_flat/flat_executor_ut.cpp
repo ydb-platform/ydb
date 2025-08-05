@@ -37,7 +37,7 @@ namespace NTabletFlatExecutor {
 
                 if (Groups) {
                     txc.DB.Alter()
-                        .SetFamily(TableId, AltFamilyId, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain, NSharedCache::ECacheTier::Regular)
+                        .SetFamily(TableId, AltFamilyId, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain, NTable::NPage::ECacheMode::Regular)
                         .AddColumnToFamily(TableId, ColumnValueId, AltFamilyId);
                 }
 
@@ -2059,7 +2059,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompressedSelectRows) {
             using namespace NTable::NPage;
 
             txc.DB.Alter()
-                .SetFamily(TRowsModel::TableId, 0, ECache::None, ECodec::LZ4, NSharedCache::ECacheTier::Regular);
+                .SetFamily(TRowsModel::TableId, 0, ECache::None, ECodec::LZ4, ECacheMode::Regular);
 
             return true;
         }
@@ -6269,7 +6269,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         {
             using namespace NTable::NPage;
 
-            txc.DB.Alter().SetFamily(TRowsModel::TableId, Family, ECache::Ever, ECodec::Plain, ECacheTier::Regular);
+            txc.DB.Alter().SetFamily(TRowsModel::TableId, Family, ECache::Ever, ECodec::Plain, ECacheMode::Regular);
 
             return true;
         }
@@ -6286,7 +6286,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             using namespace NTable::NPage;
 
             txc.DB.Alter()
-                .SetFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, ECache::None, ECodec::Plain, NSharedCache::ECacheTier::Regular)
+                .SetFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, ECache::None, ECodec::Plain, ECacheMode::Regular)
                 .AddColumnToFamily(TRowsModel::TableId, TRowsModel::ColumnValueId, TRowsModel::AltFamilyId);
 
             return true;
@@ -6741,20 +6741,20 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
     struct TTxCachingFamily : public ITransaction {
         using ECache = NTable::NPage::ECache;
-        using ECacheTier = NSharedCache::ECacheTier;
+        using ECacheMode = NSharedCache::ECacheMode;
 
         ui32 Family;
         NTable::NPage::ECache Cache;
-        ECacheTier CacheTier;
+        ECacheMode CacheMode;
 
-        TTxCachingFamily(ui32 family, ECache cache, ECacheTier cacheTier)
+        TTxCachingFamily(ui32 family, ECache cache, ECacheMode cacheMode)
             : Family(family)
             , Cache(cache)
-            , CacheTier(cacheTier)
+            , CacheMode(cacheMode)
         {}
 
         bool Execute(TTransactionContext &txc, const TActorContext &) override {
-            txc.DB.Alter().SetFamily(TRowsModel::TableId, Family, Cache, NTable::NPage::ECodec::Plain, CacheTier);
+            txc.DB.Alter().SetFamily(TRowsModel::TableId, Family, Cache, NTable::NPage::ECodec::Plain, CacheMode);
 
             return true;
         }
@@ -6771,7 +6771,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
             using namespace NTable::NPage;
 
             txc.DB.Alter()
-                .SetFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, ECache::None, ECodec::Plain, NSharedCache::ECacheTier::Regular)
+                .SetFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, ECache::None, ECodec::Plain, ECacheMode::Regular)
                 .AddColumnToFamily(TRowsModel::TableId, TRowsModel::ColumnValueId, TRowsModel::AltFamilyId);
 
             return true;
@@ -6817,7 +6817,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         auto cacheCounters = GetSharedPageCounters(env);
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::Regular) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::Regular) });
 
         // 10 history pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -6853,7 +6853,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         auto cacheCounters = GetSharedPageCounters(env);
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
 
         // 10 history pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -6889,7 +6889,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         auto cacheCounters = GetSharedPageCounters(env);
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
 
         // 1 historic[0] + 10 historic[1] pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -6925,7 +6925,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
 
         // 1 historic[0] + 10 historic[1] pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -6961,7 +6961,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
 
         // 1 historic[0] + 10 historic[1] pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -6996,8 +6996,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         auto cacheCounters = GetSharedPageCounters(env);
 
         env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
 
         // 1 historic[0] + 10 historic[1] pages
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
@@ -7045,8 +7045,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         // add family, old parts won't have it
         env.SendSync(new NFake::TEvExecute{ new TTxAddFamily() });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
@@ -7085,7 +7085,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
 
         // add family, old parts won't have it
         env.SendSync(new NFake::TEvExecute{ new TTxAddFamily() });
-        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheTier::TryKeepInMemory) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
 
         int failedAttempts = 0;
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });

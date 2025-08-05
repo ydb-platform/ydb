@@ -2,8 +2,8 @@
 
 #include <library/cpp/retry/retry_policy.h>
 
+#include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
-
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -109,5 +109,7 @@ NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message);
 void ParsePoolSettings(const NKikimrSchemeOp::TResourcePoolDescription& description, NResourcePool::TPoolSettings& poolConfig);
 
 ui64 SaturationSub(ui64 x, ui64 y);
+
+NResourcePool::TPoolSettings PoolSettingsFromConfig(const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig);
 
 }  // NKikimr::NKqp::NWorkload

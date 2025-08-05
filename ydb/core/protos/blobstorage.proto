@@ -129,6 +129,8 @@ message TGroupInfo {
     optional NKikimrBlobStorage.TGroupDecommitStatus.E DecommitStatus = 16;
     repeated uint32 BridgeGroupIds = 17; // filled in for common group when operating in bridge mode
     optional uint32 GroupSizeInUnits = 18;
+    optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
+    optional uint32 BridgePileId = 20;
 }
 
 message TEvVPatchStart {
@@ -622,6 +624,7 @@ message TEvVCollectGarbage {
     optional uint32 CollectGeneration = 4;
     optional uint32 CollectStep = 5;
     optional bool Hard = 12 [default = false];
+    optional bool IgnoreBlock = 13;
 
     repeated NKikimrProto.TLogoBlobID Keep = 6;
     repeated NKikimrProto.TLogoBlobID DoNotKeep = 7;

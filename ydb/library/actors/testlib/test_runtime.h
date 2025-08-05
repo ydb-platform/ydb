@@ -679,6 +679,7 @@ namespace NActors {
 
         THolder<TActorSystemSetup> MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node);
         THolder<TActorSystem> MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node);
+        void StartActorSystem(ui32 nodeIndex, TNodeDataBase* node);
         virtual void InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
             Y_UNUSED(setup, node);
         }

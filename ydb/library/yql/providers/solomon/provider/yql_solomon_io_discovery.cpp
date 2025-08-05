@@ -41,6 +41,16 @@ TVector<TCoAtom> ExtractUserLabels(TPositionHandle pos, TExprContext& ctx, TExpr
     return {};
 }
 
+bool HasSetting(TExprNode::TListType& settings, const TString& name) {
+    for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
+        if (const auto item = *it; item->Head().IsAtom(name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& userLabels, TExprContext& ctx, TVector<TCoAtom>& systemColumns) {
     auto allSystemColumns = {SOLOMON_SCHEME_LABELS, SOLOMON_SCHEME_VALUE, SOLOMON_SCHEME_TS, SOLOMON_SCHEME_TYPE};
     TVector<const TItemExprType*> columnTypes;
@@ -135,9 +145,17 @@ public:
                 auto userSchema = ExtractSchema(settingsList);
                 TVector<TCoAtom> userLabels = ExtractUserLabels(settings->Pos(), ctx, settingsList);
 
-                auto newSettings = Build<TCoNameValueTupleList>(ctx, settings->Pos())
-                                        .Add(settingsList)
-                                    .Done();
+                auto newSettingsBuilder = Build<TCoNameValueTupleList>(ctx, settings->Pos())
+                                        .Add(settingsList);
+
+                if (!HasSetting(settingsList, "program") && !HasSetting(settingsList, "selectors")) {
+                    newSettingsBuilder.Add<TCoNameValueTuple>()
+                        .Name<TCoAtom>().Build("selectors")
+                        .Value<TCoAtom>().Build("{}")
+                        .Build();
+                }
+
+                auto newSettings = newSettingsBuilder.Done();
 
                 auto soObject = Build<TSoObject>(ctx, read.Pos())
                                   .Project<TCoAtom>().Build(project)

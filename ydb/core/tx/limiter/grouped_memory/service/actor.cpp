@@ -13,7 +13,9 @@ void TMemoryLimiterActor::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_GROUPED_MEMORY_PROVIDER));
     for (ui64 i = 0; i < Config.GetCountBuckets(); i++) {
         LoadQueue.Add(i);
-        Managers.push_back(std::make_shared<TManager>(SelfId(), Config, Name, Signals, DefaultStage));
+        Counters.push_back(std::make_shared<TCounters>(Signals, Name + "_" + ToString(i)));
+        DefaultStages.push_back(std::make_shared<TStageFeatures>("GLOBAL", Config.GetMemoryLimit(), Config.GetHardMemoryLimit(), nullptr, Counters.back()->BuildStageCounters("general")));
+        Managers.push_back(std::make_shared<TManager>(SelfId(), Config, Name, Counters.back(), DefaultStages.back()));
     }
 
     Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(ConsumerKind));
@@ -37,12 +39,12 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishTask::TPtr& ev) 
     Managers[index]->UnregisterAllocation(event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
 }
 
-void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvUpdateTask::TPtr& ev) {
+void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvTaskUpdated::TPtr& ev) {
     auto& event = *ev->Get();
     const size_t index = GetManager(event.GetExternalProcessId());
-    LWPROBE(UpdateTask, index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), event.GetVolume(), LoadQueue.GetLoad(index));
-    Managers[index]->UpdateAllocation(
-        event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), event.GetVolume());
+    LWPROBE(TaskUpdated, index, event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId(), LoadQueue.GetLoad(index));
+    Managers[index]->AllocationUpdated(
+        event.GetExternalProcessId(), event.GetExternalScopeId(), event.GetAllocationId());
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev) {
@@ -68,8 +70,15 @@ void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& e
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev) {
     auto& event = *ev->Get();
-    const size_t index = AcquireManager(event.GetExternalProcessId());
+    const size_t index = AcquireManager(ev->Get()->GetExternalProcessId());
     LWPROBE(StartProcess, index, event.GetExternalProcessId(), LoadQueue.GetLoad(index));
+    for (auto& stage : event.GetStages()) {
+        if (!stage) {
+            continue;
+        }
+        stage->AttachOwner(DefaultStages[index]);
+        stage->AttachCounters(Counters[index]->BuildStageCounters(stage->GetName()));
+    }
     Managers[index]->RegisterProcess(event.GetExternalProcessId(), event.GetStages());
 }
 

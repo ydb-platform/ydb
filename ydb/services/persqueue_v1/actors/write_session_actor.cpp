@@ -202,11 +202,11 @@ TWriteSessionActor<UseMigrationProtocol>::TWriteSessionActor(
 {
     Y_ASSERT(Request);
 
-    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME); !values.empty()) {
-        UserAgent = values[0];
+    if (auto value = Request->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME)) {
+        UserAgent = *value;
     }
-    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); !values.empty()) {
-        SdkBuildInfo = values[0];
+    if (auto value = Request->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER)) {
+        SdkBuildInfo = *value;
     }
 }
 
@@ -216,8 +216,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ct
 
     Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel, Request->GetWilsonTraceId(), UseMigrationProtocol ? "Topic.WriteSession[migration]" : "Topic.WriteSession");
 
-    Request->GetStreamCtx()->Attach(ctx.SelfID);
-    if (!Request->GetStreamCtx()->Read()) {
+    Request->Attach(ctx.SelfID);
+    if (!Request->Read()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "grpc read failed at start");
         Die(ctx);
         return;
@@ -262,7 +262,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvRead
 
     switch(req.client_message_case()) {
         case TClientMessage::kInitRequest:
-            ctx.Send(ctx.SelfID, new TEvWriteInit(std::move(req), Request->GetStreamCtx()->GetPeerName()));
+            ctx.Send(ctx.SelfID, new TEvWriteInit(std::move(req), Request->GetPeerName()));
             break;
         case TClientMessage::kWriteRequest:
             ctx.Send(ctx.SelfID, new TEvWrite(std::move(req)));
@@ -310,6 +310,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
         ctx.Send(PartitionChooser,  new TEvents::TEvPoison());
     }
 
+    if (Request) {
+        // Write to audit log if it is needed and we have not written yet.
+        Request->AuditLogRequestEnd(Ydb::StatusIds::SUCCESS);
+    }
+
     State = ES_DYING;
     TRlHelpers::PassAway(TActorBootstrapped<TWriteSessionActor>::SelfId());
     TActorBootstrapped<TWriteSessionActor>::Die(ctx);
@@ -353,7 +358,7 @@ void TWriteSessionActor<UseMigrationProtocol>::CheckACL(const TActorContext& ctx
             TServerMessage serverMessage;
             serverMessage.set_status(Ydb::StatusIds::SUCCESS);
             serverMessage.mutable_update_token_response();
-            if (!Request->GetStreamCtx()->Write(std::move(serverMessage))) {
+            if (!Request->Write(std::move(serverMessage))) {
                 LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
                 Die(ctx);
             }
@@ -790,6 +795,7 @@ void TWriteSessionActor<UseMigrationProtocol>::CloseSession(const TString& error
     }
     SessionClosed = true;
 
+    const Ydb::StatusIds::StatusCode statusCode = ConvertPersQueueInternalCodeToStatus(errorCode);
     if (errorCode != PersQueue::ErrorCode::OK) {
 
         if (InternalErrorCode(errorCode)) {
@@ -803,16 +809,16 @@ void TWriteSessionActor<UseMigrationProtocol>::CloseSession(const TString& error
         }
 
         TServerMessage result;
-        result.set_status(ConvertPersQueueInternalCodeToStatus(errorCode));
+        result.set_status(statusCode);
         FillIssue(result.add_issues(), errorCode, errorReason);
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 error cookie: " << Cookie << " reason: " << errorReason << " sessionId: " << OwnerCookie);
 
-        if (!Request->GetStreamCtx()->WriteAndFinish(std::move(result), grpc::Status::OK)) {
+        if (!Request->WriteAndFinish(std::move(result), statusCode)) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc last write failed");
         }
     } else {
-        if (!Request->GetStreamCtx()->Finish(grpc::Status::OK)) {
+        if (!Request->Finish(statusCode)) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " double finish call");
         }
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 closed cookie: " << Cookie << " sessionId: " << OwnerCookie);
@@ -864,7 +870,7 @@ void TWriteSessionActor<UseMigrationProtocol>::MakeAndSendInitResponse(
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session inited cookie: " << Cookie << " partition: " << Partition
                                                       << " MaxSeqNo: " << maxSeqNo << " sessionId: " << OwnerCookie);
 
-    if (!Request->GetStreamCtx()->Write(std::move(response))) {
+    if (!Request->Write(std::move(response))) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
         Die(ctx);
         return;
@@ -876,7 +882,7 @@ void TWriteSessionActor<UseMigrationProtocol>::MakeAndSendInitResponse(
 
     //init completed; wait for first data chunk
     NextRequestInited = true;
-    if (!Request->GetStreamCtx()->Read()) {
+    if (!Request->Read()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
         Die(ctx);
         return;
@@ -943,7 +949,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     }
     if (!NextRequestInited && BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
         NextRequestInited = true;
-        if (!Request->GetStreamCtx()->Read()) {
+        if (!Request->Read()) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
             Die(ctx);
             return;
@@ -1075,7 +1081,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
 
         }
 
-        if (!Request->GetStreamCtx()->Write(std::move(result))) {
+        if (!Request->Write(std::move(result))) {
             // TODO: Log gRPC write error code
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
             Die(ctx);
@@ -1315,7 +1321,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvUpdateToken::T
         TServerMessage serverMessage;
         serverMessage.set_status(Ydb::StatusIds::SUCCESS);
         serverMessage.mutable_update_token_response();
-        if (!Request->GetStreamCtx()->Write(std::move(serverMessage))) {
+        if (!Request->Write(std::move(serverMessage))) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
             Die(ctx);
             return;
@@ -1334,7 +1340,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvUpdateToken::T
     }
 
     NextRequestInited = true;
-    if (!Request->GetStreamCtx()->Read()) {
+    if (!Request->Read()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
         Die(ctx);
         return;
@@ -1358,7 +1364,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
         if (ev->Get()->Retryable) {
             TServerMessage serverMessage;
             serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
-            Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
+            Request->WriteAndFinish(std::move(serverMessage), Ydb::StatusIds::UNAVAILABLE);
         } else {
             Request->RaiseIssues(ev->Get()->Issues);
             Request->ReplyUnauthenticated("refreshed token is invalid");
@@ -1496,7 +1502,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
 
     if (BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
         Y_ABORT_UNLESS(NextRequestInited);
-        if (!Request->GetStreamCtx()->Read()) {
+        if (!Request->Read()) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
             Die(ctx);
             return;

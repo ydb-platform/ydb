@@ -597,7 +597,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
             groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
                 .Args({"key", "item"})
                 .Body<TYtIsKeySwitch>()
-                    .DependsOn()
+                    .DependsOn<TCoDependsOn>()
                         .Input("item")
                     .Build()
                 .Build()

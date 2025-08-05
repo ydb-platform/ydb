@@ -174,6 +174,24 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(Metering_Documentation_Formula) {
+        for (ui64 dataSizeMB : {1500, 500, 100, 0}) {
+            const ui64 rowCount = 500'000;
+
+            TMeteringStats stats;
+            stats.SetReadRows(rowCount);
+            stats.SetReadBytes(dataSizeMB * 1_MB);
+            stats.SetUploadRows(rowCount);
+            stats.SetUploadBytes(dataSizeMB * 1_MB);
+
+            TString explain;
+            const ui64 result = TRUCalculator::Calculate(stats, explain);
+
+            // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+            // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#secondary-index
+            UNIT_ASSERT_VALUES_EQUAL_C(result, Max<ui64>(dataSizeMB * 640, dataSizeMB * 128 + rowCount * 0.5), explain);
+        }
+    }
 
     Y_UNIT_TEST(BaseCase) {
         TTestBasicRuntime runtime;
@@ -245,9 +263,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-        const TString meteringData = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-0-0-0-0-101-101-1818-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
-
-        MeteringDataEqual(meteringMessages, meteringData);
+        // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
+        // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#secondary-index
+        const TString expectedMetering = R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-0-0-0-0-101-101-1818-1818","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
+        MeteringDataEqual(meteringMessages, expectedMetering);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,

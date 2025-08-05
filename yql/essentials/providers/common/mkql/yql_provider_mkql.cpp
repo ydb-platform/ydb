@@ -168,7 +168,7 @@ TMkqlBuildContext* GetContextForMemoize(const TExprNode& node, TMkqlBuildContext
 }
 
 const TRuntimeNode& CheckTypeAndMemoize(const TExprNode& node, TMkqlBuildContext& ctx, const TRuntimeNode& runtime) {
-    if (node.GetTypeAnn()) {
+    if (node.GetTypeAnn() && node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Unit) {
         TNullOutput null;
         if (const auto type = BuildType(*node.GetTypeAnn(), ctx.ProgramBuilder, *ctx.TypeMemoization, null)) {
             if (!type->IsSameType(*runtime.GetStaticType())) {
@@ -2999,7 +2999,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.TryWeakMemberFromDict(other, rest, schemeType, member);
     });
 
-    AddCallable("DependsOn", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    // TODO: remove DependsOn from list below after NormalizeDependsOn is enabled by default
+    AddCallable({ "DependsOn", "InnerDependsOn" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 

@@ -9,7 +9,7 @@ from github import Github, GithubException, GithubObject, Commit
 
 class CherryPickCreator:
     def __init__(self, args):
-        def __split(s: str, seps: str = ', '):
+        def __split(s: str, seps: str = ', \n'):
             if not s:
                 return []
             if not seps:
@@ -19,6 +19,33 @@ class CherryPickCreator:
                 result += __split(part, seps[1:])
             return result
 
+        def __add_commit(c: str, single: bool):
+            commit = self.repo.get_commit(c)
+            pulls = commit.get_pulls()
+            if pulls.totalCount > 0:
+                pr = pulls.get_page(0)[0]
+                if single:
+                    self.pr_title_list.append(pr.title)
+                else:
+                    self.pr_title_list.append(f'commit {commit.sha}')
+                self.pr_body_list.append(f"* commit {commit.html_url}: {pr.title }")
+            else:
+                if single:
+                    self.pr_title_list.append(f'cherry-pick commit {commit.sha}')
+                else:
+                    self.pr_title_list.append(f'commit {commit.sha}')
+                self.pr_body_list.append(f"* commit {commit.html_url}")
+            self.commit_shas.append(commit.sha)
+
+        def __add_pull(p: int, single: bool):
+            pull = self.repo.get_pull(p)
+            if single:
+                self.pr_title_list.append(f"{pull.title}")
+            else:
+                self.pr_title_list.append(f'PR {pull.number}')
+            self.pr_body_list.append(f"* PR {pull.html_url}")
+            self.commit_shas.append(pull.merge_commit_sha)
+
         self.repo_name = os.environ["REPO"]
         self.target_branches = __split(args.target_branches)
         self.token = os.environ["TOKEN"]
@@ -27,33 +54,42 @@ class CherryPickCreator:
         self.commit_shas: list[str] = []
         self.pr_title_list: list[str] = []
         self.pr_body_list: list[str] = []
-        for c in __split(args.commits):
-            commit = self.repo.get_commit(c)
-            self.pr_title_list.append(commit.sha)
-            self.pr_body_list.append(commit.html_url)
-            self.commit_shas.append(commit.sha)
-        for p in __split(args.pulls):
-            pull = self.repo.get_pull(int(p))
-            self.pr_title_list.append(f'PR {pull.number}')
-            self.pr_body_list.append(pull.html_url)
-            self.commit_shas.append(pull.merge_commit_sha)
+        commits = __split(args.commits)
+        for c in commits:
+            id = c.split('/')[-1]
+            try:
+                __add_pull(int(id), len(commits) == 1)
+            except ValueError:
+                __add_commit(id, len(commits) == 1)
+
         self.dtm = datetime.datetime.now().strftime("%y%m%d-%H%M")
         self.logger = logging.getLogger("cherry-pick")
-        self.workflow_url = None
-        self.__detect_env()
+        try:
+            self.workflow_url = self.repo.get_workflow_run(int(os.getenv('GITHUB_RUN_ID', 0))).html_url
+        except:
+            self.workflow_url = None
 
-    def __detect_env(self):
-        if "GITHUB_RUN_ID" in os.environ:
-            self.workflow_url = (
-                f"{os.environ['GITHUB_SERVER_URL']}/{self.repo_name}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-            )
+    def pr_title(self, target_branch) -> str:
+        if len(self.pr_title_list) == 1:
+            return f"{target_branch}: {self.pr_title_list[0]}"
+        return f"{target_branch}: cherry-pick {', '.join(self.pr_title_list)}"
 
+    def pr_body(self, with_wf: bool) -> str:
+        commits = '\n'.join(self.pr_body_list)
+        pr_body = f"Cherry-pick:\n{commits}\n"
+        if with_wf:
+            if self.workflow_url:
+                pr_body += f"\nPR was created by cherry-pick workflow [run]({self.workflow_url})\n"
+            else:
+                pr_body += "\nPR was created by cherry-pick script\n"
+        return pr_body
+    
     def add_summary(self, msg):
-        logging.info(msg)
+        self.logger.info(msg)
         summary_path = os.getenv('GITHUB_STEP_SUMMARY')
         if summary_path:
             with open(summary_path, 'a') as summary:
-                summary.write(msg)
+                summary.write(f'{msg}\n')
 
     def git_run(self, *args):
         args = ["git"] + list(args)
@@ -76,38 +112,40 @@ class CherryPickCreator:
         self.git_run("cherry-pick", "--allow-empty", *self.commit_shas)
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)
 
-        pr_title = f"Cherry-pick {', '.join(self.pr_title_list)} to {target_branch}"
-        pr_body = f"Cherry-pick {', '.join(self.pr_body_list)} to {target_branch}\n\n"
-        if self.workflow_url:
-            pr_body += f"PR was created by cherry-pick workflow [run]({self.workflow_url})"
-        else:
-            pr_body += "PR was created by cherry-pick script"
-
         pr = self.repo.create_pull(
-            target_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True
+            target_branch, dev_branch_name, title=self.pr_title(target_branch), body=self.pr_body(True), maintainer_can_modify=True
         )
-        self.add_summary(f'{target_branch}: PR {pr.html_url} created\n')
+        self.add_summary(f'{target_branch}: PR {pr.html_url} created')
 
     def process(self):
+        br = ', '.join([f'[{b}]({self.repo.html_url}/tree/{b})' for b in self.target_branches])
+        self.logger.info(self.pr_title(br))
+        self.add_summary(f"{self.pr_body(False)}to {br}")
         if len(self.commit_shas) == 0 or len(self.target_branches) == 0:
             self.add_summary("Noting to cherry-pick or no targets branches, my life is meaningless.")
             return
-        self.git_run("clone", f"https://{self.token}@github.com/{self.repo_name}.git", "-c", "protocol.version=2", f"ydb-new-pr")
+        self.git_run(
+            "clone", f"https://{self.token}@github.com/{self.repo_name}.git", "-c", "protocol.version=2", f"ydb-new-pr"
+        )
         os.chdir(f"ydb-new-pr")
         for target in self.target_branches:
             try:
                 self.create_pr_for_branch(target)
             except GithubException as e:
-                self.add_summary(f'{target} error {type(e)}\n```\n{e}\n```\n')
+                self.add_summary(f'{target} error {type(e)}\n```\n{e}\n```')
             except BaseException as e:
-                self.add_summary(f'{target} error {type(e)}\n```\n{e}\n```\n')
+                self.add_summary(f'{target} error {type(e)}\n```\n{e}\n```')
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--commits", help="Comma or space separated list of commit SHAs")
-    parser.add_argument("--pulls", help="Comma or space separated list of PR numbers")
-    parser.add_argument("--target-branches", help="Comma or space separated list of branchs to cherry-pick")
+    parser.add_argument(
+        "--commits",
+        help="List of commits to cherry-pick. Can be represented as full or short commit SHA, PR number or URL to commit or PR. Separated by space, comma or line end.",
+    )
+    parser.add_argument(
+        "--target-branches", help="List of branchs to cherry-pick. Separated by space, comma or line end."
+    )
     args = parser.parse_args()
 
     log_fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"

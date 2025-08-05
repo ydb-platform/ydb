@@ -586,7 +586,7 @@ namespace NKikimr::NStorage {
         TBoundNode& info = it->second;
         if (inserted) {
             auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), StorageConfig.get(), false);
-            if (record.GetInitial() && record.HasCacheUpdate()) {
+            if (record.GetInitial()) {
                 auto *cache = record.MutableCacheUpdate();
 
                 // scan existing cache keys to find the ones we need to ask and to report others

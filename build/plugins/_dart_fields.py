@@ -1040,12 +1040,6 @@ class DockerImage:
 class TsConfigPath:
     KEY = 'TS_CONFIG_PATH'
 
-    @classmethod
-    def from_unit(cls, unit, flat_args, spec_args):
-        ts_config_paths = get_values_list(unit, "TS_CONFIG_PATH")
-
-        return {cls.KEY: ts_config_paths[0]}
-
 
 class TsStylelintConfig:
     KEY = 'TS_STYLELINT_CONFIG'

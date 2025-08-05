@@ -434,7 +434,7 @@ namespace NYql {
                 continue;
             } else if (parent->Type() == TExprNode::Arguments) {
                 continue;
-            } else if (parent->IsCallable("DependsOn")) {
+            } else if (NNodes::TCoDependsOnBase::Match(parent)) {
                 continue;
             } else if (parent->IsCallable(TABLE_CONTENT_CONSUMER)) {
                 if (HasExternalArgs(*parent)) {

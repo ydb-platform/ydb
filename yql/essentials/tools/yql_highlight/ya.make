@@ -1,25 +1,25 @@
 IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE OR OPENSOURCE_PROJECT != "yt")
+    PROGRAM()
 
-PROGRAM()
+    PEERDIR(
+        library/cpp/getopt
+        library/cpp/json
+        library/cpp/on_disk/tar_archive
+        yql/essentials/sql/v1/highlight
+        yql/essentials/utils
+    )
 
-PEERDIR(
-    library/cpp/getopt
-    library/cpp/json
-    yql/essentials/sql/v1/highlight
-    yql/essentials/utils
-)
+    SRCS(
+        generator_json.cpp
+        generator_textmate.cpp
+        generator_vim.cpp
+        generator.cpp
+        json.cpp
+        yql_highlight.cpp
+    )
 
-SRCS(
-    generate_textmate.cpp
-    generate_vim.cpp
-    json.cpp
-    yql_highlight.cpp
-)
-
-END()
-
-RECURSE(
-    artifact
-)
-
+    END()
+    RECURSE(
+        artifact
+    )
 ENDIF()

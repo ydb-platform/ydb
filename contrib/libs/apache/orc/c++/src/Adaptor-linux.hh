@@ -49,6 +49,12 @@ typedef SSIZE_T ssize_t;
   ssize_t pread(int fd, void* buf, size_t count, off_t offset);
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+  #define NO_SANITIZE_ATTR __attribute__((no_sanitize("signed-integer-overflow", "shift")))
+#else
+  #define NO_SANITIZE_ATTR
+#endif
+
 #ifdef HAS_DIAGNOSTIC_PUSH
   #ifdef __clang__
     #define DIAGNOSTIC_PUSH _Pragma("clang diagnostic push")

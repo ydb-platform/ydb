@@ -562,6 +562,20 @@ public:
             Y_ABORT("unexpected EDriveStatus");
         }
 
+        void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
+            if (Metrics.HasSlotCount()) {
+                slotCount = Metrics.GetSlotCount();
+                slotSizeInUnits = Metrics.GetSlotSizeInUnits();
+            } else if (InferPDiskSlotCountFromUnitSize != 0) {
+                // inferred values are unknown yet
+                slotCount = 0;
+                slotSizeInUnits = 0;
+            } else {
+                slotCount = ExpectedSlotCount;
+                slotSizeInUnits = SlotSizeInUnits;
+            }
+        }
+
         TString PathOrSerial() const {
             return Path ? Path : ExpectedSerial;
         }
@@ -1448,91 +1462,17 @@ public:
         }
     };
 
-    struct THostRecord {
-        TNodeId NodeId;
-        TNodeLocation Location;
+    struct TConfigValidationInfo {
+        enum class ESource {
+            Distconf,
+            ConsoleInteraction
+        };
 
-        THostRecord(const TEvInterconnect::TNodeInfo& nodeInfo)
-            : NodeId(nodeInfo.NodeId)
-            , Location(nodeInfo.Location)
-        {}
-
-        THostRecord(const NKikimrBlobStorage::TNodeIdentifier& node)
-            : NodeId(node.GetNodeId())
-            , Location(node.GetLocation())
-        {}
+        TActorId Sender;
+        ui64 Cookie;
+        TActorId InterconnectSession;
+        ESource Source;
     };
-
-    class THostRecordMapImpl {
-        THashMap<THostId, THostRecord> HostIdToRecord;
-        THashMap<TNodeId, THostId> NodeIdToHostId;
-        THashMultiMap<TString, TNodeId> FqdnToNodeId;
-
-    public:
-        THostRecordMapImpl() = default;
-
-        THostRecordMapImpl(TEvInterconnect::TEvNodesInfo *msg) {
-            for (const TEvInterconnect::TNodeInfo& nodeInfo : msg->Nodes) {
-                const THostId hostId(nodeInfo.Host, nodeInfo.Port);
-                NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
-                HostIdToRecord.emplace(hostId, nodeInfo);
-                FqdnToNodeId.emplace(nodeInfo.Host, nodeInfo.NodeId);
-            }
-        }
-
-        THostRecordMapImpl(const NKikimrBlobStorage::TStorageConfig& config) {
-            for (const auto& item : config.GetAllNodes()) {
-                const THostId hostId(item.GetHost(), item.GetPort());
-                const TNodeId nodeId = item.GetNodeId();
-                NodeIdToHostId.emplace(nodeId, hostId);
-                HostIdToRecord.emplace(hostId, item);
-                FqdnToNodeId.emplace(item.GetHost(), nodeId);
-            }
-        }
-
-        const TNodeLocation& GetLocation(TNodeId nodeId) const {
-            if (auto it = NodeIdToHostId.find(nodeId); it != NodeIdToHostId.end()) {
-                if (auto hostIt = HostIdToRecord.find(it->second); hostIt != HostIdToRecord.end()) {
-                    return hostIt->second.Location;
-                }
-            }
-            Y_ABORT();
-        }
-
-        TMaybe<TNodeId> ResolveNodeId(const THostId& hostId) const {
-            if (const auto it = HostIdToRecord.find(hostId); it != HostIdToRecord.end()) {
-                return it->second.NodeId;
-            } else {
-                return {};
-            }
-        }
-
-        TMaybe<TNodeId> ResolveNodeId(const TBoxInfo::THostKey& key, const TBoxInfo::THostInfo& info) const {
-            return info.EnforcedNodeId ? info.EnforcedNodeId : ResolveNodeId(key);
-        }
-
-        TMaybe<THostId> GetHostId(TNodeId nodeId) const {
-            if (const auto it = NodeIdToHostId.find(nodeId); it != NodeIdToHostId.end()) {
-                return it->second;
-            } else {
-                return {};
-            }
-        }
-
-        auto ResolveNodeId(const TString& fqdn) const {
-            return FqdnToNodeId.equal_range(fqdn);
-        }
-
-        auto begin() const {
-            return HostIdToRecord.begin();
-        }
-
-        auto end() const {
-            return HostIdToRecord.end();
-        }
-    };
-
-    using THostRecordMap = std::shared_ptr<THostRecordMapImpl>;
 
 private:
     TString InstanceId;
@@ -1580,6 +1520,9 @@ private:
     ui64 StorageYamlConfigHash = 0;
     ui64 ExpectedStorageYamlConfigVersion = 0;
     TBackoffTimer GetBlockBackoff{1, 1000};
+
+    ui64 NextValidationCookie = 1;
+    THashMap<ui64, TConfigValidationInfo> PendingValidationRequests;
 
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
@@ -1831,6 +1774,9 @@ private:
     void ApplyBscSettings(const NKikimrConfig::TBlobStorageConfig& bsConfig);
     void ApplyStorageConfig(bool ignoreDistconf = false);
     void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev);
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> BuildConfigRequestFromStorageConfig(
+        const NKikimrBlobStorage::TStorageConfig& storageConfig, const THostRecordMap& hostRecords, bool validationMode=false);
+
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev);
 
@@ -2464,6 +2410,20 @@ public:
             if (const auto it = prev.find(pdiskId); it != prev.end()) {
                 TStaticPDiskInfo& item = it->second;
                 PDiskMetrics = std::move(item.PDiskMetrics);
+            }
+        }
+
+        void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
+            if (PDiskMetrics && PDiskMetrics->HasSlotCount()) {
+                slotCount = PDiskMetrics->GetSlotCount();
+                slotSizeInUnits = PDiskMetrics->GetSlotSizeInUnits();
+            } else if (InferPDiskSlotCountFromUnitSize != 0) {
+                // inferred values are unknown yet
+                slotCount = 0;
+                slotSizeInUnits = 0;
+            } else {
+                slotCount = ExpectedSlotCount ? ExpectedSlotCount : StaticSlotUsage;
+                slotSizeInUnits = 0; // Not available for static PDisks
             }
         }
     };

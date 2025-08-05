@@ -272,6 +272,17 @@ def is_a_new_type(thing):
     return isinstance(thing, typing.NewType)
 
 
+def is_a_type_alias_type(thing):  # pragma: no cover # covered by 3.12+ tests
+    # TypeAliasType is new in python 3.12, through the type statement. If we're
+    # before python 3.12 then this can't possibly by a TypeAliasType.
+    #
+    # https://docs.python.org/3/reference/simple_stmts.html#type
+    # https://docs.python.org/3/library/typing.html#typing.TypeAliasType
+    if sys.version_info < (3, 12):
+        return False
+    return isinstance(thing, typing.TypeAliasType)
+
+
 def is_a_union(thing: object) -> bool:
     """Return True if thing is a typing.Union or types.UnionType (in py310)."""
     return isinstance(thing, UnionType) or get_origin(thing) is typing.Union
@@ -279,7 +290,12 @@ def is_a_union(thing: object) -> bool:
 
 def is_a_type(thing: object) -> bool:
     """Return True if thing is a type or a generic type like thing."""
-    return isinstance(thing, type) or is_generic_type(thing) or is_a_new_type(thing)
+    return (
+        isinstance(thing, type)
+        or is_generic_type(thing)
+        or is_a_new_type(thing)
+        or is_a_type_alias_type(thing)
+    )
 
 
 def is_typing_literal(thing: object) -> bool:
@@ -525,7 +541,9 @@ def from_typing_type(thing):
         else:
             union_elems = ()
         if not any(
-            isinstance(T, type) and issubclass(int, get_origin(T) or T)
+            # see https://github.com/HypothesisWorks/hypothesis/issues/4194 for
+            # try_issubclass.
+            isinstance(T, type) and try_issubclass(int, get_origin(T) or T)
             for T in [*union_elems, elem_type]
         ):
             mapping.pop(bytes, None)
@@ -984,7 +1002,7 @@ class GeneratorStrategy(st.SearchStrategy):
         self.yields = yields
         self.returns = returns
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<generators yields={self.yields!r} returns={self.returns!r}>"
 
     def do_draw(self, data):
@@ -1030,6 +1048,9 @@ def resolve_Callable(thing):
             f"are PEP-647 TypeGuards or PEP-742 TypeIs (got {return_type!r}).  "
             "Consider using an explicit strategy, or opening an issue."
         )
+
+    if get_origin(thing) is collections.abc.Callable and return_type is None:
+        return_type = type(None)
 
     return st.functions(
         like=(lambda *a, **k: None) if args_types else (lambda: None),

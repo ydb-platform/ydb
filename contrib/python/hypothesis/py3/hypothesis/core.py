@@ -23,8 +23,9 @@ import unittest
 import warnings
 import zlib
 from collections import defaultdict
-from collections.abc import Coroutine, Generator, Hashable
+from collections.abc import Coroutine, Generator, Hashable, Iterable, Sequence
 from functools import partial
+from inspect import Parameter
 from random import Random
 from typing import (
     TYPE_CHECKING,
@@ -45,10 +46,12 @@ from hypothesis._settings import (
     HealthCheck,
     Phase,
     Verbosity,
+    all_settings,
     local_settings,
     settings as Settings,
 )
-from hypothesis.control import BuildContext
+from hypothesis.control import BuildContext, currently_in_test_context
+from hypothesis.database import choices_from_bytes, choices_to_bytes
 from hypothesis.errors import (
     BackendCannotProceed,
     DeadlineExceeded,
@@ -74,15 +77,16 @@ from hypothesis.internal.compat import (
     get_type_hints,
     int_from_bytes,
 )
-from hypothesis.internal.conjecture.data import (
-    ConjectureData,
-    PrimitiveProvider,
-    Status,
-)
+from hypothesis.internal.conjecture.choice import ChoiceT
+from hypothesis.internal.conjecture.data import ConjectureData, Status
 from hypothesis.internal.conjecture.engine import BUFFER_SIZE, ConjectureRunner
 from hypothesis.internal.conjecture.junkdrawer import (
     ensure_free_stackframes,
     gc_cumulative_time,
+)
+from hypothesis.internal.conjecture.providers import (
+    BytestringProvider,
+    PrimitiveProvider,
 )
 from hypothesis.internal.conjecture.shrinker import sort_key
 from hypothesis.internal.entropy import deterministic_PRNG
@@ -318,27 +322,28 @@ def reproduce_failure(version: str, blob: bytes) -> Callable[[TestFunc], TestFun
     return accept
 
 
-def encode_failure(buffer):
-    buffer = bytes(buffer)
-    compressed = zlib.compress(buffer)
-    if len(compressed) < len(buffer):
-        buffer = b"\1" + compressed
+def encode_failure(choices: Iterable[ChoiceT]) -> bytes:
+    blob = choices_to_bytes(choices)
+    compressed = zlib.compress(blob)
+    if len(compressed) < len(blob):
+        blob = b"\1" + compressed
     else:
-        buffer = b"\0" + buffer
-    return base64.b64encode(buffer)
+        blob = b"\0" + blob
+    return base64.b64encode(blob)
 
 
-def decode_failure(blob):
+def decode_failure(blob: bytes) -> Sequence[ChoiceT]:
     try:
-        buffer = base64.b64decode(blob)
+        decoded = base64.b64decode(blob)
     except Exception:
         raise InvalidArgument(f"Invalid base64 encoded string: {blob!r}") from None
-    prefix = buffer[:1]
+
+    prefix = decoded[:1]
     if prefix == b"\0":
-        return buffer[1:]
+        decoded = decoded[1:]
     elif prefix == b"\1":
         try:
-            return zlib.decompress(buffer[1:])
+            decoded = zlib.decompress(decoded[1:])
         except zlib.error as err:
             raise InvalidArgument(
                 f"Invalid zlib compression for blob {blob!r}"
@@ -347,6 +352,12 @@ def decode_failure(blob):
         raise InvalidArgument(
             f"Could not decode blob {blob!r}: Invalid start byte {prefix!r}"
         )
+
+    choices = choices_from_bytes(decoded)
+    if choices is None:
+        raise InvalidArgument(f"Invalid serialized choice sequence for blob {blob!r}")
+
+    return choices
 
 
 def _invalid(message, *, exc=InvalidArgument, test, given_kwargs):
@@ -405,9 +416,12 @@ def is_invalid_test(test, original_sig, given_arguments, given_kwargs):
     ]
     if extra_kwargs and (params == [] or params[-1].kind is not params[-1].VAR_KEYWORD):
         arg = extra_kwargs[0]
+        extra = ""
+        if arg in all_settings:
+            extra = f". Did you mean @settings({arg}={given_kwargs[arg]!r})?"
         return invalid(
             f"{test.__name__}() got an unexpected keyword argument {arg!r}, "
-            f"from `{arg}={given_kwargs[arg]!r}` in @given"
+            f"from `{arg}={given_kwargs[arg]!r}` in @given{extra}"
         )
     if any(p.default is not p.empty for p in params):
         return invalid("Cannot apply @given to a function with defaults.")
@@ -475,7 +489,7 @@ def execute_explicit_examples(state, wrapped_test, arguments, kwargs, original_s
 
         with local_settings(state.settings):
             fragments_reported = []
-            empty_data = ConjectureData.for_buffer(b"")
+            empty_data = ConjectureData.for_choices([])
             try:
                 execute_example = partial(
                     state.execute_once,
@@ -620,7 +634,13 @@ class Stuff:
     given_kwargs: dict = attr.ib(factory=dict)
 
 
-def process_arguments_to_given(wrapped_test, arguments, kwargs, given_kwargs, params):
+def process_arguments_to_given(
+    wrapped_test: Any,
+    arguments: Sequence[object],
+    kwargs: dict[str, object],
+    given_kwargs: dict[str, SearchStrategy],
+    params: dict[str, Parameter],
+) -> tuple[Sequence[object], dict[str, object], Stuff]:
     selfy = None
     arguments, kwargs = convert_positional_arguments(wrapped_test, arguments, kwargs)
 
@@ -674,7 +694,7 @@ def skip_exceptions_to_reraise():
     return tuple(sorted(exceptions, key=str))
 
 
-def failure_exceptions_to_catch():
+def failure_exceptions_to_catch() -> tuple[type[BaseException], ...]:
     """Return a tuple of exceptions meaning 'this test has failed', to catch.
 
     This is intended to cover most common test runners; if you would
@@ -947,6 +967,7 @@ class StateForActualGivenExecution:
                             if (0, 0) in context.data.slice_comments
                             else None
                         ),
+                        avoid_realization=data.provider.avoid_realization,
                     )
                 report(printer.getvalue())
 
@@ -963,11 +984,12 @@ class StateForActualGivenExecution:
                         if (0, 0) in context.data.slice_comments
                         else None
                     ),
+                    avoid_realization=data.provider.avoid_realization,
                 )
                 self._string_repr = printer.getvalue()
                 data._observability_arguments = {
-                    **dict(enumerate(map(to_jsonable, args))),
-                    **{k: to_jsonable(v) for k, v in kwargs.items()},
+                    k: to_jsonable(v, avoid_realization=data.provider.avoid_realization)
+                    for k, v in [*enumerate(args), *kwargs.items()]
                 }
 
             try:
@@ -975,8 +997,9 @@ class StateForActualGivenExecution:
             except TypeError as e:
                 # If we sampled from a sequence of strategies, AND failed with a
                 # TypeError, *AND that exception mentions SearchStrategy*, add a note:
-                if "SearchStrategy" in str(e) and hasattr(
-                    data, "_sampled_from_all_strategies_elements_message"
+                if (
+                    "SearchStrategy" in str(e)
+                    and data._sampled_from_all_strategies_elements_message is not None
                 ):
                     msg, format_arg = data._sampled_from_all_strategies_elements_message
                     add_note(e, msg.format(format_arg))
@@ -987,16 +1010,18 @@ class StateForActualGivenExecution:
 
         # self.test_runner can include the execute_example method, or setup/teardown
         # _example, so it's important to get the PRNG and build context in place first.
-        with local_settings(self.settings):
-            with deterministic_PRNG():
-                with BuildContext(data, is_final=is_final) as context:
-                    # providers may throw in per_case_context_fn, and we'd like
-                    # `result` to still be set in these cases.
-                    result = None
-                    with data.provider.per_test_case_context_manager():
-                        # Run the test function once, via the executor hook.
-                        # In most cases this will delegate straight to `run(data)`.
-                        result = self.test_runner(data, run)
+        with (
+            local_settings(self.settings),
+            deterministic_PRNG(),
+            BuildContext(data, is_final=is_final) as context,
+        ):
+            # providers may throw in per_case_context_fn, and we'd like
+            # `result` to still be set in these cases.
+            result = None
+            with data.provider.per_test_case_context_manager():
+                # Run the test function once, via the executor hook.
+                # In most cases this will delegate straight to `run(data)`.
+                result = self.test_runner(data, run)
 
         # If a failure was expected, it should have been raised already, so
         # instead raise an appropriate diagnostic error.
@@ -1034,15 +1059,17 @@ class StateForActualGivenExecution:
     def _flaky_replay_to_failure(
         self, err: FlakyReplay, context: BaseException
     ) -> FlakyFailure:
+        # Note that in the mark_interesting case, _context_ itself
+        # is part of err._interesting_examples - but it's not in
+        # _runner.interesting_examples - this is fine, as the context
+        # (i.e., immediate exception) is appended.
         interesting_examples = [
             self._runner.interesting_examples[io]
             for io in err._interesting_origins
-            if io
+            if io in self._runner.interesting_examples
         ]
-        exceptions = [
-            ie.extra_information._expected_exception for ie in interesting_examples
-        ]
-        exceptions.append(context)  # the offending assume (or whatever)
+        exceptions = [ie.expected_exception for ie in interesting_examples]
+        exceptions.append(context)  # the immediate exception
         return FlakyFailure(err.reason, exceptions)
 
     def _execute_once_for_engine(self, data: ConjectureData) -> None:
@@ -1097,7 +1124,23 @@ class StateForActualGivenExecution:
             # If an unhandled (i.e., non-Hypothesis) error was raised by
             # Hypothesis-internal code, re-raise it as a fatal error instead
             # of treating it as a test failure.
-            filepath = traceback.extract_tb(e.__traceback__)[-1][0]
+            if isinstance(e, BaseExceptionGroup) and len(e.exceptions) == 1:
+                # When a naked exception is implicitly wrapped in an ExceptionGroup
+                # due to a re-raising "except*", the ExceptionGroup is constructed in
+                # the caller's stack frame (see #4183). This workaround is specifically
+                # for implicit wrapping of naked exceptions by "except*", since explicit
+                # raising of ExceptionGroup gets the proper traceback in the first place
+                # - there's no need to handle hierarchical groups here, at least if no
+                # such implicit wrapping happens inside hypothesis code (we only care
+                # about the hypothesis-or-not distinction).
+                #
+                # 01-25-2025: this was patched to give the correct
+                # stacktrace in cpython https://github.com/python/cpython/issues/128799.
+                # can remove once python3.11 is EOL.
+                tb = e.exceptions[0].__traceback__ or e.__traceback__
+            else:
+                tb = e.__traceback__
+            filepath = traceback.extract_tb(tb)[-1][0]
             if is_hypothesis_file(filepath) and not isinstance(e, HypothesisException):
                 raise
 
@@ -1111,10 +1154,10 @@ class StateForActualGivenExecution:
                 # engine that this test run was interesting. This is the normal
                 # path for test runs that fail.
                 tb = get_trimmed_traceback()
-                info = data.extra_information
-                info._expected_traceback = format_exception(e, tb)  # type: ignore
-                info._expected_exception = e  # type: ignore
-                verbose_report(info._expected_traceback)  # type: ignore
+                data.expected_traceback = format_exception(e, tb)
+                data.expected_exception = e
+                assert data.expected_traceback is not None  # for mypy
+                verbose_report(data.expected_traceback)
 
                 self.failed_normally = True
 
@@ -1125,7 +1168,11 @@ class StateForActualGivenExecution:
                 if interesting_origin[0] == DeadlineExceeded:
                     self.failed_due_to_deadline = True
                     self.explain_traces.clear()
-                data.mark_interesting(interesting_origin)  # type: ignore  # mypy bug?
+                try:
+                    data.mark_interesting(interesting_origin)
+                except FlakyReplay as err:
+                    raise self._flaky_replay_to_failure(err, e) from None
+
         finally:
             # Conditional here so we can save some time constructing the payload; in
             # other cases (without coverage) it's cheap enough to do that regardless.
@@ -1222,13 +1269,38 @@ class StateForActualGivenExecution:
         if runner.interesting_examples:
             self.falsifying_examples = sorted(
                 runner.interesting_examples.values(),
-                key=lambda d: sort_key(d.buffer),
+                key=lambda d: sort_key(d.nodes),
                 reverse=True,
             )
         else:
             if runner.valid_examples == 0:
+                explanations = []
+                # use a somewhat arbitrary cutoff to avoid recommending spurious
+                # fixes.
+                # eg, a few invalid examples from internal filters when the
+                # problem is the user generating large inputs, or a
+                # few overruns during internal mutation when the problem is
+                # impossible user filters/assumes.
+                if runner.invalid_examples > min(20, runner.call_count // 5):
+                    explanations.append(
+                        f"{runner.invalid_examples} of {runner.call_count} "
+                        "examples failed a .filter() or assume() condition. Try "
+                        "making your filters or assumes less strict, or rewrite "
+                        "using strategy parameters: "
+                        "st.integers().filter(lambda x: x > 0) fails less often "
+                        "(that is, never) when rewritten as st.integers(min_value=1)."
+                    )
+                if runner.overrun_examples > min(20, runner.call_count // 5):
+                    explanations.append(
+                        f"{runner.overrun_examples} of {runner.call_count} "
+                        "examples were too large to finish generating; try "
+                        "reducing the typical size of your inputs?"
+                    )
                 rep = get_pretty_function_description(self.test)
-                raise Unsatisfiable(f"Unable to satisfy assumptions of {rep}")
+                raise Unsatisfiable(
+                    f"Unable to satisfy assumptions of {rep}. "
+                    f"{' Also, '.join(explanations)}"
+                )
 
         # If we have not traced executions, warn about that now (but only when
         # we'd expect to do so reliably, i.e. on CPython>=3.12)
@@ -1264,17 +1336,16 @@ class StateForActualGivenExecution:
 
         explanations = explanatory_lines(self.explain_traces, self.settings)
         for falsifying_example in self.falsifying_examples:
-            info = falsifying_example.extra_information
             fragments = []
 
-            ran_example = runner.new_conjecture_data_for_buffer(
-                falsifying_example.buffer
+            ran_example = runner.new_conjecture_data(
+                falsifying_example.choices, max_choices=len(falsifying_example.choices)
             )
             ran_example.slice_comments = falsifying_example.slice_comments
             tb = None
             origin = None
-            assert info is not None
-            assert info._expected_exception is not None
+            assert falsifying_example.expected_exception is not None
+            assert falsifying_example.expected_traceback is not None
             try:
                 with with_reporter(fragments.append):
                     self.execute_once(
@@ -1282,8 +1353,8 @@ class StateForActualGivenExecution:
                         print_example=not self.is_find,
                         is_final=True,
                         expected_failure=(
-                            info._expected_exception,
-                            info._expected_traceback,
+                            falsifying_example.expected_exception,
+                            falsifying_example.expected_traceback,
                         ),
                     )
             except StopTest as e:
@@ -1299,7 +1370,8 @@ class StateForActualGivenExecution:
                     "Inconsistent results: An example failed on the "
                     "first run but now succeeds (or fails with another "
                     "error, or is for some reason not runnable).",
-                    [info._expected_exception or e],  # (note: e is a BaseException)
+                    # (note: e is a BaseException)
+                    [falsifying_example.expected_exception or e],
                 )
                 errors_to_report.append((fragments, err))
             except UnsatisfiedAssumption as e:  # pragma: no cover  # ironically flaky
@@ -1353,7 +1425,7 @@ class StateForActualGivenExecution:
                     fragments.append(
                         "\nYou can reproduce this example by temporarily adding "
                         "@reproduce_failure(%r, %r) as a decorator on your test case"
-                        % (__version__, encode_failure(falsifying_example.buffer))
+                        % (__version__, encode_failure(falsifying_example.choices))
                     )
                 # Mostly useful for ``find`` and ensuring that objects that
                 # hold on to a reference to ``data`` know that it's now been
@@ -1499,6 +1571,15 @@ def given(
 
     This is the main entry point to Hypothesis.
     """
+
+    if currently_in_test_context():
+        fail_health_check(
+            Settings(),
+            "Nesting @given tests results in quadratic generation and shrinking "
+            "behavior and can usually be more cleanly expressed by replacing the "
+            "inner function with an st.data() parameter on the outer @given.",
+            HealthCheck.nested_given,
+        )
 
     def run_test_as_given(test):
         if inspect.isclass(test):
@@ -1656,7 +1737,7 @@ def given(
                     )
                 try:
                     state.execute_once(
-                        ConjectureData.for_buffer(decode_failure(failure)),
+                        ConjectureData.for_choices(decode_failure(failure)),
                         print_example=True,
                         is_final=True,
                     )
@@ -1793,28 +1874,34 @@ def given(
             minimal_failures: dict = {}
 
             def fuzz_one_input(
-                buffer: Union[bytes, bytearray, memoryview, BinaryIO]
+                buffer: Union[bytes, bytearray, memoryview, BinaryIO],
             ) -> Optional[bytes]:
                 # This inner part is all that the fuzzer will actually run,
                 # so we keep it as small and as fast as possible.
                 if isinstance(buffer, io.IOBase):
                     buffer = buffer.read(BUFFER_SIZE)
                 assert isinstance(buffer, (bytes, bytearray, memoryview))
-                data = ConjectureData.for_buffer(buffer)
+                data = ConjectureData(
+                    random=None,
+                    provider=BytestringProvider,
+                    provider_kw={"bytestring": buffer},
+                )
                 try:
                     state.execute_once(data)
                 except (StopTest, UnsatisfiedAssumption):
                     return None
                 except BaseException:
-                    buffer = bytes(data.buffer)
                     known = minimal_failures.get(data.interesting_origin)
                     if settings.database is not None and (
-                        known is None or sort_key(buffer) <= sort_key(known)
+                        known is None or sort_key(data.nodes) <= sort_key(known)
                     ):
-                        settings.database.save(database_key, buffer)
-                        minimal_failures[data.interesting_origin] = buffer
+                        settings.database.save(
+                            database_key, choices_to_bytes(data.choices)
+                        )
+                        minimal_failures[data.interesting_origin] = data.nodes
                     raise
-                return bytes(data.buffer)
+                assert isinstance(data.provider, BytestringProvider)
+                return bytes(data.provider.drawn)
 
             fuzz_one_input.__doc__ = HypothesisHandle.fuzz_one_input.__doc__
             return fuzz_one_input

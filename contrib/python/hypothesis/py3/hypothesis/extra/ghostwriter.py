@@ -67,7 +67,7 @@ generally do their best to write you a useful test.  You can also use
     Legal questions?  While the ghostwriter fragments and logic is under the
     MPL-2.0 license like the rest of Hypothesis, the *output* from the ghostwriter
     is made available under the `Creative Commons Zero (CC0)
-    <https://creativecommons.org/share-your-work/public-domain/cc0/>`__
+    <https://creativecommons.org/public-domain/cc0/>`__
     public domain dedication, so you can use it without any restrictions.
 """
 
@@ -648,7 +648,7 @@ def _imports_for_strategy(strategy):
         for f in strategy.flat_conditions:
             imports |= _imports_for_object(f)
     if isinstance(strategy, FlatMapStrategy):
-        imports |= _imports_for_strategy(strategy.flatmapped_strategy)
+        imports |= _imports_for_strategy(strategy.base)
         imports |= _imports_for_object(strategy.expand)
 
     # recurse through one_of to handle e.g. from_type(Optional[Foo])

@@ -68,26 +68,26 @@ _SupportsArray = _try_import("numpy._typing._array_like", "_SupportsArray")
 
 __all__ = [
     "BroadcastableShapes",
-    "from_dtype",
-    "arrays",
+    "array_dtypes",
     "array_shapes",
-    "scalar_dtypes",
+    "arrays",
+    "basic_indices",
     "boolean_dtypes",
-    "unsigned_integer_dtypes",
-    "integer_dtypes",
-    "floating_dtypes",
+    "broadcastable_shapes",
+    "byte_string_dtypes",
     "complex_number_dtypes",
     "datetime64_dtypes",
-    "timedelta64_dtypes",
-    "byte_string_dtypes",
-    "unicode_string_dtypes",
-    "array_dtypes",
-    "nested_dtypes",
-    "valid_tuple_axes",
-    "broadcastable_shapes",
-    "mutually_broadcastable_shapes",
-    "basic_indices",
+    "floating_dtypes",
+    "from_dtype",
     "integer_array_indices",
+    "integer_dtypes",
+    "mutually_broadcastable_shapes",
+    "nested_dtypes",
+    "scalar_dtypes",
+    "timedelta64_dtypes",
+    "unicode_string_dtypes",
+    "unsigned_integer_dtypes",
+    "valid_tuple_axes",
 ]
 
 TIME_RESOLUTIONS = tuple("Y  M  D  h  m  s  ms  us  ns  ps  fs  as".split())
@@ -590,6 +590,7 @@ def defines_dtype_strategy(strat: T) -> T:
 
 @defines_dtype_strategy
 def boolean_dtypes() -> st.SearchStrategy["np.dtype[np.bool_]"]:
+    """Return a strategy for boolean dtypes."""
     return st.just("?")  # type: ignore[arg-type]
 
 
@@ -1196,7 +1197,9 @@ def integer_array_indices(
     shape: Shape,
     *,
     result_shape: st.SearchStrategy[Shape] = array_shapes(),
-    dtype: "np.dtype[I] | np.dtype[np.signedinteger[Any]]" = np.dtype(int),
+    dtype: "np.dtype[I] | np.dtype[np.signedinteger[Any] | np.bool[bool]]" = np.dtype(
+        int
+    ),
 ) -> "st.SearchStrategy[tuple[NDArray[I], ...]]":
     """Return a search strategy for tuples of integer-arrays that, when used
     to index into an array of shape ``shape``, given an array whose shape

@@ -22,7 +22,7 @@ from copy import copy
 from functools import lru_cache
 from io import StringIO
 from time import perf_counter
-from typing import Any, Callable, ClassVar, Optional, Union, overload
+from typing import Any, Callable, ClassVar, Optional, TypeVar, Union, overload
 from unittest import TestCase
 
 import attr
@@ -54,15 +54,29 @@ from hypothesis.reporting import current_verbosity, report
 from hypothesis.strategies._internal.featureflags import FeatureStrategy
 from hypothesis.strategies._internal.strategies import (
     Ex,
-    Ex_Inv,
     OneOfStrategy,
     SearchStrategy,
     check_strategy,
 )
 from hypothesis.vendor.pretty import RepresentationPrinter
 
+T = TypeVar("T")
 STATE_MACHINE_RUN_LABEL = cu.calc_label_from_name("another state machine step")
 SHOULD_CONTINUE_LABEL = cu.calc_label_from_name("should we continue drawing")
+
+
+def _is_singleton(obj: object) -> bool:
+    """
+    Returns True if two separately created instances of v will have the same id
+    (due to interning).
+    """
+    # The range [-5, 256] is a cpython implementation detail. This may not work
+    # well on other platforms.
+    if isinstance(obj, int) and -5 <= obj <= 256:
+        return True
+    # cpython also interns compile-time strings, but let's just ignore those for
+    # now.
+    return isinstance(obj, bool) or obj is None
 
 
 class _OmittedArgument:
@@ -83,14 +97,7 @@ class TestCaseProperty:  # pragma: no cover
         raise AttributeError("Cannot delete TestCase")
 
 
-def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_steps=0):
-    """Run a state machine definition as a test, either silently doing nothing
-    or printing a minimal breaking program and raising an exception.
-
-    state_machine_factory is anything which returns an instance of
-    RuleBasedStateMachine when called with no arguments - it can be a class or a
-    function. settings will be used to control the execution of the test.
-    """
+def get_state_machine_test(state_machine_factory, *, settings=None, _min_steps=0):
     if settings is None:
         try:
             settings = state_machine_factory.TestCase.settings
@@ -137,13 +144,13 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                 # find a failing test case, so we stop with probability of
                 # 2 ** -16 during normal operation but force a stop when we've
                 # generated enough steps.
-                cd.start_example(STATE_MACHINE_RUN_LABEL)
+                cd.start_span(STATE_MACHINE_RUN_LABEL)
                 must_stop = None
                 if steps_run >= max_steps:
                     must_stop = True
                 elif steps_run <= _min_steps:
                     must_stop = False
-                elif cd._bytes_drawn > (0.8 * BUFFER_SIZE):
+                elif cd.length > (0.8 * BUFFER_SIZE):
                     # Better to stop after fewer steps, than always overrun and retry.
                     # See https://github.com/HypothesisWorks/hypothesis/issues/3618
                     must_stop = True
@@ -220,7 +227,7 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                         # then 'print_step' prints a multi-variable assignment.
                         output(machine._repr_step(rule, data_to_print, result))
                 machine.check_invariants(settings, output, cd._stateful_run_times)
-                cd.stop_example()
+                cd.stop_span()
         finally:
             output("state.teardown()")
             machine.teardown()
@@ -237,8 +244,21 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
         state_machine_factory, "_hypothesis_internal_use_reproduce_failure", None
     )
     run_state_machine._hypothesis_internal_print_given_args = False
+    return run_state_machine
 
-    run_state_machine(state_machine_factory)
+
+def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_steps=0):
+    """Run a state machine definition as a test, either silently doing nothing
+    or printing a minimal breaking program and raising an exception.
+
+    state_machine_factory is anything which returns an instance of
+    RuleBasedStateMachine when called with no arguments - it can be a class or a
+    function. settings will be used to control the execution of the test.
+    """
+    state_machine_test = get_state_machine_test(
+        state_machine_factory, settings=settings, _min_steps=_min_steps
+    )
+    state_machine_test(state_machine_factory)
 
 
 class StateMachineMeta(type):
@@ -389,7 +409,10 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
             def printer(obj, p, cycle, name=name):
                 return p.text(name)
 
-            self.__printer.singleton_pprinters.setdefault(id(result), printer)
+            # see
+            # https://github.com/HypothesisWorks/hypothesis/pull/4266#discussion_r1949619102
+            if not _is_singleton(result):
+                self.__printer.singleton_pprinters.setdefault(id(result), printer)
             self.names_to_values[name] = result
             self.bundles.setdefault(target, []).append(VarReference(name))
 
@@ -437,6 +460,7 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
                 run_state_machine_as_test(cls, settings=self.settings)
 
             runTest.is_hypothesis_test = True
+            runTest._hypothesis_state_machine_class = cls
 
         StateMachineTestCase.__name__ = cls.__name__ + ".TestCase"
         StateMachineTestCase.__qualname__ = cls.__qualname__ + ".TestCase"
@@ -455,8 +479,11 @@ class Rule:
         self.arguments_strategies = {}
         bundles = []
         for k, v in sorted(self.arguments.items()):
+            assert not isinstance(v, BundleReferenceStrategy)
             if isinstance(v, Bundle):
                 bundles.append(v)
+                consume = isinstance(v, BundleConsumer)
+                v = BundleReferenceStrategy(v.name, consume=consume)
             self.arguments_strategies[k] = v
         self.bundles = tuple(bundles)
 
@@ -467,6 +494,26 @@ class Rule:
 
 
 self_strategy = st.runner()
+
+
+class BundleReferenceStrategy(SearchStrategy):
+    def __init__(self, name: str, *, consume: bool = False):
+        self.name = name
+        self.consume = consume
+
+    def do_draw(self, data):
+        machine = data.draw(self_strategy)
+        bundle = machine.bundle(self.name)
+        if not bundle:
+            data.mark_invalid(f"Cannot draw from empty bundle {self.name!r}")
+        # Shrink towards the right rather than the left. This makes it easier
+        # to delete data generated earlier, as when the error is towards the
+        # end there can be a lot of hard to remove padding.
+        position = data.draw_integer(0, len(bundle) - 1, shrink_towards=len(bundle))
+        if self.consume:
+            return bundle.pop(position)  # pragma: no cover  # coverage is flaky here
+        else:
+            return bundle[position]
 
 
 class Bundle(SearchStrategy[Ex]):
@@ -495,32 +542,16 @@ class Bundle(SearchStrategy[Ex]):
         self, name: str, *, consume: bool = False, draw_references: bool = True
     ) -> None:
         self.name = name
-        self.consume = consume
+        self.__reference_strategy = BundleReferenceStrategy(name, consume=consume)
         self.draw_references = draw_references
 
     def do_draw(self, data):
         machine = data.draw(self_strategy)
-
-        bundle = machine.bundle(self.name)
-        if not bundle:
-            data.mark_invalid(f"Cannot draw from empty bundle {self.name!r}")
-        # Shrink towards the right rather than the left. This makes it easier
-        # to delete data generated earlier, as when the error is towards the
-        # end there can be a lot of hard to remove padding.
-        position = data.draw_integer(0, len(bundle) - 1, shrink_towards=len(bundle))
-        if self.consume:
-            reference = bundle.pop(
-                position
-            )  # pragma: no cover  # coverage is flaky here
-        else:
-            reference = bundle[position]
-
-        if self.draw_references:
-            return reference
+        reference = data.draw(self.__reference_strategy)
         return machine.names_to_values[reference.name]
 
     def __repr__(self):
-        consume = self.consume
+        consume = self.__reference_strategy.consume
         if consume is False:
             return f"Bundle(name={self.name!r})"
         return f"Bundle(name={self.name!r}, {consume=})"
@@ -539,9 +570,16 @@ class Bundle(SearchStrategy[Ex]):
     def flatmap(self, expand):
         if self.draw_references:
             return type(self)(
-                self.name, consume=self.consume, draw_references=False
+                self.name,
+                consume=self.__reference_strategy.consume,
+                draw_references=False,
             ).flatmap(expand)
         return super().flatmap(expand)
+
+
+class BundleConsumer(Bundle[Ex]):
+    def __init__(self, bundle: Bundle[Ex]) -> None:
+        super().__init__(bundle.name, consume=True)
 
 
 def consumes(bundle: Bundle[Ex]) -> SearchStrategy[Ex]:
@@ -559,10 +597,7 @@ def consumes(bundle: Bundle[Ex]) -> SearchStrategy[Ex]:
     """
     if not isinstance(bundle, Bundle):
         raise TypeError("Argument to be consumed must be a bundle.")
-    return type(bundle)(
-        name=bundle.name,
-        consume=True,
-    )
+    return BundleConsumer(bundle)
 
 
 @attr.s()
@@ -573,9 +608,7 @@ class MultipleResults(Iterable[Ex]):
         return iter(self.values)
 
 
-# We need to use an invariant typevar here to avoid a mypy error, as covariant
-# typevars cannot be used as parameters.
-def multiple(*args: Ex_Inv) -> MultipleResults[Ex_Inv]:
+def multiple(*args: T) -> MultipleResults[T]:
     """This function can be used to pass multiple results to the target(s) of
     a rule. Just use ``return multiple(result1, result2, ...)`` in your rule.
 
@@ -609,7 +642,7 @@ def _convert_targets(targets, target):
                 )
             raise InvalidArgument(msg % (t, type(t)))
         while isinstance(t, Bundle):
-            if t.consume:
+            if isinstance(t, BundleConsumer):
                 note_deprecation(
                     f"Using consumes({t.name}) doesn't makes sense in this context.  "
                     "This will be an error in a future version of Hypothesis.",

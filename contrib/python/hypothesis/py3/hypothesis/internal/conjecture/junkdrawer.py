@@ -17,19 +17,9 @@ import gc
 import sys
 import time
 import warnings
+from array import ArrayType
 from collections.abc import Iterable, Iterator, Sequence
-from random import Random
-from typing import (
-    Any,
-    Callable,
-    Generic,
-    List,
-    Literal,
-    Optional,
-    TypeVar,
-    Union,
-    overload,
-)
+from typing import Any, Callable, Generic, Literal, Optional, TypeVar, Union, overload
 
 from sortedcontainers import SortedList
 
@@ -42,7 +32,7 @@ T = TypeVar("T")
 
 def array_or_list(
     code: str, contents: Iterable[int]
-) -> "Union[List[int], array.ArrayType[int]]":
+) -> Union[list[int], "ArrayType[int]"]:
     if code == "O":
         return list(contents)
     return array.array(code, contents)
@@ -83,7 +73,7 @@ class IntList(Sequence[int]):
 
     __slots__ = ("__underlying",)
 
-    __underlying: "Union[List[int], array.ArrayType[int]]"
+    __underlying: Union[list[int], "ArrayType[int]"]
 
     def __init__(self, values: Sequence[int] = ()):
         for code in ARRAY_CODES:
@@ -117,14 +107,16 @@ class IntList(Sequence[int]):
     def __getitem__(self, i: int) -> int: ...  # pragma: no cover
 
     @overload
-    def __getitem__(self, i: slice) -> "IntList": ...  # pragma: no cover
+    def __getitem__(
+        self, i: slice
+    ) -> Union[list[int], "ArrayType[int]"]: ...  # pragma: no cover
 
-    def __getitem__(self, i: Union[int, slice]) -> "Union[int, IntList]":
-        if isinstance(i, slice):
-            return IntList(self.__underlying[i])
+    def __getitem__(
+        self, i: Union[int, slice]
+    ) -> Union[int, list[int], "ArrayType[int]"]:
         return self.__underlying[i]
 
-    def __delitem__(self, i: int) -> None:
+    def __delitem__(self, i: Union[int, slice]) -> None:
         del self.__underlying[i]
 
     def insert(self, i: int, v: int) -> None:
@@ -189,22 +181,17 @@ def binary_search(lo: int, hi: int, f: Callable[[int], bool]) -> int:
     return lo
 
 
-def uniform(random: Random, n: int) -> bytes:
-    """Returns a bytestring of length n, distributed uniformly at random."""
-    return random.getrandbits(n * 8).to_bytes(n, "big")
-
-
-class LazySequenceCopy:
+class LazySequenceCopy(Generic[T]):
     """A "copy" of a sequence that works by inserting a mask in front
     of the underlying sequence, so that you can mutate it without changing
     the underlying sequence. Effectively behaves as if you could do list(x)
     in O(1) time. The full list API is not supported yet but there's no reason
     in principle it couldn't be."""
 
-    def __init__(self, values: Sequence[int]):
+    def __init__(self, values: Sequence[T]):
         self.__values = values
         self.__len = len(values)
-        self.__mask: Optional[dict[int, int]] = None
+        self.__mask: Optional[dict[int, T]] = None
         self.__popped_indices: Optional[SortedList] = None
 
     def __len__(self) -> int:
@@ -212,7 +199,7 @@ class LazySequenceCopy:
             return self.__len
         return self.__len - len(self.__popped_indices)
 
-    def pop(self, i: int = -1) -> int:
+    def pop(self, i: int = -1) -> T:
         if len(self) == 0:
             raise IndexError("Cannot pop from empty list")
         i = self.__underlying_index(i)
@@ -228,7 +215,13 @@ class LazySequenceCopy:
         self.__popped_indices.add(i)
         return v
 
-    def __getitem__(self, i: int) -> int:
+    def swap(self, i: int, j: int) -> None:
+        """Swap the elements ls[i], ls[j]."""
+        if i == j:
+            return
+        self[i], self[j] = self[j], self[i]
+
+    def __getitem__(self, i: int) -> T:
         i = self.__underlying_index(i)
 
         default = self.__values[i]
@@ -237,7 +230,7 @@ class LazySequenceCopy:
         else:
             return self.__mask.get(i, default)
 
-    def __setitem__(self, i: int, v: int) -> None:
+    def __setitem__(self, i: int, v: T) -> None:
         i = self.__underlying_index(i)
         if self.__mask is None:
             self.__mask = {}
@@ -268,18 +261,10 @@ class LazySequenceCopy:
                 i += 1
         return i
 
-
-def clamp(lower: float, value: float, upper: float) -> float:
-    """Given a value and lower/upper bounds, 'clamp' the value so that
-    it satisfies lower <= value <= upper."""
-    return max(lower, min(value, upper))
-
-
-def swap(ls: LazySequenceCopy, i: int, j: int) -> None:
-    """Swap the elements ls[i], ls[j]."""
-    if i == j:
-        return
-    ls[i], ls[j] = ls[j], ls[i]
+    # even though we have len + getitem, mypyc requires iter.
+    def __iter__(self) -> Iterable[T]:
+        for i in range(len(self)):
+            yield self[i]
 
 
 def stack_depth_of_caller() -> int:
@@ -480,3 +465,10 @@ def endswith(l1: Sequence[T], l2: Sequence[T]) -> bool:
     if len(l1) < len(l2):
         return False
     return all(v1 == v2 for v1, v2 in zip(l1[-len(l2) :], l2))
+
+
+def bits_to_bytes(n: int) -> int:
+    """The number of bytes required to represent an n-bit number.
+    Equivalent to (n + 7) // 8, but slightly faster. This really is
+    called enough times that that matters."""
+    return (n + 7) >> 3

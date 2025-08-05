@@ -63,10 +63,10 @@ __all__ = [
 ]
 
 
-RELEASED_VERSIONS = ("2021.12", "2022.12", "2023.12")
+RELEASED_VERSIONS = ("2021.12", "2022.12", "2023.12", "2024.12")
 NOMINAL_VERSIONS = (*RELEASED_VERSIONS, "draft")
 assert sorted(NOMINAL_VERSIONS) == list(NOMINAL_VERSIONS)  # sanity check
-NominalVersion = Literal["2021.12", "2022.12", "2023.12", "draft"]
+NominalVersion = Literal["2021.12", "2022.12", "2023.12", "2024.12", "draft"]
 assert get_args(NominalVersion) == NOMINAL_VERSIONS  # sanity check
 
 
@@ -498,9 +498,6 @@ def _arrays(
 
       >>> xps.arrays(xp, xp.int8, 3, elements={"min_value": 10}).example()
       Array([125, 13, 79], dtype=int8)
-
-    Refer to :doc:`What you can generate and how <data>` for passing
-    your own elements strategy.
 
     .. code-block:: pycon
 

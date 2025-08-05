@@ -118,4 +118,4 @@ runs:
         put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
         test_retry_count: ${{ inputs.test_retry_count }}
         custom_branch_name: ${{ inputs.custom_branch_name }}
-        add_vcs_info: $${{ inputs.add_vcs_info }}
+        add_vcs_info: ${{ inputs.add_vcs_info }}

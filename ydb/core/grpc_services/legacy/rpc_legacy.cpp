@@ -237,6 +237,11 @@ void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvide
     f.RegisterActor(CreateMessageBusConsoleRequest(ctx));
 }
 
+void DoInterconnectDebug(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG);
+    f.RegisterActor(CreateMessageBusInterconnectDebug(ctx));
+}
+
 } // namespace NLegacyGrpcService
 
 } // namespace NKikimr::NGRpcService

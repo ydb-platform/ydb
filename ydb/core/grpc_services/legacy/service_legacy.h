@@ -188,6 +188,13 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrCl
     }
 };
 
+template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TInterconnectDebug, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TInterconnectDebug>
+    , NPrivate::TResponseLegacyCommonTraits
+{
+};
+
 // Requests that should be forwarded to msg bus proxy
 using TCreateActorCallback = std::function<void(std::unique_ptr<IRequestNoOpCtx>, const IFacilityProvider&)>;
 
@@ -215,6 +222,8 @@ void DoRegisterNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&
 
 void DoCmsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+
+void DoInterconnectDebug(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 } // namespace NLegacyGrpcService
 } // namespace NKikimr::NGRpcService

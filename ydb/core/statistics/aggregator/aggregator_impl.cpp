@@ -1061,9 +1061,9 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
     for (const auto& [_, serializedStats] : BaseStatistics) {
         NKikimrStat::TSchemeShardStats stats;
         Y_PROTOBUF_SUPPRESS_NODISCARD stats.ParseFromString(serializedStats);
-        for (const auto& entrie: stats.GetEntries()) {
-            totalRowCount += entrie.GetRowCount();
-            totalBytesSize += entrie.GetBytesSize();
+        for (const auto& entry: stats.GetEntries()) {
+            totalRowCount += entry.GetRowCount();
+            totalBytesSize += entry.GetBytesSize();
         }
     }
     TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_ROW_COUNT].Set(totalRowCount);

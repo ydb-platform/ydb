@@ -20,7 +20,7 @@ Y_UNIT_TEST(TestPartitionedBlobSimpleTest) {
     THead head;
     THead newHead;
 
-    TPartitionedBlob blob(TPartitionId(0), 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8_MB, false);
+    TPartitionedBlob blob(TPartitionId(0), 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8_MB);
     TClientBlob clientBlob("sourceId", 1, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123");
     UNIT_ASSERT(blob.IsInited());
     TString error;
@@ -74,7 +74,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     newHead.PackedSize = newHead.GetLastBatch().GetUnpackedSize();
     TString value2(partSize, 'b');
     ui32 maxBlobSize = 8 << 20;
-    TPartitionedBlob blob(TPartitionId(0), newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize, false);
+    TPartitionedBlob blob(TPartitionId(0), newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
 
     TVector<TPartitionedBlob::TFormedBlobInfo> formed;
 
@@ -173,9 +173,10 @@ Y_UNIT_TEST(TestPartitionedBigTest) {
     Test(true, 1, 512_KB - 9 - sizeof(ui64) - sizeof(ui16) - 100, 1); //serialized size of client blob is 512_KB - 100
     Test(true, 101, 512_KB - 9 - sizeof(ui64) - sizeof(ui16) - 100, 7); //serialized size of client blob is 512_KB - 100
 }
-void BatchPackingTest () {
-  TBatch batch;
-  for (ui32 i = 0; i < 100; ++i) {
+
+Y_UNIT_TEST(TestBatchPacking) {
+    TBatch batch;
+    for (ui32 i = 0; i < 100; ++i) {
     TString value(10, 'a');
         batch.AddBlob(TClientBlob(
             "sourceId1", i + 1, std::move(value), TMaybe<TPartData>(),
@@ -200,20 +201,14 @@ void BatchPackingTest () {
         "sourceId", 999'999'999'999'999ll, "abacaba", TPartData{33, 66, 4'000'000'000u},
         TInstant::MilliSeconds(999'999'999'999ll), TInstant::MilliSeconds(1000), 0, "", ""
     ));
-
     batch3.Pack();
     UNIT_ASSERT(batch3.Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed);
     batch3.Unpack();
     Y_ABORT_UNLESS(batch3.Blobs.size() == 1);
 }
 
-Y_UNIT_TEST(TestBatchPacking) {
-    BatchPackingTest();
-}
-
-
-const TString ToHex(const TString &value) {
-  return TStringBuilder() << HexText(TBasicStringBuf(value));
+const TString ToHex(const TString& value) {
+    return TStringBuilder() << HexText(TBasicStringBuf(value));
 }
 
 Y_UNIT_TEST(TestKeyRange) {
@@ -327,7 +322,8 @@ Y_UNIT_TEST(RestoreKeys) {
     }
 }
 
-} // Y_UNIT_TEST_SUITE
+} //Y_UNIT_TEST_SUITE
+
 
 } // TInternalsTest
 } // namespace NKikimr::NPQ

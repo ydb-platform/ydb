@@ -299,13 +299,13 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
                 res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
             }
         }
-        auto w = partitionRequest->AddCmdWrite();
 
         if (record.Key) {
             auto res = proto.AddMessageMeta();
             res->set_key("__key");
             res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
         }
+
         if (record.Value) {
             proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
         }
@@ -314,6 +314,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         bool res = proto.SerializeToString(&str);
         Y_ABORT_UNLESS(res);
 
+        auto w = partitionRequest->AddCmdWrite();
         w->SetSourceId(sourceId);
 
         bool enableKafkaDeduplication = batch->ProducerId >= 0;
@@ -532,9 +533,9 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             partitionResponse.BaseOffset = writeResults.at(0).GetOffset();
                         }
                     } else {
-                        KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode="
-                            << static_cast<int>(Convert(msg->GetError().Code))
-                            << ", ErrorMessage=" << msg->GetError().Reason
+                        KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" 
+                            << static_cast<int>(Convert(msg->GetError().Code)) 
+                            << ", ErrorMessage=" << msg->GetError().Reason 
                             << ", Error from writer=" << static_cast<int>(msg->Record.GetErrorCode())
                             << ", #02");
                         SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
@@ -631,7 +632,7 @@ void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TAct
             }
         }
 
-
+        
         Cookies.erase(it);
     }
 }

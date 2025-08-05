@@ -155,6 +155,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         if (record.DataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue;
         }
+
         for (auto& metadata : record.DataChunk.GetMessageMeta()) {
             if (metadata.key() == "__key") {
                 record.Key = metadata.value();

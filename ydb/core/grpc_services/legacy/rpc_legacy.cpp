@@ -51,11 +51,6 @@ ui32 ToMsgBusStatus(Ydb::StatusIds::StatusCode status) {
 
 }
 
-void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST);
-    f.RegisterActor(CreateMessageBusConsoleRequest(ctx));
-}
-
 static bool CheckMsgBusProxy(const NActors::TActorId& msgBusProxy, IRequestNoOpCtx& p) {
     if (!msgBusProxy) {
         NKikimrClient::TResponse resp;
@@ -96,6 +91,16 @@ TCreateActorCallback DoSchemeDescribe(const NActors::TActorId& msgBusProxy, NAct
     return [msgBusProxy, actorSystem](std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
         DoSchemeDescribe(msgBusProxy, actorSystem, std::move(p));
     };
+}
+
+void DoChooseProxyRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CHOOSE_PROXY);
+    f.RegisterActor(CreateMessageBusChooseProxy(ctx));
+}
+
+void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST);
+    f.RegisterActor(CreateMessageBusConsoleRequest(ctx));
 }
 
 } // namespace NLegacyGrpcService

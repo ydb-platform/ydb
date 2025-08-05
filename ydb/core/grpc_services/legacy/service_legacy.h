@@ -65,26 +65,42 @@ template <class TReq, class TResp>
 struct TLegacyGrpcMethodAccessorTraits;
 
 template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrClient::TConsoleResponse> : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TConsoleRequest> {
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeOperation, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeOperation>
+    , NPrivate::TResponseLegacyCommonTraits
+{
+};
+
+template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeOperationStatus, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TSchemeOperationStatus>
+    , NPrivate::TResponseLegacyCommonTraits
+{
+};
+
+template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeDescribe, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeDescribe>
+    , NPrivate::TResponseLegacyCommonTraits
+{
+};
+
+template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TChooseProxyRequest, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TChooseProxyRequest>
+    , NPrivate::TResponseLegacyCommonTraits
+{
+};
+
+template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrClient::TConsoleResponse>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TConsoleRequest>
+{
     static void FillResponse(NKikimrClient::TConsoleResponse& resp, const NYql::TIssues& issues, Ydb::CostInfo*, Ydb::StatusIds::StatusCode status) {
         resp.MutableStatus()->SetCode(status);
         resp.MutableStatus()->SetReason(issues.ToString());
     }
 };
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeOperation, NKikimrClient::TResponse> : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeOperation>, NPrivate::TResponseLegacyCommonTraits {
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeOperationStatus, NKikimrClient::TResponse> : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TSchemeOperationStatus>, NPrivate::TResponseLegacyCommonTraits {
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeDescribe, NKikimrClient::TResponse> : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeDescribe>, NPrivate::TResponseLegacyCommonTraits {
-};
-
-void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 // Requests that should be forwarded to msg bus proxy
 using TCreateActorCallback = std::function<void(std::unique_ptr<IRequestNoOpCtx>, const IFacilityProvider&)>;
@@ -92,6 +108,10 @@ using TCreateActorCallback = std::function<void(std::unique_ptr<IRequestNoOpCtx>
 TCreateActorCallback DoSchemeOperation(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
 void DoSchemeOperationStatus(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 TCreateActorCallback DoSchemeDescribe(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
+
+void DoChooseProxyRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+
+void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 } // namespace NLegacyGrpcService
 } // namespace NKikimr::NGRpcService

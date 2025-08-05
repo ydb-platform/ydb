@@ -993,6 +993,7 @@ def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str])
             )
 
     new_items = _build_cmd_input_paths(paths=files_in, hide=True, disable_include_processor=True)
+    new_items += " "
     new_items += _build_cmd_output_paths(paths=files_out, hide=True)
     __set_append(unit, "_TS_FILES_INOUTS", new_items)
 

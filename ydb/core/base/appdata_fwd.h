@@ -314,8 +314,6 @@ struct TAppData {
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
 
-    THashMap<TString, TString> ServiceTokens;
-
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
             TMap<TString, ui32> servicePools,
@@ -328,8 +326,6 @@ struct TAppData {
 
     void InitFeatureFlags(const NKikimrConfig::TFeatureFlags& flags);
     void UpdateRuntimeFlags(const NKikimrConfig::TFeatureFlags& flags);
-
-    TString GetToken(const TString& name) const;
 
     // Test failure injection methods
     void InjectFailure(ui64 failureType) {

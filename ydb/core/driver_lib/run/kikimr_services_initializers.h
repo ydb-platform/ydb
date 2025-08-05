@@ -255,7 +255,7 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 
 private:
-    void InitializeServiceTicketManager(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData);
+    void InitializeTokenManager(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData);
     void InitializeLdapAuthProvider(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData);
     void InitializeTicketParser(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData);
 };

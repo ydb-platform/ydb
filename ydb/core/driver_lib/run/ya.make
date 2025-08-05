@@ -95,6 +95,7 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/token_manager
     ydb/core/statistics/aggregator
     ydb/core/statistics/service
     ydb/core/sys_view/processor

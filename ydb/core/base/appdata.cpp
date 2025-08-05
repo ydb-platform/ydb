@@ -154,14 +154,6 @@ void TAppData::UpdateRuntimeFlags(const NKikimrConfig::TFeatureFlags& flags) {
     Impl->FeatureFlags.CopyRuntimeFrom(flags);
 }
 
-TString TAppData::GetToken(const TString& name) const {
-    auto it = ServiceTokens.find(name);
-    if (it != ServiceTokens.cend()) {
-        return it->second;
-    }
-    return "";
-}
-
 TIntrusivePtr<IRandomProvider> TAppData::RandomProvider = CreateDefaultRandomProvider();
 TIntrusivePtr<ITimeProvider> TAppData::TimeProvider = CreateDefaultTimeProvider();
 

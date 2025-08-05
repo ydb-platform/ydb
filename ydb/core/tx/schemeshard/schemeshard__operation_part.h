@@ -404,6 +404,13 @@ ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::E
 ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::ETxState state);
 
+TVector<ISubOperation::TPtr> CreateChangeConstraint(TOperationId, const TTxTransaction&, TOperationContext&);
+
+
+ISubOperation::TPtr CreateChangeConstraintBegin(TOperationId, const TTxTransaction&);
+ISubOperation::TPtr CreateChangeConstraintCheck(TOperationId, const TTxTransaction&);
+ISubOperation::TPtr CreateChangeConstraintFinalize(TOperationId, const TTxTransaction&);
+
 // External Table
 // Create
 TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);

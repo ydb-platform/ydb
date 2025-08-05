@@ -316,6 +316,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                         Repeat(("ForwardWriteActor"), 1)),
                     "RunTasks",
                     ExpectedSpan(
+                        "WaitTasks"),
+                    ExpectedSpan(
                         "Commit",
                         Repeat(
                             ExpectedSpan("Datashard.WriteTransaction",

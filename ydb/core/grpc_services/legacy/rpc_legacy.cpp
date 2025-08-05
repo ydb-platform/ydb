@@ -111,6 +111,19 @@ TCreateActorCallback DoPersQueueRequest(const NActors::TActorId& msgBusProxy, NA
     };
 }
 
+static void DoSchemeInitRoot(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem, std::unique_ptr<IRequestNoOpCtx> p) {
+    if (CheckMsgBusProxy(msgBusProxy, *p)) {
+        NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_SCHEME_INITROOT);
+        actorSystem->Send(msgBusProxy, new NMsgBusProxy::TEvBusProxy::TEvInitRoot(ctx));
+    }
+}
+
+TCreateActorCallback DoSchemeInitRoot(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem) {
+    return [msgBusProxy, actorSystem](std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
+        DoSchemeInitRoot(msgBusProxy, actorSystem, std::move(p));
+    };
+}
+
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST);
     f.RegisterActor(CreateMessageBusConsoleRequest(ctx));

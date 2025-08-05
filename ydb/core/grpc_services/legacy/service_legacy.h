@@ -106,6 +106,13 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TPersQueueRequest, NKikimr
 };
 
 template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeInitRoot, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeInitRoot>
+    , NPrivate::TResponseLegacyCommonTraits
+{
+};
+
+template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrClient::TConsoleResponse>
     : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TConsoleRequest>
 {
@@ -125,6 +132,8 @@ TCreateActorCallback DoSchemeDescribe(const NActors::TActorId& msgBusProxy, NAct
 void DoChooseProxy(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 TCreateActorCallback DoPersQueueRequest(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
+
+TCreateActorCallback DoSchemeInitRoot(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
 
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 

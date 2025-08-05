@@ -505,23 +505,8 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_SERVER_METHOD(SchemeDescribe, TSchemeDescribe, TResponse, DoSchemeDescribe(MsgBusProxy, ActorSystem), Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
     SETUP_SERVER_METHOD(ChooseProxy, TChooseProxyRequest, TResponse, DoChooseProxy, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
     SETUP_SERVER_METHOD(PersQueueRequest, TPersQueueRequest, TResponse, DoPersQueueRequest(MsgBusProxy, ActorSystem), Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_SERVER_METHOD(SchemeInitRoot, TSchemeInitRoot, TResponse, DoSchemeInitRoot(MsgBusProxy, ActorSystem), Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_SERVER_METHOD(ConsoleRequest, TConsoleRequest, TConsoleResponse, DoConsoleRequest, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-
-#define ADD_PROXY_REQUEST_BASE(NAME, TYPE, RES_TYPE, EVENT_TYPE, MTYPE) \
-    ADD_REQUEST(NAME, TYPE, RES_TYPE, { \
-        if (MsgBusProxy) { \
-            NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE)); \
-            ActorSystem->Send(MsgBusProxy, new NMsgBusProxy::EVENT_TYPE(msg)); \
-        } else { \
-            ctx->ReplyError("no MessageBus proxy"); \
-        } \
-    })
-
-#define ADD_PROXY_REQUEST(NAME, TYPE, EVENT_TYPE, MTYPE) \
-    ADD_PROXY_REQUEST_BASE(NAME, TYPE, TResponse, EVENT_TYPE, MTYPE)
-
-    // proxy requests
-    ADD_PROXY_REQUEST(SchemeInitRoot,  TSchemeInitRoot,  TEvBusProxy::TEvInitRoot,            MTYPE_CLIENT_SCHEME_INITROOT)
 }
 
 }

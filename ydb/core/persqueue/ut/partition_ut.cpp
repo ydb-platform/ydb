@@ -3655,7 +3655,7 @@ Y_UNIT_TEST_F(TEvTxCalcPredicate_With_Conflicts, TPartitionTxTestHelper)
 
     WaitTxPredicateReply(tx1);
 
-    auto tx2 = MakeAndSendWriteTx({{"sourceid", {1, 3}}});
+    auto tx2 = MakeAndSendWriteTx({{"sourceid", {4, 6}}});
 
     WaitWriteInfoRequest(tx2);
     SendWriteInfoResponse(tx2);
@@ -3663,8 +3663,6 @@ Y_UNIT_TEST_F(TEvTxCalcPredicate_With_Conflicts, TPartitionTxTestHelper)
     ExpectNoTxPredicateReply();
 
     SendTxCommit(tx1);
-
-    EmulateKVTablet();
 
     WaitTxPredicateReply(tx2);
 }

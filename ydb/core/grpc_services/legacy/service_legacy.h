@@ -31,6 +31,8 @@ namespace NPrivate {
 
 ui32 ToMsgBusStatus(Ydb::StatusIds::StatusCode status);
 
+Y_HAS_MEMBER(GetSecurityToken);
+
 template <class TReq>
 struct TGetYdbTokenLegacyTraits {
     static const TMaybe<TString> GetYdbToken(const TReq& req, const NYdbGrpc::IRequestContextBase*) {
@@ -39,6 +41,8 @@ struct TGetYdbTokenLegacyTraits {
         }
         return Nothing();
     }
+
+    static_assert(THasGetSecurityToken<TReq>::value, "Request class must have GetSecurityToken method");
 };
 
 template <class TReq>
@@ -46,6 +50,8 @@ struct TGetYdbTokenUnsecureTraits {
     static const TMaybe<TString> GetYdbToken(const TReq&, const NYdbGrpc::IRequestContextBase*) {
         return Nothing();
     }
+
+    static_assert(!THasGetSecurityToken<TReq>::value, "Request class has GetSecurityToken method, so TGetYdbTokenUnsecureTraits must not be used");
 };
 
 struct TResponseLegacyCommonTraits {

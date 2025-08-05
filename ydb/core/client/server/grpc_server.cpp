@@ -471,7 +471,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace ::NKikimr::NGRpcService;
     using namespace ::NKikimr::NGRpcService::NLegacyGrpcService;
 
-#define SETUP_SERVER_METHOD(methodName, In, Out, createActorCb, rlMode, requestType, counterName, auditMode)       \
+#define SETUP_SERVER_METHOD(methodName, In, Out, createActorCb, rlMode, requestType, counterName, auditMode) \
     MakeIntrusive<NGRpcService::TGRpcRequest<                                                                \
         NKikimrClient::In,                                                                                   \
         NKikimrClient::Out,                                                                                  \

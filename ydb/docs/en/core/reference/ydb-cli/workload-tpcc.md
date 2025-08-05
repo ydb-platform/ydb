@@ -85,7 +85,7 @@ However, on the client side, it is recommended to keep the number of loading thr
 Run the load:
 
 ```bash
-{{ ydb-cli }} workload tpcc --path tpcc/10wh run
+{{ ydb-cli }} workload tpcc --path tpcc/10wh run --warehouses 10
 ```
 
 During the benchmark, the CLI displays a preview of the results and various client side load statistics:

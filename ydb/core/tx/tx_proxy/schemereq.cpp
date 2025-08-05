@@ -426,8 +426,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableChangePathState()->MutablePath();
             
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
-            // For finalization operations, use a placeholder path since it operates on multiple paths
-            return *modifyScheme.MutableIncrementalRestoreFinalize()->MutableTargetTablePaths(0);
+            // For finalization operations, use the backup collection path as the primary identifier
+            return *modifyScheme.MutableIncrementalRestoreFinalize()->MutableBackupCollectionPath();
         }
         Y_UNREACHABLE();
     }

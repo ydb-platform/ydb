@@ -86,12 +86,6 @@ class KillSystemTabletByTypeNemesis(AbstractTabletByTypeNemesis):
         self.logger.info("=== INJECT_FAULT START: %s ===", str(self))
         self.logger.info("Available tablet_ids: %s (count: %d)", self.tablet_ids, len(self.tablet_ids))
         
-        # Safe access to __tablet_ids
-        try:
-            self.logger.info("Internal __tablet_ids: %s (count: %d)", self.__tablet_ids, len(self.__tablet_ids))
-        except Exception as e:
-            self.logger.error("Error accessing __tablet_ids: %s", str(e))
-            self.logger.info("Internal __tablet_ids: <error accessing>")
 
         if self.tablet_ids:
             tablet_id = random.choice(self.tablet_ids)
@@ -130,12 +124,6 @@ class KillSystemTabletByTypeNemesis(AbstractTabletByTypeNemesis):
             self.prepare_state()
             self.logger.info("After prepare_state, tablet_ids: %s (count: %d)", self.tablet_ids, len(self.tablet_ids))
             
-            # Safe access to __tablet_ids after prepare_state
-            try:
-                self.logger.info("After prepare_state, __tablet_ids: %s (count: %d)", self.__tablet_ids, len(self.__tablet_ids))
-            except Exception as e:
-                self.logger.error("Error accessing __tablet_ids after prepare_state: %s", str(e))
-                self.logger.info("After prepare_state, __tablet_ids: <error accessing>")
                 
             if self.tablet_ids:
                 self.logger.info("Retrying inject_fault after prepare_state")

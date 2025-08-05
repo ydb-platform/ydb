@@ -401,34 +401,41 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
                     if pile_id != self._current_pile_id:
                         other_nodes.extend(nodes)
 
+                # Schedule recovery and block routes in one pass
+                recovery_tasks = []
                 unreach_tasks = []
+                
                 for other_node in other_nodes:
-                    self.logger.info("Blocking routes on host %s to current pile %d", other_node.host, self._current_pile_id)
+                    self.logger.info("Processing host %s for current pile %d", other_node.host, self._current_pile_id)
                     for node in self._current_nodes:
                         ip = self._resolve_hostname_to_ip(node.host)
                         if ip is None:
                             self.logger.error("Failed to resolve hostname %s to IP address", node.host)
                             raise Exception("Failed to resolve hostname to IP address")
+                        
+                        # Schedule automatic recovery first
+                        recovery_cmd = f"sudo /usr/bin/ip -6 ro del unreach {ip}"
+                        at_cmd = f"echo '{recovery_cmd}' | sudo at now + {self._duration} seconds"
+                        try:
+                            at_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, at_cmd, raise_on_error=False))
+                            self.logger.info("Scheduled automatic recovery for IP %s on host %s", ip, other_node.host)
+                            recovery_tasks.append(at_task)
+                        except Exception as e:
+                            self.logger.warning("Failed to schedule automatic recovery for IP %s on host %s: %s", ip, other_node.host, str(e))
+                        
+                        # Then block the route
                         block_cmd = self._block_cmd_template.format(ip, ip)
                         block_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_cmd, raise_on_error=True))
-                        
-                        # Schedule automatic recovery using 'at' command with duration
-                        recovery_cmd = f"sudo /usr/bin/ip -6 ro del unreach {ip}"
-                        at_cmd = f"echo '{recovery_cmd}' | sudo at now + {self.duration} seconds"
-                        at_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, at_cmd, raise_on_error=False))
-                        
-                        unreach_tasks.extend([block_task, at_task])
+                        unreach_tasks.append(block_task)
+                
+                # Wait for recovery scheduling to complete first
+                if recovery_tasks:
+                    await asyncio.gather(*recovery_tasks, return_exceptions=True)
+                
+                # Then wait for blocking operations to complete
+                await asyncio.gather(*unreach_tasks, return_exceptions=True)
 
-                results = await asyncio.gather(*unreach_tasks, return_exceptions=True)
-                success_count = 0
-                for result in results:
-                    if isinstance(result, Exception):
-                        self.logger.error("Failed to block routes on host %s to current pile %d", other_node.host, self._current_pile_id)
-                        raise result
-                    self.logger.info("Successfully blocked routes on host %s to current pile %d", other_node.host, self._current_pile_id)
-                    success_count += 1
-
-                self.logger.info("Blocked routes to pile %d: %d/%d operations successful", self._current_pile_id, success_count, len(results))
+                self.logger.info("Blocked routes to pile %d and scheduled automatic recovery", self._current_pile_id)
 
             except Exception as e:
                 self.logger.error("Failed to block routes: %s", str(e))
@@ -440,8 +447,6 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
     def _extract_specific_fault(self):
         """Network routes are automatically restored via 'at' command scheduled during injection."""
         self.logger.info("Skipping manual route restoration - automatic recovery via 'at' command is scheduled")
-        # Routes are automatically restored via 'at' command scheduled during _inject_specific_fault
-        # This prevents SSH connectivity issues during manual restoration
 
 
 def bridge_pile_nemesis_list(cluster):

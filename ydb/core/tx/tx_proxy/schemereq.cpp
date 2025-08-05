@@ -424,6 +424,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpChangePathState:
             return *modifyScheme.MutableChangePathState()->MutablePath();
+            
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
+            // For finalization operations, use a placeholder path since it operates on multiple paths
+            return *modifyScheme.MutableIncrementalRestoreFinalize()->MutableTargetTablePaths(0);
         }
         Y_UNREACHABLE();
     }
@@ -1061,6 +1065,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::ESchemeOpAlterView:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
             return false;
         }
         return true;

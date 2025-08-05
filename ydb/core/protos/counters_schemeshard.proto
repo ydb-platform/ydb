@@ -257,6 +257,7 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxRotateCdcStream = 201        [(CounterOpts) = {Name: "InFlightOps/RotateCdcStream"}];
     COUNTER_IN_FLIGHT_OPS_TxRotateCdcStreamAtTable = 202 [(CounterOpts) = {Name: "InFlightOps/RotateCdcStreamAtTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxIncrementalRestoreFinalize = 203 [(CounterOpts) = {Name: "InFlightOps/IncrementalRestoreFinalize"}];
 }
 
 enum ECumulativeCounters {
@@ -416,6 +417,7 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxRotateCdcStream = 123        [(CounterOpts) = {Name: "FinishedOps/RotateCdcStream"}];
     COUNTER_FINISHED_OPS_TxRotateCdcStreamAtTable = 124 [(CounterOpts) = {Name: "FinishedOps/RotateCdcStreamAtTable"}];
+    COUNTER_FINISHED_OPS_TxIncrementalRestoreFinalize = 125 [(CounterOpts) = {Name: "FinishedOps/IncrementalRestoreFinalize"}];
 }
 
 enum EPercentileCounters {

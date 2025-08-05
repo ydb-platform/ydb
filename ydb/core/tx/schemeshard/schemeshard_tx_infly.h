@@ -134,6 +134,7 @@ struct TTxState {
         item(TxChangePathState, 106) \
         item(TxRotateCdcStream, 107) \
         item(TxRotateCdcStreamAtTable, 108) \
+        item(TxIncrementalRestoreFinalize, 109) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -361,6 +362,8 @@ struct TTxState {
         case TxCreateSysView:
         case TxCreateLongIncrementalRestoreOp:
             return true;
+        case TxIncrementalRestoreFinalize:
+            return false;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
         case TxCreateCdcStreamAtTableWithInitialScan:
@@ -483,6 +486,8 @@ struct TTxState {
         case TxDropBackupCollection:
         case TxDropSysView:
             return true;
+        case TxIncrementalRestoreFinalize:
+            return false;
         case TxMkDir:
         case TxCreateTable:
         case TxCopyTable:
@@ -686,6 +691,8 @@ struct TTxState {
         case TxRotateCdcStream:
         case TxRotateCdcStreamAtTable:
             return false;
+        case TxIncrementalRestoreFinalize:
+            return false;
         case TxInvalid:
         case TxAllocatePQ:
             Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
@@ -809,6 +816,7 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpDropSysView: return TxDropSysView;
             case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp: return TxCreateLongIncrementalRestoreOp;
             case NKikimrSchemeOp::ESchemeOpChangePathState: return TxChangePathState;
+            case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize: return TxIncrementalRestoreFinalize;
             default: return TxInvalid;
         }
     }

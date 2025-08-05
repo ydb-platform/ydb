@@ -1,6 +1,6 @@
 # YDB Documentation
 
-This folder contains the source code for YDB documentation built using the [Diplodoc](https://diplodoc.com/) documentation platform.
+This folder contains the source code for [YDB documentation](https://ydb.tech/docs/en/) built using the [Diplodoc](https://diplodoc.com/) documentation platform.
 
 ## Contributing to Documentation 📖
 

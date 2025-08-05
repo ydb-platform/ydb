@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/protos/grpc.grpc.pb.h>
+#include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -30,6 +31,7 @@ namespace NLegacyGrpcService {
 namespace NPrivate {
 
 ui32 ToMsgBusStatus(Ydb::StatusIds::StatusCode status);
+NKikimrNodeBroker::TStatus::ECode ToNodeBrokerStatus(Ydb::StatusIds::StatusCode status);
 
 Y_HAS_MEMBER(GetSecurityToken);
 
@@ -155,6 +157,16 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TTestShardControlRequest, 
 };
 
 template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TNodeRegistrationRequest, NKikimrClient::TNodeRegistrationResponse>
+    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TNodeRegistrationRequest> // Unsecure because authorization is performed using client certificates
+{
+    static void FillResponse(NKikimrClient::TNodeRegistrationResponse& resp, const NYql::TIssues& issues, Ydb::CostInfo*, Ydb::StatusIds::StatusCode status) {
+        resp.MutableStatus()->SetCode(NPrivate::ToNodeBrokerStatus(status));
+        resp.MutableStatus()->SetReason(issues.ToString());
+    }
+};
+
+template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrClient::TConsoleResponse>
     : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TConsoleRequest>
 {
@@ -186,6 +198,8 @@ void DoBlobStorageConfig(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProv
 void DoHiveCreateTablet(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 void DoTestShardControl(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+
+void DoRegisterNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 

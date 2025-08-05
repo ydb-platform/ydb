@@ -49,6 +49,40 @@ ui32 ToMsgBusStatus(Ydb::StatusIds::StatusCode status) {
     }
 }
 
+// In real situations we don't return all these codes from grpc layer
+NKikimrNodeBroker::TStatus::ECode ToNodeBrokerStatus(Ydb::StatusIds::StatusCode status) {
+    switch (status) {
+        case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED:
+            return NKikimrNodeBroker::TStatus::UNKNOWN;
+        case Ydb::StatusIds::SUCCESS:
+            return NKikimrNodeBroker::TStatus::OK;
+        case Ydb::StatusIds::BAD_REQUEST:
+        case Ydb::StatusIds::BAD_SESSION:
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+            return NKikimrNodeBroker::TStatus::WRONG_REQUEST;
+        case Ydb::StatusIds::UNAUTHORIZED:
+            return NKikimrNodeBroker::TStatus::UNAUTHORIZED;
+        case Ydb::StatusIds::INTERNAL_ERROR:
+        case Ydb::StatusIds::UNAVAILABLE:
+        case Ydb::StatusIds::OVERLOADED:
+        case Ydb::StatusIds::TIMEOUT:
+        case Ydb::StatusIds::SESSION_EXPIRED:
+        case Ydb::StatusIds::SESSION_BUSY:
+            return NKikimrNodeBroker::TStatus::ERROR_TEMP;
+        // case Ydb::StatusIds::ABORTED:
+        // case Ydb::StatusIds::SCHEME_ERROR:
+        // case Ydb::StatusIds::GENERIC_ERROR:
+        // case Ydb::StatusIds::ALREADY_EXISTS:
+        // case Ydb::StatusIds::NOT_FOUND:
+        // case Ydb::StatusIds::CANCELLED:
+        // case Ydb::StatusIds::UNDETERMINED:
+        // case Ydb::StatusIds::UNSUPPORTED:
+        // case Ydb::StatusIds::EXTERNAL_ERROR:
+        default:
+            return NKikimrNodeBroker::TStatus::ERROR;
+    }
+}
+
 }
 
 static bool CheckMsgBusProxy(const NActors::TActorId& msgBusProxy, IRequestNoOpCtx& p) {
@@ -152,6 +186,11 @@ void DoHiveCreateTablet(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvi
 void DoTestShardControl(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_TEST_SHARD_CONTROL);
     f.RegisterActor(CreateMessageBusTestShardControl(ctx));
+}
+
+void DoRegisterNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST);
+    f.RegisterActor(CreateMessageBusRegisterNode(ctx));
 }
 
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {

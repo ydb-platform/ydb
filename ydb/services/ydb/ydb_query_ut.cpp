@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         UNIT_ASSERT(allDoneOk);
 
         {
-            EnsureSessionClosed(p, Ydb::StatusIds::BAD_SESSION, allDoneOk);
+            EnsureSessionClosed(p, Ydb::StatusIds::SUCCESS, allDoneOk);
         }
 
         p->Cancel();
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         UNIT_ASSERT(allDoneOk);
 
         {
-            CheckAttach(clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+            CheckAttach(clientConfig, sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
         }
 
         UNIT_ASSERT(allDoneOk);

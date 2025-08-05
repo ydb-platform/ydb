@@ -15,6 +15,7 @@ from ydb.tests.library.nemesis.nemesis_core import Nemesis, Schedule
 logger = logging.getLogger("bridge_pile")
 logger.info("=== BRIDGE_PILE.PY LOADED ===")
 
+
 class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
     """
     Bridge-aware nemesis that performs master bridge pile switching scenarios.
@@ -321,22 +322,21 @@ class BridgePileIptablesBlockPortsNemesis(AbstractBridgePileNemesis):
         """Block YDB ports using iptables on nodes in the current pile."""
         async def _async_block_ports():
             try:
+                # Block ports and schedule recovery in one pass
                 block_tasks = []
+
                 for node in self._current_nodes:
-                    self.logger.info("Blocking YDB ports on host %s", node.host)
-                    task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._block_ports_cmd, raise_on_error=True))
-                    block_tasks.append(task)
+                    self.logger.info("Processing host %s for current pile %d", node.host, self._current_pile_id)
 
-                results = await asyncio.gather(*block_tasks, return_exceptions=True)
-                success_count = 0
-                for node, result in zip(self._current_nodes, results):
-                    if isinstance(result, Exception):
-                        self.logger.error("Error blocking YDB ports on host %s: %s", node.host, result)
-                        raise result
-                    self.logger.info("Successfully blocked YDB ports on host %s", node.host)
-                    success_count += 1
+                    # Block ports and schedule automatic recovery in one command
+                    block_and_recover_cmd = f"nohup bash -c '{self._block_ports_cmd} && sleep {self._duration} && sudo /sbin/ip6tables -w -F YDB_FW' > /dev/null 2>&1 &"
+                    block_task = asyncio.create_task(asyncio.to_thread(node.ssh_command, block_and_recover_cmd, raise_on_error=True))
+                    block_tasks.append(block_task)
 
-                self.logger.info("Blocked YDB ports on %d/%d nodes in pile %d", success_count, len(self._current_nodes), self._current_pile_id)
+                # Wait for all blocking and recovery scheduling operations to complete
+                await asyncio.gather(*block_tasks, return_exceptions=True)
+
+                self.logger.info("Blocked YDB ports on pile %d and scheduled automatic recovery", self._current_pile_id)
             except Exception as e:
                 self.logger.error("Failed to block YDB ports: %s", str(e))
                 raise e
@@ -345,27 +345,10 @@ class BridgePileIptablesBlockPortsNemesis(AbstractBridgePileNemesis):
             runner.run(_async_block_ports())
 
     def _extract_specific_fault(self):
-        """Restore YDB ports using iptables on nodes in the current pile."""
-        async def _async_restore_ports():
-            restore_tasks = []
-            for node in self._current_nodes:
-                self.logger.info("Restoring YDB ports on host %s", node.host)
-                task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._restore_ports_cmd, raise_on_error=True))
-                restore_tasks.append(task)
-
-            results = await asyncio.gather(*restore_tasks, return_exceptions=True)
-            success_count = 0
-            for node, result in zip(self._current_nodes, results):
-                if isinstance(result, Exception):
-                    self.logger.error("Exception restoring YDB ports on host %s: %s", node.host, result)
-                    continue
-                self.logger.info("Successfully restored YDB ports on host %s", node.host)
-                success_count += 1
-
-            self.logger.info("Restored YDB ports on %d/%d nodes in pile %d", success_count, len(self._current_nodes), self._current_pile_id)
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_restore_ports())
+        """YDB ports are automatically restored via sleep command scheduled during injection."""
+        self.logger.info("Skipping manual port restoration - automatic recovery via sleep command is scheduled")
+        # Ports are automatically restored via sleep command scheduled during _inject_specific_fault
+        # This prevents SSH connectivity issues during manual restoration
 
 
 class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
@@ -401,8 +384,7 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
                     if pile_id != self._current_pile_id:
                         other_nodes.extend(nodes)
 
-                # Schedule recovery and block routes in one pass
-                recovery_tasks = []
+                # Block routes and schedule recovery in one pass
                 unreach_tasks = []
 
                 for other_node in other_nodes:
@@ -413,27 +395,10 @@ class BridgePileRouteUnreachableNemesis(AbstractBridgePileNemesis):
                             self.logger.error("Failed to resolve hostname %s to IP address", node.host)
                             raise Exception("Failed to resolve hostname to IP address")
 
-                        # Schedule automatic recovery using sleep + nohup
-                        recovery_cmd = f"sudo /usr/bin/ip -6 ro del unreach {ip}"
-                        sleep_cmd = f"nohup bash -c 'sleep {self._duration} && {recovery_cmd}' > /dev/null 2>&1 &"
-
-                        try:
-                            sleep_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, sleep_cmd, raise_on_error=False))
-                            self.logger.info("Scheduled automatic recovery for IP %s on host %s (sleep %d seconds)", ip, other_node.host, self._duration)
-                            recovery_tasks.append(sleep_task)
-                        except Exception as e:
-                            self.logger.warning("Failed to schedule automatic recovery for IP %s on host %s: %s", ip, other_node.host, str(e))
-
-                        # Then block the route
-                        block_cmd = self._block_cmd_template.format(ip, ip)
-                        block_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_cmd, raise_on_error=True))
+                        block_and_recover_cmd = f"nohup bash -c 'sudo /usr/bin/ip -6 ro add unreach {ip} && sleep {self._duration} && sudo /usr/bin/ip -6 ro del unreach {ip}' > /dev/null 2>&1 &"
+                        block_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_and_recover_cmd, raise_on_error=True))
                         unreach_tasks.append(block_task)
 
-                # Wait for recovery scheduling to complete first
-                if recovery_tasks:
-                    await asyncio.gather(*recovery_tasks, return_exceptions=True)
-
-                # Then wait for blocking operations to complete
                 await asyncio.gather(*unreach_tasks, return_exceptions=True)
 
                 self.logger.info("Blocked routes to pile %d and scheduled automatic recovery", self._current_pile_id)

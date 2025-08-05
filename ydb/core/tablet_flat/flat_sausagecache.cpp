@@ -288,10 +288,8 @@ void TPrivatePageCache::ProvideBlock(TPageId pageId, TSharedPageRef sharedBody, 
     if (Y_UNLIKELY(page->PinnedBody && !page->SharedBody))
         Stats.TotalExclusive -= page->Size;
 
-    page->Fill(std::move(sharedBody));
+    page->ProvideSharedBody(std::move(sharedBody));
     Stats.TotalSharedBody += page->Size;
-    Stats.TotalPinnedBody += page->Size;
-    TryUnload(page);
 }
 
 THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache::DetachPrivatePageCache() {

@@ -59,12 +59,6 @@ public:
             return Info->IsSticky(Id);
         }
 
-        void Fill(TSharedPageRef sharedBody) {
-            SharedBody = std::move(sharedBody);
-            LoadState = LoadStateLoaded;
-            PinnedBody = TPinnedPageRef(SharedBody).GetData();
-        }
-
         void ProvideSharedBody(TSharedPageRef sharedBody) {
             SharedBody = std::move(sharedBody);
             SharedBody.UnUse();

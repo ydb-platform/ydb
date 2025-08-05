@@ -534,7 +534,6 @@ bool TSchemeShard::ApplyStorageConfig(
         ui32 channel = channelsBinding.size();
         channelsBinding.emplace_back();
         channelsBinding.back().SetStoragePoolName(pool.GetName());
-        channelsBinding.back().SetStoragePoolKind(pool.GetKind());
         reverseBinding[pool.GetName()].emplace_back(channel);
         return channel;
     };
@@ -559,7 +558,7 @@ bool TSchemeShard::ApplyStorageConfig(
         auto logPool = resolve(storagePools, storageConfig.GetLog());
         LOCAL_CHECK(logPool != storagePools.end(), "unable determine pool for log storage");
 
-        ui32 channel = allocateChannel(logPool->GetName());
+        ui32 channel = allocateChannel(*logPool);
         Y_ABORT_UNLESS(channel == 1, "Expected to allocate log channel, not %" PRIu32, channel);
     }
 
@@ -573,7 +572,7 @@ bool TSchemeShard::ApplyStorageConfig(
         auto dataPool = resolve(storagePools, storageConfig.GetData());
         LOCAL_CHECK(dataPool != storagePools.end(), "definition of data storage present but unable determine pool for it");
 
-        ui32 channel = allocateChannel(dataPool->GetName());
+        ui32 channel = allocateChannel(*dataPool);
         room.AssignChannel(NKikimrStorageSettings::TChannelPurpose::Data, channel);
     }
 

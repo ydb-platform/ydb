@@ -42,7 +42,7 @@ private:
     std::shared_ptr<TColumnFilter> Filter = std::make_shared<TColumnFilter>(TColumnFilter::BuildAllowFilter());
     bool UseFilter = true;
     std::optional<ui32> RecordsCountActual;
-    const std::optional<ui32> RecordsCountOriginal;
+    std::optional<ui32> RecordsCountOriginal;
     THashSet<i64> Markers;
 
 public:

@@ -1933,7 +1933,7 @@ namespace Tests {
 
     NBus::EMessageStatus TClient::WaitCompletion(ui64 txId, ui64 schemeshard, ui64 pathId,
                                         TAutoPtr<NBus::TBusMessage>& reply,
-                                        TDuration timeout)
+                                        TDuration timeout, const TString& securityToken)
     {
         auto deadline = TInstant::Now() + timeout;
 
@@ -1941,6 +1941,9 @@ namespace Tests {
         const NKikimrClient::TResponse* response = nullptr;
         do {
             TAutoPtr<NMsgBusProxy::TBusSchemeOperationStatus> msg = new NMsgBusProxy::TBusSchemeOperationStatus();
+            if (securityToken) {
+                msg->Record.SetSecurityToken(securityToken);
+            }
             msg->Record.MutableFlatTxId()->SetTxId(txId);
             msg->Record.MutableFlatTxId()->SetSchemeShardTabletId(schemeshard);
             msg->Record.MutableFlatTxId()->SetPathId(pathId);
@@ -1967,6 +1970,7 @@ namespace Tests {
                                                         TAutoPtr<NBus::TBusMessage>& reply,
                                                         TDuration timeout) {
         PrepareRequest(request);
+        const TString securityToken = request->Record.GetSecurityToken();
 
         NBus::EMessageStatus status = SendWhenReady(request, reply, timeout.MilliSeconds());
 
@@ -1989,7 +1993,7 @@ namespace Tests {
         }
 
         NKikimrClient::TFlatTxId txId = response->GetFlatTxId();
-        return WaitCompletion(txId.GetTxId(), txId.GetSchemeShardTabletId(), txId.GetPathId(), reply, timeout);
+        return WaitCompletion(txId.GetTxId(), txId.GetSchemeShardTabletId(), txId.GetPathId(), reply, timeout, securityToken);
     }
 
     NMsgBusProxy::EResponseStatus TClient::MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {

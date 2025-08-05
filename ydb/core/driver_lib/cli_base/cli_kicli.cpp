@@ -26,6 +26,10 @@ void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBus
     SetToken(config, request);
 }
 
+void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeOperationStatus>& request) {
+    SetToken(config, request);
+}
+
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeDescribe>& request) {
     SetToken(config, request);
 }

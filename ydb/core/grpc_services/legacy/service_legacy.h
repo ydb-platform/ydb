@@ -83,7 +83,7 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeOperation, NKikimrC
 
 template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeOperationStatus, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TSchemeOperationStatus>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeOperationStatus>
     , NPrivate::TResponseLegacyCommonTraits
 {
 };

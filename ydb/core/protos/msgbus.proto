@@ -401,6 +401,7 @@ message TFlatDescribeResponse {
 
 message TSchemeOperationStatus {
     optional TFlatTxId FlatTxId = 1;
+    optional string SecurityToken = 2;
     optional TFlatTxPollOptions PollOptions = 10;
 };
 

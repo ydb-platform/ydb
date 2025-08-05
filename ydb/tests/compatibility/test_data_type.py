@@ -50,15 +50,11 @@ class TestDataType(RestartToAnotherVersionFixture):
     def write_data(self):
         querys = []
         for i in range(self.count_table):
-            pk_keys = self.pk_types[i].keys()
-            if self.store_type == "COLUMN":
-                pk_keys = pk_keys - {"Bool"}
-            
             values = []
             for key in range(1, self.count_rows + 1):
                 values.append(
                     f'''(
-                        {", ".join([format_sql_value(self.pk_types[i][type_name](key), type_name) for type_name in pk_keys])},
+                        {", ".join([format_sql_value(self.pk_types[i][type_name](key), type_name) for type_name in self.pk_types[i].keys()])},
                         {", ".join([format_sql_value(self.all_types[type_name](key), type_name) for type_name in self.all_types.keys()])}
                         )
                         '''
@@ -66,7 +62,7 @@ class TestDataType(RestartToAnotherVersionFixture):
             querys.append(
                 f"""
                 UPSERT INTO `{self.table_names[i]}` (
-                    {", ".join([f"pk_{cleanup_type_name(type_name)}" for type_name in pk_keys])},
+                    {", ".join([f"pk_{cleanup_type_name(type_name)}" for type_name in self.pk_types[i].keys()])},
                     {", ".join([f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()])}
                 )
                 VALUES {",".join(values)};
@@ -125,13 +121,9 @@ class TestDataType(RestartToAnotherVersionFixture):
     def create_table(self):
         pk_columns = []
         for i in range(self.count_table):
-            pk_keys = self.pk_types[i].keys()
-            if self.store_type == "COLUMN":
-                pk_keys = pk_keys - {"Bool"}
-            
             pk_columns.append(
                 {
-                    "pk_": pk_keys,
+                    "pk_": self.pk_types[i].keys(),
                 }
             )
         querys = []

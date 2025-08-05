@@ -486,7 +486,7 @@ private:
             ComputeConfig.GetWorkloadManagerConfig(task.scope()),
             PqGatewayFactory,
             std::vector<std::pair<TString, TString>>{sensorLabels.begin(), sensorLabels.end()},
-            TVector<ui64>{task.node_id().begin(), task.node_id().end()}
+            std::vector<ui64>{task.node_id().begin(), task.node_id().end()}
             );
 
         auto runActorId =

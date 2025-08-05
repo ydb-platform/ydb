@@ -63,7 +63,7 @@ TRunActorParams::TRunActorParams(
     const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
     NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
     const std::vector<std::pair<TString, TString>>& taskSensorLabels,
-    const TVector<ui64>& nodeIds
+    const std::vector<ui64>& nodeIds
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)

@@ -82,7 +82,7 @@ struct TRunActorParams { // TODO2 : Change name
         const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
         NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
         const std::vector<std::pair<TString, TString>>& taskSensorLabels,
-        const TVector<ui64>& nodeIds
+        const std::vector<ui64>& nodeIds
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -150,7 +150,7 @@ struct TRunActorParams { // TODO2 : Change name
     ::NFq::NConfig::TWorkloadManagerConfig WorkloadManager;
     NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
     const std::vector<std::pair<TString, TString>> TaskSensorLabels;
-    const TVector<ui64> NodeIds;
+    const std::vector<ui64> NodeIds;
 };
 
 } /* NFq */

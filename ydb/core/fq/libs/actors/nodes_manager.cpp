@@ -221,8 +221,11 @@ private:
             }
             std::shuffle(SingleNodeScheduler.NodeOrder.begin(), SingleNodeScheduler.NodeOrder.end(), std::default_random_engine(TInstant::Now().MicroSeconds()));
         }
-        const auto& nodeIdProto =  filtersPerTask.Get(0).GetNodeId();
-        TSet<ui64> nodeFilter{nodeIdProto.begin(), nodeIdProto.end()};
+        TSet<ui64> nodeFilter;
+        if (!filtersPerTask.empty()) {
+            const auto& nodeIdProto =  filtersPerTask.Get(0).GetNodeId();
+            nodeFilter.insert(nodeIdProto.begin(), nodeIdProto.end());
+        }
         TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
         
         if (!Peers.empty()) {

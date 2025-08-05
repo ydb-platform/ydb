@@ -28,9 +28,9 @@ namespace NKikimr {
             }
         }
 
-        template<typename TType, typename TProto>
-        static constexpr TBridgePileId FromProto(const TType *message, TProto (TType::*pfn)() const) {
-            return FromValue(std::invoke(pfn, message));
+        template<typename TType, typename TProto, typename... TArgs, typename... TArgs2>
+        static constexpr TBridgePileId FromProto(const TType *message, TProto (TType::*pfn)(TArgs...) const, TArgs2&&... args) {
+            return FromValue(std::invoke(pfn, message, std::forward<TArgs2>(args)...));
         }
 
         static constexpr TBridgePileId FromPileIndex(size_t index) noexcept { return FromValue(index + 1); }

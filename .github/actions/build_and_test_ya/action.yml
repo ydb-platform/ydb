@@ -51,6 +51,10 @@ inputs:
   vars:
     type: string
     default: ""
+  add_vcs_info:
+    type: boolean
+    default: false
+    description: "add ya make vars with git info"
 defaults:
   run:
     shell: bash
@@ -117,6 +121,7 @@ runs:
         put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
+        add_vcs_info: ${{ inputs.add_vcs_info }}
 
     - name: Run tests
       uses: ./.github/actions/test_ya

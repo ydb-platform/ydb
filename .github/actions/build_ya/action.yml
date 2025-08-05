@@ -27,6 +27,10 @@ inputs:
   additional_ya_make_args:
     type: string
     default: ""
+  add_vcs_info:
+    type: boolean
+    default: false
+    description: "add ya make vars with git info"
 outputs:
   success:
     value: ${{ steps.build.outputs.status }}
@@ -118,6 +122,13 @@ runs:
         
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           extra_params+=(${{ inputs.additional_ya_make_args }})
+        fi
+
+        if [[ "${{inputs.add_vcs_info}}" == "true" ]]; then
+          params+=(
+            -DGIT_BRANCH=$GITHUB_REF_NAME
+            -DGIT_COMMIT_SHA=$(git rev-parse HEAD)
+          )
         fi
 
         echo "::debug::get version"

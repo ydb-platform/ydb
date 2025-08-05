@@ -529,6 +529,7 @@ protected:
         ui64 taskId = state.GetTaskId();
 
         bool populateChannels = HandleComputeStats(ev);
+        LOG_D("HandleComputeState task " << taskId << ", state " << state.GetState());
 
         switch (state.GetState()) {
             case NYql::NDqProto::COMPUTE_STATE_UNKNOWN: {
@@ -548,6 +549,9 @@ protected:
 
             default:
                 ; // ignore all other states.
+        }
+        if (CheckpointCoordinatorId) {
+            TlsActivationContext->Send(ev->Forward(CheckpointCoordinatorId));
         }
 
         if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE) {

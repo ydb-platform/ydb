@@ -135,6 +135,7 @@ public:
 #if defined(USE_HDRF_SCHEDULER)
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
 #endif
+        bool StartCA = true;
     };
 
     typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;

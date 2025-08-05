@@ -45,6 +45,9 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
     , StateLoadMode(stateLoadMode)
     , StreamingDisposition(streamingDisposition)
 {
+        CC_LOG_D("CC created, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
+
+
 }
 
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
@@ -53,7 +56,9 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
     NeedSendRunToCA = ev->Get()->NeedSendRunToCA;
 
     for (const auto& task : ev->Get()->Tasks) {
+        Y_ABORT_UNLESS(task.ActorId);
         auto& actorId = TaskIdToActor[task.Id];
+        TaskIds.emplace(task.ActorId, task.Id);
         if (actorId) {
             OnInternalError(TStringBuilder() << "Duplicate task id: " << task.Id);
             return;
@@ -525,6 +530,17 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvStateCommi
     }
 }
 
+void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
+    auto& state = ev->Get()->Record;
+    ui64 taskId = state.GetTaskId();
+
+    CC_LOG_D("Got TEvState from " << ev->Sender << ", task id " << taskId << ". State:" << state.GetState());
+
+    if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
+        FinishedTasks.insert(taskId);
+    }
+}
+    
 void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCompleteCheckpointResponse::TPtr& ev) {
     const auto& checkpointId = ev->Get()->CheckpointId;
     CC_LOG_D("[" << checkpointId << "] Got TEvCompleteCheckpointResponse");
@@ -597,6 +613,13 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) 
     message << "Undelivered Event " << ev->Get()->SourceType
         << " from " << SelfId() << " (Self) to " << ev->Sender
         << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
+
+    auto it = TaskIds.find(ev->Sender);
+    if (it != TaskIds.end() && FinishedTasks.contains(it->second)) {
+        CC_LOG_D("Ignore undelivered from finished CAs");
+        return;
+    }
+
     CC_LOG_D(message);
     if (const auto actorIt = AllActors.find(ev->Sender); actorIt != AllActors.end()) {
         actorIt->second->EventsQueue.HandleUndelivered(ev);

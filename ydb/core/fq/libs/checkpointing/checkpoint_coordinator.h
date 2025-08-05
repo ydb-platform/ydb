@@ -42,6 +42,7 @@ public:
     void Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse::TPtr&);
     void Handle(const NYql::NDq::TEvDqCompute::TEvStateCommitted::TPtr&);
+    void Handle(const NYql::NDq::TEvDqCompute::TEvState::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvCompleteCheckpointResponse::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvAbortCheckpointResponse::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev);
@@ -69,6 +70,7 @@ public:
         hFunc(NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpointResult, Handle)
         hFunc(NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult, Handle)
         hFunc(NYql::NDq::TEvDqCompute::TEvStateCommitted, Handle)
+        hFunc(NYql::NDq::TEvDqCompute::TEvState, Handle);
 
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle)
 
@@ -186,6 +188,9 @@ private:
 
     FederatedQuery::StateLoadMode StateLoadMode;
     FederatedQuery::StreamingDisposition StreamingDisposition;
+
+    THashMap<TActorId, ui64> TaskIds;
+    THashSet<ui64> FinishedTasks;
 };
 
 THolder<NActors::IActor> MakeCheckpointCoordinator(

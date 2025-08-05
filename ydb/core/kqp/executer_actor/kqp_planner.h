@@ -106,6 +106,7 @@ private:
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
     void LogMemoryStatistics(const TLogFunc& logFunc);
+    void PrepareCheckpoints();
 
 private:
     const ui64 TxId;
@@ -150,7 +151,7 @@ private:
 #if defined(USE_HDRF_SCHEDULER)
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
 #endif
-    const TActorId CheckpointCoordinatorId;
+    TActorId CheckpointCoordinatorId;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

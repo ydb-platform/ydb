@@ -1676,7 +1676,7 @@ public:
         }
 
         bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig();
-        if (enableCheckpointCoordinator) {
+        if (!CheckpointCoordinatorId && enableCheckpointCoordinator) {
             const NKikimrConfig::TCheckpointsConfig& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
 
             NFq::NConfig::TCheckpointCoordinatorConfig config;
@@ -1687,12 +1687,13 @@ public:
 
             ui64 dqGraphIndex = 0;
             ui64 generation = 0;
-            auto stateLoadMode = FederatedQuery::StateLoadMode::EMPTY;
+            auto stateLoadMode = FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT;//FederatedQuery::StateLoadMode::EMPTY;
             FederatedQuery::StreamingDisposition streamingDisposition;
             NFq::NProto::TGraphParams dqGraphParams;
 
+            TString executionId = QueryState ? QueryState->UserRequestContext->CurrentExecutionId : "";
             CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
-                ::NFq::TCoordinatorId(request.UserTraceId + "-" + ToString(dqGraphIndex), generation),
+                ::NFq::TCoordinatorId((executionId) + "-" + ToString(dqGraphIndex), generation),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
                 config,
@@ -1700,7 +1701,7 @@ public:
                 dqGraphParams,
                 stateLoadMode,
                 streamingDisposition).Release());
-                LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << ")");
+                LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId);
         }
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
@@ -2685,6 +2686,11 @@ public:
             if (!QueryState->IsLocalExecution(SelfId().NodeId())) {
                 Counters->NonLocalSingleNodeReqCount->Inc();
             }
+        }
+        if (CheckpointCoordinatorId) {
+            LOG_D("send TEvPoisonPill to coordinator");
+            Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
+            CheckpointCoordinatorId = TActorId{};
         }
 
         LOG_I("Cleanup start, isFinal: " << isFinal << " CleanupCtx: " << bool{CleanupCtx}

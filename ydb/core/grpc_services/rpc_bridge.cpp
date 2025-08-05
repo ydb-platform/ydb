@@ -200,6 +200,7 @@ private:
                     internalState = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1;
                     break;
                 case Ydb::Bridge::PileState::DISCONNECTED:
+                case Ydb::Bridge::PileState::SUSPENDED:
                     internalState = NKikimrBridge::TClusterState::DISCONNECTED;
                     break;
                 default:

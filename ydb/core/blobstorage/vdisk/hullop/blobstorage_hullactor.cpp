@@ -205,6 +205,7 @@ namespace NKikimr {
             Y_ABORT_UNLESS(CompactionScheduled);
             CompactionScheduled = false;
             if (ctx.Monotonic() >= NextCompactionWakeup) {
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule compactions");
                 ScheduleCompaction(ctx);
             } else {
                 ScheduleCompactionWakeup(ctx);

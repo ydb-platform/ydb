@@ -199,8 +199,17 @@ public:
             sb << i << ";";
         }
         Cerr << sb << Endl;
-        Sleep(TDuration::Seconds(15));
-        AFL_VERIFY(NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val() == 5)("count", NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val());
+
+        int expected = 5;
+        auto actual = []() {
+            return NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val();
+        };
+        int timeout = 60;
+
+        for (int i = 0; i < timeout && actual() != expected; ++i) {
+            Sleep(TDuration::Seconds(1));
+        }
+        AFL_VERIFY(actual() == expected)("count", actual());
 
         actorSystem.Stop();
         actorSystem.Cleanup();

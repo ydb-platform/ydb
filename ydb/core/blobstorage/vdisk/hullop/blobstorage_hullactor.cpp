@@ -20,15 +20,15 @@ namespace NKikimr {
             {}
 
             bool IsEnable() const {
-                return (TInstant::Now() - LastUpdateTime).Seconds() > (ui32) Config->HullCompFullCompPeriodSec; 
+                return (TActivationContext::Now() - LastUpdateTime).Seconds() > (ui32) Config->HullCompFullCompPeriodSec; 
             }
 
             void Update() {
-                LastUpdateTime = TInstant::Now();
+                LastUpdateTime = TActivationContext::Now();
             }
 
         private:
-            TInstant LastUpdateTime = TInstant::Now();
+            TInstant LastUpdateTime = TInstant::Zero();
             TIntrusivePtr<TVDiskConfig> Config;
         };
 

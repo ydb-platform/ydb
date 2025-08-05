@@ -666,19 +666,23 @@ namespace NKikimr {
                             if (HullCtx->VCtx->ActorSystem) {
                                 LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                                     HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to full compact compact level 0");
-                                return ActCompactSsts;
                             }
+                            return ActCompactSsts;
                         }
 
                         if (BalancePartiallySortedLevels.FullCompact(FullCompactionAttrs->FullCompactionLsn)) {
-                            LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                    HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to full compact compact sorted level");
+                            if (HullCtx->VCtx->ActorSystem) {
+                                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                                        HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to full compact compact sorted level");
+                            }
                             return ActCompactSsts;
                         }
 
                         if (BalanceLevelX.FullCompact(*FullCompactionAttrs)) {
-                            LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                    HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to full compact compact level x");
+                            if (HullCtx->VCtx->ActorSystem) {
+                                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                                        HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to full compact compact level x");
+                            }
                             return ActCompactSsts;
                         }
 

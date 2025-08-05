@@ -139,6 +139,11 @@ void DoDrainNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f)
     f.RegisterActor(CreateMessageBusDrainNode(ctx));
 }
 
+void DoBlobStorageConfig(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST);
+    f.RegisterActor(CreateMessageBusBlobStorageConfig(ctx));
+}
+
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST);
     f.RegisterActor(CreateMessageBusConsoleRequest(ctx));

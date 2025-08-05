@@ -134,6 +134,13 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TDrainNodeRequest, NKikimr
 };
 
 template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TBlobStorageConfigRequest, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TBlobStorageConfigRequest>
+    , NPrivate::TResponseLegacyCommonTraits
+{
+};
+
+template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrClient::TConsoleResponse>
     : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TConsoleRequest>
 {
@@ -159,6 +166,8 @@ TCreateActorCallback DoSchemeInitRoot(const NActors::TActorId& msgBusProxy, NAct
 void DoResolveNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoFillNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoDrainNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+
+void DoBlobStorageConfig(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 

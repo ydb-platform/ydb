@@ -60,7 +60,6 @@ def is_bridge_cluster(cluster):
 def basic_kikimr_nemesis_list(
         cluster, ssh_username, num_of_pq_nemesis=10, network_nemesis=False,
         enable_nemesis_list_filter_by_hostname=False):
-  
 
     logger.info("Building nemesis list")
     logger.info("is_bridge_cluster: %s", is_bridge_cluster(cluster))

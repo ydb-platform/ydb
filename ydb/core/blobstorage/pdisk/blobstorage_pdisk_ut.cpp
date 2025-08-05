@@ -1565,6 +1565,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         Cerr << "ioDuration# " << ioDuration << Endl;
         testCtx.TestCtx.SectorMap->ImitateRandomWait = {ioDuration, ioDuration};
 
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->SeparateHugePriorities = true;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
 

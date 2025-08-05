@@ -287,7 +287,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
         } else {
             const TColumnDataSplitter::TBorder& finish = splitter.GetIntervalFinish(i);
             const std::shared_ptr<TBuildDuplicateFilters> task = std::make_shared<TBuildDuplicateFilters>(
-                finish.GetKey().GetSchema(), maxVersionBatch, finish.GetKey(), finish.GetIsLast(), Counters, SelfId());
+                splitter.GetPKSchema(), maxVersionBatch, finish.GetKey(), finish.GetIsLast(), Counters, SelfId());
             for (auto&& [source, segment] : segments) {
                 const auto* columnData = dataByPortion.FindPtr(source);
                 AFL_VERIFY(columnData)("source", source);

@@ -90,8 +90,6 @@ class NemesisProcess(threading.Thread):
             except Exception as e:
                 self.__logger.error("Ошибка при остановке nemesis в finally: %s", e)
 
-
-
     def __run(self):
         self.__logger.info("Starting nemesis execution loop")
         random.seed()
@@ -108,16 +106,15 @@ class NemesisProcess(threading.Thread):
             current_time = time.time()
             try:
                 next_priority = self.__pq.peek_priority()
-                self.__logger.debug("Current time: %f, Next priority: %f, Queue size: %d", 
-                                   current_time, next_priority, len(self.__pq))
-                
+                self.__logger.debug("Current time: %f, Next priority: %f, Queue size: %d",
+                                    current_time, next_priority, len(self.__pq))
+
                 while self.__is_running.is_set() and time.time() < self.__pq.peek_priority():
                     time.sleep(1)
                 if not self.__is_running.is_set():
                     self.__logger.info("Nemesis process stopped, breaking main loop")
                     break
             except IndexError:
-                # Очередь стала пустой между проверками
                 self.__logger.debug("Queue became empty, breaking main loop")
                 break
 
@@ -125,7 +122,7 @@ class NemesisProcess(threading.Thread):
             execution_count += 1
             self.__logger.info("=== EXECUTING NEMESIS #%d: %s ===", execution_count, str(nemesis))
             self.__logger.info("Current time: %f, Executing nemesis: %s", time.time(), str(nemesis))
-            
+
             try:
                 nemesis.inject_fault()
                 self.__logger.info("=== NEMESIS COMPLETED: %s ===", str(nemesis))
@@ -140,13 +137,12 @@ class NemesisProcess(threading.Thread):
             try:
                 next_schedule = nemesis.next_schedule()
                 self.__logger.debug("Next schedule for %s: %s", str(nemesis), next_schedule)
-                
-                # Добавляем обратно в очередь только если next_schedule не None
+
                 if next_schedule is not None:
                     priority = time.time() + next_schedule
                     self.__pq.add_task(task=nemesis, priority=priority)
-                    self.__logger.debug("Re-added nemesis to queue: %s with priority: %f (in %f seconds)", 
-                                       str(nemesis), priority, next_schedule)
+                    self.__logger.debug("Re-added nemesis to queue: %s with priority: %f (in %f seconds)",
+                                        str(nemesis), priority, next_schedule)
                 else:
                     self.__logger.debug("Nemesis disabled, not adding back to queue: %s", nemesis)
             except Exception as e:
@@ -159,12 +155,10 @@ class NemesisProcess(threading.Thread):
         self.__logger.info("Total nemesis count: %d", len(self.__nemesis_list))
         self.__logger.info("Nemesis types: %s", [type(nemesis).__name__ for nemesis in self.__nemesis_list])
 
-        # Подготовка nemesis
         self.__logger.info("Starting nemesis preparation phase")
         prepared_count = 0
         failed_count = 0
-        
-        # noinspection PyTypeChecker
+
         for i, nemesis in enumerate(self.__nemesis_list):
             self.__logger.info("Preparing nemesis %d/%d: %s", i+1, len(self.__nemesis_list), nemesis)
             prepared = False
@@ -184,18 +178,15 @@ class NemesisProcess(threading.Thread):
 
         self.__logger.info("Preparation phase completed: %d succeeded, %d failed", prepared_count, failed_count)
 
-        # Планирование nemesis
         self.__logger.info("Starting nemesis scheduling phase")
         scheduled_count = 0
         skipped_count = 0
         error_count = 0
-        
-        # noinspection PyTypeChecker
+
         for i, nemesis in enumerate(self.__nemesis_list):
             self.__logger.info("Scheduling nemesis %d/%d: %s", i+1, len(self.__nemesis_list), nemesis)
             try:
                 next_schedule = nemesis.next_schedule()
-                # Добавляем в очередь только если next_schedule не None
                 if next_schedule is not None:
                     priority = time.time() + next_schedule
                     self.__pq.add_task(nemesis, priority=priority)
@@ -208,8 +199,8 @@ class NemesisProcess(threading.Thread):
                 error_count += 1
                 self.__logger.error("Failed to schedule nemesis %s: %s", nemesis, e)
 
-        self.__logger.info("Scheduling phase completed: %d scheduled, %d skipped, %d errors", 
-                          scheduled_count, skipped_count, error_count)
+        self.__logger.info("Scheduling phase completed: %d scheduled, %d skipped, %d errors",
+                           scheduled_count, skipped_count, error_count)
         self.__logger.debug("Initial PriorityQueue size: %d", len(self.__pq))
 
     def __stop_nemesis(self):

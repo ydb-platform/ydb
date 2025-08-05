@@ -1464,35 +1464,31 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
 {
     // This actor waits for permission response and then sends manage request response
     // with approved permissions to the sender of the request while also removing scheduled request.
-    class TRequestApproveActor : public TActorBootstrapped<TRequestApproveActor> {
+    class TRequestApproveActor : public TActor<TRequestApproveActor> {
     public:
-        TString RequestId;
-
-        TCmsStatePtr State;
-
-        TActorId SendTo;
+        using TBase = TActor<TRequestApproveActor>;
+        const TString RequestId;
+        const TCmsStatePtr State;
+        const TActorId SendTo;
 
         TRequestApproveActor(TString requestId, TCmsStatePtr state, TActorId sendTo)
-        : RequestId(std::move(requestId))
+        : TBase(&TRequestApproveActor::StateWork)
+        , RequestId(std::move(requestId))
         , State(std::move(state))
-        , SendTo(sendTo) {}
-
-        void Bootstrap() {
-            Become(&TRequestApproveActor::StateWork);
-        }
+        , SendTo(sendTo)
+        {}
 
         void Handle(TEvCms::TEvPermissionResponse::TPtr &ev) {
             auto resp = ev->Get();
 
-            NKikimrCms::TStatus status = resp->Record.GetStatus();
+            const NKikimrCms::TStatus status = resp->Record.GetStatus();
 
-            TAutoPtr<TEvCms::TEvManageRequestResponse> manageResponse = new TEvCms::TEvManageRequestResponse;
+            THolder<TEvCms::TEvManageRequestResponse> manageResponse = MakeHolder<TEvCms::TEvManageRequestResponse>();
 
             if (status.GetCode() != TStatus::ALLOW) {
                 manageResponse->Record.MutableStatus()->SetCode(status.GetCode());
                 manageResponse->Record.MutableStatus()->SetReason(status.GetReason());
-                auto handle = new IEventHandle(SendTo, SelfId(), manageResponse.Release(), 0, ev->Cookie);
-                Send(handle);
+                Send(SendTo, std::move(manageResponse), 0, ev->Cookie);
                 PassAway();
                 return;
             }
@@ -1505,11 +1501,11 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             // Remove the scheduled request
             State->ScheduledRequests.erase(RequestId);
 
-            auto handle = new IEventHandle(SendTo, SelfId(), manageResponse.Release(), 0, ev->Cookie);
-            Send(handle);
+            Send(SendTo, std::move(manageResponse), 0, ev->Cookie);
 
             PassAway();
         }
+
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvCms::TEvPermissionResponse, Handle);
@@ -1537,7 +1533,7 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
     // Create a permission for each action in the scheduled request
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
     resp->Record.MutableStatus()->SetCode(TStatus::ALLOW);
-    ui32 priority = copy->Request.GetPriority();
+    const ui32 priority = copy->Request.GetPriority();
     for (const auto& action : copy->Request.GetActions()) {
         auto items = ClusterInfo->FindLockedItems(action, &ctx);
         for (const auto& item : items) {

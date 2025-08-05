@@ -381,7 +381,7 @@ public:
         }
     }
 
-    void RemainOnly(const std::vector<ui32>& columns, const bool useAsSequence);
+    void InitResultSequence(const std::vector<ui32>& columns);
 
     arrow::Datum GetDatumVerified(const ui32 columnId) const {
         auto chunked = GetAccessorVerified(columnId)->GetChunkedArray();

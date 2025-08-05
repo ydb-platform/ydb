@@ -40,7 +40,8 @@ public:
     }
 };
 
-TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const IColumnResolver& resolver) {
+TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const IColumnResolver& resolver)
+    : NodesCountReserve(original.GetNextNodeId()) {
     for (auto&& i : original.GetNodes()) {
         Nodes.emplace(i.first, std::make_shared<TNode>(i.first, i.second->GetProcessor()));
     }
@@ -159,16 +160,19 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             node->SetRemoveResourceIds(i.second.GetLastUsageResources());
         }
     }
+    RootNodes = FilterRoot;
+    RootNodes.emplace_back(ResultRoot);
     AFL_TRACE(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", DebugDOT());
-//    Cerr << DebugDOT() << Endl;
+    //    Cerr << DebugDOT() << Endl;
 }
 
 TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
     const std::shared_ptr<IDataSource>& source, std::unique_ptr<TAccessorsCollection>&& resources) const {
     TProcessorContext context(source, std::move(resources), std::nullopt, false);
     NMiniKQL::TThrowingBindTerminator bind;
-    std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(std::move(context));
-    for (auto it = BuildIterator(visitor); it->IsValid();) {
+    auto it = BuildIterator(std::make_unique<TExecutionVisitor>(std::move(context)));
+    TExecutionVisitor* visitor = it->MutableVisitorAs<TExecutionVisitor>();
+    while (it->IsValid()) {
         {
             auto conclusion = visitor->Execute();
             if (conclusion.IsFail()) {
@@ -264,12 +268,11 @@ TString TCompiledGraph::DebugDOT(const THashSet<ui32>& special) const {
     return result;
 }
 
-std::shared_ptr<TCompiledGraph::TIterator> TCompiledGraph::BuildIterator(const std::shared_ptr<IVisitor>& visitor) const {
-    auto result = std::make_shared<TIterator>(visitor);
-    auto rootNodes = FilterRoot;
-    rootNodes.emplace_back(ResultRoot);
-    result->Reset(std::move(rootNodes)).DetachResult();
-    return result;
+std::unique_ptr<TCompiledGraph::TIterator> TCompiledGraph::BuildIterator(std::unique_ptr<IVisitor>&& visitor) const {
+    auto result = std::make_unique<TIterator>(std::move(visitor));
+    auto rootNodes = RootNodes;
+    result->Reset(std::move(rootNodes), NodesCountReserve).DetachResult();
+    return std::move(result);
 }
 
 bool TCompiledGraph::IsFilterRoot(const ui32 identifier) const {
@@ -314,25 +317,27 @@ TConclusionStatus TCompiledGraph::TIterator::ProvideCurrentToExecute() {
             }
         }
         NodesStack.emplace_back(CurrentNode);
-        auto it = Statuses.find(CurrentNode->GetIdentifier());
-        if (it == Statuses.end()) {
-            AFL_VERIFY(Statuses.emplace(CurrentNode->GetIdentifier(), ENodeStatus::InProgress).second);
+        AFL_VERIFY(CurrentNode->GetIdentifier() < Statuses.size())("idx", CurrentNode->GetIdentifier())("count", Statuses.size());
+        auto& status = Statuses[CurrentNode->GetIdentifier()];
+        if (status == ENodeStatus::NotVisited) {
+            status = ENodeStatus::InProgress;
             bool needInput = false;
             for (auto&& input : CurrentNode->GetInputEdges()) {
-                auto it = Statuses.find(input->GetIdentifier());
-                if (it == Statuses.end()) {
+                AFL_VERIFY(input->GetIdentifier() < Statuses.size())("idx", input->GetIdentifier())("count", Statuses.size());
+                auto statusInput = Statuses[input->GetIdentifier()];
+                if (statusInput == ENodeStatus::NotVisited) {
                     CurrentNode = input;
                     needInput = true;
                     break;
                 } else {
-                    AFL_VERIFY(it->second == ENodeStatus::Finished);
+                    AFL_VERIFY(statusInput == ENodeStatus::Finished);
                 }
             }
             if (!needInput) {
                 break;
             }
         } else {
-            AFL_VERIFY(it->second == ENodeStatus::Finished);
+            AFL_VERIFY(status == ENodeStatus::Finished);
             NodesStack.pop_back();
             if (NodesStack.size()) {
                 CurrentNode = NodesStack.back();
@@ -362,7 +367,9 @@ TConclusion<bool> TCompiledGraph::TIterator::GlobalInitialize() {
     return IsValid();
 }
 
-TConclusion<bool> TCompiledGraph::TIterator::Reset(std::vector<std::shared_ptr<TCompiledGraph::TNode>>&& graphNodes) {
+TConclusion<bool> TCompiledGraph::TIterator::Reset(std::vector<std::shared_ptr<TCompiledGraph::TNode>>&& graphNodes, const ui32 nodesCount) {
+    Statuses = std::vector<ENodeStatus>(nodesCount, ENodeStatus::NotVisited);
+    NodesStack.reserve(nodesCount);
     GraphNodes = std::move(graphNodes);
     GraphNodes.erase(std::remove_if(GraphNodes.begin(), GraphNodes.end(),
                          [](const std::shared_ptr<TCompiledGraph::TNode>& item) {
@@ -409,12 +416,14 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
         bool found = false;
         for (ui32 idx = 0; idx < owner->GetInputEdges().size(); ++idx) {
             if (found) {
-                auto itStatus = Statuses.find(owner->GetInputEdges()[idx]->GetIdentifier());
-                if (itStatus == Statuses.end()) {
+                const ui32 statIdx = owner->GetInputEdges()[idx]->GetIdentifier();
+                AFL_VERIFY(statIdx < Statuses.size())("idx", statIdx)("count", Statuses.size());
+                const auto status = Statuses[statIdx];
+                if (status == ENodeStatus::NotVisited) {
                     nextNode = owner->GetInputEdges()[idx];
                     break;
                 } else {
-                    AFL_VERIFY(itStatus->second == ENodeStatus::Finished);
+                    AFL_VERIFY(status == ENodeStatus::Finished);
                 }
             } else if (owner->GetInputEdges()[idx]->GetIdentifier() == CurrentNode->GetIdentifier()) {
                 if (Visitor) {
@@ -437,13 +446,15 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
     }
     AFL_VERIFY(NodesStack.size());
     NodesStack.pop_back();
-    auto itStatus = Statuses.find(CurrentNode->GetIdentifier());
-    AFL_VERIFY(itStatus != Statuses.end());
-    AFL_VERIFY(itStatus->second == ENodeStatus::InProgress);
-    if (skipFlag) {
-        Statuses.erase(itStatus);
-    } else {
-        itStatus->second = ENodeStatus::Finished;
+    {
+        AFL_VERIFY(CurrentNode->GetIdentifier() < Statuses.size())("idx", CurrentNode->GetIdentifier())("size", Statuses.size());
+        auto status = Statuses[CurrentNode->GetIdentifier()];
+        AFL_VERIFY(status == ENodeStatus::InProgress);
+        if (skipFlag) {
+            Statuses[CurrentNode->GetIdentifier()] = ENodeStatus::NotVisited;
+        } else {
+            Statuses[CurrentNode->GetIdentifier()] = ENodeStatus::Finished;
+        }
     }
     if (!!nextNode) {
         CurrentNode = nextNode;
@@ -468,12 +479,14 @@ TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TCompiledGraph::IVisitor::On
         return conclusion;
     }
     if (*conclusion == EVisitStatus::Finished) {
-        AFL_VERIFY(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
+        AFL_VERIFY_DEBUG(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
     } else if (*conclusion == EVisitStatus::Skipped) {
-        AFL_VERIFY(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
-        AFL_VERIFY(Visited.erase(node.GetIdentifier()))("id", node.GetIdentifier());
+        AFL_VERIFY_DEBUG(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
+        AFL_VERIFY_DEBUG(Visited.erase(node.GetIdentifier()))("id", node.GetIdentifier());
     } else {
-        AFL_VERIFY(Executed.emplace(node.GetIdentifier()).second)("id", node.GetIdentifier());
+        if (IS_DEBUG_LOG_ENABLED(NKikimrServices::SSA_GRAPH_EXECUTION)) {
+            AFL_VERIFY_DEBUG(Executed.emplace(node.GetIdentifier()).second)("id", node.GetIdentifier());
+        }
     }
     return conclusion;
 }

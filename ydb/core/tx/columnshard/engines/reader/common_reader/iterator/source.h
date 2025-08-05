@@ -30,8 +30,7 @@ class TFetchingScriptCursor;
 
 class TExecutionContext {
 private:
-    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator> ProgramIterator;
-    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> ExecutionVisitor;
+    std::unique_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator> ProgramIterator;
 
     std::optional<ui32> CurrentProgramNodeId;
     std::shared_ptr<TFetchingStepSignals> CurrentStepSignals;
@@ -88,11 +87,9 @@ public:
         return !!ProgramIterator;
     }
 
-    void SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
-        const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& visitor) {
+    void SetProgramIterator(std::unique_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>&& it) {
         AFL_VERIFY(!ProgramIterator);
-        ProgramIterator = it;
-        ExecutionVisitor = visitor;
+        ProgramIterator = std::move(it);
     }
 
     void SetCursorStep(const TFetchingScriptCursor& step) {
@@ -105,14 +102,14 @@ public:
         return *CursorStep;
     }
 
-    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& GetProgramIteratorVerified() const {
+    NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator& MutableProgramIteratorVerified() const {
         AFL_VERIFY(!!ProgramIterator);
-        return ProgramIterator;
+        return *ProgramIterator;
     }
 
-    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& GetExecutionVisitorVerified() const {
-        AFL_VERIFY(!!ExecutionVisitor);
-        return ExecutionVisitor;
+    NArrow::NSSA::NGraph::NExecution::TExecutionVisitor& MutableExecutionVisitorVerified() const {
+        AFL_VERIFY(!!ProgramIterator);
+        return *static_cast<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor*>(&ProgramIterator->MutableVisitor());
     }
 };
 

@@ -253,33 +253,10 @@ std::optional<TAccessorsCollection> TAccessorsCollection::SelectOptional(const s
     return result;
 }
 
-void TAccessorsCollection::RemainOnly(const std::vector<ui32>& columns, const bool useAsSequence) {
-    THashSet<ui32> columnIds;
-    for (auto&& i : columns) {
-        columnIds.emplace(i);
-    }
-    THashSet<ui32> toRemove;
-    for (auto&& [i, _] : Accessors) {
-        if (!columnIds.contains(i)) {
-            toRemove.emplace(i);
-        } else {
-            columnIds.erase(i);
-        }
-    }
-    for (auto&& [i, _] : Constants) {
-        if (!columnIds.contains(i)) {
-            toRemove.emplace(i);
-        } else {
-            columnIds.erase(i);
-        }
-    }
-    AFL_VERIFY(columnIds.empty());
-    for (auto&& i : toRemove) {
-        Remove(i);
-    }
-    if (useAsSequence) {
-        ColumnIdsSequence = columns;
-    }
+void TAccessorsCollection::InitResultSequence(const std::vector<ui32>& columns) {
+    AFL_VERIFY(ColumnIdsSequence.empty());
+    AFL_VERIFY(columns.size());
+    ColumnIdsSequence = columns;
 }
 
 void TAccessorsCollection::AddBatch(

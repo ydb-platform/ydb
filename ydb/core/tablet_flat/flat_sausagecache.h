@@ -71,10 +71,6 @@ public:
             LoadState = LoadStateNo;
             PinnedBody = { };
         }
-
-        const TSharedData* GetPinnedBody() const noexcept {
-            return LoadState == LoadStateLoaded ? &PinnedBody : nullptr;
-        }
     };
 
     struct TInfo : public TThrRefBase {

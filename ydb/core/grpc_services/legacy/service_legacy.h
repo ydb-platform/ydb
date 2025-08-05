@@ -141,6 +141,13 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TBlobStorageConfigRequest,
 };
 
 template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::THiveCreateTablet, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::THiveCreateTablet>
+    , NPrivate::TResponseLegacyCommonTraits
+{
+};
+
+template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrClient::TConsoleResponse>
     : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TConsoleRequest>
 {
@@ -168,6 +175,8 @@ void DoFillNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoDrainNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 void DoBlobStorageConfig(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+
+void DoHiveCreateTablet(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 

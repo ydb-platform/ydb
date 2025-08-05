@@ -144,6 +144,11 @@ void DoBlobStorageConfig(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProv
     f.RegisterActor(CreateMessageBusBlobStorageConfig(ctx));
 }
 
+void DoHiveCreateTablet(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_HIVE_CREATE_TABLET);
+    f.RegisterActor(CreateMessageBusHiveCreateTablet(ctx));
+}
+
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST);
     f.RegisterActor(CreateMessageBusConsoleRequest(ctx));

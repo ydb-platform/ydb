@@ -189,14 +189,9 @@ message BackupProgress {
     }
 }
 
-message BackupItemProgress {
-    uint32 parts_total = 1;
-    uint32 parts_completed = 2;
-}
-
 message IncrementalBackupMetadata {
     BackupProgress.Progress progress = 1;
-    repeated BackupItemProgress items_progress = 2;
+    uint32 progress_percent = 2 [(Ydb.value) = "[0; 100]"];
 }
 
 message IncrementalBackupResult {

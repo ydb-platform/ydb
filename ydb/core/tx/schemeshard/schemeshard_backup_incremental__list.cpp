@@ -39,18 +39,22 @@ public:
 
         switch (backupInfo.State) {
             case TIncrementalBackupInfo::EState::Transferring:
-            case TIncrementalBackupInfo::EState::Done:
+            case TIncrementalBackupInfo::EState::Done: {
+                ui32 itemsTotal = 0;
+                ui32 itemsDone = 0;
                 for (const auto& [_, item] : backupInfo.Items) {
-                    auto& itemProgress = *backup.AddItemsProgress();
-                    itemProgress.set_parts_total(1);
+                    ++itemsTotal;
                     if (item.IsDone()) {
-                        itemProgress.set_parts_completed(1);
+                        ++itemsDone;
                     }
                 }
+
+                backup.SetProgressPercent(100.0 * itemsDone / itemsTotal);
                 backup.SetProgress(backupInfo.IsDone()
                     ? Ydb::Backup::BackupProgress::PROGRESS_DONE
                     : Ydb::Backup::BackupProgress::PROGRESS_TRANSFER_DATA);
                 break;
+            }
             case TIncrementalBackupInfo::EState::Cancellation:
                 backup.SetProgress(Ydb::Backup::BackupProgress::PROGRESS_CANCELLATION);
                 break;

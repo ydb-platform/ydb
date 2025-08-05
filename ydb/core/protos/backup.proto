@@ -66,7 +66,7 @@ message TIncrementalBackup {
     optional Ydb.StatusIds.StatusCode Status = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
     optional Ydb.Backup.BackupProgress.Progress Progress = 4;
-    repeated Ydb.Backup.BackupItemProgress ItemsProgress = 5;
+    optional uint32 ProgressPercent = 5;
     optional google.protobuf.Timestamp StartTime = 6;
     optional google.protobuf.Timestamp EndTime = 7;
     optional string UserSID = 8;

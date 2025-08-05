@@ -19,16 +19,11 @@ enum class EBackupProgress {
     Unknown = std::numeric_limits<int>::max(),
 };
 
-struct TBackupItemProgress {
-    uint32_t PartsTotal;
-    uint32_t PartsCompleted;
-};
-
 class TIncrementalBackupResponse : public TOperation {
 public:
     struct TMetadata {
         EBackupProgress Progress;
-        std::vector<TBackupItemProgress> ItemsProgress;
+        uint32_t ProgressPercent = 0; // [0; 100]
     };
 
 public:

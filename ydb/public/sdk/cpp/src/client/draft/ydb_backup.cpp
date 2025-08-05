@@ -24,17 +24,6 @@ namespace {
         }
     }
 
-    std::vector<TBackupItemProgress> FromProto(const google::protobuf::RepeatedPtrField<Ydb::Backup::BackupItemProgress>& proto) {
-        std::vector<TBackupItemProgress> result(proto.size());
-
-        for (const auto& protoItem : proto) {
-            auto& item = result.emplace_back();
-            item.PartsTotal = protoItem.parts_total();
-            item.PartsCompleted = protoItem.parts_completed();
-        }
-
-        return result;
-    }
 } // namespace anonymous
 
 TIncrementalBackupResponse::TIncrementalBackupResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
@@ -44,7 +33,7 @@ TIncrementalBackupResponse::TIncrementalBackupResponse(TStatus&& status, Ydb::Op
     GetProto().metadata().UnpackTo(&metadata);
 
     Metadata_.Progress = FromProto(metadata.progress());
-    Metadata_.ItemsProgress = FromProto(metadata.items_progress());
+    Metadata_.ProgressPercent = metadata.progress_percent();
 }
 
 const TIncrementalBackupResponse::TMetadata& TIncrementalBackupResponse::Metadata() const {

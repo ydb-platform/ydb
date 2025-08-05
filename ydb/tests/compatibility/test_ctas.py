@@ -59,7 +59,7 @@ class TestCTASOperations(RollingUpgradeAndDowngradeFixture):
                 rows_per_batch = self.rows_count // self.upsert_batches
                 rows = []
                 for j in range(rows_per_batch):
-                    rows.append({'k': i * rows_per_batch + j, 'v': ('0' * self.value_bytes).encode('utf-8') })
+                    rows.append({'k': i * rows_per_batch + j, 'v': ('0' * self.value_bytes).encode('utf-8')})
 
                 data_struct_type = ydb.StructType()
                 data_struct_type.add_member("k", ydb.PrimitiveType.Uint64)
@@ -87,7 +87,7 @@ class TestCTASOperations(RollingUpgradeAndDowngradeFixture):
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
             );
         """
-    
+
     def q_upsert_source_table(self):
         return f"""
             DECLARE $data AS List<Struct<k: Uint64, v: String>>;
@@ -110,7 +110,7 @@ class TestCTASOperations(RollingUpgradeAndDowngradeFixture):
         return f"""
             SELECT COUNT(*) AS cnt FROM `{table_name}`;
         """
-    
+
     def q_drop_destination_table(self, table_name):
         return f"""
             DROP TABLE `{table_name}`;

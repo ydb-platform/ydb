@@ -380,9 +380,11 @@ private:
         if (LastProcessedOffset) {
             Send(Worker, new TEvWorker::TEvCommit(LastProcessedOffset.value() + 1));
         }
+
         if (RequiredFlush) {
             return Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(ui32(ETag::LeaveOnBatchSizeExceed)));
         }
+
         if (!PollSent) {
             PollSent = true;
             Send(Worker, new TEvWorker::TEvPoll());

@@ -23,7 +23,7 @@ public:
             batcher = CreateDataBatcher();
         }
 
-        static constexpr size_t MaxBatchSize = 1_GB; // error on 2147483646
+        static constexpr size_t MaxBatchSize = 512_MB; // error on 2147483646
 
         if (batcher->GetMemory() + estimateSize > MaxBatchSize) {
             return false;

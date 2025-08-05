@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
             )");
         testCase.CreateTopic(1);
 
-        TString big(1_MB, '-');
+        TString big(512_KB, '-');
         auto settings = MainTestCase::CreateTransferSettings::WithLocalTopic(local);
         settings.BatchSizeBytes = 1_GB;
         testCase.CreateTransfer(Sprintf(R"(
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
                 };
             )", big.data()), settings);
 
-        const size_t PartCont = 750;
+        const size_t PartCont = 900;
 
         TStringBuilder msg;
         for (size_t i = 0; i < PartCont; ++i) {

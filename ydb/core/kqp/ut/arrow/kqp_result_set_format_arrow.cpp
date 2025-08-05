@@ -173,7 +173,80 @@ std::string SerializeToBinaryJsonString(const TStringBuf json) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpResultSetFormat) {
-    Y_UNIT_TEST_TWIN(Arrow_AllTypes, isOlap) {
+    Y_UNIT_TEST(DefaultFormat) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        auto result = client.ExecuteQuery(R"(
+            SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.Format(), TResultSet::EFormat::Value);
+
+        CompareYson(R"([
+            [["None"];[7200u];["Tony"]];
+            [["None"];[3500u];["Anna"]];
+            [["None"];[300u];["Paul"]]
+        ])", FormatResultSetYson(resultSet));
+    }
+
+    Y_UNIT_TEST(ValueFormat_Simple) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Value);
+
+        auto result = client.ExecuteQuery(R"(
+            SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+        )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.Format(), TResultSet::EFormat::Value);
+
+        CompareYson(R"([
+            [["None"];[7200u];["Tony"]];
+            [["None"];[3500u];["Anna"]];
+            [["None"];[300u];["Paul"]]
+        ])", FormatResultSetYson(resultSet));
+    }
+
+    Y_UNIT_TEST(ArrowFormat_Simple) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
+
+        auto result = client.ExecuteQuery(R"(
+            SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+        )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.Format(), TResultSet::EFormat::Arrow);
+
+        const auto& [schema, batches] = resultSet.GetArrowResult();
+
+        std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
+        std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+
+        NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
+            std::make_pair("Comment", TTypeInfo(NTypeIds::String)),
+            std::make_pair("Amount", TTypeInfo(NTypeIds::Uint64)),
+            std::make_pair("Name", TTypeInfo(NTypeIds::String))
+        }));
+
+        builder.AddRow().Add<std::string>("None").Add<ui64>(7200).Add<std::string>("Tony");
+        builder.AddRow().Add<std::string>("None").Add<ui64>(3500).Add<std::string>("Anna");
+        builder.AddRow().Add<std::string>("None").Add<ui64>(300).Add<std::string>("Paul");
+
+        auto expected = builder.BuildArrow();
+        UNIT_ASSERT_VALUES_EQUAL(arrowBatch->ToString(), expected->ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(ArrowFormat_AllTypes, isOlap) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
@@ -299,6 +372,68 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormat) {
         }
     }
 
+    Y_UNIT_TEST(ArrowFormat_Types_Arithmetic) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE ArithmeticTypesTable (
+                    BoolValue Bool,
+                    Int8Value Int8,
+                    Uint8Value Uint8 NOT NULL,
+                    Int16Value Int16,
+                    Uint16Value Uint16 NOT NULL,
+                    Int32Value Int32,
+                    Uint32Value Uint32 NOT NULL,
+                    Int64Value Int64,
+                    Uint64Value Uint64 NOT NULL,
+                    FloatValue Float,
+                    DoubleValue Double NOT NULL,
+                    PRIMARY KEY (BoolValue)
+                );
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = client.ExecuteQuery(R"(
+                INSERT INTO ArithmeticTypesTable (BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue) VALUES
+                (NULL, -1, 1, -2, 2, -3, 3, -4, 4, CAST(5.0 AS Float), 6.0),
+                (true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(5.0 AS Float), 6.0),
+                (false, -1, 1, -2, 2, -3, 3, -4, 4, CAST(5.0 AS Float), 6.0);
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto batch = ExecuteAndCombineBatches(client, R"(
+                    SELECT BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue
+                    FROM ArithmeticTypesTable ORDER BY BoolValue;
+            )", /* assertSize */ true);
+
+            NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
+                std::make_pair("BoolValue", TTypeInfo(NTypeIds::Bool)),
+                std::make_pair("Int8Value", TTypeInfo(NTypeIds::Int8)),
+                std::make_pair("Uint8Value", TTypeInfo(NTypeIds::Uint8)),
+                std::make_pair("Int16Value", TTypeInfo(NTypeIds::Int16)),
+                std::make_pair("Uint16Value", TTypeInfo(NTypeIds::Uint16)),
+                std::make_pair("Int32Value", TTypeInfo(NTypeIds::Int32)),
+                std::make_pair("Uint32Value", TTypeInfo(NTypeIds::Uint32)),
+                std::make_pair("Int64Value", TTypeInfo(NTypeIds::Int64)),
+                std::make_pair("Uint64Value", TTypeInfo(NTypeIds::Uint64)),
+                std::make_pair("FloatValue", TTypeInfo(NTypeIds::Float)),
+                std::make_pair("DoubleValue", TTypeInfo(NTypeIds::Double)),
+                // std::make_pair("DecimalValue", TTypeInfo(NTypeIds::Decimal)) // ydb/core/scheme_types/scheme_type_info.h:32
+            }));
+
+            builder.AddRow().AddNull().Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0);
+            builder.AddRow().Add<bool>(false).Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0);
+            builder.AddRow().Add<bool>(true).Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0);
+
+            auto expected = builder.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        }
+    }
+
     Y_UNIT_TEST(ArrowFormat_Types_String) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
@@ -408,6 +543,105 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormat) {
         }
     }
 
+    Y_UNIT_TEST(ArrowFormat_Types_Time) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE TimeTypesTable (
+                    DateValue Date,
+                    DatetimeValue Datetime,
+                    TimestampValue Timestamp,
+                    IntervalValue Interval,
+                    PRIMARY KEY (DateValue)
+                );
+            )", TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = client.ExecuteQuery(R"(
+                INSERT INTO TimeTypesTable (DateValue, DatetimeValue, TimestampValue, IntervalValue) VALUES
+                (Date("2001-01-01"), Datetime("2002-02-02T02:02:02Z"), Timestamp("2003-03-03T03:03:03Z"), Interval("P7D"));
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto batch = ExecuteAndCombineBatches(client, R"(
+                SELECT DateValue, DatetimeValue, TimestampValue, IntervalValue
+                FROM TimeTypesTable ORDER BY DateValue;
+            )", /* assertSize */ true);
+
+            NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
+                std::make_pair("DateValue", TTypeInfo(NTypeIds::Date)),
+                std::make_pair("DatetimeValue", TTypeInfo(NTypeIds::Datetime)),
+                std::make_pair("TimestampValue", TTypeInfo(NTypeIds::Timestamp)),
+                std::make_pair("IntervalValue", TTypeInfo(NTypeIds::Interval))
+            }));
+
+            builder.AddRow().Add<ui16>(11323).Add<ui32>(1012615322).Add<ui64>(1046660583000000).Add<i64>(604800000000);
+
+            auto expected = builder.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ArrowFormat_Compression_None) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        std::shared_ptr<arrow::Schema> firstSchema;
+        TString firstRecordBatch;
+
+        std::shared_ptr<arrow::Schema> secondSchema;
+        TString secondRecordBatch;
+
+        {
+            auto settings = TExecuteQuerySettings()
+                .Format(TResultSet::EFormat::Arrow)
+                .ArrowFormatSettings(TArrowFormatSettings()
+                    .CompressionCodec(TArrowFormatSettings::TCompressionCodec()
+                        .Type(TArrowFormatSettings::TCompressionCodec::EType::None)));
+
+            auto result = client.ExecuteQuery(R"(
+                SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+            )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto [schema, recordBatches] = result.GetResultSet(0).GetArrowResult();
+
+            firstSchema = NArrow::DeserializeSchema(TString(schema));
+            firstRecordBatch = std::move(recordBatches[0]);
+        }
+        {
+            // Default compression is None
+            auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
+
+            auto result = client.ExecuteQuery(R"(
+                SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+            )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto [schema, recordBatches] = result.GetResultSet(0).GetArrowResult();
+
+            secondSchema = NArrow::DeserializeSchema(TString(schema));
+            secondRecordBatch = std::move(recordBatches[0]);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(firstSchema->ToString(), secondSchema->ToString());
+
+        auto firstArrowBatch = NArrow::DeserializeBatch(firstRecordBatch, firstSchema);
+        auto secondArrowBatch = NArrow::DeserializeBatch(secondRecordBatch, secondSchema);
+
+        UNIT_ASSERT_C(firstArrowBatch->ValidateFull().ok(), "Batch validation failed");
+        UNIT_ASSERT_C(secondArrowBatch->ValidateFull().ok(), "Batch validation failed");
+
+        UNIT_ASSERT_VALUES_EQUAL(firstRecordBatch, secondRecordBatch);
+        UNIT_ASSERT_VALUES_EQUAL(firstArrowBatch->ToString(), secondArrowBatch->ToString());
+
+        UNIT_ASSERT_C(firstArrowBatch->num_rows() > 0, "Arrow batch must not be empty");
+    }
+
     Y_UNIT_TEST(ArrowFormat_Compression_ZSTD) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
         auto client = kikimr.GetQueryClient();
@@ -423,7 +657,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormat) {
                 .Format(TResultSet::EFormat::Arrow)
                 .ArrowFormatSettings(TArrowFormatSettings()
                     .CompressionCodec(TArrowFormatSettings::TCompressionCodec()
-                        .Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd)));
+                        .Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd)
+                        .Level(12)));
 
             auto result = client.ExecuteQuery(R"(
                 SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
@@ -516,6 +751,22 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormat) {
         UNIT_ASSERT_VALUES_EQUAL(firstArrowBatch->ToString(), secondArrowBatch->ToString());
 
         UNIT_ASSERT_C(firstArrowBatch->num_rows() > 0, "Arrow batch must not be empty");
+
+        {
+            auto settings = TExecuteQuerySettings()
+                .Format(TResultSet::EFormat::Arrow)
+                .ArrowFormatSettings(TArrowFormatSettings()
+                    .CompressionCodec(TArrowFormatSettings::TCompressionCodec()
+                        .Type(TArrowFormatSettings::TCompressionCodec::EType::Lz4Frame)
+                        .Level(12)));
+
+            auto result = client.ExecuteQuery(R"(
+                SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+            )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Codec 'lz4' doesn't support setting a compression level");
+        }
     }
 }
 

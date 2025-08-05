@@ -121,20 +121,21 @@ def recursive_property(name, default):
 
         mapping = {}
         sentinel = object()
-        hit_recursion = [False]
+        hit_recursion = False
 
         # For a first pass we do a direct recursive calculation of the
         # property, but we block recursively visiting a value in the
         # computation of its property: When that happens, we simply
         # note that it happened and return the default value.
         def recur(strat):
+            nonlocal hit_recursion
             try:
                 return forced_value(strat)
             except AttributeError:
                 pass
             result = mapping.get(strat, sentinel)
             if result is calculating:
-                hit_recursion[0] = True
+                hit_recursion = True
                 return default
             elif result is sentinel:
                 mapping[strat] = calculating
@@ -150,7 +151,7 @@ def recursive_property(name, default):
         # a more careful fixed point calculation to get the exact
         # values. Hopefully our mapping is still pretty good and it
         # won't take a large number of updates to reach a fixed point.
-        if hit_recursion[0]:
+        if hit_recursion:
             needs_update = set(mapping)
 
             # We track which strategies use which in the course of
@@ -334,7 +335,10 @@ class SearchStrategy(Generic[Ex]):
         @given(self)
         @settings(
             database=None,
-            max_examples=100,
+            # generate only a few examples at a time to avoid slow interactivity
+            # for large strategies. The overhead of @given is very small relative
+            # to generation, so a small batch size is fine.
+            max_examples=10,
             deadline=None,
             verbosity=Verbosity.quiet,
             phases=(Phase.generate,),

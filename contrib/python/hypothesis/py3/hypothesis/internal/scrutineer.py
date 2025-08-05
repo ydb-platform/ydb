@@ -54,11 +54,12 @@ if sys.version_info[:2] >= (3, 12):
 class Tracer:
     """A super-simple branch coverage tracer."""
 
-    __slots__ = ("branches", "_previous_location")
+    __slots__ = ("branches", "_previous_location", "_should_trace")
 
-    def __init__(self) -> None:
+    def __init__(self, *, should_trace: bool) -> None:
         self.branches: Trace = set()
         self._previous_location: Optional[Location] = None
+        self._should_trace = should_trace and self.can_trace()
 
     @staticmethod
     def can_trace() -> bool:
@@ -75,7 +76,6 @@ class Tracer:
             if event == "call":
                 return self.trace
             elif event == "line":
-                # manual inlining of self.trace_line for performance.
                 fname = frame.f_code.co_filename
                 if should_trace_file(fname):
                     current_location = (fname, frame.f_lineno)
@@ -86,13 +86,18 @@ class Tracer:
 
     def trace_line(self, code: types.CodeType, line_number: int) -> None:
         fname = code.co_filename
-        if should_trace_file(fname):
-            current_location = (fname, line_number)
-            self.branches.add((self._previous_location, current_location))
-            self._previous_location = current_location
+        if not should_trace_file(fname):
+            # this function is only called on 3.12+, but we want to avoid an
+            # assertion to that effect for performance.
+            return sys.monitoring.DISABLE  # type: ignore
+
+        current_location = (fname, line_number)
+        self.branches.add((self._previous_location, current_location))
+        self._previous_location = current_location
 
     def __enter__(self):
-        assert self.can_trace()  # caller checks in core.py
+        if not self._should_trace:
+            return self
 
         if sys.version_info[:2] < (3, 12):
             sys.settrace(self.trace)
@@ -107,6 +112,9 @@ class Tracer:
         return self
 
     def __exit__(self, *args, **kwargs):
+        if not self._should_trace:
+            return
+
         if sys.version_info[:2] < (3, 12):
             sys.settrace(None)
             return

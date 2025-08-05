@@ -38,7 +38,10 @@ def belongs_to(package):
         except KeyError:
             pass
         try:
-            Path(filepath).resolve().relative_to(root)
+            if not filepath.startswith("<frozen "):
+                Path(filepath).resolve().relative_to(root)
+            else:
+                raise ValueError
             result = True
         except Exception:
             result = False

@@ -92,7 +92,7 @@ namespace NKikimr::NStorage {
                 if (NBridge::PileStateTraits(pile.State).AllowsConnection) {
                     continue;
                 }
-                const size_t index = pile.BridgePileId.GetRawId();
+                const size_t index = pile.BridgePileId.GetPileIndex();
                 Y_ABORT_UNLESS(index < map->size());
                 for (const ui32 nodeId : map->at(index)) {
                     if (nodeId <= MaxStaticNodeId) {
@@ -177,7 +177,7 @@ namespace NKikimr::NStorage {
             }
 
             // obtain peer's pile id (we must have one)
-            std::optional<TBridgePileId> peerBridgePileId;
+            TBridgePileId peerBridgePileId;
             if (BridgeInfo) { // this may be null if this is dynamic node
                 if (const auto *pile = BridgeInfo->GetPileForNode(peerNodeId)) {
                     peerBridgePileId = pile->BridgePileId;
@@ -188,14 +188,14 @@ namespace NKikimr::NStorage {
             } else if (!incoming.HasBridgePileId()) {
                 error = "missing mandatory peer bridge pile id";
             } else if (const auto value = TBridgePileId::FromProto(&incoming, &decltype(incoming)::GetBridgePileId);
-                    peerBridgePileId && *peerBridgePileId != value) {
+                    peerBridgePileId && peerBridgePileId != value) {
                 // not the one we expect from this node
                 error = "incorrect peer bridge pile id provided";
-            } else if (AppData()->BridgeConfig.PilesSize() <= value.GetRawId()) {
+            } else if (AppData()->BridgeConfig.PilesSize() <= value.GetPileIndex()) {
                 // out of bounds
                 error = "peer bridge pile id out of range";
             } else {
-                peerBridgePileId.emplace(value);
+                peerBridgePileId = value;
             }
 
             // process the peer's configuration
@@ -203,7 +203,7 @@ namespace NKikimr::NStorage {
                 // we already have an error
             } else if (!IsSelfStatic || MaxStaticNodeId < peerNodeId) {
                 error = ValidateConnectionWithDynamicNodes(
-                    *peerBridgePileId,
+                    peerBridgePileId,
                     peerNodeId <= MaxStaticNodeId,
                     incoming.HasStorageConfig()
                         ? incoming.MutableStorageConfig()
@@ -211,7 +211,7 @@ namespace NKikimr::NStorage {
                 );
             } else if (!incoming.HasStorageConfig()) {
                 error = "missing mandatory peer storage configuration section in handshake";
-            } else if (auto res = CheckPeerConfig(*peerBridgePileId, incoming.GetStorageConfig(), &outgoing)) {
+            } else if (auto res = CheckPeerConfig(peerBridgePileId, incoming.GetStorageConfig(), &outgoing)) {
                 error = std::move(res);
             }
 
@@ -249,9 +249,9 @@ namespace NKikimr::NStorage {
                     return error;
                 }
                 const auto& cs = peerConfig->GetClusterState();
-                if (!NBridge::PileStateTraits(cs.GetPerPileState(SelfBridgePileId.GetRawId())).AllowsConnection) {
+                if (!NBridge::PileStateTraits(cs.GetPerPileState(SelfBridgePileId.GetPileIndex())).AllowsConnection) {
                     return "can't establish connection to node belonging to disconnected pile (as seen by peer): local disconnected";
-                } else if (!NBridge::PileStateTraits(cs.GetPerPileState(peerBridgePileId.GetRawId())).AllowsConnection) {
+                } else if (!NBridge::PileStateTraits(cs.GetPerPileState(peerBridgePileId.GetPileIndex())).AllowsConnection) {
                     return "can't establish connection to node belonging to disconnected pile (as seen by peer): remote disconnected";
                 }
             } else if (isPeerStatic) {
@@ -304,9 +304,9 @@ namespace NKikimr::NStorage {
 
             std::optional<TString> error;
 
-            if (!NBridge::PileStateTraits(cs.GetPerPileState(peerBridgePileId.GetRawId())).AllowsConnection) {
+            if (!NBridge::PileStateTraits(cs.GetPerPileState(peerBridgePileId.GetPileIndex())).AllowsConnection) {
                 error = "peer is not allowed to connect";
-            } else if (!NBridge::PileStateTraits(cs.GetPerPileState(SelfBridgePileId.GetRawId())).AllowsConnection) {
+            } else if (!NBridge::PileStateTraits(cs.GetPerPileState(SelfBridgePileId.GetPileIndex())).AllowsConnection) {
                 error = "local node is not allowed to accept peer";
             }
 
@@ -340,15 +340,18 @@ namespace NKikimr::NStorage {
                 return "ClusterState section is missing in StorageConfig";
             }
             const size_t numPiles = AppData()->BridgeConfig.PilesSize();
-            if (const auto& cs = config.GetClusterState(); cs.PerPileStateSize() != numPiles) {
+            const auto& cs = config.GetClusterState();
+            const auto primaryPileId = TBridgePileId::FromProto(&cs, &NKikimrBridge::TClusterState::GetPrimaryPile);
+            const auto promotedPileId = TBridgePileId::FromProto(&cs, &NKikimrBridge::TClusterState::GetPromotedPile);
+            if (cs.PerPileStateSize() != numPiles) {
                 return "incorrect number of piles in ClusterState";
-            } else if (numPiles <= cs.GetPrimaryPile()) {
+            } else if (numPiles <= primaryPileId.GetPileIndex()) {
                 return "PrimaryPile value is out of range";
-            } else if (cs.GetPerPileState(cs.GetPrimaryPile()) != TClusterState::SYNCHRONIZED) {
+            } else if (cs.GetPerPileState(primaryPileId.GetPileIndex()) != TClusterState::SYNCHRONIZED) {
                 return "PrimaryPile is not in SYNCHRONIZED state";
-            } else if (numPiles <= cs.GetPromotedPile()) {
+            } else if (numPiles <= promotedPileId.GetPileIndex()) {
                 return "PromotedPile value is out of range";
-            } else if (cs.GetPerPileState(cs.GetPromotedPile()) != TClusterState::SYNCHRONIZED) {
+            } else if (cs.GetPerPileState(promotedPileId.GetPileIndex()) != TClusterState::SYNCHRONIZED) {
                 return "PromotedPile is not in SYNCHRONIZED state";
             }
             return std::nullopt;

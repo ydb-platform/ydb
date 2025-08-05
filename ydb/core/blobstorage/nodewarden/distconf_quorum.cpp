@@ -12,7 +12,7 @@ namespace NKikimr::NStorage {
             const auto& clusterState = config.GetClusterState();
             for (size_t i = 0; i < clusterState.PerPileStateSize(); ++i) {
                 if (NBridge::PileStateTraits(clusterState.GetPerPileState(i)).RequiresConfigQuorum) {
-                    mandatoryPileIds.insert(TBridgePileId::FromValue(i));
+                    mandatoryPileIds.insert(TBridgePileId::FromPileIndex(i));
                 }
             }
         }
@@ -49,7 +49,7 @@ namespace NKikimr::NStorage {
             for (size_t i = 0; i < cs.PerPileStateSize(); ++i) {
                 if (NBridge::PileStateTraits(cs.GetPerPileState(i)).RequiresConfigQuorum) {
                     // this pile is part of config quorum, we need it to be connected
-                    res.try_emplace(TBridgePileId::FromValue(i));
+                    res.try_emplace(TBridgePileId::FromPileIndex(i));
                 }
             }
         } else {
@@ -61,11 +61,11 @@ namespace NKikimr::NStorage {
     }
 
     bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TNodeIdentifier> successful,
-            const THashMap<TString, TBridgePileId>& bridgePileNameMap, std::optional<TBridgePileId> singleBridgePileId,
+            const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
             TStringStream *out) {
         // prepare list of piles we want to examine
         auto status = singleBridgePileId
-            ? THashMap<TBridgePileId, THashMap<TString, std::tuple<ui32, ui32>>>{{*singleBridgePileId, {}}}
+            ? THashMap<TBridgePileId, THashMap<TString, std::tuple<ui32, ui32>>>{{singleBridgePileId, {}}}
             : PrepareStatusMap(config);
 
         // generate set of all nodes

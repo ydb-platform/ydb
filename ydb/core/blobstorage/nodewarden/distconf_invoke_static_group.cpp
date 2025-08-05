@@ -192,9 +192,7 @@ namespace NKikimr::NStorage {
         for (const auto& group : ss.GetGroups()) {
             if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
                 try {
-                    std::optional<TBridgePileId> bridgePileId = group.HasBridgePileId()
-                        ? std::make_optional(TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId))
-                        : std::nullopt;
+                    const auto bridgePileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
                     std::optional<TGroupId> bridgeProxyGroupId = group.HasBridgeProxyGroupId()
                         ? std::make_optional(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId))
                         : std::nullopt;

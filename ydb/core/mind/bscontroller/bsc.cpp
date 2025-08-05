@@ -120,10 +120,11 @@ void TBlobStorageController::TGroupInfo::FillInGroupParameters(
     if (GroupMetrics) {
         params->MergeFrom(GroupMetrics->GetGroupParameters());
     } else if (BridgeGroupInfo) {
+        Y_ABORT_UNLESS(self->BridgeInfo);
         for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
             if (TGroupInfo *groupInfo = self->FindGroup(TGroupId::FromValue(groupId))) {
-                if (self->BridgeInfo && groupInfo->BridgePileId &&
-                        self->BridgeInfo->GetPile(*groupInfo->BridgePileId)->State == NKikimrBridge::TClusterState::DISCONNECTED) {
+                Y_ABORT_UNLESS(groupInfo->BridgePileId);
+                if (!NBridge::PileStateTraits(self->BridgeInfo->GetPile(groupInfo->BridgePileId)->State).AllowsConnection) {
                     continue; // ignore groups from disconnected piles
                 }
                 groupInfo->FillInGroupParameters(params, self);

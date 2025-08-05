@@ -9,8 +9,7 @@ namespace NKikimr::NStorage {
             const THashSet<TBridgePileId>& pileIdQuorumOverride);
 
     bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TNodeIdentifier> successful,
-        const THashMap<TString, TBridgePileId>& bridgePileNameMap, std::optional<TBridgePileId> singleBridgePileId,
-        TStringStream *out);
+        const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId, TStringStream *out);
 
     using TSuccessfulDisk = std::tuple<TNodeIdentifier, TString, std::optional<ui64>>;
 

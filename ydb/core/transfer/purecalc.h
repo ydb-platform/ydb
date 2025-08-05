@@ -37,6 +37,7 @@ struct TOutputMessage {
     std::optional<TString> Table;
     NYql::NUdf::TUnboxedValue Value;
     NKikimr::NMiniKQL::TUnboxedValueBatch Data;
+    size_t EstimateSize = 0;
 };
 
 class TMessageOutputSpec : public NYql::NPureCalc::TOutputSpecBase {

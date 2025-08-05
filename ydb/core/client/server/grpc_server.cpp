@@ -503,7 +503,8 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_SERVER_METHOD(SchemeOperation, TSchemeOperation, TResponse, DoSchemeOperation(MsgBusProxy, ActorSystem), Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_SERVER_METHOD(SchemeOperationStatus, TSchemeOperationStatus, TResponse, DoSchemeOperationStatus, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
     SETUP_SERVER_METHOD(SchemeDescribe, TSchemeDescribe, TResponse, DoSchemeDescribe(MsgBusProxy, ActorSystem), Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
-    SETUP_SERVER_METHOD(ChooseProxy, TChooseProxyRequest, TResponse, DoChooseProxyRequest, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
+    SETUP_SERVER_METHOD(ChooseProxy, TChooseProxyRequest, TResponse, DoChooseProxy, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
+    SETUP_SERVER_METHOD(PersQueueRequest, TPersQueueRequest, TResponse, DoPersQueueRequest(MsgBusProxy, ActorSystem), Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
     SETUP_SERVER_METHOD(ConsoleRequest, TConsoleRequest, TConsoleResponse, DoConsoleRequest, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
 #define ADD_PROXY_REQUEST_BASE(NAME, TYPE, RES_TYPE, EVENT_TYPE, MTYPE) \
@@ -521,8 +522,6 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     // proxy requests
     ADD_PROXY_REQUEST(SchemeInitRoot,  TSchemeInitRoot,  TEvBusProxy::TEvInitRoot,            MTYPE_CLIENT_SCHEME_INITROOT)
-
-    ADD_PROXY_REQUEST(PersQueueRequest, TPersQueueRequest, TEvBusProxy::TEvPersQueue,           MTYPE_CLIENT_PERSQUEUE)
 }
 
 }

@@ -99,6 +99,13 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TChooseProxyRequest, NKiki
 };
 
 template <>
+struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TPersQueueRequest, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TPersQueueRequest>
+    , NPrivate::TResponseLegacyCommonTraits
+{
+};
+
+template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrClient::TConsoleResponse>
     : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TConsoleRequest>
 {
@@ -115,7 +122,9 @@ TCreateActorCallback DoSchemeOperation(const NActors::TActorId& msgBusProxy, NAc
 void DoSchemeOperationStatus(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 TCreateActorCallback DoSchemeDescribe(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
 
-void DoChooseProxyRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+void DoChooseProxy(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+
+TCreateActorCallback DoPersQueueRequest(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem);
 
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 

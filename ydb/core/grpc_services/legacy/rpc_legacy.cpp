@@ -93,9 +93,22 @@ TCreateActorCallback DoSchemeDescribe(const NActors::TActorId& msgBusProxy, NAct
     };
 }
 
-void DoChooseProxyRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+void DoChooseProxy(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CHOOSE_PROXY);
     f.RegisterActor(CreateMessageBusChooseProxy(ctx));
+}
+
+static void DoPersQueueRequest(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem, std::unique_ptr<IRequestNoOpCtx> p) {
+    if (CheckMsgBusProxy(msgBusProxy, *p)) {
+        NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_PERSQUEUE);
+        actorSystem->Send(msgBusProxy, new NMsgBusProxy::TEvBusProxy::TEvPersQueue(ctx));
+    }
+}
+
+TCreateActorCallback DoPersQueueRequest(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem) {
+    return [msgBusProxy, actorSystem](std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
+        DoPersQueueRequest(msgBusProxy, actorSystem, std::move(p));
+    };
 }
 
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {

@@ -2,9 +2,9 @@
 
 {{ spark-name }} is a fast, open-source cluster computing system for big data processing that works with various data stores and supports multiple programming languages (Scala, Java, Python, R). {{ spark-name }} can work with {{ ydb-full-name }} using the [{{ ydb-full-name }} Spark Connector](https://github.com/ydb-platform/ydb-spark-connector), a special module that implements core  {{ spark-name }} primitives. It supports:
 
-* Distribution of operations across {{ ydb-full-name }} table partitions;
-* Scalable {{ ydb-full-name }} table readings and writing;
-* Automatic creation of tables if they do not exist.
+* Distribution of operations across {{ ydb-full-name }} table partitions
+* Scalable {{ ydb-full-name }} table readings and writing
+* Automatic creation of tables if they do not exist
 
 ## How to Use {#usage}
 

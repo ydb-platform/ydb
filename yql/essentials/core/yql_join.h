@@ -169,7 +169,7 @@ TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi
 TExprNode::TPtr MakeCrossJoin(TPositionHandle pos, TExprNode::TPtr left, TExprNode::TPtr right, TExprContext& ctx);
 
 void GatherAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& andTerms, bool& isPg, TExprContext& ctx);
-TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, bool isPg, TExprContext& ctx);
+TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, TExprNode::TPtr&& replaceWith, bool isPg, TExprContext& ctx);
 
 bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPtr& right);
 bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TExprNode::TPtr& leftMember, TExprNode::TPtr& rightMember);
@@ -177,6 +177,8 @@ bool IsMemberEquality(const TExprNode::TPtr& predicate, const TExprNode& row, TE
 void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
     const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields);
+bool GatherJoinInputsForAllNodes(const TExprNode::TPtr& expr, const TExprNode& row,
+    const THashMap<TString, TString>& backRenameMap, const TJoinLabels& labels, TNodeMap<TSet<ui32>>& inputs);
 
 bool IsCachedJoinOption(TStringBuf name);
 bool IsCachedJoinLinkOption(TStringBuf name);

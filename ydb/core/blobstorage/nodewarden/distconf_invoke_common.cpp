@@ -188,7 +188,8 @@ namespace NKikimr::NStorage {
                         throw TExError() << *r.ErrorReason;
                     } else if (r.ConfigToPropose) {
                         CheckSyncersAfterCommit = r.CheckSyncersAfterCommit;
-                        StartProposition(&r.ConfigToPropose.value(), true,
+                        StartProposition(&r.ConfigToPropose.value(), /*acceptLocalQuorum=*/ true,
+                            /*requireScepter=*/ false, /*mindPrev=*/ true,
                             r.PropositionBase ? &r.PropositionBase.value() : nullptr);
                     } else {
                         Finish(TResult::OK, std::nullopt);
@@ -240,12 +241,12 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase) {
+            bool requireScepter, bool mindPrev, const NKikimrBlobStorage::TStorageConfig *propositionBase) {
         if (auto error = UpdateClusterState(config)) {
             throw TExError() << *error;
         } else if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
             throw TExError() << "No quorum to start propose/commit configuration";
-        } else if (!acceptLocalQuorum && !Self->Scepter) {
+        } else if (requireScepter && !Self->Scepter) {
             throw TExError() << "No scepter";
         }
 
@@ -295,7 +296,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-            SelfId(), CheckSyncersAfterCommit);
+            SelfId(), CheckSyncersAfterCommit, mindPrev);
         if (error) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
                 (Error, *error), (ProposedConfig, *config));
@@ -489,7 +490,9 @@ namespace NKikimr::NStorage {
             DeadActorWaitingForProposition = true;
         } else {
             InvokeQ.pop_front();
-            if (!InvokeQ.empty()) {
+            if (InvokeQ.empty()) {
+                CheckForConfigUpdate();
+            } else {
                 TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, InvokeQ.front().ActorId, {},
                     nullptr, 0));
             }

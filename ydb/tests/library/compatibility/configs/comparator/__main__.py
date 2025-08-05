@@ -5,15 +5,15 @@ import json
 import logging
 import sys
 import os
-from enum import StrEnum
+from enum import Enum
 
 
-class Resolution(StrEnum):
-    NO = ''
-    OK = '#aaffaa'
-    INFO = '#aaffaa'
-    WARNING = '#ffffaa'
-    ERROR = '#ffaaaa'
+class Resolution(Enum):
+    NO = 0
+    OK = 1
+    INFO = 2
+    WARNING = 3
+    ERROR = 4
 
 
 class FieldInfo:
@@ -26,7 +26,7 @@ class Differ:
 
     def __init__(self):
         self.fields: list[tuple[str, list[FieldInfo]]] = []
-        self.resolutions: list[tuple[str, list[tuple[Resolution, str]]]] = []
+        self.resolutions: list[tuple[str, list[tuple[Resolution, str]], str]] = []
         self.branches: list[dict[str, str]] = []
 
     def load_files(self, names: list[str]):
@@ -108,12 +108,14 @@ class Differ:
             if len(values) == 0:
                 continue
             result = [(Resolution.NO if values[0] is None else Resolution.OK, '')]
-            intresting = False
+            max_resolution = 0
             for i in range(1, len(values)):
                 result.append(self.compare_two_fields(values[i-1], values[i], name))
-                intresting = intresting or result[-1][0] not in {Resolution.OK, Resolution.NO, Resolution.INFO}
-            if intresting:
-                self.resolutions.append((name, result))
+                max_resolution = max(max_resolution, result[-1][0].value)
+            if max_resolution <= Resolution.OK.value:
+                continue
+            cl = 'greenLine' if max_resolution == Resolution.INFO.value else ''
+            self.resolutions.append((name, result, cl))
 
     def print_result(self) -> None:
         print('''<style>
@@ -123,28 +125,17 @@ class Differ:
     background-color: #AAFFAA;
 }
 
-
 .tab button {
-    background-color: inherit;
     float: left;
-    border: none;
-    outline: none;
     cursor: pointer;
     padding: 14px 16px;
     transition: 0.3s;
 }
 
-
-.tab button:hover {
-    background-color: #FFEB3B;
-}
-
-
 .tab button.active {
-    background-color: #4CAF50;
+    background-color: #888888;
   color: #fff;
 }
-
 
 .tabcontent {
     display: none;
@@ -175,6 +166,15 @@ function openDescr(evt, lang) {
     document.getElementById(lang).style.display = "block";
     evt.currentTarget.className += " active";
 }
+
+function showGreen(evt) {
+    lines = document.getElementsByClassName("greenLine");
+    value = evt.currentTarget.className != "active"
+    evt.currentTarget.className = value ? "active" : ""
+    for (i = 0; i < lines.length; i++) {
+        lines[i].style.display = value ? "table-row" : "none"
+    }
+}
 </script>
 
 <html>
@@ -186,6 +186,7 @@ function openDescr(evt, lang) {
 <div class="tab">
   <button class="tablinks" onclick="openDescr(event, 'russian')">Описание</button>
   <button class="tablinks" onclick="openDescr(event, 'english')">Description</button>
+  <button class="active" onclick="showGreen(event)">Show all diff</button>
 </div>
 <div id=russian class="tabcontent">
 <h1>Сравнение дефолтных конфигураций ydbd разных версий</h1>
@@ -218,7 +219,7 @@ removing fields, changing their type or id (in protobuf), disabling the Feature 
 </ul>
 </p>
 </div>
-<table border=1 valign="center">''')
+<table border=1 valign="center" width="100%">''')
         print('<thead style="position: sticky; top: 0; background: white; align: center">')
         print('<tr><th style="padding-left: 10; padding-right: 10">config field \\ branch, commit</th>')
         for b in self.branches:
@@ -229,9 +230,16 @@ removing fields, changing their type or id (in protobuf), disabling the Feature 
             print(f'<th style="padding-left: 10; padding-right: 10">{br_text}</th>')
         print('</tr></thead>')
         print('<tbody>')
-        for field, result in self.resolutions:
-            print(f'<tr><td style="padding-left: 10; padding-right: 10">{field}</td>')
-            for color, msg in result:
+        for field, result, cl in self.resolutions:
+            print(f'<tr class="{cl}"><td style="padding-left: 10; padding-right: 10">{field}</td>')
+            for resulution, msg in result:
+                color = {
+                    Resolution.NO: '',
+                    Resolution.OK: '#aaffaa',
+                    Resolution.INFO: '#aaffaa',
+                    Resolution.WARNING: '#ffffaa',
+                    Resolution.ERROR: '#ffaaaa'
+                }[resulution]
                 print(f'<td align="center" bgcolor="{color}" style="padding-left: 10; padding-right: 10">{msg}</td>')
             print('</tr>')
         print('</tbody>')

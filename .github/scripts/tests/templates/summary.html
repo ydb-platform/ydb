@@ -16,6 +16,29 @@
         h1 { 
             font-size: 20px; 
         }
+        .report-header {
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        .report-header h2 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .report-header p {
+            margin: 4px 0;
+            font-size: 14px;
+        }
+        .report-header a {
+            color: #0969da;
+            text-decoration: none;
+        }
+        .report-header a:hover {
+            text-decoration: underline;
+        }
         th {
             text-transform: uppercase;
         }
@@ -720,6 +743,19 @@
 </script>
 </head>
 <body>
+    {% if pr_url or workflow_url %}
+    <div class="report-header">
+        <h2>Test Report Information</h2>
+        {% if pr_url %}
+        <p><strong>Pull Request:</strong> <a href="{{ pr_url }}" target="_blank">PR #{{ pr_number }}</a></p>
+        {% endif %}
+        {% if workflow_url %}
+        <p><strong>Workflow Run:</strong> <a href="{{ workflow_url }}" target="_blank">{{ workflow_run_id }}</a></p>
+        {% endif %}
+        <p><strong>Build Preset:</strong> {{ build_preset }}</p>
+        <p><strong>Branch:</strong> {{ branch }}</p>
+    </div>
+    {% endif %}
     <div class="toggle-visibility-buttons">
         <button id="expand-all">Expand All</button>
         <button id="collapse-all">Collapse All</button>

@@ -138,6 +138,7 @@ message TConfigItem {
         AllowEditYamlInUiItem = 75;
         S3ProxyResolverConfigItem = 76;
         BackgroundCleaningConfigItem = 77;
+        BlobCacheConfigItem = 78;
         MetadataCacheConfigItem = 80;
         MemoryControllerConfigItem = 81;
         ScanGroupedMemoryLimiterConfig = 82;
@@ -146,6 +147,7 @@ message TConfigItem {
         HealthCheckConfigItem = 89;
         WorkloadManagerConfigItem = 90;
         CompGroupedMemoryLimiterConfig = 92;
+        BlockstoreConfigItem = 93;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

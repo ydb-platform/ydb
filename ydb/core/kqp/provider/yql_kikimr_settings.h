@@ -80,6 +80,10 @@ public:
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
+
+    // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
+    NCommon::TConfSetting<TString, Static> CostBasedOptimization;
+
     NCommon::TConfSetting<bool, Static> UseBlockReader;
 
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> HashShuffleFuncType;

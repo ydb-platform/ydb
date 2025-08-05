@@ -180,13 +180,13 @@ std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const T
 
 TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, TExprBase>>& parameters, const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos);
 
-[[maybe_unused]]
 TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprNode& argument, TExprContext& ctx, bool allowApply) {
     if (const auto params = ExtractBinaryFunctionParameters(coalesce, argument, ctx, coalesce.Pos(), allowApply)) {
         return Build<TKqpOlapFilterBinaryOp>(ctx, coalesce.Pos())
                 .Operator().Value("??", TNodeFlags::Default).Build()
                 .Left(params->first)
                 .Right(params->second)
+                .OpType(ExpandType(coalesce.Pos(), *(coalesce.Ptr()->GetTypeAnn()), ctx))
                 .Done();
     }
 
@@ -409,6 +409,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
                         .Operator().Value(arithmetic.Ref().Content(), TNodeFlags::Default).Build()
                         .Left(UnwrapOptionalTKqpOlapApplyColumnArg(params->first))
                         .Right(UnwrapOptionalTKqpOlapApplyColumnArg(params->second))
+                        .OpType(ExpandType(node.Pos(), *(arithmetic.Ptr()->GetTypeAnn()), ctx))
                         .Done();
             }
         }
@@ -552,6 +553,7 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
         .Operator().Value(compareOperator, TNodeFlags::Default).Build()
         .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.first))
         .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.second))
+        .OpType(ExpandType(predicate.Pos(), *(predicate.Ptr()->GetTypeAnn()), ctx))
         .Done();
 }
 

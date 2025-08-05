@@ -78,7 +78,7 @@ public:
         diffAcl.AddAccess(NACLib::EAccessType::Allow, useAccess, BUILTIN_ACL_ROOT);
 
         auto token = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
-        Register(CreatePoolCreatorActor(SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, NResourcePool::TPoolSettings(), token, diffAcl));
+        Register(CreatePoolCreatorActor(SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, PoolSettingsFromConfig(WorkloadManagerConfig), token, diffAcl));
     }
 
     void Handle(TEvPrivate::TEvCreatePoolResponse::TPtr& ev) {
@@ -251,15 +251,7 @@ public:
 
     void Bootstrap() {
         if (PoolId == NResourcePool::DEFAULT_POOL_ID) {
-            NResourcePool::TPoolSettings poolSettings;
-            poolSettings.ResourceWeight = WorkloadManagerConfig.GetResourceWeight();
-            poolSettings.ConcurrentQueryLimit = WorkloadManagerConfig.GetConcurrentQueryLimit();
-            poolSettings.QueueSize = WorkloadManagerConfig.GetQueueSize();
-            poolSettings.QueryCpuLimitPercentPerNode = WorkloadManagerConfig.GetQueryCpuLimitPercentPerNode();
-            poolSettings.QueryMemoryLimitPercentPerNode = WorkloadManagerConfig.GetQueryMemoryLimitPercentPerNode();
-            poolSettings.TotalCpuLimitPercentPerNode = WorkloadManagerConfig.GetTotalCpuLimitPercentPerNode();
-            poolSettings.DatabaseLoadCpuThreshold = WorkloadManagerConfig.GetDatabaseLoadCpuThreshold();
-            Reply(poolSettings);
+            Reply(PoolSettingsFromConfig(WorkloadManagerConfig));
             return;
         }
         ReplyError(Ydb::StatusIds::BAD_REQUEST, "Unknown static pool " + PoolId + ", please check the database configuration");

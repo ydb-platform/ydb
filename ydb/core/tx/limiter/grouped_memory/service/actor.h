@@ -103,25 +103,25 @@ private:
 
     const TConfig Config;
     const TString Name;
-    const std::shared_ptr<TCounters> Signals;
-    const std::shared_ptr<TStageFeatures> DefaultStage;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> Signals;
+    TVector<std::shared_ptr<TCounters>> Counters;
+    TVector<std::shared_ptr<TStageFeatures>> DefaultStages;
     const NMemory::EMemoryConsumerKind ConsumerKind;
     TIntrusivePtr<TMemoryConsumptionAggregator> MemoryConsumptionAggregator;
 
 public:
-    TMemoryLimiterActor(const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,
-        const std::shared_ptr<TStageFeatures>& defaultStage, const NMemory::EMemoryConsumerKind consumerKind)
+    TMemoryLimiterActor(const TConfig& config, const TString& name, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals,
+        const NMemory::EMemoryConsumerKind consumerKind)
         : Config(config)
         , Name(name)
         , Signals(signals)
-        , DefaultStage(defaultStage)
         , ConsumerKind(consumerKind)
         , MemoryConsumptionAggregator(new TMemoryConsumptionAggregator(Config.GetCountBuckets())) {
     }
 
     void Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvFinishTask::TPtr& ev);
-    void Handle(NEvents::TEvExternal::TEvUpdateTask::TPtr& ev);
+    void Handle(NEvents::TEvExternal::TEvTaskUpdated::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvStartGroup::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev);
     void Handle(NEvents::TEvExternal::TEvStartProcess::TPtr& ev);
@@ -137,7 +137,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NEvents::TEvExternal::TEvStartTask, Handle);
             hFunc(NEvents::TEvExternal::TEvFinishTask, Handle);
-            hFunc(NEvents::TEvExternal::TEvUpdateTask, Handle);
+            hFunc(NEvents::TEvExternal::TEvTaskUpdated, Handle);
             hFunc(NEvents::TEvExternal::TEvStartGroup, Handle);
             hFunc(NEvents::TEvExternal::TEvFinishGroup, Handle);
             hFunc(NEvents::TEvExternal::TEvStartProcess, Handle);

@@ -79,4 +79,13 @@ ui64 TIdsControl::GetExternalIdVerified(const ui64 internalId) const {
     return it->second;
 }
 
+ui64 TExternalIdsControl::GetMinExternalIdVerified() const {
+    AFL_VERIFY(ExternalIds.size());
+    return *ExternalIds.begin();
+}
+
+void TExternalIdsControl::RegisterExternalId(const ui64 id) {
+    AFL_VERIFY(ExternalIds.emplace(id).second);
+}
+
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

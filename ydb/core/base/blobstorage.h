@@ -2319,6 +2319,8 @@ struct TEvBlobStorage {
         bool IsMultiCollectAllowed;
         bool IsMonitored = true;
 
+        bool IgnoreBlock = false;
+
         bool Decommission = false;
 
         TEvCollectGarbage(TCloneEventPolicy, const TEvCollectGarbage& origin)
@@ -2335,13 +2337,14 @@ struct TEvBlobStorage {
             , Collect(origin.Collect)
             , IsMultiCollectAllowed(origin.IsMultiCollectAllowed)
             , IsMonitored(origin.IsMonitored)
+            , IgnoreBlock(origin.IgnoreBlock)
             , Decommission(origin.Decommission)
         {}
 
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
                 bool collect, ui32 collectGeneration,
                 ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline,
-                bool isMultiCollectAllowed, bool hard = false)
+                bool isMultiCollectAllowed, bool hard = false, bool ignoreBlock = false)
             : TabletId(tabletId)
             , RecordGeneration(recordGeneration)
             , PerGenerationCounter(perGenerationCounter)
@@ -2354,6 +2357,7 @@ struct TEvBlobStorage {
             , Hard(hard)
             , Collect(collect)
             , IsMultiCollectAllowed(isMultiCollectAllowed)
+            , IgnoreBlock(ignoreBlock)
         {}
 
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 channel, bool collect, ui32 collectGeneration,
@@ -2589,7 +2593,7 @@ struct TEvBlobStorage {
             }
             if (SkipBarriersUpTo) {
                 auto& [tabletId, channel] = *SkipBarriersUpTo;
-                str << " SkipBarriersUpTo# " << tabletId << ':' << channel;
+                str << " SkipBarriersUpTo# " << tabletId << ':' << (int)channel;
             }
             if (SkipBlobsUpTo) {
                 str << " SkipBlobsUpTo# ";

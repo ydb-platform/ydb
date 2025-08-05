@@ -3534,7 +3534,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ToFlowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ToFlowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -3545,10 +3545,9 @@ namespace NTypeAnnImpl {
         }
         const auto kind = input->Head().GetTypeAnn()->GetKind();
 
-        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-            if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         if (ETypeAnnotationKind::Flow == kind) {
@@ -5064,13 +5063,13 @@ namespace NTypeAnnImpl {
 
     template <NKikimr::NUdf::EDataSlot DataSlot>
     IGraphTransformer::TStatus DataGeneratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        Y_UNUSED(output);
         if (!EnsureNotInDiscoveryMode(*input, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureDependsOnTail(*input, ctx.Expr, 0)) {
-            return IGraphTransformer::TStatus::Error;
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 0);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(DataSlot));
@@ -5090,8 +5089,9 @@ namespace NTypeAnnImpl {
             }
         }
         if (input->ChildrenSize() > 0) {
-            if (!EnsureDependsOn(input->Head(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 0, 1);
+            if (status != IGraphTransformer::TStatus::Ok) {
+                return status;
             }
 
             auto depOn = input->Head().HeadPtr();
@@ -5147,8 +5147,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureDependsOnTail(*input, ctx.Expr, 1)) {
-            return IGraphTransformer::TStatus::Error;
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         TExprNode::TListType deps = input->ChildrenList();
@@ -5183,8 +5184,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
         if (input->ChildrenSize() > 0) {
-            if (!EnsureDependsOn(input->Head(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 0, 1);
+            if (status != IGraphTransformer::TStatus::Ok) {
+                return status;
             }
 
             auto depOn = input->Head().HeadPtr();
@@ -8201,10 +8203,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus NamedApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
-        if (!EnsureDependsOnTail(*input, ctx.Expr, 3)) {
-            return IGraphTransformer::TStatus::Error;
+    IGraphTransformer::TStatus NamedApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 3);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         if (!EnsureCallableType(input->Head(), ctx.Expr)) {
@@ -10537,11 +10539,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus QueueCreateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
-        if (!EnsureDependsOnTail(*input, ctx.Expr, 3)) {
-            return IGraphTransformer::TStatus::Error;
+    IGraphTransformer::TStatus QueueCreateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 3);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
+
         if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -10648,10 +10651,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus QueuePeekWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        Y_UNUSED(output);
-        if (!EnsureDependsOnTail(*input, ctx.Expr, 2)) {
-            return IGraphTransformer::TStatus::Error;
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 2);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
+
         auto resourceArg = input->Child(0);
         auto& indexArg = input->ChildRef(1);
 
@@ -10670,9 +10674,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus QueueRangeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        Y_UNUSED(output);
-        if (!EnsureDependsOnTail(*input, ctx.Expr, 3)) {
-            return IGraphTransformer::TStatus::Error;
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 3);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         auto resourceArg = input->Child(0);
@@ -10738,6 +10742,24 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus InnerDependsOnWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (ctx.Types.NormalizeDependsOn && !IsNormalizedDependsOn(*input)) {
+            ctx.Expr.Step.Repeat(TExprStep::NormalizeDependsOn);
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -12720,10 +12742,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["FlatOptionalIf"] = &FlatOptionalIfWrapper;
         Functions["Size"] = &SizeWrapper;
         Functions["Length"] = &LengthWrapper;
-        Functions["Iterator"] = &IteratorWrapper;
-        Functions["EmptyIterator"] = &EmptyIteratorWrapper;
+        ExtFunctions["Iterator"] = &IteratorWrapper;
+        ExtFunctions["EmptyIterator"] = &EmptyIteratorWrapper;
         Functions["ForwardList"] = &ForwardListWrapper;
-        Functions["ToStream"] = &ToStreamWrapper;
+        ExtFunctions["ToStream"] = &ToStreamWrapper;
         Functions["ToSequence"] = &ToSequenceWrapper;
         Functions["Collect"] = &CollectWrapper;
         Functions["LazyList"] = &LazyListWrapper;
@@ -12918,7 +12940,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["DictKeyType"] = &TypeArgWrapper<ETypeArgument::DictKey>;
         Functions["DictPayloadType"] = &TypeArgWrapper<ETypeArgument::DictPayload>;
         Functions["Apply"] = &ApplyWrapper;
-        Functions["NamedApply"] = &NamedApplyWrapper;
+        ExtFunctions["NamedApply"] = &NamedApplyWrapper;
         Functions["PositionalArgs"] = &PositionalArgsWrapper;
         Functions["SqlCall"] = &SqlCallWrapper;
         Functions["Callable"] = &CallableWrapper;
@@ -13039,9 +13061,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AutoDemux"] = &AutoDemuxWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;
         Functions["AggrCountUpdate"] = &AggrCountUpdateWrapper;
-        Functions["QueueCreate"] = &QueueCreateWrapper;
+        ExtFunctions["QueueCreate"] = &QueueCreateWrapper;
         Functions["QueuePop"] = &QueuePopWrapper;
         Functions["DependsOn"] = &DependsOnWrapper;
+        ExtFunctions["InnerDependsOn"] = &InnerDependsOnWrapper;
         Functions["Seq"] = &SeqWrapper;
         Functions["Parameter"] = &ParameterWrapper;
         ExtFunctions["WeakField"] = &WeakFieldWrapper;
@@ -13100,7 +13123,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["EvaluateType"] = &RestartEvaluationWrapper;
         Functions["EvaluateCode"] = &RestartEvaluationWrapper;
         Functions["EvaluateExprIfPure"] = &EvaluateExprIfPureWrapper;
-        Functions["ToFlow"] = &ToFlowWrapper;
+        ExtFunctions["ToFlow"] = &ToFlowWrapper;
         Functions["FromFlow"] = &FromFlowWrapper;
         Functions["BuildTablePath"] = &BuildTablePathWrapper;
         Functions["WithOptionalArgs"] = &WithOptionalArgsWrapper;
@@ -13248,7 +13271,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         Functions["FromPg"] = &FromPgWrapper;
         Functions["ToPg"] = &ToPgWrapper;
-        Functions["PgClone"] = &PgCloneWrapper;
+        ExtFunctions["PgClone"] = &PgCloneWrapper;
         Functions["PgNullIf"] = &PgNullIfWrapper;
         ExtFunctions["PgAgg"] = &PgAggWrapper;
         ExtFunctions["PgAggWindowCall"] = &PgAggWrapper;

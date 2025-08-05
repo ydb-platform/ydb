@@ -86,6 +86,7 @@ struct TTestEnvOpts {
     ui32 RingSize;
     ui32 DataCenterCount;
     ui32 PileCount;
+    ui32 NodesWithoutPDisksCount;
     TNodeTenantsMap Tenants;
     bool UseMirror3dcErasure;
     bool AdvanceCurrentTime;
@@ -111,6 +112,7 @@ struct TTestEnvOpts {
         , RingSize(nodeCount)
         , DataCenterCount(1)
         , PileCount(0)
+        , NodesWithoutPDisksCount(0)
         , Tenants(tenants)
         , UseMirror3dcErasure(false)
         , AdvanceCurrentTime(false)

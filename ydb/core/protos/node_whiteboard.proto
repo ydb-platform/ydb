@@ -110,6 +110,7 @@ message TNodeStateInfo {
     optional uint64 WriteThroughput = 15; // bytes written per second
     optional ESessionState SessionState = 16;
     optional bool SameScope = 17; // true if the peer is in the same scope
+    optional string PeerBridgePileName = 18;
 }
 
 message TEvNodeStateRequest {
@@ -269,6 +270,8 @@ message TBSGroupStateInfo {
     optional bool NoVDisksInGroup = 22 [(DefaultField) = true];
     optional uint64 BlobDepotOnlineTime = 23 [(DefaultField) = true];
     optional uint32 GroupSizeInUnits = 24;
+    optional uint32 BridgeProxyGroupId = 25; // when running in Bridge mode
+    optional uint32 BridgePileId = 26; // also in Bridge mode
 }
 
 message TEvBSGroupStateRequest {

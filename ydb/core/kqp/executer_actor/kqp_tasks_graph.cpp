@@ -1386,6 +1386,172 @@ NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, c
     return result;
 }
 
+void PersistTasksGraphInfo(const TKqpTasksGraph& tasksGraph, NKikimrKqp::TQueryPhysicalGraph& result) {
+    auto& resultTasks = *result.MutableTasks();
+
+    const auto& tasks = tasksGraph.GetTasks();
+    resultTasks.Reserve(tasks.size());
+    for (const auto& task : tasks) {
+        auto& resultTask = *resultTasks.Add();
+        resultTask.SetTxId(task.StageId.TxId);
+
+        auto* taskInfo = resultTask.MutableDqTask();
+        SerializeTaskToProto(tasksGraph, task, taskInfo, false);
+
+        taskInfo->ClearProgram();
+        taskInfo->ClearSecureParams();
+    }
+}
+
+void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryPhysicalGraph& graphInfo) {
+    const auto restoreDqTransform = [](const auto& protoInfo) -> TMaybe<TTransform> {
+        if (!protoInfo.HasTransform()) {
+            return Nothing();
+        }
+
+        const auto& transformInfo = protoInfo.GetTransform();
+        return TTransform{
+            .Type = transformInfo.GetType(),
+            .InputType = transformInfo.GetInputType(),
+            .OutputType = transformInfo.GetOutputType(),
+            .Settings = transformInfo.GetSettings(),
+        };
+    };
+
+    std::map<ui64, TChannel> channels;
+    const auto restoreDqChannel = [&channels](ui64 txId, const NYql::NDqProto::TChannel& protoInfo) -> TChannel& {
+        const auto [it, inserted] = channels.emplace(protoInfo.GetId(), TChannel());
+        auto& channel = it->second;
+
+        if (inserted) {
+            channel.Id = protoInfo.GetId();
+            channel.SrcStageId = TStageId(txId, protoInfo.GetSrcStageId());
+            channel.SrcTask = protoInfo.GetSrcTaskId();
+            channel.DstStageId = TStageId(txId, protoInfo.GetDstStageId());
+            channel.DstTask = protoInfo.GetDstTaskId();
+            channel.InMemory = protoInfo.GetInMemory();
+        }
+
+        return channel;
+    };
+
+    for (size_t taskIdx = 0; taskIdx < graphInfo.TasksSize(); ++taskIdx) {
+        const auto& task = graphInfo.GetTasks(taskIdx);
+        const auto txId = task.GetTxId();
+        const auto& taskInfo = task.GetDqTask();
+
+        auto& stageInfo = tasksGraph.GetStageInfo({txId, taskInfo.GetStageId()});
+        auto& newTask = tasksGraph.AddTask(stageInfo);
+        YQL_ENSURE(taskInfo.GetId() == newTask.Id);
+        newTask.Meta.TaskParams.insert(taskInfo.GetTaskParams().begin(), taskInfo.GetTaskParams().end());
+        newTask.Meta.ReadRanges.assign(taskInfo.GetReadRanges().begin(), taskInfo.GetReadRanges().end());
+
+        for (size_t inputIdx = 0; inputIdx < taskInfo.InputsSize(); ++inputIdx) {
+            const auto& inputInfo = taskInfo.GetInputs(inputIdx);
+            auto& newInput = newTask.Inputs[inputIdx];
+            newInput.Transform = restoreDqTransform(inputInfo);
+
+            switch (inputInfo.GetTypeCase()) {
+                case NDqProto::TTaskInput::kMerge: {
+                    const auto& sortColumnsInfo = inputInfo.GetMerge().GetSortColumns();
+
+                    TVector<TSortColumn> sortColumns;
+                    sortColumns.reserve(sortColumnsInfo.size());
+                    for (const auto& sortColumnInfo : sortColumnsInfo) {
+                        sortColumns.emplace_back(sortColumnInfo.GetColumn(), sortColumnInfo.GetAscending());
+                    }
+
+                    newInput.ConnectionInfo = TMergeTaskInput(sortColumns);
+                    break;
+                }
+                case NDqProto::TTaskInput::kSource: {
+                    newInput.ConnectionInfo = TSourceInput();
+
+                    const auto& sourceInfo = inputInfo.GetSource();
+                    newInput.SourceType = sourceInfo.GetType();
+                    if (sourceInfo.HasSettings()) {
+                        newInput.SourceSettings = sourceInfo.GetSettings();
+                    }
+                    break;
+                }
+                case NDqProto::TTaskInput::kUnionAll: {
+                    break;
+                }
+                case NDqProto::TTaskInput::TYPE_NOT_SET: {
+                    YQL_ENSURE(false, "Unknown input type");
+                    break;
+                }
+            }
+
+            newInput.Channels.reserve(inputInfo.ChannelsSize());
+            for (const auto& channelInfo : inputInfo.GetChannels()) {
+                newInput.Channels.emplace_back(channelInfo.GetId());
+                restoreDqChannel(txId, channelInfo).DstInputIndex = inputIdx;
+            }
+        }
+
+        for (size_t outputIdx = 0; outputIdx < taskInfo.OutputsSize(); ++outputIdx) {
+            const auto& outputInfo = taskInfo.GetOutputs(outputIdx);
+            auto& newOutput = newTask.Outputs[outputIdx];
+            newOutput.Transform = restoreDqTransform(outputInfo);
+
+            switch (outputInfo.GetTypeCase()) {
+                case NDqProto::TTaskOutput::kMap: {
+                    newOutput.Type = TTaskOutputType::Map;
+                    break;
+                }
+                case NDqProto::TTaskOutput::kRangePartition: {
+                    YQL_ENSURE(false, "Range partition output type is not supported for restore");
+                    break;
+                }
+                case NDqProto::TTaskOutput::kHashPartition: {
+                    newOutput.Type = TTaskOutputType::HashPartition;
+
+                    const auto& hashInfo = outputInfo.GetHashPartition();
+                    newOutput.KeyColumns.assign(hashInfo.GetKeyColumns().begin(), hashInfo.GetKeyColumns().end());
+                    newOutput.PartitionsCount = hashInfo.GetPartitionsCount();
+                    break;
+                }
+                case NDqProto::TTaskOutput::kBroadcast: {
+                    newOutput.Type = TTaskOutputType::Broadcast;
+                    break;
+                }
+                case NDqProto::TTaskOutput::kEffects: {
+                    newOutput.Type = TTaskOutputType::Effects;
+                    break;
+                }
+                case NDqProto::TTaskOutput::kSink: {
+                    newOutput.Type = TTaskOutputType::Sink;
+
+                    const auto& sinkInfo = outputInfo.GetSink();
+                    newOutput.SinkType = sinkInfo.GetType();
+                    if (sinkInfo.HasSettings()) {
+                        newOutput.SinkSettings = sinkInfo.GetSettings();
+                    }
+                    break;
+                }
+                case NDqProto::TTaskOutput::TYPE_NOT_SET: {
+                    YQL_ENSURE(false, "Unknown output type");
+                    break;
+                }
+            }
+            YQL_ENSURE(newOutput.Type);
+
+            newOutput.Channels.reserve(outputInfo.ChannelsSize());
+            for (const auto& channelInfo : outputInfo.GetChannels()) {
+                newOutput.Channels.emplace_back(channelInfo.GetId());
+                restoreDqChannel(txId, channelInfo).SrcOutputIndex = outputIdx;
+            }
+        }
+    }
+
+    for (const auto& [id, channel] : channels) {
+        auto& newChannel = tasksGraph.AddChannel();
+        newChannel = channel;
+        YQL_ENSURE(id == newChannel.Id);
+    }
+}
+
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
 {
     TStringBuilder sb;

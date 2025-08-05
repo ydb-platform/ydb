@@ -1,10 +1,11 @@
 #pragma once
 
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/stream/input.h>
 
-namespace NSQLComplete {
+namespace NYql::NDocs {
 
     struct TMarkdownHeader {
         TString Content;
@@ -16,8 +17,13 @@ namespace NSQLComplete {
         TString Body;
     };
 
+    struct TMarkdownPage {
+        TString Text;
+        THashMap<TString, TMarkdownSection> SectionsByAnchor;
+    };
+
     using TMarkdownCallback = std::function<void(TMarkdownSection&&)>;
 
-    void ParseMarkdown(IInputStream& markdown, TMarkdownCallback&& onSection);
+    TMarkdownPage ParseMarkdownPage(TString markdown);
 
-} // namespace NSQLComplete
+} // namespace NYql::NDocs

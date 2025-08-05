@@ -126,7 +126,7 @@ namespace NKikimr::NStorage {
             }
         }
 
-        StartProposition(&config);
+        StartProposition(&config, /*acceptLocalQuorum=*/ false, /*requireScepter=*/ false, /*mindPrev=*/ false);
     }
 
     void TInvokeRequestHandlerActor::NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd) {

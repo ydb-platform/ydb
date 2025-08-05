@@ -83,7 +83,7 @@ class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
     std::map<TVSlotId, const NKikimrSysView::TVSlotInfo*> VSlotIndex;
     std::map<TGroupId, const NKikimrSysView::TGroupInfo*> GroupIndex;
     std::map<TBoxStoragePoolId, const NKikimrSysView::TStoragePoolInfo*> StoragePoolIndex;
-    TBlobStorageController::THostRecordMap HostRecords;
+    THostRecordMap HostRecords;
     ui32 GroupReserveMin = 0;
     ui32 GroupReservePart = 0;
     ::NMonitoring::TDynamicCounterPtr Counters;
@@ -324,9 +324,14 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     if (pDiskInfo->Metrics.HasEnforcedDynamicSlotSize()) {
         info->SetEnforcedDynamicSlotSize(pDiskInfo->Metrics.GetEnforcedDynamicSlotSize());
     }
-    info->SetExpectedSlotCount(pDiskInfo->ExpectedSlotCount);
+    ui32 slotCount = 0;
+    ui32 slotSizeInUnits = 0;
+    pDiskInfo->ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
+    info->SetExpectedSlotCount(slotCount);
     info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
+    info->SetSlotSizeInUnits(slotSizeInUnits);
+    info->SetInferPDiskSlotCountFromUnitSize(pDiskInfo->InferPDiskSlotCountFromUnitSize);
 }
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
@@ -417,6 +422,7 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     const auto& status = groupInfo->GetStatus(finder);
     info->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus));
     info->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus));
+    info->SetGroupSizeInUnits(groupInfo->GroupSizeInUnits);
 }
 
 void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo,
@@ -444,6 +450,7 @@ void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageControll
     TStringStream pdiskFilterData;
     Save(&pdiskFilterData, poolInfo.PDiskFilters);
     info->SetPDiskFilterData(pdiskFilterData.Str());
+    info->SetDefaultGroupSizeInUnits(poolInfo.DefaultGroupSizeInUnits);
 }
 
 template<typename TDstMap, typename TDeletedSet, typename TSrcMap, typename TChangedSet>
@@ -526,7 +533,14 @@ void TBlobStorageController::UpdateSystemViews() {
                 }
                 pb->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(NKikimrBlobStorage::EDriveStatus::ACTIVE));
                 pb->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE));
-                pb->SetExpectedSlotCount(pdisk.ExpectedSlotCount ? pdisk.ExpectedSlotCount : pdisk.StaticSlotUsage);
+
+                ui32 slotCount = 0;
+                ui32 slotSizeInUnits = 0;
+                pdisk.ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
+
+                pb->SetExpectedSlotCount(slotCount);
+                pb->SetSlotSizeInUnits(slotSizeInUnits);
+                pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
                 pb->SetNumActiveSlots(pdisk.StaticSlotUsage);
             }
         }

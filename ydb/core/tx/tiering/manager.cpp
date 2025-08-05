@@ -119,9 +119,9 @@ public:
         , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
               []() {
                   return ERetryErrorClass::ShortRetry;
-              },
-              TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 10))
-        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()) {
+              }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 10000))
+        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
+    {
     }
 
     void Bootstrap() {

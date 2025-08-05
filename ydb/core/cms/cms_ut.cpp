@@ -2484,7 +2484,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Pile #1: There are 0 rings locked on this pile => it is possible to lock.
         env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
-        // Pile #0: There are 0 rings locked on this pile => it is possible to lock.                            
+        // Pile #0: There are 0 rings locked on this pile => it is possible to lock.
         env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
         // Pile #1: There is already one ring locked on this pile => it is not possible to lock.
@@ -2593,6 +2593,28 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Pile #0: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 5, down: 0, limit: 5 (MODE_KEEP_AVAILABLE)
         env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+        
+    }
+
+    Y_UNIT_TEST(CheckSysTabletsOnNodesWithPDisks) {
+        TTestEnvOpts opts(8, 1);
+        opts.NodesWithoutPDisksCount = 4;
+        TCmsTestEnv env(opts);
+        env.EnableSysNodeChecking();
+
+        // Locking 4 nodes without pdisks.
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        // tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes.
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
         
     }
 }

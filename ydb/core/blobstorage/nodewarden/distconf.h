@@ -212,7 +212,6 @@ namespace NKikimr::NStorage {
 
         // initial config based on config file and stored committed configs
         std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> InitialConfig;
-        std::vector<TString> DrivesToRead;
 
         // proposed storage configuration of the cluster
         std::optional<NKikimrBlobStorage::TStorageConfig> ProposedStorageConfig; // proposed one
@@ -282,6 +281,7 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TStorageConfig StorageConfig; // storage config being proposed
             TActorId ActorId; // actor id waiting for this operation to complete
             bool CheckSyncersAfterCommit; // shall we check Bridge syncers after commit has been made
+            bool MindPrev; // mind previous configuration quorum
         };
         std::optional<TProposition> CurrentProposition;
 
@@ -358,11 +358,13 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
 
-        void ReadConfig(ui64 cookie = 0);
+        void ReadConfig(std::vector<TString> paths, ui64 cookie = 0);
         void WriteConfig(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record);
         void PersistConfig(TPersistCallback callback);
         void Handle(TEvPrivate::TEvStorageConfigStored::TPtr ev);
         void Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev);
+
+        std::vector<TString> GetDrivesToRead(bool initial) const;
 
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
         static void UpdateFingerprint(NKikimrBlobStorage::TStorageConfig *config);
@@ -440,7 +442,7 @@ namespace NKikimr::NStorage {
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
             i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
-            std::optional<TBridgePileId> bridgePileId);
+            std::optional<TBridgePileId> bridgePileId, std::optional<TGroupId> bridgeProxyGroupId);
 
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config, bool& checkSyncersAfterCommit);
 
@@ -453,7 +455,8 @@ namespace NKikimr::NStorage {
         void SwitchToError(const TString& reason, bool timeout = true);
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool checkSyncersAfterCommit);
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool checkSyncersAfterCommit,
+            bool mindPrev);
 
         void CheckForConfigUpdate();
 
@@ -462,9 +465,10 @@ namespace NKikimr::NStorage {
         // Generate state storage config
 
         std::unordered_map<ui32, ui32> SelfHealNodesState;
-        
-        bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig);
+
+        bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
+            , const NKikimrBlobStorage::TStorageConfig& baseConfig
+            , std::unordered_set<ui32>& usedNodes);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge ops

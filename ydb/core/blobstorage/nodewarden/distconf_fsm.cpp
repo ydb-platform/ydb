@@ -493,7 +493,7 @@ namespace NKikimr::NStorage {
         }
 
         if (TStringStream err; HasConfigQuorum(proposition.StorageConfig, successfulDisks, BridgePileNameMap,
-                *Cfg, true, &err)) {
+                *Cfg, proposition.MindPrev, &err)) {
             // apply configuration and spread it
             ApplyStorageConfig(proposition.StorageConfig);
             FanOutReversePush(StorageConfig.get(), true /*recurseConfigUpdate*/);
@@ -544,17 +544,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::PrepareScatterTask(ui64 cookie, TScatterTask& task) {
         switch (task.Request.GetRequestCase()) {
             case TEvScatter::kCollectConfigs: {
-                std::vector<TString> drives;
-                auto callback = [&](const auto& /*node*/, const auto& drive) {
-                    drives.push_back(drive.GetPath());
-                };
-                EnumerateConfigDrives(*StorageConfig, SelfId().NodeId(), callback);
-                if (ProposedStorageConfig) {
-                    EnumerateConfigDrives(*ProposedStorageConfig, SelfId().NodeId(), callback);
-                }
-                std::sort(drives.begin(), drives.end());
-                drives.erase(std::unique(drives.begin(), drives.end()), drives.end());
-                ReadConfig(cookie);
+                ReadConfig(GetDrivesToRead(false), cookie);
                 ++task.AsyncOperationsPending;
                 break;
             }
@@ -752,7 +742,8 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> TDistributedConfigKeeper::StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool checkSyncersAfterCommit) {
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool checkSyncersAfterCommit,
+            bool mindPrev) {
         // ensure we are not proposing any other config right now
         Y_ABORT_UNLESS(!CurrentProposition);
 
@@ -794,6 +785,7 @@ namespace NKikimr::NStorage {
             .StorageConfig = *configToPropose,
             .ActorId = actorId,
             .CheckSyncersAfterCommit = checkSyncersAfterCommit,
+            .MindPrev = mindPrev,
         });
 
         // issue scatter task

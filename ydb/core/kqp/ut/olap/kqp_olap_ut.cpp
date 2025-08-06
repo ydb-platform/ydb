@@ -3405,7 +3405,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(BulkUpsertUpdate) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        runnerSettings.SetColumnShardAlterObjectEnabled(true).SetColumnShardReaderClassName("PLAIN");
+        runnerSettings.SetColumnShardAlterObjectEnabled(true);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TTestHelper testHelper(runnerSettings);
 
@@ -4333,7 +4333,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(ReverseMerge) {
         auto runnerSettings =
-            TKikimrSettings().SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true).SetColumnShardReaderClassName("PLAIN");
+            TKikimrSettings().SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true);
         runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();

@@ -296,6 +296,58 @@ namespace {
         row.FreeText(freeText);
     }
 
+    // Incremental backup
+    TPrettyTable MakeTable(const NYdb::NBackup::TIncrementalBackupResponse&) {
+        return TPrettyTable({"id", "ready", "status", "progress"});
+    }
+
+    TString PrintProgress(const NYdb::NBackup::TIncrementalBackupResponse::TMetadata& metadata) {
+        TStringBuilder result;
+
+        result << metadata.Progress;
+        if (metadata.Progress != NYdb::NBackup::EBackupProgress::TransferData) {
+            return result;
+        }
+
+        result << " (" << ToString(metadata.ProgressPercent) + "%)";
+        return result;
+    }
+
+    void PrettyPrint(const NYdb::NBackup::TIncrementalBackupResponse& operation, TPrettyTable& table) {
+        const auto& status = operation.Status();
+        const auto& metadata = operation.Metadata();
+
+        auto& row = table.AddRow();
+        row
+            .Column(0, operation.Id().ToString())
+            .Column(1, operation.Ready() ? "true" : "false")
+            .Column(2, status.GetStatus())
+            .Column(3, PrintProgress(metadata));
+
+        TStringBuilder freeText;
+
+        if (!status.GetIssues().Empty()) {
+            freeText << "Issues: " << Endl;
+            for (const auto& issue : status.GetIssues()) {
+                freeText << "  - " << issue << Endl;
+            }
+        }
+
+        if (!operation.CreatedBy().empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
+        }
+
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
+        }
+
+        if (operation.EndTime() != TInstant::Zero()) {
+            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
+        }
+
+        row.FreeText(freeText);
+    }
+
     // Common
     template <typename T>
     void PrintOperationImpl(const T& operation, EDataFormat format) {

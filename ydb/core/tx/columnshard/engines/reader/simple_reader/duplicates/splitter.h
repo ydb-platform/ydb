@@ -47,15 +47,15 @@ public:
 
 private:
     std::vector<TBorder> Borders;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
+    std::shared_ptr<arrow::Schema> SortingSchema;
 
 public:
     TColumnDataSplitter(const THashMap<ui64, NArrow::TFirstLastSpecialKeys>& sources, const NArrow::TFirstLastSpecialKeys& bounds) {
         AFL_VERIFY(sources.size());
-        PKSchema = sources.begin()->second.GetSchema();
+        SortingSchema = sources.begin()->second.GetSchema();
 
         for (const auto& [id, specials] : sources) {
-            AFL_VERIFY(specials.GetSchema()->Equals(PKSchema))("lhs", specials.GetSchema()->ToString())("rhs", PKSchema->ToString());
+            AFL_VERIFY(specials.GetSchema()->Equals(SortingSchema))("lhs", specials.GetSchema()->ToString())("rhs", SortingSchema->ToString());
             if (specials.GetFirst() > bounds.GetFirst()) {
                 Borders.emplace_back(TBorder::First(specials.GetFirst()));
             }
@@ -88,7 +88,7 @@ public:
         std::vector<ui64> borderOffsets;
         ui64 offset = 0;
 
-        auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, PKSchema->field_names(), {}, false);
+        auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, SortingSchema->field_names(), {}, false);
 
         for (const auto& border : Borders) {
             if (offset == data->GetRecordsCount()) {

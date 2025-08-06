@@ -55,6 +55,12 @@
 
 ## Транзакции с участием топиков и таблиц {#topic-table-transactions}
 
+{% note warning %}
+
+{% include [not_allow_for_olap](../../_includes/not_allow_for_olap_text.md) %}
+
+{% endnote %}
+
 {{ ydb-short-name }} поддерживает транзакции с участием [строковых таблиц](../glossary.md#row-oriented-table) и/или топиков. Таким образом, можно транзакционно перекладывать данные из таблиц в топики и в обратном направлении, а также между топиками, чтобы данные не терялись и не дублировались даже в случае непредвиденных обстоятельств.
 
 Подробнее о транзакционных операциях при работе с топиками см. в [{#T}](../topic.md#topic-transactions) и [{#T}](../../reference/ydb-sdk/topic.md).
@@ -63,4 +69,4 @@
 
 В настоящее время одновременное использование [столбцовые таблицы](../glossary.md#column-oriented-table) и [строковые таблицы](../glossary.md#row-oriented-table) таблиц возможно только в транзакциях Read-Only. Поддержка пишущих транзакций находится в разработке.
 
-При попытке выполнить запись в транзакции, включающих оба типа таблиц, транзакция завершится с ошибкой: `Write transactions between column and row tables are disabled at current time`. (TODO: переделать ошибку на `Write transactions with column and row tables are disabled at current time`.)
+При попытке выполнить запись в транзакции, включающих оба типа таблиц, транзакция завершится с ошибкой: `Write transactions between column and row tables are disabled at current time`.

@@ -30,6 +30,8 @@ items:
 - name: Асинхронная репликация
   href: async-replication.md
   when: feature_async_replication
+- name: Режим bridge
+  href: bridge.md
 - name: Оптимизатор запросов
   href: optimizer.md
 - name: Федеративные запросы

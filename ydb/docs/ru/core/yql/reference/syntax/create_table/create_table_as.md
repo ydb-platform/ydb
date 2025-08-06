@@ -63,7 +63,7 @@ CREATE TABLE my_table (
     STORE=COLUMN
 ) AS SELECT 
     key AS key1,
-    other_key AS key2,
+    Unwrap(other_key) AS key2,
     value,
     String::Contains(value, "test") AS has_test
 FROM other_table;

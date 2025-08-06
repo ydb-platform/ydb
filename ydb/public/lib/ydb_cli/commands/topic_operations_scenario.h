@@ -79,6 +79,8 @@ public:
     bool OnlyTopicInTx = true;
     bool OnlyTableInTx = false;
     bool UseTableSelect = false;
+    TDuration RestartInterval = TDuration::Max();
+    bool ReadWithoutCommit = false;
     bool ReadWithoutConsumer = false;
     bool UseCpuTimestamp = false;
     TMaybe<TString> KeyPrefix;

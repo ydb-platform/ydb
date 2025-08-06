@@ -240,6 +240,8 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .UseTopicCommit = OnlyTopicInTx,
                 .UseTableSelect = UseTableSelect && !OnlyTopicInTx,
                 .UseTableUpsert = !OnlyTopicInTx,
+                .RestartInterval = RestartInterval,
+                .ReadWithoutCommit = ReadWithoutCommit,
                 .ReadWithoutConsumer = ReadWithoutConsumer,
                 .CommitPeriodMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion,
                 .CommitMessages = CommitMessages

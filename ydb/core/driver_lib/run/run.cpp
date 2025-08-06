@@ -36,6 +36,7 @@
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
+#include <ydb/core/load_test/service_actor.h>
 #include <ydb/core/log_backend/log_backend.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/mon/crossref.h>
@@ -143,6 +144,7 @@
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/malloc/api/malloc.h>
 
+#include <ydb/core/util/failure_injection.h>
 #include <ydb/core/util/sig.h>
 #include <ydb/core/util/stlog.h>
 
@@ -517,7 +519,16 @@ void TKikimrRunner::InitializeMonitoringLogin(const TKikimrRunConfig&)
 void TKikimrRunner::InitializeControlBoard(const TKikimrRunConfig& runConfig)
 {
     if (Monitoring) {
-        Monitoring->RegisterActorPage(ActorsMonPage, "icb", "Immediate Control Board", false, ActorSystem.Get(), MakeIcbId(runConfig.NodeId));
+        Monitoring->RegisterActorPage(
+            ActorsMonPage,
+            "icb",
+            "Immediate Control Board",
+            false,
+            ActorSystem.Get(),
+            MakeIcbId(runConfig.NodeId),
+            true,
+            true,
+            IcbAuditResolver);
     }
 }
 
@@ -1466,7 +1477,10 @@ void TKikimrRunner::InitializeActorSystem(
                 "Logger",
                 false,
                 ActorSystem.Get(),
-                LogSettings->LoggerActorId);
+                LogSettings->LoggerActorId,
+                true,
+                true,
+                LoggerAuditResolver);
         }
 
         if (servicesMask.EnableProfiler) {
@@ -1476,7 +1490,10 @@ void TKikimrRunner::InitializeActorSystem(
                 "Profiler",
                 false,
                 ActorSystem.Get(),
-                MakeProfilerID(runConfig.NodeId));
+                MakeProfilerID(runConfig.NodeId),
+                true,
+                true,
+                ProfilerAuditResolver);
         }
 
         if (servicesMask.EnableLoadService) {
@@ -1486,7 +1503,10 @@ void TKikimrRunner::InitializeActorSystem(
                 "Load",
                 false,
                 ActorSystem.Get(),
-                MakeLoadServiceID(runConfig.NodeId));
+                MakeLoadServiceID(runConfig.NodeId),
+                true,
+                true,
+                LoadServiceAuditResolver);
         }
 
         if (servicesMask.EnableFailureInjectionService) {
@@ -1496,7 +1516,10 @@ void TKikimrRunner::InitializeActorSystem(
                 "Failure Injection",
                 false,
                 ActorSystem.Get(),
-                MakeBlobStorageFailureInjectionID(runConfig.NodeId));
+                MakeBlobStorageFailureInjectionID(runConfig.NodeId),
+                true,
+                true,
+                FailureInjectionAuditResolver);
         }
 
         Monitoring->RegisterActorPage(

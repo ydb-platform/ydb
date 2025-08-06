@@ -43,7 +43,8 @@ void InitVDiskBlobIndexStatJsonHandler(TJsonHandlers& jsonHandlers) {
 }
 
 void InitVDiskEvictJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/vdisk/evict", new TJsonHandler<TJsonVDiskEvict>(TJsonVDiskEvict::GetSwagger()));
+    handlers.AddHandler("/vdisk/evict", new TJsonHandler<TJsonVDiskEvict>(TJsonVDiskEvict::GetSwagger()), 1,
+                        NHttp::NAudit::EAuditableAction::EvictVdisk);
 }
 
 void InitVDiskJsonHandlers(TJsonHandlers& jsonHandlers) {

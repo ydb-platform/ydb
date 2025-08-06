@@ -2,14 +2,18 @@
 
 #include <ydb/core/protos/profiler.pb.h>
 
+#include <ydb/library/actors/http/audit/auditable_actions.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/service/mon_service_http_request.h>
 
 #include <util/generic/string.h>
+
 
 namespace NActors {
     struct TEvProfiler {
@@ -119,4 +123,6 @@ namespace NActors {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         TString dir,
         std::unique_ptr<IProfilerLogic> profiler = nullptr);
+
+    NHttp::NAudit::EAuditableAction ProfilerAuditResolver(const NMonitoring::IMonHttpRequest& request);
 }

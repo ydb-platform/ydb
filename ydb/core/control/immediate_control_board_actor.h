@@ -3,8 +3,10 @@
 #include "immediate_control_board_impl.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/service/mon_service_http_request.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/http/audit/auditable_actions.h>
 
 namespace NKikimr {
 
@@ -16,5 +18,6 @@ inline NActors::TActorId MakeIcbId(ui32 node) {
 class TImmediateControlActor;
 
 NActors::IActor* CreateImmediateControlActor(TIntrusivePtr<TControlBoard> board, const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters);
+NHttp::NAudit::EAuditableAction IcbAuditResolver(const NMonitoring::IMonHttpRequest& request);
 
 }

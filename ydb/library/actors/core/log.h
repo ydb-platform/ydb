@@ -21,6 +21,7 @@
 #include <library/cpp/svnversion/svnversion.h>
 
 #include <ydb/library/actors/memory_log/memlog.h>
+#include <ydb/library/actors/http/audit/auditable_actions.h>
 #include <ydb/library/services/services.pb.h>
 
 // TODO: limit number of messages per second
@@ -321,6 +322,7 @@ namespace NActors {
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName);
     TAutoPtr<TLogBackend> CreateNullBackend();
     TAutoPtr<TLogBackend> CreateCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends);
+    NHttp::NAudit::EAuditableAction LoggerAuditResolver(const NMonitoring::IMonHttpRequest& request);
 
     /////////////////////////////////////////////////////////////////////
     //  Logging adaptors for memory log and logging into filesystem

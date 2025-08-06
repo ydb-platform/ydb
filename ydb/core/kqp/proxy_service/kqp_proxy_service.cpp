@@ -200,6 +200,13 @@ public:
         , QueryCache(new TKqpQueryCache(TableServiceConfig.GetCompileQueryCacheSize(), TDuration::Seconds(TableServiceConfig.GetCompileQueryCacheTTLSec())))
     {}
 
+    static NHttp::NAudit::EAuditableAction KqpProxyAuditResolver(const NMonitoring::IMonHttpRequest& request) {
+        const TCgiParameters& cgi = request.GetParams();
+        return cgi.Has("force_shutdown")
+            ? NHttp::NAudit::EAuditableAction::ForceShutdownKqp
+            : NHttp::NAudit::EAuditableAction::Unknown;
+    }
+
     void Bootstrap(const TActorContext &ctx) {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
@@ -266,7 +273,7 @@ public:
             if (NActors::TMon* mon = AppData()->Mon) {
                 NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
                 mon->RegisterActorPage(actorsMonPage, "kqp_spilling_file", "KQP Local File Spilling Service", false,
-                    TActivationContext::ActorSystem(), SpillingService);
+                    TActivationContext::ActorSystem(), SpillingService, true, true, KqpProxyAuditResolver);
             }
         }
 
@@ -316,7 +323,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "kqp_proxy", "KQP Proxy", false,
-                TActivationContext::ActorSystem(), SelfId());
+                TActivationContext::ActorSystem(), SelfId(), true, true, KqpProxyAuditResolver);
         }
 
         KqpRmServiceActor = MakeKqpRmServiceID(SelfId().NodeId());

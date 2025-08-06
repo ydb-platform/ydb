@@ -166,10 +166,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr Guarantee;
         NMonitoring::TDynamicCounters::TCounterPtr Demand;
         NMonitoring::TDynamicCounters::TCounterPtr Usage;
+        NMonitoring::TDynamicCounters::TCounterPtr UsageResume;
         NMonitoring::TDynamicCounters::TCounterPtr Throttle;
         NMonitoring::TDynamicCounters::TCounterPtr FairShare;
         NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         NMonitoring::TDynamicCounters::TCounterPtr Waiting;
+        NMonitoring::TDynamicCounters::TCounterPtr Satisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr InFlightExtra;
         NMonitoring::TDynamicCounters::TCounterPtr UsageExtra;
         NMonitoring::THistogramPtr                 Delay;

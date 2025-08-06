@@ -34,6 +34,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> Throttle = 0;
 
         std::atomic<ui64> BurstUsage = 0;
+        std::atomic<ui64> BurstUsageResume = 0;
         std::atomic<ui64> BurstUsageExtra = 0;
         std::atomic<ui64> BurstThrottle = 0;
 

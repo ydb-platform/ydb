@@ -69,7 +69,7 @@ bool TSchedulableActorBase::StartExecution(TMonotonic now) {
     return Executed;
 }
 
-void TSchedulableActorBase::StopExecution() {
+void TSchedulableActorBase::StopExecution(bool& forcedResume) {
     Y_ASSERT(SchedulableTask);
 
     if (Executed) {
@@ -78,8 +78,12 @@ void TSchedulableActorBase::StopExecution() {
         TDuration timePassed = TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
         SchedulableTask->Query->CurrentTasksTime -= LastExecutionTime.MicroSeconds();
         LastExecutionTime = timePassed;
-        SchedulableTask->DecreaseUsage(timePassed);
+        SchedulableTask->DecreaseUsage(timePassed, forcedResume);
+        forcedResume = false;
         Executed = false;
+
+        SchedulableTask->Query->ResumeTasks(SchedulableTask->GetSpareUsage());
+        // TODO: resume tasks for all queries from parent leaf pool
     } else if (Throttled) {
         Resume();
     }

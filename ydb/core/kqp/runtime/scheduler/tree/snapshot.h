@@ -20,9 +20,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
         TPool* GetParent() const;
 
-        virtual void AccountFairShare(const TDuration& period);
+        virtual void AccountSnapshotDuration(const TDuration& period);
         virtual void UpdateBottomUp(ui64 totalLimit);
-        TTreeElement* UpdateTopDown(); // returns the most unsatisfied leaf pool
+        void UpdateTopDown();
     };
 
     class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::SNAPSHOT>, public std::enable_shared_from_this<TQuery> {
@@ -36,7 +36,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
     public:
         TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const TStaticAttributes& attrs = {});
 
-        void AccountFairShare(const TDuration& period) override;
+        void AccountSnapshotDuration(const TDuration& period) override;
         void UpdateBottomUp(ui64 totalLimit) override;
     };
 
@@ -57,10 +57,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         void RemoveDatabase(const TDatabaseId& databaseId);
         TDatabasePtr GetDatabase(const TDatabaseId& databaseId) const;
 
-        void AccountFairShare(const TRootPtr& previous);
-
-    private:
-        using TTreeElement::AccountFairShare;
+        void AccountPreviousSnapshot(const TRootPtr& snapshot);
     };
 
 }

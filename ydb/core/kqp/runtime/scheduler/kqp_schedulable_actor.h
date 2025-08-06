@@ -36,7 +36,7 @@ protected:
     }
 
     bool StartExecution(TMonotonic now);
-    void StopExecution();
+    void StopExecution(bool& forcedResume);
 
     TDuration CalculateDelay(TMonotonic now) const;
 

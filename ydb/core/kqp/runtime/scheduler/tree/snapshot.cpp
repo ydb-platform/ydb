@@ -12,9 +12,9 @@ TPool* TTreeElement::GetParent() const {
     return dynamic_cast<TPool*>(Parent);
 }
 
-void TTreeElement::AccountFairShare(const TDuration& period) {
+void TTreeElement::AccountSnapshotDuration(const TDuration& period) {
     ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
-        child->AccountFairShare(period);
+        child->AccountSnapshotDuration(period);
     });
 }
 
@@ -36,20 +36,19 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit) {
     Guarantee = Min<ui64>(GetGuarantee(), Demand);
 }
 
-TTreeElement* TTreeElement::UpdateTopDown() {
+void TTreeElement::UpdateTopDown() {
     if (IsRoot()) {
         FairShare = Demand;
     }
 
     // At this moment we know own fair-share. Need to calibrate children.
 
-    TTreeElement* mostUnsatisfied = this;
-    if (FairShare >= 1'000'000) {
-        Satisfaction = Usage/float(FairShare);
+    if (FairShare) {
+        Satisfaction = Usage / float(FairShare);
     }
 
     if (!IsPool()) {
-        return mostUnsatisfied;
+        return;
     }
 
     // Fair-share variant (when children are pools and databases)
@@ -70,12 +69,7 @@ TTreeElement* TTreeElement::UpdateTopDown() {
                 child->FairShare = 0;
             }
 
-            auto* unsatisfied = child->UpdateTopDown();
-            if (mostUnsatisfied == this || !mostUnsatisfied->Satisfaction ||
-                unsatisfied->Satisfaction && *unsatisfied->Satisfaction <= *mostUnsatisfied->Satisfaction)
-            {
-                mostUnsatisfied = unsatisfied;
-            }
+            child->UpdateTopDown();
         });
     }
     // FIFO variant (when children are queries)
@@ -106,8 +100,6 @@ TTreeElement* TTreeElement::UpdateTopDown() {
             query->Origin->SetSnapshot(query->shared_from_this());
         });
     }
-
-    return mostUnsatisfied;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -133,16 +125,19 @@ TPool::TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, co
 {
     if (counters) {
         Counters = TPoolCounters();
+        Counters->Satisfaction = counters->Satisfaction;
         Counters->Demand    = counters->Demand;
         Counters->FairShare = counters->FairShare;
     }
 }
 
-void TPool::AccountFairShare(const TDuration& period) {
+void TPool::AccountSnapshotDuration(const TDuration& period) {
     if (Counters) {
         Counters->FairShare->Add(FairShare * period.MicroSeconds());
+        Counters->Satisfaction->Set(Satisfaction.value_or(0) * 1'000'000);
+        // TODO: calculate satisfaction as burst-usage increment / fair-share increment - for better precision
     }
-    TTreeElement::AccountFairShare(period);
+    TTreeElement::AccountSnapshotDuration(period);
 }
 
 void TPool::UpdateBottomUp(ui64 totalLimit) {
@@ -184,8 +179,8 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
     return std::static_pointer_cast<TDatabase>(GetPool(databaseId));
 }
 
-void TRoot::AccountFairShare(const TRootPtr& previous) {
-    AccountFairShare(Timestamp - previous->Timestamp);
+void TRoot::AccountPreviousSnapshot(const TRootPtr& snapshot) {
+    AccountSnapshotDuration(Timestamp - snapshot->Timestamp);
 }
 
 } // namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot

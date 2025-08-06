@@ -55,20 +55,31 @@ bool TSchedulableTask::TryIncreaseUsage() {
 
 // TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
 void TSchedulableTask::IncreaseUsage() {
-    if (Iterator) {
-        (*Iterator)->second = false;
-    }
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         ++parent->Usage;
     }
 }
 
 // TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
-void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage) {
+void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedResume) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         --parent->Usage;
-        parent->BurstUsage += burstUsage.MicroSeconds();
+        if (forcedResume) {
+            parent->BurstUsageResume += burstUsage.MicroSeconds();
+        } else {
+            parent->BurstUsage += burstUsage.MicroSeconds();
+        }
     }
+}
+
+size_t TSchedulableTask::GetSpareUsage() const {
+    if (const auto snapshot = Query->GetSnapshot()) {
+        auto usage = Query->GetParent()->Usage.load();
+        auto fairShare = snapshot->GetParent()->FairShare;
+        return fairShare >= usage ? (fairShare - usage) : 0;
+    }
+
+    return 0;
 }
 
 void TSchedulableTask::IncreaseExtraUsage() {
@@ -100,6 +111,9 @@ void TSchedulableTask::IncreaseThrottle() {
 }
 
 void TSchedulableTask::DecreaseThrottle() {
+    if (Iterator) {
+        (*Iterator)->second = false;
+    }
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         --parent->Throttle;
     }

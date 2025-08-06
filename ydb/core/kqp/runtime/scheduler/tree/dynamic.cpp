@@ -78,19 +78,21 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account with microsecond precision
 
     Counters = TPoolCounters();
-    Counters->Limit     = group->GetCounter("Limit",     false);
-    Counters->Guarantee = group->GetCounter("Guarantee", false);
-    Counters->Demand    = group->GetCounter("Demand",    false); // snapshot
-    Counters->InFlight  = group->GetCounter("InFlight",  false);
-    Counters->Waiting   = group->GetCounter("Waiting",   false);
-    Counters->Usage     = group->GetCounter("Usage",     true);
-    Counters->Throttle  = group->GetCounter("Throttle",  true);
-    Counters->FairShare = group->GetCounter("FairShare", true);  // snapshot
+    Counters->Satisfaction = group->GetCounter("Satisfaction", false); // snapshot
+    Counters->Limit        = group->GetCounter("Limit",        false);
+    Counters->Guarantee    = group->GetCounter("Guarantee",    false);
+    Counters->Demand       = group->GetCounter("Demand",       false); // snapshot
+    Counters->InFlight     = group->GetCounter("InFlight",     false);
+    Counters->Waiting      = group->GetCounter("Waiting",      false);
+    Counters->Usage        = group->GetCounter("Usage",        true);
+    Counters->UsageResume  = group->GetCounter("UsageResume",  true);
+    Counters->Throttle     = group->GetCounter("Throttle",     true);
+    Counters->FairShare    = group->GetCounter("FairShare",    true);  // snapshot
 
-    Counters->InFlightExtra = group->GetCounter("InFlightExtra",  false);
-    Counters->UsageExtra    = group->GetCounter("UsageExtra",     true);
+    Counters->InFlightExtra = group->GetCounter("InFlightExtra", false);
+    Counters->UsageExtra    = group->GetCounter("UsageExtra",    true);
 
-    Counters->Delay     = group->GetHistogram("Delay",
+    Counters->Delay = group->GetHistogram("Delay",
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
 }
 
@@ -103,6 +105,7 @@ NSnapshot::TPool* TPool::TakeSnapshot() const {
         Counters->InFlight->Set(Usage * 1'000'000);
         Counters->Waiting->Set(Throttle * 1'000'000);
         Counters->Usage->Set(BurstUsage);
+        Counters->UsageResume->Set(BurstUsageResume);
         Counters->Throttle->Set(BurstThrottle);
 
         Counters->InFlightExtra->Set(UsageExtra * 1'000'000);

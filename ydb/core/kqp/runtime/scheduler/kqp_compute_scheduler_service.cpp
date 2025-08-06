@@ -273,22 +273,13 @@ void TComputeScheduler::UpdateFairShare() {
     }
 
     snapshot->UpdateBottomUp(Root->TotalLimit);
-    auto* mostUnsatisfiedPool = snapshot->UpdateTopDown();
-    Y_ENSURE(mostUnsatisfiedPool->IsPool() && mostUnsatisfiedPool->IsLeaf());
+    snapshot->UpdateTopDown();
 
     {
         TWriteGuard lock(Mutex);
         if (auto oldSnapshot = Root->SetSnapshot(snapshot)) {
-            snapshot->AccountFairShare(oldSnapshot);
+            snapshot->AccountPreviousSnapshot(oldSnapshot);
         }
-    }
-
-    if (mostUnsatisfiedPool->Satisfaction && mostUnsatisfiedPool->Satisfaction < 1.0) {
-        auto leftTasks = (mostUnsatisfiedPool->FairShare - mostUnsatisfiedPool->Usage) / 1'000'000;
-        mostUnsatisfiedPool->ForEachChild<NHdrf::NSnapshot::TQuery>([&](NHdrf::NSnapshot::TQuery* query, size_t) -> bool {
-            leftTasks -= query->Origin->ResumeTasks(leftTasks);
-            return !leftTasks; // 'true' means stop iterating children
-        });
     }
 
     Counters.UpdateFairShare->Add((TMonotonic::Now() - startTime).MicroSeconds());

@@ -41,7 +41,7 @@ namespace NKikimr::NKqp::NScheduler {
         void PassAway() override {
             if (!PassedAway && IsAccountable()) {
                 PassedAway = true;
-                StopExecution();
+                StopExecution(ForcedResume);
             }
 
             TBase::PassAway();
@@ -51,6 +51,7 @@ namespace NKikimr::NKqp::NScheduler {
         void Handle(TSchedulableTask::TResumeEventType::TPtr& ev) {
             if (TSchedulableTask::IsResumeEvent(ev)) {
                 if (IsThrottled()) {
+                    ForcedResume = ev->Sender != this->SelfId();
                     TBase::DoExecute();
                 }
             } else {
@@ -70,7 +71,7 @@ namespace NKikimr::NKqp::NScheduler {
             if (StartExecution(now)) {
                 TBase::DoExecuteImpl();
                 if (!PassedAway) {
-                    StopExecution();
+                    StopExecution(ForcedResume);
                 }
                 return;
             }
@@ -80,6 +81,7 @@ namespace NKikimr::NKqp::NScheduler {
 
     private:
         bool PassedAway = false;
+        bool ForcedResume = false;
     };
 
 } // namespace NKikimr::NKqp::NScheduler

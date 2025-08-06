@@ -26,7 +26,10 @@ struct TSchedulableTask : public std::enable_shared_from_this<TSchedulableTask> 
 
     bool TryIncreaseUsage();
     void IncreaseUsage();
-    void DecreaseUsage(const TDuration& burstUsage);
+    void DecreaseUsage(const TDuration& burstUsage, bool forcedResume);
+
+    // Returns parent pool's 'fair-share' - 'usage'
+    size_t GetSpareUsage() const;
 
     // Account extra usage which doesn't affect scheduling
     void IncreaseExtraUsage();

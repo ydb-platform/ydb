@@ -199,6 +199,9 @@ struct TEvPQ {
         EvDeletePartitionDone,
         EvTransactionCompleted,
         EvListAllTopicsResponse,
+        EvAcquireExclusiveLock,
+        EvExclusiveLockAcquired,
+        EvReleaseExclusiveLock,
         EvEnd
     };
 
@@ -1230,6 +1233,14 @@ struct TEvPQ {
         TString Error;
     };
 
+    struct TEvAcquireExclusiveLock : public TEventLocal<TEvAcquireExclusiveLock, EvAcquireExclusiveLock> {
+    };
+
+    struct TEvExclusiveLockAcquired : public TEventLocal<TEvExclusiveLockAcquired, EvExclusiveLockAcquired> {
+    };
+
+    struct TEvReleaseExclusiveLock : public TEventLocal<TEvReleaseExclusiveLock, EvReleaseExclusiveLock> {
+    };
 };
 
 } //NKikimr

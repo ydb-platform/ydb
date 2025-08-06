@@ -143,6 +143,8 @@ public:
     void HandleConfigUpdate(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     virtual void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) = 0;
     virtual void HandleUpdateAccountQuotaCounters(NAccountQuoterEvents::TEvCounters::TPtr& ev, const TActorContext& ctx) = 0;
+    void HandleAcquireExclusiveLock(TEvPQ::TEvAcquireExclusiveLock::TPtr& ev, const TActorContext& ctx);
+    void HandleReleaseExclusiveLock(TEvPQ::TEvReleaseExclusiveLock::TPtr& ev, const TActorContext& ctx);
 
 protected:
     virtual void HandleQuotaRequestImpl(TRequestContext& context) = 0;
@@ -177,7 +179,7 @@ private:
 
     void ScheduleWakeUp(const TActorContext& ctx);
 
-STFUNC(StateWork)
+    STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPQ::TEvRequestQuota, HandleQuotaRequest);
@@ -186,12 +188,16 @@ STFUNC(StateWork)
             HFunc(TEvPQ::TEvConsumed, HandleConsumed);
             HFunc(TEvPQ::TEvChangePartitionConfig, HandleConfigUpdate);
             HFunc(NAccountQuoterEvents::TEvCounters, HandleUpdateAccountQuotaCounters);
+            HFunc(TEvPQ::TEvAcquireExclusiveLock, HandleAcquireExclusiveLock);
+            HFunc(TEvPQ::TEvReleaseExclusiveLock, HandleReleaseExclusiveLock);
             HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
         default:
             ProcessEventImpl(ev);
             break;
         };
     }
+
+    void ReplyExclusiveLockAcquired(const TActorId& receiver);
 
 protected:
     std::deque<TRequestContext> WaitingInflightRequests;
@@ -205,6 +211,12 @@ protected:
     TTabletCountersBase Counters;
 
 private:
+    enum class EExclusiveLockState {
+        EReleased,
+        EAcquiring,
+        EAcquired,
+    };
+
     TActorId TabletActor;
     std::deque<TRequestContext> WaitingTotalPartitionQuotaRequests;
     THashMap<ui64, TRequestContext> PendingAccountQuotaRequests;
@@ -213,6 +225,8 @@ private:
     ui64 MaxInflightRequests;
     bool TotalPartitionQuotaEnabled;
     TVector<TEvPQ::TEvRequestQuota::TPtr> PendingQuotaRequests;
+    EExclusiveLockState ExclusiveLockState = EExclusiveLockState::EReleased;
+    TActorId ExclusiveLockRequester;
 };
 
 

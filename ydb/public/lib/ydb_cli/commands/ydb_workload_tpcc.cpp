@@ -74,7 +74,7 @@ void TCommandTPCCInit::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     config.Opts->AddLongOption(
         "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
@@ -121,7 +121,7 @@ void TCommandTPCCImport::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     // TODO: detect automatically
     config.Opts->AddLongOption(
@@ -189,7 +189,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     // TODO: default value should be auto
     config.Opts->AddLongOption(
@@ -295,7 +295,7 @@ void TCommandTPCCCheck::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     config.Opts->AddLongOption(
         "just-imported", TStringBuilder() << "Turns on additional checks. "

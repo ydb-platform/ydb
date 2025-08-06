@@ -10,6 +10,7 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
@@ -183,7 +184,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     }
 
                     for (auto& [index, arrowResult] : resultsArrow) {
-                        resultSets[index].SetArrowResult(std::move(arrowResult));
+                        TArrowAccessor::SetResultArrow(resultSets[index], std::move(arrowResult));
                     }
 
                     self->Promise_.SetValue(TExecuteQueryResult(
@@ -288,7 +289,7 @@ public:
             if (settings.ArrowFormatSettings_->CompressionCodec_) {
                 auto codec = formatSettings->mutable_compression_codec();
                 auto type = settings.ArrowFormatSettings_->CompressionCodec_->Type_;
-                codec->set_type(::Ydb::Formats::ArrowFormatSettings_CompressionCodec_Type(type));
+                codec->set_type(::Ydb::Formats::ArrowFormatSettings::CompressionCodec::Type(type));
 
                 if (settings.ArrowFormatSettings_->CompressionCodec_->Level_) {
                     codec->set_level(*settings.ArrowFormatSettings_->CompressionCodec_->Level_);

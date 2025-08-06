@@ -13,6 +13,8 @@ namespace Ydb {
 namespace NYdb::inline Dev {
 
 class TProtoAccessor;
+class TArrowAccessor;
+struct TResultArrow;
 
 struct TColumn {
     std::string Name;
@@ -29,15 +31,12 @@ struct TColumn {
 bool operator==(const TColumn& col1, const TColumn& col2);
 bool operator!=(const TColumn& col1, const TColumn& col2);
 
-struct TResultArrow {
-    std::string Schema;
-    std::vector<std::string> Data;
-};
-
 //! Collection of rows, represents result of query or part of the result in case of stream operations
 class TResultSet {
     friend class TResultSetParser;
     friend class NYdb::TProtoAccessor;
+    friend class NYdb::TArrowAccessor;
+
 public:
     enum class EFormat {
         Unspecified = 0,
@@ -61,17 +60,14 @@ public:
     //! Returns meta information (name, type) for columns
     const std::vector<TColumn>& GetColumnsMeta() const;
 
-    //! Returns format of the result set
-    EFormat Format() const;
-
-    //! Set Arrow record batch with serialized schema and data
-    void SetArrowResult(const TResultArrow& resultArrow);
-
-    //! Returns Arrow record batch with serialized schema and data
-    const TResultArrow& GetArrowResult() const;
-
 private:
     const Ydb::ResultSet& GetProto() const;
+
+    EFormat Format() const;
+
+    void SetArrowResult(TResultArrow&& resultArrow);
+
+    const TResultArrow& GetArrowResult() const;
 
 private:
     class TImpl;

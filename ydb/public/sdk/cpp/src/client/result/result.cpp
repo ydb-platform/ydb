@@ -1,6 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 
 #include <ydb/public/api/protos/ydb_common.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -93,8 +94,8 @@ const Ydb::ResultSet& TResultSet::GetProto() const {
     return Impl_->ProtoResultSet_;
 }
 
-void TResultSet::SetArrowResult(const TResultArrow& resultArrow) {
-    Impl_->ResultArrow_ = resultArrow;
+void TResultSet::SetArrowResult(TResultArrow&& resultArrow) {
+    Impl_->ResultArrow_ = std::move(resultArrow);
 }
 
 const TResultArrow& TResultSet::GetArrowResult() const {

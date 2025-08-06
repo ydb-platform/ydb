@@ -150,7 +150,9 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
                 AFL_VERIFY(PathsToDrop[table.GetDropVersionVerified()].emplace(table.GetPathId().InternalPathId).second);
             }
             const auto& pathId = table.GetPathId();
-            AFL_VERIFY(pathId.InternalPathId <= MaxInternalPathId)("path_id", pathId)("max_internal_path_id", MaxInternalPathId);
+            if (GenerateInternalPathId) {
+                AFL_VERIFY(pathId.InternalPathId <= MaxInternalPathId)("path_id", pathId)("max_internal_path_id", MaxInternalPathId);
+            }
             AFL_VERIFY(Tables.emplace(pathId.InternalPathId, std::move(table)).second);
             AFL_VERIFY(SchemeShardLocalToInternal.emplace(pathId.SchemeShardLocalPathId, pathId.InternalPathId).second);
 

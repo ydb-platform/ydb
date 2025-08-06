@@ -2,7 +2,7 @@
 
 ## Can {{ ydb-short-name }} be used for analytical workloads (OLAP)?
 
-Yes, it can. If this is the primary type of workload for a given table, make sure it is [column-oriented](../concepts/datamodel/table.md#column-oriented-tables). {{ ydb-short-name }} is designed as a [HTAP DBMS](../concepts/htap.md), capable of handling both OLTP and OLAP workloads efficiently.
+Yes, it can. If this is the primary type of workload for a given table, make sure it is [column-oriented](../concepts/datamodel/table.md#column-oriented-tables). {{ ydb-short-name }} is designed as a [universal database](../concepts/universal-database.md), capable of handling both OLTP and OLAP workloads efficiently.
 
 ## How to choose between row-oriented and column-oriented tables?
 

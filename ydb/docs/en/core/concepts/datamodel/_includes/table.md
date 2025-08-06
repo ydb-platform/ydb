@@ -17,7 +17,7 @@ CREATE TABLE article (
 
 Please note that currently, the `NOT NULL` constraint can only be applied to columns that are part of the primary key.
 
-{{ ydb-short-name }} supports the creation of both row-oriented and column-oriented tables. The primary difference between them lies in their use cases and how data is stored on the disk drive. In row-oriented tables, data is stored sequentially in the form of rows, while in column-oriented tables, data is stored in the form of columns. Each table type has its own specific purpose. This dual approach is a key feature of {{ ydb-short-name }}'s [{#T}](../../htap.md) capabilities.
+{{ ydb-short-name }} supports the creation of both row-oriented and column-oriented tables. The primary difference between them lies in their use cases and how data is stored on the disk drive. In row-oriented tables, data is stored sequentially in the form of rows, while in column-oriented tables, data is stored in the form of columns. Each table type has its own specific purpose.
 
 ## Row-Oriented Tables {#row-oriented-tables}
 

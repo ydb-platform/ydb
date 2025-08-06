@@ -6,7 +6,7 @@ Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
 
 {% endnote %}
 
-A column-oriented table in {{ ydb-short-name }} is a relational table containing a set of related data and made up of rows and columns. Unlike regular [row-oriented {{ ydb-short-name }} tables](#table) designed for [OLTP loads](https://en.wikipedia.org/wiki/OLTP), column-oriented tables are optimized for data analytics and [OLAP loads](https://en.wikipedia.org/wiki/OLAP). This dual-mode support is a key feature of {{ ydb-short-name }}'s [{#T}](htap.md) architecture.
+A column-oriented table in {{ ydb-short-name }} is a relational table containing a set of related data and made up of rows and columns. Unlike regular [row-oriented {{ ydb-short-name }} tables](#table) designed for [OLTP loads](https://en.wikipedia.org/wiki/OLTP), column-oriented tables are optimized for data analytics and [OLAP loads](https://en.wikipedia.org/wiki/OLAP).
 
 The current primary use case for column-oriented tables is writing data with the increasing primary key, for example, event time, analyzing this data, and deleting expired data based on TTL. The optimal method of inserting data to column-oriented tables is batch writing in blocks of several megabytes.
 

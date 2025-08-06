@@ -20,7 +20,7 @@ The term **Distributed SQL** describes a new generation of relational database
 
 ### Hybrid Transactional/Analytical Processing {#htap}
 
-The term **Hybrid Transactional/Analytical Processing (HTAP)** refers to database systems that can efficiently handle both [transactional (OLTP)](https://en.wikipedia.org/wiki/Online_transaction_processing) and [analytical (OLAP)](https://en.wikipedia.org/wiki/Online_analytical_processing) workloads within a single engine. HTAP databases eliminate the need for separate systems for these workloads and complex ETL processes, enabling real-time analytics on fresh transactional data without impacting performance. Read more in [{#T}](htap.md).
+The term **Hybrid Transactional/Analytical Processing (HTAP)** refers to database systems that can efficiently handle both [transactional (OLTP)](https://en.wikipedia.org/wiki/Online_transaction_processing) and [analytical (OLAP)](https://en.wikipedia.org/wiki/Online_analytical_processing) workloads within a single engine. HTAP databases eliminate the need for separate systems for these workloads and complex ETL processes, enabling real-time analytics on fresh transactional data without impacting performance. Read more about [HTAP](https://en.wikipedia.org/wiki/Hybrid_transactional/analytical_processing).
 
 ### Universal database {#universal-database}
 
@@ -28,7 +28,7 @@ A **universal database** is a comprehensive data management system designed to n
 
 ### Converged database {#converged-database}
 
-A **converged database** extends the [HTAP](#htap) vision by unifying *all* critical data capabilities—transactions, analytics, streams, vector search, graph, document, time‑series—within a single distributed platform. By collapsing multiple specialized engines into one strongly consistent, elastically scalable back‑end, a converged database removes the latency, integration cost, and governance risks that arise when data sprawls across purpose‑built systems. Read more in [{#T}](converged-database.md).
+A **converged database** extends the [HTAP](#htap) vision by unifying *all* critical data capabilities—transactions, analytics, streams, vector search, graph, document, time‑series—within a single distributed platform. By collapsing multiple specialized engines into one strongly consistent, elastically scalable back‑end, a converged database removes the latency, integration cost, and governance risks that arise when data sprawls across purpose‑built systems. Read more in [{#T}](universal-database.md).
 
 ### Cluster {#cluster}
 

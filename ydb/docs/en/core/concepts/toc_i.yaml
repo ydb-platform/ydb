@@ -20,10 +20,6 @@ items:
   href: distributed-sql.md
 - name: Universal Database
   href: universal-database.md
-- name: Converged Database
-  href: converged-database.md
-- name: HTAP
-  href: htap.md
 - name: Transactions
   href: transactions.md
 - name: Secondary indexes

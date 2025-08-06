@@ -2,65 +2,74 @@
 
 ## What Is a Universal Database?
 
-A **universal database** is a comprehensive data management system designed to handle diverse workloads and data models through a unified architecture. Similarly to [converged databases](converged-database.md), universal databases not only focus on combining transactional and analytical processing with additional capabilities, but take this concept even further by providing a complete ecosystem for all data management needs with seamless integration and native support for modern workloads.
+A **universal database** is a database system that supports multiple data models and workload types within a single platform. These systems extend beyond traditional [OLTP](https://en.wikipedia.org/wiki/Online_transaction_processing) and [OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing) systems by integrating additional capabilities such as vector search, stream processing, and document storage.
 
-### Key Universal Database Concepts
+### Key Concepts
 
-* **Unified data platform**: A comprehensive system that natively supports multiple data paradigms including relational, document, key-value, time-series, and vector data.
-* **Workload versatility**: A single database engine capable of handling any combination of OLTP, OLAP, stream processing, vector search, and AI operations.
-* **Data fabric architecture**: Consistent data access and management across distributed environments, including cloud and on-premises deployments.
-* **AI-native capabilities**: Built-in support for AI workloads, including vector operations and embeddings management.
-* **Cross-domain data governance**: Unified security, compliance, and governance across all data types and processing modes.
+* **Multi-model support**: Support for relational, document, key-value, time-series, and vector data within a single system
+* **Workload consolidation**: Processing of [OLTP](https://en.wikipedia.org/wiki/Online_transaction_processing), [OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing), stream processing, and vector search operations using shared infrastructure
+* **Unified query interface**: Single query language and Application Programming Interface (API) for accessing different data models and processing modes
+* **Integrated storage**: Shared storage layer that handles different data types without requiring separate systems
+* **Cross-workload governance**: Consistent security, compliance, and administration across all supported workloads
 
-### Key {{ ydb-short-name }} Universal Database Features
+### Key Features of {{ ydb-short-name }} as a Universal Database
 
-* **Full [HTAP](htap.md) support**: Seamless handling of both transactional and analytical workloads.
+* **Full support for both [OLTP](https://en.wikipedia.org/wiki/Online_transaction_processing) and [OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing)**: Seamless handling of both transactional and analytical workloads.
+* **Multi-Model Support**: [Vector operations](vector_search.md) for similarity search and ML model integration, [JSON operations](../yql/reference/builtins/json.md) and document storage, time-series data handling with temporal queries, and integration with [AI frameworks](../integrations/vectorsearch/langchain.md) such as LangChain.
+* **Event Processing Capabilities**: [Topics](topic.md) for event streaming with ordering guarantees and exactly-once delivery, [Change Data Capture (CDC)](cdc.md) for real-time data change tracking, and event sourcing patterns with persistent event storage.
+* **Query Processing**: Unified SQL interface across all supported data models, [Federated queries](federated_query/index.md) for accessing external data sources, and distributed query execution with cross-model optimization.
 * **[AI integration](ai-database.md)**: Native support for AI operations, including vector operations and embeddings storage.
 * **[Retrieval-Augmented Generation (RAG)](rag.md)**: Built-in capabilities for implementing AI applications that combine database retrieval with generative AI.
 * **Advanced streaming with [Topics](topic.md)**: Enterprise-grade publish/subscribe messaging system with exactly-once semantics and ordering guarantees.
 * **Comprehensive [Vector Search](vector_search.md)**: High-performance similarity search integrated into the core query engine.
 * **Extensible [Federated Queries](federated_query/index.md)**: Ability to query and combine data from diverse external sources through a unified SQL interface.
-* **Cross-region [Asynchronous Replication](async-replication.md)**: Replicating data between geographically distributed clusters with minimal latency.
+* **Cross-region [Asynchronous Replication](async-replication.md)**: Replicating data between geographically distributed clusters with minimal lag.
 * **Event-driven architecture with [CDC](cdc.md)**: Capturing and processing data changes in real-time for event-driven applications.
 
-## Scalability in Universal Databases
+## Scaling Considerations
 
-Universal databases implement advanced scaling strategies that work together to provide exceptional performance and reliability. The elastic scalability feature dynamically adjusts resources based on workload demands, ensuring optimal performance at all times. This is enhanced by sharding, which optimizes data distribution based on access patterns to minimize latency and maximize throughput. Native support for geo-distributed deployments allows data to be available whenever it's needed even in case of datacenter outages. Critical workloads are protected through resource isolation, which guarantees performance through fine-grained resource governance. Additionally, multi-layered storage tiering can place data on appropriate storage mediums based on access patterns, balancing cost and performance requirements.
+Universal databases face unique scaling challenges due to their multi-workload nature:
 
-## Universal Database Use Cases
+* **Resource allocation**: Different workloads (OLTP, OLAP, vector search) have varying resource requirements and access patterns
+* **Data distribution**: Sharding strategies must account for multiple data models and query types
+* **Performance isolation**: Preventing resource contention between concurrent workload types
+* **Storage tiering**: Managing different storage requirements for transactional, analytical, and vector data
+* **Geographic distribution**: Coordinating distributed operations across multiple data models and workload types
 
-### AI-Powered Applications
+## Common Use Cases
 
-Modern AI applications require [extensive data management capabilities](ai-database.md). Universal databases excel in this area by storing and managing vector embeddings for machine learning models efficiently. They enable developers to combine semantic similarity search with traditional predicates, creating powerful hybrid query capabilities. This foundation makes it possible to support sophisticated [RAG](rag.md) applications with real-time data access, delivering more accurate and contextually relevant AI responses.
+### Applications Requiring Multiple Data Models
 
-### Unified Enterprise Data Platform
+Systems that need to handle structured transactions alongside document storage, vector search, or time-series data benefit from consolidation in a universal database. Examples include:
 
-A universal database serves as a comprehensive foundation for enterprise data needs. By replacing specialized systems with a single universal platform, organizations can significantly reduce complexity and maintenance overhead. This consolidation eliminates the need for data movement between disparate systems, reducing latency and potential points of failure. Additionally, it provides consistent security and governance across all data, simplifying compliance efforts and improving overall data protection.
+* E-commerce platforms combining transactional data, product catalogs (documents), and recommendation engines (vectors)
+* IoT systems processing time-series sensor data alongside relational metadata and event streams
+* Content management systems storing structured metadata, document content, and similarity-based search indexes
 
-### Event-Driven Architectures
+### AI and Machine Learning Workloads
 
-Event-driven systems benefit greatly from the capabilities of universal databases. They provide the foundation to build reactive systems with real-time data processing, enabling immediate responses to changing conditions. The platform supports implementing event sourcing patterns with guaranteed ordering, ensuring reliable event sequence reconstruction. Additionally, universal databases connect event producers and consumers through a reliable message bus, facilitating smooth and dependable communication between system components.
+Universal databases support [AI applications](ai-database.md) that require:
 
-## Choosing a Universal Database Solution
+* Vector storage and similarity search for embeddings
+* Hybrid queries combining vector search with traditional predicates
+* [RAG](rag.md) implementations requiring fast retrieval alongside transactional data
+* Real-time feature stores combining historical and streaming data
 
-When evaluating universal database platforms, consider these factors:
+### Event-Driven Systems
 
-1. **Data model requirements**: Assess your needs for relational, document, and vector data models
-2. **Workload diversity**: Consider the range of processing functionality required by your applications
-3. **Deployment environment**: Evaluate your needs across cloud and on-premises deployments
-4. **Scalability requirements**: Project future growth in data volume, velocity, and variety
-5. **Ecosystem integration**: Assess compatibility with your existing technology stack and tools
+Applications using event-driven architectures can leverage universal databases for:
 
-## {{ ydb-short-name }} Universal Database Features
+* Event sourcing with ordered event storage and replay capabilities
+* [Change Data Capture (CDC)](cdc.md) for real-time data synchronization
+* Stream processing integrated with persistent state management
+* Message queuing with transactional guarantees
 
-### AI Capabilities in {{ ydb-short-name }}
+## Implementation Considerations
 
-{{ ydb-short-name }} offers comprehensive AI support through its vector operations for ML model integration and [similarity search](vector_search.md). The platform includes optimized storage for embeddings and high-dimensional data, ensuring efficient access and management of AI assets. To facilitate development, {{ ydb-short-name }} integrates with popular AI frameworks like [LangChain](../integrations/vectorsearch/langchain.md), enabling end-to-end machine learning workflows with minimal friction. See [{#T}](ai-database.md) for more details.
+When implementing or selecting a universal database system, key factors include:
 
-### Event Processing in {{ ydb-short-name }}
-
-Event processing in {{ ydb-short-name }} provides [event sourcing](topic.md) with guaranteed ordering and exactly-once delivery, ensuring reliable event-based applications. The system supports real-time stream processing with low latency, enabling immediate responses to business events. This capability is enhanced through integration with [CDC](cdc.md) for capturing and processing data changes as they occur, making it easy to build reactive systems that respond to database modifications.
-
-### Universal Query Engine in {{ ydb-short-name }}
-
-The query engine in {{ ydb-short-name }} provides a unified SQL interface across all data models and sources, simplifying access to diverse data. It delivers sophisticated query optimization across heterogeneous data and supports complex, distributed query execution for high performance. The system extends its reach through [federated queries](federated_query/index.md) to external systems, bringing disparate data sources under a single query model. Additionally, it offers support for [JSON](../yql/reference/builtins/json.md) operations and storage, making document-oriented processing seamless and efficient.
+1. **Data model requirements**: Determine which combinations of relational, document, vector, and time-series models are needed
+2. **Workload characteristics**: Analyze the mix of transactional, analytical, and specialized processing requirements
+3. **Performance requirements**: Consider latency, throughput, and consistency needs across different workload types
+4. **Resource management**: Evaluate requirements for workload isolation and resource allocation
+5. **Operational complexity**: Assess the trade-offs between consolidation benefits and increased system complexity

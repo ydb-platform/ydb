@@ -153,8 +153,6 @@ public:
                 return NKikimrSchemeOp::EPathTypeFileStore;
             case TNavigate::KindView:
                 return NKikimrSchemeOp::EPathTypeView;
-            case TNavigate::KindSysView:
-                return NKikimrSchemeOp::EPathTypeSysView;
             default:
                 return NKikimrSchemeOp::EPathTypeDir;
         }

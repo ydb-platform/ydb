@@ -5,13 +5,15 @@
 ## Синтаксис {#syntax}
 
 ```yql
-ALTER TRANSFER <name> (SET USING lambda | SET (option = value [, ...]))
+ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
 ```
 
 где:
 
 * `name` — имя экземпляра трансфера.
-* `lambda` — lambda-функция преобразования сообщения.
+
+{% include [x](../_includes/transfer_lambda.md) %}
+
 * `SET (option = value [, ...])` — [параметры](#params) трансфера.
 
 ### Параметры {#params}
@@ -19,6 +21,12 @@ ALTER TRANSFER <name> (SET USING lambda | SET (option = value [, ...]))
 * `STATE` — [состояние](../../../concepts/transfer.md#pause-and-resume) трансфера. Возможные значения:
   * `PAUSED` — остановка трансфера.
   * `STANDBY` — возобновление работы трансфера после приостановки.
+
+{% include [x](../_includes/transfer_flush.md) %}
+
+## Разрешения
+
+Для изменения трансфера требуются [право](grant.md#permissions-list) изменять схемные объекты (`ALTER SCHEMA`).
 
 ## Примеры {#examples}
 
@@ -44,8 +52,17 @@ ALTER TRANSFER my_transfer SET USING $new_lambda;
 ALTER TRANSFER my_transfer SET (STATE = "PAUSED");
 ```
 
+Следующий запрос изменяет параметры батчевания:
+
+```yql
+ALTER TRANSFER my_transfer SET (
+    BATCH_SIZE_BYTES = 1048576,
+    FLUSH_INTERVAL = Interval('PT60S')
+);
+```
 
 ## См. также
 
 * [CREATE TRANSFER](create-transfer.md)
 * [DROP TRANSFER](drop-transfer.md)
+* [{#T}](../../../concepts/transfer.md)

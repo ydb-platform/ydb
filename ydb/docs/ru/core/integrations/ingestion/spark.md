@@ -36,20 +36,20 @@
 
 * Так же скачанную shaded-сборку можно скопировать в папку `jars` дистрибутива {{ spark-name }}. В таком случае никаких опций указывать не требуется.
 
-### Работа через DataSet API {#dataset-api}
+### Работа через DataFrame API {#dataframe-api}
 
-DataSet API позволяет работать с {{ ydb-short-name }} в интерактивных `spark-shell` или `pyspark`, а так же при написании кода на `Java`, `Scala` или `Python` для `spark-submit`.
+DataFrame API позволяет работать с {{ ydb-short-name }} в интерактивных `spark-shell` или `pyspark`, а так же при написании кода на `Java`, `Scala` или `Python` для `spark-submit`.
 
-Создать `DataSet`, ссылающийся на таблицу {{ ydb-short-name }}:
+Создать `DataFrame`, ссылающийся на таблицу {{ ydb-short-name }}:
 
 ```scala
-val ydb_ds = spark.read.format("ydb").options(<options>).load("<table-path>")
+val ydb_df = spark.read.format("ydb").options(<options>).load("<table-path>")
 ```
 
-Записать `DataSet` в таблицу {{ ydb-short-name }}:
+Записать `DataFrame` в таблицу {{ ydb-short-name }}:
 
 ```scala
-any_dataset.write.format("ydb").options(<options>).mode("append").save("<table-path>")
+any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
 ```
 
 {% note info %}
@@ -84,7 +84,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 ## Список параметров {{ ydb-short-name }} Spark Connector {#options}
 
-Поведение {{ ydb-short-name }} Spark Connector настраивается с помощью опций, которые как могут передаваться в виде одного набора с помощью метода `options`, так и указываться по одной с помощью метода `option`. При этом каждый `DataSet` и даже каждая отдельная операция над `DataSet` может иметь свой набор опций.
+Поведение {{ ydb-short-name }} Spark Connector настраивается с помощью опций, которые как могут передаваться в виде одного набора с помощью метода `options`, так и указываться по одной с помощью метода `option`. При этом каждый `DataFrame` и даже каждая отдельная операция над `DataFrame` может иметь свой набор опций.
 
 ### Опции подключения {#connection-options}
 
@@ -168,7 +168,7 @@ scala> so_posts2020.count
 res1: Long = 4304021
 ```
 
-Добавим к данному DataSet новую колонку с годом и запишем всё это в колоночную таблицу {{ ydb-short-name }}:
+Добавим к данному DataFrame новую колонку с годом и запишем всё это в колоночную таблицу {{ ydb-short-name }}:
 
 ```shell
 scala> val my_ydb = Map("url" -> "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token")

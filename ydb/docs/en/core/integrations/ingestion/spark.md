@@ -20,36 +20,36 @@ To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ yd
 
   ```shell
   # Run spark-shell
-  ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
+  ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
   # Or spark-sql
-  ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
+  ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
   ```
 
 * Download the latest version of the shaded connector (a connector build that includes all dependencies) from [GitHub](https://github.com/ydb-platform/ydb-spark-connector/releases) or [Maven Central](https://central.sonatype.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) and specify the downloaded artifact in the `--jars` option:
 
   ```shell
   # Run spark-shell
-  ~ $ spark-shell --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar
+  ~ $ spark-shell --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
   # Or spark-sql
-  ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar
+  ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
   ```
 
 * You can also copy the downloaded shaded artifact to the `jars` folder of your {{ spark-name }} distribution. In this case, no additional options need to be specified.
 
-### Use DataSet API {#dataset-api}
+### Use DataFrame API {#dataframe-api}
 
-The DataSet API allows you to work with {{ ydb-short-name }} in an interactive `spark-shell` or `pyspark` session, as well as when writing code in `Java`, `Scala`, or `Python` for `spark-submit`.
+The DataFrame API allows you to work with {{ ydb-short-name }} in an interactive `spark-shell` or `pyspark` session, as well as when writing code in `Java`, `Scala`, or `Python` for `spark-submit`.
 
-Create a `DataSet` referencing a {{ ydb-short-name }} table:
+Create a `DataFrame` referencing a {{ ydb-short-name }} table:
 
 ```scala
-val ydb_ds = spark.read.format("ydb").options(<options>).load("<table-path>")
+val ydb_df = spark.read.format("ydb").option("url", "grpc://<options>).load("<table-path>")
 ```
 
-Write a `DataSet` to a {{ ydb-short-name }} table:
+Write a `DataFrame` to a {{ ydb-short-name }} table:
 
 ```scala
-any_dataset.write.format("ydb").options(<options>).mode("append").save("<table-path>")
+any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
 ```
 
 {% note info %}
@@ -85,7 +85,7 @@ A more detailed example is provided in the [Spark SQL example](#example-spark-sq
 
 ## {{ ydb-short-name }} Spark Connector Options {#options}
 
-The behavior of the {{ ydb-short-name }} Spark Connector is configured using options that can be passed as a `Map` using the `options` method, or specified one by one using the `option` method. Each `DataSet` and even each individual operation on a `DataSet` can have its own configuration of options.
+The behavior of the {{ ydb-short-name }} Spark Connector is configured using options that can be passed as a `Map` using the `options` method, or specified one by one using the `option` method. Each `DataFrame` and even each individual operation on a `DataFrame` can have its own configuration of options.
 
 ### Connection Options {#connection-options}
 
@@ -121,7 +121,7 @@ The behavior of the {{ ydb-short-name }} Spark Connector is configured using opt
 As an example, we'll show how to load a list of all Stack Overflow posts from 2020 into {{ ydb-short-name }}. This data can be downloaded from the following link: [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet)
 
 ```shell
-~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1
+~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
 Spark session available as 'spark'.
 Welcome to
       ____              __
@@ -170,7 +170,7 @@ scala> so_posts2020.count
 res1: Long = 4304021
 ```
 
-Then add a new column with the year to this DataSet and store it all to a column-oriented {{ ydb-short-name }} table:
+Then add a new column with the year to this DataFrame and store it all to a column-oriented {{ ydb-short-name }} table:
 
 ```shell
 scala> val my_ydb = Map("url" -> "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token")
@@ -226,9 +226,10 @@ First, let's run `spark-sql` with the configured `my_ydb` catalog:
 
 ```shell
 ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 \
-     --conf spark.sql.catalog.my_ydb=tech.ydb.spark.connector.YdbCatalog
-     --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test
-     --conf spark.sql.catalog.my_ydb.auth.token.file=~/.token
+     --conf spark.sql.catalog.my_ydb=tech.ydb.spark.connector.YdbCatalog \
+     --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test \
+     --conf spark.sql.catalog.my_ydb.auth.token.file=~/.token \
+     --conf spark.executor.memory=4g
 spark-sql (default)>
 ```
 

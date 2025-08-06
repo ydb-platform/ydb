@@ -7825,13 +7825,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             for (ui32 pile = 0; pile < 2; ++pile) {
                 BridgeInfos[pile] = std::make_shared<TBridgeInfo>();
                 BridgeInfos[pile]->Piles.push_back(TBridgeInfo::TPile{
-                    .BridgePileId = TBridgePileId::FromValue(0),
+                    .BridgePileId = TBridgePileId::FromPileIndex(0),
                     .State = NKikimrBridge::TClusterState::SYNCHRONIZED,
                     .IsPrimary = true,
                     .IsBeingPromoted = false,
                 });
                 BridgeInfos[pile]->Piles.push_back(TBridgeInfo::TPile{
-                    .BridgePileId = TBridgePileId::FromValue(1),
+                    .BridgePileId = TBridgePileId::FromPileIndex(1),
                     .State = NKikimrBridge::TClusterState::SYNCHRONIZED,
                     .IsPrimary = false,
                     .IsBeingPromoted = false,

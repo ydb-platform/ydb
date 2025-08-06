@@ -258,7 +258,8 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxRotateCdcStream = 201        [(CounterOpts) = {Name: "InFlightOps/RotateCdcStream"}];
     COUNTER_IN_FLIGHT_OPS_TxRotateCdcStreamAtTable = 202 [(CounterOpts) = {Name: "InFlightOps/RotateCdcStreamAtTable"}];
 
-    COUNTER_IN_FLIGHT_OPS_TxCreateLongIncrementalBackupOp = 203       [(CounterOpts) = {Name: "InFlightOps/CreateLongIncrementalBackupOp"}];
+    COUNTER_IN_FLIGHT_OPS_TxIncrementalRestoreFinalize = 203 [(CounterOpts) = {Name: "InFlightOps/IncrementalRestoreFinalize"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateLongIncrementalBackupOp = 204 [(CounterOpts) = {Name: "InFlightOps/CreateLongIncrementalBackupOp"}];
 }
 
 enum ECumulativeCounters {
@@ -419,7 +420,8 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxRotateCdcStream = 123        [(CounterOpts) = {Name: "FinishedOps/RotateCdcStream"}];
     COUNTER_FINISHED_OPS_TxRotateCdcStreamAtTable = 124 [(CounterOpts) = {Name: "FinishedOps/RotateCdcStreamAtTable"}];
 
-    COUNTER_FINISHED_OPS_TxCreateLongIncrementalBackupOp = 125       [(CounterOpts) = {Name: "FinishedOps/CreateLongIncrementalBackupOp"}];
+    COUNTER_FINISHED_OPS_TxIncrementalRestoreFinalize = 125 [(CounterOpts) = {Name: "FinishedOps/IncrementalRestoreFinalize"}];
+    COUNTER_FINISHED_OPS_TxCreateLongIncrementalBackupOp = 126 [(CounterOpts) = {Name: "FinishedOps/CreateLongIncrementalBackupOp"}];
 }
 
 enum EPercentileCounters {

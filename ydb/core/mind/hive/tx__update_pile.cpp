@@ -45,7 +45,7 @@ public:
             pileInfo.State = wardenPileInfo.State;
             pileInfo.IsPrimary = wardenPileInfo.IsPrimary;
             pileInfo.IsPromoted = wardenPileInfo.IsBeingPromoted;
-            db.Table<Schema::BridgePile>().Key(pileId.GetRawId()).Update(
+            db.Table<Schema::BridgePile>().Key(pileId.GetLocalDb()).Update(
                 NIceDb::TUpdate<Schema::BridgePile::State>(pileInfo.State),
                 NIceDb::TUpdate<Schema::BridgePile::IsPrimary>(pileInfo.IsPrimary),
                 NIceDb::TUpdate<Schema::BridgePile::IsPromoted>(pileInfo.IsPromoted)

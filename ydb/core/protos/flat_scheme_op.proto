@@ -1126,6 +1126,13 @@ message TRestoreMultipleIncrementalBackups {
     optional NKikimrProto.TPathID DstPathId = 4;
 }
 
+message TIncrementalRestoreFinalize {
+    optional uint64 OriginalOperationId = 1;
+    optional uint64 BackupCollectionPathId = 2;
+    repeated string TargetTablePaths = 3;
+    repeated string BackupTablePaths = 4;
+}
+
 message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
 }
@@ -1819,7 +1826,10 @@ message TModifyScheme {
 
     optional TChangePathState ChangePathState = 82;
 
-    optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 84;
+    optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
+    
+    optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
+
     // Some entries are grouped by semantics, so are out of order
 }
 

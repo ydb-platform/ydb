@@ -571,11 +571,22 @@ struct MainTestCase {
         return DescribeConsumer(consumers[0].GetConsumerName());
     }
 
-    void CheckCommittedOffset(size_t partitionId, size_t expectedOffset) {
-        auto d = DescribeConsumer();
-        UNIT_ASSERT(d.IsSuccess());
-        auto s = d.GetConsumerDescription().GetPartitions().at(partitionId).GetPartitionConsumerStats();
-        UNIT_ASSERT_VALUES_EQUAL(expectedOffset, s->GetCommittedOffset());
+    void CheckCommittedOffset(size_t partitionId, size_t expectedOffset, TDuration timeout = TDuration::Seconds(5)) {
+        auto end = TInstant::Now() + timeout;
+
+        while(true) {
+            auto d = DescribeConsumer();
+            UNIT_ASSERT(d.IsSuccess());
+            auto s = d.GetConsumerDescription().GetPartitions().at(partitionId).GetPartitionConsumerStats();
+            if (expectedOffset == s->GetCommittedOffset()) {
+                break;
+            }
+            if (end < TInstant::Now()) {
+                UNIT_ASSERT_VALUES_EQUAL(expectedOffset, s->GetCommittedOffset());
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
     }
 
     void CreateReplication() {

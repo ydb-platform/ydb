@@ -63,6 +63,7 @@ struct TEvWorker {
             S3_ERROR,
             SCHEME_ERROR,
             UNAVAILABLE,
+            OVERLOAD
         };
 
         EStatus Status;

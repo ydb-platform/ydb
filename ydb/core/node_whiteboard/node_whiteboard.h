@@ -334,9 +334,7 @@ struct TEvWhiteboard {
             if (const auto& bridgeProxyGroupId = groupInfo->GetBridgeProxyGroupId()) {
                 bridgeProxyGroupId->CopyToProto(&Record, &decltype(Record)::SetBridgeProxyGroupId);
             }
-            if (const auto& bridgePileId = groupInfo->GetBridgePileId()) {
-                bridgePileId->CopyToProto(&Record, &decltype(Record)::SetBridgePileId);
-            }
+            groupInfo->GetBridgePileId().CopyToProto(&Record, &decltype(Record)::SetBridgePileId);
         }
     };
 

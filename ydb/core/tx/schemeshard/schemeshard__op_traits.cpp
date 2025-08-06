@@ -146,6 +146,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
             return EOperationClass::Other;
 
         // intentionally no default -- to trigger [-Werror,-Wswitch] compile error on any new entry not handled here

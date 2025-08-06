@@ -7,6 +7,7 @@
 namespace NKikimr::NSharedCache {
 
 using TPageId = NTable::NPage::TPageId;
+using EPage = NTable::NPage::EPage;
 
 struct TCollection;
 

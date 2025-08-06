@@ -51,7 +51,7 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
 TConclusion<bool> TScanHead::BuildNextInterval() {
     std::optional<NActors::TLogContextGuard> gLogging;
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN)) {
-        gLogging = NActors::TLogContextBuilder::Build()("tablet_id", SourcesCollection->GetTabletId());
+        gLogging.emplace(NActors::TLogContextBuilder::Build()("tablet_id", SourcesCollection->GetTabletId()));
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "build_next_interval");
     bool changed = false;

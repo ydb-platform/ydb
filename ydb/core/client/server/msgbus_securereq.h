@@ -29,11 +29,6 @@ public:
     {
         this->SetInternalToken(this->GetInternalToken()); // No effect if token is nullptr
     }
-
-    template<typename T>
-    void Become(T stateFunc) {
-        IActorCallback::Become(stateFunc);
-    }
 };
 
 template <typename TDerived, typename TTabletReplyEvent, NKikimrServices::TActivity::EType Activity>

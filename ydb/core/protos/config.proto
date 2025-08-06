@@ -2065,7 +2065,7 @@ message TColumnShardConfig {
     optional bool GenerateInternalPathId = 43 [default = false];
     optional bool ProxyWritingEnabled = 44 [default = true];
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
-    optional bool DeduplicationEnabled = 46 [default = false];
+    optional bool DeduplicationEnabled = 46 [default = true];
 }
 
 message TSchemeShardConfig {

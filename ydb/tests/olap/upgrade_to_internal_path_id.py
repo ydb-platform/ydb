@@ -6,6 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class TestUpgradeToInternalPathId:
     cluster = None
     session = None
@@ -96,7 +97,7 @@ class TestUpgradeToInternalPathId:
             path_mapping = self.get_path_ids(new_table_name)
             tables_path_mapping.append(path_mapping)
             logger.info(f"{i}, path_mapping: {path_mapping}")
-            
+
             external_path_id, counted_internal_path_ids = path_mapping
             assert external_path_id < i + 10  # with a gap for some path ids created before tables creation
 

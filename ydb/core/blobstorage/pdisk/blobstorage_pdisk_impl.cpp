@@ -34,7 +34,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             cfg->DriveModelSpeedBpsMin,
             cfg->DriveModelSpeedBpsMax,
             cfg->DeviceInFlight)
-    , ReqCreator(PCtx, &Mon, &DriveModel, &EstimatedLogChunkIdx)
+    , ReqCreator(PCtx, &Mon, &DriveModel, &EstimatedLogChunkIdx, cfg->SeparateHugePriorities)
     , ReorderingMs(cfg->ReorderingMs)
     , LogSeekCostLoop(2)
     , ExpectedDiskGuid(cfg->PDiskGuid)
@@ -2117,7 +2117,8 @@ void TPDisk::SchedulerConfigure(const TConfigureScheduler &reqCfg) {
     ConfigureCbs(ownerId, GateFastRead, cfg.FastReadWeight * bytesTotalWeight);
     ConfigureCbs(ownerId, GateOtherRead, cfg.OtherReadWeight * bytesTotalWeight);
     ConfigureCbs(ownerId, GateLoad, cfg.LoadWeight * bytesTotalWeight);
-    ConfigureCbs(ownerId, GateHuge, cfg.HugeWeight * bytesTotalWeight);
+    ConfigureCbs(ownerId, GateHugeAsync, cfg.HugeWeight * bytesTotalWeight);
+    ConfigureCbs(ownerId, GateHugeUser, cfg.HugeWeight * bytesTotalWeight);
     ConfigureCbs(ownerId, GateSyncLog, cfg.SyncLogWeight * bytesTotalWeight);
     ConfigureCbs(ownerId, GateLow, cfg.LowReadWeight);
     ForsetiScheduler.UpdateTotalWeight();
@@ -4087,7 +4088,8 @@ void TPDisk::AddCbsSet(ui32 ownerId) {
     AddCbs(ownerId, GateFastRead, "FastRead", 0ull);
     AddCbs(ownerId, GateOtherRead, "OtherRead", 0ull);
     AddCbs(ownerId, GateLoad, "Load", 0ull);
-    AddCbs(ownerId, GateHuge, "Huge", 0ull);
+    AddCbs(ownerId, GateHugeAsync, "HugeAsync", 0ull);
+    AddCbs(ownerId, GateHugeUser, "HugeUser", 0ull);
     AddCbs(ownerId, GateSyncLog, "SyncLog", 0ull);
     AddCbs(ownerId, GateLow, "LowRead", 0ull);
 

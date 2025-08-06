@@ -36,7 +36,7 @@
   ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
   ```
 
-* Так же скачанную shaded-сборку можно скопировать в папку `jars` дистрибутива {{ spark-name }}. В таком случае никаких опций указывать не требуется.
+* Также скачанную shaded-сборку можно скопировать в папку `jars` дистрибутива {{ spark-name }}. В таком случае никаких опций указывать не требуется.
 
 ### Работа через DataFrame API {#dataframe-api}
 
@@ -80,7 +80,7 @@
 
 {% note info %}
 
-При записи данных в {{ ydb-short-name }} рекомендуется использовать режим `append`, который использует [пакетную загрузку данных](../../dev/batch-upload.md). Если указанная в методе `save()` таблица не существует, то оно будет создана в соответствии с опциями [автосоздания таблиц](#autocreate-options)
+При записи данных в {{ ydb-short-name }} рекомендуется использовать режим `append`, который использует [пакетную загрузку данных](../../dev/batch-upload.md). Если указанная в методе `save()` таблица не существует, то она будет создана в соответствии с опциями [автосоздания таблиц](#autocreate-options)
 
 {% endnote %}
 
@@ -95,12 +95,12 @@
 # Обязательный параметр типа каталога
 spark.sql.catalog.<catalog_name>=tech.ydb.spark.connector.YdbCatalog
 # Обязательный параметр url
-spark.sql.catalog.<catalog_name>.url=<ydb-connnection-url>
+spark.sql.catalog.<catalog_name>.url=<ydb-connection-url>
 # Все остальные параметры не обязательны и указываются только при необходимости
 spark.sql.catalog.<catalog_name>.<param-name>=<param-value>
 ```
 
-После задания каталогов можно работать в таблицами {{ ydb-short-name }} через стандартные SQL запросы {{ spark-name }}. Обратите внимание, что в качестве разделителя в пути к таблице нужно использовать `.`:
+После задания каталогов можно работать с таблицами {{ ydb-short-name }} через стандартные SQL запросы {{ spark-name }}. Обратите внимание, что в качестве разделителя в пути к таблице нужно использовать `.`:
 
 ```sql
 SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
@@ -116,7 +116,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 * `url` — обязательный параметр с адресом подключения к {{ ydb-short-name }}. Имеет вид `grpc[s]://<endpoint>:<port>/<database>[?<options>]`
    Примеры использования:
-   - Локальный Docker контейнер с анонимной аутентификацией и без TLS:<br/>`grpc://localhost:2136/local`
+   - Локальный Docker-контейнер с анонимной аутентификацией и без TLS:<br/>`grpc://localhost:2136/local`
    - Удаленный кластер, размещенный на собственном сервере:<br/>`grpcs://my-private-cluster:2135/Root/my-database?secureConnectionCertificate=~/myCertificate.cer`
    - Экземпляр облачной базы данных с токеном:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
    - Экземпляр облачной базы данных с файлом сервисного аккаунта:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
@@ -135,8 +135,8 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 * `table.autocreate` — если указано `true`, то при записи в несуществующую таблицу она будет создана автоматически. По умолчанию включено.
 * `table.type` — тип автоматически создаваемой таблицы. Возможные варианты:
-    - `rows` — для создания строчной таблицы (по умолчанию);
-    - `columns` — для создания колоночной таблицы;
+    - `row` — для создания строчной таблицы (по умолчанию);
+    - `column` — для создания колоночной таблицы;
 * `table.primary_keys` — разделённый запятой список колонок для использования в качестве первичного ключа. При отсутствии этой опции для ключа будет использоваться новая колонка со случайным содержимым.
 * `table.auto_pk_name` — имя колонки для случайного создаваемого ключа. По умолчанию `_spark_key`.
 
@@ -271,7 +271,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
   ```shell
   >>> from pyspark.sql.functions import col,lit
-  >>> my_ydb = { url: "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token"}
+  >>> my_ydb = {"url": "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token"}
   >>> so_posts2020.withColumn("Year", lit(2020)).write.format("ydb").options(**my_ydb).option("table.type", "column").option("table.primary_keys", "Id").mode("append").save("stackoverflow/posts")
   ```
 
@@ -348,6 +348,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
   |-- ParentId: binary (nullable = true)
   |-- CommunityOwnedDate: timestamp (nullable = true)
   |-- ClosedDate: timestamp (nullable = true)
+  |-- Year: integer (nullable = true)
 
   >>> ydb_posts2020.count()
   4304021
@@ -392,7 +393,7 @@ spark-sql (default)> SELECT COUNT(*) FROM parquet.`/home/username/2020.parquet`;
 Добавим новую колонку с годом и запишем всё это в таблицу {{ ydb-short-name }}:
 
 ```shell
-spark-sql (default)> CREATE TABLE my_ydb.stackoverflow.posts AS SELECT *, 2020 as Year FROM parquet.`/home/username/2020.parquet`;
+spark-sql (default)> CREATE TABLE my_ydb.stackoverflow.posts OPTIONS(table.primary_keys='Id') AS SELECT *, 2020 as Year FROM parquet.`/home/username/2020.parquet`;
 Time taken: 85.225 seconds
 ```
 
@@ -426,7 +427,6 @@ ParentId              binary
 CommunityOwnedDate    timestamp
 ClosedDate            timestamp
 Year                  int
-_spark_key            string
 ```
 
 В итоге мы можем прочитать записанные данные из {{ ydb-short-name }} и, например, подсчитать число постов, у которых есть подтверждённый ответ:

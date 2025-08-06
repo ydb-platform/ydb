@@ -95,7 +95,7 @@ To access {{ ydb-short-name }}, you need to add a catalog by specifying the foll
 # Mandatory catalog's driver name
 spark.sql.catalog.<catalog_name>=tech.ydb.spark.connector.YdbCatalog
 # Mandatory option, the url of database
-spark.sql.catalog.<catalog_name>.url=<ydb-connnection-url>
+spark.sql.catalog.<catalog_name>.url=<ydb-connection-url>
 # Other options are not mandatory and may be specified as necessary
 spark.sql.catalog.<catalog_name>.<param-name>=<param-value>
 ```
@@ -137,8 +137,8 @@ The behavior of the {{ ydb-short-name }} Spark Connector is configured using opt
 
 * `table.autocreate` — if set to `true`, then when writing to a non-existent table, it will be created automatically. Enabled by default;
 * `table.type` — the type of automatically created table. Possible values:
-    - `rows` for creating a row-oriented table (default).
-    - `columns` for creating a column-oriented table.
+    - `row` for creating a row-oriented table (default).
+    - `column` for creating a column-oriented table.
 * `table.primary_keys` — a comma-separated list of columns to use as the primary key. If this option is not provided, a new column with random content will be used for the key.
 * `table.auto_pk_name` — the name of the column for the randomly created key. Default value is `_spark_key`.
 
@@ -273,7 +273,7 @@ Then add a new column with the year to this DataFrame and store it all to a colu
 
   ```shell
   >>> from pyspark.sql.functions import col,lit
-  >>> my_ydb = { url: "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token"}
+  >>> my_ydb = {"url": "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token"}
   >>> so_posts2020.withColumn("Year", lit(2020)).write.format("ydb").options(**my_ydb).option("table.type", "column").option("table.primary_keys", "Id").mode("append").save("stackoverflow/posts")
   ```
 
@@ -350,6 +350,7 @@ As a result, you can read the stored data from the {{ ydb-short-name }} table an
   |-- ParentId: binary (nullable = true)
   |-- CommunityOwnedDate: timestamp (nullable = true)
   |-- ClosedDate: timestamp (nullable = true)
+  |-- Year: integer (nullable = true)
 
   >>> ydb_posts2020.count()
   4304021
@@ -394,7 +395,7 @@ spark-sql (default)> SELECT COUNT(*) FROM parquet.`/home/username/2020.parquet`;
 Let's add a new column with the year and copy it all to a new {{ ydb-short-name }} table:
 
 ```shell
-spark-sql (default)> CREATE TABLE my_ydb.stackoverflow.posts AS SELECT *, 2020 as Year FROM parquet.`/home/username/2020.parquet`;
+spark-sql (default)> CREATE TABLE my_ydb.stackoverflow.posts OPTIONS(table.primary_keys='Id') AS SELECT *, 2020 as Year FROM parquet.`/home/username/2020.parquet`;
 Time taken: 85.225 seconds
 ```
 
@@ -428,7 +429,6 @@ ParentId              binary
 CommunityOwnedDate    timestamp
 ClosedDate            timestamp
 Year                  int
-_spark_key            string
 ```
 
 As a result, we can read the stored data from {{ ydb-short-name }} table and, for example, count the number of posts that have an accepted answer:

@@ -29,7 +29,13 @@ struct TIncrementalBackupConv: public TOperationConv<NKikimrBackup::TIncremental
         }
 
         operation.set_id(NOperationId::ProtoToString(MakeOperationId(in.GetId())));
-        Fill<Ydb::Backup::IncrementalBackupMetadata, Ydb::Backup::IncrementalBackupResult>(operation, in);
+        Ydb::Backup::IncrementalBackupMetadata metadata;
+        metadata.set_progress(in.GetProgress());
+        metadata.set_progress_percent(in.GetProgressPercent());
+        operation.mutable_metadata()->PackFrom(metadata);
+
+        Ydb::Backup::IncrementalBackupResult result;
+        operation.mutable_result()->PackFrom(result);
 
         return operation;
     }

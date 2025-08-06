@@ -3117,7 +3117,7 @@ void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
     for (auto &kv : msg->DroppedPages) {
         if (auto *info = PrivatePageCache->Info(kv.first)) {
             for (ui32 pageId : kv.second) {
-                PrivatePageCache->DropSharedBody(info, pageId);
+                PrivatePageCache->DropSharedBody(pageId, info);
             }
         }
     }

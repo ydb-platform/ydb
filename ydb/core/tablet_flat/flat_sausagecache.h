@@ -144,7 +144,7 @@ public:
 
     const TStats& GetStats() const { return Stats; }
 
-    const TSharedData* Lookup(TPageId pageId, TInfo *collection);
+    const TSharedData* Lookup(TPageId pageId, TInfo *info);
 
     void CountTouches(TPinned &pinned, ui32 &touchedUnpinnedPages, ui64 &touchedUnpinnedMemory, ui64 &touchedPinnedMemory);
     void PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory);
@@ -154,7 +154,7 @@ public:
 
     void ResetTouchesAndToLoad(bool verifyEmpty);
 
-    void DropSharedBody(TInfo *collectionInfo, TPageId pageId);
+    void DropSharedBody(TPageId pageId, TInfo *info);
 
     void ProvideBlock(TPageId pageId, TSharedPageRef sharedBody, TInfo *info);
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();

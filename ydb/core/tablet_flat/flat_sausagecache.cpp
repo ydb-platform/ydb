@@ -253,7 +253,7 @@ void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
     }
 }
 
-void TPrivatePageCache::DropSharedBody(TInfo *info, TPageId pageId) {
+void TPrivatePageCache::DropSharedBody(TPageId pageId, TInfo *info) {
     TPage *page = info->GetPage(pageId);
     if (!page)
         return;

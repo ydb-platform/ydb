@@ -168,6 +168,7 @@ public:
 TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<NSimple::TSourceConstructor>& portions)
     : TActor(&TDuplicateManager::StateMain)
     , PKColumns(context.GetPKColumns())
+    , PKSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetPrimaryKey())
     , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
     , Intervals(MakeIntervalTree(portions))
     , Portions(MakePortionsIndex(Intervals))
@@ -300,7 +301,7 @@ void TDuplicateManager::BuildFilterForSlice(const TPortionsSlice& slice, const s
     }();
 
     const std::shared_ptr<TBuildDuplicateFilters> task = std::make_shared<TBuildDuplicateFilters>(
-        slice.GetEnd().GetKey().GetSchema(), maxVersionBatch, slice.GetEnd().GetKey(), slice.GetEnd().GetIsLast(), Counters, SelfId());
+        PKSchema, maxVersionBatch, slice.GetEnd().GetKey(), slice.GetEnd().GetIsLast(), Counters, SelfId());
     for (const auto& [source, segment] : slice.GetRanges()) {
         const auto* columnData = dataByPortion.FindPtr(source);
         AFL_VERIFY(columnData)("source", source);

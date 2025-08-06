@@ -35,6 +35,7 @@ private:
     inline static TAtomicCounter NextRequestId = 0;
 
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
+    const std::shared_ptr<arrow::Schema> PKSchema;
     std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
     const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;

@@ -216,7 +216,7 @@ class PnpmPackageManager(BasePackageManager):
         """
         Creates node_modules directory according to the lockfile.
         """
-        ws = self._prepare_workspace()
+        ws = self._prepare_workspace(local_cli)
 
         self._copy_pnpm_patches()
 
@@ -276,7 +276,7 @@ class PnpmPackageManager(BasePackageManager):
                 "--ignore-pnpmfile",
                 "--ignore-scripts",
                 "--no-verify-store-integrity",
-                "--offline",
+                "--prefer-offline" if local_cli else "--offline",
                 "--config.confirmModulesPurge=false",  # hack for https://st.yandex-team.ru/FBP-1295
                 "--package-import-method",
                 "hardlink",
@@ -321,7 +321,7 @@ class PnpmPackageManager(BasePackageManager):
 
     @timeit
     def calc_prepare_deps_inouts_and_resources(
-        self, store_path: str, has_deps: bool
+        self, store_path: str, has_deps: bool, local_cli: bool
     ) -> tuple[list[str], list[str], list[str]]:
         ins = [
             s_rooted(build_pj_path(self.module_path)),
@@ -333,7 +333,7 @@ class PnpmPackageManager(BasePackageManager):
         ]
         resources = []
 
-        if has_deps:
+        if has_deps and not local_cli:
             for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
                 resources.append(pkg.to_uri())
                 outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
@@ -380,15 +380,19 @@ class PnpmPackageManager(BasePackageManager):
             raise PackageManagerError("Unable to process some lockfiles:\n{}".format("\n".join(errors)))
 
     @timeit
-    def _prepare_workspace(self):
-        lf = self.load_lockfile(build_pre_lockfile_path(self.build_path))
-        lf.update_tarball_resolutions(lambda p: "file:" + os.path.join(self.build_root, p.tarball_url))
-        lf.write(build_lockfile_path(self.build_path))
+    def _prepare_workspace(self, local_cli: bool):
+        if local_cli:
+            shutil.copy(build_pre_lockfile_path(self.build_path), build_lockfile_path(self.build_path))
+        else:
+            lf = self.load_lockfile(build_pre_lockfile_path(self.build_path))
+
+            lf.update_tarball_resolutions(lambda p: "file:" + os.path.join(self.build_root, p.tarball_url))
+            lf.write(build_lockfile_path(self.build_path))
 
         return PnpmWorkspace.load(build_ws_config_path(self.build_path))
 
     @timeit
-    def build_workspace(self, tarballs_store: str):
+    def build_workspace(self, tarballs_store: str, local_cli: bool):
         """
         :rtype: PnpmWorkspace
         """
@@ -399,12 +403,12 @@ class PnpmPackageManager(BasePackageManager):
 
         dep_paths = ws.get_paths(ignore_self=True)
         self._build_merged_workspace_config(ws, dep_paths)
-        self._build_merged_pre_lockfile(tarballs_store, dep_paths)
+        self._build_merged_pre_lockfile(tarballs_store, dep_paths, local_cli)
 
         return ws
 
     @timeit
-    def _build_merged_pre_lockfile(self, tarballs_store, dep_paths):
+    def _build_merged_pre_lockfile(self, tarballs_store, dep_paths, local_cli: bool):
         """
         :type dep_paths: list of str
         :rtype: PnpmLockfile
@@ -412,7 +416,8 @@ class PnpmPackageManager(BasePackageManager):
         lf = self.load_lockfile_from_dir(self.sources_path)
         # Change to the output path for correct path calcs on merging.
         lf.path = build_pre_lockfile_path(self.build_path)
-        lf.update_tarball_resolutions(lambda p: self._tarballs_store_path(p, tarballs_store))
+        if not local_cli:
+            lf.update_tarball_resolutions(lambda p: self._tarballs_store_path(p, tarballs_store))
 
         for dep_path in dep_paths:
             pre_lf_path = build_pre_lockfile_path(dep_path)

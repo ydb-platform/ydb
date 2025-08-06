@@ -112,7 +112,7 @@ public:
         AFL_VERIFY(batch);
         Schema = batch->schema();
         Data = TSimpleRowViewV0::BuildString(batch, recordIndex);
-        AFL_VERIFY_DEBUG(TSimpleRowViewV0(Data).DoValidate(Schema));
+        AFL_VERIFY_DEBUG(TSimpleRowViewV0(Data).DoValidate(*Schema));
     }
 
     std::shared_ptr<arrow::RecordBatch> ToBatch() const;

@@ -562,6 +562,20 @@ public:
             Y_ABORT("unexpected EDriveStatus");
         }
 
+        void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
+            if (Metrics.HasSlotCount()) {
+                slotCount = Metrics.GetSlotCount();
+                slotSizeInUnits = Metrics.GetSlotSizeInUnits();
+            } else if (InferPDiskSlotCountFromUnitSize != 0) {
+                // inferred values are unknown yet
+                slotCount = 0;
+                slotSizeInUnits = 0;
+            } else {
+                slotCount = ExpectedSlotCount;
+                slotSizeInUnits = SlotSizeInUnits;
+            }
+        }
+
         TString PathOrSerial() const {
             return Path ? Path : ExpectedSerial;
         }
@@ -598,7 +612,7 @@ public:
 
         Table::GroupSizeInUnits::Type GroupSizeInUnits;
 
-        std::optional<Table::BridgePileId::Type> BridgePileId;
+        Table::BridgePileId::Type BridgePileId;
 
         TMaybe<Table::VirtualGroupName::Type> VirtualGroupName;
         TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
@@ -736,7 +750,7 @@ public:
                    Schema::Group::Down::Type down,
                    Schema::Group::SeenOperational::Type seenOperational,
                    Schema::Group::GroupSizeInUnits::Type groupSizeInUnits,
-                   std::optional<Schema::Group::BridgePileId::Type> bridgePileId,
+                   Schema::Group::BridgePileId::Type bridgePileId,
                    TBoxStoragePoolId storagePoolId,
                    ui32 numFailRealms,
                    ui32 numFailDomainsPerFailRealm,
@@ -2396,6 +2410,20 @@ public:
             if (const auto it = prev.find(pdiskId); it != prev.end()) {
                 TStaticPDiskInfo& item = it->second;
                 PDiskMetrics = std::move(item.PDiskMetrics);
+            }
+        }
+
+        void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
+            if (PDiskMetrics && PDiskMetrics->HasSlotCount()) {
+                slotCount = PDiskMetrics->GetSlotCount();
+                slotSizeInUnits = PDiskMetrics->GetSlotSizeInUnits();
+            } else if (InferPDiskSlotCountFromUnitSize != 0) {
+                // inferred values are unknown yet
+                slotCount = 0;
+                slotSizeInUnits = 0;
+            } else {
+                slotCount = ExpectedSlotCount ? ExpectedSlotCount : StaticSlotUsage;
+                slotSizeInUnits = 0; // Not available for static PDisks
             }
         }
     };

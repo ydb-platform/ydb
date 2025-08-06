@@ -195,7 +195,7 @@ public:
     ui32 AllocateGroup(TGroupMapper& mapper, TGroupMapper::TGroupDefinition& group, ui32 groupSizeInUnits = 0u, bool allowFailure = false) {
         ui32 groupId = NextGroupId++;
         TString error;
-        bool success = mapper.AllocateGroup(groupId, group, {}, {}, groupSizeInUnits, 0, false, std::nullopt, error);
+        bool success = mapper.AllocateGroup(groupId, group, {}, {}, groupSizeInUnits, 0, false, TBridgePileId(), error);
         if (!success && allowFailure) {
             Ctest << "error# " << error << Endl;
             return 0;
@@ -244,7 +244,7 @@ public:
 
         TString error;
         bool success = mapper.AllocateGroup(groupId, group.Group, replacedDisks, std::move(forbid), group.GroupSizeInUnits, 0,
-            requireOperational, std::nullopt, error);
+            requireOperational, TBridgePileId(), error);
         if (!success) {
             Ctest << "error# " << error << Endl;
             if (allowError) {
@@ -330,7 +330,7 @@ public:
             status = ESanitizeResult::FAIL;
             for (auto vdisk : result.Disks) {
                 auto target = mapper.TargetMisplacedVDisk(TGroupId::FromValue(groupId), group.Group, vdisk,
-                    std::move(forbid), 0, requireOperational, group.GroupSizeInUnits, std::nullopt, error);
+                    std::move(forbid), 0, requireOperational, group.GroupSizeInUnits, TBridgePileId(), error);
                 if (target) {
                     status = ESanitizeResult::SUCCESS;
                     if (movedDisk) {

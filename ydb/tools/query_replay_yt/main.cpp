@@ -58,6 +58,7 @@ class TQueryReplayMapper
     ui32 ActorSystemThreadsCount = 5;
     NActors::NLog::EPriority YqlLogPriority = NActors::NLog::EPriority::PRI_ERROR;
     bool EnableAntlr4Parser;
+    bool EnableOltpSinkSideBySinkCompare;
 
 public:
     static TString GetFailReason(const TQueryReplayEvents::TCheckQueryPlanStatus& status) {
@@ -96,14 +97,15 @@ public:
 public:
     TQueryReplayMapper() = default;
 
-    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, EnableAntlr4Parser, YqlLogPriority);
+    Y_SAVELOAD_JOB(UdfFiles, ActorSystemThreadsCount, EnableAntlr4Parser, EnableOltpSinkSideBySinkCompare, YqlLogPriority);
 
-    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool enableAntlr4Parser,
+    TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool enableAntlr4Parser, bool enableOltpSinkSideBySinkCompare,
         NActors::NLog::EPriority yqlLogPriority = NActors::NLog::EPriority::PRI_ERROR)
         : UdfFiles(udfFiles)
         , ActorSystemThreadsCount(actorSystemThreadsCount)
         , YqlLogPriority(yqlLogPriority)
         , EnableAntlr4Parser(enableAntlr4Parser)
+        , EnableOltpSinkSideBySinkCompare(enableOltpSinkSideBySinkCompare)
     {}
 
     void Start(NYT::TTableWriter<NYT::TNode>*) override {
@@ -151,14 +153,83 @@ public:
             return nullptr;
         }
 
-        auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, EnableAntlr4Parser));
+        NJson::TJsonValue replayJson = std::move(json);
 
-        auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
-            compileActorId,
-            THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(json))),
-            TDuration::Seconds(600));
+        THolder<TQueryReplayEvents::TEvCompileResponse> replayResult;
+        {
+            NJson::TJsonValue firstCompileReplayJson = replayJson;
+            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, EnableAntlr4Parser, true));
 
-        return future.ExtractValueSync();
+            auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
+                compileActorId,
+                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(firstCompileReplayJson))),
+                TDuration::Seconds(600));
+
+            replayResult.Reset(future.ExtractValueSync().Release());
+        }
+
+        THolder<TQueryReplayEvents::TEvCompileResponse> replayResultWithoutSink;
+
+        if (!EnableOltpSinkSideBySinkCompare)
+        {
+            return replayResult;
+        }
+
+        {
+            NJson::TJsonValue secondCompileReplayJson = replayJson;
+            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, EnableAntlr4Parser, false));
+
+            auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
+                compileActorId,
+                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(secondCompileReplayJson))),
+                TDuration::Seconds(600));
+
+            replayResultWithoutSink.Reset(future.ExtractValueSync().Release());
+        }
+
+        THolder<TQueryReplayEvents::TEvCompileResponse> compareResult = MakeHolder<TQueryReplayEvents::TEvCompileResponse>(false);
+        if (!replayResult || !replayResultWithoutSink) {
+            compareResult->Status = TQueryReplayEvents::UncategorizedFailure;
+            compareResult->Message = TStringBuilder() << "failed to compare side by side oltp sink and without it because one the cases has failed, with: "
+                << (replayResult ? GetFailReason(replayResult->Status) : "timeout")
+                << ", without:"
+                << (replayResultWithoutSink ? GetFailReason(replayResultWithoutSink->Status) : "timeout");
+        } else {
+            if (!replayResult->Success || !replayResultWithoutSink->Success) {
+                compareResult->Status = TQueryReplayEvents::UncategorizedFailure;
+                compareResult->Message = TStringBuilder() << "failed to compare side by side oltp sink and without it because one the cases has failed, with: "
+                    << (replayResult ? GetFailReason(replayResult->Status) : "timeout")
+                    << ", without:"
+                    << (replayResultWithoutSink ? GetFailReason(replayResultWithoutSink->Status) : "timeout");
+            } else {
+                TStringBuilder builder;
+                bool differentReads = false;
+                for(const auto& [table, stats]: replayResult->EngineTableStats) {
+                    auto it = replayResultWithoutSink->EngineTableStats.find(table);
+                    if (it == replayResultWithoutSink->EngineTableStats.end()) {
+                        builder << "missing table read without sink " << table << ";" << Endl;
+                        differentReads = true;
+                        continue;
+                    }
+
+                    if (it->second.Reads.size() < stats.Reads.size()) {
+                        builder << "oltp sinks adds extra reading in table " << table
+                            << ", without sink " << it->second.Reads.size()
+                            << ", with it: " << stats.Reads.size() <<  Endl;
+                        differentReads = true;
+                        continue;
+                    }
+                }
+
+                if (differentReads) {
+                    compareResult->Status = TQueryReplayEvents::UncategorizedFailure;
+                    compareResult->Message = TString(builder);
+                    compareResult->Plan = replayResult->Plan;
+                }
+            }
+        }
+
+        return compareResult;
     }
 
     void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
@@ -241,7 +312,7 @@ int main(int argc, const char** argv) {
     TQueryReplayConfig config;
     config.ParseConfig(argc, argv);
     if (config.QueryFile) {
-        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel);
+        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel);
         fakeMapper.Start(nullptr);
         Y_DEFER {
             fakeMapper.Finish(nullptr);
@@ -255,11 +326,13 @@ int main(int argc, const char** argv) {
         }
 
         Cerr << "Running local replay of the query:" << Endl
-	     << "Database: " << queryJson["query_database"].GetStringSafe() << Endl
-	     << UnescapeC(queryJson["query_text"].GetStringSafe()) << Endl;
+            << "Database: " << queryJson["query_database"].GetStringSafe() << Endl
+            << UnescapeC(queryJson["query_text"].GetStringSafe()) << Endl;
+
         auto TableMetadata = ExtractStaticMetadata(queryJson);
         Cerr << "Tables: " << Endl;
-	for(auto& [name, meta]: TableMetadata) {
+
+	    for(auto& [name, meta]: TableMetadata) {
             Cerr << "TableName: " << name << Endl;
             NKikimrKqp::TKqpTableMetadataProto protoDescription;
             meta->ToMessage(&protoDescription);
@@ -271,6 +344,7 @@ int main(int argc, const char** argv) {
         auto status = result.Get()->Status;
         TString failReason = TQueryReplayMapper::GetFailReason(status);
         Cerr << failReason << Endl;
+        Cerr << result.Get()->Message << Endl;
         return 0;
     }
 
@@ -298,7 +372,7 @@ int main(int argc, const char** argv) {
     }
     spec.MaxFailedJobCount(10000);
 
-    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel));
+    client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.EnableOltpSinkSideBySinkCompare, config.YqlLogLevel));
 
     auto mergeSpec = NYT::TMergeOperationSpec();
     mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));

@@ -6,6 +6,8 @@ ENV(YDB_ERASURE=block_4-2)
 
 ENV(YDB_FEATURE_FLAGS="enable_topic_transfer")
 ENV(YDB_GRPC_SERVICES="replication")
+ENV(YDB_ADDITIONAL_LOG_CONFIGS="PERSQUEUE:DEBUG")
+
 
 PEERDIR(
     ydb/core/transfer/ut/common
@@ -23,7 +25,7 @@ SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:24 cpu:4)
 ELSE()
-    REQUIREMENTS(ram:16 cpu:2)
+    REQUIREMENTS(ram:24 cpu:2)
 ENDIF()
 
 END()

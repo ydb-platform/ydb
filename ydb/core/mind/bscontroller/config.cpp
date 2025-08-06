@@ -1244,6 +1244,10 @@ namespace NKikimr::NBsController {
             if (groupInfo.BridgeGroupInfo) {
                 group->MergeFrom(*groupInfo.BridgeGroupInfo);
             }
+            if (groupInfo.BridgeProxyGroupId) {
+                groupInfo.BridgeProxyGroupId->CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
+            }
+            groupInfo.BridgePileId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
         }
 
         void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {

@@ -276,7 +276,7 @@ public:
         ui32 Generation;
         bool LayoutCorrect = true;
         std::vector<TGroupState*> BridgeGroups;
-        std::optional<TBridgePileId> BridgePileId;
+        TBridgePileId BridgePileId;
     };
 
     struct TSelfCheckResult {
@@ -1756,9 +1756,7 @@ public:
             groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
             groupState.Generation = group.GetInfo().GetGeneration();
             groupState.LayoutCorrect = group.GetInfo().GetLayoutCorrect();
-            if (group.GetInfo().HasBridgePileId()) {
-                groupState.BridgePileId = TBridgePileId::FromValue(group.GetInfo().GetBridgePileId());
-            }
+            groupState.BridgePileId = TBridgePileId::FromProto(&group.GetInfo(), &NKikimrSysView::TGroupInfo::GetBridgePileId);
             if (group.GetInfo().HasProxyGroupId()) {
                 GroupState[group.GetInfo().GetProxyGroupId()].BridgeGroups.push_back(&groupState);
             } else {
@@ -3043,11 +3041,11 @@ public:
             auto getStatus = [&](const TGroupState* group) {
                 TGroupChecker checker(group->ErasureSpecies, group->LayoutCorrect, ETags::BridgeGroupState);
                 TSelfCheckContext pileContext(&context, "BRIDGE_GROUP");
-                if (group->BridgePileId->GetRawId() < AppData()->BridgeConfig.PilesSize()) {
-                    const auto& pileName = AppData()->BridgeConfig.GetPiles(group->BridgePileId->GetRawId()).GetName();
+                if (group->BridgePileId.GetPileIndex() < AppData()->BridgeConfig.PilesSize()) {
+                    const auto& pileName = AppData()->BridgeConfig.GetPiles(group->BridgePileId.GetPileIndex()).GetName();
                     pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pileName);
                 } else { // this fallback should not ever happen - but is used in tests
-                    pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(group->BridgePileId->ToString());
+                    pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(group->BridgePileId.ToString());
                 }
                 pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(group->Id));
                 CheckGroupVSlots(checker, group->VSlots, storageGroupStatus, pileContext);
@@ -3058,7 +3056,7 @@ public:
                 if (!group->BridgePileId) {
                     return true;
                 }
-                return NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(*group->BridgePileId)->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
+                return NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(group->BridgePileId)->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
             };
             auto [minStatus, maxStatus] = std::ranges::minmax(itGroup->second.BridgeGroups | std::views::filter(isSyncPile) | std::views::transform(getStatus));
             Ydb::Monitoring::StatusFlag::Status status = maxStatus;

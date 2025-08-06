@@ -47,7 +47,9 @@ struct TTxInitSchema : public ITransaction {
             .SetCompactionPolicy(TableId, *CompactionPolicy);
 
         if (TryKeepInMemory) {
-            txc.DB.Alter().SetFamily(TableId, 0, NTable::NPage::ECache::Once, NTable::NPage::ECodec::Plain, NTable::NPage::ECacheMode::TryKeepInMemory);
+            txc.DB.Alter()
+                .SetFamilyCacheMode(TableId, 0, NTable::NPage::ECacheMode::TryKeepInMemory)
+                .SetFamilyCache(TableId, 0, NTable::NPage::ECache::Once);
         }
 
         return true;
@@ -173,7 +175,9 @@ struct TTxTryKeepInMemory : public ITransaction {
     {
         using namespace NTable::NPage;
 
-        txc.DB.Alter().SetFamily(TableId, 0, ECache::Once, ECodec::Plain, TryKeepInMemory ? ECacheMode::TryKeepInMemory : ECacheMode::Regular);
+        txc.DB.Alter()
+            .SetFamilyCacheMode(TableId, 0, TryKeepInMemory ? ECacheMode::TryKeepInMemory : ECacheMode::Regular)
+            .SetFamilyCache(TableId, 0, ECache::Once);
 
         return true;
     }

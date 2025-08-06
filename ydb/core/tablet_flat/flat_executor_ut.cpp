@@ -37,7 +37,7 @@ namespace NTabletFlatExecutor {
 
                 if (Groups) {
                     txc.DB.Alter()
-                        .SetFamily(TableId, AltFamilyId, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain, NTable::NPage::ECacheMode::Regular)
+                        .AddFamily(TableId, AltFamilyId, 0)
                         .AddColumnToFamily(TableId, ColumnValueId, AltFamilyId);
                 }
 
@@ -2059,7 +2059,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompressedSelectRows) {
             using namespace NTable::NPage;
 
             txc.DB.Alter()
-                .SetFamily(TRowsModel::TableId, 0, ECache::None, ECodec::LZ4, ECacheMode::Regular);
+                .SetFamilyCompression(TRowsModel::TableId, 0, ECodec::LZ4);
 
             return true;
         }
@@ -6269,7 +6269,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         {
             using namespace NTable::NPage;
 
-            txc.DB.Alter().SetFamily(TRowsModel::TableId, Family, ECache::Ever, ECodec::Plain, ECacheMode::Regular);
+            txc.DB.Alter().SetFamilyCache(TRowsModel::TableId, Family, ECache::Ever);
 
             return true;
         }
@@ -6286,7 +6286,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             using namespace NTable::NPage;
 
             txc.DB.Alter()
-                .SetFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, ECache::None, ECodec::Plain, ECacheMode::Regular)
+                .AddFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, 0)
                 .AddColumnToFamily(TRowsModel::TableId, TRowsModel::ColumnValueId, TRowsModel::AltFamilyId);
 
             return true;
@@ -6754,7 +6754,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         {}
 
         bool Execute(TTransactionContext &txc, const TActorContext &) override {
-            txc.DB.Alter().SetFamily(TRowsModel::TableId, Family, Cache, NTable::NPage::ECodec::Plain, CacheMode);
+            txc.DB.Alter()
+                .SetFamilyCacheMode(TRowsModel::TableId, Family, CacheMode)
+                .SetFamilyCache(TRowsModel::TableId, Family, Cache);
 
             return true;
         }
@@ -6771,7 +6773,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
             using namespace NTable::NPage;
 
             txc.DB.Alter()
-                .SetFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, ECache::None, ECodec::Plain, ECacheMode::Regular)
+                .AddFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, 0)
                 .AddColumnToFamily(TRowsModel::TableId, TRowsModel::ColumnValueId, TRowsModel::AltFamilyId);
 
             return true;

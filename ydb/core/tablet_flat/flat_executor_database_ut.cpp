@@ -277,7 +277,7 @@ private:
         NTable::TAlter delta;
 
         delta.AddTable("table", Table);
-        delta.SetFamily(Table, AltFamily, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain, NTable::NPage::ECacheMode::Regular);
+        delta.AddFamily(Table, AltFamily, 0);
         delta.AddColumn(Table, "Id", 1, NScheme::TUint32::TypeId, false);
         delta.AddColumn(Table, "value", 2, NScheme::TUint64::TypeId, false);
         delta.AddColumn(Table, "large", 3, NScheme::TString::TypeId, false);

@@ -40,7 +40,9 @@ namespace {
             bld.AddTable("table1", TableId);
             bld.SetRoom(TableId, StoreIdOut, ChannelOut, {ChannelBlobs}, ChannelOut);
             bld.AddFamily(TableId, GroupId1, StoreIdDef);
-            bld.SetFamily(TableId, GroupId1, ECache::Ever, ECodec::LZ4, ECacheMode::TryKeepInMemory);
+            bld.SetFamilyCompression(TableId, GroupId1, ECodec::LZ4);
+            bld.SetFamilyCacheMode(TableId, GroupId1, ECacheMode::TryKeepInMemory);
+            bld.SetFamilyCache(TableId, GroupId1, ECache::Ever);
             bld.AddFamily(TableId, GroupId2, StoreIdOut);
             bld.AddColumn(TableId, "key", ColId1, NScheme::TSmallBoundedString::TypeId, false);
             bld.AddColumn(TableId, "value", ColId2, NScheme::TUint32::TypeId, false);

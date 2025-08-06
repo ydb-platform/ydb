@@ -449,8 +449,9 @@ void TUserTable::DoApplyCreate(
         const TUserFamily& family = fam.second;
 
         alter.AddFamily(tid, familyId, family.GetRoomId());
-        // TODO: handle different cache modes
-        alter.SetFamily(tid, familyId, family.Cache, family.Codec, NTable::NPage::ECacheMode::Regular);
+        alter.SetFamilyCompression(tid, familyId, family.Codec);
+        alter.SetFamilyCacheMode(tid, familyId, NTable::NPage::ECacheMode::Regular); // TODO: handle different cache modes
+        alter.SetFamilyCache(tid, familyId, family.Cache);
         alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
@@ -547,8 +548,9 @@ void TUserTable::ApplyAlter(
 
         for (ui32 tid : tids) {
             alter.AddFamily(tid, familyId, family.GetRoomId());
-            // TODO: handle different cache modes
-            alter.SetFamily(tid, familyId, family.Cache, family.Codec, NTable::NPage::ECacheMode::Regular);
+            alter.SetFamilyCompression(tid, familyId, family.Codec);
+            alter.SetFamilyCacheMode(tid, familyId, NTable::NPage::ECacheMode::Regular); // TODO: handle different cache modes
+            alter.SetFamilyCache(tid, familyId, family.Cache);
             alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
         }
 
@@ -699,8 +701,9 @@ void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db, ui32 tid) const
         const TUserFamily& family = fam.second;
 
         db.Alter().AddFamily(tid, familyId, family.GetRoomId());
-        // TODO: handle different cache modes
-        db.Alter().SetFamily(tid, familyId, family.Cache, family.Codec, NTable::NPage::ECacheMode::Regular);
+        db.Alter().SetFamilyCompression(tid, familyId, family.Codec);
+        db.Alter().SetFamilyCacheMode(tid, familyId, NTable::NPage::ECacheMode::Regular); // TODO: handle different cache modes
+        db.Alter().SetFamilyCache(tid, familyId, family.Cache);
         db.Alter().SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
     }
 }

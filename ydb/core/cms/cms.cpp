@@ -1472,10 +1472,10 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
         const TActorId SendTo;
 
         TRequestApproveActor(TString requestId, TCmsStatePtr state, TActorId sendTo)
-        : TBase(&TRequestApproveActor::StateWork)
-        , RequestId(std::move(requestId))
-        , State(std::move(state))
-        , SendTo(sendTo)
+            : TBase(&TRequestApproveActor::StateWork)
+            , RequestId(std::move(requestId))
+            , State(std::move(state))
+            , SendTo(sendTo)
         {}
 
         void Handle(TEvCms::TEvPermissionResponse::TPtr &ev) {
@@ -1495,11 +1495,8 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
 
             manageResponse->Record.MutableStatus()->SetCode(TStatus::OK);
             for (auto& permission : resp->Record.permissions()) {
-                manageResponse->Record.AddManuallyApprovedPermissions(permission.GetId());
+                manageResponse->Record.AddManuallyApprovedPermissions()->CopyFrom(permission);
             }
-
-            // Remove the scheduled request
-            State->ScheduledRequests.erase(RequestId);
 
             Send(SendTo, std::move(manageResponse), 0, ev->Cookie);
 

@@ -526,9 +526,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
         TCmsTestEnv env(opts);
 
-        auto pdiskId = env.PDiskId(0, 0);
-        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
-
         // Disconnect 3 nodes, in this case locking is not allowed
         for (ui32 i = 0; i < 3; i++) {
             auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(i)];
@@ -550,7 +547,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Manual approval
         auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
-        TString permissionId = approveResp.GetManuallyApprovedPermissions(0);
+        TString permissionId = approveResp.GetManuallyApprovedPermissions(0).GetId();
         auto rec2 = env.CheckGetPermission("user", permissionId);
         UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
@@ -572,9 +569,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
         TCmsTestEnv env(opts);
 
-        auto pdiskId = env.PDiskId(0, 0);
-        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
-
         auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
         node.Connected = false;
         env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
@@ -594,7 +588,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             // Manual approval
             auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
             UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
-            TString permissionId = approveResp.GetManuallyApprovedPermissions(0);
+            TString permissionId = approveResp.GetManuallyApprovedPermissions(0).GetId();
             auto rec2 = env.CheckGetPermission("user", permissionId);
             UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
@@ -605,9 +599,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
         TCmsTestEnv env(opts);
-
-        auto pdiskId = env.PDiskId(0, 0);
-        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
 
         auto req = MakePermissionRequest(
             TRequestOptions("user", true, false, true),
@@ -629,7 +620,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // // Manual approval
         auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 2);
-        for (const auto& permissionId : approveResp.GetManuallyApprovedPermissions()) {
+        for (const auto& permission : approveResp.GetManuallyApprovedPermissions()) {
+            auto permissionId = permission.GetId();
             auto rec3 = env.CheckGetPermission("user", permissionId);
             UNIT_ASSERT_VALUES_EQUAL(rec3.PermissionsSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(rec3.GetPermissions(0).GetId(), permissionId);
@@ -640,9 +632,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
         TCmsTestEnv env(opts);
-
-        auto pdiskId = env.PDiskId(0, 0);
-        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
 
         auto req = MakePermissionRequest(
             TRequestOptions("user", true, false, true),

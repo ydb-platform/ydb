@@ -235,7 +235,7 @@ message TManageRequestResponse {
 
   optional TStatus           Status = 1;
   repeated TScheduledRequest Requests = 2;
-  repeated string            ManuallyApprovedPermissions = 3;
+  repeated TPermission       ManuallyApprovedPermissions = 3;
 }
 
 message TCheckRequest {

@@ -607,6 +607,8 @@ message TInterconnectDebug {
     optional uint64 SleepMax = 203;
     optional uint64 RescheduleMin = 204;
     optional uint64 RescheduleMax = 205;
+
+    optional string SecurityToken = 13;
 }
 
 message TConsoleRequest {

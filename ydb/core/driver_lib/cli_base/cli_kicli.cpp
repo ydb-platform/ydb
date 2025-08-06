@@ -70,6 +70,10 @@ void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBus
     SetToken(config, request);
 }
 
+void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusInterconnectDebug>& request) {
+    SetToken(config, request);
+}
+
 template <>
 int OnMessageBus(const TClientCommand::TConfig& config, const NMsgBusProxy::TBusResponse& response) {
     const NKikimrClient::TResponse& resp(response.Record);

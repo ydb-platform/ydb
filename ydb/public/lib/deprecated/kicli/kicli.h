@@ -901,6 +901,12 @@ protected:
         }
     }
 
+    void PrepareRequest(NKikimrClient::TInterconnectDebug& request) const {
+        if (!SecurityToken.empty()) {
+            request.SetSecurityToken(SecurityToken);
+        }
+    }
+
     TString SecurityToken;
     THolder<TImpl> Impl;
 };

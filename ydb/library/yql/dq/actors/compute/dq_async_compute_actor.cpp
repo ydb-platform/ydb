@@ -977,7 +977,7 @@ private:
         }
 
         if (it->second.Ack) {
-            Channels->SendChannelDataAck(it->second.ChannelId, inputChannel->FreeSpace);
+            Channels->SendChannelDataAck(channelId, inputChannel->FreeSpace);
         }
 
         TakeInputChannelDataRequests.erase(it);

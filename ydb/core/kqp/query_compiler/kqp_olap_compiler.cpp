@@ -1,7 +1,6 @@
 #include "kqp_olap_compiler.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
 #include <yql/essentials/core/arrow_kernels/request/request.h>
@@ -51,8 +50,6 @@ public:
             YQL_ENSURE(ReadColumns.emplace(columnMeta.Name, columnMeta.Id).second);
             MaxColumnId = std::max(MaxColumnId, columnMeta.Id);
         }
-
-        Program.SetVersion(NKikimr::NSsa::RuntimeVersion);
     }
 
     ui32 GetColumnId(const std::string& name) const {
@@ -592,18 +589,18 @@ const TTypedColumn CompileExists(const TExprBase& arg, TKqpOlapCompileContext& c
 TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCompileContext& ctx) {
     std::vector<ui64> ids;
     TTypeAnnotationNode::TListType argTypes;
-    ids.reserve(apply.Columns().Size());
-    argTypes.reserve(apply.Columns().Size());
-    for (const auto& member : apply.Columns()) {
-        const auto arg = GetOrCreateColumnIdAndType(member, ctx);
-        ids.emplace_back(arg.Id);
-        argTypes.emplace_back(arg.Type);
-    }
-
-    for(const auto& param: apply.Parameters()) {
-        const auto& arg = GetOrCreateColumnIdAndType(param, ctx);
-        ids.emplace_back(arg.Id);
-        argTypes.emplace_back(arg.Type);
+    ids.reserve(apply.Args().Size());
+    argTypes.reserve(apply.Args().Size());
+    for (const auto& arg : apply.Args()) {
+        if (const auto& column = arg.Maybe<TKqpOlapApplyColumnArg>()) {
+            const auto ssaCol = GetOrCreateColumnIdAndType(column.Cast().ColumnName(), ctx);
+            ids.emplace_back(ssaCol.Id);
+            argTypes.emplace_back(ssaCol.Type);
+        } else {
+            const auto& ssaCol = GetOrCreateColumnIdAndType(arg, ctx);
+            ids.emplace_back(ssaCol.Id);
+            argTypes.emplace_back(ssaCol.Type);
+        }
     }
 
     auto *const command = ctx.CreateAssignCmd();
@@ -611,6 +608,7 @@ TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCom
     const auto idx = ctx.GetKernelRequestBuilder().AddScalarApply(apply.Lambda().Ref(), argTypes, ctx.ExprCtx());
     function->SetKernelIdx(idx);
     function->SetFunctionType(TProgram::YQL_KERNEL);
+    function->SetKernelName(apply.KernelName().StringValue());
     std::for_each(ids.cbegin(), ids.cend(), [function] (ui64 id) { function->AddArguments()->SetId(id); });
     return {command->GetColumn().GetId(), ctx.ExprCtx().MakeType<TBlockExprType>(apply.Lambda().Body().Ref().GetTypeAnn())};
 }

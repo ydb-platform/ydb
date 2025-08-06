@@ -705,7 +705,7 @@ using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder1;
 class IFunctionTypeInfoBuilder: public IFunctionTypeInfoBuilderImpl {
 public:
     IFunctionTypeInfoBuilder();
-    
+
     IFunctionTypeInfoBuilder& Implementation(
             TUniquePtr<IBoxedValue> impl) {
         ImplementationImpl(std::move(impl));
@@ -884,13 +884,6 @@ struct TTypeBuilderHelper<TOptional<T>> {
     }
 };
 
-template <typename T>
-struct TTypeBuilderHelper<TAutoMap<T>> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        return TTypeBuilderHelper<T>::Build(builder);
-    }
-};
-
 template <typename TKey, typename TValue>
 struct TTypeBuilderHelper<TDict<TKey, TValue>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
@@ -983,6 +976,29 @@ struct TCallableArgsHelper<TArg, TArgs...> {
             const IFunctionTypeInfoBuilder& builder)
     {
         callableBuilder.Arg(TTypeBuilderHelper<TArg>::Build(builder));
+        TCallableArgsHelper<TArgs...>::Arg(callableBuilder, builder);
+    }
+};
+
+template <typename TArg, typename... TArgs>
+struct TCallableArgsHelper<TAutoMap<TArg>, TArgs...> {
+    static void Arg(
+            ICallableTypeBuilder& callableBuilder,
+            const IFunctionTypeInfoBuilder& builder)
+    {
+        callableBuilder.Arg(TTypeBuilderHelper<TArg>::Build(builder))
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 38)
+        // XXX: Unfortunately, ICallableTypeBuilder provides Flags
+        // method only since UDF ABI 2.38. However, AutoMap flag
+        // has been silently ignored by this builder and also by
+        // the TTypeBuilderHelper specialization for AutoMap type.
+        // Hence, the correct AutoMap type processing is wrapped
+        // with this compatibility macro, since the caller of
+        // ICallableTypeBuilder has to explicitly set AutoMap flag
+        // for the particular argument anyway.
+                       .Flags(ICallablePayload::TArgumentFlags::AutoMap)
+#endif
+                       ;
         TCallableArgsHelper<TArgs...>::Arg(callableBuilder, builder);
     }
 };

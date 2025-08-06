@@ -1115,8 +1115,19 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     const auto& cfg = runConfig.AppConfig;
 
     bool useAutoConfig = !cfg.HasActorSystemConfig() || (cfg.GetActorSystemConfig().HasUseAutoConfig() && cfg.GetActorSystemConfig().GetUseAutoConfig());
+    bool useSharedThreads = cfg.HasActorSystemConfig() && cfg.GetActorSystemConfig().HasUseSharedThreads() && cfg.GetActorSystemConfig().GetUseSharedThreads();
     NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
+
+    if (useSharedThreads) {
+        pools.SystemPoolId = 0;
+        pools.UserPoolId = 1;
+        pools.BatchPoolId = 2;
+        pools.IOPoolId = 3;
+        pools.ICPoolId = 4;
+        servicePools.clear();
+        servicePools["Interconnect"] = 4;
+    }
 
     AppData.Reset(new TAppData(pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
                                servicePools,
@@ -1166,6 +1177,11 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (runConfig.AppConfig.HasPQClusterDiscoveryConfig()) {
         AppData->PQClusterDiscoveryConfig.CopyFrom(runConfig.AppConfig.GetPQClusterDiscoveryConfig());
     }
+
+    if (runConfig.AppConfig.HasKafkaProxyConfig()) {
+        AppData->KafkaProxyConfig.CopyFrom(runConfig.AppConfig.GetKafkaProxyConfig());
+    }
+
 
     if (runConfig.AppConfig.HasNetClassifierConfig()) {
         AppData->NetClassifierConfig.CopyFrom(runConfig.AppConfig.GetNetClassifierConfig());
@@ -1689,23 +1705,20 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableGroupedMemoryLimiter) {
-        sil->AddServiceInitializer(new TGroupedMemoryLimiterInitializer(runConfig));
-    }
-
-    if (serviceMask.EnableScanConveyor) {
-        sil->AddServiceInitializer(new TScanConveyorInitializer(runConfig));
+        sil->AddServiceInitializer(new TScanGroupedMemoryLimiterInitializer(runConfig));
+        sil->AddServiceInitializer(new TCompGroupedMemoryLimiterInitializer(runConfig));
     }
 
     if (serviceMask.EnableCompPriorities) {
         sil->AddServiceInitializer(new TCompPrioritiesInitializer(runConfig));
     }
 
-    if (serviceMask.EnableCompConveyor) {
-        sil->AddServiceInitializer(new TCompConveyorInitializer(runConfig));
+    if (serviceMask.EnableCompConveyor || serviceMask.EnableInsertConveyor || serviceMask.EnableScanConveyor) {
+        sil->AddServiceInitializer(new TCompositeConveyorInitializer(runConfig));
     }
 
-    if (serviceMask.EnableInsertConveyor) {
-        sil->AddServiceInitializer(new TInsertConveyorInitializer(runConfig));
+    if (serviceMask.EnableGeneralCachePortionsMetadata) {
+        sil->AddServiceInitializer(new TGeneralCachePortionsMetadataInitializer(runConfig));
     }
 
     if (serviceMask.EnableCms) {
@@ -1829,6 +1842,17 @@ void TKikimrRunner::KikimrStart() {
             endpoint += Sprintf(":%d", server.second->GetPort());
             ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId),
                               new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(server.first, endpoint));
+            if (ProcessMemoryInfoProvider) {
+                auto memInfo = ProcessMemoryInfoProvider->Get();
+                NKikimrWhiteboard::TSystemStateInfo systemStateInfo;
+                if (memInfo.CGroupLimit) {
+                    systemStateInfo.SetMemoryLimit(*memInfo.CGroupLimit);
+                } else if (memInfo.MemTotal) {
+                    systemStateInfo.SetMemoryLimit(*memInfo.MemTotal);
+                }
+                ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId),
+                              new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(systemStateInfo));
+            }
         }
     }
 

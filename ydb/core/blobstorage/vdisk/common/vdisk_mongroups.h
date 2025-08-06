@@ -123,15 +123,11 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(EmergencyPatchStartQueueItems, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyPutQueueItems, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyMultiPutQueueItems, false);
-                COUNTER_INIT_IF_EXTENDED(EmergencyLocalSyncDataQueueItems, false);
-                COUNTER_INIT_IF_EXTENDED(EmergencyAnubisOsirisPutQueueItems, false);
 
                 COUNTER_INIT_IF_EXTENDED(EmergencyMovedPatchQueueBytes, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyPatchStartQueueBytes, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyPutQueueBytes, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyMultiPutQueueBytes, false);
-                COUNTER_INIT_IF_EXTENDED(EmergencyLocalSyncDataQueueBytes, false);
-                COUNTER_INIT_IF_EXTENDED(EmergencyAnubisOsirisPutQueueBytes, false);
 
                 COUNTER_INIT_IF_EXTENDED(FreshSatisfactionRankPercent, false);
                 COUNTER_INIT_IF_EXTENDED(LevelSatisfactionRankPercent, false);
@@ -159,15 +155,11 @@ public:                                                                         
             COUNTER_DEF(EmergencyPatchStartQueueItems);
             COUNTER_DEF(EmergencyPutQueueItems);
             COUNTER_DEF(EmergencyMultiPutQueueItems);
-            COUNTER_DEF(EmergencyLocalSyncDataQueueItems);
-            COUNTER_DEF(EmergencyAnubisOsirisPutQueueItems);
 
             COUNTER_DEF(EmergencyMovedPatchQueueBytes);
             COUNTER_DEF(EmergencyPatchStartQueueBytes);
             COUNTER_DEF(EmergencyPutQueueBytes);
             COUNTER_DEF(EmergencyMultiPutQueueBytes);
-            COUNTER_DEF(EmergencyLocalSyncDataQueueBytes);
-            COUNTER_DEF(EmergencyAnubisOsirisPutQueueBytes);
 
             COUNTER_DEF(FreshSatisfactionRankPercent);
             COUNTER_DEF(LevelSatisfactionRankPercent);
@@ -774,5 +766,57 @@ public:                                                                         
             COUNTER_DEF(SkeletonFrontUptimeSeconds);
         };
 
+        class TDeepScrubbingGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TDeepScrubbingGroup)
+            {
+                COUNTER_INIT(BlobsChecked, true);
+                COUNTER_INIT(CheckIntegritySuccesses, true);
+                COUNTER_INIT(CheckIntegrityErrors, true);
+                COUNTER_INIT(UnknownDataStatus, true);
+                COUNTER_INIT(UnknownPlacementStatus, true);
+                COUNTER_INIT(DataIssues, true);
+                COUNTER_INIT(PlacementIssues, true);
+            }
+
+            COUNTER_DEF(BlobsChecked);
+            COUNTER_DEF(CheckIntegritySuccesses);
+            COUNTER_DEF(CheckIntegrityErrors);
+            COUNTER_DEF(UnknownDataStatus);
+            COUNTER_DEF(UnknownPlacementStatus);
+            COUNTER_DEF(DataIssues);
+            COUNTER_DEF(PlacementIssues);
+        };
+
+        class TDeepScrubbingSubgroups {
+        public:
+            TDeepScrubbingSubgroups(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+                for (bool isHuge : {true, false}) {
+                    for (TErasureType::EErasureSpecies erasure :
+                            {TErasureType::ErasureNone, TErasureType::Erasure4Plus2Block,
+                            TErasureType::ErasureMirror3of4, TErasureType::ErasureMirror3dc}) {
+                        ::NMonitoring::TDynamicCounterPtr subgroup = counters
+                                ->GetSubgroup("blobSize", isHuge ? "huge" : "small")
+                                ->GetSubgroup("erasure", TErasureType::ErasureSpeciesName(erasure));
+                        Subgroups.insert({GetKey(isHuge, erasure), TDeepScrubbingGroup(subgroup)});
+                    }
+                }
+            }
+
+            TDeepScrubbingGroup* GetCounters(bool isHuge, TErasureType::EErasureSpecies erasure) {
+                auto it = Subgroups.find(GetKey(isHuge, erasure));
+                if (it == Subgroups.end()) {
+                    return nullptr;
+                }
+                return &it->second;
+            }
+
+        private:
+            std::unordered_map<ui64, TDeepScrubbingGroup> Subgroups;
+
+            ui64 GetKey(bool isHuge, TErasureType::EErasureSpecies erasure) {
+                return ((ui64)isHuge << 32) + (ui64)erasure;
+            }
+        };
     } // NMonGroup
 } // NKikimr

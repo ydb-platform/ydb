@@ -3,7 +3,6 @@
 #include "kqp_executer.h"
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
-#include "kqp_partition_helper.h"
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
@@ -132,6 +131,7 @@ public:
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TGUCSettings::TPtr GUCSettings,
+        TPartitionPruner::TConfig partitionPrunerConfig,
         const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpRequestCounters::TPtr counters,
@@ -140,12 +140,13 @@ public:
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
-        TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing())
+        TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing())
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
+        , PartitionPruner(HolderFactory(), TypeEnv(), std::move(partitionPrunerConfig))
         , BufferActorId(bufferActorId)
         , TxManager(txManager)
         , Database(database)
@@ -1033,7 +1034,6 @@ protected:
                 ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             }
             if (!settings.GetInconsistentTx()
-                    && TasksGraph.GetMeta().LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION
                     && GetSnapshot().IsValid()) {
                 settings.MutableMvccSnapshot()->SetStep(GetSnapshot().Step);
                 settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
@@ -1100,6 +1100,14 @@ protected:
             structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
         }
 
+        ui64 selfNodeIdx = 0;
+        for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
+            if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
+                selfNodeIdx = i;
+                break;
+            }
+        }
+
         TVector<ui64> tasksIds;
 
         // generate all tasks
@@ -1119,7 +1127,7 @@ protected:
             if (resourceSnapshot.empty()) {
                 task.Meta.Type = TTaskMeta::TTaskType::Compute;
             } else {
-                task.Meta.NodeId = resourceSnapshot[i % resourceSnapshot.size()].GetNodeId();
+                task.Meta.NodeId = resourceSnapshot[(selfNodeIdx + i) % resourceSnapshot.size()].GetNodeId();
                 task.Meta.Type = TTaskMeta::TTaskType::Scan;
             }
 
@@ -1400,7 +1408,7 @@ protected:
 
         bool isFullScan = false;
         const THashMap<ui64, TShardInfo> partitions = SourceScanStageIdToParititions.empty()
-            ? PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv(), isFullScan)
+            ? PartitionPruner.Prune(source, stageInfo, isFullScan)
             : SourceScanStageIdToParititions.at(stageInfo.Id);
 
         if (isFullScan && !source.HasItemsLimit()) {
@@ -1733,7 +1741,8 @@ protected:
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         auto& columnShardHashV1Params = stageInfo.Meta.ColumnShardHashV1Params;
-        if (enableShuffleElimination && stage.GetIsShuffleEliminated() && stageInfo.Meta.ColumnTableInfoPtr) {
+        bool shuffleEliminated = enableShuffleElimination && stage.GetIsShuffleEliminated();
+        if (shuffleEliminated && stageInfo.Meta.ColumnTableInfoPtr) {
             const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
             columnShardHashV1Params.SourceShardCount = tableDesc.GetColumnShardCount();
             columnShardHashV1Params.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
@@ -1753,7 +1762,7 @@ protected:
 
             auto columns = BuildKqpColumns(op, tableInfo);
             bool isFullScan;
-            auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv(), isFullScan);
+            auto partitions = PartitionPruner.Prune(op, stageInfo, isFullScan);
             const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
             auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
 
@@ -1779,7 +1788,7 @@ protected:
                 }
             }
 
-            if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() || (!isOlapScan && readSettings.IsSorted())) {
+            if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() && !shuffleEliminated || (!isOlapScan && readSettings.IsSorted())) {
                 for (auto&& pair : nodeShards) {
                     auto& shardsInfo = pair.second;
                     for (auto&& shardInfo : shardsInfo) {
@@ -1798,7 +1807,7 @@ protected:
                     }
                 }
 
-            } else if (enableShuffleElimination && stage.GetIsShuffleEliminated() /* save partitioning for shuffle elimination */) {
+            } else if (shuffleEliminated /* save partitioning for shuffle elimination */) {
                 std::size_t stageInternalTaskId = 0;
                 columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>();
                 columnShardHashV1Params.TaskIndexByHash->resize(columnShardHashV1Params.SourceShardCount);
@@ -2255,6 +2264,7 @@ protected:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
+    TPartitionPruner PartitionPruner;
 
     TActorId BufferActorId;
     IKqpTransactionManagerPtr TxManager;
@@ -2328,7 +2338,7 @@ protected:
     ui64 StatCollectInflightBytes = 0;
     ui64 StatFinishInflightBytes = 0;
 
-    TMaybe<TBatchOperationSettings> BatchOperationSettings;
+    TMaybe<NBatchOperations::TSettings> BatchOperationSettings;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };
@@ -2341,8 +2351,9 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing());
+    TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
+    const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing());
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

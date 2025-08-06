@@ -36,31 +36,7 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
 bool ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& = {});
 bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
 
-template<NUdf::EDataSlot slot>
-std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
-    static_assert(slot == NUdf::EDataSlot::TzDate || slot == NUdf::EDataSlot::TzDatetime || slot == NUdf::EDataSlot::TzTimestamp
-        || slot == NUdf::EDataSlot::TzDate32 || slot == NUdf::EDataSlot::TzDatetime64 || slot == NUdf::EDataSlot::TzTimestamp64,
-        "Expected tz date type slot");
-
-    if constexpr (slot == NUdf::EDataSlot::TzDate) {
-        return arrow::uint16();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzDatetime) {
-        return arrow::uint32();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzTimestamp) {
-        return arrow::uint64();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzDate32) {
-        return arrow::int32();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzDatetime64) {
-        return arrow::int64();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzTimestamp64) {
-        return arrow::int64();
-    }
-}
+using NYql::NUdf::MakeTzLayoutArrowType;
 
 template<NUdf::EDataSlot slot>
 std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {

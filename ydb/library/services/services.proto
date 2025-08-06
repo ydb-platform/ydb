@@ -55,6 +55,7 @@ enum EServiceKikimr {
     BS_VDISK_BALANCING = 2600;
     BS_PROXY_GETBLOCK = 2601;
     BS_SHRED = 2602;
+    BS_PROXY_CHECKINTEGRITY = 2603;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -188,6 +189,7 @@ enum EServiceKikimr {
     CHOOSE_PROXY = 444;
     LB_CONFIG_MANAGER = 445;
     PQ_PARTITION_CHOOSER = 462;
+    PQ_TX = 2201;
 
     TOKEN_BUILDER = 450;
     TICKET_PARSER = 455;
@@ -384,6 +386,8 @@ enum EServiceKikimr {
     METADATA_INITIALIZER = 1501;
     METADATA_MANAGER = 1502;
     METADATA_SECRET = 1503;
+
+    GENERAL_CACHE = 1504;
 
     // Tiering
     TX_TIERING = 1600;
@@ -1086,5 +1090,7 @@ message TActivity {
         DATA_ERASURE = 658;
         TENANT_DATA_ERASURE = 659;
         BS_SYNC_BROKER = 660;
+        BS_PROXY_CHECKINTEGRITY_ACTOR = 661;
+        RECOMPUTE_KMEANS_SCAN_ACTOR = 663;
     };
 };

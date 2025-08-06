@@ -230,6 +230,10 @@ struct TEvPQ {
             bool IgnoreQuotaDeadline;
             // If specified, Data will contain heartbeat's data
             std::optional<TRowVersion> HeartbeatVersion;
+
+            // For Kafka deduplication:
+            bool EnableKafkaDeduplication = false;
+            TMaybe<i16> ProducerEpoch;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
@@ -362,7 +366,8 @@ struct TEvPQ {
 
         TEvSetClientInfo(const ui64 cookie, const TString& clientId, const ui64 offset, const TString& sessionId, const ui64 partitionSessionId,
                             const ui32 generation, const ui32 step, const TActorId& pipeClient,
-                            ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0, bool strict = false)
+                            ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0, bool strict = false,
+                            const std::optional<TString>& сommittedMetadata = std::nullopt)
         : Cookie(cookie)
         , ClientId(clientId)
         , Offset(offset)
@@ -374,6 +379,7 @@ struct TEvPQ {
         , ReadRuleGeneration(readRuleGeneration)
         , Strict(strict)
         , PipeClient(pipeClient)
+        , CommittedMetadata(сommittedMetadata)
         {
         }
 
@@ -388,6 +394,7 @@ struct TEvPQ {
         ui64 ReadRuleGeneration;
         bool Strict;
         TActorId PipeClient;
+        std::optional<TString> CommittedMetadata;
     };
 
 
@@ -824,11 +831,23 @@ struct TEvPQ {
             Operations.push_back(std::move(operation));
         }
 
+        void AddKafkaOffsetCommitOperation(TString consumer, ui64 offset) {
+            NKikimrPQ::TPartitionOperation operation;
+            operation.SetConsumer(std::move(consumer));
+            operation.SetKafkaTransaction(true);
+            operation.SetCommitOffsetsEnd(offset);
+            operation.SetForceCommit(true);
+
+            Operations.push_back(std::move(operation));
+        }
+
         ui64 Step;
         ui64 TxId;
         TVector<NKikimrPQ::TPartitionOperation> Operations;
         TActorId SupportivePartitionActor;
         bool ForcePredicateFalse = false;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
@@ -886,6 +905,8 @@ struct TEvPQ {
         ui64 TxId;
 
         TMessageGroupsPtr ExplicitMessageGroups;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvTxCommitDone : public TEventLocal<TEvTxCommitDone, EvTxCommitDone> {
@@ -899,6 +920,8 @@ struct TEvPQ {
         ui64 Step;
         ui64 TxId;
         NPQ::TPartitionId Partition;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvTxRollback : public TEventLocal<TEvTxRollback, EvTxRollback> {
@@ -910,6 +933,8 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvSubDomainStatus : public TEventPB<TEvSubDomainStatus, NKikimrPQ::TEvSubDomainStatus, EvSubDomainStatus> {
@@ -1074,6 +1099,8 @@ struct TEvPQ {
 
     struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
         TActorId OriginalPartition;
+
+        NWilson::TSpan Span;
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {

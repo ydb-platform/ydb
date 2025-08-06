@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/fq/libs/actors
     ydb/core/fq/libs/common
+    ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/shared_resources/interface
     ydb/core/protos

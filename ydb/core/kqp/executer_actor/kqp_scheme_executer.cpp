@@ -545,7 +545,7 @@ public:
             } else {
                 ev->Result.SetStatus(status.GetStatus());
                 if (TString message = status.GetErrorMessage()) {
-                    ev->Result.AddIssue(NYql::TIssue{message});
+                    ev->Result.AddIssue(NYql::TIssue(message).SetCode(status.GetStatus(), NYql::TSeverityIds::S_ERROR));
                 }
             }
             actorSystem->Send(selfId, ev.Release());

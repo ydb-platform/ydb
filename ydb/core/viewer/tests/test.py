@@ -357,6 +357,7 @@ def normalize_result_nodes(result):
                                           'MemoryTotal',
                                           'MemoryLimit',
                                           'NumberOfCpus',
+                                          'RealNumberOfCpus',
                                           'CoresUsed',
                                           'CoresTotal',
                                           'CreateTime',
@@ -414,6 +415,8 @@ def normalize_result_replication(result):
 def normalize_result(result):
     delete_keys_recursively(result, ['Version',
                                      'MemoryUsed',
+                                     'MemoryTotal',
+                                     'MemoryLimit',
                                      'WriteThroughput',
                                      'ReadThroughput',
                                      'Read',
@@ -444,6 +447,27 @@ def get_viewer_db_normalized(url, params=None):
 
 def test_viewer_nodes():
     result = get_viewer_db_normalized("/viewer/nodes", {
+    })
+    return result
+
+
+def test_viewer_nodes_all():
+    result = get_viewer_db_normalized("/viewer/nodes", {
+        'fields_required': 'all'
+    })
+    return result
+
+
+def test_viewer_storage_nodes():
+    result = get_viewer_db_normalized("/viewer/nodes", {
+        'type': 'storage',
+    })
+    return result
+
+
+def test_viewer_storage_nodes_all():
+    result = get_viewer_db_normalized("/viewer/nodes", {
+        'type': 'storage',
         'fields_required': 'all'
     })
     for name in databases:

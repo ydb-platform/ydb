@@ -2172,10 +2172,9 @@ void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
     Subscribers.insert(actorId);
 }
 
-TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount)
+TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck)
     : Range(std::move(range))
     , LastKeyAck(std::move(lastKeyAck))
-    , Index(shardsCount)
 {}
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
@@ -2215,47 +2214,221 @@ void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikim
     }
 }
 
-void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
-    if (KMeans.Parent == 0) {
-        // For Parent == 0 only single kmeans needed, so there is only two options:
-        // 1. It fits entirely in the single shard => local kmeans for single shard
-        // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
-        return;
-    }
-    const auto [parentFrom, parentTo] = KMeans.RangeToBorders(range);
-    // TODO(mbkkt) We can make it more granular
+ui64 TIndexBuildInfo::TKMeans::ParentEnd() const noexcept {  // included
+    return ChildBegin - 1;
+}
+ui64 TIndexBuildInfo::TKMeans::ChildEnd() const noexcept {  // included
+    return ChildBegin + ChildCount() - 1;
+}
 
-    // the new range does not intersect with other ranges, just add it with 1 shard
+ui64 TIndexBuildInfo::TKMeans::ParentCount() const noexcept {
+    return ParentEnd() - ParentBegin + 1;
+}
+ui64 TIndexBuildInfo::TKMeans::ChildCount() const noexcept {
+    return ParentCount() * K;
+}
+
+TString TIndexBuildInfo::TKMeans::DebugString() const {
+    return TStringBuilder()
+        << "{ "
+        << "State = " << State
+        << ", Level = " << Level << " / " << Levels
+        << ", K = " << K
+        << ", Round = " << Round
+        << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
+        << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
+        << ", TableSize = " << TableSize
+        << " }";
+}
+
+bool TIndexBuildInfo::TKMeans::NeedsAnotherLevel() const noexcept {
+    return Level < Levels;
+}
+bool TIndexBuildInfo::TKMeans::NeedsAnotherParent() const noexcept {
+    return Parent < ParentEnd();
+}
+
+bool TIndexBuildInfo::TKMeans::NextParent() noexcept {
+    if (!NeedsAnotherParent()) {
+        return false;
+    }
+    ++Parent;
+    Child += K;
+    return true;
+}
+
+bool TIndexBuildInfo::TKMeans::NextLevel() noexcept {
+    if (!NeedsAnotherLevel()) {
+        return false;
+    }
+    NextLevel(ChildCount());
+    return true;
+}
+
+void TIndexBuildInfo::TKMeans::PrefixIndexDone(ui64 shards) {
+    Y_ENSURE(NeedsAnotherLevel());
+    // There's two worst cases, but in both one shard contains TableSize rows
+    // 1. all rows have unique prefix (*), in such case we need 1 id for each row (parent, id in prefix table)
+    // 2. all unique prefixes have size K, so we have TableSize/K parents + TableSize childs
+    // * it doesn't work now, because now prefix should have at least K embeddings, but it's bug
+    NextLevel((2 * TableSize) * shards);
+    Parent = ParentEnd();
+}
+
+void TIndexBuildInfo::TKMeans::Set(ui32 level,
+    NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
+    NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
+    ui32 state, ui64 tableSize, ui32 round) {
+    Level = level;
+    Round = round;
+    ParentBegin = parentBegin;
+    Parent = parent;
+    ChildBegin = childBegin;
+    Child = child;
+    State = static_cast<EState>(state);
+    TableSize = tableSize;
+}
+
+NKikimrTxDataShard::EKMeansState TIndexBuildInfo::TKMeans::GetUpload() const {
+    if (Level == 1) {
+        if (NeedsAnotherLevel()) {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD;
+        } else {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING;
+        }
+    } else {
+        if (NeedsAnotherLevel()) {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD;
+        } else {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING;
+        }
+    }
+}
+
+TString TIndexBuildInfo::TKMeans::WriteTo(bool needsBuildTable) const {
+    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    TString name = PostingTable;
+    if (needsBuildTable || NeedsAnotherLevel()) {
+        name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
+    }
+    return name;
+}
+
+TString TIndexBuildInfo::TKMeans::ReadFrom() const {
+    Y_ENSURE(Level > 1);
+    using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+    TString name = PostingTable;
+    name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
+    return name;
+}
+
+std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId> TIndexBuildInfo::TKMeans::RangeToBorders(const TSerializedTableRange& range) const {
+    const NTableIndex::TClusterId minParent = ParentBegin;
+    const NTableIndex::TClusterId maxParent = ParentEnd();
+    const NTableIndex::TClusterId parentFrom = [&, from = range.From.GetCells()] {
+        if (!from.empty()) {
+            if (!from[0].IsNull()) {
+                return from[0].AsValue<NTableIndex::TClusterId>() + static_cast<NTableIndex::TClusterId>(from.size() == 1);
+            }
+        }
+        return minParent;
+    }();
+    const NTableIndex::TClusterId parentTo = [&, to = range.To.GetCells()] {
+        if (!to.empty()) {
+            if (!to[0].IsNull()) {
+                return to[0].AsValue<NTableIndex::TClusterId>() - static_cast<NTableIndex::TClusterId>(to.size() != 1 && to[1].IsNull());
+            }
+        }
+        return maxParent;
+    }();
+    Y_ENSURE(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ") " << DebugString());
+    Y_ENSURE(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ") " << DebugString());
+    Y_ENSURE(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ") " << DebugString());
+    return {parentFrom, parentTo};
+}
+
+TString TIndexBuildInfo::TKMeans::RangeToDebugStr(const TSerializedTableRange& range) const {
+    auto toStr = [&](const TSerializedCellVec& v) -> TString {
+        const auto cells = v.GetCells();
+        if (cells.empty()) {
+            return "inf";
+        }
+        if (cells[0].IsNull()) {
+            return "-inf";
+        }
+        auto str = TStringBuilder{} << "{ count: " << cells.size();
+        if (Level > 1) {
+            str << ", parent: " << cells[0].AsValue<NTableIndex::TClusterId>();
+            if (cells.size() != 1 && cells[1].IsNull()) {
+                str << ", pk: null";
+            }
+        }
+        return str << " }";
+    };
+    return TStringBuilder{} << "{ From: " << toStr(range.From) << ", To: " << toStr(range.To) << " }";
+}
+
+void TIndexBuildInfo::TKMeans::NextLevel(ui64 childCount) noexcept {
+    ParentBegin = ChildBegin;
+    Parent = ParentBegin;
+    ChildBegin = ParentBegin + childCount;
+    Child = ChildBegin;
+    ++Level;
+}
+
+void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
+    // For Parent == 0 only single kmeans needed, so there are two options:
+    // 1. It fits entirely in the single shard => local kmeans for single shard
+    // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
+    auto [parentFrom, parentTo] = KMeans.Parent == 0
+        ? std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId>{0, 0}
+        : KMeans.RangeToBorders(range);
+
     auto itFrom = Cluster2Shards.lower_bound(parentFrom);
     if (itFrom == Cluster2Shards.end() || parentTo < itFrom->second.From) {
+        // The new range does not intersect with other ranges, just add it with 1 shard
         Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
         return;
     }
 
-    // otherwise, this range has multiple shards and we need to merge all intersecting ranges
-    auto itTo = parentTo < itFrom->first ? itFrom : Cluster2Shards.lower_bound(parentTo);
-    if (itTo == Cluster2Shards.end()) {
-        itTo = Cluster2Shards.rbegin().base();
+    for (auto it = itFrom; it != Cluster2Shards.end() && it->second.From <= parentTo && it->first >= parentFrom; it++) {
+        // The new shard may only intersect with existing shards by its starting or ending edge
+        Y_ENSURE(it->second.From == parentTo || it->first == parentFrom);
     }
-    if (itTo->first < parentTo) {
-        const bool needsToReplaceFrom = itFrom == itTo;
-        auto node = Cluster2Shards.extract(itTo);
-        node.key() = parentTo;
-        itTo = Cluster2Shards.insert(Cluster2Shards.end(), std::move(node));
-        itFrom = needsToReplaceFrom ? itTo : itFrom;
-    }
-    auto& [toFrom, toShards] = itTo->second;
 
-    toFrom = std::min(toFrom, parentFrom);
-    toShards.emplace_back(shard);
-
-    while (itFrom != itTo) {
-        const auto& [fromFrom, fromShards] = itFrom->second;
-        toFrom = std::min(toFrom, fromFrom);
-        Y_ASSERT(!fromShards.empty());
-        toShards.insert(toShards.end(), fromShards.begin(), fromShards.end());
-        itFrom = Cluster2Shards.erase(itFrom);
+    if (parentFrom == itFrom->first) {
+        // Intersects by parentFrom
+        if (itFrom->second.From < itFrom->first) {
+            Cluster2Shards.emplace_hint(itFrom, itFrom->first-1, itFrom->second);
+            itFrom->second.From = parentFrom;
+        }
+        itFrom->second.Shards.push_back(shard);
+        // Increment to also check intersection by parentTo
+        itFrom++;
+        if (parentTo == parentFrom) {
+            return;
+        }
+        parentFrom++;
     }
+
+    if (itFrom != Cluster2Shards.end() && parentTo == itFrom->second.From) {
+        // Intersects by parentTo
+        if (itFrom->second.From < itFrom->first) {
+            auto endShards = itFrom->second.Shards;
+            endShards.push_back(shard);
+            Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentTo, .Shards = std::move(endShards)});
+            itFrom->second.From = parentTo+1;
+        } else {
+            itFrom->second.Shards.push_back(shard);
+        }
+        if (parentTo == parentFrom) {
+            return;
+        }
+        parentTo--;
+    }
+
+    // Add the remaining range
+    Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
 }
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
@@ -2424,39 +2597,6 @@ bool TTopicInfo::FillKeySchema(const TString& tabletConfig) {
 
     TString unused;
     return FillKeySchema(proto, unused);
-}
-
-TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui64 uploadBytes)
-    : UploadRows{uploadRows}
-    , UploadBytes{uploadBytes}
-    , ReadRows{readRows}
-    , ReadBytes{readBytes}
-{
-}
-
-TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ENSURE(UploadRows >= other.UploadRows);
-    Y_ENSURE(UploadBytes >= other.UploadBytes);
-    Y_ENSURE(ReadRows >= other.ReadRows);
-    Y_ENSURE(ReadBytes >= other.ReadBytes);
-
-    return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
-            ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
-}
-
-TBillingStats TBillingStats::operator +(const TBillingStats &other) const {
-    return {UploadRows + other.UploadRows, UploadBytes + other.UploadBytes,
-            ReadRows + other.ReadRows, ReadBytes + other.ReadBytes};
-}
-
-TString TBillingStats::ToString() const {
-    return TStringBuilder()
-            << "{"
-            << " upload rows: " << UploadRows
-            << ", upload bytes: " << UploadBytes
-            << ", read rows: " << ReadRows
-            << ", read bytes: " << ReadBytes
-            << " }";
 }
 
 TSequenceInfo::TSequenceInfo(

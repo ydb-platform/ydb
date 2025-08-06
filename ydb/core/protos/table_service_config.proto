@@ -8,6 +8,8 @@ message TTableServiceConfig {
         optional uint32 ScanLimit = 3 [default = 16];
         optional bool ParallelScanningAvailable = 4 [default = false];
         optional uint32 ShardSplitFactor = 5 [default = 1];
+        optional uint32 CriticalTotalRetriesCount = 6 [default = 20];
+        optional uint32 ReaskShardRetriesCount = 7 [default = 5];
     }
 
     message TResourceManager {
@@ -22,6 +24,7 @@ message TTableServiceConfig {
         }
         optional uint32 ComputeActorsCount = 1 [default = 10000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
+        optional uint64 ChannelChunkSizeLimit = 30 [default = 50331648];        //  48 MB
         reserved 3;
         optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 1048576];   // 1 MiB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
@@ -369,7 +372,7 @@ message TTableServiceConfig {
 
     optional bool AllowMultiBroadcasts = 79 [default = false];
 
-    optional bool DefaultEnableShuffleElimination = 80 [default = true];
+    optional bool DefaultEnableShuffleElimination = 80 [default = false];
 
     message TBatchOperationSettings {
         optional uint64 MaxBatchSize = 1 [ default = 10000 ];
@@ -387,4 +390,6 @@ message TTableServiceConfig {
 
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = false];
 
+    optional bool EnableOlapScalarApply = 86 [default = true];
+    optional bool EnableOlapSubstringPushdown = 87 [default = true];
 };

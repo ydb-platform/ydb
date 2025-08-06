@@ -210,7 +210,7 @@ private:
                 share = 1.0;
             }
             std::optional<double> resourceWeight;
-            if (msg.GetResourceWeight() >= 0) {
+            if (msg.HasResourceWeight() && msg.GetResourceWeight() >= 0) {
                 resourceWeight = msg.GetResourceWeight();
             }
 
@@ -312,6 +312,10 @@ private:
             auto* startedTask = reply->Record.AddStartedTasks();
             startedTask->SetTaskId(taskCtx.TaskId);
             ActorIdToProto(taskCtx.ComputeActorId, startedTask->MutableActorId());
+        }
+
+        if (!schedulerGroup.empty()) {
+            Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
         }
 
         TCPULimits cpuLimits;

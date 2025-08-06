@@ -39,7 +39,7 @@ private:
         auto& transaction = *record.MutableTransaction();
 
         if (req->tables().empty()) {
-            Request_->RaiseIssue(NYql::TIssue("Emply move list"));
+            Request_->RaiseIssue(NYql::TIssue("Empty move list"));
             return Reply(StatusIds::BAD_REQUEST, ctx);
         }
 

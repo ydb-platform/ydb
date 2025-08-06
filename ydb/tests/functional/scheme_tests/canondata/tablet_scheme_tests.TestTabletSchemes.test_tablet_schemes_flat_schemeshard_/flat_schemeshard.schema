@@ -7,11 +7,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 17,
-                "ColumnName": "TempDirOwnerActorId",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "Id",
                 "ColumnType": "Uint64"
@@ -90,13 +85,22 @@
                 "ColumnId": 16,
                 "ColumnName": "ParentOwnerId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "TempDirOwnerActorId_Deprecated",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "TempDirOwnerActorIdRaw",
+                "ColumnType": "ActorID"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
                     1,
                     2,
                     3,
@@ -112,7 +116,9 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3424,11 +3430,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 17,
-                "ColumnName": "TempDirOwnerActorId",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerPathId",
                 "ColumnType": "Uint64"
@@ -3507,13 +3508,22 @@
                 "ColumnId": 16,
                 "ColumnName": "ACLVersion",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "TempDirOwnerActorId_Deprecated",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "TempDirOwnerActorIdRaw",
+                "ColumnType": "ActorID"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
                     1,
                     2,
                     3,
@@ -3529,7 +3539,9 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5129,6 +5141,16 @@
                 "ColumnId": 43,
                 "ColumnName": "UserSID",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 44,
+                "ColumnName": "CpuTimeUsBilled",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 45,
+                "ColumnName": "CpuTimeUsProcessed",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5177,7 +5199,9 @@
                     40,
                     41,
                     42,
-                    43
+                    43,
+                    44,
+                    45
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5470,6 +5494,11 @@
                 "ColumnId": 12,
                 "ColumnName": "ReadBytesProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "CpuTimeUsProcessed",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5487,7 +5516,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8204,6 +8234,11 @@
                 "ColumnId": 8,
                 "ColumnName": "TableSize",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "Round",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -8217,7 +8252,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8414,6 +8450,69 @@
                     1,
                     2,
                     3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 121,
+        "TableName": "KMeansTreeClusters",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Row",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Size",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Data",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "OldSize",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -670,11 +670,18 @@ public:
                     settings.MaxStoredBytes = memoryLimits.ChannelBufferSize;
                     settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
                     settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
+                    settings.ArrayBufferMinFillPercentage = memoryLimits.ArrayBufferMinFillPercentage;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 
                     if (!outputChannelDesc.GetInMemory()) {
                         settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                    }
+
+                    if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
+                        const auto srcNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId()).NodeId();
+                        const auto dstNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetDstEndpoint().GetActorId()).NodeId();
+                        settings.MutableSettings.IsLocalChannel = srcNodeId == dstNodeId;
                     }
 
                     auto outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);

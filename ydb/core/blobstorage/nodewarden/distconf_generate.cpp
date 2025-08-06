@@ -206,7 +206,7 @@ namespace NKikimr::NStorage {
                         pdiskInfo.Usable = false;
                         pdiskInfo.WhyUnusable += 'S';
                     }
-                    const bool usableInTermsOfDecommission = 
+                    const bool usableInTermsOfDecommission =
                         pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE ||
                         pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED && !isSelfHealReasonDecommit;
                     if (!usableInTermsOfDecommission) {
@@ -568,15 +568,29 @@ namespace NKikimr::NStorage {
 
         const size_t maxNodesPerDataCenter = nodesByDataCenter.size() == 1 ? 8 : 3;
         for (auto& [_, v] : nodesByDataCenter) {
-            auto r = pickNodes(v, Min<size_t>(v.size(), maxNodesPerDataCenter));
+            size_t countToSelect = Min<size_t>(v.size(), maxNodesPerDataCenter);
+            if (v.size() < maxNodesPerDataCenter && nodesByDataCenter.size() > 1) {
+                countToSelect = 1;
+            }
+            auto r = pickNodes(v, countToSelect);
             nodes.insert(nodes.end(), r.begin(), r.end());
         }
 
         for (ui32 nodeId : nodes) {
             ring->AddNode(nodeId);
         }
-
-        ring->SetNToSelect(nodes.size() / 2 + 1);
+        ui32 nodesCnt = nodes.size();
+        ui32 nToSelect = 1;
+        if (nodesCnt <= 2) {
+            nToSelect = 1;
+        } else if (nodesCnt < 8) {
+            nToSelect = 3;
+        } else if (nodesCnt == 8) {
+            nToSelect = 5;
+        } else if (nodesCnt > 8) {
+            nToSelect = 9;
+        }
+        ring->SetNToSelect(nToSelect);
     }
 
     bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {

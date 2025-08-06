@@ -2,6 +2,8 @@
 #include "mkql_computation_node_holders.h"
 #include "mkql_block_builder.h"
 #include "mkql_block_reader.h"
+#include "mkql_block_trimmer.h"
+
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -655,7 +657,58 @@ protected:
         }
     }
 
-    void DoTestBlockPacking(ui64 offset, ui64 len, bool legacyStruct) {
+    struct TBlockTestArgs {
+        ui64 Offset = 0;
+        ui64 Len = 0;
+        bool LegacyStruct = false;
+        bool TrimBlock = false;
+        TMaybe<ui8> MinFillPercentage;
+
+        TString ToString() const {
+            auto result = TStringBuilder() << "Offset: " << Offset << ", Len: " << Len << ", LegacyStruct: " << LegacyStruct << ", TrimBlock: " << TrimBlock;
+            if (MinFillPercentage) {
+                result << ", MinFillPercentage: " << ui64(*MinFillPercentage);
+            }
+            return result;
+        }
+    };
+
+    class IArgsDispatcher : public TThrRefBase {
+    public:
+        using TPtr = TIntrusivePtr<IArgsDispatcher>;
+
+        virtual ui64 GetSize() const = 0;
+        virtual void Set(ui64 index) = 0;
+    };
+
+    template <typename TValue>
+    class TArgsDispatcher : public IArgsDispatcher {
+    public:
+        TArgsDispatcher(TValue& dst, const std::vector<TValue>& choices)
+            : Dst(dst)
+            , Choices(choices)
+        {
+            UNIT_ASSERT_C(!choices.empty(), "Choices should not be empty");
+        }
+
+        ui64 GetSize() const {
+            return Choices.size();
+        }
+
+        void Set(ui64 index) {
+            UNIT_ASSERT_LE_C(index + 1, Choices.size(), "Invalid args dispatcher index");
+            Dst = Choices[index];
+        }
+
+    private:
+        TValue& Dst;
+        const std::vector<TValue> Choices;
+    };
+
+    void DoTestBlockPacking(const TBlockTestArgs& args) {
+        bool legacyStruct = args.LegacyStruct;
+        ui64 offset = args.Offset;
+        ui64 len = args.Len;
         if constexpr (Transport) {
             auto strType = PgmBuilder.NewDataType(NUdf::TDataType<char*>::Id);
             auto ui32Type = PgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id);
@@ -674,6 +727,8 @@ protected:
 
             auto tzDateType = PgmBuilder.NewDataType(NUdf::EDataSlot::TzDate);
             auto blockTzDateType = PgmBuilder.NewBlockType(tzDateType, TBlockType::EShape::Many);
+            auto nullType = PgmBuilder.NewNullType();
+            auto blockNullType = PgmBuilder.NewBlockType(nullType, TBlockType::EShape::Many);
 
             auto rowType =
                 legacyStruct
@@ -683,11 +738,12 @@ protected:
                           {"_yql_block_length", scalarUi64Type},
                           {"a", scalarOptStrType},
                           {"b", blockOptTupleOptUi32StrType},
-                          {"c", blockTzDateType}
+                          {"c", blockTzDateType},
+                          {"nill", blockNullType},
                       })
                     : PgmBuilder.NewMultiType(
                           {blockUi32Type, blockOptStrType, scalarOptStrType,
-                           blockOptTupleOptUi32StrType, blockTzDateType, scalarUi64Type});
+                           blockOptTupleOptUi32StrType, blockTzDateType, blockNullType, scalarUi64Type});
 
             ui64 blockLen = 1000;
             UNIT_ASSERT_LE(offset + len, blockLen);
@@ -696,6 +752,7 @@ protected:
             auto builder2 = MakeArrayBuilder(TTypeInfoHelper(), optStrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optStrType)), nullptr);
             auto builder3 = MakeArrayBuilder(TTypeInfoHelper(), optTupleOptUi32StrType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optTupleOptUi32StrType)), nullptr);
             auto builder4 = MakeArrayBuilder(TTypeInfoHelper(), tzDateType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tzDateType)), nullptr);
+            auto builder5 = MakeArrayBuilder(TTypeInfoHelper(), nullType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(nullType)), nullptr);
 
             for (ui32 i = 0; i < blockLen; ++i) {
                 TBlockItem b1(i);
@@ -712,6 +769,7 @@ protected:
                 TBlockItem tzDate {i};
                 tzDate.SetTimezoneId(i % 100);
                 builder4->Add(tzDate);
+                builder5->Add(TBlockItem::Zero());
             }
 
             std::string_view testScalarString = "foobar";
@@ -725,20 +783,39 @@ protected:
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
                 datums.emplace_back(builder3->Build(true));
                 datums.emplace_back(builder4->Build(true));
+                datums.emplace_back(builder5->Build(true));
             } else {
                 datums.emplace_back(builder1->Build(true));
                 datums.emplace_back(builder2->Build(true));
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
                 datums.emplace_back(builder3->Build(true));
                 datums.emplace_back(builder4->Build(true));
+                datums.emplace_back(builder5->Build(true));
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
             }
 
+            const ui32 blockLenIndex = legacyStruct ? 2 : 6;
             if (offset != 0 || len != blockLen) {
                 for (auto& datum : datums) {
                     if (datum.is_array()) {
                         datum = NYql::NUdf::DeepSlice(datum.array(), offset, len);
                     }
+                }
+                datums[blockLenIndex] = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len));
+            }
+
+            const auto trimmerFactory = [&](ui32 index) {
+                const TType* columnType = legacyStruct ? static_cast<const TStructType*>(rowType)->GetMemberType(index)
+                                                       : static_cast<const TMultiType*>(rowType)->GetElementType(index);
+                return MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), static_cast<const TBlockType*>(columnType)->GetItemType(), ArrowPool_);
+            };
+            if (args.TrimBlock) {
+                for (ui32 index = 0; index < datums.size(); ++index) {
+                    auto& datum = datums[index];
+                    if (!datum.is_array()) {
+                        continue;
+                    }
+                    datum = trimmerFactory(index)->Trim(datum.array());
                 }
             }
             TUnboxedValueVector columns;
@@ -746,7 +823,7 @@ protected:
                 columns.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum)));
             }
 
-            TValuePackerType packer(false, rowType, ArrowPool_);
+            TValuePackerType packer(false, rowType, ArrowPool_, args.MinFillPercentage);
             if (legacyStruct) {
                 TUnboxedValueVector columnsCopy = columns;
                 NUdf::TUnboxedValue row = HolderFactory.VectorAsArray(columnsCopy);
@@ -773,18 +850,30 @@ protected:
 
             UNIT_ASSERT_VALUES_EQUAL(unpackedColumns.size(), columns.size());
             if (legacyStruct) {
-                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::UInt64Scalar>().value, blockLen);
+                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::UInt64Scalar>().value, len);
                 UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[3]).GetDatum().scalar_as<arrow::BinaryScalar>().value->ToString(), testScalarString);
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value, blockLen);
+                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value, len);
                 UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::BinaryScalar>().value->ToString(), testScalarString);
             }
 
+            if (args.MinFillPercentage) {
+                for (size_t i = 0; i < unpackedColumns.size(); ++i) {
+                    auto datum = TArrowBlock::From(unpackedColumns[i]).GetDatum();
+                    if (datum.is_scalar()) {
+                        continue;
+                    }
+                    const auto unpackedSize = NUdf::GetSizeOfArrayDataInBytes(*datum.array());
+                    const auto trimmedSize = NUdf::GetSizeOfArrayDataInBytes(*trimmerFactory(i)->Trim(datum.array()));
+                    UNIT_ASSERT_GE_C(trimmedSize, unpackedSize * *args.MinFillPercentage / 100, "column: " << i);
+                }
+            }
 
             auto reader1 = MakeBlockReader(TTypeInfoHelper(), ui32Type);
             auto reader2 = MakeBlockReader(TTypeInfoHelper(), optStrType);
             auto reader3 = MakeBlockReader(TTypeInfoHelper(), optTupleOptUi32StrType);
             auto reader4 = MakeBlockReader(TTypeInfoHelper(), tzDateType);
+            auto reader5 = MakeBlockReader(TTypeInfoHelper(), nullType);
 
             for (ui32 i = offset; i < len; ++i) {
                 TBlockItem b1 = reader1->GetItem(*TArrowBlock::From(unpackedColumns[0]).GetDatum().array(), i - offset);
@@ -814,25 +903,41 @@ protected:
                 TBlockItem b4 = reader4->GetItem(*TArrowBlock::From(unpackedColumns[legacyStruct ? 5 : 4]).GetDatum().array(), i - offset);
                 UNIT_ASSERT(b4.Get<ui16>() == i);
                 UNIT_ASSERT(b4.GetTimezoneId() == (i % 100));
+                TBlockItem b5 = reader5->GetItem(*TArrowBlock::From(unpackedColumns[legacyStruct ? 6 : 5]).GetDatum().array(), i - offset);
+                UNIT_ASSERT(b5);
             }
         }
     }
 
+    void TestBlockPackingCases(TBlockTestArgs& args, std::vector<typename IArgsDispatcher::TPtr> dispatchers = {}) {
+        ui64 numberCases = 1;
+        for (const auto& dispatcher : dispatchers) {
+            numberCases *= dispatcher->GetSize();
+        }
+        for (ui64 i = 0; i < numberCases; ++i) {
+            ui64 caseId = i;
+            for (const auto& dispatcher : dispatchers) {
+                dispatcher->Set(caseId % dispatcher->GetSize());
+                caseId /= dispatcher->GetSize();
+            }
+            Cerr << "Run block packing test case: " << args.ToString() << "\n";
+            DoTestBlockPacking(args);
+        }
+    }
+
     void TestBlockPacking() {
-        DoTestBlockPacking(0, 1000, false);
+        TBlockTestArgs args;
+        TestBlockPackingCases(args, {
+            MakeIntrusive<TArgsDispatcher<TBlockTestArgs>>(args, std::vector<TBlockTestArgs>{
+                {.Offset = 0, .Len = 1000},
+                {.Offset = 19, .Len = 623}
+            }),
+            MakeIntrusive<TArgsDispatcher<bool>>(args.LegacyStruct, std::vector<bool>{false, true}),
+            MakeIntrusive<TArgsDispatcher<bool>>(args.TrimBlock, std::vector<bool>{false, true}),
+            MakeIntrusive<TArgsDispatcher<TMaybe<ui8>>>(args.MinFillPercentage, std::vector<TMaybe<ui8>>{Nothing(), 90})
+        });
     }
 
-    void TestBlockPackingSliced() {
-        DoTestBlockPacking(19, 623, false);
-    }
-
-    void TestLegacyBlockPacking() {
-        DoTestBlockPacking(0, 1000, true);
-    }
-
-    void TestLegacyBlockPackingSliced() {
-        DoTestBlockPacking(19, 623, true);
-    }
 private:
     TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -910,9 +1015,6 @@ class TMiniKQLComputationNodeTransportPackTest: public TMiniKQLComputationNodePa
         UNIT_TEST(TestRopeSplit);
         UNIT_TEST(TestIncrementalPacking);
         UNIT_TEST(TestBlockPacking);
-        UNIT_TEST(TestBlockPackingSliced);
-        UNIT_TEST(TestLegacyBlockPacking);
-        UNIT_TEST(TestLegacyBlockPackingSliced);
     UNIT_TEST_SUITE_END();
 };
 
@@ -938,9 +1040,6 @@ class TMiniKQLComputationNodeTransportFastPackTest: public TMiniKQLComputationNo
         UNIT_TEST(TestRopeSplit);
         UNIT_TEST(TestIncrementalPacking);
         UNIT_TEST(TestBlockPacking);
-        UNIT_TEST(TestBlockPackingSliced);
-        UNIT_TEST(TestLegacyBlockPacking);
-        UNIT_TEST(TestLegacyBlockPackingSliced);
     UNIT_TEST_SUITE_END();
 };
 

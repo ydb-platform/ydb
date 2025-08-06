@@ -14,6 +14,7 @@
 #include "read_quoter.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -30,6 +31,11 @@ namespace NKikimr::NPQ {
 static const ui32 MAX_BLOB_PART_SIZE = 500_KB;
 static const ui32 DEFAULT_BUCKET_COUNTER_MULTIPLIER = 20;
 static const ui32 MAX_USER_ACTS = 1000;
+// Extra amount of time YDB should wait before deleting supportive partition for kafka transaction
+// after transaction timeout has passed.
+//
+// Total time till kafka supportive partition deletion = AppData.KafkaProxyConfig.TransactionTimeoutMs + KAFKA_TRANSACTION_DELETE_DELAY_MS
+static const ui32 KAFKA_TRANSACTION_DELETE_DELAY_MS = TDuration::Hours(1).MilliSeconds(); // 1 hour;
 
 using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
 
@@ -52,6 +58,7 @@ struct TTransaction {
         : Tx(tx)
         , Predicate(predicate)
         , SupportivePartitionActor(tx->SupportivePartitionActor)
+        , CalcPredicateSpan(std::move(tx->Span))
     {
         Y_ABORT_UNLESS(Tx);
     }
@@ -105,6 +112,12 @@ struct TTransaction {
     bool WriteInfoApplied = false;
     TString Message;
     ECommitState State = ECommitState::Pending;
+
+    NWilson::TSpan CalcPredicateSpan;
+    NWilson::TSpan GetWriteInfoSpan;
+    NWilson::TSpan CommitSpan;
+
+    TInstant WriteInfoResponseTimestamp;
 };
 
 class TPartition : public TActorBootstrapped<TPartition> {
@@ -158,7 +171,7 @@ private:
                       NKikimrPQ::TError::EKind kind, const TString& reason);
     void ReplyErrorForStoredWrites(const TActorContext& ctx);
 
-    void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp, bool consumerHasAnyCommits);
+    void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp, bool consumerHasAnyCommits, const std::optional<TString>& committedMetadata);
     void ReplyOk(const TActorContext& ctx, const ui64 dst);
     void ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpan& span);
     void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie, ui64 seqNo, NWilson::TSpan& span);
@@ -346,7 +359,8 @@ private:
                                         const i64 offset,
                                         const TInstant writeTimestamp,
                                         const TInstant createTimestamp,
-                                        bool consumerHasAnyCommits);
+                                        bool consumerHasAnyCommits,
+                                        const std::optional<TString>& committedMetadata=std::nullopt);
     void ScheduleReplyError(const ui64 dst,
                             NPersQueue::NErrorCode::EErrorCode errorCode,
                             const TString& error);
@@ -354,7 +368,8 @@ private:
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                               NKikimrPQ::TError::EKind kind,
                               const TString& reason);
-    void ScheduleReplyCommitDone(ui64 step, ui64 txId);
+    void ScheduleReplyCommitDone(ui64 step, ui64 txId,
+                                 NWilson::TSpan&& commitSpan);
     void ScheduleDropPartitionLabeledCounters(const TString& group);
     void SchedulePartitionConfigChanged();
 
@@ -363,7 +378,7 @@ private:
                      ui64 offset, ui32 gen, ui32 step, const TString& session,
                      ui64 readOffsetRewindSum,
                      ui64 readRuleGeneration,
-                     bool anyCommits);
+                     bool anyCommits, const std::optional<TString>& committedMetadata);
     void AddCmdWriteTxMeta(NKikimrClient::TKeyValueRequest& request);
     void AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request);
     void AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request);
@@ -378,7 +393,8 @@ private:
                                                                 const i64 offset,
                                                                 const TInstant writeTimestamp,
                                                                 const TInstant createTimestamp,
-                                                                bool consumerHasAnyCommits);
+                                                                bool consumerHasAnyCommits,
+                                                                const std::optional<TString>& committedMetadata);
     THolder<TEvPQ::TEvError> MakeReplyError(const ui64 dst,
                                             NPersQueue::NErrorCode::EErrorCode errorCode,
                                             const TString& error);
@@ -463,8 +479,9 @@ public:
     TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
-               const TActorId& writeQuoterActorId, bool newPartition = false,
-               TVector<TTransaction> distrTxs = {});
+               const TActorId& writeQuoterActorId,
+               TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
+               bool newPartition = false);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -662,6 +679,20 @@ private:
     struct TSourceIdPostPersistInfo {
         ui64 SeqNo = 0;
         ui64 Offset = 0;
+
+        // KafkaProducerEpoch field is only used for Kafka API,
+        // in particular for idempotent or transactional producer.
+        // The value is always Nothing() for Topic API.
+        TMaybe<i16> KafkaProducerEpoch = 0;
+    };
+
+    struct TSeqNoProducerEpoch {
+        ui64 SeqNo = 0;
+
+        // KafkaProducerEpoch field is only used for Kafka API,
+        // in particular for idempotent or transactional producer.
+        // The value is always Nothing() for Topic API.
+        TMaybe<i16> KafkaProducerEpoch = 0;
     };
 
     THashSet<TString> TxAffectedSourcesIds;
@@ -669,7 +700,7 @@ private:
     THashSet<TString> TxAffectedConsumers;
     THashSet<TString> SetOffsetAffectedConsumers;
     THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
-    THashMap<TString, ui64> TxInflightMaxSeqNoPerSourceId;
+    THashMap<TString, TSeqNoProducerEpoch> TxInflightMaxSeqNoPerSourceId;
 
 
     ui32 MaxBlobSize;
@@ -1011,6 +1042,12 @@ private:
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
 
     TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
+
+    TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
+    TDeque<NWilson::TTraceId> TxForPersistTraceIds;
+    TDeque<NWilson::TSpan> TxForPersistSpans;
+
+    bool CanProcessUserActionAndTransactionEvents() const;
 };
 
 } // namespace NKikimr::NPQ

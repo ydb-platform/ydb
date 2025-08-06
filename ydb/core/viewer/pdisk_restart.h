@@ -24,14 +24,9 @@ class TJsonPDiskRestart : public TViewerPipeClient {
 protected:
     using TThis = TJsonPDiskRestart;
     using TBase = TViewerPipeClient;
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
-    ui32 Timeout = 0;
-    ui32 ActualRetries = 0;
-    ui32 Retries = 0;
-    TDuration RetryPeriod = TDuration::MilliSeconds(500);
+    using TBase::ReplyAndPassAway;
 
-    std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> Response;
+    TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> Response;
 
     ui32 NodeId = 0;
     ui32 PDiskId = 0;
@@ -39,99 +34,49 @@ protected:
 
 public:
     TJsonPDiskRestart(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TViewerPipeClient(viewer, ev)
     {}
 
     void Bootstrap() override {
-        const auto& params(Event->Get()->Request.GetParams());
-        NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
-        PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
-        Force = FromStringWithDefault<bool>(params.Get("force"), false);
+        ui32 nodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
+        ui32 pDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());
+        bool force = FromStringWithDefault<bool>(Params.Get("force"), false);
 
-        if (PDiskId == Max<ui32>()) {
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'pdisk_id' is required"),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+        if (pDiskId == Max<ui32>()) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'pdisk_id' is required"));
         }
-        if (Event->Get()->Request.GetMethod() != HTTP_METHOD_POST) {
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only POST method is allowed"),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+        if (!PostData.IsDefined()) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
         }
-        if (Force && !Viewer->CheckAccessAdministration(Event->Get())) {
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+        if (force && !Viewer->CheckAccessAdministration(Event->Get())) {
+            return ReplyAndPassAway(GetHTTPFORBIDDEN());
         }
 
-        if (!NodeId) {
-            NodeId = TlsActivationContext->ActorSystem()->NodeId;
+        if (!nodeId) {
+            nodeId = TlsActivationContext->ActorSystem()->NodeId;
         }
-        TBase::InitConfig(params);
 
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Retries = FromStringWithDefault<ui32>(params.Get("retries"), 0);
-        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("retry_period"), RetryPeriod.MilliSeconds()));
+        Response = RequestBSControllerPDiskRestart(nodeId, pDiskId, force);
 
-        SendRequest();
-
-        TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
-            cFunc(TEvRetryNodeRequest::EventType, HandleRetry);
-            cFunc(TEvents::TEvUndelivered::EventType, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void SendRequest() {
-        RequestBSControllerPDiskRestart(NodeId, PDiskId, Force);
-    }
-
-    bool RetryRequest() {
-        if (Retries) {
-            if (++ActualRetries <= Retries) {
-                TBase::Schedule(RetryPeriod, new TEvRetryNodeRequest());
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void Undelivered() {
-        if (!RetryRequest()) {
-            TBase::RequestDone();
-        }
-    }
-
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
-        Response.reset(ev->Release().Release());
-        ReplyAndPassAway();
-    }
-
-    void HandleRetry() {
-        SendRequest();
-    }
-
-    void HandleTimeout() {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(
-            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from BSC"),
-            0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
-    }
-
-    void PassAway() override {
-        TBase::PassAway();
+        if (Response.Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void ReplyAndPassAway() override {
         NJson::TJsonValue json;
-        if (Response != nullptr) {
+        if (Response.IsOk()) {
             if (Response->Record.GetResponse().GetSuccess()) {
                 json["result"] = true;
             } else {
@@ -145,15 +90,10 @@ public:
                 }
             }
             json["debugMessage"] = Response->Record.ShortDebugString();
-            TBase::Send(Event->Sender,
-                new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json)),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            ReplyAndPassAway(GetHTTPOKJSON(json));
         } else {
-            TBase::Send(Event->Sender,
-                new NMon::TEvHttpInfoRes(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "No response was received from BSC"),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", Response.GetError()));
         }
-        PassAway();
     }
 
     static YAML::Node GetSwagger() {
@@ -168,6 +108,7 @@ public:
                     in: query
                     description: node identifier
                     type: integer
+                    required: true
                   - name: pdisk_id
                     in: query
                     description: pdisk identifier
@@ -180,7 +121,7 @@ public:
                     type: integer
                   - name: force
                     in: query
-                    description: attempt forced operation, ignore warnings
+                    description: attempt forced operation, ignore warnings, for admin only and only if previous call returned forceRetryPossible = true
                     required: false
                     type: boolean
                 responses:

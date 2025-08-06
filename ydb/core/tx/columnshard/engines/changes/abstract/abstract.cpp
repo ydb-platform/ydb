@@ -10,7 +10,8 @@
 namespace NKikimr::NOlap {
 
 void TColumnEngineChanges::SetStage(const NChanges::EStage stage) {
-    Counters->SetStage(stage);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "new_stage")("stage", ::ToString(stage))("task_id", GetTaskIdentifier());
+    StateGuard.SetState(stage);
 }
 
 TString TColumnEngineChanges::DebugString() const {
@@ -23,8 +24,8 @@ TString TColumnEngineChanges::DebugString() const {
 
 TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& context) noexcept {
     const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("task_id", GetTaskIdentifier())("task_class", TypeString());
-    AFL_VERIFY(Counters->GetStage() == NChanges::EStage::ReadyForConstruct || Counters->GetStage() == NChanges::EStage::Started)(
-                                                                              "actual_stage", Counters->GetStage());
+    AFL_VERIFY(StateGuard.GetStage() == NChanges::EStage::ReadyForConstruct || StateGuard.GetStage() == NChanges::EStage::Started)(
+                                                                               "actual_stage", StateGuard.GetStage());
 
     context.Counters.CompactionInputSize(Blobs.GetTotalBlobsSize());
     const TMonotonic start = TMonotonic::Now();
@@ -39,16 +40,16 @@ TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& con
 }
 
 void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
-    AFL_VERIFY(Counters->GetStage() != NChanges::EStage::Aborted);
-    AFL_VERIFY(Counters->GetStage() <= NChanges::EStage::Written);
-    AFL_VERIFY(Counters->GetStage() >= NChanges::EStage::Compiled);
+    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
+    AFL_VERIFY(StateGuard.GetStage() <= NChanges::EStage::Written);
+    AFL_VERIFY(StateGuard.GetStage() >= NChanges::EStage::Compiled);
 
     DoWriteIndexOnExecute(self, context);
     SetStage(NChanges::EStage::Written);
 }
 
 void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
-    Y_ABORT_UNLESS(Counters->GetStage() == NChanges::EStage::Written || !self);
+    Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Written || !self);
     SetStage(NChanges::EStage::Finished);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
     DoWriteIndexOnComplete(self, context);
@@ -59,7 +60,7 @@ void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self
 }
 
 void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
-    AFL_VERIFY(Counters->GetStage() != NChanges::EStage::Aborted);
+    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
 
     DoCompile(context);
     DoOnAfterCompile();
@@ -73,7 +74,8 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Abort")("reason", context.ErrorMessage);
-    AFL_VERIFY(Counters->GetStage() != NChanges::EStage::Finished && Counters->GetStage() != NChanges::EStage::Created && Counters->GetStage() != NChanges::EStage::Aborted)("stage", Counters->GetStage())(
+    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted)(
+                                              "stage", StateGuard.GetStage())(
                                                              "reason", context.ErrorMessage)("prev_reason", AbortedReason);
     SetStage(NChanges::EStage::Aborted);
     AbortedReason = context.ErrorMessage;
@@ -83,7 +85,7 @@ void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinis
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
     AFL_VERIFY(!LockGuard);
     LockGuard = self.DataLocksManager->RegisterLock(BuildDataLock());
-    Y_ABORT_UNLESS(Counters->GetStage() == NChanges::EStage::Created);
+    Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Created);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);
     DoStart(self);
     SetStage(NChanges::EStage::Started);
@@ -93,7 +95,7 @@ void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
 }
 
 void TColumnEngineChanges::StartEmergency() {
-    Y_ABORT_UNLESS(Counters->GetStage() == NChanges::EStage::Created);
+    Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Created);
     SetStage(NChanges::EStage::Started);
 //    if (!NeedConstruction()) {
 //        SetStage(NChanges::EStage::Constructed);
@@ -102,7 +104,7 @@ void TColumnEngineChanges::StartEmergency() {
 
 void TColumnEngineChanges::AbortEmergency(const TString& reason) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency")("reason", reason)("prev_reason", AbortedReason);
-    if (Counters->GetStage() == NChanges::EStage::Aborted) {
+    if (StateGuard.GetStage() == NChanges::EStage::Aborted) {
         AbortedReason += "; AnotherReason: " + reason;
     } else {
         SetStage(NChanges::EStage::Aborted);

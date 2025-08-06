@@ -45,20 +45,25 @@ public:
     TSortedFullScanCollection(const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources,
         const std::shared_ptr<IScanCursor>& cursor)
         : TBase(context) {
+        HeapSources = std::move(sources);
+        std::make_heap(HeapSources.begin(), HeapSources.end());
         if (cursor && cursor->IsInitialized()) {
-            for (auto&& i : sources) {
+            while (HeapSources.size()) {
                 bool usage = false;
-                if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(i, usage)) {
+                if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(HeapSources.front(), usage)) {
+                    std::pop_heap(HeapSources.begin(), HeapSources.end());
+                    HeapSources.pop_back();
                     continue;
                 }
                 if (usage) {
-                    i.SetIsStartedByCursor();
+                    HeapSources.front().SetIsStartedByCursor();
+                } else {
+                    std::pop_heap(HeapSources.begin(), HeapSources.end());
+                    HeapSources.pop_back();
                 }
                 break;
             }
         }
-        HeapSources = std::move(sources);
-        std::make_heap(HeapSources.begin(), HeapSources.end());
     }
 };
 

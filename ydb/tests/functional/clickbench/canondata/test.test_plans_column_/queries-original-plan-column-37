@@ -60,6 +60,7 @@
                                                 "PlanNodeId": 3,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "Title"
                                                         ],
@@ -269,8 +270,7 @@
                                                                                         ]
                                                                                     }
                                                                                 }
-                                                                            ],
-                                                                            "Version": 5
+                                                                            ]
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }

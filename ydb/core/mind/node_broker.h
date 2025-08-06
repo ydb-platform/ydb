@@ -75,6 +75,16 @@ struct TEpochInfo {
     }
 };
 
+struct TApproximateEpochStartInfo {
+    ui64 Id = 0;
+    ui64 Version = 0;
+
+    TString ToString() const
+    {
+        return TStringBuilder() << "#" << Id << "." << Version;
+    }
+};
+
 struct TEvNodeBroker {
     enum EEv {
         // requests
@@ -98,6 +108,12 @@ struct TEvNodeBroker {
         // decommission
         EvGracefulShutdownRequest,
         EvGracefulShutdownResponse,
+
+        // delta protocol
+        EvSubscribeNodesRequest,
+        EvUpdateNodes,
+        EvSyncNodesRequest,
+        EvSyncNodesResponse,
 
         // TODO: remove
         // internal
@@ -193,6 +209,31 @@ struct TEvNodeBroker {
     struct TEvSetConfigResponse : public TEventPB<TEvSetConfigResponse,
                                                   NKikimrNodeBroker::TSetConfigResponse,
                                                   EvSetConfigResponse> {
+    };
+
+    struct TEvSubscribeNodesRequest : public TEventPB<TEvSubscribeNodesRequest,
+                                                      NKikimrNodeBroker::TSubscribeNodesRequest,
+                                                      EvSubscribeNodesRequest> {
+    };
+
+    struct TEvUpdateNodes : public TEventPreSerializedPB<TEvUpdateNodes,
+                                                         NKikimrNodeBroker::TUpdateNodes,
+                                                         EvUpdateNodes> {
+        TEvUpdateNodes() = default;
+        TEvUpdateNodes(const NKikimrNodeBroker::TUpdateNodes &record)
+            : TEventPreSerializedPB(record)
+        {
+        }
+    };
+
+    struct TEvSyncNodesRequest : public TEventPB<TEvSyncNodesRequest,
+                                                 NKikimrNodeBroker::TSyncNodesRequest,
+                                                 EvSyncNodesRequest> {
+    };
+
+    struct TEvSyncNodesResponse : public TEventPB<TEvSyncNodesResponse,
+                                                  NKikimrNodeBroker::TSyncNodesResponse,
+                                                  EvSyncNodesResponse> {
     };
 };
 

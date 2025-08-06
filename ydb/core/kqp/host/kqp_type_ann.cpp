@@ -1121,69 +1121,67 @@ TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOlapApplyColumnArg(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2U, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto& row = node->Head();
+    if (!EnsureType(row, ctx)) {
+        return TStatus::Error;
+    }
+    const auto& rowType = row.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    if (!EnsureStructType(row.Pos(), *rowType, ctx)) {
+        return TStatus::Error;
+    }
+    const auto& rowStructType = rowType->Cast<TStructExprType>();
+
+
+    if (!EnsureAtom(node->Tail(), ctx)) {
+        return TStatus::Error;
+    }
+    const auto& columnName = node->Tail().Content();
+    if (const auto& columnType = rowStructType->FindItemType(columnName)) {
+        node->SetTypeAnn(columnType);
+        return TStatus::Ok;
+    } else {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Tail().Pos()),
+            TStringBuilder() << "Missed column: " << columnName
+        ));
+        return TStatus::Error;
+    }
+}
+
 TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 4U, ctx)) {
+    if (!EnsureArgsCount(*node, 3U, ctx)) {
         return TStatus::Error;
     }
 
-    const auto type = node->Child(TKqpOlapApply::idx_Type);
-    if (!EnsureType(*type, ctx)) {
+    TExprList args = TExprList(node->Child(TKqpOlapApply::idx_Args));
+    std::vector<const NYql::TTypeAnnotationNode*> argTypes;
+
+    for(const auto& arg: args) {
+        argTypes.push_back(arg.Ref().GetTypeAnn());
+    }
+
+    auto& lambda = node->ChildRef(TKqpOlapApply::idx_Lambda);
+    if (!EnsureLambda(*lambda, ctx)) {
         return TStatus::Error;
     }
 
-    const auto argsType = type->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-    if (!EnsureStructType(type->Pos(), *argsType, ctx)) {
+    if (!UpdateLambdaAllArgumentsTypes(lambda, argTypes, ctx)) {
         return TStatus::Error;
     }
 
-    const auto columns = node->Child(TKqpOlapApply::idx_Columns);
-    if (!EnsureTupleOfAtoms(*columns, ctx)) {
-        return TStatus::Error;
-    }
-
-    const auto structType = argsType->Cast<TStructExprType>();
-    std::vector<const NYql::TTypeAnnotationNode*> argsTypes(columns->ChildrenSize());
-
-    for (auto i = 0U; i < argsTypes.size(); ++i) {
-        if (const auto argType = structType->FindItemType(columns->Child(i)->Content()))
-            argsTypes[i] = argType;
-        else {
-            ctx.AddError(TIssue(ctx.GetPosition(columns->Child(i)->Pos()),
-                TStringBuilder() << "Missed column: " << columns->Child(i)->Content()
-            ));
-            return TStatus::Error;
-        }
-    }
-
-    TExprList parameters = TExprList(node->Child(TKqpOlapApply::idx_Parameters));
-
-    for(auto expr: parameters) {
-        if (!EnsureArgsCount(*expr.Ptr(), 2U, ctx)) {
-            return TStatus::Error;
-        }
-
-        TCoParameter param = TMaybeNode<TCoParameter>(expr.Ptr()).Cast();
-        const auto& paramType = expr.Ptr()->Child(TCoParameter::idx_Type);
-        if (!EnsureType(*paramType, ctx)) {
-            return TStatus::Error;
-        }
-
-        argsTypes.push_back(paramType->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
-    }
-
-    if (!EnsureLambda(node->Tail(), ctx)) {
-        return TStatus::Error;
-    }
-
-    if (!UpdateLambdaAllArgumentsTypes(node->TailRef(), argsTypes, ctx)) {
-        return TStatus::Error;
-    }
-
-    if (!node->Tail().GetTypeAnn()) {
+    if (!lambda->GetTypeAnn()) {
         return TStatus::Repeat;
     }
 
-    node->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+    if (!EnsureAtom(*node->Child(TKqpOlapApply::idx_KernelName), ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(lambda->GetTypeAnn());
     return TStatus::Ok;
 }
 
@@ -1542,6 +1540,50 @@ TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const 
     auto listSeqType = ctx.MakeType<TListExprType>(expectedRowType);
     node->SetTypeAnn(listSeqType);
 
+    return TStatus::Ok;
+}
+
+TStatus AnnotateKqpOlapPredicateClosure(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* argsType = node->Child(TKqpOlapPredicateClosure::idx_ArgsType);
+
+    if (!EnsureType(*argsType, ctx)) {
+        return TStatus::Error;
+    }
+    auto argTypesTupleRaw = argsType->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+
+    if (!EnsureTupleType(node->Pos(), *argTypesTupleRaw, ctx)) {
+        return TStatus::Error;
+    }
+    auto argTypesTuple = argTypesTupleRaw->Cast<TTupleExprType>();
+
+    std::vector<const TTypeAnnotationNode*> argTypes;
+    argTypes.reserve(argTypesTuple->GetSize());
+
+    for (const auto& argTypeRaw : argTypesTuple->GetItems()) {
+        if (!EnsureStructType(node->Pos(), *argTypeRaw, ctx)) {
+            return TStatus::Error;
+        }
+        argTypes.push_back(argTypeRaw);
+    }
+
+    auto& lambda = node->ChildRef(TKqpOlapPredicateClosure::idx_Lambda);
+    if (!EnsureLambda(*lambda, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(lambda, argTypes, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!lambda->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
     return TStatus::Ok;
 }
 
@@ -1990,8 +2032,16 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateOlapUnaryLogicOperator(input, ctx);
             }
 
+            if (TKqpOlapPredicateClosure::Match(input.Get())) {
+                return AnnotateKqpOlapPredicateClosure(input, ctx);
+            }
+
             if (TKqpOlapFilter::Match(input.Get())) {
                 return AnnotateOlapFilter(input, ctx);
+            }
+
+            if (TKqpOlapApplyColumnArg::Match(input.Get())) {
+                return AnnotateOlapApplyColumnArg(input, ctx);
             }
 
             if (TKqpOlapApply::Match(input.Get())) {

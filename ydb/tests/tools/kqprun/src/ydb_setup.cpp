@@ -516,13 +516,15 @@ public:
     }
 
     NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId) const {
-        TString executionId = *NKikimr::NKqp::ScriptExecutionIdFromOperation(operation);
+        TString error;
+        const auto executionId = NKikimr::NKqp::ScriptExecutionIdFromOperation(operation, error);
+        Y_ENSURE(executionId, error);
 
         ui32 nodeIndex = GetNodeIndexForDatabase(database);
         NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
         auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
-        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
+        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), *executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
 
         GetRuntime()->Register(fetchActor, nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
 

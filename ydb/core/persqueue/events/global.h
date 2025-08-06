@@ -250,6 +250,7 @@ namespace TEvPersQueue {
     };
 
     struct TEvProposeTransaction : public TEventPreSerializedPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+        NWilson::TSpan ExecuteSpan;
     };
 
     struct TEvProposeTransactionBuilder: public TEvProposeTransaction {

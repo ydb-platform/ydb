@@ -368,6 +368,17 @@ namespace NTypeAnnImpl {
                     .Build(), ctx.MakeType<TDataExprType>(EDataSlot::TzTimestamp) };
             }
 
+            if (resType->GetTag() == "DateTime2.TM64") {
+                return { ctx.Builder(input->Pos())
+                    .Callable("Apply")
+                        .Callable(0, "Udf")
+                            .Atom(0, "DateTime2.MakeTzTimestamp64", TNodeFlags::Default)
+                        .Seal()
+                        .Add(1, input)
+                    .Seal()
+                    .Build(), ctx.MakeType<TDataExprType>(EDataSlot::TzTimestamp64) };
+            }
+
             if (resType->GetTag() == "JsonNode") {
                 return { ctx.Builder(input->Pos())
                     .Callable("Apply")
@@ -3311,7 +3322,9 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (IsNull(input->Head()) || IsNull(input->Tail())) {
+        const auto ignoreNulls = input->Content().ends_with("IgnoreCase");
+
+        if ((IsNull(input->Head()) || IsNull(input->Tail())) && !ignoreNulls) {
             output = MakeBoolNothing(input->Pos(), ctx.Expr);
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -3331,8 +3344,11 @@ namespace NTypeAnnImpl {
             }
             bool isOptional = false;
             const TDataExprType* dataType = nullptr;
-            if (!IsDataOrOptionalOfData(type, isOptional, dataType) ||
-                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8))
+            if ((!IsDataOrOptionalOfData(type, isOptional, dataType) ||
+                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8) ||
+                dataType->IsOptionalOrNull()) &&
+                (!IsNull(*type) && ignoreNulls)
+            )
             {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder()
                     << "Expected (optional) string/utf8 or corresponding Pg type, but got: " << *child->GetTypeAnn()));
@@ -3340,8 +3356,7 @@ namespace NTypeAnnImpl {
             }
             hasOptionals = hasOptionals || isOptional;
         }
-
-        if (hasOptionals)
+        if (hasOptionals && !ignoreNulls)
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool)));
         else
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
@@ -12408,6 +12423,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["GreaterOrEqual"] = &CompareWrapper<false>;
         Functions["=="] = &CompareWrapper<true>;
         Functions["Equal"] = &CompareWrapper<true>;
+        Functions["EqualsIgnoreCase"] = &WithWrapper;
         Functions["!="] = &CompareWrapper<true>;
         Functions["NotEqual"] = &CompareWrapper<true>;
         Functions["Inc"] = &IncDecWrapper<true>;
@@ -12471,8 +12487,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Find"] = &FindWrapper;
         Functions["RFind"] = &FindWrapper;
         Functions["StartsWith"] = &WithWrapper;
+        Functions["StartsWithIgnoreCase"] = &WithWrapper;
         Functions["EndsWith"] = &WithWrapper;
+        Functions["EndsWithIgnoreCase"] = &WithWrapper;
         Functions["StringContains"] = &WithWrapper;
+        Functions["StringContainsIgnoreCase"] = &WithWrapper;
         Functions["ByteAt"] = &ByteAtWrapper;
         Functions["ListIf"] = &ListIfWrapper;
         Functions["AsList"] = &AsListWrapper<false>;

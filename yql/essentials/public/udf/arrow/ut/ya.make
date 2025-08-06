@@ -3,6 +3,7 @@ UNITTEST()
 SRCS(
     array_builder_ut.cpp
     bit_util_ut.cpp
+    block_reader_ut.cpp
 )
 
 PEERDIR(

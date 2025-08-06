@@ -1,16 +1,6 @@
 #include "dq_arrow_helpers.h"
 
-#include <ydb/library/yverify_stream/yverify_stream.h>
-
 #include <memory>
-#include <yql/essentials/public/udf/udf_data_type.h>
-#include <yql/essentials/public/udf/udf_string_ref.h>
-#include <yql/essentials/public/udf/udf_type_ops.h>
-#include <yql/essentials/public/udf/udf_value.h>
-#include <yql/essentials/minikql/mkql_node.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_value_builder.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_nested.h>
@@ -18,16 +8,34 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
 
+#include <library/cpp/testing/unittest/registar.h>
+
 #include <util/string/builder.h>
 #include <util/system/yassert.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/batch.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
-using namespace NKikimr;
+#include <yql/essentials/minikql/computation/mkql_block_reader.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_value_builder.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/public/udf/arrow/defs.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_string_ref.h>
+#include <yql/essentials/public/udf/udf_type_ops.h>
+#include <yql/essentials/public/udf/udf_value.h>
+
 using namespace NKikimr::NMiniKQL;
+using namespace NKikimr::NArrow;
 using namespace NYql;
 
 namespace {
+
 NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
     Y_ABORT_UNLESS(type->GetKind() == TType::EKind::Data);
     auto dataType = static_cast<const TDataType*>(type);
@@ -59,6 +67,28 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             Y_ABORT("Not implemented creation value for such type");
     }
 }
+
+ui64 GetScalarDatumSize(const arrow::Datum& datum) {
+    UNIT_ASSERT_C(datum.is_scalar(), "Expected scalar datum");
+    return NUdf::GetSizeOfArrayDataInBytes(*ARROW_RESULT(arrow::MakeArrayFromScalar(*datum.scalar(), 1))->data());
+}
+
+struct TBlockColumn {
+    using TPtr = std::shared_ptr<TBlockColumn>;
+
+    arrow::Datum Datum;
+    TBlockType* Type;
+    std::unique_ptr<IBlockReader> BlockReader;
+    ui64 Size = 0;
+};
+
+struct TBlockValue {
+    TUnboxedValueVector Values;
+    std::vector<std::unique_ptr<IBlockReader>> BlockReaders;
+    const TMultiType* Type;
+    ui64 ArraysSize = 0;
+    ui64 ScalarsSize = 0;
+};
 
 struct TTestContext {
     TScopedAlloc Alloc;
@@ -342,6 +372,65 @@ struct TTestContext {
         }
         return values;
     }
+
+    template <typename TDataSlot, typename TScalar, typename TFiller>
+    TBlockColumn::TPtr CreateBlockColumn(std::optional<ui64> numberRows, TFiller& arrayFiller, std::function<TScalar()> scalarFiller) {
+        TBlockColumn result = {
+            .Type = TBlockType::Create(TDataType::Create(NUdf::TDataType<TDataSlot>::Id, TypeEnv), numberRows ? TBlockType::EShape::Many : TBlockType::EShape::Scalar, TypeEnv)
+        };
+
+        if (numberRows) {
+            result.Datum = std::make_shared<NConstruction::TSimpleArrayConstructor<TFiller>>("field", arrayFiller)->BuildArray(*numberRows);
+            result.BlockReader = MakeBlockReader(TTypeInfoHelper(), result.Type->GetItemType());
+            result.Size = result.BlockReader->GetDataWeight(*result.Datum.array());
+        } else {
+            result.Datum = arrow::Datum(std::make_shared<TScalar>(scalarFiller()));
+            result.Size = GetScalarDatumSize(result.Datum);
+        }
+
+        return std::make_shared<TBlockColumn>(std::move(result));
+    }
+
+    TBlockColumn::TPtr CreateStringBlockColumn(std::optional<ui64> numberRows) {
+        NConstruction::TStringPoolFiller stringGenerator(8, 512);
+        return CreateBlockColumn<char*, arrow::StringScalar>(numberRows, stringGenerator, [&]() {
+            return arrow::StringScalar(stringGenerator.GetValue(0).to_string());
+        });
+    }
+
+    TBlockColumn::TPtr CreateIntBlockColumn(std::optional<ui64> numberRows) {
+        NConstruction::TIntSeqFiller<arrow::Int32Type> intGenerator;
+        return CreateBlockColumn<i32, arrow::Int32Scalar>(numberRows, intGenerator, [&]() {
+            return arrow::Int32Scalar(intGenerator.GetValue(0));
+        });
+    }
+
+    TBlockValue ComposeBlockColumns(std::vector<TBlockColumn::TPtr> columns, ui64 numberRows) {
+        TBlockValue result;
+        std::vector<TType* const> columnTypes;
+        result.Values.reserve(columns.size() + 1);
+        result.BlockReaders.reserve(columns.size());
+        columnTypes.reserve(columns.size() + 1);
+        for (auto& column : columns) {
+            if (column->Datum.is_scalar()) {
+                result.ScalarsSize += column->Size;
+            } else {
+                result.ArraysSize += column->Size;
+            }
+
+            result.Values.emplace_back(HolderFactory.CreateArrowBlock(std::move(column->Datum)));
+            result.BlockReaders.emplace_back(std::move(column->BlockReader));
+            columnTypes.emplace_back(column->Type);
+        }
+
+        auto lengtDatum = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(numberRows));
+        result.ScalarsSize += GetScalarDatumSize(lengtDatum);
+        result.Values.emplace_back(HolderFactory.CreateArrowBlock(std::move(lengtDatum)));
+        columnTypes.emplace_back(TBlockType::Create(TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv), TBlockType::EShape::Scalar, TypeEnv));
+
+        result.Type = TMultiType::Create(columnTypes.size(), columnTypes.data(), TypeEnv);
+        return result;
+    }
 };
 
 // Note this equality check is not fully valid. But it is sufficient for UnboxedValues used in tests.
@@ -471,7 +560,8 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
         THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
     }
 }
-}
+
+} // namespace
 
 
 Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
@@ -967,3 +1057,120 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
     }
 }
 
+Y_UNIT_TEST_SUITE(TestArrowBlockSplitter) {
+    void ValidateSplit(const TBlockValue& initialItem, ui64 numberParts, ui64 sizeLimit, const std::vector<std::vector<arrow::Datum>>& splittedItems) {
+        UNIT_ASSERT_VALUES_EQUAL(splittedItems.size(), numberParts);
+        const ui64 numberRows = TArrowBlock::From(initialItem.Values.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        const ui64 expectedSplittedSize = numberRows / numberParts;
+        const ui64 width = initialItem.Type->GetElementsCount();
+
+        ui64 rowsCount = 0;
+        for (const auto& splittedBatch : splittedItems) {
+            const auto batchSuffix = TStringBuilder() << "rows count: " << rowsCount;
+
+            UNIT_ASSERT_VALUES_EQUAL_C(width, splittedBatch.size(), batchSuffix);
+            UNIT_ASSERT_C(splittedBatch.back().is_scalar(), batchSuffix);
+
+            const auto splittedSize = splittedBatch.back().scalar_as<arrow::UInt64Scalar>().value;
+            UNIT_ASSERT_VALUES_EQUAL_C(splittedSize, expectedSplittedSize, batchSuffix);
+
+            ui64 itemSize = 0;
+            for (ui64 i = 0; i < width - 1; ++i) {
+                const auto columnSuffix = TStringBuilder() << batchSuffix << ", column: " << i;
+
+                const auto initialDatum = TArrowBlock::From(initialItem.Values[i]).GetDatum();
+                const auto splittedDatum = splittedBatch[i];
+                if (initialDatum.is_scalar()) {
+                    UNIT_ASSERT_C(splittedDatum.is_scalar(), columnSuffix);
+                    UNIT_ASSERT_C(initialDatum.Equals(splittedDatum), columnSuffix);
+                    itemSize += GetScalarDatumSize(splittedDatum);
+                } else {
+                    UNIT_ASSERT_C(splittedDatum.is_array(), columnSuffix);
+
+                    const auto splittedArray = splittedDatum.make_array();
+                    UNIT_ASSERT_VALUES_EQUAL_C(splittedSize, splittedArray->length(), columnSuffix);
+                    UNIT_ASSERT_VALUES_EQUAL_C(rowsCount, splittedArray->offset(), columnSuffix);
+                    UNIT_ASSERT_C(splittedArray->Equals(initialDatum.make_array()->Slice(rowsCount, splittedSize)), columnSuffix);
+                    itemSize += initialItem.BlockReaders[i]->GetDataWeight(*splittedArray->data());
+                }
+            }
+            UNIT_ASSERT_LE_C(itemSize, sizeLimit, batchSuffix);
+
+            rowsCount += splittedSize;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(numberRows, rowsCount);
+    }
+
+    Y_UNIT_TEST(SplitLargeBlock) {
+        TTestContext context;
+
+        constexpr ui64 numberRows = 2048;
+        const auto& item = context.ComposeBlockColumns({
+            context.CreateStringBlockColumn(numberRows),
+            context.CreateIntBlockColumn(numberRows)
+        }, numberRows);
+
+        constexpr ui64 numberParts = 8;
+        const ui64 sizeLimit = item.ScalarsSize + item.ArraysSize / numberParts;
+        const auto splitter = NArrow::CreateBlockSplitter(item.Type, sizeLimit);
+
+        UNIT_ASSERT(splitter->ShouldSplitItem(item.Values.data(), item.Values.size()));
+        ValidateSplit(item, numberParts, sizeLimit, splitter->SplitItem(item.Values.data(), item.Values.size()));
+    }
+
+    Y_UNIT_TEST(SplitWithScalars) {
+        TTestContext context;
+
+        constexpr ui64 numberRows = 2048;
+        const auto& item = context.ComposeBlockColumns({
+            context.CreateStringBlockColumn(std::nullopt),
+            context.CreateIntBlockColumn(numberRows)
+        }, numberRows);
+
+        constexpr ui64 numberParts = 8;
+        const ui64 sizeLimit = item.ScalarsSize + item.ArraysSize / numberParts;
+        const auto splitter = NArrow::CreateBlockSplitter(item.Type, sizeLimit);
+
+        UNIT_ASSERT(splitter->ShouldSplitItem(item.Values.data(), item.Values.size()));
+        ValidateSplit(item, numberParts, sizeLimit, splitter->SplitItem(item.Values.data(), item.Values.size()));
+    }
+
+    Y_UNIT_TEST(PassSmallBlock) {
+        TTestContext context;
+
+        constexpr ui64 numberRows = 2048;
+        const auto& item = context.ComposeBlockColumns({
+            context.CreateStringBlockColumn(std::nullopt),
+            context.CreateStringBlockColumn(numberRows),
+            context.CreateIntBlockColumn(std::nullopt),
+            context.CreateIntBlockColumn(numberRows)
+        }, numberRows);
+
+        const auto splitter = NArrow::CreateBlockSplitter(item.Type, 2 * (item.ArraysSize + item.ScalarsSize));
+        UNIT_ASSERT(!splitter->ShouldSplitItem(item.Values.data(), item.Values.size()));
+    }
+
+    Y_UNIT_TEST(CheckLargeRows) {
+        TTestContext context;
+
+        constexpr ui64 numberRows = 2048;
+        const auto& item = context.ComposeBlockColumns({context.CreateStringBlockColumn(numberRows)}, numberRows);
+
+        const ui64 sizeLimit = item.ArraysSize / numberRows;
+        const auto splitter = NArrow::CreateBlockSplitter(item.Type, sizeLimit);
+        UNIT_ASSERT(splitter->ShouldSplitItem(item.Values.data(), item.Values.size()));
+        UNIT_ASSERT_EXCEPTION_CONTAINS(splitter->SplitItem(item.Values.data(), item.Values.size()), yexception, TStringBuilder() << "Row size in block is " << item.ArraysSize / numberRows + item.ScalarsSize << ", that is larger than allowed limit " << sizeLimit);
+    }
+
+    Y_UNIT_TEST(CheckLargeScalarRows) {
+        TTestContext context;
+
+        constexpr ui64 numberRows = 2048;
+        const auto& item = context.ComposeBlockColumns({context.CreateStringBlockColumn(std::nullopt)}, numberRows);
+
+        const ui64 sizeLimit = item.ScalarsSize / 2;
+        const auto splitter = NArrow::CreateBlockSplitter(item.Type, sizeLimit);
+        UNIT_ASSERT(splitter->ShouldSplitItem(item.Values.data(), item.Values.size()));
+        UNIT_ASSERT_EXCEPTION_CONTAINS(splitter->SplitItem(item.Values.data(), item.Values.size()), yexception, TStringBuilder() << "Row size in block is " << item.ScalarsSize << ", that is larger than allowed limit " << sizeLimit);
+    }
+}

@@ -853,6 +853,12 @@ bool TCms::TryToLockPDisk(const TAction &action,
                           const TPDiskInfo &pdisk,
                           TErrorInfo &error) const
 {
+    TDuration duration = TDuration::MicroSeconds(action.GetDuration());
+    duration += opts.PermissionDuration;
+    
+    if (pdisk.IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration))
+        return false;
+
     if (!TryToLockVDisks(action, opts, pdisk.VDisks, error))
         return false;
 
@@ -936,14 +942,6 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
             }
             break;
         case MODE_FORCE_RESTART:
-            if (counters->GroupAlreadyHasLockedDisks() && !counters->GroupHasMoreThanOneDiskPerNode() && opts.PartialPermissionAllowed) {
-                TabletCounters->Cumulative()[COUNTER_PARTIAL_PERMISSIONS_OPTIMIZED].Increment(1);
-                error.Code = TStatus::DISALLOW_TEMP;
-                error.Reason = "You cannot get two or more disks from the same group at the same time"
-                               " in partial permissions allowed mode";
-                error.Deadline = defaultDeadline;
-                return false;
-            }
             // Any number of down disks is OK for this mode.
             break;
         default:

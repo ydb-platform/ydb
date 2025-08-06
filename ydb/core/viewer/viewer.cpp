@@ -282,6 +282,8 @@ public:
                 forceRetryPossible = true;
             } else if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData) {
                 bscError = TStringBuilder() << "Calling this operation may result in data loss for " << GetGroupList(groups);
+            } else if (lastStatus.GetErrorDescription().find("failed to allocate group: no group options") != TString::npos) {
+                bscError = "Failed to allocate group";
             }
         }
         if (bscError.empty()) {

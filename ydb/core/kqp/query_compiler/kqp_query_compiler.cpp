@@ -542,6 +542,12 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
+        queryProto.SetEnableOltpSink(Config->EnableOltpSink);
+        queryProto.SetEnableOlapSink(Config->EnableOlapSink);
+        queryProto.SetEnableHtapTx(Config->EnableHtapTx);
+        queryProto.SetForceImmediateEffectsExecution(
+            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
             if (queryBlockSettings.HasUncommittedChangesRead) {
@@ -1242,6 +1248,10 @@ private:
                 settingsProto.SetIsBatch(true);
             }
 
+            if (const auto isIndexImplTable = settings.IsIndexImplTable().Cast(); isIndexImplTable.StringValue() == "true") {
+                settingsProto.SetIsIndexImplTable(true);
+            }
+
             if (settings.Mode().Cast().StringValue() == "replace") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE);
             } else if (settings.Mode().Cast().StringValue() == "upsert" || settings.Mode().Cast().StringValue().empty() /* for compatibility, will be removed */) {
@@ -1324,45 +1334,56 @@ private:
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
 
-            if (Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination)) {
-                auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
-
-                const auto& outputType = NYql::NDq::GetDqConnectionType(connection, ctx);
-                auto structType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-                for (const auto& column: shuffle.KeyColumns().Ptr()->Children()) {
-                    auto ty = NYql::NDq::GetColumnType(connection, *structType, column->Content(), column->Pos(), ctx);
-                    if (ty->GetKind() == ETypeAnnotationKind::List) {
-                        ty = ty->Cast<TListExprType>()->GetItemType();
-                    }
-                    NYql::NUdf::EDataSlot slot;
-                    switch (ty->GetKind()) {
-                        case ETypeAnnotationKind::Data: {
-                            slot = ty->Cast<TDataExprType>()->GetSlot();
-                            break;
-                        }
-                        case ETypeAnnotationKind::Optional: {
-                            auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
-                            if (optionalType->GetKind() == ETypeAnnotationKind::List) {
-                                optionalType = optionalType->Cast<TListExprType>()->GetItemType();
-                            }
-                            Y_ENSURE(
-                                optionalType->GetKind() == ETypeAnnotationKind::Data,
-                                TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
-                            );
-                            slot = optionalType->Cast<TDataExprType>()->GetSlot();
-                            break;
-                        }
-                        default: {
-                            Y_ENSURE(false, TStringBuilder{} << "Can't get type for ColumnHashV1 Shuffling: " << static_cast<std::int64_t>(ty->GetKind()));
-                        }
-                    }
-
-                    auto typeId = GetDataTypeInfo(slot).TypeId;
-                    columnHashV1.AddKeyColumnTypes(typeId);
-                }
-            } else {
-                shuffleProto.MutableHashV1();
+            NDq::EHashShuffleFuncType hashFuncType = NDq::EHashShuffleFuncType::HashV1;
+            if (shuffle.HashFunc().IsValid()) {
+                hashFuncType = FromString<NDq::EHashShuffleFuncType>(shuffle.HashFunc().Cast().StringValue());
             }
+
+            switch (hashFuncType) {
+                using enum NDq::EHashShuffleFuncType;
+                case HashV1: {
+                    shuffleProto.MutableHashV1();
+                    break;
+                }
+                case ColumnShardHashV1: {
+                    auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
+
+                    const auto& outputType = NYql::NDq::GetDqConnectionType(connection, ctx);
+                    auto structType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                    for (const auto& column: shuffle.KeyColumns().Ptr()->Children()) {
+                        auto ty = NYql::NDq::GetColumnType(connection, *structType, column->Content(), column->Pos(), ctx);
+                        if (ty->GetKind() == ETypeAnnotationKind::List) {
+                            ty = ty->Cast<TListExprType>()->GetItemType();
+                        }
+                        NYql::NUdf::EDataSlot slot;
+                        switch (ty->GetKind()) {
+                            case ETypeAnnotationKind::Data: {
+                                slot = ty->Cast<TDataExprType>()->GetSlot();
+                                break;
+                            }
+                            case ETypeAnnotationKind::Optional: {
+                                auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
+                                if (optionalType->GetKind() == ETypeAnnotationKind::List) {
+                                    optionalType = optionalType->Cast<TListExprType>()->GetItemType();
+                                }
+                                Y_ENSURE(
+                                    optionalType->GetKind() == ETypeAnnotationKind::Data,
+                                    TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
+                                );
+                                slot = optionalType->Cast<TDataExprType>()->GetSlot();
+                                break;
+                            }
+                            default: {
+                                Y_ENSURE(false, TStringBuilder{} << "Can't get type for ColumnHashV1 Shuffling: " << static_cast<std::int64_t>(ty->GetKind()));
+                            }
+                        }
+
+                        auto typeId = GetDataTypeInfo(slot).TypeId;
+                        columnHashV1.AddKeyColumnTypes(typeId);
+                    }
+                    break;
+                }
+            };
 
             if (Config->EnableSpillingInHashJoinShuffleConnections && shuffle.UseSpilling()) {
                 shuffleProto.SetUseSpilling(FromStringWithDefault<bool>(shuffle.UseSpilling().Cast().StringValue(), false));

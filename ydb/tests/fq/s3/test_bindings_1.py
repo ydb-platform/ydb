@@ -113,7 +113,7 @@ class TestBindings:
 
         describe_result = client.describe_query(query_id).result
         describe_string = "{}".format(describe_result)
-        assert "Type mismatch between schema type" in describe_string, describe_string
+        assert "Row type mismatch for S3 external table" in describe_string, describe_string
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

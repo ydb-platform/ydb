@@ -13,7 +13,6 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
-#include <ydb/core/kqp/common/batch/params.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
@@ -531,18 +530,72 @@ public:
         CompileQuery();
     }
 
+    bool AreAllTheTopicsAndPartitionsKnown() const {
+        if (QueryState->HasTopicOperations()) {
+            const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
+
+            if (operations.HasTabletId()) {
+                for (const auto& topic : operations.GetTopics()) {
+                    auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
+                    for (const auto& partition : topic.partitions()) {
+                        QueryState->TxCtx->TopicOperations.SetTabletId(path, partition.partition_id(), operations.GetTabletId());
+                    }
+                }
+                return true;
+            }
+
+            for (const auto& topic : operations.GetTopics()) {
+                auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
+
+                for (const auto& partition : topic.partitions()) {
+                    if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, partition.partition_id())) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if (QueryState->HasKafkaApiOperations()) {
+            const NKikimrKqp::TKafkaApiOperationsRequest& operations = QueryState->GetKafkaApiOperationsFromRequest();
+            for (const auto& topicAndPartition : operations.GetPartitionsInTxn()) {
+                auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topicAndPartition.GetTopicPath()));
+
+                if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, topicAndPartition.GetPartitionId())) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     void AddOffsetsToTransaction() {
         YQL_ENSURE(QueryState);
         if (!PrepareQueryTransaction()) {
             return;
         }
 
-        QueryState->AddOffsetsToTransaction();
+        QueryState->FillTopicOperations();
 
-        auto navigate = QueryState->BuildSchemeCacheNavigate();
+        if (!AreAllTheTopicsAndPartitionsKnown()) {
+            auto navigate = QueryState->BuildSchemeCacheNavigate();
+            Become(&TKqpSessionActor::ExecuteState);
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+            return;
+        }
 
-        Become(&TKqpSessionActor::ExecuteState);
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+        TString message;
+        if (!QueryState->TryMergeTopicOffsets(QueryState->TopicOperations, message)) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
+        }
+
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
+            Become(&TKqpSessionActor::ExecuteState);
+            Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
+            return;
+        }
+
+        ReplySuccess();
     }
 
     void CompileQuery() {
@@ -928,6 +981,55 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+
+        auto checkSchemeTx = [&]() {
+            for (const auto &tx : phyQuery.GetTransactions()) {
+                if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        if (phyQuery.HasEnableOltpSink()) {
+            if (!QueryState->TxCtx->EnableOltpSink) {
+                QueryState->TxCtx->EnableOltpSink = phyQuery.GetEnableOltpSink();
+            }
+            if (QueryState->TxCtx->EnableOltpSink != phyQuery.GetEnableOltpSink()) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED,
+                                "Transaction execution settings have been changed (EnableOltpSink).");
+                return false;
+            }
+        } else {
+            AFL_ENSURE(checkSchemeTx());
+        }
+
+        if (phyQuery.HasEnableOlapSink()) {
+            if (!QueryState->TxCtx->EnableOlapSink) {
+                QueryState->TxCtx->EnableOlapSink = phyQuery.GetEnableOlapSink();
+            }
+            if (QueryState->TxCtx->EnableOlapSink != phyQuery.GetEnableOlapSink()) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED,
+                                "Transaction execution settings have been changed (EnableOlapSink).");
+                return false;
+            }
+        } else {
+            AFL_ENSURE(checkSchemeTx());
+        }
+
+        if (phyQuery.HasEnableHtapTx()) {
+            if (!QueryState->TxCtx->EnableHtapTx) {
+                QueryState->TxCtx->EnableHtapTx = phyQuery.GetEnableHtapTx();
+            }
+            if (QueryState->TxCtx->EnableHtapTx != phyQuery.GetEnableHtapTx()) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED,
+                                "Transaction execution settings have been changed (EnableHtapTx).");
+                return false;
+            }
+        } else {
+            AFL_ENSURE(checkSchemeTx());
+        }
+
         const bool hasOlapWrite = ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
         const bool hasOltpWrite = ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
         const bool hasOlapRead = ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery);
@@ -937,7 +1039,7 @@ public:
         QueryState->TxCtx->HasTableWrite |= hasOlapWrite || hasOltpWrite;
         QueryState->TxCtx->HasTableRead |= hasOlapRead || hasOltpRead;
         if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
-                && !Settings.TableService.GetEnableHtapTx() && !QueryState->IsSplitted()) {
+                && !QueryState->TxCtx->EnableHtapTx.value_or(false) && !QueryState->IsSplitted()) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Write transactions between column and row tables are disabled at current time.");
             return false;
@@ -950,6 +1052,9 @@ public:
         }
 
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
+        if (phyQuery.GetForceImmediateEffectsExecution()) {
+            Counters->ForcedImmediateEffectsExecution->Inc();
+        }
         QueryState->TxCtx->ApplyPhysicalQuery(phyQuery, QueryState->Commit);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);
@@ -1165,11 +1270,9 @@ public:
             return;
         }
 
-        bool isBatchQuery = IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery());
-
         TKqpPhyTxHolder::TConstPtr tx;
         try {
-            tx = QueryState->GetCurrentPhyTx(QueryState->TxCtx->TxAlloc->TypeEnv, isBatchQuery);
+            tx = QueryState->GetCurrentPhyTx(QueryState->TxCtx->TxAlloc->TypeEnv);
         } catch (const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }
@@ -1178,17 +1281,8 @@ public:
             return;
         }
 
-        if (Settings.TableService.GetEnableOltpSink() && isBatchQuery) {
-            if (!Settings.TableService.GetEnableBatchUpdates()) {
-                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                    "BATCH operations are disabled by EnableBatchUpdates flag.");
-            }
-
-            if (QueryState->TxCtx->HasOlapTable) {
-                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                    "BATCH operations are not supported for column tables at the current time.");
-            }
-
+        bool isBatchQuery = IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery());
+        if (QueryState->TxCtx->EnableOltpSink.value_or(false) && isBatchQuery && (!tx || !tx->IsLiteralTx())) {
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
             ExecuteDeferredEffectsImmediately(tx);
@@ -1200,30 +1294,46 @@ public:
     }
 
     void ExecutePartitioned(const TKqpPhyTxHolder::TConstPtr& tx) {
+        if (!Settings.TableService.GetEnableBatchUpdates()) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                "BATCH operations are disabled by EnableBatchUpdates flag.");
+        }
+
+        if (QueryState->TxCtx->HasOlapTable) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                "BATCH operations are not supported for column tables at the current time.");
+        }
+
         if (QueryState->HasTxControl()) {
             NYql::TIssues issues;
-            return ReplyQueryError(
-                ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST,
-                "BATCH operation can be executed only in NoTx mode.",
-                MessageFromIssues(issues));
+            return ReplyQueryError(::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST,
+                "BATCH operation can be executed only in the implicit transaction mode.");
         }
 
         auto& txCtx = *QueryState->TxCtx;
+        auto request = PrepareRequest(tx, false, QueryState.get());
 
-        auto literalRequest = PrepareLiteralRequest(QueryState.get());
-        auto physicalRequest = PreparePhysicalRequest(QueryState.get(), txCtx.TxAlloc);
+        try {
+            QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txCtx.TxAlloc->TypeEnv);
+        } catch (const yexception& ex) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+        }
 
-        if (QueryState->PreparedQuery->GetTransactions().size() == 2) {
-            literalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
-        } else {
-            physicalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
+        if (tx) {
+            request.Transactions.emplace_back(tx, QueryState->QueryData);
         }
 
         QueryState->TxCtx->OnNewExecutor(false);
         QueryState->Commited = true;
 
-        SendToPartitionedExecuter(QueryState->TxCtx.Get(), std::move(literalRequest), std::move(physicalRequest));
-        QueryState->CurrentTx += QueryState->PreparedQuery->GetTransactions().size();
+        for (const auto& effect : txCtx.DeferredEffects) {
+            request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
+            LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
+                   << " current Transactions.size(): " << request.Transactions.size());
+        }
+
+        SendToPartitionedExecuter(QueryState->TxCtx.Get(), std::move(request));
+        QueryState->CurrentTx += 1;
     }
 
     void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
@@ -1353,7 +1463,7 @@ public:
                 request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
             }
 
-            if (Settings.TableService.GetEnableOltpSink()) {
+            if (txCtx.EnableOltpSink.value_or(false)) {
                 if (txCtx.TxHasEffects() || hasLocks || txCtx.TopicOperations.HasOperations()) {
                     request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
                 }
@@ -1390,7 +1500,7 @@ public:
                 }
             }
             request.TopicOperations = std::move(txCtx.TopicOperations);
-        } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || Settings.TableService.GetEnableOlapSink())) {
+        } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || txCtx.EnableOlapSink.value_or(false))) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
             if (!txCtx.CanDeferEffects()) {
@@ -1453,12 +1563,12 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
-        if (Settings.TableService.GetEnableOltpSink() && !txCtx->TxManager) {
+        if (txCtx->EnableOltpSink.value_or(false) && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
         }
 
-        if (Settings.TableService.GetEnableOltpSink()
+        if (txCtx->EnableOltpSink.value_or(false)
             && !txCtx->BufferActorId
             && (txCtx->HasTableWrite || request.TopicOperations.GetSize() != 0)) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
@@ -1493,7 +1603,7 @@ public:
             };
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
-        } else if (Settings.TableService.GetEnableOltpSink() && txCtx->BufferActorId) {
+        } else if (txCtx->EnableOltpSink.value_or(false) && txCtx->BufferActorId) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
             txCtx->TxManager->AddTopicsToShards();
         }
@@ -1505,7 +1615,7 @@ public:
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
-                ? GUCSettings : nullptr,
+                ? GUCSettings : nullptr, {},
             txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId);
 
         auto exId = RegisterWithSameMailbox(executerActor);
@@ -1518,22 +1628,27 @@ public:
         ExecuterId = exId;
     }
 
-    void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& literalRequest,
-        IKqpGateway::TExecPhysicalRequest&& physicalRequest)
+    void SendToPartitionedExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request)
     {
-        physicalRequest.Orbit = std::move(QueryState->Orbit);
-        QueryState->StatementResultSize = GetResultsCount(physicalRequest);
+        if (txCtx->TxHasEffects() || txCtx->Locks.HasLocks()) {
+            request.AcquireLocksTxId = txCtx->Locks.GetLockTxId();
+        }
 
-        literalRequest.TraceId = QueryState->KqpSessionSpan.GetTraceId();
+        if (!txCtx->DeferredEffects.Empty()) {
+            request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
+        }
 
-        physicalRequest.LocksOp = ELocksOp::Commit;
-        physicalRequest.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
-        physicalRequest.MaxShardCount = RequestControls.MaxShardCount;
-        physicalRequest.TraceId = QueryState
-            ? QueryState->KqpSessionSpan.GetTraceId()
-            : NWilson::TTraceId();
-        physicalRequest.CaFactory_ = CaFactory_;
-        physicalRequest.ResourceManager_ = ResourceManager_;
+        if (QueryState) {
+            request.Orbit = std::move(QueryState->Orbit);
+            QueryState->StatementResultSize = GetResultsCount(request);
+        }
+
+        request.LocksOp = ELocksOp::Commit;
+        request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
+        request.MaxShardCount = RequestControls.MaxShardCount;
+        request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        request.CaFactory_ = CaFactory_;
+        request.ResourceManager_ = ResourceManager_;
 
         const auto& queryLimitsProto = Settings.TableService.GetQueryLimits();
         const auto& bufferLimitsProto = queryLimitsProto.GetBufferLimits();
@@ -1545,8 +1660,7 @@ public:
             : ui64(Settings.MkqlInitialMemoryLimit);
 
         TKqpPartitionedExecuterSettings settings{
-            .LiteralRequest = std::move(literalRequest),
-            .PhysicalRequest = std::move(physicalRequest),
+            .Request = std::move(request),
             .SessionActorId = SelfId(),
             .FuncRegistry = AppData()->FunctionRegistry,
             .TimeProvider = AppData()->TimeProvider,
@@ -2075,7 +2189,7 @@ public:
         }
 
         if (replyTopicOperations) {
-            if (HasTopicWriteId()) {
+            if (HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
                 auto* w = response->MutableTopicOperations();
                 auto* writeId = w->MutableWriteId();
                 writeId->SetNodeId(SelfId().NodeId());
@@ -2856,11 +2970,14 @@ private:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicWriteId()) {
+        QueryState->TxCtx->TopicOperations.CacheSchemeCacheNavigate(response->ResultSet);
+
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
-        } else {
-            ReplySuccess();
+            return;
         }
+
+        ReplySuccess();
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
@@ -2870,7 +2987,9 @@ private:
 
         YQL_ENSURE(QueryState);
         YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_TOPIC);
+
         SetTopicWriteId(NLongTxService::TLockHandle(ev->Get()->TxId, TActivationContext::ActorSystem()));
+
         ReplySuccess();
     }
 
@@ -2878,7 +2997,11 @@ private:
         return QueryState->TxCtx->TopicOperations.HasWriteOperations();
     }
 
-    bool HasTopicWriteId() const {
+    bool HasKafkaApiWriteOperations() const {
+        return QueryState->TxCtx->TopicOperations.HasKafkaOperations() && QueryState->TxCtx->TopicOperations.HasWriteOperations();
+    }
+
+    bool HasTopicApiWriteOperations() const {
         return QueryState->TxCtx->TopicOperations.HasWriteId();
     }
 

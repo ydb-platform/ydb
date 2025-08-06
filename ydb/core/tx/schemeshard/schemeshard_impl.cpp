@@ -289,6 +289,30 @@ THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal
     );
 }
 
+THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(
+        const TPathId& pathId, const TOperationId& opId,
+        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const
+{
+    return MakeHolder<TEvColumnShard::TEvProposeTransaction>(
+        NKikimrTxColumnShard::TX_KIND_SCHEMA, TabletID(), ctx.SelfID,
+        ui64(opId.GetTxId()), body, seqNo,  SelectProcessingParams(pathId),
+        0, 0
+    );
+}
+
+THolder<::NActors::IEventBase> TSchemeShard::MakeShardProposal(
+        const TPath& path, const TOperationId& opId,
+        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const
+{
+    if (path->IsTable()) {
+        return MakeDataShardProposal(path->PathId, opId, body, ctx);
+    } else if (path->IsColumnTable()) {
+        return MakeColumnShardProposal(path->PathId, opId, seqNo, body, ctx);
+    } else {
+        Y_ABORT();
+    }
+}
+
 TTxId TSchemeShard::GetCachedTxId(const TActorContext &ctx) {
     TTxId txId = InvalidTxId;
     if (CachedTxIds) {
@@ -1958,7 +1982,7 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::Paths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::Paths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
                     NIceDb::TUpdate<Schema::Paths::ACLVersion>(elem->ACLVersion),
-                    NIceDb::TUpdate<Schema::Paths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString())
+                    NIceDb::TUpdate<Schema::Paths::TempDirOwnerActorIdRaw>(elem->TempDirOwnerActorId)
                     );
     } else {
         db.Table<Schema::MigratedPaths>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
@@ -1976,7 +2000,7 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
                     NIceDb::TUpdate<Schema::MigratedPaths::DirAlterVersion>(elem->DirAlterVersion),
                     NIceDb::TUpdate<Schema::MigratedPaths::UserAttrsAlterVersion>(elem->UserAttrs->AlterVersion),
                     NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(elem->ACLVersion),
-                    NIceDb::TUpdate<Schema::MigratedPaths::TempDirOwnerActorId>(elem->TempDirOwnerActorId.ToString())
+                    NIceDb::TUpdate<Schema::MigratedPaths::TempDirOwnerActorIdRaw>(elem->TempDirOwnerActorId)
                     );
     }
 }
@@ -4925,6 +4949,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvIndexBuildingMakeABill, Handle);
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvRecomputeKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
@@ -4978,6 +5003,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureRequest, Handle);
         HFuncTraced(TEvDataShard::TEvForceDataCleanupResult, Handle);
         HFuncTraced(TEvKeyValue::TEvCleanUpDataResponse, Handle);
+        HFuncTraced(TEvPrivate::TEvAddNewShardToDataErasure, Handle);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataErasureInfoRequest, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataErasureManualStartupRequest, Handle);
@@ -7116,9 +7142,6 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
                 newDataErasureShards.push_back(p.ShardIdx);
             }
         }
-        if (EnableDataErasure && DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-            Execute(CreateTxAddEntryToDataErasure(newDataErasureShards), this->ActorContext());
-        }
 
         for (const auto& p: oldPartitioning) {
             if (!newPartitioningSet.contains(p.ShardIdx)) {
@@ -7680,6 +7703,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, con
 
 void TSchemeShard::Handle(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(this->CreateTxCompleteDataErasureShard(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxAddNewShardToDataErasure(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx) {

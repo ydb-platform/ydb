@@ -49,29 +49,29 @@ static const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCo
 
     {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  OK,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO,  NO, NO, NO,  NO,  NO, NO, NO }}, // Uuid
 
-    {{ NO,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  NO,  OK, OK, OK,  NO, NO, NO,  OK, OK, OK,  NO,  NO, NO, NO }}, // Date
-    {{ NO,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  LD, OK, OK,  NO,  LD, OK, OK,  NO, NO, NO,  LD, OK, OK,  NO,  NO, NO, NO }}, // Datetime
-    {{ NO,  MF, MF, MF, MF, MF, MF, OK, OK,  LD, LD,  OK, OK,  NO, NO,  NO,  LD, LD, OK,  NO,  LD, LD, OK,  NO, NO, NO,  LD, LD, OK,  NO,  NO, NO, NO }}, // Timestamp
+    {{ NO,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  NO,  OK, OK, OK,  NO, NO, NO,  OK, OK, OK,  NO,  OK, OK, OK }}, // Date
+    {{ NO,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  LD, OK, OK,  NO,  LD, OK, OK,  NO, NO, NO,  LD, OK, OK,  NO,  LD, OK, OK }}, // Datetime
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, OK,  LD, LD,  OK, OK,  NO, NO,  NO,  LD, LD, OK,  NO,  LD, LD, OK,  NO, NO, NO,  LD, LD, OK,  NO,  LD, LD, OK }}, // Timestamp
 
     {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  OK,  NO, NO, NO,  NO, NO, NO,  NO, NO, NO,  OK,  NO, NO, NO }}, // Interval
 
-    {{ NO,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  NO,  OK, OK, OK,  NO, NO, NO,  NO, NO, NO,  NO,  OK, OK, OK }}, // TzDate
-    {{ NO,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  LD, OK, OK,  NO,  LD, OK, OK,  NO, NO, NO,  NO, NO, NO,  NO,  LD, OK, OK }}, // TzDatetime
-    {{ NO,  MF, MF, MF, MF, MF, MF, OK, OK,  LD, LD,  OK, OK,  NO, NO,  NO,  LD, LD, OK,  NO,  LD, LD, OK,  NO, NO, NO,  NO, NO, NO,  NO,  LD, LD, OK }}, // TzTimestamp
+    {{ NO,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  LD, LD, LD,  NO,  OK, OK, OK,  NO, NO, NO,  LD, LD, LD,  NO,  OK, OK, OK }}, // TzDate
+    {{ NO,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  LD, LD, LD,  NO,  LD, OK, OK,  NO, NO, NO,  LD, LD, LD,  NO,  LD, OK, OK }}, // TzDatetime
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, OK,  LD, LD,  OK, OK,  NO, NO,  NO,  LD, LD, LD,  NO,  LD, LD, OK,  NO, NO, NO,  LD, LD, LD,  NO,  LD, LD, OK }}, // TzTimestamp
 
     {{ NO,  UN, UN, UN, UN, UN, UN, UN, UN,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  UN, NO, NO,  NO, NO, NO,  NO,  NO, NO, NO }}, // Decimal
     {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, OK, NO,  NO, NO, NO,  NO,  NO, NO, NO }}, // DyNumber
     {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, OK,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, OK,  NO, NO, NO,  NO,  NO, NO, NO }}, // JsonDocument
 
-    {{ NO,  MF, MF, MF, MF, OK, MF, OK, MF,  LD, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  NO,  NO, NO, NO,  NO, NO, NO,  OK, OK, OK,  NO,  NO, NO, NO }}, // Date32
-    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  FL, MF, MF,  NO,  NO, NO, NO,  NO, NO, NO,  LD, OK, OK,  NO,  NO, NO, NO }}, // Datetime64
-    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  FL, FL, MF,  NO,  NO, NO, NO,  NO, NO, NO,  LD, LD, OK,  NO,  NO, NO, NO }}, // Timestamp64
+    {{ NO,  MF, MF, MF, MF, OK, MF, OK, MF,  LD, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  NO,  MF, MF, MF,  NO, NO, NO,  OK, OK, OK,  NO,  OK, OK, OK }}, // Date32
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  FL, MF, MF,  NO,  FL, MF, MF,  NO, NO, NO,  LD, OK, OK,  NO,  LD, OK, OK }}, // Datetime64
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  FL, FL, MF,  NO,  FL, FL, MF,  NO, NO, NO,  LD, LD, OK,  NO,  LD, LD, OK }}, // Timestamp64
 
     {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  MF,  NO, NO, NO,  NO, NO, NO,  NO, NO, NO,  OK,  NO, NO, NO }}, // Interval64
 
-    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  NO,  MF, MF, MF,  NO, NO, NO,  OK, OK, OK,  NO,  OK, OK, OK }}, // TzDate32
-    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  NO,  MF, MF, MF,  NO, NO, NO,  LD, OK, OK,  NO,  LD, OK, OK }}, // TzDatetime64
-    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  NO,  MF, MF, MF,  NO, NO, NO,  LD, LD, OK,  NO,  LD, LD, OK }}, // TzTimestamp64
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  FL, FL, FL,  NO,  MF, MF, MF,  NO, NO, NO,  LD, LD, LD,  NO,  OK, OK, OK }}, // TzDate32
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  FL, FL, FL,  NO,  FL, MF, MF,  NO, NO, NO,  LD, LD, LD,  NO,  LD, OK, OK }}, // TzDatetime64
+    {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, NO,  NO,  FL, FL, FL,  NO,  FL, FL, MF,  NO, NO, NO,  LD, LD, LD,  NO,  LD, LD, OK }}, // TzTimestamp64
 }};
 
 }

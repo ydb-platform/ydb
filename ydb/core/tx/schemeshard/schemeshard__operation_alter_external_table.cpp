@@ -61,9 +61,9 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterExternalTable);
 
-        const auto pathId                = txState->TargetPathId;
-        const auto dataSourcePathId      = txState->SourcePathId;
-        const auto path                  = TPath::Init(pathId, context.SS);
+        const auto pathId = txState->TargetPathId;
+        const auto dataSourcePathId = txState->SourcePathId;
+        const auto path = TPath::Init(pathId, context.SS);
         const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
         const TPathElement::TPtr dataSourcePathPtr =
             context.SS->PathsById.at(dataSourcePathId);
@@ -134,6 +134,7 @@ private:
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
+            .NotUnderOperation()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeExternalTable)
             .IsValidLeafName()
             .DepthLimit()
@@ -267,6 +268,7 @@ private:
         NIceDb::TNiceDb& db,
         const TPathElement::TPtr& externalTable,
         const TExternalTableInfo::TPtr& externalTableInfo,
+        const TExternalTableInfo::TPtr& oldExternalTableInfo,
         const TPathId& externalDataSourcePathId,
         const TExternalDataSourceInfo::TPtr& externalDataSource,
         const TPathId& oldExternalDataSourcePathId,
@@ -274,7 +276,6 @@ private:
         const TString& acl,
         bool isSameDataSource) const {
         context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
-
 
         if (!acl.empty()) {
             externalTable->ApplyACL(acl);
@@ -285,6 +286,13 @@ private:
             context.SS->PersistExternalDataSource(db, externalDataSourcePathId, externalDataSource);
             context.SS->PersistExternalDataSource(db, oldExternalDataSourcePathId, oldExternalDataSource);
         }
+
+        for (const auto& [oldColId, _] : oldExternalTableInfo->Columns) {
+            if (!externalTableInfo->Columns.contains(oldColId)) {
+                db.Table<Schema::MigratedColumns>().Key(externalTable->PathId.OwnerId, externalTable->PathId.LocalPathId, oldColId).Delete();
+            }
+        }
+
         context.SS->PersistExternalTable(db, externalTable->PathId, externalTableInfo);
         context.SS->PersistTxState(db, OperationId);
     }
@@ -302,7 +310,7 @@ public:
 
         LOG_N("TAlterExternalTable Propose"
             << ": opId# " << OperationId
-            << ", path# " << parentPathStr << "/" << name << ", ReplaceIfExists:" << externalTableDescription.GetReplaceIfExists());
+            << ", path# " << parentPathStr << "/" << name << ", ReplaceIfExists: " << externalTableDescription.GetReplaceIfExists());
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -319,7 +327,7 @@ public:
         RETURN_RESULT_UNLESS(NExternalTable::IsParentPathValid(result, parentPath));
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
-        TPath dstPath     = parentPath.Child(name);
+        TPath dstPath = parentPath.Child(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
 
         const auto dataSourcePath =
@@ -383,7 +391,7 @@ public:
                                                 oldDataSource,
                                                 IsSameDataSource);
 
-        PersistExternalTable(context, db, externalTable, externalTableInfo,
+        PersistExternalTable(context, db, externalTable, externalTableInfo, oldExternalTableInfo,
                              dataSourcePath->PathId, externalDataSource,
                              OldDataSourcePathId, oldDataSource, acl,
                              IsSameDataSource);

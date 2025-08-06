@@ -17,6 +17,8 @@ constexpr TStringBuf TEST_CONTENT_KEYS =
 extern const TString TEST_SCHEMA;
 extern const TString TEST_SCHEMA_IDS;
 
-std::shared_ptr<NKikimr::NKqp::TKikimrRunner> MakeKikimrRunner(std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt, const TString& domainRoot = "Root");
+using TKikimrRunnerOptions = NKikimr::NKqp::NFederatedQueryTest::TKikimrRunnerOptions;
+
+std::shared_ptr<NKikimr::NKqp::TKikimrRunner> MakeKikimrRunner(std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt, const TKikimrRunnerOptions& options = {});
 
 } // namespace NTestUtils

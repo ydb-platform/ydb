@@ -1,8 +1,8 @@
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "leaked_blobs.h"
 
 #include <ydb/core/keyvalue/keyvalue_const.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
@@ -80,7 +80,7 @@ private:
             return;
         }
         AFL_VERIFY(CSBlobIds.size() <= BSBlobIds.size())("cs", CSBlobIds.size())("bs", BSBlobIds.size())(
-                                           "error", "have to use broken blobs repair");
+                                         "error", "have to use broken blobs repair");
         for (auto&& i : CSBlobIds) {
             AFL_VERIFY(BSBlobIds.erase(i))("error", "have to use broken blobs repair")("blob_id", i);
         }
@@ -182,7 +182,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr),
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), controller.GetDataAccessorsManager(),
         std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), TabletId);
 
     if (!tablesManager.InitFromDB(db)) {
@@ -209,24 +209,23 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
     TDbWrapper wrapper(db.GetDatabase(), nullptr);
     if (Portions.empty()) {
         THashMap<ui64, std::unique_ptr<TPortionInfoConstructor>> portionsLocal;
-        if (!wrapper.LoadPortions({}, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-                const TIndexInfo& indexInfo =
-                    portion->GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
-                AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
-                const ui64 portionId = portion->GetPortionIdVerified();
-                AFL_VERIFY(portionsLocal.emplace(portionId, std::move(portion)).second);
-            })) {
+        if (!wrapper.LoadPortions(
+                {}, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+                    const TIndexInfo& indexInfo =
+                        portion->GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
+                    AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
+                    const ui64 portionId = portion->GetPortionIdVerified();
+                    AFL_VERIFY(portionsLocal.emplace(portionId, std::move(portion)).second);
+                })) {
             return TConclusionStatus::Fail("repeated read db");
         }
         Portions = std::move(portionsLocal);
     }
     if (Records.empty()) {
-        THashMap<ui64, std::vector<TColumnChunkLoadContextV1>> recordsLocal;
+        THashMap<ui64, TColumnChunkLoadContextV2::TBuildInfo> recordsLocal;
         if (!wrapper.LoadColumns(std::nullopt, [&](TColumnChunkLoadContextV2&& chunk) {
                 const ui64 portionId = chunk.GetPortionId();
-                for (auto&& i : chunk.BuildRecordsV1()) {
-                    recordsLocal[portionId].emplace_back(std::move(i));
-                }
+                AFL_VERIFY(recordsLocal.emplace(portionId, chunk.CreateBuildInfo()).second);
             })) {
             return TConclusionStatus::Fail("repeated read db");
         }
@@ -234,10 +233,11 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
     }
     if (Indexes.empty()) {
         THashMap<ui64, std::vector<TIndexChunkLoadContext>> indexesLocal;
-        if (!wrapper.LoadIndexes(std::nullopt, [&](const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& indexChunk) {
-                const ui64 portionId = indexChunk.GetPortionId();
-                indexesLocal[portionId].emplace_back(std::move(indexChunk));
-            })) {
+        if (!wrapper.LoadIndexes(
+                std::nullopt, [&](const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& indexChunk) {
+                    const ui64 portionId = indexChunk.GetPortionId();
+                    indexesLocal[portionId].emplace_back(std::move(indexChunk));
+                })) {
             return TConclusionStatus::Fail("repeated read db");
         }
         Indexes = std::move(indexesLocal);

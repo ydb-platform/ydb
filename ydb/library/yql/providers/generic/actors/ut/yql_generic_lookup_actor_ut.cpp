@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         ;
         // clang-format on
 
-        NYql::NGeneric::TLookupSource lookupSourceSettings;
+        NYql::Generic::TLookupSource lookupSourceSettings;
         *lookupSourceSettings.mutable_data_source_instance() = dsi;
         lookupSourceSettings.Settable("lookup_test");
         lookupSourceSettings.SetServiceAccountId("testsaid");
@@ -351,7 +351,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         }
         // clang-format on
 
-        NYql::NGeneric::TLookupSource lookupSourceSettings;
+        NYql::Generic::TLookupSource lookupSourceSettings;
         *lookupSourceSettings.mutable_data_source_instance() = dsi;
         lookupSourceSettings.Settable("lookup_test");
         lookupSourceSettings.SetServiceAccountId("testsaid");

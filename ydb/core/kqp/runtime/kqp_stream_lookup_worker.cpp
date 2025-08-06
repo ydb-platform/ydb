@@ -479,8 +479,14 @@ public:
             auto unprocessedRange = ranges[firstUnprocessedQuery];
             YQL_ENSURE(!unprocessedRange.Point);
 
-            unprocessedRanges.emplace_back(*lastProcessedKey, false,
+            TOwnedTableRange range(*lastProcessedKey, false,
                 unprocessedRange.GetOwnedTo(), unprocessedRange.InclusiveTo);
+
+            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
+            YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+            leftRowIt->second.PendingReads.erase(prevReadId);
+
+            unprocessedRanges.emplace_back(std::move(range));
             ++firstUnprocessedQuery;
         }
 
@@ -543,6 +549,8 @@ public:
 
             auto partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), range);
             for (auto [shardId, range] : partitions) {
+                YQL_ENSURE(PendingLeftRowsByKey.contains(ExtractKeyPrefix(range)));
+
                 if (range.Point) {
                     pointsPerShard[shardId].push_back(std::move(range));
                 } else {
@@ -581,7 +589,7 @@ public:
                 std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
                 if (joinKey.size() < KeyColumns.size()) {
                     // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
-                    std::vector <TCell> fromCells(KeyColumns.size());
+                    std::vector<TCell> fromCells(KeyColumns.size() - joinKey.size());
                     fromCells.insert(fromCells.begin(), joinKey.begin(), joinKey.end());
                     bool fromInclusive = true;
                     bool toInclusive = false;
@@ -716,8 +724,14 @@ public:
             auto unprocessedRange = ranges[firstUnprocessedQuery];
             YQL_ENSURE(!unprocessedRange.Point);
 
-            UnprocessedKeys.emplace_back(*lastProcessedKey, false,
+            TOwnedTableRange range(*lastProcessedKey, false,
                 unprocessedRange.GetOwnedTo(), unprocessedRange.InclusiveTo);
+
+            auto leftRowIt = PendingLeftRowsByKey.find(ExtractKeyPrefix(range));
+            YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
+            leftRowIt->second.PendingReads.erase(readId);
+
+            UnprocessedKeys.emplace_back(std::move(range));
             ++firstUnprocessedQuery;
         }
 

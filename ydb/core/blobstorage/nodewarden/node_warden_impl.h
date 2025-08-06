@@ -146,6 +146,8 @@ namespace NKikimr::NStorage {
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
+        TControlWrapper HullCompFullCompPeriodSec;
+        TControlWrapper HullCompThrottlerBytesRate;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -191,6 +193,8 @@ namespace NKikimr::NStorage {
             , FreshCompMaxInFlightWrites(10, 1, 1000)
             , HullCompMaxInFlightWrites(10, 1, 1000)
             , HullCompMaxInFlightReads(20, 1, 1000)
+            , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
+            , HullCompThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
             , CostMetricsParametersByMedia({
                 TCostMetricsParameters{200},
                 TCostMetricsParameters{50},

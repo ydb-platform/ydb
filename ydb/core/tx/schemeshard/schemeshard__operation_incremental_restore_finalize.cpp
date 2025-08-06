@@ -130,11 +130,6 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             
             // 3. Clean up mappings
             CleanupMappings(context.SS, originalOpId, context);
-            
-            // 4. Update counters
-            context.SS->TabletCounters->Simple()[TTxState::TxTypeInFlightCounter(TTxState::TxIncrementalRestoreFinalize)].Sub(1);
-            context.SS->TabletCounters->Cumulative()[COUNTER_FINISHED_OPS_TxIncrementalRestoreFinalize].Increment(1);
-            LOG_I("Updated counters for incremental restore finalization");
         }
 
         void CleanupMappings(TSchemeShard* ss, ui64 operationId, TOperationContext& context) {

@@ -204,33 +204,52 @@ private:
             }
         };
 
+        auto makeErrorResponse = [&] (const TString& errorMessage) {
+            partResp->MutableResult()->Clear();
+            responseRecord.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+            responseRecord.SetErrorCode(NPersQueue::NErrorCode::READ_NOT_DONE);
+            responseRecord.SetErrorReason(errorMessage);
+            InitialRequest = false; //So we don't make any more retries but return error;
+        };
+
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
             auto currentReadResult = readResult.GetResult(i);
             if (currentReadResult.GetData().empty() && currentReadResult.GetUncompressedSize() == 0) { // This is empty parted removed by compactification
                 LastSkipOffset = currentReadResult.GetOffset();
-                removeIncompleteMessageIfAny(); // Also drop previous incomplete message
+                if (!InitialRequest) {
+                    removeIncompleteMessageIfAny();
+                }
                 continue; // Skip the empty part;
-              }
+            }
             if (LastSkipOffset.Defined() && currentReadResult.GetOffset() == *LastSkipOffset) {
                 continue; // This is part of the message which is already being skipped due to empty parts. Skip all other parts as well;
             }
             if (!InitialRequest) {
                 // This is followup request to read missing parts;
                 // There must be some data in response already.
-                Y_ABORT_UNLESS(partResp->ResultSize() > 0);
+                if (partResp->ResultSize() == 0) {
+                    makeErrorResponse("Internal error - got message part on followup read request with empty current response");
+                    PQ_LOG_CRIT("Handle TEvRead got message part on followup read request with empty current response. Readed now "
+                                << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
+                                << " full request(now): " << Request);
+                    break;
+                }
                 if (currentReadResult.GetPartNo() == 0) {
                     // This is new message. If we still have another incomplete message stored previously, its' last parts were probably deleted by retention of compactification.
                     // This is fine, we can drop last message (if incomplete) and go on;
                     removeIncompleteMessageIfAny();
                 } else {
-                    // Otherwise this must be the next part of previously read message.
-                    Y_ABORT_UNLESS(currentReadResult.GetOffset() == partResp->GetResult(partResp->ResultSize() - 1).GetOffset());
+                    if (currentReadResult.GetOffset() != partResp->GetResult(partResp->ResultSize() - 1).GetOffset()) {
+                        // This is a middle of another message. Possibly some race on deletion. Skip new message, remove previous big message and stop here;
+                        removeIncompleteMessageIfAny();
+                        break;
+                    }
                 }
             }
 
             // If we already have some data and encounter new message that doesn't fit into current response, we don't go any further, just stop;
             // (And throw away that message to)
-            if (partResp->ResultSize() > 0 && currentReadResult.GetPartNo() == 0 &&
+            if (partResp->ResultSize() > 1 && currentReadResult.GetPartNo() == 0 &&
                 currentReadResult.HasTotalParts() && currentReadResult.GetTotalParts() + i > readResult.ResultSize())
             {
                 break;
@@ -238,15 +257,35 @@ private:
 
             // Now actually add some data;
             if (currentReadResult.GetPartNo() == 0) {
+                if (partResp->ResultSize()) {
+                    const auto& back = partResp->GetResult(partResp->ResultSize() - 1);
+                    if (back.GetPartNo() + 1< back.GetTotalParts()) {
+                        makeErrorResponse("Internal error - got message part from the middle when expecting first part");
+                        PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << back.GetSeqNo() << "," << back.GetPartNo() << " readed now "
+                                    << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
+                                    << " full request(now): " << Request);
+                        break;
+                    }
+                }
                 // Create new message for first part;
                 partResp->AddResult()->CopyFrom(readResult.GetResult(i));
             } else { // Glue next part to prevous otherwise
-                Y_ABORT_UNLESS(partResp->ResultSize() > 0); // Must have some data at this point;
+                if(partResp->ResultSize() == 0) {
+                    // This is error, Must have some data at this point;
+                    PQ_LOG_CRIT("Handle TEvRead, have last read pos, readed now "
+                                    << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
+                                    << " full request(now): " << Request);
+                    makeErrorResponse("Internal error - got message part from the middle when current response if empty");
+                    break;
+
+                }
                 auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
                 if (rr->GetSeqNo() != readResult.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != readResult.GetResult(i).GetPartNo()) {
                     PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
                                     << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
                                     << " full request(now): " << Request);
+                    makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
+                    break;
                 }
                 Y_ABORT_UNLESS(rr->GetSeqNo() == readResult.GetResult(i).GetSeqNo());
                 (*rr->MutableData()) += readResult.GetResult(i).GetData();
@@ -263,7 +302,7 @@ private:
         // We got no data during initial request - possibly skipped all the data due to compactification.
         if (InitialRequest && partResp->GetResult().empty() && LastSkipOffset.Defined()
             // Check if we did actually skip anything so we don't request the same offset again.
-            && Request.GetPartitionRequest().GetCmdRead().GetOffset() < *LastSkipOffset
+            && (ui64)Request.GetPartitionRequest().GetCmdRead().GetOffset() < *LastSkipOffset
         ) {
             //Try another read. Set TMP_MARKER so that response is redirected to proxy, but here we will treat is as "initial" response still.
             Request.SetRequestId(TMP_REQUEST_MARKER);
@@ -296,6 +335,7 @@ private:
                 return;
             }
         }
+        removeIncompleteMessageIfAny();
         //filter old messages
         ::google::protobuf::RepeatedPtrField<NKikimrClient::TCmdReadResult::TResult> records;
         records.Swap(partResp->MutableResult());
@@ -323,8 +363,8 @@ private:
             if (readResult.ResultSize()) {
                 prepareResponse->SetWriteTimestampMS(readResult.GetResult(readResult.ResultSize() - 1).GetWriteTimestampMS());
             }
-            Response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
-            Response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+            Response->Record.SetStatus(responseRecord.GetStatus());
+            Response->Record.SetErrorCode(responseRecord.GetErrorCode());
             ctx.Send(
                 MakePQDReadCacheServiceActorId(),
                 new TEvPQ::TEvStageDirectReadData(DirectReadKey, TabletGeneration, PreparedResponse)

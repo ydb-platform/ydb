@@ -22,6 +22,7 @@ TTopicWorkloadWriterProducer::TTopicWorkloadWriterProducer(
 
 void TTopicWorkloadWriterProducer::SetWriteSession(std::shared_ptr<NYdb::NTopic::IWriteSession> writeSession) {
     WriteSession_ = writeSession;
+    InflightMessagesCount_.store(0);
 }
 
 void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,

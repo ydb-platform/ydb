@@ -593,6 +593,7 @@ public:
         bool EnableTablePgTypes;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
+        bool EnableSetConstraint = false; // This flag is used in alter table operation only
     };
 
     static TAlterDataPtr CreateAlterData(

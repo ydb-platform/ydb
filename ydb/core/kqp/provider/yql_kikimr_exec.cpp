@@ -1722,9 +1722,13 @@ public:
                             if (value == "drop_not_null") {
                                 alter_columns->set_not_null(false);
                             } else if (value == "set_not_null") {
-                                ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
-                                    << "SET NOT NULL is currently not supported."));
-                                return SyncError();
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableSetConstraint()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
+                                        << "SET NOT NULL is currently not supported."));
+                                    return SyncError();
+                                } else {
+                                    alter_columns->set_not_null(true);
+                                }
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
                                     << "Unknown operation in changeColumnConstraints"));

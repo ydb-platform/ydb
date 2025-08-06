@@ -363,9 +363,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            bool isDropNotNull = col.HasNotNull(); // if has, then always false
+            bool isChangeNotNullConstraint = col.HasNotNull();
 
-            if (!isDropNotNull && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
+            if (!isChangeNotNullConstraint && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -393,7 +393,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {
-                if (isDropNotNull || columnFamily) {
+                if (isChangeNotNullConstraint || columnFamily) {
                     errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
                     return nullptr;
                 }
@@ -447,8 +447,26 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = sourceColumn;
 
-            if (isDropNotNull) {
-                column.NotNull = false;
+            if (isChangeNotNullConstraint) {
+                if (col.GetNotNull()) { // SET NOT NULL
+                    if (!featureFlags.EnableSetConstraint) {
+                        errStr = Sprintf("Type '%s' specified for column '%s', but support for SET NOT NULL is disabled (EnableSetConstraint feature flag is off)", col.GetType().data(), colName.data());
+                        return nullptr;
+                    }
+
+                    /*
+                        Note that here we are setting the NotNull value to true, although we can't just leave it that way,
+                        because first we need to check the column for null values.
+
+                        Thus, after that, such a check will be started. Based on the results of this check, one of two decisions will be made:
+                        1. Leave the NotNull value as true if the column did not contain Nulls.
+                        2. Set NotNull back to false if there is at least one Null in the column.
+                    */
+
+                    // column.NotNull = true;
+                } else { // DROP NOT NULL
+                    column.NotNull = false;
+                }
             }
 
             if (columnFamily) {

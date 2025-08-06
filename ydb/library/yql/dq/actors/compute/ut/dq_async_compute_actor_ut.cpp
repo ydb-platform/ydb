@@ -777,41 +777,41 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         TMap<ui32, ui32> receivedData;
         TMaybe<TInstant> watermark;
         try {
-        while (ReceiveData(
-                [this, &receivedData, &watermark](const NUdf::TUnboxedValue& val, ui32 column) {
-                    UNIT_ASSERT(!!val);
-                    UNIT_ASSERT(val.IsEmbedded());
-                    if (RowType->GetMemberName(column) == "ts") {
-                        auto ts = val.Get<ui64>();
-                        if (watermark) {
-                            WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), ts << " >= " << watermark->Seconds());
+            while (ReceiveData(
+                    [this, &receivedData, &watermark](const NUdf::TUnboxedValue& val, ui32 column) {
+                        UNIT_ASSERT(!!val);
+                        UNIT_ASSERT(val.IsEmbedded());
+                        if (RowType->GetMemberName(column) == "ts") {
+                            auto ts = val.Get<ui64>();
+                            if (watermark) {
+                                WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), ts << " >= " << watermark->Seconds());
+                            }
+                            return true;
                         }
+                        UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "id");
+                        auto data = val.Get<i32>();
+                        LOG_D(data);
+                        ++receivedData[data];
                         return true;
-                    }
-                    UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "id");
-                    auto data = val.Get<i32>();
-                    LOG_D(data);
-                    ++receivedData[data];
-                    return true;
-                },
-                [this, &watermark](const auto& receivedWatermark) {
-                    watermark = receivedWatermark;
-                    LOG_D("Got watermark " << *watermark);
-                },
-                [this, &asyncCA]() {
-                    DumpMonPage(asyncCA, [this](auto&& str) {
-                        UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
-                        UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
-                        // TODO add validation
-                        LOG_D(str);
-                    });
-                },
-                dqInputChannel))
-        {}
+                    },
+                    [this, &watermark](const auto& receivedWatermark) {
+                        watermark = receivedWatermark;
+                        LOG_D("Got watermark " << *watermark);
+                    },
+                    [this, &asyncCA]() {
+                        DumpMonPage(asyncCA, [this](auto&& str) {
+                            UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+                            UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+                            // TODO add validation
+                            LOG_D(str);
+                        });
+                    },
+                    dqInputChannel))
+            {}
         } catch(...) {
             DumpMonPage(asyncCA, [this](auto&& str) {
-                    LOG_D(str);
-                    });
+                LOG_D(str);
+            });
             throw;
         }
         UNIT_ASSERT_EQUAL_C(receivedData.size(), val, "expected size " << val << " != " << receivedData.size());

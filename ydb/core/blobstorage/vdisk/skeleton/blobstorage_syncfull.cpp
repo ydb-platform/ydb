@@ -183,6 +183,7 @@ namespace NKikimr {
                     } else if (pres & LongProcessing) {
                         return false;
                     }
+                    Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::PhantomFlags:
                     pres = ProcessPhantomFlags(data);
@@ -191,10 +192,11 @@ namespace NKikimr {
                     }
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     break;
-                default: Y_ABORT("Unexpected case: stage=%d", Stage);
+                default:
+                    Y_ABORT("Unexpected case: stage=%d", Stage);
             }
 
-            bool finished = (bool)(pres & EmptyFlag) && Stage == NKikimrBlobStorage::Barriers;
+            bool finished = (bool)(pres & EmptyFlag) && Stage == NKikimrBlobStorage::PhantomFlags;
 
             // Status, SyncState, Data and VDiskID are already set up; set up other
             Result->Record.SetFinished(finished);

@@ -503,6 +503,7 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(LocRecCtx->VCtx && LocRecCtx->VCtx->Top);
                 auto hullCtx = MakeIntrusive<THullCtx>(
                         LocRecCtx->VCtx,
+                        Config,
                         ui32(LocRecCtx->PDiskCtx->Dsk->ChunkSize),
                         ui32(LocRecCtx->PDiskCtx->Dsk->PrefetchSizeBytes),
                         Config->FreshCompaction && !Config->BaseInfo.ReadOnly,
@@ -512,10 +513,6 @@ namespace NKikimr {
                         Config->HullSstSizeInChunksFresh,
                         Config->HullSstSizeInChunksLevel,
                         Config->HullCompFreeSpaceThreshold,
-                        Config->FreshCompMaxInFlightWrites,
-                        Config->FreshCompMaxInFlightReads,
-                        Config->HullCompMaxInFlightWrites,
-                        Config->HullCompMaxInFlightReads,
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,

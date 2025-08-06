@@ -1478,6 +1478,32 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000,
             DefaultValue: 0 }];
+
+        reserved 28;
+
+        optional uint64 FreshCompMaxInFlightWrites = 29 [(ControlOptions) = {
+            Description: "Max writes inflight for fresh level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 10 }];
+
+        optional uint64 FreshCompMaxInFlightReads = 30 [(ControlOptions) = {
+            Description: "Max reads inflight for fresh level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 10 }];
+        
+        optional uint64 HullCompMaxInFlightWrites = 31 [(ControlOptions) = {
+            Description: "Max writes inflight for level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 10 }];
+
+        optional uint64 HullCompMaxInFlightReads = 32 [(ControlOptions) = {
+            Description: "Max reads inflight for level compaction",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 20 }];
     }
 
     message TTabletControls {

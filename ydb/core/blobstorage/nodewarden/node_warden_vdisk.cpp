@@ -193,6 +193,10 @@ namespace NKikimr::NStorage {
         vdiskConfig->DefaultHugeGarbagePerMille = DefaultHugeGarbagePerMille;
         vdiskConfig->HugeDefragFreeSpaceBorderPerMille = HugeDefragFreeSpaceBorderPerMille;
         vdiskConfig->MaxChunksToDefragInflight = MaxChunksToDefragInflight;
+        vdiskConfig->FreshCompMaxInFlightWrites = FreshCompMaxInFlightWrites;
+        vdiskConfig->FreshCompMaxInFlightReads = FreshCompMaxInFlightReads;
+        vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
+        vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
 
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {

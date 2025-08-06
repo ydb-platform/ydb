@@ -1133,6 +1133,10 @@ message TIncrementalRestoreFinalize {
     repeated string BackupTablePaths = 4;
 }
 
+message TCreateLongIncrementalBackupOp {
+    repeated NKikimrProto.TPathID StreamPathIds = 1;
+}
+
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
@@ -1823,6 +1827,8 @@ message TModifyScheme {
     optional TChangePathState ChangePathState = 82;
 
     optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
+    
+    optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
     // Some entries are grouped by semantics, so are out of order
 }

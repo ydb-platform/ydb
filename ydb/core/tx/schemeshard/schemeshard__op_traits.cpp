@@ -144,6 +144,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
             return EOperationClass::Other;

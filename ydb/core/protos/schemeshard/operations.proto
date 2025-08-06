@@ -191,5 +191,8 @@ enum EOperationType {
     // Incremental Restore Finalization
     ESchemeOpIncrementalRestoreFinalize = 123;
 
+    // Long Incremental Backup
+    ESchemeOpCreateLongIncrementalBackupOp = 124;
+
     // Some entries are grouped by semantics, so are out of order
 }

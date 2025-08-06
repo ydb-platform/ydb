@@ -135,6 +135,7 @@ struct TTxState {
         item(TxRotateCdcStream, 107) \
         item(TxRotateCdcStreamAtTable, 108) \
         item(TxIncrementalRestoreFinalize, 109) \
+        item(TxCreateLongIncrementalBackupOp, 110) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -361,6 +362,7 @@ struct TTxState {
         case TxCreateBackupCollection:
         case TxCreateSysView:
         case TxCreateLongIncrementalRestoreOp:
+        case TxCreateLongIncrementalBackupOp:
             return true;
         case TxIncrementalRestoreFinalize:
             return false;
@@ -528,6 +530,7 @@ struct TTxState {
         case TxCreateBackupCollection:
         case TxCreateSysView:
         case TxCreateLongIncrementalRestoreOp:
+        case TxCreateLongIncrementalBackupOp:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -612,6 +615,7 @@ struct TTxState {
         case TxDropResourcePool:
         case TxDropSysView:
         case TxCreateLongIncrementalRestoreOp:
+        case TxCreateLongIncrementalBackupOp:
             return false;
         case TxMkDir:
         case TxCreateTable:
@@ -817,6 +821,7 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp: return TxCreateLongIncrementalRestoreOp;
             case NKikimrSchemeOp::ESchemeOpChangePathState: return TxChangePathState;
             case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize: return TxIncrementalRestoreFinalize;
+            case NKikimrSchemeOp::ESchemeOpCreateLongIncrementalBackupOp: return TxCreateLongIncrementalBackupOp;
             default: return TxInvalid;
         }
     }

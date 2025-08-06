@@ -257,7 +257,9 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxRotateCdcStream = 201        [(CounterOpts) = {Name: "InFlightOps/RotateCdcStream"}];
     COUNTER_IN_FLIGHT_OPS_TxRotateCdcStreamAtTable = 202 [(CounterOpts) = {Name: "InFlightOps/RotateCdcStreamAtTable"}];
+
     COUNTER_IN_FLIGHT_OPS_TxIncrementalRestoreFinalize = 203 [(CounterOpts) = {Name: "InFlightOps/IncrementalRestoreFinalize"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateLongIncrementalBackupOp = 204 [(CounterOpts) = {Name: "InFlightOps/CreateLongIncrementalBackupOp"}];
 }
 
 enum ECumulativeCounters {
@@ -417,7 +419,9 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxRotateCdcStream = 123        [(CounterOpts) = {Name: "FinishedOps/RotateCdcStream"}];
     COUNTER_FINISHED_OPS_TxRotateCdcStreamAtTable = 124 [(CounterOpts) = {Name: "FinishedOps/RotateCdcStreamAtTable"}];
+
     COUNTER_FINISHED_OPS_TxIncrementalRestoreFinalize = 125 [(CounterOpts) = {Name: "FinishedOps/IncrementalRestoreFinalize"}];
+    COUNTER_FINISHED_OPS_TxCreateLongIncrementalBackupOp = 126 [(CounterOpts) = {Name: "FinishedOps/CreateLongIncrementalBackupOp"}];
 }
 
 enum EPercentileCounters {
@@ -664,4 +668,9 @@ enum ETxTypes {
 
     TXTYPE_PROGRESS_INCREMENTAL_RESTORE = 101 [(TxTypeOpts) = {Name: "TxProgressIncrementalRestore"}];
     TXTYPE_INCREMENTAL_RESTORE_SHARD_RESPONSE = 102 [(TxTypeOpts) = {Name: "TxIncrementalRestoreShardResponse"}];
+
+    TXTYPE_GET_INCREMENTAL_BACKUP = 103 [(TxTypeOpts) = {Name: "TxGetIncrementalBackup"}];
+    TXTYPE_LIST_INCREMENTAL_BACKUP = 104 [(TxTypeOpts) = {Name: "TxListIncrementalBackup"}];
+    TXTYPE_FORGET_INCREMENTAL_BACKUP = 105 [(TxTypeOpts) = {Name: "TxForgetIncrementalBackup"}];
+    TXTYPE_PROGRESS_INCREMENTAL_BACKUP = 106 [(TxTypeOpts) = {Name: "TxProgressIncrementalBackup"}];
 }

@@ -118,7 +118,7 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeInitRoot, NKikimrCl
 
 template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TResolveNodeRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TResolveNodeRequest>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TResolveNodeRequest>
     , NPrivate::TResponseLegacyCommonTraits
 {
 };

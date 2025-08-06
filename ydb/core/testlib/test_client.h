@@ -510,6 +510,36 @@ namespace Tests {
                 request->Record.SetSecurityToken(SecurityToken);
         }
 
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusCmsRequest>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusConsoleRequest>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusResolveNode>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusFillNode>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusDrainNode>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
         void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusChooseProxy>& request) {
             if (!SecurityToken.empty())
                 request->Record.SetSecurityToken(SecurityToken);

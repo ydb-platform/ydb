@@ -883,6 +883,12 @@ protected:
         }
     }
 
+    void PrepareRequest(NKikimrClient::TResolveNodeRequest& request) const {
+        if (!SecurityToken.empty()) {
+            request.SetSecurityToken(SecurityToken);
+        }
+    }
+
     TString SecurityToken;
     THolder<TImpl> Impl;
 };

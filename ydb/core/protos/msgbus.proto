@@ -442,6 +442,7 @@ message TResolveNodeRequest {
     optional string Host = 1;
     optional uint32 NodeId = 2;
     optional bool ResolveLocalNode = 3; // for compatibility of resolving local '.' node
+    optional string SecurityToken = 4;
 };
 
 message TNodeRegistrationRequest {

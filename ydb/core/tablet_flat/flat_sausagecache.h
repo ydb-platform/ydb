@@ -59,21 +59,12 @@ public:
             return Info->IsSticky(Id);
         }
 
-        void Fill(TSharedPageRef sharedBody) {
-            SharedBody = std::move(sharedBody);
-            LoadState = LoadStateLoaded;
-            PinnedBody = TPinnedPageRef(SharedBody).GetData();
-        }
-
         void ProvideSharedBody(TSharedPageRef sharedBody) {
+            // here sharedBody may be unused or invalid
             SharedBody = std::move(sharedBody);
             SharedBody.UnUse();
             LoadState = LoadStateNo;
             PinnedBody = { };
-        }
-
-        const TSharedData* GetPinnedBody() const noexcept {
-            return LoadState == LoadStateLoaded ? &PinnedBody : nullptr;
         }
     };
 
@@ -125,6 +116,12 @@ public:
             return StickyPagesSize;
         }
 
+        void Clear() {
+            PageMap.clear();
+            StickyPages.clear();
+            StickyPagesSize = 0;
+        }
+
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;
@@ -139,7 +136,7 @@ public:
     };
 
 public:
-    TIntrusivePtr<TInfo> GetPageCollection(TLogoBlobID id) const;
+    TIntrusivePtr<TInfo> GetPageCollection(const TLogoBlobID &id) const;
     void RegisterPageCollection(TIntrusivePtr<TInfo> info);
     void ForgetPageCollection(TIntrusivePtr<TInfo> info);
 
@@ -147,7 +144,7 @@ public:
 
     const TStats& GetStats() const { return Stats; }
 
-    const TSharedData* Lookup(TPageId pageId, TInfo *collection);
+    const TSharedData* Lookup(TPageId pageId, TInfo *info);
 
     void CountTouches(TPinned &pinned, ui32 &touchedUnpinnedPages, ui64 &touchedUnpinnedMemory, ui64 &touchedPinnedMemory);
     void PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory);
@@ -157,7 +154,7 @@ public:
 
     void ResetTouchesAndToLoad(bool verifyEmpty);
 
-    void DropSharedBody(TInfo *collectionInfo, TPageId pageId);
+    void DropSharedBody(TPageId pageId, TInfo *info);
 
     void ProvideBlock(TPageId pageId, TSharedPageRef sharedBody, TInfo *info);
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();

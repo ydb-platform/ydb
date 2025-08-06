@@ -35,15 +35,20 @@ ui32 ToMsgBusStatus(Ydb::StatusIds::StatusCode status);
 NKikimrNodeBroker::TStatus::ECode ToNodeBrokerStatus(Ydb::StatusIds::StatusCode status);
 NKikimrCms::TStatus::ECode ToCmsStatus(Ydb::StatusIds::StatusCode status);
 
+const TMaybe<TString> ExtractYdbTokenFromHeaders(const NYdbGrpc::IRequestContextBase* ctx);
+
 Y_HAS_MEMBER(GetSecurityToken);
 
 template <class TReq>
 struct TGetYdbTokenLegacyTraits {
-    static const TMaybe<TString> GetYdbToken(const TReq& req, const NYdbGrpc::IRequestContextBase*) {
+    static const TMaybe<TString> GetYdbToken(const TReq& req, const NYdbGrpc::IRequestContextBase* ctx) {
+        // Explicit token from request proto
         if (const TString& token = req.GetSecurityToken()) {
             return token;
         }
-        return Nothing();
+
+        // Fallback on headers
+        return ExtractYdbTokenFromHeaders(ctx);
     }
 
     static_assert(THasGetSecurityToken<TReq>::value, "Request class must have GetSecurityToken method");
@@ -51,8 +56,9 @@ struct TGetYdbTokenLegacyTraits {
 
 template <class TReq>
 struct TGetYdbTokenUnsecureTraits {
-    static const TMaybe<TString> GetYdbToken(const TReq&, const NYdbGrpc::IRequestContextBase*) {
-        return Nothing();
+    static const TMaybe<TString> GetYdbToken(const TReq&, const NYdbGrpc::IRequestContextBase* ctx) {
+        // Fallback on headers
+        return ExtractYdbTokenFromHeaders(ctx);
     }
 
     static_assert(!THasGetSecurityToken<TReq>::value, "Request class has GetSecurityToken method, so TGetYdbTokenUnsecureTraits must not be used");

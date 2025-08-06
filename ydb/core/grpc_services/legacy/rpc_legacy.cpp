@@ -6,6 +6,8 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/grpc/server/grpc_request_base.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -115,6 +117,14 @@ NKikimrCms::TStatus::ECode ToCmsStatus(Ydb::StatusIds::StatusCode status) {
         default:
             return NKikimrCms::TStatus::ERROR;
     }
+}
+
+const TMaybe<TString> ExtractYdbTokenFromHeaders(const NYdbGrpc::IRequestContextBase* ctx) {
+    auto authHeadValues = ctx->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER);
+    if (authHeadValues.empty()) {
+        return {};
+    }
+    return TString{authHeadValues[0]};
 }
 
 }

@@ -1,8 +1,8 @@
 LIBRARY()
 
     SRCS(
-        bridge.cpp
-        bridge.h
+        bridge_proxy.cpp
+        bridge_proxy.h
         defs.h
     )
 

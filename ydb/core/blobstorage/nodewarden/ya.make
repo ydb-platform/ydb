@@ -52,10 +52,10 @@ PEERDIR(
     library/cpp/openssl/crypto
     ydb/core/base
     ydb/core/blob_depot/agent
+    ydb/core/blobstorage/bridge/proxy
     ydb/core/blobstorage/bridge/syncer
     ydb/core/blobstorage/common
     ydb/core/blobstorage/crypto
-    ydb/core/blobstorage/dsproxy/bridge
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
     ydb/core/control/lib

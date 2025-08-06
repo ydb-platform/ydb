@@ -183,7 +183,7 @@ namespace NKikimr::NStorage {
         OpQueueOnError(TStringBuilder() << "binding is in progress Binding# " << Binding->ToString());
 
         // unbind any other piles
-        UnbindNodesFromOtherPiles();
+        UnbindNodesFromOtherPiles("started binding to another node");
     }
 
     void TDistributedConfigKeeper::BindToSession(TActorId sessionId) {
@@ -701,8 +701,6 @@ namespace NKikimr::NStorage {
             DirectBoundNodes.erase(it);
 
             UnsubscribeQueue.insert(nodeId);
-
-            OnSyncerUnboundNode(nodeId);
         }
     }
 
@@ -714,7 +712,7 @@ namespace NKikimr::NStorage {
         return Scepter || (Binding && GetRootNodeId() != SelfId().NodeId());
     }
 
-    void TDistributedConfigKeeper::UnbindNodesFromOtherPiles() {
+    void TDistributedConfigKeeper::UnbindNodesFromOtherPiles(const char *reason) {
         if (!BridgeInfo) {
             return;
         }
@@ -725,7 +723,7 @@ namespace NKikimr::NStorage {
             }
         }
         for (ui32 nodeId : goingToUnbind) {
-            UnbindNode(nodeId, "primary pile scepter lost");
+            UnbindNode(nodeId, reason);
         }
     }
 

@@ -4,7 +4,7 @@
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
-#include <ydb/core/blobstorage/dsproxy/bridge/bridge.h>
+#include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 #include <ydb/core/blob_depot/agent/agent.h>
 
 using namespace NKikimr;

@@ -176,33 +176,4 @@ namespace NKikimr::NStorage {
         {}
     };
 
-    struct TEvNodeWardenManageSyncers
-        : TEventLocal<TEvNodeWardenManageSyncers, TEvBlobStorage::EvNodeWardenManageSyncers>
-    {
-        struct TSyncer {
-            ui32 NodeId;
-            TGroupId GroupId;
-            TBridgePileId TargetBridgePileId;
-        };
-        std::vector<TSyncer> RunSyncers;
-
-        TEvNodeWardenManageSyncers(std::vector<TSyncer>&& runSyncers)
-            : RunSyncers(std::move(runSyncers))
-        {}
-    };
-
-    struct TEvNodeWardenManageSyncersResult
-        : TEventLocal<TEvNodeWardenManageSyncersResult, TEvBlobStorage::EvNodeWardenManageSyncersResult>
-    {
-        struct TSyncer {
-            TGroupId GroupId;
-            TBridgePileId TargetBridgePileId;
-        };
-        std::vector<TSyncer> WorkingSyncers;
-
-        TEvNodeWardenManageSyncersResult(std::vector<TSyncer>&& workingSyncers)
-            : WorkingSyncers(std::move(workingSyncers))
-        {}
-    };
-
 } // NKikimr::NStorage

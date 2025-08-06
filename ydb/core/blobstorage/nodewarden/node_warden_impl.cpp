@@ -151,6 +151,7 @@ STATEFN(TNodeWarden::StateOnline) {
         // proxy requests for the NodeWhiteboard to prevent races
         hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
 
+        hFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
         hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
 
         cFunc(TEvPrivate::EvReadCache, HandleReadCache);
@@ -180,8 +181,6 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
-
-        hFunc(TEvNodeWardenManageSyncers, HandleManageSyncers);
 
         default:
             EnqueuePendingMessage(ev);
@@ -902,6 +901,8 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
 
         ExpectedSaveConfigCookie++;
     }
+
+    ApplyWorkingSyncers(record);
 }
 
 void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff) {
@@ -1029,9 +1030,30 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvNotifyWardenPDiskRestarted::TPtr ev)
     OnPDiskRestartFinished(ev->Get()->PDiskId, ev->Get()->Status);
 }
 
+void TNodeWarden::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr ev) {
+    const ui64 cookie = NextConfigCookie++;
+    UnfinishedRequests[cookie].CopyFrom(ev->Get()->Record);
+    ConfigInFlight.emplace(cookie, [this, cookie = cookie, origSender = ev->Sender, origCookie = ev->Cookie](
+            TEvBlobStorage::TEvControllerConfigResponse *ev) {
+        if (ev) {
+            Send(origSender, ev, 0, origCookie);
+            UnfinishedRequests.erase(cookie);
+        }
+    });
+    SendToController(std::unique_ptr<IEventBase>(ev->ReleaseBase().Release()), cookie);
+}
+
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
     if (auto nh = ConfigInFlight.extract(ev->Cookie)) {
         nh.mapped()(ev->Get());
+    }
+}
+
+void TNodeWarden::SendUnfinishedRequests() {
+    for (const auto& [cookie, record] : UnfinishedRequests) {
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        ev->Record.CopyFrom(record);
+        SendToController(std::move(ev), cookie);
     }
 }
 

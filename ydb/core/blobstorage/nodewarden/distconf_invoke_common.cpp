@@ -167,6 +167,9 @@ namespace NKikimr::NStorage {
                     case TQuery::kNotifyBridgeSyncFinished:
                         return NotifyBridgeSyncFinished(op.Command.GetNotifyBridgeSyncFinished());
 
+                    case TQuery::kUpdateBridgeGroupInfo:
+                        return UpdateBridgeGroupInfo(op.Command.GetUpdateBridgeGroupInfo());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
                 }
@@ -187,7 +190,6 @@ namespace NKikimr::NStorage {
                     } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                         throw TExError() << *r.ErrorReason;
                     } else if (r.ConfigToPropose) {
-                        CheckSyncersAfterCommit = r.CheckSyncersAfterCommit;
                         StartProposition(&r.ConfigToPropose.value(), /*acceptLocalQuorum=*/ true,
                             /*requireScepter=*/ false, /*mindPrev=*/ true,
                             r.PropositionBase ? &r.PropositionBase.value() : nullptr);
@@ -197,7 +199,6 @@ namespace NKikimr::NStorage {
                 });
             },
             [&](TProposeConfig& op) {
-                CheckSyncersAfterCommit = op.CheckSyncersAfterCommit;
                 StartProposition(&op.Config);
             }
         }, Query);
@@ -296,7 +297,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-            SelfId(), CheckSyncersAfterCommit, mindPrev);
+            SelfId(), mindPrev);
         if (error) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
                 (Error, *error), (ProposedConfig, *config));

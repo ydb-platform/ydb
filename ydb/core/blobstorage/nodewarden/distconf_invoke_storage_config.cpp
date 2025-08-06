@@ -560,7 +560,6 @@ namespace NKikimr::NStorage {
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
-                CheckSyncersAfterCommit = r.CheckSyncersAfterCommit;
                 StartProposition(&r.ConfigToPropose.value());
             } else { // no new proposition has been made
                 Finish(TResult::OK, std::nullopt);
@@ -570,6 +569,64 @@ namespace NKikimr::NStorage {
         TEvScatter task;
         task.MutableCollectConfigs();
         IssueScatterTask(std::move(task), std::move(done));
+    }
+
+    void TInvokeRequestHandlerActor::UpdateBridgeGroupInfo(const TQuery::TUpdateBridgeGroupInfo& cmd) {
+        RunCommonChecks();
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+
+        // find group we are going to update
+        auto *bsConfig = config.MutableBlobStorageConfig();
+        auto *ss = bsConfig->MutableServiceSet();
+        auto *groups = ss->MutableGroups();
+        NKikimrBlobStorage::TGroupInfo *bridgeProxyGroup = nullptr;
+        THashMap<TGroupId, NKikimrBlobStorage::TGroupInfo*> groupMap;
+        for (auto& group : *groups) {
+            if (group.GetGroupID() == cmd.GetGroupId()) {
+                if (group.GetGroupGeneration() != cmd.GetGroupGeneration()) {
+                    throw TExError() << "bridge proxy group generation mismatch";
+                } else if (group.HasBridgeGroupState()) {
+                    throw TExError() << "group is not bridge proxy group";
+                }
+                bridgeProxyGroup = &group;
+            }
+            groupMap.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), &group);
+        }
+        if (!bridgeProxyGroup) {
+            throw TExError() << "bridge proxy group not found";
+        }
+
+        // validate state update
+        auto *state = bridgeProxyGroup->MutableBridgeGroupState();
+        const auto& newState = cmd.GetBridgeGroupInfo().GetBridgeGroupState();
+        if (state->PileSize() != newState.PileSize()) {
+            throw TExError() << "can't change number of piles in TGroupInfo.BridgeGroupState";
+        }
+        for (size_t i = 0; i < newState.PileSize(); ++i) {
+            const auto& pile = newState.GetPile(i);
+            const auto it = groupMap.find(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+            if (it == groupMap.end()) {
+                throw TExError() << "can't find referenced group";
+            } else if (state->GetPile(i).GetGroupId() != pile.GetGroupId()) {
+                throw TExError() << "can't change group id";
+            } else if (it->second->GetGroupGeneration() + 1 != pile.GetGroupGeneration()) {
+                throw TExError() << "referenced group generation mismatch";
+            }
+            it->second->SetGroupGeneration(it->second->GetGroupGeneration() + 1);
+        }
+
+        // update state
+        state->CopyFrom(newState);
+
+        // update referenced group generations
+        bridgeProxyGroup->SetGroupGeneration(bridgeProxyGroup->GetGroupGeneration() + 1);
+        for (auto& pile : *state->MutablePile()) {
+            const auto it = groupMap.find(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+            Y_ABORT_UNLESS(it != groupMap.end());
+            pile.SetGroupGeneration(it->second->GetGroupGeneration());
+        }
+
+        StartProposition(&config);
     }
 
 } // NKikimr::NStorage

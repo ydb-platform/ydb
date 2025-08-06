@@ -121,8 +121,9 @@ void TBlobStorageController::TGroupInfo::FillInGroupParameters(
         params->MergeFrom(GroupMetrics->GetGroupParameters());
     } else if (BridgeGroupInfo) {
         Y_ABORT_UNLESS(self->BridgeInfo);
-        for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
-            if (TGroupInfo *groupInfo = self->FindGroup(TGroupId::FromValue(groupId))) {
+        for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+            const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+            if (TGroupInfo *groupInfo = self->FindGroup(groupId)) {
                 Y_ABORT_UNLESS(groupInfo->BridgePileId);
                 if (!NBridge::PileStateTraits(self->BridgeInfo->GetPile(groupInfo->BridgePileId)->State).AllowsConnection) {
                     continue; // ignore groups from disconnected piles
@@ -546,28 +547,7 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     InvokeOnRootTimer.Reset();
     InvokeOnRootCmd.reset();
 
-    if (StorageConfig->HasClusterStateDetails()) {
-        for (const auto& unsynced : StorageConfig->GetClusterStateDetails().GetPileSyncState()) {
-            if (unsynced.GetUnsyncedBSC()) {
-                auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-                auto& record = ev->Record;
-                auto *nbsf = record.MutableNotifyBridgeSyncFinished();
-                nbsf->SetGeneration(StorageConfig->GetClusterState().GetGeneration());
-                nbsf->SetBridgePileId(unsynced.GetBridgePileId());
-                using TQuery = NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TNotifyBridgeSyncFinished;
-                nbsf->SetStatus(TQuery::Success);
-                nbsf->SetBSC(true);
-                for (const auto& [groupId, info] : GroupMap) {
-                    if (info->BridgeGroupInfo) {
-                        groupId.CopyToProto(nbsf, &TQuery::AddUnsyncedGroupIdsToAdd);
-                    }
-                }
-                // remember the command in case it fails
-                InvokeOnRootCmd.emplace(record);
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
-            }
-        }
-    }
+    CheckUnsyncedBridgePiles();
 
     if (!StorageConfig->HasBlobStorageConfig()) {
         return;
@@ -972,6 +952,7 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
         cFunc(TEvPrivate::EvCommitMetrics, CommitMetrics);
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+        cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -1128,6 +1109,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kStopPDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateBridgeGroupInfo:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

@@ -5,22 +5,19 @@
 
 namespace NKikimr::NBridge {
 
-    TSyncerActor::TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TBridgePileId targetPileId, TGroupId groupId)
+    TSyncerActor::TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId)
         : Info(std::move(info))
-        , TargetPileId(targetPileId)
-        , GroupId(groupId)
+        , SourceGroupId(sourceGroupId)
+        , TargetGroupId(targetGroupId)
     {
         Y_ABORT_UNLESS(!Info || Info->IsBridged());
     }
 
     void TSyncerActor::Bootstrap() {
-        LogId = TStringBuilder() << SelfId() << GroupId;
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS00, "bootstrapping bridged blobstorage syncer", (LogId, LogId),
-            (TargetPileId, TargetPileId), (HasGroupInfo, static_cast<bool>(Info)));
+        LogId = TStringBuilder() << SelfId() << Info->GroupID << '{' << SourceGroupId << "->" << TargetGroupId << '}';
+        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS00, "bootstrapping bridged blobstorage syncer", (LogId, LogId));
         Become(&TThis::StateFunc);
-        if (Info) {
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
-        }
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
     }
 
     void TSyncerActor::PassAway() {
@@ -28,75 +25,152 @@ namespace NKikimr::NBridge {
     }
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
-        if (!Info) {
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
-        }
         Info = std::move(ev->Get()->Info);
         Y_ABORT_UNLESS(Info);
         Y_ABORT_UNLESS(Info->IsBridged());
+        OnConfigUpdate();
     }
 
-    void TSyncerActor::Terminate(std::optional<TString> errorReason) {
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS04, "syncing finished", (LogId, LogId), (ErrorReason, errorReason));
-        auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        auto& record = ev->Record;
-        auto *notify = record.MutableNotifyBridgeSyncFinished();
-        notify->SetGeneration(StorageConfig->GetClusterState().GetGeneration());
-        TargetPileId.CopyToProto(notify, &std::decay_t<decltype(*notify)>::SetBridgePileId);
-        notify->SetStatus(errorReason
-            ? NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TNotifyBridgeSyncFinished::TransientError
-            : NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TNotifyBridgeSyncFinished::Success);
-        if (errorReason) {
-            notify->SetErrorReason(*errorReason);
+    void TSyncerActor::OnConfigUpdate() {
+        if (!Info || LastProcessedGeneration == Info->GroupGeneration) {
+            return; // already done this
         }
-        Info->GroupID.CopyToProto(notify, &std::decay_t<decltype(*notify)>::SetGroupId);
-        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
-        PassAway();
-    }
+        LastProcessedGeneration.emplace(Info->GroupGeneration);
 
-    void TSyncerActor::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
-        const bool initial = !BridgeInfo;
-        StorageConfig = std::move(ev->Get()->Config);
-        BridgeInfo = std::move(ev->Get()->BridgeInfo);
-        Y_ABORT_UNLESS(BridgeInfo);
-        const auto& targetPile = *BridgeInfo->GetPile(TargetPileId);
-        if (!PileStateTraits(targetPile.State).RequiresDataQuorum) {
-            // there is absolutely no need in synchronization: pile is either marked synchronized (what would be strange),
-            // or it is disconnected; we terminate in either case
-            return Terminate("target pile is not in data quorum state");
-        }
-        if (!initial && !PileStateTraits(BridgeInfo->GetPile(SourcePileId)->State).RequiresDataQuorum) {
-            return Terminate("source pile is not in data quorum state");
-        }
-        if (initial) {
-            InitiateSync();
-        }
-    }
+        const auto& state = Info->Group->GetBridgeGroupState();
+        NKikimrBridge::TGroupState::EStage targetStage;
+        for (size_t i = 0; i < state.PileSize(); ++i) {
+            const auto& pile = state.GetPile(i);
+            const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+            if (groupId == SourceGroupId) {
+                if (pile.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                    Y_DEBUG_ABORT("TGroupState.TPile is not in SYNCED state for primary pile");
+                    return Terminate("group is not synced for primary pile");
+                }
+            } else if (groupId == TargetGroupId) {
+                targetStage = pile.GetStage();
+                if (targetStage == NKikimrBridge::TGroupState::SYNCED) {
+                    return Terminate(std::nullopt); // everything is already synced
+                }
 
-    void TSyncerActor::InitiateSync() {
+            }
+        }
+
+        // ignore responses for any previous requests
+        QueriesInFlight = 0;
+        Payloads.clear();
+        PendingQueries.clear();
+
         // remember our source pile (primary one) on first start; actually, we can pick any of SYNCHRONIZED
         Y_ABORT_UNLESS(PileStateTraits(BridgeInfo->PrimaryPile->State).RequiresDataQuorum);
-        SourcePileId = BridgeInfo->PrimaryPile->BridgePileId;
-        const auto& groups = Info->GetBridgeGroupIds();
-        Y_ABORT_UNLESS(groups.size() == std::size(BridgeInfo->Piles));
-        SourceGroupId = groups[SourcePileId.GetPileIndex()];
-        TargetGroupId = groups[TargetPileId.GetPileIndex()];
-        LogId = TStringBuilder() << LogId << '{' << SourceGroupId << "->" << TargetGroupId << '}';
         STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS01, "initiating sync", (LogId, LogId));
-        SourceState = &GroupAssimilateState[false];
-        TargetState = &GroupAssimilateState[true];
+
+        // reset sync states to their original state and decide what to synchronize
+        bool needBlocks = false;
+        bool needBarriers = false;
+        bool needBlobs = false;
+        switch (targetStage) {
+            case NKikimrBridge::TGroupState::BLOCKS:
+                needBlocks = true;
+                break;
+
+            case NKikimrBridge::TGroupState::WRITE_KEEP:
+                needBlobs = true; // keep flags are reported along with blobs
+                break;
+
+            case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
+                needBlobs = needBlocks = true; // we need both keep/donotkeep flags and the barriers
+                break;
+
+            case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA:
+                needBlobs = true; // only blobs
+                break;
+
+            default:
+                Y_ABORT();
+        }
+        std::ranges::fill(GroupAssimilateState, TAssimilateState());
+        if (!needBlocks) {
+            SourceState.SkipBlocksUpTo.emplace(TargetState.SkipBlocksUpTo.emplace(0));
+        }
+        if (!needBarriers) {
+            SourceState.SkipBarriersUpTo.emplace(TargetState.SkipBarriersUpTo.emplace(0, 0));
+        }
+        if (!needBlobs) {
+            SourceState.SkipBlobsUpTo.emplace(TargetState.SkipBlobsUpTo.emplace(Min<TLogoBlobID>()));
+        }
+
+        // issue requests
         IssueAssimilateRequest(false);
         IssueAssimilateRequest(true);
     }
 
+    void TSyncerActor::Terminate(std::optional<TString> errorReason) {
+        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS04, "syncing finished", (LogId, LogId), (ErrorReason, errorReason));
+        PassAway();
+    }
+
+    void TSyncerActor::SwitchToSyncStage(NKikimrBridge::TGroupState::EStage stage) {
+        auto fillAndSend = [&](auto *request, auto& ev) {
+            auto *cmd = request->MutableUpdateBridgeGroupInfo();
+            Info->GroupID.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::SetGroupId);
+            cmd->SetGroupGeneration(Info->GroupGeneration);
+            auto *info = cmd->MutableBridgeGroupInfo();
+            auto *state = info->MutableBridgeGroupState();
+            state->CopyFrom(Info->Group->GetBridgeGroupState());
+            bool found = false;
+            for (auto& pile : *state->MutablePile()) {
+                if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == TargetGroupId) {
+                    pile.SetStage(stage);
+                    found = true;
+                    break;
+                }
+            }
+            Y_DEBUG_ABORT_UNLESS(found);
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
+        };
+        if (TGroupID(TargetGroupId).ConfigurationType() == EGroupConfigurationType::Static) {
+            auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            fillAndSend(&ev->Record, ev);
+        } else {
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+            fillAndSend(ev->Record.MutableRequest()->AddCommand(), ev);
+        }
+    }
+
+    void TSyncerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
+        auto& record = ev->Get()->Record;
+        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSSxx, "TEvControllerConfigResponse", (LogId, LogId), (Record, record));
+        const auto& response = record.GetResponse();
+        if (!response.GetSuccess()) {
+            Terminate(TStringBuilder() << "failed to switch group state in BSC: " << response.GetErrorDescription());
+        }
+    }
+
+    void TSyncerActor::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+        auto& record = ev->Get()->Record;
+        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSSxx, "TEvNodeConfigInvokeOnRootResult", (LogId, LogId), (Record, record));
+        if (record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+            Terminate(TStringBuilder() << "failed to switch static group state: " << record.GetErrorReason());
+        }
+    }
+
+    void TSyncerActor::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+        StorageConfig = std::move(ev->Get()->Config);
+        BridgeInfo = std::move(ev->Get()->BridgeInfo);
+        Y_ABORT_UNLESS(BridgeInfo);
+        OnConfigUpdate();
+    }
+
     void TSyncerActor::DoMergeLoop() {
-        if (SourceState->RequestInFlight || TargetState->RequestInFlight) {
+        if (SourceState.RequestInFlight || TargetState.RequestInFlight) {
             return; // nothing to merge yet
         }
 
         auto mergeBlocks = [&](auto *sourceItem, auto *targetItem, const auto& key) {
             STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS05, "merging block", (LogId, LogId), (SourceItem, sourceItem),
                 (TargetItem, targetItem));
+            // this operation is only possible while syncing blocks, so enforce it
             const auto& [tabletId] = key;
             std::optional<ui32> sourceGeneration = sourceItem
                 ? std::make_optional(sourceItem->BlockedGeneration)
@@ -190,7 +264,7 @@ namespace NKikimr::NBridge {
         };
 
 #define MERGE(NAME) \
-        if (!DoMergeEntities(SourceState->NAME, TargetState->NAME, SourceState->NAME##Finished, TargetState->NAME##Finished, merge##NAME)) { \
+        if (!DoMergeEntities(SourceState.NAME, TargetState.NAME, SourceState.NAME##Finished, TargetState.NAME##Finished, merge##NAME)) { \
             return; \
         }
         MERGE(Blocks)
@@ -443,17 +517,19 @@ namespace NKikimr::NBridge {
 
     STRICT_STFUNC(TSyncerActor::StateFunc,
         hFunc(TEvBlobStorage::TEvConfigureProxy, Handle)
+        hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle)
         hFunc(TEvBlobStorage::TEvAssimilateResult, Handle)
         hFunc(TEvBlobStorage::TEvBlockResult, Handle)
         hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle)
         hFunc(TEvBlobStorage::TEvPutResult, Handle)
         hFunc(TEvBlobStorage::TEvGetResult, Handle)
         hFunc(TEvNodeWardenStorageConfig, Handle)
+        hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle)
         cFunc(TEvents::TSystem::Poison, PassAway)
     )
 
-    IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TBridgePileId targetPileId, TGroupId groupId) {
-        return new TSyncerActor(std::move(info), targetPileId, groupId);
+    IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId) {
+        return new TSyncerActor(std::move(info), sourceGroupId, targetGroupId);
     }
 
 } // NKikimr::NBridge

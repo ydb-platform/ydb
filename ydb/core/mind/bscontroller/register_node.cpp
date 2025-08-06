@@ -293,6 +293,30 @@ public:
             }
         }
 
+        Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead);
+        for (auto it = Self->SyncersNodeTargetSource.lower_bound(std::make_tuple(nodeId, TGroupId(), TGroupId()));
+                it != Self->SyncersNodeTargetSource.end() && std::get<0>(*it) == nodeId; ++it) {
+            const auto& [nodeId, targetGroupId, sourceGroupId] = *it;
+            TGroupId bridgeProxyGroupId;
+            if (TGroupID(targetGroupId).ConfigurationType() == EGroupConfigurationType::Static) {
+                const auto it = Self->StaticGroups.find(targetGroupId);
+                Y_ABORT_UNLESS(it != Self->StaticGroups.end());
+                const auto& group = it->second.Info->Group;
+                Y_ABORT_UNLESS(group);
+                Y_ABORT_UNLESS(group->HasBridgeProxyGroupId());
+                bridgeProxyGroupId = TGroupId::FromProto(&group.value(), &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId);
+            } else {
+                const TGroupInfo *group = Self->FindGroup(targetGroupId);
+                Y_ABORT_UNLESS(group);
+                Y_ABORT_UNLESS(group->BridgeProxyGroupId);
+                bridgeProxyGroupId = *group->BridgeProxyGroupId;
+            }
+            auto *syncer = Response->Record.AddSyncers();
+            bridgeProxyGroupId.CopyToProto(syncer, &std::decay_t<decltype(*syncer)>::SetBridgeProxyGroupId);
+            sourceGroupId.CopyToProto(syncer, &std::decay_t<decltype(*syncer)>::SetSourceGroupId);
+            targetGroupId.CopyToProto(syncer, &std::decay_t<decltype(*syncer)>::SetTargetGroupId);
+        }
+
         Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
@@ -592,6 +616,7 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
     }
 
     node.LastConnectTimestamp = TInstant::Now();
+    node.DisconnectedTimestampMono = TMonotonic::Max();
 
     ShredState.OnWardenConnected(nodeId);
 }
@@ -658,6 +683,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         GroupToNode.erase(std::make_tuple(groupId, nodeId));
     }
     node.LastDisconnectTimestamp = now;
+    node.DisconnectedTimestampMono = mono;
     Execute(new TTxUpdateNodeDisconnectTimestamp(nodeId, this));
 }
 

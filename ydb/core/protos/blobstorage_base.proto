@@ -1,3 +1,7 @@
+import "ydb/core/protos/blobstorage_base3.proto";
+import "ydb/core/protos/bridge.proto";
+import "ydb/library/actors/protos/interconnect.proto";
+
 package NKikimrBlobStorage;
 
 // VDisk handle and store LogoBlobs in different ways, below we define several classes of these blobs
@@ -65,4 +69,48 @@ enum EStatusFlags {  // Never use this type for storage, use ui32 bitset
     StatusMaskDiskSpace = 1998;                 // 0111 1100 1110
     StatusNewOwner = 16;                        // 0000 0001 0000
     StatusNotEnoughDiskSpaceForOperation = 32;  // 0000 0010 0000
+}
+
+enum EEntityStatus {
+    INITIAL = 1; // entity was generated from the current state by the configuration request
+    CREATE  = 2; // entity was just created and notification is being pushed to the warden
+    DESTROY = 3; // entity was just destroyed and the notification is being pushed to the warden
+    RESTART = 4; // entity has changed config or changed environment and should be restarted by warden
+}
+
+message TVDiskLocation {
+    optional uint32 NodeID = 1;
+    optional uint32 PDiskID = 2;
+    optional uint32 VDiskSlotID = 3;
+    optional uint64 PDiskGuid = 4;
+}
+
+message TGroupInfo {
+    message TFailRealm {
+        message TFailDomain {
+            repeated TVDiskLocation VDiskLocations = 1;
+        }
+        repeated TFailDomain FailDomains = 1;
+    }
+
+    optional uint32 GroupID = 1;
+    optional uint32 GroupGeneration = 2;
+    optional uint32 ErasureSpecies = 3;
+    repeated TFailRealm Rings = 4; // name "Rings" for textual compatibility
+    optional EEntityStatus EntityStatus = 5;
+    optional uint32 EncryptionMode = 6 [default = 0];
+    optional uint32 LifeCyclePhase = 7 [default = 0];
+    optional bytes MainKeyId = 8 [default = ""];
+    optional bytes EncryptedGroupKey = 9 [default = ""];
+    optional uint64 GroupKeyNonce = 10 [default = 0];
+    optional uint64 MainKeyVersion = 11 [default = 0];
+    optional NActorsInterconnect.TScopeId AcceptedScope = 12; // some kind of ACL for scopes; empty = no restrictions
+    optional string StoragePoolName = 13;
+    optional EPDiskType DeviceType = 14;
+    optional uint64 BlobDepotId = 15; // if filled, then this is virtual group
+    optional NKikimrBlobStorage.TGroupDecommitStatus.E DecommitStatus = 16;
+    optional NKikimrBridge.TGroupState BridgeGroupState = 17; // filled for brigde proxy groups only
+    optional uint32 GroupSizeInUnits = 18;
+    optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
+    optional uint32 BridgePileId = 20;
 }

@@ -79,6 +79,7 @@ public:
     class TTxUpdateNodeDrives;
     class TTxUpdateNodeDisconnectTimestamp;
     class TTxUpdateShred;
+    class TTxCheckUnsynced;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -873,8 +874,8 @@ public:
 
         bool IsLayoutCorrect(const TGroupFinder& finder) const {
             if (BridgeGroupInfo) {
-                for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
-                    const TGroupInfo *group = finder(TGroupId::FromValue(groupId));
+                for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    const TGroupInfo *group = finder(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
                     if (!group || !group->IsLayoutCorrect(finder)) {
                         return false;
                     }
@@ -888,8 +889,8 @@ public:
         TGroupStatus GetStatus(const TGroupFinder& finder) const {
             if (BridgeGroupInfo) {
                 std::optional<TGroupStatus> res;
-                for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
-                    const TGroupInfo *group = finder(TGroupId::FromValue(groupId));
+                for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    const TGroupInfo *group = finder(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
                     if (group) {
                         if (const TGroupStatus& s = group->GetStatus(finder); res) {
                             res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
@@ -918,6 +919,7 @@ public:
         Table::NextPDiskID::Type NextPDiskID;
         TInstant LastConnectTimestamp;
         TInstant LastDisconnectTimestamp;
+        TMonotonic DisconnectedTimestampMono;
         // in-mem only
         std::map<TString, NPDisk::TDriveData> KnownDrives;
         THashSet<TGroupId> WaitingForGroups;
@@ -1533,6 +1535,7 @@ private:
     bool Loaded = false;
     bool EnableConfigV2 = false;
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
+    TMonotonic LoadedAt;
 
     struct TLifetimeToken {};
     std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
@@ -1574,6 +1577,7 @@ private:
             EvUpdateHostRecords,
             EvUpdateShredState,
             EvCommitMetrics,
+            EvCheckSyncerDisconnectedNodes,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -2000,6 +2004,23 @@ private:
         const NKikimrBlobStorage::TConfigRequest& cmd, std::deque<ui64> expectedSlotSize,
         NKikimrBlobStorage::TConfigResponse::TStatus& status);
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Bridge operation
+
+    static constexpr TDuration DisconnectedSyncerReactionTime = TDuration::Seconds(10);
+
+    std::set<std::tuple<TGroupId, TNodeId, TGroupId>> SyncersTargetNodeSource;
+    std::set<std::tuple<TNodeId, TGroupId, TGroupId>> SyncersNodeTargetSource;
+
+    void CheckUnsyncedBridgePiles();
+
+    void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
+        TSet<ui32>& groupIdsToRead);
+
+    void CheckSyncerDisconnectedNodes();
+
+    void StartRequiredSyncers();
+    
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_CONTROLLER_ACTOR;
@@ -2153,6 +2174,7 @@ public:
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
         Loaded = true;
+        LoadedAt = TActivationContext::Monotonic();
         ApplyStorageConfig();
 
         for (const auto& [id, info] : GroupMap) {
@@ -2173,6 +2195,7 @@ public:
 
         ShredState.Initialize();
         CommitMetrics();
+        CheckSyncerDisconnectedNodes();
     }
 
     void UpdatePDisksCounters() {

@@ -688,6 +688,7 @@ message TTestShardControlRequest {
     oneof Command {
         TCmdInitialize Initialize = 2;
     }
+    optional string SecurityToken = 3;
 }
 
 message TTestShardControlResponse {

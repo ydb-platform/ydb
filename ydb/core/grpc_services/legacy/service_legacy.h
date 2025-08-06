@@ -153,7 +153,7 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::THiveCreateTablet, NKikimr
 
 template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TTestShardControlRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TTestShardControlRequest>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TTestShardControlRequest>
     , NPrivate::TResponseLegacyCommonTraits
 {
 };

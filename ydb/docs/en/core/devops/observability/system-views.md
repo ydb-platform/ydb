@@ -41,10 +41,12 @@ Additionally, there is a separate view that shows statistics on the usage of gro
 | Status                | String    |         | PDisk operating mode that affects its participation in group allocation (ACTIVE, INACTIVE, BROKEN, FAULTY, TO_BE_REMOVED)                                       |
 | StatusChangeTimestamp | Timestamp |         | Time when Status last changed; if NULL, Status has not changed since PDisk creation                                                                              |
 | ExpectedSlotCount     | Uint32    |         | Maximum number of slots (VSlot) that can be created on this PDisk. Either user-defined or inferred.                                                              |
-| NumActiveSlots        | Uint32    |         | Number of currently occupied slots with respect to GroupSizeInUnits of VDisks                                                                                    |
+| NumActiveSlots        | Uint32    |         | Number of currently occupied slots (VSlot) with respect to GroupSizeInUnits of VDisks                                                                            |
 | SlotSizeInUnits       | Uint32    |         | Slot size in units. Either user-defined or inferrerd.                                                                                                            |
-| DecommitStatus        | String    |         | Status of PDisk decommissioning (DECOMMIT_NONE, DECOMMIT_PENDING, DECOMMIT_IMMINENT, DECOMMIT_REJECTED)                                                          |
-| InferPDiskSlotCountFromUnitSize  | Uint64    |         | If not zero, ExpectedSlotCount and SlotSizeInUnits values are inferred (unless user-defined) from drive size and this value                           |
+| DecommitStatus        | String    |         | Status of PDisk [decommissioning](../deployment-options/manual/decommissioning.md) (DECOMMIT_NONE, DECOMMIT_PENDING, DECOMMIT_IMMINENT, DECOMMIT_REJECTED)       |
+| InferPDiskSlotCountFromUnitSize  | Uint64    |         | If not zero, ExpectedSlotCount and SlotSizeInUnits values are inferred (unless user-defined) from TotalSize and this value                           |
+
+The inferred values are calculated by the formula `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, where `SlotSizeInUnits = 2^N` is chosen to meet `ExpectedSlotCount <= 16`.
 
 ### ds_vslots
 
@@ -103,7 +105,7 @@ In this view, the tuple (BoxId, StoragePoolId) forms a foreign key to the `ds_st
 | EncryptionMode | Uint32   |         | Data encryption setting for all groups (similar to ds_groups.EncryptionMode)                               |
 | SchemeshardId  | Uint64   |         | SchemeShard identifier of the schema object to which this storage pool belongs (currently always NULL)      |
 | PathId         | Uint64   |         | Schema object node identifier within the specified SchemeShard to which this storage pool belongs          |
-| DefaultGroupSizeInUnits | Uint32   |         | The value inherited by groups when new groups are added to the pool                                |
+| DefaultGroupSizeInUnits | Uint32   |         | The value of GroupSizeInUnits inherited by groups when new groups are added to the pool                                |
 
 ### ds_storage_stats
 

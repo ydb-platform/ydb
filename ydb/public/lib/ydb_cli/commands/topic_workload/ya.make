@@ -31,6 +31,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/operation
     ydb/public/sdk/cpp/src/client/types/status
+    # library/cpp/containers/concurrent_hash TODO: add after full library sync
     library/cpp/unified_agent_client
     library/cpp/histogram/hdr
 )

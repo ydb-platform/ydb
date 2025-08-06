@@ -99,10 +99,11 @@ namespace NActors {
                         State = EState::SECTIONS;
                         SectionIndex = 0;
 
-                        SendViaRdma = Params.UseRdma && RdmaMemPool && SerializationInfo->Sections.size() > 2;
-                        for (const auto& section : SerializationInfo->Sections) {
-                            SendViaRdma &= section.IsRdma;
-                        }
+                        SendViaRdma =  Params.UseRdma && RdmaMemPool;
+                        // SendViaRdma = Params.UseRdma && RdmaMemPool && SerializationInfo->Sections.size() > 2;
+                        // for (const auto& section : SerializationInfo->Sections) {
+                        //    SendViaRdma &= section.IsRdma;
+                        // }
                         if (SendViaRdma) {
                             Chunker.DiscardEvent();
                         }
@@ -110,6 +111,7 @@ namespace NActors {
                     break;
 
                 case EState::BODY:
+                    // Cerr << (event.Buffer ? (i32)event.Buffer->GetSize() : -1) << Endl;
                     if (FeedPayload(task, event, rdmaDeviceIndex)) {
                         State = EState::DESCRIPTOR;
                     } else {
@@ -309,33 +311,49 @@ namespace NActors {
     }
 
     bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ssize_t rdmaDeviceIndex) {
+        Y_ABORT_UNLESS(GetDefaultRcBufAllocator());
         if (!event.Buffer && event.Event) {
             std::optional<TRope> rope = event.Event->SerializeToRope(
                 //TODO: !!! handle allocation error
-                [&](ui32 size) -> TRcBuf { return RdmaMemPool->AllocRcBuf(size, NInterconnect::NRdma::IMemPool::BLOCK_MODE).value(); }
+                // [&](ui32 size) -> TRcBuf { return RdmaMemPool->AllocRcBuf(size, NInterconnect::NRdma::IMemPool::BLOCK_MODE).value(); }
+               [&](ui32 size) -> TRcBuf { return GetDefaultRcBufAllocator()->AllocRcBuf(size, 0, 0); } 
             );
             if (!rope) {
+                Cerr << "Failed to allocate rcbuf" << Endl;
                 return false; // serialization failed
             }
             event.Buffer = MakeIntrusive<TEventSerializedData>(
                 std::move(*rope), event.Event->CreateSerializationInfo()
             );
-            Iter = event.Buffer->GetBeginIter();
         }
+        Y_ABORT_UNLESS(event.Buffer);
+        Y_ABORT_UNLESS(RdmaMemPool);
+        Iter = event.Buffer->GetBeginIter();
 
         if (event.Buffer) {
             for (; Iter.Valid(); ++Iter) {
                 TRcBuf buf = Iter.GetChunk();
-                auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
-                if (memReg.Empty()) {
-                    // TODO: may be copy to RDMA buffer ?????
-                    return false;
-                }
+                // auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
+                //Y_ABORT_UNLESS(NInterconnect::NRdma::TryExtractFromRcBuf(buf).Empty());
+                // if (memReg.Empty()) {
+                //     // TODO: may be copy to RDMA buffer ?????
+                //     return false;
+                // }
+                // Cerr << "ALLOC:" << buf.GetSize() << Endl;
+                auto memReg = RdmaMemPool->Alloc(buf.GetSize(), NInterconnect::NRdma::IMemPool::BLOCK_MODE);
+
+                Y_ABORT_UNLESS(memReg);
+                auto data = memReg->GetDataMut();
+                std::memcpy(data.GetData(), buf.GetData(), buf.GetSize());
                 auto cred = rdmaCreds.AddCreds();
-                cred->SetAddress(reinterpret_cast<ui64>(memReg.GetAddr()));
-                cred->SetSize(memReg.GetSize());
-                cred->SetRkey(memReg.GetRKey(rdmaDeviceIndex));
+                cred->SetAddress(reinterpret_cast<ui64>(memReg->GetAddr()));
+                cred->SetSize(memReg->GetSize());
+                cred->SetRkey(memReg->GetRKey(rdmaDeviceIndex));
+                event.MemRegs.emplace_back(std::move(memReg));
             }
+        } else {
+            // PrintBackTrace();
+            Y_ABORT_UNLESS(false);
         } 
         return true;
     }
@@ -343,6 +361,7 @@ namespace NActors {
     std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex) {
         Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
         NActorsInterconnect::TRdmaCreds rdmaCreds;
+        Y_ABORT_UNLESS(this);
         if (!SerializeEventRdma(event, rdmaCreds, rdmaDeviceIndex)) {
             Y_ABORT("RDMA payload serialization failed for event");
             return std::nullopt; // serialization failed

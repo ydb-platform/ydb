@@ -61,6 +61,41 @@ namespace NActors {
         }
     }
 
+    static bool NeedReallocateRdma(const NInterconnect::NRdma::TMemRegionSlice& region) {
+        return !region.Empty();
+    }
+
+    static void ReallocPayload(TRope& rope) {
+        bool needRealloc = false;
+        for (TRope::TConstIterator it = rope.Begin(); it != rope.End(); ++it) {
+            const TRcBuf& chunk = it.GetChunk();
+            const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
+            if (NeedReallocateRdma(region)) { //Reduce small regions rdma memory consumption
+                needRealloc = true;
+            }
+        }
+
+        if (!needRealloc) {
+            return;
+        }
+
+        TRope newRope;
+
+        for (TRope::TIterator it = rope.Begin(); it != rope.End(); ++it) {
+            TRcBuf chunk = it.GetChunk();
+            const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
+            if (NeedReallocateRdma(region)) {
+                auto newBuf = TRcBuf::Copy(chunk.GetContiguousSpan(), 0, 0);
+                newRope.Insert(newRope.End(), TRope(std::move(newBuf)));
+            } else {
+                newRope.Insert(newRope.End(), TRope(std::move(chunk)));
+            }
+        }
+
+        rope.clear();
+        rope = newRope;
+    }
+
     static TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult SendRdmaReadRequest(
         NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq,
         const NActorsInterconnect::TRdmaCred& cred, const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
@@ -84,6 +119,7 @@ namespace NActors {
             }
 
             size_t before = left->fetch_sub(size, std::memory_order_relaxed);
+            //Cerr << "Success read: " << eventId << " " << before << " " << size << Endl;
             Y_ABORT_UNLESS(before >= size);
             if (before == size) {
                 reply(as, ioDone);
@@ -100,10 +136,16 @@ namespace NActors {
         auto* wr = std::get<ICq::IWr*>(allocResult);
 
         void* addr = static_cast<char*>(memReg.GetAddr()) + offset;
-        qp.SendRdmaReadWr(wr->GetId(),
+        //Cerr << "SendRdmaReadWr: " << eventId << " " << cred.GetSize();
+        auto err = qp.SendRdmaReadWr(wr->GetId(),
             addr, memReg.GetLKey(qp.GetCtx()->GetDeviceIndex()),
             reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize()
         );
+
+        if (err) {
+            wr->Release();
+            Y_ABORT("Unable to post rdma READ work request, error %d\n", err);
+        }
 
         return TReceiveContext::TPerChannelContext::TRdmaReadReqOk{};
     }
@@ -132,7 +174,7 @@ namespace NActors {
                 }
 
                 mrOffset += credCopy.GetSize();
-                credOffset += credCopy.GetSize(); 
+                credOffset += credCopy.GetSize();
 
                 if (mrOffset == curMemReg.GetSize()) {  // section finished
                     pendingEvent.RdmaBuffers.pop_front();
@@ -145,6 +187,7 @@ namespace NActors {
                 }
             } while (credOffset < cred.GetSize());
         }
+
         return TRdmaReadReqOk{};
     }
 
@@ -816,6 +859,9 @@ namespace NActors {
                 }
             }
             pendingEvent.SerializationInfo.IsExtendedFormat = descr.Flags & IEventHandle::FlagExtendedFormat;
+
+            ReallocPayload(payload);
+
             auto ev = std::make_unique<IEventHandle>(SessionId,
                 descr.Type,
                 descr.Flags & ~IEventHandle::FlagExtendedFormat,

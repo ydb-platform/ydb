@@ -77,19 +77,19 @@ namespace NActors {
     {}
 
     TRcBuf TRdmaAllocatorWithFallback::AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept {
-        std::optional<TRcBuf> buf = TryAllocRdmaRcBuf<false>(size, headRoom, tailRoom);
-        if (!buf) {
+        //std::optional<TRcBuf> buf = TryAllocRdmaRcBuf<false>(size, headRoom, tailRoom);
+        //if (!buf) {
             return GetDefaultRcBufAllocator()->AllocRcBuf(size, headRoom, tailRoom);
-        }
-        return buf.value();
+        //}
+        //return buf.value();
     }
 
     TRcBuf TRdmaAllocatorWithFallback::AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept {
-        std::optional<TRcBuf> buf = TryAllocRdmaRcBuf<true>(size, 0, tailRoom);
-        if (!buf) {
+        //std::optional<TRcBuf> buf = TryAllocRdmaRcBuf<true>(size, 0, tailRoom);
+        //if (!buf) {
             return GetDefaultRcBufAllocator()->AllocPageAlignedRcBuf(size, tailRoom);
-        }
-        return buf.value();
+        //}
+        //return buf.value();
     }
 
     template<bool pageAligned>

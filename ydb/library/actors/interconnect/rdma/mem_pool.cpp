@@ -354,7 +354,7 @@ namespace NInterconnect::NRdma {
 
         struct TAuxChunkData {
             std::atomic<ui32> Allocated = 0; //not atomic modified only from alloc while not in shared array
-            std::atomic<int> Freed;
+            std::atomic<int> Freed = 0;
             std::atomic<int> InactivePos = -1;
             bool IsInactive() const noexcept {
                 return InactivePos.load(std::memory_order_acquire) >= 0;
@@ -435,14 +435,16 @@ namespace NInterconnect::NRdma {
             return new TMemRegion(chunk, offset + allignmentOffset, size);
         }
 
-        void Free(TMemRegion&&, TChunk& chunk) noexcept override {
+        void Free(TMemRegion&& reg, TChunk& chunk) noexcept override {
             TAuxChunkData* auxData = CastToAuxChunkData(&chunk);
+            auxData->Freed.fetch_add(reg.GetSize());
             if (auxData->IsInactive() && chunk.RefCount() == (1 + 1)) { // last MemRegion for chunk: 1 ref from TMemRegion and 1 is "manual" during allocation 
                 Y_ABORT_UNLESS(auxData->InactivePos < (int)Inactive.size());
                 Y_ABORT_UNLESS(Inactive[auxData->InactivePos].load() == &chunk, "chunk: %p, expected: %p",
                     (void*)&chunk, Inactive[auxData->InactivePos].load());
                 Inactive[auxData->InactivePos].store(nullptr);
                 auxData->Allocated.store(0);
+                auxData->Freed.store(0);
                 auxData->InactivePos.store(-1);
                 int ret = PushChunk(0, ActiveAndFree, &chunk);
                 if (ret == -1) {
@@ -461,7 +463,7 @@ namespace NInterconnect::NRdma {
 
     private:
         static constexpr size_t ChunkSize = 32 << 20;
-        static constexpr size_t MaxChunks = 1 << 5; //must be power of two
+        static constexpr size_t MaxChunks = 1 << 8; //must be power of two
         static constexpr size_t ChunkGap = CacheLineSz / sizeof(TChunk*); // Distance between elemets to prevent cache line sharing
         static_assert(MaxChunks % ChunkGap == 0);
 
@@ -545,6 +547,7 @@ namespace NInterconnect::NRdma {
                         //}
                         auto aux = CastToAuxChunkData(p);
                         aux->Allocated.store(0);
+                        aux->Freed.store(0);
                         aux->InactivePos.store(-1);
                         
                         if (PushChunk(0, ActiveAndFree, p) == -1) {

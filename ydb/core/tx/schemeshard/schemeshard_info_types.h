@@ -3818,6 +3818,13 @@ struct TIncrementalRestoreState {
     }
 
     bool AreAllCurrentOperationsComplete() const {
+        // If we started processing the current incremental but there are no operations at all,
+        // it means no table backups were found in this incremental backup, so consider it complete
+        // TODO: probably have to ensure that empty backups are impossible
+        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()) {
+            return true;
+        }
+        // Normal case: all operations have moved from InProgress to Completed
         return InProgressOperations.empty() && !CompletedOperations.empty();
     }
 

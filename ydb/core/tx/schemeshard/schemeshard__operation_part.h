@@ -703,6 +703,10 @@ TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxT
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
 
+// Incremental Restore Finalization
+ISubOperation::TPtr CreateIncrementalRestoreFinalize(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateIncrementalRestoreFinalize(TOperationId opId, TTxState::ETxState state);
+
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 

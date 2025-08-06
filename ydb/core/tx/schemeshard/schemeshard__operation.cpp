@@ -1274,6 +1274,10 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxChangePathState:
         return CreateChangePathState(NextPartId(), txState);
 
+    // Incremental Restore Finalization
+    case TTxState::ETxType::TxIncrementalRestoreFinalize:
+        return CreateIncrementalRestoreFinalize(NextPartId(), txState);
+
     case TTxState::ETxType::TxCreateLongIncrementalRestoreOp:
         return CreateLongIncrementalRestoreOpControlPlane(NextPartId(), txState);
 
@@ -1592,6 +1596,10 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     // ChangePathState
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         return CreateChangePathState(op.NextPartId(), tx, context);
+
+    // Incremental Restore Finalization
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        return {CreateIncrementalRestoreFinalize(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

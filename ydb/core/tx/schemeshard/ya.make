@@ -155,6 +155,7 @@ SRCS(
     schemeshard__operation_create_resource_pool.cpp
     schemeshard__operation_create_restore.cpp
     schemeshard__operation_create_restore_incremental_backup.cpp
+    schemeshard__operation_incremental_restore_finalize.cpp
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
     schemeshard__operation_create_solomon.cpp

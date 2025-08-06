@@ -88,8 +88,10 @@ TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TK
         .Done();
 }
 
-TKqpCnVectorResolve BuildVectorResolveOverPrecompute(NYql::NNodes::TDqPhyPrecompute& rowsPrecompute,
-    NYql::NNodes::TExprBase originalInput, const TKqpTable& kqpTableNode,
+} // namespace
+
+TKqpCnVectorResolve BuildVectorResolveOverPrecompute(const NYql::NNodes::TDqPhyPrecompute& rowsPrecompute,
+    const NYql::NNodes::TExprBase& originalInput, const TKqpTable& kqpTableNode,
     const TString& kqpIndexName, const TPositionHandle& pos, TExprContext& ctx)
 {
     const TTypeAnnotationNode* originalAnnotation = originalInput.Ptr()->GetTypeAnn();
@@ -130,8 +132,6 @@ TKqpCnVectorResolve BuildVectorResolveOverPrecompute(NYql::NNodes::TDqPhyPrecomp
         .Index(ctx.NewAtom(pos, kqpIndexName))
         .Done();
 }
-
-} // namespace
 
 TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlInsertRowsIndex>()) {

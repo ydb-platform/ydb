@@ -1946,7 +1946,6 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
             indexDesc = &index;
         }
     }
-    //TKikimrTableMetadataPtr indexMeta = tableDesc->Metadata->GetIndexMetadata().first;
     if (!indexDesc) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_Index)->Pos()),
             TStringBuilder() << "Index does not exist"));
@@ -1982,7 +1981,8 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
         inputColSet.insert(TString(keyColumn->GetName()));
     }
 
-    // Input should contain PK columns, index key columns and index data columns
+    // Input must contain PK columns and index key columns
+    // Index data columns may also be requested but they're not required
     for (const auto& keyColumn : tableDesc->Metadata->KeyColumnNames) {
         if (!inputColSet.contains(keyColumn)) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
@@ -1997,17 +1997,10 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
             return TStatus::Error;
         }
     }
-    for (const auto& keyColumn : indexDesc->DataColumns) {
-        if (!inputColSet.contains(keyColumn)) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
-                TStringBuilder() << "Input must contain all vector index data columns"));
-            return TStatus::Error;
-        }
-    }
 
     // Generate output type
     TVector<const TItemExprType*> rowItems;
-    inputColSet.clear();
+    TSet<TString> outputColSet;
 
     // First cluster ID
     rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
@@ -2022,11 +2015,12 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
             return TStatus::Error;
         }
         rowItems.push_back(itemType);
+        outputColSet.insert(keyColumn);
     }
 
     // Then index data columns which are not also part of the PK
     for (const auto& dataColumn : indexDesc->DataColumns) {
-        if (inputColSet.contains(dataColumn)) {
+        if (!inputColSet.contains(dataColumn) || outputColSet.contains(dataColumn)) {
             continue;
         }
         auto type = tableDesc->GetColumnType(dataColumn);

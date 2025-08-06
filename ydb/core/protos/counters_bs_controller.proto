@@ -280,4 +280,6 @@ enum ETxTypes {
     TXTYPE_DELETE_BLOB_DEPOT = 28 [(TxTypeOpts) = {Name: "TTxDeleteBlobDepot"}];
     TXTYPE_COMMIT_CONFIG = 29 [(TxTypeOpts) = {Name: "TTxCommitConfig"}];
     TXTYPE_UPDATE_SHRED = 30 [(TxTypeOpts) = {Name: "TTxUpdateShred"}];
+    TXTYPE_CHECK_UNSYNCED = 31 [(TxTypeOpts) = {Name: "TTxCheckUnsynced"}];
+    TXTYPE_UPDATE_BRIDGE_GROUP_INFO = 32 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupInfo"}];
 }

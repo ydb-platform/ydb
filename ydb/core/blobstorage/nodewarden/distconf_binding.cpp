@@ -157,7 +157,7 @@ namespace NKikimr::NStorage {
         }
 
         // nothing to bind to
-        closest = Max(closest, revClosest, primaryClosest);
+        closest = Min(closest, revClosest, primaryClosest);
         if (closest != TMonotonic::Max() && !Scheduled) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC30, "Delaying bind");
             TActivationContext::Schedule(closest, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, 0));
@@ -183,7 +183,7 @@ namespace NKikimr::NStorage {
         OpQueueOnError(TStringBuilder() << "binding is in progress Binding# " << Binding->ToString());
 
         // unbind any other piles
-        UnbindNodesFromOtherPiles();
+        UnbindNodesFromOtherPiles("started binding to another node");
     }
 
     void TDistributedConfigKeeper::BindToSession(TActorId sessionId) {
@@ -413,7 +413,6 @@ namespace NKikimr::NStorage {
             }
         } else {
             const bool configUpdate = record.HasCommittedStorageConfig() &&
-                CheckBridgePeerRevPush(record.GetCommittedStorageConfig(), senderNodeId) &&
                 (ApplyStorageConfig(record.GetCommittedStorageConfig()) || record.GetRecurseConfigUpdate());
 
             const bool bindingUpdate = !Binding || Binding->RootNodeId != record.GetRootNodeId();
@@ -701,8 +700,6 @@ namespace NKikimr::NStorage {
             DirectBoundNodes.erase(it);
 
             UnsubscribeQueue.insert(nodeId);
-
-            OnSyncerUnboundNode(nodeId);
         }
     }
 
@@ -714,7 +711,7 @@ namespace NKikimr::NStorage {
         return Scepter || (Binding && GetRootNodeId() != SelfId().NodeId());
     }
 
-    void TDistributedConfigKeeper::UnbindNodesFromOtherPiles() {
+    void TDistributedConfigKeeper::UnbindNodesFromOtherPiles(const char *reason) {
         if (!BridgeInfo) {
             return;
         }
@@ -725,7 +722,7 @@ namespace NKikimr::NStorage {
             }
         }
         for (ui32 nodeId : goingToUnbind) {
-            UnbindNode(nodeId, "primary pile scepter lost");
+            UnbindNode(nodeId, reason);
         }
     }
 

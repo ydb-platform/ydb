@@ -6,6 +6,7 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/grpc/server/grpc_request_base.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
@@ -127,6 +128,18 @@ const TMaybe<TString> ExtractYdbTokenFromHeaders(const NYdbGrpc::IRequestContext
     return TString{authHeadValues[0]};
 }
 
+void AddRequestToAuditLog(IRequestNoOpCtx* ctx) {
+    const google::protobuf::Message* req = ctx->GetRequest();
+    if (req) {
+        const google::protobuf::Descriptor* descriptor = req->GetDescriptor();
+        TSecurityTextFormatPrinterBase printer(descriptor);
+        printer.SetSingleLineMode(true);
+        TString result;
+        printer.PrintToString(*req, &result);
+        ctx->AddAuditLogPart("request", result);
+    }
+}
+
 }
 
 static bool CheckMsgBusProxy(const NActors::TActorId& msgBusProxy, IRequestNoOpCtx& p) {
@@ -142,6 +155,7 @@ static bool CheckMsgBusProxy(const NActors::TActorId& msgBusProxy, IRequestNoOpC
 
 static void DoSchemeOperation(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem, std::unique_ptr<IRequestNoOpCtx> p) {
     if (CheckMsgBusProxy(msgBusProxy, *p)) {
+        NPrivate::AddRequestToAuditLog(p.get());
         NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_FLAT_TX_REQUEST);
         actorSystem->Send(msgBusProxy, new NMsgBusProxy::TEvBusProxy::TEvFlatTxRequest(ctx));
     }
@@ -178,6 +192,7 @@ void DoChooseProxy(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& 
 
 static void DoPersQueueRequest(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem, std::unique_ptr<IRequestNoOpCtx> p) {
     if (CheckMsgBusProxy(msgBusProxy, *p)) {
+        NPrivate::AddRequestToAuditLog(p.get());
         NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_PERSQUEUE);
         actorSystem->Send(msgBusProxy, new NMsgBusProxy::TEvBusProxy::TEvPersQueue(ctx));
     }
@@ -191,6 +206,7 @@ TCreateActorCallback DoPersQueueRequest(const NActors::TActorId& msgBusProxy, NA
 
 static void DoSchemeInitRoot(const NActors::TActorId& msgBusProxy, NActors::TActorSystem* actorSystem, std::unique_ptr<IRequestNoOpCtx> p) {
     if (CheckMsgBusProxy(msgBusProxy, *p)) {
+        NPrivate::AddRequestToAuditLog(p.get());
         NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_SCHEME_INITROOT);
         actorSystem->Send(msgBusProxy, new NMsgBusProxy::TEvBusProxy::TEvInitRoot(ctx));
     }
@@ -208,46 +224,55 @@ void DoResolveNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& 
 }
 
 void DoFillNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NPrivate::AddRequestToAuditLog(p.get());
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_FILL_NODE);
     f.RegisterActor(CreateMessageBusFillNode(ctx));
 }
 
 void DoDrainNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NPrivate::AddRequestToAuditLog(p.get());
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_DRAIN_NODE);
     f.RegisterActor(CreateMessageBusDrainNode(ctx));
 }
 
 void DoBlobStorageConfig(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NPrivate::AddRequestToAuditLog(p.get());
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST);
     f.RegisterActor(CreateMessageBusBlobStorageConfig(ctx));
 }
 
 void DoHiveCreateTablet(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NPrivate::AddRequestToAuditLog(p.get());
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_HIVE_CREATE_TABLET);
     f.RegisterActor(CreateMessageBusHiveCreateTablet(ctx));
 }
 
 void DoTestShardControl(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NPrivate::AddRequestToAuditLog(p.get());
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_TEST_SHARD_CONTROL);
     f.RegisterActor(CreateMessageBusTestShardControl(ctx));
 }
 
 void DoRegisterNode(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NPrivate::AddRequestToAuditLog(p.get());
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST);
     f.RegisterActor(CreateMessageBusRegisterNode(ctx));
 }
 
 void DoCmsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NPrivate::AddRequestToAuditLog(p.get());
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CMS_REQUEST);
     f.RegisterActor(CreateMessageBusCmsRequest(ctx));
 }
 
 void DoConsoleRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NPrivate::AddRequestToAuditLog(p.get());
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST);
     f.RegisterActor(CreateMessageBusConsoleRequest(ctx));
 }
 
 void DoInterconnectDebug(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NPrivate::AddRequestToAuditLog(p.get());
     NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG);
     f.RegisterActor(CreateMessageBusInterconnectDebug(ctx));
 }

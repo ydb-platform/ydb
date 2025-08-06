@@ -500,7 +500,7 @@ class TExecutor
 
     ui64 UsedTabletMemory = 0;
     ui64 StickyPagesMemory = 0;
-    ui64 TryKeepInMemoryModeMemory = 0;
+    ui64 TryKeepInMemoryMemory = 0;
     ui64 TransactionPagesMemory = 0;
 
     TActorContext SelfCtx() const;
@@ -558,12 +558,12 @@ class TExecutor
 
     void TranslateCacheTouchesToSharedCache();
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
-    void RequestInMemPagesForDatabase(bool pendingOnly = false);
+    void UpdateCachePagesForDatabase(bool pendingOnly = false);
     void RequestInMemPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
     void StickInMemPages(NSharedCache::TEvResult *msg);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     THashMap<NTable::TTag, ECacheMode> GetCacheModes(ui32 tableId);
-    TVector<ECacheMode> GetCacheModesByGroup(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
+    ECacheMode GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);

@@ -109,7 +109,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         if (delta.HasCacheMode()) {
             Y_ENSURE(delta.GetCacheMode() <= 1, "Invalid cache mode value");
             if (ChangeTableSetting(table, family.CacheMode, static_cast<ECacheMode>(delta.GetCacheMode()))) {
-                ChangeTableSetting(table, tableInfo.PendingCacheModeChanges, true);
+                ChangeTableSetting(table, tableInfo.PendingCacheModeChange, true);
                 changes |= true;
             }
         }

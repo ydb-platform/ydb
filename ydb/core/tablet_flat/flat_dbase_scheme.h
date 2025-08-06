@@ -89,8 +89,8 @@ public:
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
 
         // When true this table has an in-memory caching enabled that has not been processed yet
-        mutable bool PendingCacheEnable = false;
-        mutable bool PendingCacheModeChanges = false; // the same but for any CacheMode changes
+        mutable bool PendingCacheEnable = false; // has unprocessed NPage::ECache change
+        mutable bool PendingCacheModeChange = false; // has unprocessed NPage::ECacheMode change
     };
 
     struct TRedo {

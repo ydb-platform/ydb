@@ -123,20 +123,19 @@ public:
         }
 
         bool UpdateCacheMode(ECacheMode newCacheMode) {
-            bool changed = std::exchange(CacheMode, newCacheMode) != newCacheMode;
-            if (changed && newCacheMode == ECacheMode::TryKeepInMemory) {
-                // TODO: count only pages allocated in SharedCache
-                TryKeepInMemoryModeSize = PageCollection->BackingSize();
+            if (CacheMode == newCacheMode) {
+                return false;
             }
-            return changed;
+            CacheMode = newCacheMode;
+            return true;
         }
 
         ECacheMode GetCacheMode() const noexcept {
             return CacheMode;
         }
 
-        ui64 GetTryKeepInMemoryModeSize() const noexcept {
-            return TryKeepInMemoryModeSize;
+        ui64 GetTryKeepInMemorySize() const noexcept {
+            return CacheMode == ECacheMode::TryKeepInMemory ? PageCollection->BackingSize() : 0;
         }
 
         const TLogoBlobID Id;
@@ -151,7 +150,6 @@ public:
         THashMap<TPageId, TSharedPageRef> StickyPages;
         ui64 StickyPagesSize = 0;
         ECacheMode CacheMode = ECacheMode::Regular;
-        ui64 TryKeepInMemoryModeSize = 0;
     };
 
 public:

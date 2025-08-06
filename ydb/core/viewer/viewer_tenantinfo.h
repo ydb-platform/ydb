@@ -1030,6 +1030,7 @@ public:
             request.Error(error);
         }
         ReplyAndPassAway();
+        TBase::HandleTimeout();
     }
 
     static YAML::Node GetSwagger() {

@@ -102,11 +102,9 @@ void UpdateContinuationData(const NKikimrTxDataShard::TEvReadResult& record, TRe
 }  // !namespace
 
 TKqpStreamLookupWorker::TKqpStreamLookupWorker(TLookupSettings&& settings,
-    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-    const NYql::NDqProto::TTaskInput& inputDesc)
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory)
     : TypeEnv(typeEnv)
     , HolderFactory(holderFactory)
-    , InputDesc(inputDesc)
     , Settings(std::move(settings)) {
     KeyColumnTypes.resize(Settings.KeyColumns.size());
     for (const auto& [_, columnInfo] : Settings.KeyColumns) {
@@ -129,8 +127,8 @@ TTableId TKqpStreamLookupWorker::GetTableId() const {
 class TKqpLookupRows : public TKqpStreamLookupWorker {
 public:
     TKqpLookupRows(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc)
-        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory, inputDesc) {
+        const NMiniKQL::THolderFactory& holderFactory)
+        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory) {
     }
 
     virtual ~TKqpLookupRows() {}
@@ -484,7 +482,8 @@ class TKqpJoinRows : public TKqpStreamLookupWorker {
 public:
     TKqpJoinRows(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
         const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc)
-        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory, inputDesc) {
+        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory)
+        , InputDesc(inputDesc) {
 
         // read columns should contain join key and result columns
         for (auto joinKey : Settings.LookupKeyColumns) {
@@ -1073,6 +1072,7 @@ private:
     }
 
 private:
+    const NYql::NDqProto::TTaskInput& InputDesc;
     std::map<std::string, TSysTables::TTableColumnInfo> ReadColumns;
     std::deque<std::pair<TOwnedCellVec, NUdf::TUnboxedValue>> UnprocessedRows;
     std::deque<TOwnedTableRange> UnprocessedKeys;
@@ -1132,13 +1132,21 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
 
     switch (settings.GetLookupStrategy()) {
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
-            return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory, inputDesc);
+            return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);
         case NKqpProto::EStreamLookupStrategy::JOIN:
         case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
             return std::make_unique<TKqpJoinRows>(std::move(preparedSettings), typeEnv, holderFactory, inputDesc);
         default:
             return {};
     }
+}
+
+std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& settings,
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory) {
+    AFL_ENSURE(settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP);
+    AFL_ENSURE(!settings.KeepRowsOrder);
+    AFL_ENSURE(!settings.AllowNullKeysPrefixSize);
+    return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory);
 }
 
 } // namespace NKqp

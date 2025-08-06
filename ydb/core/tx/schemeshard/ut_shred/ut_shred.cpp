@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         // block borrow returns to suspend SplitTable
         TBlockEvents<TEvDataShard::TEvReturnBorrowedPart> borrowReturns(runtime);
 
-        // block CollectGarbage requests to suspend DataCleanup
+        // block CollectGarbage requests to suspend Vacuum
         TBlockEvents<TEvBlobStorage::TEvCollectGarbage> collectGarbageReqs(runtime);
         runtime.WaitFor("collect garbage", [&collectGarbageReqs]{ return collectGarbageReqs.size() >= 1; });
 
@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
 
         runtime.WaitFor("borrow return", [&borrowReturns]{ return borrowReturns.size() >= 1; });
 
-        // Shred should be in progress because of SplitTable and DataCleanup have been suspended
+        // Shred should be in progress because of SplitTable and Vacuum have been suspended
         CheckShredStatus(runtime, sender, dsProxies, valueToDelete, false);
 
         auto shards2 = GetTableShards(runtime, schemeshardId, "/MyRoot/Database1/Simple");
@@ -488,7 +488,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         // block borrow returns to suspend SplitTable
         TBlockEvents<TEvDataShard::TEvReturnBorrowedPart> borrowReturns(runtime);
 
-        // block CollectGarbage requests to suspend DataCleanup
+        // block CollectGarbage requests to suspend Vacuum
         TBlockEvents<TEvBlobStorage::TEvCollectGarbage> collectGarbageReqs(runtime);
         runtime.WaitFor("collect garbage", [&collectGarbageReqs]{ return collectGarbageReqs.size() >= 1; });
 
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
 
         runtime.WaitFor("borrow return", [&borrowReturns]{ return borrowReturns.size() >= 1; });
 
-        // Shred should be in progress because of SplitTable and DataCleanup have been suspended
+        // Shred should be in progress because of SplitTable and Vacuum have been suspended
         CheckShredStatus(runtime, sender, dsProxies, valueToDelete, false);
 
         auto shards2 = GetTableShards(runtime, schemeshardId, "/MyRoot/Database1/Simple");

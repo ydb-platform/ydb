@@ -20,20 +20,20 @@ using namespace NActors;
 using namespace Ydb;
 
 namespace {
-    Ydb::Bridge::PileState GetPublicState(const NKikimrBridge::TClusterState& from, TBridgePileId pileId) {
-        if (pileId.GetRawId() == from.GetPrimaryPile()) {
-            return Ydb::Bridge::PRIMARY;
-        } else if (pileId.GetRawId() == from.GetPromotedPile()) {
-            return Ydb::Bridge::PROMOTE;
+    Ydb::Bridge::PileState::State GetPublicState(const NKikimrBridge::TClusterState& from, TBridgePileId pileId) {
+        if (pileId == TBridgePileId::FromProto(&from, &NKikimrBridge::TClusterState::GetPrimaryPile)) {
+            return Ydb::Bridge::PileState::PRIMARY;
+        } else if (pileId == TBridgePileId::FromProto(&from, &NKikimrBridge::TClusterState::GetPromotedPile)) {
+            return Ydb::Bridge::PileState::PROMOTE;
         } else {
-            switch (from.GetPerPileState(pileId.GetRawId())) {
+            switch (from.GetPerPileState(pileId.GetPileIndex())) {
                 case NKikimrBridge::TClusterState::DISCONNECTED:
-                    return Ydb::Bridge::DISCONNECTED;
+                    return Ydb::Bridge::PileState::DISCONNECTED;
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
-                    return Ydb::Bridge::NOT_SYNCHRONIZED;
+                    return Ydb::Bridge::PileState::NOT_SYNCHRONIZED;
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
-                    return Ydb::Bridge::SYNCHRONIZED;
+                    return Ydb::Bridge::PileState::SYNCHRONIZED;
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_ABORT();
@@ -42,11 +42,12 @@ namespace {
     }
 } // namespace
 
-void CopyFromInternalClusterState(const NKikimrBridge::TClusterState& from, Ydb::Bridge::GetClusterStateResult& to) {
+void CopyFromInternalClusterState(const NKikimrBridge::TClusterState& from, const TBridgeInfo& bridgeInfo, Ydb::Bridge::GetClusterStateResult& to) {
     for (ui32 i = 0; i < from.PerPileStateSize(); ++i) {
-        auto* update = to.add_per_pile_state();
-        update->set_pile_id(i);
-        update->set_state(GetPublicState(from, TBridgePileId::FromValue(i)));
+        auto* state = to.add_pile_states();
+        const auto* pile = bridgeInfo.GetPile(TBridgePileId::FromPileIndex(i));
+        state->set_pile_name(pile->Name);
+        state->set_state(GetPublicState(from, TBridgePileId::FromPileIndex(i)));
     }
 }
 
@@ -91,32 +92,32 @@ public:
             return false;
         }
 
-        std::optional<TBridgePileId> primary, promoted;
-        THashSet<TBridgePileId> updatedPiles;
+        std::optional<TString> primary, promoted;
+        THashSet<TString> updatedPiles;
 
         for (const auto& update : updates) {
-            if (!updatedPiles.insert(TBridgePileId::FromValue(update.pile_id())).second) {
+            if (!updatedPiles.insert(update.pile_name()).second) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                issues.AddIssue(TStringBuilder() << "duplicate update for pile id# " << update.pile_id());
+                issues.AddIssue(TStringBuilder() << "duplicate update for pile name# " << update.pile_name());
                 return false;
             }
 
             switch (update.state()) {
-                case Ydb::Bridge::PRIMARY:
+                case Ydb::Bridge::PileState::PRIMARY:
                     if (primary) {
                         status = Ydb::StatusIds::BAD_REQUEST;
                         issues.AddIssue("multiple primary piles are not allowed in a single request");
                         return false;
                     }
-                    primary = TBridgePileId::FromValue(update.pile_id());
+                    primary = update.pile_name();
                     break;
-                case Ydb::Bridge::PROMOTE:
+                case Ydb::Bridge::PileState::PROMOTE:
                     if (promoted) {
                         status = Ydb::StatusIds::BAD_REQUEST;
                         issues.AddIssue("multiple promoted piles are not allowed in a single request");
                         return false;
                     }
-                    promoted = TBridgePileId::FromValue(update.pile_id());
+                    promoted = update.pile_name();
                     break;
                 default:
                     break;
@@ -125,6 +126,7 @@ public:
         return true;
     }
 
+private:
     STFUNC(StateWaitForConfig) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvNodeWardenStorageConfig, Handle);
@@ -139,40 +141,47 @@ public:
             return;
         }
 
+        THashMap<TString, TBridgePileId> nameToId;
+        const auto& bridgeInfo = ev->Get()->BridgeInfo;
+        for (const auto& pile : bridgeInfo->Piles) {
+            nameToId.emplace(pile.Name, pile.BridgePileId);
+        }
+
         const auto& currentClusterState = config->GetClusterState();
+
         for (const auto& update : GetProtoRequest()->updates()) {
-            if (update.pile_id() >= currentClusterState.PerPileStateSize()) {
-                 self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid pile id# " << update.pile_id(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+            if (nameToId.find(update.pile_name()) == nameToId.end()) {
+                 self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid pile name# " << update.pile_name(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                  return;
             }
         }
 
         NKikimrBridge::TClusterState newClusterState = currentClusterState;
 
-        THashMap<TBridgePileId, Ydb::Bridge::PileState> updates;
+        THashMap<TBridgePileId, Ydb::Bridge::PileState::State> updates;
         for (const auto& update : GetProtoRequest()->updates()) {
-            updates[TBridgePileId::FromValue(update.pile_id())] = update.state();
+            updates[nameToId.at(update.pile_name())] = update.state();
         }
 
         std::optional<TBridgePileId> finalPrimary;
         std::optional<TBridgePileId> finalPromoted;
 
         for (ui32 i = 0; i < currentClusterState.PerPileStateSize(); ++i) {
-            const TBridgePileId pileId = TBridgePileId::FromValue(i);
-            Ydb::Bridge::PileState publicState;
+            const TBridgePileId pileId = TBridgePileId::FromPileIndex(i);
+            Ydb::Bridge::PileState::State publicState;
             if (auto it = updates.find(pileId); it != updates.end()) {
                 publicState = it->second;
             } else {
                 publicState = GetPublicState(currentClusterState, pileId);
             }
 
-            if (publicState == Ydb::Bridge::PRIMARY) {
+            if (publicState == Ydb::Bridge::PileState::PRIMARY) {
                 if (finalPrimary) {
                     self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Multiple primary piles are not allowed, found " << *finalPrimary << " and " << pileId, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                     return;
                 }
                 finalPrimary = pileId;
-            } else if (publicState == Ydb::Bridge::PROMOTE) {
+            } else if (publicState == Ydb::Bridge::PileState::PROMOTE) {
                 if (finalPromoted) {
                     self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Multiple promoted piles are not allowed, found " << *finalPromoted << " and " << pileId, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                     return;
@@ -182,46 +191,54 @@ public:
 
             NKikimrBridge::TClusterState::EPileState internalState;
             switch (publicState) {
-                case Ydb::Bridge::PRIMARY:
-                case Ydb::Bridge::PROMOTE:
-                case Ydb::Bridge::SYNCHRONIZED:
+                case Ydb::Bridge::PileState::PRIMARY:
+                case Ydb::Bridge::PileState::PROMOTE:
+                case Ydb::Bridge::PileState::SYNCHRONIZED:
                     internalState = NKikimrBridge::TClusterState::SYNCHRONIZED;
                     break;
-                case Ydb::Bridge::NOT_SYNCHRONIZED:
+                case Ydb::Bridge::PileState::NOT_SYNCHRONIZED:
                     internalState = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1;
                     break;
-                case Ydb::Bridge::DISCONNECTED:
+                case Ydb::Bridge::PileState::DISCONNECTED:
                     internalState = NKikimrBridge::TClusterState::DISCONNECTED;
                     break;
                 default:
                     self->Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unsupported pile state", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                     return;
             }
-            newClusterState.SetPerPileState(pileId.GetRawId(), internalState);
+            newClusterState.SetPerPileState(pileId.GetPileIndex(), internalState);
         }
 
         if (!finalPrimary) {
             self->Reply(Ydb::StatusIds::BAD_REQUEST, "Request must result in a state with one primary pile", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             return;
         }
+        if (!finalPromoted) {
+            finalPromoted = finalPrimary;
+        }
 
-        newClusterState.SetPrimaryPile(finalPrimary->GetRawId());
-        newClusterState.SetPromotedPile(finalPromoted.value_or(*finalPrimary).GetRawId());
+        finalPrimary->CopyToProto(&newClusterState, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        finalPromoted->CopyToProto(&newClusterState, &NKikimrBridge::TClusterState::SetPromotedPile);
         newClusterState.SetGeneration(currentClusterState.GetGeneration() + 1);
 
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         auto *cmd = request->Record.MutableSwitchBridgeClusterState();
         cmd->MutableNewClusterState()->CopyFrom(newClusterState);
-        for (ui32 specificBridgePileId : GetProtoRequest()->specific_pile_ids()) {
-            cmd->AddSpecificBridgePileIds(specificBridgePileId);
+
+        for (const auto& name : GetProtoRequest()->quorum_piles()) {
+            if (const auto it = nameToId.find(name); it != nameToId.end()) {
+                it->second.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::AddSpecificBridgePileIds);
+            } else {
+                self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown pile name in quorum: " << name,
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            }
         }
 
         self->ActorContext().Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), request.release());
         self->Become(&TThis::StateWaitForPropose);
     }
 
-private:
-public:
     STFUNC(StateWaitForPropose) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
@@ -263,10 +280,12 @@ public:
         }
     }
 
-protected:
+private:
+
     void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
         auto* self = Self();
         const auto& config = ev->Get()->Config;
+        const auto& bridgeInfo = ev->Get()->BridgeInfo;
 
         if (!config->HasSelfManagementConfig() || !config->GetSelfManagementConfig().GetEnabled()) {
             self->Reply(Ydb::StatusIds::UNSUPPORTED, "Bridge operations require self-management mode to be enabled",
@@ -276,7 +295,7 @@ protected:
 
         if (config->HasClusterState()) {
             Ydb::Bridge::GetClusterStateResult result;
-            CopyFromInternalClusterState(config->GetClusterState(), result);
+            CopyFromInternalClusterState(config->GetClusterState(), *bridgeInfo, result);
             self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
         } else {
             self->Reply(Ydb::StatusIds::NOT_FOUND, "Bridge cluster state is not configured",

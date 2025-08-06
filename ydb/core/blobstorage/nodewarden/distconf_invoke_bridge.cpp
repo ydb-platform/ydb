@@ -21,15 +21,17 @@ namespace NKikimr::NStorage {
 
         // check new config alone
         const ui32 numPiles = Self->Cfg->BridgeConfig->PilesSize();
+        const auto primaryPileId = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPrimaryPile);
+        const auto promotedPileId = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPromotedPile);
         if (newClusterState.PerPileStateSize() != numPiles) {
             throw TExError() << "Incorrect number of per-pile states in new config";
-        } else if (newClusterState.GetPrimaryPile() >= numPiles) {
+        } else if (primaryPileId.GetPileIndex() >= numPiles) {
             throw TExError() << "Incorrect primary pile";
-        } else if (newClusterState.GetPromotedPile() >= numPiles) {
+        } else if (promotedPileId.GetPileIndex() >= numPiles) {
             throw TExError() << "Incorrect promoted pile";
-        } else if (newClusterState.GetPerPileState(newClusterState.GetPrimaryPile()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
+        } else if (newClusterState.GetPerPileState(primaryPileId.GetPileIndex()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
             throw TExError() << "Incorrect primary pile state";
-        } else if (newClusterState.GetPerPileState(newClusterState.GetPromotedPile()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
+        } else if (newClusterState.GetPerPileState(promotedPileId.GetPileIndex()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
             throw TExError() << "Incorrect promoted pile state";
         }
 
@@ -83,18 +85,20 @@ namespace NKikimr::NStorage {
             }
         }
         clusterState->CopyFrom(newClusterState);
+        UpdateClusterStateGuid(clusterState);
 
         auto *details = config.MutableClusterStateDetails();
         auto *entry = details->AddUnsyncedHistory();
         entry->MutableClusterState()->CopyFrom(newClusterState);
-        entry->SetOperationGuid(RandomNumber<ui64>());
         for (ui32 i = 0; i < Self->Cfg->BridgeConfig->PilesSize(); ++i) {
-            entry->AddUnsyncedPiles(i); // all piles are unsynced by default
+            TBridgePileId::FromPileIndex(i).CopyToProto(entry, &std::decay_t<decltype(*entry)>::AddUnsyncedPiles);
         }
 
         if (changedPileIndex != Max<size_t>()) {
             for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
-                if (const auto& state = details->GetPileSyncState(i); state.GetBridgePileId() == changedPileIndex) {
+                const auto& state = details->GetPileSyncState(i);
+                const auto bridgePileId = TBridgePileId::FromProto(&state, &std::decay_t<decltype(state)>::GetBridgePileId);
+                if (bridgePileId.GetPileIndex() == changedPileIndex) {
                     details->MutablePileSyncState()->DeleteSubrange(i, 1);
                     break;
                 }
@@ -105,7 +109,8 @@ namespace NKikimr::NStorage {
                     // this pile is not disconnected, there is no reason to synchronize it anymore
                     for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
                         const auto& item = details->GetPileSyncState(i);
-                        if (item.GetBridgePileId() != changedPileIndex) {
+                        const auto bridgePileId = TBridgePileId::FromProto(&item, &std::decay_t<decltype(item)>::GetBridgePileId);
+                        if (bridgePileId.GetPileIndex() != changedPileIndex) {
                             break;
                         }
                         details->MutablePileSyncState()->DeleteSubrange(i, 1);
@@ -131,9 +136,12 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd) {
         RunCommonChecks();
+
+        const auto bridgePileId = TBridgePileId::FromProto(&cmd, &TQuery::TNotifyBridgeSyncFinished::GetBridgePileId);
+
         if (!Self->Cfg->BridgeConfig) {
             throw TExError() << "Bridge mode is not enabled";
-        } else if (Self->Cfg->BridgeConfig->PilesSize() <= cmd.GetBridgePileId()) {
+        } else if (Self->Cfg->BridgeConfig->PilesSize() <= bridgePileId.GetPileIndex()) {
             throw TExError() << "BridgePileId out of bounds";
         } else if (Self->StorageConfig->GetClusterState().GetGeneration() != cmd.GetGeneration()) {
             throw TExError() << "Generation mismatch";
@@ -148,7 +156,7 @@ namespace NKikimr::NStorage {
         NKikimrBridge::TClusterStateDetails::TPileSyncState *state = nullptr;
         for (stateIndex = 0; stateIndex < details->PileSyncStateSize(); ++stateIndex) {
             state = details->MutablePileSyncState(stateIndex);
-            if (state->GetBridgePileId() == cmd.GetBridgePileId()) {
+            if (TBridgePileId::FromProto(state, &std::decay_t<decltype(*state)>::GetBridgePileId) == bridgePileId) {
                 break;
             } else {
                 state = nullptr;
@@ -192,13 +200,13 @@ namespace NKikimr::NStorage {
                 if (!state->GetUnsyncedBSC() && !state->UnsyncedGroupIdsSize()) {
                     // fully synced, can switch to SYNCHRONIZED
                     details->MutablePileSyncState()->DeleteSubrange(stateIndex, 1);
-                    clusterState->SetPerPileState(cmd.GetBridgePileId(), NKikimrBridge::TClusterState::SYNCHRONIZED);
+                    clusterState->SetPerPileState(bridgePileId.GetPileIndex(), NKikimrBridge::TClusterState::SYNCHRONIZED);
                     clusterState->SetGeneration(clusterState->GetGeneration() + 1);
+                    UpdateClusterStateGuid(clusterState);
                     auto *entry = details->AddUnsyncedHistory();
                     entry->MutableClusterState()->CopyFrom(*clusterState);
-                    entry->SetOperationGuid(RandomNumber<ui64>());
                     for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
-                        entry->AddUnsyncedPiles(i);
+                        TBridgePileId::FromPileIndex(i).CopyToProto(entry, &std::decay_t<decltype(*entry)>::AddUnsyncedPiles);
                     }
                 }
                 break;

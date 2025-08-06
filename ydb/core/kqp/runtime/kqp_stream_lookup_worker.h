@@ -59,7 +59,7 @@ public:
 
 public:
     TKqpStreamLookupWorker(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc);
+        const NMiniKQL::THolderFactory& holderFactory);
 
     virtual ~TKqpStreamLookupWorker();
 
@@ -84,7 +84,6 @@ public:
 protected:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
-    const NYql::NDqProto::TTaskInput& InputDesc;
     const TLookupSettings Settings;
 
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -93,6 +92,9 @@ protected:
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
     const NYql::NDqProto::TTaskInput& inputDesc);
+
+std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& settings,
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory);
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -63,7 +63,7 @@ namespace NKikimr {
                 const bool Operational;
                 const bool Decommitted;
                 TString WhyUnusable;
-                std::optional<TBridgePileId> BridgePileId;
+                TBridgePileId BridgePileId;
             };
 
         public:
@@ -101,9 +101,9 @@ namespace NKikimr {
             // prefix+infix part gives us distinct fail realms we can use while generating groups.
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace,
-                bool requireOperational, std::optional<TBridgePileId> bridgePileId, TString& error);
+                bool requireOperational, TBridgePileId bridgePileId, TString& error);
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
-                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, std::optional<TBridgePileId> bridgePileId,
+                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TBridgePileId bridgePileId,
                 TString& error);
 
             struct TMisplacedVDisks {
@@ -135,7 +135,7 @@ namespace NKikimr {
             TMisplacedVDisks FindMisplacedVDisks(const TGroupDefinition& group, ui32 groupSizeInUnits);
 
             std::optional<TPDiskId> TargetMisplacedVDisk(TGroupId groupId, TGroupDefinition& group, TVDiskIdShort vdisk,
-                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, std::optional<TBridgePileId> bridgePileId,
+                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TBridgePileId bridgePileId,
                 TString& error);
         };
 

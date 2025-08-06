@@ -32,71 +32,6 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 
-enum EReadType : ui32 {
-    Lookup = 1,
-    Scan = 2,
-    FullScan = 3
-};
-
-TString ToString(EReadType readType) {
-    switch (readType) {
-        case Lookup:
-            return "lookup";
-        case Scan:
-            return "scan";
-        case FullScan:
-            return "fullscan";
-    }
-
-    return "unspecified";
-}
-
-struct TTableReadAccessInfo {
-    EReadType ReadType;
-    i32 PushedLimit = -1;
-    std::vector<std::string> ReadColumns;
-
-    constexpr bool operator==(const TTableReadAccessInfo& other) const {
-        return std::tie(ReadType, PushedLimit, ReadColumns) == std::tie(other.ReadType, other.PushedLimit, other.ReadColumns);
-    }
-
-    constexpr bool operator<(const TTableReadAccessInfo& other) const  {
-        return std::tie(ReadType, PushedLimit, ReadColumns) < std::tie(other.ReadType, other.PushedLimit, other.ReadColumns);
-    }
-};
-
-enum EWriteType : ui32 {
-    Upsert = 1,
-    Erase = 2
-};
-
-struct TTableWriteInfo {
-    EWriteType WriteType;
-    std::vector<std::string> WriteColumns;
-
-    constexpr bool operator==(const TTableWriteInfo& other) const {
-        return std::tie(WriteType, WriteColumns) == std::tie(other.WriteType, other.WriteColumns);
-    }
-
-    constexpr bool operator<(const TTableWriteInfo& other) const  {
-        return std::tie(WriteType, WriteColumns) < std::tie(other.WriteType, other.WriteColumns);
-    }
-};
-
-struct TTableStats {
-    TString Name;
-    std::vector<TTableReadAccessInfo> Reads;
-    std::vector<TTableWriteInfo> Writes;
-
-    constexpr bool operator==(const TTableStats& other) const {
-        return std::tie(Name, Reads, Writes) == std::tie(other.Name, other.Reads, other.Writes);
-    }
-
-    constexpr bool operator<(const TTableStats& other) const {
-        return std::tie(Name, Reads, Writes) < std::tie(other.Name, other.Reads, other.Writes);
-    }
-};
-
 struct TMetadataInfoHolder {
     const THashMap<TString, NYql::TKikimrTableMetadataPtr> TableMetadata;
     THashMap<TString, NYql::TKikimrTableMetadataPtr> Indexes;
@@ -137,6 +72,7 @@ struct TMetadataInfoHolder {
         return TableMetadata.end();
     }
 };
+
 
 THashMap<TString, NYql::TKikimrTableMetadataPtr> ExtractStaticMetadata(const NJson::TJsonValue& data) {
     EMetaSerializationType metaType = EMetaSerializationType::EncodedProto;
@@ -264,7 +200,7 @@ public:
 class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
 public:
     TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry,
-        NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser)
+        NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser, bool enableOltpSink)
         : ModuleResolverState(moduleResolverState)
         , KqpSettings()
         , Config(MakeIntrusive<TKikimrConfiguration>())
@@ -273,6 +209,7 @@ public:
     {
         Config->EnableAntlr4Parser = enableAntlr4Parser;
         Config->DefaultCostBasedOptimizationLevel = 2;
+        Config->EnableOltpSink = enableOltpSink;
     }
 
     void Bootstrap() {
@@ -405,24 +342,20 @@ private:
                             probablyLookupScan = true;
                         }
 
-                        if (type == "Scan") {
-                            reads.push_back(TTableReadAccessInfo{EReadType::Scan, limit, columns});
-                        } else if (type == "FullScan") {
-                            reads.push_back(TTableReadAccessInfo{EReadType::FullScan, limit, columns});
-                        } else if (type == "Lookup") {
+                        if (type == "Lookup") {
                             if (probablyLookupScan) {
-                                reads.push_back(TTableReadAccessInfo{EReadType::Scan, limit, columns});
+                                reads.push_back(TTableReadAccessInfo{"Scan", limit, columns});
                             } else {
-                                reads.push_back(TTableReadAccessInfo{EReadType::Lookup, limit, columns});
+                                reads.push_back(TTableReadAccessInfo{"Lookup", limit, columns});
                             }
                         } else if (type == "MultiLookup") {
-                            reads.push_back(TTableReadAccessInfo{EReadType::Lookup, limit, columns});
+                            reads.push_back(TTableReadAccessInfo{"Lookup", limit, columns});
+                        } else {
+                            reads.push_back(TTableReadAccessInfo({type, limit, columns}));
                         }
                     }
 
                     std::sort(reads.begin(), reads.end());
-                    auto last = std::unique(reads.begin(), reads.end());
-                    reads.erase(last, reads.end());
                 }
 
                 if (table.Has("writes")) {
@@ -442,11 +375,7 @@ private:
                         }
 
                         const auto& type = write["type"].GetStringSafe();
-                        if (type == "Upsert" || type == "MultiUpsert") {
-                            writes.push_back(TTableWriteInfo{EWriteType::Upsert, columns});
-                        } else if (type == "Erase" || type == "MultiErase") {
-                            writes.push_back(TTableWriteInfo{EWriteType::Erase, columns});
-                        }
+                        writes.push_back(TTableWriteInfo{type, columns});
                     }
 
                     std::sort(writes.begin(), writes.end());
@@ -518,14 +447,16 @@ private:
         return {TQueryReplayEvents::UncategorizedPlanMismatch, ""};
     }
 
-    std::pair<TQueryReplayEvents::TCheckQueryPlanStatus, TString> CheckQueryPlan(const NJson::TJsonValue& newEnginePlan) {
+    std::pair<TQueryReplayEvents::TCheckQueryPlanStatus, TString> CheckQueryPlan(std::unique_ptr<TQueryReplayEvents::TEvCompileResponse>& ev,
+        const NJson::TJsonValue& newEnginePlan)
+    {
         NJson::TJsonValue oldEnginePlan = ExtractQueryPlan(ReplayDetails["query_plan"].GetStringSafe());
         const auto oldEngineStats = ExtractTableStats(oldEnginePlan);
-        const auto newEngineStats = ExtractTableStats(newEnginePlan);
+        ev->EngineTableStats = ExtractTableStats(newEnginePlan);
 
         for (const auto& [table, stats] : oldEngineStats) {
-            auto it = newEngineStats.find(table);
-            if (it == newEngineStats.end()) {
+            auto it = ev->EngineTableStats.find(table);
+            if (it == ev->EngineTableStats.end()) {
                 WriteQueryMismatchInfo(oldEnginePlan, newEnginePlan);
                 return {TQueryReplayEvents::TableMissing,
                     TStringBuilder() << "Table " << table << " not found in new engine plan"};
@@ -565,7 +496,7 @@ private:
         } else {
             Y_ENSURE(queryPlan);
             ev->Plan = *queryPlan;
-            std::tie(ev->Status, ev->Message) = CheckQueryPlan(ExtractQueryPlan(*queryPlan));
+            std::tie(ev->Status, ev->Message) = CheckQueryPlan(ev, ExtractQueryPlan(*queryPlan));
         }
 
         Send(Owner, ev.release());
@@ -699,7 +630,7 @@ private:
 };
 
 IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser)
+    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway, bool enableAntlr4Parser, bool enableOltpSink)
 {
-    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, enableAntlr4Parser);
+    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, enableAntlr4Parser, enableOltpSink);
 }

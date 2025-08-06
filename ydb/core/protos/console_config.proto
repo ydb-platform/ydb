@@ -147,6 +147,7 @@ message TConfigItem {
         HealthCheckConfigItem = 89;
         WorkloadManagerConfigItem = 90;
         CompGroupedMemoryLimiterConfig = 92;
+        BlockstoreConfigItem = 93;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

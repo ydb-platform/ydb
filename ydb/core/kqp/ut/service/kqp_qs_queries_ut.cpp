@@ -4577,6 +4577,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[0u;#;["null"]];[1u;#;#]])");
         }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                DELETE FROM `/Root/DataShard` ON (Col1) VALUES (0u), (1u);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(5000))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([])");
+        }
     }
 
     Y_UNIT_TEST(TableSink_OltpLiteralUpsert) {

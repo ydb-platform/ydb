@@ -39,7 +39,7 @@ class TestDataType(RestartToAnotherVersionFixture):
             self.table_names.append(f"table_{i}_{self.store_type}")
         yield from self.setup_cluster(
             extra_feature_flags={
-                "enable_parameterized_decimal": True,
+                "enable_parameterized_decimal": Ttue,
                 "enable_table_datetime64": True,
             },
             column_shard_config={
@@ -59,6 +59,7 @@ class TestDataType(RestartToAnotherVersionFixture):
                         )
                         '''
                 )
+
             querys.append(
                 f"""
                 UPSERT INTO `{self.table_names[i]}` (
@@ -68,6 +69,7 @@ class TestDataType(RestartToAnotherVersionFixture):
                 VALUES {",".join(values)};
             """
             )
+
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in querys:
                 session_pool.execute_with_retries(query)
@@ -79,18 +81,20 @@ class TestDataType(RestartToAnotherVersionFixture):
                 queries.append(f"SELECT * FROM {self.table_names[numb_table]} WHERE pk_Int64 = {i}")
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            count = 1
-            value = 0
+            query_index = 0
             for query in queries:
-                value += 1 if count != 0 else 0
-                count = (count + 1) % self.count_table
+                table_index = query_index % self.count_table
+                row_num = (query_index // self.count_table) + 1
                 result_sets = session_pool.execute_with_retries(query)
                 assert len(result_sets[0].rows) == 1
                 rows = result_sets[0].rows
                 for row in rows:
-                    for prefix in self.columns[count].keys():
-                        for type_name in self.columns[count][prefix]:
-                            self.assert_type(type_name, value, row[f"{prefix}{cleanup_type_name(type_name)}"])
+                    for prefix in self.columns[table_index].keys():
+                        for type_name in self.columns[table_index][prefix]:
+                            expected_value = row_num if prefix == "pk_" else row_num
+                            self.assert_type(type_name, expected_value, row[f"{prefix}{cleanup_type_name(type_name)}"])
+
+                query_index += 1
 
     def assert_type(self, data_type: str, values: int, values_from_rows):
         if data_type == "String" or data_type == "Yson":
@@ -126,6 +130,7 @@ class TestDataType(RestartToAnotherVersionFixture):
                     "pk_": self.pk_types[i].keys(),
                 }
             )
+
         querys = []
         for i in range(self.count_table):
             if self.store_type == "COLUMN":
@@ -150,6 +155,7 @@ class TestDataType(RestartToAnotherVersionFixture):
                         sync="",
                     )
                 )
+
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in querys:
                 session_pool.execute_with_retries(query)

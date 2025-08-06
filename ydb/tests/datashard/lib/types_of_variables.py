@@ -13,8 +13,8 @@ def format_sql_value(value, type_name):
         return f"'{value}'"
     if type_name in non_pk_types.keys() or type_name == "Datetime64" or type_name == "Date32" or type_name == "Datetime" or \
             type_name == "Date" or type_name == "UUID" or type_name == "DyNumber" or type_name == "Decimal(35,10)" or type_name == "Decimal(22,9)" or type_name == "Decimal(15,0))":
-        return f"CAST('{value}' AS {type_name})"
-    return f"CAST({value} AS {type_name})"
+        return f"Unwrap(CAST('{value}' AS {type_name}))"
+    return f"Unwrap(CAST({value} AS {type_name}))"
 
 
 ttl_types = {

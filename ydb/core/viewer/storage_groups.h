@@ -1311,8 +1311,8 @@ public:
 
     void ProcessResponses() {
         AddEvent("ProcessResponses");
-        if (NodeWardenStorageConfigResponse) {
-            if (!NodeWardenStorageConfigResponseProcessed && NodeWardenStorageConfigResponse->IsDone()) {
+        if (NodeWardenStorageConfigResponse && !NodeWardenStorageConfigResponseProcessed) {
+            if (NodeWardenStorageConfigResponse->IsDone()) {
                 if (NodeWardenStorageConfigResponse->IsOk()) {
                     if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
                         const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();

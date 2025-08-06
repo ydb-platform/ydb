@@ -11,7 +11,7 @@ void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program, const TFetchingScriptCursor& step) {
     auto readMeta = source->GetContext()->GetCommonContext()->GetReadMetadata();
     NArrow::NSSA::TProcessorContext context(
-        source, source->MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
+        source, source->MutableStageData().ExtractTable(), readMeta->GetLimitController().GetLimitRobustOptional(), readMeta->IsDescSorted());
     SetProgramIterator(program->BuildIterator(std::make_unique<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(std::move(context))));
     SetCursorStep(step);
 }

@@ -22,24 +22,25 @@ TConclusionStatus TScanHead::Start() {
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
     if (auto script = Context->GetSourcesAggregationScript()) {
-        SourcesCollection =
-            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitRobustOptional());
+        SourcesCollection = std::make_shared<TNotSortedCollection>(
+            Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitController().GetLimitRobustOptional());
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
         SyncPoints.emplace_back(std::make_shared<TSyncPointResultsAggregationControl>(
             SourcesCollection, Context->GetSourcesAggregationScript(), Context->GetRestoreResultScript(), SyncPoints.size(), context));
     } else if (Context->GetReadMetadata()->IsSorted()) {
-        if (Context->GetReadMetadata()->HasLimit()) {
+        if (Context->GetReadMetadata()->GetLimitController().HasLimit()) {
             auto collection = std::make_shared<TScanWithLimitCollection>(Context, std::move(sourcesConstructor));
             SourcesCollection = collection;
             SyncPoints.emplace_back(std::make_shared<TSyncPointLimitControl>(
-                (ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust(), SyncPoints.size(), context, collection));
+                (ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitController().GetLimitRobust(), SyncPoints.size(), context,
+                collection));
         } else {
             SourcesCollection = std::make_shared<TSortedFullScanCollection>(Context, std::move(sourcesConstructor));
         }
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     } else {
-        SourcesCollection =
-            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitRobustOptional());
+        SourcesCollection = std::make_shared<TNotSortedCollection>(
+            Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitController().GetLimitRobustOptional());
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     }
     for (ui32 i = 0; i + 1 < SyncPoints.size(); ++i) {
@@ -48,7 +49,10 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
 }
 
 TConclusion<bool> TScanHead::BuildNextInterval() {
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build()("tablet_id", SourcesCollection->GetTabletId());
+    std::optional<NActors::TLogContextGuard> gLogging;
+    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN)) {
+        gLogging = NActors::TLogContextBuilder::Build()("tablet_id", SourcesCollection->GetTabletId());
+    }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "build_next_interval");
     bool changed = false;
     while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {

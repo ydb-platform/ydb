@@ -18,16 +18,60 @@ class TScanIteratorBase;
 class TReadContext;
 
 // Holds all metadata that is needed to perform read/scan
+
+class TLimitController {
+private:
+    std::optional<ui64> FilteredCountLimit;
+    std::optional<ui64> RequestedLimit;
+    ui64 LimitRobust = Max<i64>();
+
+    void RefreshLimitRobust() {
+        LimitRobust = std::min<i64>(FilteredCountLimit.value_or(Max<i64>()), RequestedLimit.value_or(Max<i64>()));
+    }
+
+public:
+    void SetFilteredCountLimit(const ui64 value) {
+        AFL_VERIFY(!FilteredCountLimit);
+        FilteredCountLimit = value;
+        RefreshLimitRobust();
+    }
+
+    void SetRequestedLimit(const ui64 value) {
+        AFL_VERIFY(!RequestedLimit);
+        if (value == 0 || value >= Max<i64>()) {
+            return;
+        }
+        RequestedLimit = value;
+        RefreshLimitRobust();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("requested_limit_detected", RequestedLimit)("robust", GetLimitRobust());
+    }
+
+    i64 GetLimitRobust() const {
+        return LimitRobust;
+    }
+
+    std::optional<i64> GetLimitRobustOptional() const {
+        if (HasLimit()) {
+            return GetLimitRobust();
+        } else {
+            return std::nullopt;
+        }
+    }
+
+    bool HasLimit() const {
+        return !!FilteredCountLimit || !!RequestedLimit;
+    }
+};
+
 class TReadMetadataBase {
 public:
     using ESorting = ERequestSorting;
 
 private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
-    std::optional<ui64> FilteredCountLimit;
-    std::optional<ui64> RequestedLimit;
     const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
+    TLimitController LimitController;
     TProgramContainer Program;
     const std::shared_ptr<const TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
@@ -50,33 +94,16 @@ protected:
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
+    TLimitController& MutableLimitController() {
+        return LimitController;
+    }
+
+    const TLimitController& GetLimitController() const {
+        return LimitController;
+    }
+
     ui64 GetTabletId() const {
         return TabletId;
-    }
-
-    void SetRequestedLimit(const ui64 value) {
-        AFL_VERIFY(!RequestedLimit);
-        if (value == 0 || value >= Max<i64>()) {
-            return;
-        }
-        RequestedLimit = value;
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("requested_limit_detected", RequestedLimit);
-    }
-
-    i64 GetLimitRobust() const {
-        return std::min<i64>(FilteredCountLimit.value_or(Max<i64>()), RequestedLimit.value_or(Max<i64>()));
-    }
-
-    std::optional<i64> GetLimitRobustOptional() const {
-        if (HasLimit()) {
-            return GetLimitRobust();
-        } else {
-            return std::nullopt;
-        }
-    }
-
-    bool HasLimit() const {
-        return !!FilteredCountLimit || !!RequestedLimit;
     }
 
     void OnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const {
@@ -126,11 +153,13 @@ public:
         Y_ABORT_UNLESS(!PKRangesFilter);
         PKRangesFilter = value;
         if (ResultIndexSchema) {
-            FilteredCountLimit = PKRangesFilter->GetFilteredCountLimit(ResultIndexSchema->GetIndexInfo().GetReplaceKey());
-            if (FilteredCountLimit) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_detected", FilteredCountLimit);
+            const std::optional<ui64> count = PKRangesFilter->GetFilteredCountLimit(ResultIndexSchema->GetIndexInfo().GetReplaceKey());
+            if (count) {
+                LimitController.SetFilteredCountLimit(*count);
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_detected", count)("robust", LimitController.GetLimitRobust());
             } else {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_not_detected", PKRangesFilter->DebugString());
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("filter_limit_not_detected", PKRangesFilter->DebugString())(
+                    "robust", LimitController.GetLimitRobust());
             }
         }
     }

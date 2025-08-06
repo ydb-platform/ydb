@@ -450,8 +450,8 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
 
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
 
-    const ui64 sizeToReserve = policy->GetReserveMemorySize(
-        result.GetBlobsSize(), result.GetRawSize(), GetContext()->GetReadMetadata()->GetLimitRobustOptional(), GetRecordsCount());
+    const ui64 sizeToReserve = policy->GetReserveMemorySize(result.GetBlobsSize(), result.GetRawSize(),
+        GetContext()->GetReadMetadata()->GetLimitController().GetLimitRobustOptional(), GetRecordsCount());
 
     auto allocation = std::make_shared<NCommon::TAllocateMemoryStep::TFetchingStepAllocation>(
         source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false);

@@ -11,7 +11,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 void TScanHead::OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
     std::optional<NArrow::TShardedRecordBatch>&& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK,
     std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
-    if (Context->GetReadMetadata()->HasLimit() && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < MaxInFlight) {
+    if (Context->GetReadMetadata()->GetLimitController().HasLimit() && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < MaxInFlight) {
         InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 4);
     }
     auto itInterval = FetchingIntervals.find(intervalIdx);
@@ -112,7 +112,7 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sources, co
         }
     }
 
-    if (Context->GetReadMetadata()->HasLimit()) {
+    if (Context->GetReadMetadata()->GetLimitController().HasLimit()) {
         InFlightLimit = 1;
     } else {
         InFlightLimit = MaxInFlight;

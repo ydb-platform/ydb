@@ -23,7 +23,7 @@ class TIncrementalBackupResponse : public TOperation {
 public:
     struct TMetadata {
         EBackupProgress Progress;
-        uint32_t ProgressPercent = 0; // [0; 100]
+        int32_t ProgressPercent = 0; // [0; 100]
     };
 
 public:

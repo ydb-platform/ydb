@@ -40,8 +40,8 @@ public:
         switch (backupInfo.State) {
             case TIncrementalBackupInfo::EState::Transferring:
             case TIncrementalBackupInfo::EState::Done: {
-                ui32 itemsTotal = 0;
-                ui32 itemsDone = 0;
+                i32 itemsTotal = 0;
+                i32 itemsDone = 0;
                 for (const auto& [_, item] : backupInfo.Items) {
                     ++itemsTotal;
                     if (item.IsDone()) {

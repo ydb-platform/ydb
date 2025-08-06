@@ -26,7 +26,7 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
 {
     PageMap.resize(info.PageMap.size());
     for (const auto& [pageId, page] : info.PageMap) {
-        Y_ENSURE(page);
+        Y_ASSERT(page);
         EnsurePage(pageId)->ProvideSharedBody(page->SharedBody);
     }
 }
@@ -43,7 +43,7 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
     ++Stats.TotalCollections;
 
     for (const auto& [pageId, page] : info->PageMap) {
-        Y_ENSURE(page);
+        Y_ASSERT(page);
         Y_ENSURE(page->SharedBody, "new filled page can't be without a shared body");
 
         Stats.TotalSharedBody += page->Size;
@@ -58,7 +58,7 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
 
 void TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
     for (const auto& [pageId, page] : info->PageMap) {
-        Y_ENSURE(page);
+        Y_ASSERT(page);
 
         if (page->SharedBody)
             Stats.TotalSharedBody -= page->Size;
@@ -130,7 +130,8 @@ void TPrivatePageCache::TPrivatePageCache::TryEraseIfUnnecessary(TPage *page) {
         const TPageId pageId = page->Id;
         auto* info = page->Info;
         Y_DEBUG_ABORT_UNLESS(info->PageMap[pageId].Get() == page);
-        Y_ENSURE(info->PageMap.erase(pageId));
+        bool erased = info->PageMap.erase(pageId);
+        Y_ENSURE(erased);
     }
 }
 

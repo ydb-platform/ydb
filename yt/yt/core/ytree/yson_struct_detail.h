@@ -211,6 +211,7 @@ private:
     THashMap<std::string, IYsonStructParameterPtr> Parameters_;
     std::vector<std::pair<std::string, IYsonStructParameterPtr>> SortedParameters_;
     THashSet<std::string> RegisteredKeys_;
+    THashMap<std::string, i64> RegisteredParametersIndexes_;
 
     std::vector<std::function<void(TYsonStructBase*)>> Preprocessors_;
     std::vector<std::function<void(TYsonStructBase*)>> Postprocessors_;

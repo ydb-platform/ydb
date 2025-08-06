@@ -207,20 +207,14 @@ void TYsonStructMeta::LoadStruct(
         };
     };
 
-    THashMap<TStringBuf, IYsonStructParameter*> keyToParameter;
-    THashSet<IYsonStructParameter*> pendingParameters;
-    for (const auto& [key, parameter] : SortedParameters_) {
-        EmplaceOrCrash(keyToParameter, key, parameter.Get());
-        for (const auto& alias : parameter->GetAliases()) {
-            EmplaceOrCrash(keyToParameter, alias, parameter.Get());
-        }
-        InsertOrCrash(pendingParameters, parameter.Get());
-    }
+    i64 pendingParameterCount = SortedParameters_.size();
+    TCompactBitmap foundParameters;
+    foundParameters.Initialize(pendingParameterCount);
 
     THashMap<std::string, std::string> aliasedData;
 
     auto processPossibleAlias = [&] (
-        IYsonStructParameter* parameter,
+        const IYsonStructParameterPtr& parameter,
         TStringBuf key,
         NYson::TYsonPullParserCursor* cursor)
     {
@@ -272,28 +266,33 @@ void TYsonStructMeta::LoadStruct(
 
     cursor->ParseMap([&] (NYson::TYsonPullParserCursor* cursor) {
         auto key = ExtractTo<std::string>(cursor);
-        auto it = keyToParameter.find(key);
-        if (it == keyToParameter.end()) {
+        auto it = RegisteredParametersIndexes_.find(key);
+        if (it == RegisteredParametersIndexes_.end()) {
             processUnrecognized(key, cursor);
             return;
         }
 
-        auto* parameter = it->second;
+        i64 parameterIndex = it->second;
+        auto& parameter = SortedParameters_[parameterIndex].second;
         if (parameter->GetAliases().empty()) {
             parameter->Load(target, cursor, createLoadOptions(key));
         } else {
             processPossibleAlias(parameter, key, cursor);
         }
-        // NB: Key may be missing in case of aliasing.
-        pendingParameters.erase(parameter);
+
+        if (!foundParameters[parameterIndex]) {
+            pendingParameterCount--;
+            foundParameters.Set(parameterIndex);
+        }
     });
 
-    auto sortedPendingParameters = std::vector(pendingParameters.begin(), pendingParameters.end());
-    Sort(sortedPendingParameters, [] (const auto* lhs, const auto* rhs) {
-        return lhs->GetKey() < rhs->GetKey();
-    });
-    for (const auto parameter : sortedPendingParameters) {
-        parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
+    if (pendingParameterCount > 0) {
+        for (i64 i = 0; i < std::ssize(SortedParameters_); ++i) {
+            if (!foundParameters[i]) {
+                const auto& [_, parameter] = SortedParameters_[i];
+                parameter->Load(target, /*cursor*/ nullptr, createLoadOptions(parameter->GetKey()));
+            }
+        }
     }
 
     if (postprocess) {
@@ -374,6 +373,14 @@ void TYsonStructMeta::FinishInitialization(const std::type_info& structType)
         [] (const auto& lhs, const auto& rhs) {
             return lhs.first < rhs.first;
         });
+
+    for (i64 i = 0; i < std::ssize(SortedParameters_); ++i) {
+        const auto& [name, parameter] = SortedParameters_[i];
+        RegisteredParametersIndexes_.emplace(name, i);
+        for (const auto& alias : parameter->GetAliases()) {
+            RegisteredParametersIndexes_.emplace(alias, i);
+        }
+    }
 }
 
 bool TYsonStructMeta::CompareStructs(

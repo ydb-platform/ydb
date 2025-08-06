@@ -484,15 +484,7 @@ namespace NKikimr::NStorage {
 
                 // copy cluster state generation
                 pb->SetClusterStateGeneration(clusterState.GetGeneration());
-                
-                auto& details = config->GetClusterStateDetails();
-                if (details.UnsyncedHistorySize() > 0) {
-                    // get the last entry about current cluster state
-                    auto& lastItem = details.GetUnsyncedHistory(details.UnsyncedHistorySize() - 1);
-                    pb->SetClusterStateGuid(lastItem.GetOperationGuid());
-                } else {
-                    pb->SetClusterStateGuid(0);
-                }
+                pb->SetClusterStateGuid(clusterState.GetGuid());
 
                 if (!pb->RingGroupsSize() || pb->HasRing()) {
                     return "configuration has Ring field set or no RingGroups";
@@ -555,6 +547,34 @@ namespace NKikimr::NStorage {
                 error = fillInBridge(config->MutableSchemeBoardConfig());
             }
             return error;
+        }
+
+        if (config->HasClusterStateDetails()) {
+            auto *details = config->MutableClusterStateDetails();
+            auto *history = details->MutableUnsyncedHistory();
+
+            Y_DEBUG_ABORT_UNLESS(config->HasClusterState());
+            const auto& clusterState = config->GetClusterState();
+
+            // filter out unsynced piles from config (they become synced when they are the part of the quorum)
+            for (int i = 0; i < history->size(); ++i) {
+                auto *unsyncedPiles = history->Mutable(i)->MutableUnsyncedPiles();
+                for (int j = 0; j < unsyncedPiles->size(); ++j) {
+                    const auto unsyncedBridgePileId = TBridgePileId::FromProto(unsyncedPiles,
+                        &std::decay_t<decltype(*unsyncedPiles)>::at, j);
+                    if (clusterState.PerPileStateSize() <= unsyncedBridgePileId.GetPileIndex()) {
+                        Y_DEBUG_ABORT(); // incorrect per pile state
+                    } else if (NBridge::PileStateTraits(clusterState.GetPerPileState(
+                            unsyncedBridgePileId.GetPileIndex())).RequiresConfigQuorum) {
+                        // this pile is a part of quorum we expect to obtain, so it will be config-synced
+                        unsyncedPiles->SwapElements(j--, unsyncedPiles->size() - 1);
+                        unsyncedPiles->RemoveLast();
+                    }
+                }
+                if (unsyncedPiles->empty()) {
+                    history->DeleteSubrange(i--, 1);
+                }
+            }
         }
 
         return std::nullopt;

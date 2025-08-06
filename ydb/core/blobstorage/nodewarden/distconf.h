@@ -704,6 +704,8 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config);
 
+    void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState);
+
 } // NKikimr::NStorage
 
 template<>

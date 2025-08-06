@@ -11,7 +11,7 @@ namespace NKikimr::NStorage {
 
     TStateStoragePerPileGenerator::TStateStoragePerPileGenerator(THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>& nodes
         , const std::unordered_map<ui32, ui32>& selfHealNodesState
-        , const std::optional<TBridgePileId>& pileId
+        , TBridgePileId pileId
         , std::unordered_set<ui32>& usedNodes
         , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
     )
@@ -78,14 +78,19 @@ namespace NKikimr::NStorage {
     }
 
     bool TStateStoragePerPileGenerator::IsGoodConfig() const {
-        return GoodConfig;
+         for (auto &nodes : Rings) {
+            for (auto nodeId : nodes) {
+                if (CalcNodeState(nodeId, false) > 1) {
+                    return false;
+                }
+            }
+         }
+         return true;
     }
 
     void TStateStoragePerPileGenerator::AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss) {
         auto *rg = ss->AddRingGroups();
-        if (PileId) {
-            PileId->CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
-        }
+        PileId.CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
         rg->SetNToSelect(NToSelect);
         for (auto &nodes : Rings) {
             std::ranges::sort(nodes, [&](const auto& x, const auto& y) {
@@ -97,14 +102,14 @@ namespace NKikimr::NStorage {
         });
         for (auto &nodes : Rings) {
             auto *ring = rg->AddRing();
-            for(auto nodeId : nodes) {
+            for (auto nodeId : nodes) {
                 ring->AddNode(nodeId);
                 UsedNodes.insert(nodeId);
             }
         }
     }
 
-    ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId, bool disconnected) {
+    ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId, bool disconnected) const {
         ui32 state = disconnected ? 0 : (SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : (NodeStatesSize - 1));
         Y_ABORT_UNLESS(state < NodeStatesSize);
         Y_ABORT_UNLESS(state != NCms::NSentinel::TNodeStatusComputer::ENodeState::PRETTY_GOOD);
@@ -232,11 +237,9 @@ namespace NKikimr::NStorage {
         std::ranges::sort(group.Nodes, compByState);
         for (ui32 stateLimit : xrange(NodeStatesSize)) {
             if (PickNodesSimpleStrategy(group, stateLimit, rackStates.size() < RingsInGroupCount)) {
-                GoodConfig &= stateLimit <= 1;
                 return;
             }
         }
-        GoodConfig = false;
         STLOG(PRI_DEBUG, BS_NODE, NW103, "TStateStoragePerPileGenerator::PickNodesByState without limits");
         Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
     }

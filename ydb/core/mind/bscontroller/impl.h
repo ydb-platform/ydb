@@ -612,7 +612,7 @@ public:
 
         Table::GroupSizeInUnits::Type GroupSizeInUnits;
 
-        std::optional<Table::BridgePileId::Type> BridgePileId;
+        Table::BridgePileId::Type BridgePileId;
 
         TMaybe<Table::VirtualGroupName::Type> VirtualGroupName;
         TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
@@ -750,7 +750,7 @@ public:
                    Schema::Group::Down::Type down,
                    Schema::Group::SeenOperational::Type seenOperational,
                    Schema::Group::GroupSizeInUnits::Type groupSizeInUnits,
-                   std::optional<Schema::Group::BridgePileId::Type> bridgePileId,
+                   Schema::Group::BridgePileId::Type bridgePileId,
                    TBoxStoragePoolId storagePoolId,
                    ui32 numFailRealms,
                    ui32 numFailDomainsPerFailRealm,

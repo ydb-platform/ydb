@@ -377,7 +377,7 @@ namespace NKikimr::NStorage {
 
         void ApplyNewNodeList(std::span<std::tuple<TNodeIdentifier, TNodeLocation>> newNodeList);
 
-        std::optional<TBridgePileId> ResolveNodePileId(const TNodeLocation& location);
+        TBridgePileId ResolveNodePileId(const TNodeLocation& location);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding to peer nodes
@@ -441,8 +441,8 @@ namespace NKikimr::NStorage {
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
             i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
-            bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
-            std::optional<TBridgePileId> bridgePileId, std::optional<TGroupId> bridgeProxyGroupId);
+            bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit, TBridgePileId bridgePileId,
+            std::optional<TGroupId> bridgeProxyGroupId);
 
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config, bool& checkSyncersAfterCommit);
 
@@ -493,6 +493,8 @@ namespace NKikimr::NStorage {
         static void GenerateBridgeInitialState(const TNodeWardenConfig& cfg, NKikimrBlobStorage::TStorageConfig *config);
 
         bool CheckBridgePeerRevPush(const NKikimrBlobStorage::TStorageConfig& peerConfig, ui32 senderNodeId);
+
+        TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
@@ -703,8 +705,7 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config);
 
-    TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
-        const TNodeWardenConfig *cfg, ui32 selfNodeId);
+    void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState);
 
 } // NKikimr::NStorage
 

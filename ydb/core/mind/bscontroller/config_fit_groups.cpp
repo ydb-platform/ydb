@@ -108,7 +108,7 @@ namespace NKikimr {
                         false, /* down */
                         false, /* seenOperational */
                         0, /* groupSizeInUnits */
-                        std::nullopt, /* bridgePileId */
+                        TBridgePileId(), /* bridgePileId */
                         StoragePoolId, /* storagePoolId */
                         0, /* numFailRealms */
                         0, /* numFailDomainsPerFailRealm */
@@ -129,11 +129,11 @@ namespace NKikimr {
                         groupId.CopyToProto(&mainGroup, &NKikimrBlobStorage::TGroupInfo::AddBridgeGroupIds);
                     });
                 } else {
-                    CreateGroup(std::nullopt, std::nullopt); // regular single group
+                    CreateGroup(TBridgePileId(), std::nullopt); // regular single group
                 }
             }
 
-            TGroupId CreateGroup(std::optional<TBridgePileId> bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
+            TGroupId CreateGroup(TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
                 ////////////////////////////////////////////////////////////////////////////////////////////
                 // ALLOCATE GROUP ID FOR THE NEW GROUP
                 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -523,7 +523,7 @@ namespace NKikimr {
                 TGroupMapper::TForbiddenPDisks,
                 ui32,
                 i64,
-                std::optional<TBridgePileId>>;
+                TBridgePileId>;
 
             template<typename T>
             TAllocateOrSanitizeGroupResult<T> AllocateOrSanitizeGroup(
@@ -535,7 +535,7 @@ namespace NKikimr {
                     ui32 groupSizeInUnits,
                     i64 requiredSpace,
                     bool addExistingDisks,
-                    std::optional<TBridgePileId> bridgePileId,
+                    TBridgePileId bridgePileId,
                     T&& func) {
                 if (!Mapper) {
                     Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
@@ -577,7 +577,7 @@ namespace NKikimr {
                     ui32 groupSizeInUnits,
                     i64 requiredSpace,
                     bool addExistingDisks,
-                    std::optional<TBridgePileId> bridgePileId,
+                    TBridgePileId bridgePileId,
                     T&& func) {
                 TGroupMapper::TGroupConstraintsDefinition emptyConstraints;
                 return AllocateOrSanitizeGroup(groupId, group, emptyConstraints, replacedDisks, forbid, groupSizeInUnits, requiredSpace,
@@ -661,7 +661,7 @@ namespace NKikimr {
                     whyUnusable.append('D');
                 }
 
-                std::optional<TBridgePileId> bridgePileId;
+                TBridgePileId bridgePileId;
                 if (const auto& bridgeInfo = State.BridgeInfo) {
                     if (const TBridgeInfo::TPile *pile = bridgeInfo->GetPileForNode(id.NodeId)) {
                         bridgePileId = pile->BridgePileId;

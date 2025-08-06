@@ -130,9 +130,6 @@ private:
         Y_UNUSED(txc);
         LOG_I("Starting finalization of incremental restore operation: " << OperationId);
         
-        // Increment in-flight counter for finalization operation
-        Self->TabletCounters->Simple()[TTxState::TxTypeInFlightCounter(TTxState::TxIncrementalRestoreFinalize)].Add(1);
-        
         CreateFinalizationOperation(state, ctx);
     }
 
@@ -223,32 +220,6 @@ private:
                 }
             }
         }
-    }
-    
-    void CleanupMappings(const TActorContext& ctx, ui64 operationId) {
-        auto txIt = Self->TxIdToIncrementalRestore.begin();
-        while (txIt != Self->TxIdToIncrementalRestore.end()) {
-            if (txIt->second == operationId) {
-                auto toErase = txIt++;
-                Self->TxIdToIncrementalRestore.erase(toErase);
-            } else {
-                ++txIt;
-            }
-        }
-        
-        auto opIt = Self->IncrementalRestoreOperationToState.begin();
-        while (opIt != Self->IncrementalRestoreOperationToState.end()) {
-            if (opIt->second == operationId) {
-                auto toErase = opIt++;
-                Self->IncrementalRestoreOperationToState.erase(toErase);
-            } else {
-                ++opIt;
-            }
-        }
-        
-        Self->LongIncrementalRestoreOps.erase(TOperationId(operationId, 0));
-        
-        LOG_I("Cleaned up mappings for operation: " << operationId);
     }
 };
 

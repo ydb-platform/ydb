@@ -14,15 +14,15 @@ Y_UNIT_TEST_SUITE(GcServiceTests) {
         auto gcService = MakeGcService(tableDataService);
 
         for (ui64 i = 0; i < keysNum; ++i) {
-            TString key = group + ":" + ToString(i);
-            tableDataService->Put(key, content +  ToString(i)).GetValueSync();
+            TString chunkId = ToString(i);
+            tableDataService->Put(group, chunkId, content +  ToString(i)).GetValueSync();
         }
         gcService->ClearGarbage({group}).GetValueSync();
         Sleep(TDuration::Seconds(3)); // deleting by prefix, after reigster wait some time for actual deletion
 
         for (ui64 i = 0; i < keysNum; ++i) {
-            TString key = group + ":" + ToString(i);
-            UNIT_ASSERT(!tableDataService->Get(key).GetValueSync());
+            TString chunkId = ToString(i);
+            UNIT_ASSERT(!tableDataService->Get(group, chunkId).GetValueSync());
         }
     }
     Y_UNIT_TEST(MaxInflightGroupDeletionRequestsExceeded) {

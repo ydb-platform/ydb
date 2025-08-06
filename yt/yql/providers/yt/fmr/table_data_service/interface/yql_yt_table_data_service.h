@@ -11,11 +11,13 @@ public:
 
     virtual ~ITableDataService() = default;
 
-    virtual NThreading::TFuture<void> Put(const TString& key, const TString& value) = 0;
+    // Table data service key should consist of group (prefix) and chunkId.
 
-    virtual NThreading::TFuture<TMaybe<TString>> Get(const TString& key) const = 0;
+    virtual NThreading::TFuture<void> Put(const TString& group, const TString& chunkId, const TString& value) = 0;
 
-    virtual NThreading::TFuture<void> Delete(const TString& key) = 0;
+    virtual NThreading::TFuture<TMaybe<TString>> Get(const TString& group, const TString& chunkId) const = 0;
+
+    virtual NThreading::TFuture<void> Delete(const TString& group, const TString& chunkId) = 0;
 
     virtual NThreading::TFuture<void> RegisterDeletion(const std::vector<TString>& groupsToDelete) = 0;
 };

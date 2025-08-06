@@ -1,5 +1,6 @@
 #include "yql_yt_table_data_service_server.h"
 
+#include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/parsed_request.h>
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/http/server/response.h>
@@ -123,43 +124,48 @@ private:
     const ui64 WorkerId_;
     const ui64 WorkersNum_;
 
-    TString GetTableDataServiceKey(THttpInput& input) {
+    struct TTableDataServiceKey {
+        TString Group;
+        TString ChunkId;
+    };
+
+    TTableDataServiceKey GetTableDataServiceKey(THttpInput& input) {
         TParsedHttpFull httpRequest(input.FirstLine());
-        TStringBuf url = httpRequest.Request;
-        std::vector<TString> splittedUrl;
-        TString delim = "?key=";
-        StringSplitter(url).SplitByString(delim).AddTo(&splittedUrl);
-        YQL_ENSURE(splittedUrl.size() == 2);
-        return splittedUrl[1];
+        TCgiParameters queryParams(httpRequest.Cgi);
+        YQL_ENSURE(queryParams.Has("group") && queryParams.Has("chunkId"));
+        return TTableDataServiceKey{.Group = queryParams.Get("group"), .ChunkId = queryParams.Get("chunkId")};
     }
 
     THttpResponse PutTableDataServiceHandler(THttpInput& input) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetLogContext(input));
         TString ysonTableContent = input.ReadAll();
         auto tableDataServiceKey = GetTableDataServiceKey(input);
-        TableDataService_->Put(tableDataServiceKey, ysonTableContent).GetValueSync();
-        YQL_CLOG(TRACE, FastMapReduce) << "Putting content in table data service with key " << tableDataServiceKey;
+        TString group = tableDataServiceKey.Group, chunkId = tableDataServiceKey.ChunkId;
+        TableDataService_->Put(group, chunkId, ysonTableContent).GetValueSync();
+        YQL_CLOG(TRACE, FastMapReduce) << "Putting key in table service with group " << group << " and chunkId " << chunkId;
         return THttpResponse(HTTP_OK);
     }
 
     THttpResponse GetTableDataServiceHandler(THttpInput& input) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetLogContext(input));
-        auto tableDataServiceId = GetTableDataServiceKey(input);
+        auto tableDataServiceKey = GetTableDataServiceKey(input);
+        TString group = tableDataServiceKey.Group, chunkId = tableDataServiceKey.ChunkId;
         TString ysonTableContent;
-        if (auto value = TableDataService_->Get(tableDataServiceId).GetValueSync()) {
+        if (auto value = TableDataService_->Get(group, chunkId).GetValueSync()) {
             ysonTableContent = *value;
         }
         THttpResponse httpResponse(HTTP_OK);
         httpResponse.SetContent(ysonTableContent);
-        YQL_CLOG(TRACE, FastMapReduce) << "Getting content in table data service with key " << tableDataServiceId;
+        YQL_CLOG(TRACE, FastMapReduce) << "Getting key in table service with group " << group << " and chunkId " << chunkId;
         return httpResponse;
     }
 
     THttpResponse DeleteTableDataServiceHandler(THttpInput& input) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetLogContext(input));
         auto tableDataServiceKey = GetTableDataServiceKey(input);
-        TableDataService_->Delete(tableDataServiceKey).GetValueSync();
-        YQL_CLOG(TRACE, FastMapReduce) << "Deleting content in table data service with key " << tableDataServiceKey;
+        TString group = tableDataServiceKey.Group, chunkId = tableDataServiceKey.ChunkId;
+        TableDataService_->Delete(group, chunkId).GetValueSync();
+        YQL_CLOG(TRACE, FastMapReduce) << "Deleting key in table service with group " << group << " and chunkId " << chunkId;
         return THttpResponse(HTTP_OK);
     }
 

@@ -34,5 +34,4 @@ void SetupTableDataServiceDiscovery(TTempFileHandle& hostsFile, ui16 port) {
     WriteHostsToFile(hostsFile, workersNum, connections);
 }
 
-
 } // namespace NYql::NFmr

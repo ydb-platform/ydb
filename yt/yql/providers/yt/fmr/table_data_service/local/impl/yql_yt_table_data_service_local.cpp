@@ -11,34 +11,31 @@ namespace {
 class TLocalTableDataService: public ILocalTableDataService {
 public:
 
-    NThreading::TFuture<void> Put(const TString& key, const TString& value) override {
-        YQL_CLOG(TRACE, FastMapReduce) << "Putting key " << key << " to local table data service";
+    NThreading::TFuture<void> Put(const TString& group, const TString& chunkId, const TString& value) override {
+        YQL_CLOG(TRACE, FastMapReduce) << "Putting key with group " << group << " and chunkId " << chunkId << " to local table data service";
         TGuard<TMutex> guard(Mutex_);
-        auto [group, chunk] = GetTableDataServiceGroupAndChunk(key);
-        Data_[group][chunk] = value;
+        Data_[group][chunkId] = value;
         return NThreading::MakeFuture();
     }
 
-    NThreading::TFuture<TMaybe<TString>> Get(const TString& key) const override {
-        YQL_CLOG(TRACE, FastMapReduce) << "Getting key " << key << " from local table data service";
+    NThreading::TFuture<TMaybe<TString>> Get(const TString& group, const TString& chunkId) const override {
+        YQL_CLOG(TRACE, FastMapReduce) << "Getting key with group " << group << " and chunkId " << chunkId << " from local table data service";
         TGuard<TMutex> guard(Mutex_);
-        auto [group, chunk] = GetTableDataServiceGroupAndChunk(key);
-        if (!Data_.contains(group) || !Data_.at(group).contains(chunk)) {
+        if (!Data_.contains(group) || !Data_.at(group).contains(chunkId)) {
             TMaybe<TString> emptyRes = Nothing();
             return NThreading::MakeFuture(emptyRes);
         }
-        TMaybe<TString> value = Data_.at(group).at(chunk);
+        TMaybe<TString> value = Data_.at(group).at(chunkId);
         return NThreading::MakeFuture(value);
     }
 
-    NThreading::TFuture<void> Delete(const TString& key) override {
-        YQL_CLOG(TRACE, FastMapReduce) << "Deleting key " << key << " from local table data service";
+    NThreading::TFuture<void> Delete(const TString& group, const TString& chunkId) override {
+        YQL_CLOG(TRACE, FastMapReduce) << "Deleting key with group " << group << " and chunkId " << chunkId << " from local table data service";
         TGuard<TMutex> guard(Mutex_);
-        auto [group, chunk] = GetTableDataServiceGroupAndChunk(key);
         if (!Data_.contains(group)) {
             return NThreading::MakeFuture();
         }
-        Data_[group].erase(chunk);
+        Data_[group].erase(chunkId);
         return NThreading::MakeFuture();
     }
 
@@ -63,7 +60,7 @@ public:
     }
 
 private:
-    std::unordered_map<TString, std::unordered_map<ui64, TString>> Data_;  // Groups -> ChunkId -> Values
+    std::unordered_map<TString, std::unordered_map<TString, TString>> Data_;  // Groups -> ChunkId -> Values
     TMutex Mutex_ = TMutex();
 };
 

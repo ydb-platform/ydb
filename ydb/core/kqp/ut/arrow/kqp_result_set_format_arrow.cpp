@@ -113,16 +113,20 @@ void AssertArrowValueResultsSize(const std::vector<TResultSet>& arrowResultSets,
         UNIT_ASSERT_VALUES_EQUAL_C(TArrowAccessor::Format(arrowResultSet), TResultSet::EFormat::Arrow, "Result set format mismatch");
         UNIT_ASSERT_VALUES_EQUAL_C(TArrowAccessor::Format(valueResultSet), TResultSet::EFormat::Value, "Result set format mismatch");
 
+        UNIT_ASSERT_VALUES_EQUAL_C(arrowResultSet.RowsCount(), 0, "Rows must be empty for Arrow format of the result set");
+
         size_t arrowRowsCount = 0;
 
-        const auto& [schema, recordBatches] = TArrowAccessor::GetResultArrow(arrowResultSet);
+        const auto& [schema, recordBatches] = TArrowAccessor::GetCollectedArrowResult(arrowResultSet);
         UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty");
 
         std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
 
         for (const auto& recordBatch : recordBatches) {
             auto batch = NArrow::DeserializeBatch(TString(recordBatch), arrowSchema);
+            UNIT_ASSERT_C(batch, "Batch must be deserialized");
             UNIT_ASSERT_C(batch->ValidateFull().ok(), "Batch validation failed");
+
             arrowRowsCount += batch->num_rows();
 
             UNIT_ASSERT_VALUES_EQUAL_C(batch->num_columns(), valueResultSet.ColumnsCount(), "Columns count mismatch");
@@ -145,7 +149,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ExecuteAndCombineBatches(TQuery
     std::vector<std::shared_ptr<arrow::RecordBatch>> resultBatches;
 
     for (const auto& resultSet : arrowResponse.GetResultSets()) {
-        const auto& [schema, batches] = TArrowAccessor::GetResultArrow(resultSet);
+        const auto& [schema, batches] = TArrowAccessor::GetCollectedArrowResult(resultSet);
 
         UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty");
         UNIT_ASSERT_GE_C(batches.size(), minBatchesCount, "Batches count must be greater than or equal to " + ToString(minBatchesCount));
@@ -155,8 +159,10 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ExecuteAndCombineBatches(TQuery
 
         for (const auto& batch : batches) {
             auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
+            UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
             UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-            recordBatches.push_back(arrowBatch);
+
+            recordBatches.push_back(std::move(arrowBatch));
         }
 
         auto resultBatch = NArrow::CombineBatches(recordBatches);
@@ -192,7 +198,7 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, TArrowFormatSettin
         )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        auto [schema, recordBatches] = TArrowAccessor::GetResultArrow(result.GetResultSet(0));
+        auto [schema, recordBatches] = TArrowAccessor::GetCollectedArrowResult(result.GetResultSet(0));
 
         schemaCompressedBatch = NArrow::DeserializeSchema(TString(schema));
         compressedBatch = std::move(recordBatches[0]);
@@ -205,7 +211,7 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, TArrowFormatSettin
         )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        auto [schema, recordBatches] = TArrowAccessor::GetResultArrow(result.GetResultSet(0));
+        auto [schema, recordBatches] = TArrowAccessor::GetCollectedArrowResult(result.GetResultSet(0));
 
         schemaDefaultBatch = NArrow::DeserializeSchema(TString(schema));
         defaultBatch = std::move(recordBatches[0]);
@@ -223,6 +229,9 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, TArrowFormatSettin
     auto firstArrowBatch = NArrow::DeserializeBatch(compressedBatch, schemaCompressedBatch);
     auto secondArrowBatch = NArrow::DeserializeBatch(defaultBatch, schemaDefaultBatch);
 
+    UNIT_ASSERT_C(firstArrowBatch, "First arrow batch must be deserialized");
+    UNIT_ASSERT_C(secondArrowBatch, "Second arrow batch must be deserialized");
+
     UNIT_ASSERT_C(firstArrowBatch->num_rows() > 0, "Arrow batch must not be empty");
 
     UNIT_ASSERT_C(firstArrowBatch->ValidateFull().ok(), "Batch validation failed");
@@ -235,7 +244,7 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, TArrowFormatSettin
 
 Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
-     * Unspecified format is Value by default for compatibility with previous versions.
+     * By default, unspecified format is Value for compatibility with previous versions.
      */
     Y_UNIT_TEST(DefaultFormat) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
@@ -281,7 +290,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
-     * Small buffer size for many ExecuteQueryResponePart parts, the result is filled in one ResultSet.
+     * Small channel buffer size, rows from many ExecuteQueryResponePart parts are filled into a single ResultSet.
      */
     Y_UNIT_TEST(ValueFormat_SmallChannelBufferSize) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
@@ -303,6 +312,170 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
+     * By default, SchemaInclusionMode is ALWAYS for Value format.
+     */
+    Y_UNIT_TEST(ValueFormat_SchemaInclusionMode_Unspecified) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+        auto client = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Value);
+
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT * FROM LargeTable;
+        )", TTxControl::BeginTx().CommitTx(), settings)
+                      .GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        size_t count = 0;
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (part.HasResultSet()) {
+                auto resultSet = part.ExtractResultSet();
+                UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Value);
+                UNIT_ASSERT_VALUES_UNEQUAL(resultSet.ColumnsCount(), 0);
+
+                ++count;
+            }
+        }
+
+        UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets");
+    }
+
+    /**
+     * Set SchemaInclusionMode ALWAYS for Value format explicitly in TExecuteQuerySettings.
+     */
+    Y_UNIT_TEST(ValueFormat_SchemaInclusionMode_Always) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+        auto client = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Value).SchemaInclusionMode(ESchemaInclusionMode::Always);
+
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT * FROM LargeTable;
+        )", TTxControl::BeginTx().CommitTx(), settings)
+                      .GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        size_t count = 0;
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (part.HasResultSet()) {
+                auto resultSet = part.ExtractResultSet();
+                UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Value);
+                UNIT_ASSERT_VALUES_UNEQUAL(resultSet.ColumnsCount(), 0);
+
+                ++count;
+            }
+        }
+
+        UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets");
+    }
+
+    /**
+     * Set SchemaInclusionMode FIRST_ONLY for Value format explicitly in TExecuteQuerySettings.
+     */
+    Y_UNIT_TEST(ValueFormat_SchemaInclusionMode_FirstOnly) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+        auto client = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Value).SchemaInclusionMode(ESchemaInclusionMode::FirstOnly);
+
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT * FROM LargeTable;
+        )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        size_t count = 0;
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (part.HasResultSet()) {
+                auto resultSet = part.ExtractResultSet();
+                UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Value);
+
+                if (count == 0) {
+                    UNIT_ASSERT_VALUES_UNEQUAL(resultSet.ColumnsCount(), 0);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 0);
+                }
+
+                ++count;
+            }
+        }
+
+        UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets");
+    }
+
+    /**
+     * For Value format, FirstOnly schema inclusion mode is supported for multistatement queries.
+     */
+    Y_UNIT_TEST(ValueFormat_SchemaInclusionMode_FirstOnly_Multistatement) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+        auto client = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 200, 2, 2, 10, 2);
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Value).SchemaInclusionMode(ESchemaInclusionMode::FirstOnly);
+
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT * FROM LargeTable;
+            SELECT Key, Data FROM LargeTable;
+        )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        std::unordered_map<size_t, ui64> counts;
+
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (part.HasResultSet()) {
+                auto resultSet = part.ExtractResultSet();
+                UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Value);
+
+                auto idx = part.GetResultSetIndex();
+
+                if (counts.find(idx) == counts.end()) {
+                    UNIT_ASSERT_VALUES_UNEQUAL(resultSet.ColumnsCount(), 0);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 0);
+                }
+
+                ++counts[idx];
+            }
+        }
+
+        UNIT_ASSERT_C(counts.size() == 2, "Expected 2 result set indexes");
+
+        for (const auto& [idx, count] : counts) {
+            UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets for statement with ResultSetIndex = " << idx);
+        }
+    }
+
+    /**
      * Set Arrow format explicitly in TExecuteQuerySettings.
      */
     Y_UNIT_TEST(ArrowFormat_Simple) {
@@ -319,10 +492,14 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         auto resultSet = result.GetResultSet(0);
         UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
 
-        const auto& [schema, batches] = TArrowAccessor::GetResultArrow(resultSet);
+        const auto& [schema, batches] = TArrowAccessor::GetCollectedArrowResult(resultSet);
 
         std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
         std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+
+        UNIT_ASSERT_C(arrowSchema, "Schema must be deserialized");
+        UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
+        UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
 
         NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
             std::make_pair("Comment", TTypeInfo(NTypeIds::String)),
@@ -339,7 +516,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
-     * Arrow format is supported for all types of columns in column/row tables.
+     * Arrow format is supported for all types of columns.
      */
     Y_UNIT_TEST_TWIN(ArrowFormat_AllTypes, isOlap) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
@@ -480,8 +657,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
-     * Small buffer size for many ExecuteQueryResponePart parts.
-     * Record batches are filled in one ResultSet as std::vector with one schema.
+     * Small channel buffer size, data bytes and schema from many ExecuteQueryResponePart parts are filled into a single ResultSet as a std::vector with a single schema.
      */
     Y_UNIT_TEST(ArrowFormat_SmallChannelBufferSize) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
@@ -498,7 +674,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
-     * Arrow arithmetic types 
+     * These YQL types are supported for Arrow format as arithmetic types:
      */
     Y_UNIT_TEST(ArrowFormat_Types_Arithmetic) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
@@ -564,7 +740,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
-     * Arrow string types
+     * These YQL types are supported for Arrow format as string types:
      */
     Y_UNIT_TEST(ArrowFormat_Types_String) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
@@ -616,7 +792,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
-     * Arrow binary types
+     * These YQL types are supported for Arrow format as binary types:
      */
     Y_UNIT_TEST(ArrowFormat_Types_Binary) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
@@ -679,7 +855,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
-     * Arrow time types
+     * These YQL types are supported for Arrow format as integer and time types:
      */
     Y_UNIT_TEST(ArrowFormat_Types_Time) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
@@ -726,7 +902,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
     /**
      * Arrow format is supported for compression.
-     * Unspecified compression codec is None by default.
+     * By default, unspecified compression codec is None (without compression).
      */
     Y_UNIT_TEST(ArrowFormat_Compression_None) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
@@ -743,7 +919,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
         auto client = kikimr.GetQueryClient();
 
-        CompareCompressedAndDefaultBatches(client, TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd), /* assertEqual */ false);
+        CompareCompressedAndDefaultBatches(client, TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(12), /* assertEqual */ false);
     }
 
     /**
@@ -770,6 +946,318 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Codec 'lz4' doesn't support setting a compression level");
+        }
+    }
+
+    /**
+     * Arrow batches are returned for different result set indexes.
+     */
+    Y_UNIT_TEST(ArrowFormat_Multistatement) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
+
+        auto result = client.ExecuteQuery(R"(
+            SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+            SELECT Key, Value FROM KeyValue ORDER BY Key;
+        )", TTxControl::BeginTx().CommitTx(), settings)
+                          .GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+
+        {
+            auto resultSet = result.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
+
+            const auto& [schema, batches] = TArrowAccessor::GetCollectedArrowResult(resultSet);
+
+            std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+
+            UNIT_ASSERT_C(arrowSchema, "Schema must be deserialized");
+            UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
+            UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
+
+            NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({std::make_pair("Comment", TTypeInfo(NTypeIds::String)),
+                                                                                std::make_pair("Amount", TTypeInfo(NTypeIds::Uint64)),
+                                                                                std::make_pair("Name", TTypeInfo(NTypeIds::String))}));
+
+            builder.AddRow().Add<std::string>("None").Add<ui64>(7200).Add<std::string>("Tony");
+            builder.AddRow().Add<std::string>("None").Add<ui64>(3500).Add<std::string>("Anna");
+            builder.AddRow().Add<std::string>("None").Add<ui64>(300).Add<std::string>("Paul");
+
+            auto expected = builder.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(arrowBatch->ToString(), expected->ToString());
+        }
+        {
+            auto resultSet = result.GetResultSet(1);
+            UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
+
+            const auto& [schema, batches] = TArrowAccessor::GetCollectedArrowResult(resultSet);
+
+            std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+
+            UNIT_ASSERT_C(arrowSchema, "Schema must be deserialized");
+            UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
+            UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
+
+            NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({std::make_pair("Key", TTypeInfo(NTypeIds::Uint64)),
+                                                                                std::make_pair("Value", TTypeInfo(NTypeIds::String))}));
+
+            builder.AddRow().Add<ui64>(1).Add<std::string>("One");
+            builder.AddRow().Add<ui64>(2).Add<std::string>("Two");
+
+            auto expected = builder.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(arrowBatch->ToString(), expected->ToString());
+        }
+    }
+
+    /**
+     * By default, SchemaInclusionMode is FIRST_ONLY for Arrow format.
+     */
+    Y_UNIT_TEST(ArrowFormat_SchemaInclusionMode_Unspecified) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+        auto client = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
+
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT * FROM LargeTable;
+        )", TTxControl::BeginTx().CommitTx(), settings)
+                      .GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        std::shared_ptr<arrow::Schema> arrowSchema;
+
+        size_t count = 0;
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (part.HasResultSet()) {
+                auto resultSet = part.ExtractResultSet();
+                UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
+
+                const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+                const auto& batch = TArrowAccessor::GetArrowData(resultSet);
+
+                UNIT_ASSERT_C(!batch.empty(), "Batch must not be empty");
+
+                if (count == 0) {
+                    // With Arrow format, the result set contains a YQL schema and an Arrow record batch schema
+                    UNIT_ASSERT_VALUES_UNEQUAL_C(resultSet.ColumnsCount(), 0, "Columns must not be empty for the first result set");
+                    UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty for the first result set");
+
+                    arrowSchema = NArrow::DeserializeSchema(TString(schema));
+
+                    UNIT_ASSERT_C(arrowSchema, "Schema must be deserialized");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(resultSet.ColumnsCount(), 0, "Columns count must be empty for the rest result sets");
+                    UNIT_ASSERT_C(schema.empty(), "Schema must be empty for the rest result sets");
+                }
+
+                auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
+                UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
+                UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
+
+                ++count;
+            }
+        }
+
+        UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets");
+    }
+
+    /**
+     * Set SchemaInclusionMode ALWAYS for Arrow format explicitly in TExecuteQuerySettings.
+     */
+    Y_UNIT_TEST(ArrowFormat_SchemaInclusionMode_Always) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+        auto client = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow).SchemaInclusionMode(ESchemaInclusionMode::Always);
+
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT * FROM LargeTable;
+        )", TTxControl::BeginTx().CommitTx(), settings)
+                      .GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        std::shared_ptr<arrow::Schema> arrowSchema;
+
+        size_t count = 0;
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (part.HasResultSet()) {
+                auto resultSet = part.ExtractResultSet();
+                UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
+
+                const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+                const auto& batch = TArrowAccessor::GetArrowData(resultSet);
+
+                UNIT_ASSERT_C(!batch.empty(), "Batch must not be empty");
+
+                // With Arrow format, the result set contains a YQL schema and an Arrow record batch schema
+                UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty");
+                UNIT_ASSERT_VALUES_UNEQUAL_C(resultSet.ColumnsCount(), 0, "Columns must not be empty for the first result set");
+
+                auto curSchema = NArrow::DeserializeSchema(TString(schema));
+                UNIT_ASSERT_C(curSchema, "Schema must be deserialized");
+
+                if (arrowSchema) {
+                    UNIT_ASSERT_VALUES_EQUAL(arrowSchema->ToString(), curSchema->ToString());
+                } else {
+                    arrowSchema = curSchema;
+                }
+
+                auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
+                UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
+                UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
+
+                ++count;
+            }
+        }
+
+        UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets");
+    }
+
+    /**
+     * Set SchemaInclusionMode FIRST_ONLY for Arrow format explicitly in TExecuteQuerySettings.
+     */
+    Y_UNIT_TEST(ArrowFormat_SchemaInclusionMode_FirstOnly) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+        auto client = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow).SchemaInclusionMode(ESchemaInclusionMode::FirstOnly);
+
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT * FROM LargeTable;
+        )", TTxControl::BeginTx().CommitTx(), settings)
+                      .GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        std::shared_ptr<arrow::Schema> arrowSchema;
+
+        size_t count = 0;
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (part.HasResultSet()) {
+                auto resultSet = part.ExtractResultSet();
+                UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
+
+                const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+                const auto& batch = TArrowAccessor::GetArrowData(resultSet);
+
+                UNIT_ASSERT_C(!batch.empty(), "Batch must not be empty");
+
+                if (count == 0) {
+                    // With Arrow format, the result set contains a YQL schema and an Arrow record batch schema
+                    UNIT_ASSERT_VALUES_UNEQUAL_C(resultSet.ColumnsCount(), 0, "Columns must not be empty for the first result set");
+                    UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty for the first result set");
+
+                    arrowSchema = NArrow::DeserializeSchema(TString(schema));
+
+                    UNIT_ASSERT_C(arrowSchema, "Schema must be deserialized");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(resultSet.ColumnsCount(), 0, "Columns count must be empty for the rest result sets");
+                    UNIT_ASSERT_C(schema.empty(), "Schema must be empty for the rest result sets");
+                }
+
+                auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
+                UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
+                UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
+
+                ++count;
+            }
+        }
+
+        UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets");
+    }
+
+    /**
+     * For Arrow format, FirstOnly schema inclusion mode is supported for multistatement queries.
+     */
+    Y_UNIT_TEST(ArrowFormat_SchemaInclusionMode_FirstOnly_Multistatement) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+        auto client = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 200, 2, 2, 10, 2);
+
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow).SchemaInclusionMode(ESchemaInclusionMode::FirstOnly);
+
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT * FROM LargeTable;
+            SELECT Key, Data FROM LargeTable;
+        )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        std::unordered_map<size_t, std::shared_ptr<arrow::Schema>> arrowSchemas;
+        std::unordered_map<size_t, ui64> counts;
+
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (part.HasResultSet()) {
+                auto resultSet = part.ExtractResultSet();
+                UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
+
+                const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+                const auto& batch = TArrowAccessor::GetArrowData(resultSet);
+
+                UNIT_ASSERT_C(!batch.empty(), "Batch must not be empty");
+
+                auto idx = part.GetResultSetIndex();
+
+                if (arrowSchemas.find(idx) == arrowSchemas.end()) {
+                    // The first result set of each statement contains schemas.
+                    UNIT_ASSERT_VALUES_UNEQUAL_C(resultSet.ColumnsCount(), 0, "Columns must not be empty for the first result set of the statement");
+                    UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty for the first result set of the statement");
+
+                    arrowSchemas[idx] = NArrow::DeserializeSchema(TString(schema));
+
+                    UNIT_ASSERT_C(arrowSchemas[idx], "Schema must be deserialized");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(resultSet.ColumnsCount(), 0, "Columns count must be empty for the rest result sets of the statement");
+                    UNIT_ASSERT_C(schema.empty(), "Schema must be empty for the rest result sets of the statement");
+                }
+
+                auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchemas[idx]);
+                UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
+                UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
+
+                ++counts[idx];
+            }
+        }
+
+        UNIT_ASSERT_C(counts.size() == 2, "Expected 2 result set indexes");
+
+        for (const auto& [idx, count] : counts) {
+            UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets for statement with ResultSetIndex = " << idx);
         }
     }
 }

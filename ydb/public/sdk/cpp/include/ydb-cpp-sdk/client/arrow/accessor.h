@@ -4,7 +4,7 @@
 
 namespace NYdb::inline Dev {
 
-struct TResultArrow {
+struct TCollectedArrowResult {
     std::string Schema;
     std::vector<std::string> Data;
 };
@@ -14,8 +14,10 @@ struct TResultArrow {
 class TArrowAccessor {
 public:
     static TResultSet::EFormat Format(const TResultSet& resultSet);
-    static void SetResultArrow(TResultSet& resultSet, TResultArrow&& resultArrow);
-    static const TResultArrow& GetResultArrow(const TResultSet& resultSet);
+    static void SetCollectedArrowResult(TResultSet& resultSet, TCollectedArrowResult&& resultArrow);
+    static const TCollectedArrowResult& GetCollectedArrowResult(const TResultSet& resultSet);
+    static const std::string& GetArrowSchema(const TResultSet& resultSet);
+    static const std::string& GetArrowData(const TResultSet& resultSet);
 };
 
 } // namespace NYdb

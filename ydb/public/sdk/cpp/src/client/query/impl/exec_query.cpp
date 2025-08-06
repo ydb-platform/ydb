@@ -151,7 +151,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     std::vector<Ydb::ResultSet> ResultSets_;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Tx_;
-    std::unordered_map<size_t, TResultArrow> ResultsArrow_;
+    std::unordered_map<size_t, TCollectedArrowResult> ResultsArrow_;
 
     void Next() {
         TPtr self(this);
@@ -171,7 +171,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     std::vector<NYdb::NIssue::TIssue> issues;
                     std::vector<Ydb::ResultSet> resultProtos;
                     std::optional<TTransaction> tx;
-                    std::unordered_map<size_t, TResultArrow> resultsArrow;
+                    std::unordered_map<size_t, TCollectedArrowResult> resultsArrow;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
@@ -184,7 +184,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     }
 
                     for (auto& [index, arrowResult] : resultsArrow) {
-                        TArrowAccessor::SetResultArrow(resultSets[index], std::move(arrowResult));
+                        TArrowAccessor::SetCollectedArrowResult(resultSets[index], std::move(arrowResult));
                     }
 
                     self->Promise_.SetValue(TExecuteQueryResult(

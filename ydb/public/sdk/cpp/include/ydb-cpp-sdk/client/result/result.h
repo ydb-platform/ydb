@@ -14,7 +14,7 @@ namespace NYdb::inline Dev {
 
 class TProtoAccessor;
 class TArrowAccessor;
-struct TResultArrow;
+struct TCollectedArrowResult;
 
 struct TColumn {
     std::string Name;
@@ -65,9 +65,11 @@ private:
 
     EFormat Format() const;
 
-    void SetArrowResult(TResultArrow&& resultArrow);
+    const std::string& GetArrowSchema() const;
+    const std::string& GetArrowData() const;
 
-    const TResultArrow& GetArrowResult() const;
+    void SetCollectedArrowResult(TCollectedArrowResult&& resultArrow);
+    const TCollectedArrowResult& GetCollectedArrowResult() const;
 
 private:
     class TImpl;

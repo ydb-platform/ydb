@@ -183,6 +183,10 @@ namespace NKikimr {
         // pointer to an atomic variable contaning number of in flight writes
         TAtomic *WritesInFlight;
 
+        // max inflight request to pdisk
+        ui32 MaxInFlightWrites;
+        ui32 MaxInFlightReads;
+
         struct TBatcherPayload {
             ui64 Id = 0;
             ui8 PartIdx;
@@ -324,6 +328,9 @@ namespace NKikimr {
                 ReadsInFlight = &LevelIndex->HullCompReadsInFlight;
                 WritesInFlight = &LevelIndex->HullCompWritesInFlight;
             }
+
+            MaxInFlightWrites = GetMaxInFlightWrites();
+            MaxInFlightReads = GetMaxInFlightReads();
         }
 
         void Prepare(THandoffMapPtr hmp, TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriers,
@@ -424,7 +431,7 @@ namespace NKikimr {
                             Y_ABORT_UNLESS(!WriterPtr->GetPendingMessage());
                             WriterPtr.reset();
                         } else {
-                            Y_ABORT_UNLESS(InFlightWrites == GetMaxInFlightWrites());
+                            Y_ABORT_UNLESS(InFlightWrites == MaxInFlightWrites);
                             return false;
                         }
                         break;
@@ -702,7 +709,7 @@ namespace NKikimr {
         bool FlushSST() {
             // try to flush some more data; if the flush fails, it means that we have reached in flight write limit and
             // there is nothing to do here now, so we return
-            if (!WriterPtr->FlushNext(FirstLsn, LastLsn, GetMaxInFlightWrites() - InFlightWrites)) {
+            if (!WriterPtr->FlushNext(FirstLsn, LastLsn, MaxInFlightWrites - InFlightWrites)) {
                 return false;
             }
 
@@ -717,12 +724,12 @@ namespace NKikimr {
         void ProcessPendingMessages(TVector<std::unique_ptr<IEventBase>>& msgsForYard) {
             // ensure that we have writer
             Y_ABORT_UNLESS(WriterPtr);
-            Y_ABORT_UNLESS(GetMaxInFlightWrites());
-            Y_ABORT_UNLESS(GetMaxInFlightReads());
+            Y_ABORT_UNLESS(MaxInFlightWrites);
+            Y_ABORT_UNLESS(MaxInFlightReads);
 
             // send new messages until we reach in flight limit
             std::unique_ptr<NPDisk::TEvChunkWrite> msg;
-            while (InFlightWrites < GetMaxInFlightWrites() && (msg = GetPendingWriteMessage())) {
+            while (InFlightWrites < MaxInFlightWrites && (msg = GetPendingWriteMessage())) {
                 HullCtx->VCtx->CountCompactionCost(*msg);
                 Statistics.Update(msg.get());
                 msgsForYard.push_back(std::move(msg));
@@ -731,7 +738,7 @@ namespace NKikimr {
             }
 
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
-            while (InFlightReads < GetMaxInFlightReads() && (readMsg = ReadBatcher.GetPendingMessage(
+            while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
                             PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
                 HullCtx->VCtx->CountCompactionCost(*readMsg);
                 Statistics.Update(readMsg.get());

@@ -2062,7 +2062,7 @@ message TColumnShardConfig {
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
     optional bool PortionMetaV0Usage = 41 [default = true];
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
-    optional bool GenerateInternalPathId = 43 [default = false];
+    optional bool GenerateInternalPathId = 43 [default = true];
     optional bool ProxyWritingEnabled = 44 [default = true];
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
     optional bool DeduplicationEnabled = 46 [default = false];

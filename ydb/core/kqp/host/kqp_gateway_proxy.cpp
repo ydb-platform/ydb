@@ -1408,7 +1408,7 @@ public:
             }
 
             TString database = GetDatabase() ? GetDatabase() : NSchemeHelpers::GetDomainDatabase(AppData(ActorSystem));
-            tx.SetWorkingDir(database + "/.backups/collections");
+            tx.SetWorkingDir(JoinPath({database, ".backups", "collections"}));
 
             auto& op = *tx.MutableDrop();
             op.SetName(settings.Name);

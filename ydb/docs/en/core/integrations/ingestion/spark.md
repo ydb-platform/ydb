@@ -30,6 +30,8 @@ To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ yd
   ```shell
   # Run spark-shell
   ~ $ spark-shell --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
+  # Or pyspark
+  ~ $ pyspark --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
   # Or spark-sql
   ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
   ```
@@ -42,15 +44,39 @@ To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ yd
 
 To create a `DataFrame`, you need to specify the `ydb` format, pass a set of [connection options](#connection-options) and the path to the {{ ydb-short-name }} table:
 
-```scala
-val ydb_df = spark.read.format("ydb").option("url", "grpc://<options>).load("<table-path>")
-```
+{% list tabs %}
+
+- Scala
+
+  ```scala
+  val ydb_df = spark.read.format("ydb").options(<options>).load("<table-path>")
+  ```
+
+- Python
+
+  ```python
+  ydb_df = spark.read.format("ydb").options(<options>).load("<table-path>")
+  ```
+
+{% endlist %}
 
 To save any `DataFrame` in the table {{ ydb-short-name }}, you similarly need to specify the `ydb` format, [connection options](#connection-options) and the path to the table:
 
-```scala
-any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
-```
+{% list tabs %}
+
+- Scala
+
+  ```scala
+  any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
+  ```
+
+- Python
+
+  ```python
+  any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
+  ```
+
+{% endlist %}
 
 {% note info %}
 
@@ -116,107 +142,222 @@ The behavior of the {{ ydb-short-name }} Spark Connector is configured using opt
 * `table.primary_keys` — a comma-separated list of columns to use as the primary key. If this option is not provided, a new column with random content will be used for the key.
 * `table.auto_pk_name` — the name of the column for the randomly created key. Default value is `_spark_key`.
 
-## Spark Shell Example {#example-spark-shell}
+## Spark Shell and PySpark Example {#example-spark-shell}
 
 As an example, we'll show how to load a list of all Stack Overflow posts from 2020 into {{ ydb-short-name }}. This data can be downloaded from the following link: [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet)
 
-```shell
-~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
-Spark session available as 'spark'.
-Welcome to
-      ____              __
-     / __/__  ___ _____/ /__
-    _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 3.5.4
-      /_/
+{% list tabs %}
 
-Using Scala version 2.12.18 (OpenJDK 64-Bit Server VM, Java 17.0.15)
-Type in expressions to have them evaluated.
-Type :help for more information.
-```
+- Spark Shell
+
+  ```shell
+  ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+  Spark session available as 'spark'.
+  Welcome to
+        ____              __
+      / __/__  ___ _____/ /__
+      _\ \/ _ \/ _ `/ __/  '_/
+    /___/ .__/\_,_/_/ /_/\_\   version 3.5.4
+        /_/
+
+  Using Scala version 2.12.18 (OpenJDK 64-Bit Server VM, Java 17.0.15)
+  Type in expressions to have them evaluated.
+  Type :help for more information.
+  ```
+
+- PySpark
+
+  ```shell
+  ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+  Welcome to
+        ____              __
+      / __/__  ___ _____/ /__
+      _\ \/ _ \/ _ `/ __/  '_/
+    /__ / .__/\_,_/_/ /_/\_\   version 3.5.4
+        /_/
+
+  Using Python version 3.10.12 (main, May 27 2025 17:12:29)
+  SparkSession available as 'spark'.
+  ```
+
+{% endlist %}
 
 Let's display the schema of the Parquet file and count the number of rows it contains:
 
-```shell
-scala> val so_posts2020 = spark.read.format("parquet").load("/home/username/2020.parquet")
-so_posts2020: org.apache.spark.sql.DataFrame = [Id: bigint, PostTypeId: bigint ... 20 more fields]
+{% list tabs %}
 
-scala> so_posts2020.printSchema
-root
- |-- Id: long (nullable = true)
- |-- PostTypeId: long (nullable = true)
- |-- AcceptedAnswerId: long (nullable = true)
- |-- CreationDate: timestamp (nullable = true)
- |-- Score: long (nullable = true)
- |-- ViewCount: long (nullable = true)
- |-- Body: binary (nullable = true)
- |-- OwnerUserId: long (nullable = true)
- |-- OwnerDisplayName: binary (nullable = true)
- |-- LastEditorUserId: long (nullable = true)
- |-- LastEditorDisplayName: binary (nullable = true)
- |-- LastEditDate: timestamp (nullable = true)
- |-- LastActivityDate: timestamp (nullable = true)
- |-- Title: binary (nullable = true)
- |-- Tags: binary (nullable = true)
- |-- AnswerCount: long (nullable = true)
- |-- CommentCount: long (nullable = true)
- |-- FavoriteCount: long (nullable = true)
- |-- ContentLicense: binary (nullable = true)
- |-- ParentId: binary (nullable = true)
- |-- CommunityOwnedDate: timestamp (nullable = true)
- |-- ClosedDate: timestamp (nullable = true)
+- Spark Shell
 
-scala> so_posts2020.count
-res1: Long = 4304021
-```
+  ```shell
+  scala> val so_posts2020 = spark.read.format("parquet").load("/home/username/2020.parquet")
+  so_posts2020: org.apache.spark.sql.DataFrame = [Id: bigint, PostTypeId: bigint ... 20 more fields]
+
+  scala> so_posts2020.printSchema
+  root
+  |-- Id: long (nullable = true)
+  |-- PostTypeId: long (nullable = true)
+  |-- AcceptedAnswerId: long (nullable = true)
+  |-- CreationDate: timestamp (nullable = true)
+  |-- Score: long (nullable = true)
+  |-- ViewCount: long (nullable = true)
+  |-- Body: binary (nullable = true)
+  |-- OwnerUserId: long (nullable = true)
+  |-- OwnerDisplayName: binary (nullable = true)
+  |-- LastEditorUserId: long (nullable = true)
+  |-- LastEditorDisplayName: binary (nullable = true)
+  |-- LastEditDate: timestamp (nullable = true)
+  |-- LastActivityDate: timestamp (nullable = true)
+  |-- Title: binary (nullable = true)
+  |-- Tags: binary (nullable = true)
+  |-- AnswerCount: long (nullable = true)
+  |-- CommentCount: long (nullable = true)
+  |-- FavoriteCount: long (nullable = true)
+  |-- ContentLicense: binary (nullable = true)
+  |-- ParentId: binary (nullable = true)
+  |-- CommunityOwnedDate: timestamp (nullable = true)
+  |-- ClosedDate: timestamp (nullable = true)
+
+  scala> so_posts2020.count
+  res1: Long = 4304021
+  ```
+
+- PySpark
+
+  ```shell
+  >>> so_posts2020 = spark.read.format("parquet").load("/home/username/2020.parquet")
+  >>> so_posts2020.printSchema()
+  root
+  |-- Id: long (nullable = true)
+  |-- PostTypeId: long (nullable = true)
+  |-- AcceptedAnswerId: long (nullable = true)
+  |-- CreationDate: timestamp (nullable = true)
+  |-- Score: long (nullable = true)
+  |-- ViewCount: long (nullable = true)
+  |-- Body: binary (nullable = true)
+  |-- OwnerUserId: long (nullable = true)
+  |-- OwnerDisplayName: binary (nullable = true)
+  |-- LastEditorUserId: long (nullable = true)
+  |-- LastEditorDisplayName: binary (nullable = true)
+  |-- LastEditDate: timestamp (nullable = true)
+  |-- LastActivityDate: timestamp (nullable = true)
+  |-- Title: binary (nullable = true)
+  |-- Tags: binary (nullable = true)
+  |-- AnswerCount: long (nullable = true)
+  |-- CommentCount: long (nullable = true)
+  |-- FavoriteCount: long (nullable = true)
+  |-- ContentLicense: binary (nullable = true)
+  |-- ParentId: binary (nullable = true)
+  |-- CommunityOwnedDate: timestamp (nullable = true)
+  |-- ClosedDate: timestamp (nullable = true)
+
+  >>> so_posts2020.count()
+  4304021
+  ```
+
+{% endlist %}
 
 Then add a new column with the year to this DataFrame and store it all to a column-oriented {{ ydb-short-name }} table:
 
-```shell
-scala> val my_ydb = Map("url" -> "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token")
-my_ydb: scala.collection.immutable.Map[String,String] = Map(url -> grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token)
+{% list tabs %}
 
-scala> so_posts2020.withColumn("Year", lit(2020)).write.format("ydb").options(my_ydb).option("table.type", "column").option("table.primary_keys", "Id").mode("append").save("stackoverflow/posts");
-```
+- Spark Shell
+
+  ```shell
+  scala> val my_ydb = Map("url" -> "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token")
+  my_ydb: scala.collection.immutable.Map[String,String] = Map(url -> grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token)
+
+  scala> so_posts2020.withColumn("Year", lit(2020)).write.format("ydb").options(my_ydb).option("table.type", "column").option("table.primary_keys", "Id").mode("append").save("stackoverflow/posts");
+  ```
+
+- PySpark
+
+  ```shell
+  >>> from pyspark.sql.functions import col,lit
+  >>> my_ydb = { url: "grpcs://ydb.my-host.net:2135/preprod/spark-test?tokenFile=~/.token"}
+  >>> so_posts2020.withColumn("Year", lit(2020)).write.format("ydb").options(**my_ydb).option("table.type", "column").option("table.primary_keys", "Id").mode("append").save("stackoverflow/posts")
+  ```
+
+{% endlist %}
 
 As a result, you can read the stored data from the {{ ydb-short-name }} table and, for example, count the number of posts that have an accepted answer:
 
-```shell
-scala> val ydb_posts2020 = spark.read.format("ydb").options(my_ydb).load("stackoverflow/posts")
-ydb_posts2020: org.apache.spark.sql.DataFrame = [Id: bigint, PostTypeId: bigint ... 21 more fields]
+{% list tabs %}
 
-scala> ydb_posts2020.printSchema
-root
- |-- Id: long (nullable = false)
- |-- PostTypeId: long (nullable = true)
- |-- AcceptedAnswerId: long (nullable = true)
- |-- CreationDate: timestamp (nullable = true)
- |-- Score: long (nullable = true)
- |-- ViewCount: long (nullable = true)
- |-- Body: binary (nullable = true)
- |-- OwnerUserId: long (nullable = true)
- |-- OwnerDisplayName: binary (nullable = true)
- |-- LastEditorUserId: long (nullable = true)
- |-- LastEditorDisplayName: binary (nullable = true)
- |-- LastEditDate: timestamp (nullable = true)
- |-- LastActivityDate: timestamp (nullable = true)
- |-- Title: binary (nullable = true)
- |-- Tags: binary (nullable = true)
- |-- AnswerCount: long (nullable = true)
- |-- CommentCount: long (nullable = true)
- |-- FavoriteCount: long (nullable = true)
- |-- ContentLicense: binary (nullable = true)
- |-- ParentId: binary (nullable = true)
- |-- CommunityOwnedDate: timestamp (nullable = true)
- |-- ClosedDate: timestamp (nullable = true)
- |-- Year: integer (nullable = true)
+- Spark Shell
 
-scala> ydb_posts2020.count
-res3: Long = 4304021
+  ```shell
+  scala> val ydb_posts2020 = spark.read.format("ydb").options(my_ydb).load("stackoverflow/posts")
+  ydb_posts2020: org.apache.spark.sql.DataFrame = [Id: bigint, PostTypeId: bigint ... 21 more fields]
 
-scala> ydb_posts2020.filter(col("AcceptedAnswerId") > 0).count
-res4: Long = 843780
-```
+  scala> ydb_posts2020.printSchema
+  root
+  |-- Id: long (nullable = false)
+  |-- PostTypeId: long (nullable = true)
+  |-- AcceptedAnswerId: long (nullable = true)
+  |-- CreationDate: timestamp (nullable = true)
+  |-- Score: long (nullable = true)
+  |-- ViewCount: long (nullable = true)
+  |-- Body: binary (nullable = true)
+  |-- OwnerUserId: long (nullable = true)
+  |-- OwnerDisplayName: binary (nullable = true)
+  |-- LastEditorUserId: long (nullable = true)
+  |-- LastEditorDisplayName: binary (nullable = true)
+  |-- LastEditDate: timestamp (nullable = true)
+  |-- LastActivityDate: timestamp (nullable = true)
+  |-- Title: binary (nullable = true)
+  |-- Tags: binary (nullable = true)
+  |-- AnswerCount: long (nullable = true)
+  |-- CommentCount: long (nullable = true)
+  |-- FavoriteCount: long (nullable = true)
+  |-- ContentLicense: binary (nullable = true)
+  |-- ParentId: binary (nullable = true)
+  |-- CommunityOwnedDate: timestamp (nullable = true)
+  |-- ClosedDate: timestamp (nullable = true)
+  |-- Year: integer (nullable = true)
+
+  scala> ydb_posts2020.count
+  res3: Long = 4304021
+
+  scala> ydb_posts2020.filter(col("AcceptedAnswerId") > 0).count
+  res4: Long = 843780
+  ```
+
+- PySpark
+
+  ```shell
+  >>> ydb_posts2020 = spark.read.format("ydb").options(**my_ydb).load("stackoverflow/posts")
+  >>> ydb_posts2020.printSchema()
+  root
+  |-- Id: long (nullable = true)
+  |-- PostTypeId: long (nullable = true)
+  |-- AcceptedAnswerId: long (nullable = true)
+  |-- CreationDate: timestamp (nullable = true)
+  |-- Score: long (nullable = true)
+  |-- ViewCount: long (nullable = true)
+  |-- Body: binary (nullable = true)
+  |-- OwnerUserId: long (nullable = true)
+  |-- OwnerDisplayName: binary (nullable = true)
+  |-- LastEditorUserId: long (nullable = true)
+  |-- LastEditorDisplayName: binary (nullable = true)
+  |-- LastEditDate: timestamp (nullable = true)
+  |-- LastActivityDate: timestamp (nullable = true)
+  |-- Title: binary (nullable = true)
+  |-- Tags: binary (nullable = true)
+  |-- AnswerCount: long (nullable = true)
+  |-- CommentCount: long (nullable = true)
+  |-- FavoriteCount: long (nullable = true)
+  |-- ContentLicense: binary (nullable = true)
+  |-- ParentId: binary (nullable = true)
+  |-- CommunityOwnedDate: timestamp (nullable = true)
+  |-- ClosedDate: timestamp (nullable = true)
+
+  >>> ydb_posts2020.count()
+  4304021
+  >>> ydb_posts2020.filter(col("AcceptedAnswerId") > 0).count()
+  843780
+  ```
+
+{% endlist %}
 
 ## Spark SQL example {#example-spark-sql}
 

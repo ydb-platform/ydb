@@ -1,13 +1,13 @@
-LIBRARY()
+GTEST()
 
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
+PEERDIR(
+    library/cpp/yt/assert
+)
+
 SRCS(
-    assert.cpp
+    assert_ut.cpp
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    unittests
-)

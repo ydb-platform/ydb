@@ -125,12 +125,12 @@ namespace NKikimr::NSharedCache {
         }
 
         struct TLoaded {
-            TLoaded(ui32 pageId, TSharedPageRef page)
+            TLoaded(TPageId pageId, TSharedPageRef page)
                 : PageId(pageId)
                 , Page(std::move(page))
             { }
 
-            ui32 PageId;
+            TPageId PageId;
             TSharedPageRef Page;
         };
 

@@ -445,10 +445,11 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         // Insert to the table with index should succeed
         {
+            //, (11, "\x77\x75\x03", "11")
             const TString query1(Q_(R"(
-                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES)"
-                "(10, \"\x76\x76\x03\", \"10\");"
-            ));
+                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
+                (10, "\x76\x77\x03", "10");
+            )"));
 
             auto result = session.ExecuteDataQuery(
                                  query1,
@@ -456,6 +457,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
         }
+
+        // First index is updated
+        const TString postingTable1_ins = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable1_ins);
 
         // BulkUpsert to the table with index should fail
         {
@@ -474,10 +479,43 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_C(issues.contains("Only async-indexed tables are supported by BulkUpsert"), issues);
         }
 
-        const TString postingTable1 = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        const TString postingTable1_bulk = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_EQUAL(postingTable1_ins, postingTable1_bulk);
+
+        // Delete ON from the table with index should succeed
+        {
+            const TString query1(Q_(R"(
+                DELETE FROM `/Root/TestTable` ON SELECT 10 AS `pk`;
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        const TString postingTable1_del = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+
+/*
+        // Normal delete from the table with index should succeed (it uses a different code path)
+        {
+            const TString query1(Q_(R"(
+                DELETE FROM `/Root/TestTable` WHERE pk=11;
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        const TString postingTable1_del = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+*/
 
         // First index is updated
-        UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable1);
+        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_del);
     }
 
     Y_UNIT_TEST_TWIN(SimpleVectorIndexOrderByCosineDistanceWithCover, Nullable) {

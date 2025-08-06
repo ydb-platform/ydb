@@ -64,7 +64,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     auto lookupKeys = PrecomputeDictKeys(*condenseResult, del.Pos(), ctx);
 
-    const auto indexes = BuildSecondaryIndexVector(table, del.Pos(), ctx);
+    const auto indexes = BuildSecondaryIndexVector(table, del.Pos(), ctx, nullptr, true);
     YQL_ENSURE(indexes);
     THashSet<TString> keyColumns;
     for (const auto& pair : indexes) {
@@ -105,14 +105,79 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
         auto deleteIndexKeys = MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumns, del.Pos(), ctx);
 
-        auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
-            .Table(tableNode)
-            .Input(deleteIndexKeys)
-            .ReturningColumns<TCoAtomList>().Build()
-            .IsBatch(ctx.NewAtom(del.Pos(), "false"))
-            .Done();
+        if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            // Generate input type for vector resolve
+            TVector<const TItemExprType*> rowItems;
+            for (const auto& column : indexTableColumns) {
+                auto type = table.GetColumnType(TString(column));
+                YQL_ENSURE(type, "No key column: " << column);
+                auto itemType = ctx.MakeType<TItemExprType>(column, type);
+                YQL_ENSURE(itemType->Validate(del.Pos(), ctx));
+                rowItems.push_back(itemType);
+            }
+            auto rowType = ctx.MakeType<TStructExprType>(rowItems);
+            YQL_ENSURE(rowType->Validate(del.Pos(), ctx));
+            const TTypeAnnotationNode* resolveInputType = ctx.MakeType<TListExprType>(rowType);
 
-        effects.emplace_back(std::move(indexDelete));
+            auto resolveOutput = Build<TKqpCnVectorResolve>(ctx, del.Pos())
+                .Output()
+                    .Stage<TDqStage>()
+                        .Inputs()
+                            .Add(deleteIndexKeys)
+                            .Build()
+                        .Program()
+                            .Args({"vector_resolve_rows"})
+                            .Body<TCoToStream>()
+                                .Input("vector_resolve_rows")
+                                .Build()
+                            .Build()
+                        .Settings().Build()
+                        .Build()
+                    .Index().Build(0)
+                    .Build()
+                .Table(del.Table())
+                .InputType(ExpandType(del.Pos(), *resolveInputType, ctx))
+                .Index(ctx.NewAtom(del.Pos(), indexDesc->Name))
+                .Done();
+
+            auto deleteIndexStage = Build<TDqStage>(ctx, del.Pos())
+                .Inputs()
+                    .Add(resolveOutput)
+                    .Build()
+                .Program()
+                    .Args({"rows"})
+                    .Body<TCoToStream>()
+                        .Input("rows")
+                        .Build()
+                    .Build()
+                .Settings().Build()
+                .Done();
+
+            auto deleteUnion = Build<TDqCnUnionAll>(ctx, del.Pos())
+                .Output()
+                    .Stage(deleteIndexStage)
+                    .Index().Build("0")
+                    .Build()
+                .Done();
+
+            auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
+                .Table(tableNode)
+                .Input(deleteUnion)
+                .ReturningColumns<TCoAtomList>().Build()
+                .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+                .Done();
+
+            effects.emplace_back(indexDelete);
+        } else {
+            auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
+                .Table(tableNode)
+                .Input(deleteIndexKeys)
+                .ReturningColumns<TCoAtomList>().Build()
+                .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+                .Done();
+
+            effects.emplace_back(std::move(indexDelete));
+        }
     }
 
     return Build<TExprList>(ctx, del.Pos())

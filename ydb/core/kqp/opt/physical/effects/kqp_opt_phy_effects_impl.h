@@ -95,8 +95,12 @@ struct TDictAndKeysResult {
 TDictAndKeysResult PrecomputeDictAndKeys(const TCondenseInputResult& condenseResult, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx);
 
-NYql::NNodes::TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const NYql::TKikimrTableDescription & table,  NYql::NNodes::TDqPhyPrecompute& precompute,
+NYql::NNodes::TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const NYql::TKikimrTableDescription & table, NYql::NNodes::TDqPhyPrecompute& precompute,
     NYql::NNodes::TExprBase input,
     const NYql::NNodes::TKqpTable& kqpTableNode, const NYql::TPositionHandle& pos, NYql::TExprContext& ctx, const TVector<TString>& extraColumnsToRead = {});
+
+NYql::NNodes::TKqpCnVectorResolve BuildVectorResolveOverPrecompute(const NYql::NNodes::TDqPhyPrecompute& rowsPrecompute,
+    const NYql::NNodes::TExprBase& originalInput, const NYql::NNodes::TKqpTable& kqpTableNode,
+    const TString& kqpIndexName, const NYql::TPositionHandle& pos, NYql::TExprContext& ctx);
 
 } // NKikimr::NKqp::NOpt

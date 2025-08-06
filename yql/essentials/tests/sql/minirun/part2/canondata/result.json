@@ -260,9 +260,9 @@
     ],
     "test.test[blocks-agg_by_key_only_distinct-default.txt-Peephole]": [
         {
-            "checksum": "0ab97b60dc932f51a4cad3d5b703d98c",
-            "size": 2174,
-            "uri": "https://{canondata_backend}/1917492/6fdf85f7e05da60eed58efcacce70c29bce9a047/resource.tar.gz#test.test_blocks-agg_by_key_only_distinct-default.txt-Peephole_/opt.yql"
+            "checksum": "7d9e856c428f2381f7d3e7388ee0a354",
+            "size": 2150,
+            "uri": "https://{canondata_backend}/1871182/8bd84ab8578c2ebd4af82266ee441200daed8d95/resource.tar.gz#test.test_blocks-agg_by_key_only_distinct-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-agg_by_key_only_distinct-default.txt-Results]": [
@@ -281,9 +281,9 @@
     ],
     "test.test[blocks-agg_singular_type_value_optional-default.txt-Peephole]": [
         {
-            "checksum": "d22ed37889eea3b41eadb6164bf6d017",
-            "size": 3113,
-            "uri": "https://{canondata_backend}/1781765/b8d92d6ccf46e436b2e5b3b70ab511bab6d820b0/resource.tar.gz#test.test_blocks-agg_singular_type_value_optional-default.txt-Peephole_/opt.yql"
+            "checksum": "de251a08bbc706c12478c04b4ebd6c43",
+            "size": 3101,
+            "uri": "https://{canondata_backend}/1871182/8bd84ab8578c2ebd4af82266ee441200daed8d95/resource.tar.gz#test.test_blocks-agg_singular_type_value_optional-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-agg_singular_type_value_optional-default.txt-Results]": [
@@ -302,9 +302,9 @@
     ],
     "test.test[blocks-coalesce_pg_types-default.txt-Peephole]": [
         {
-            "checksum": "fe534530228d3199c1fb63621b1bdcfc",
-            "size": 742,
-            "uri": "https://{canondata_backend}/1937150/e249b7faff24c68591c4c61cf9ecf7e069660ddc/resource.tar.gz#test.test_blocks-coalesce_pg_types-default.txt-Peephole_/opt.yql"
+            "checksum": "b13866be9b49bf34530fe439d229a539",
+            "size": 722,
+            "uri": "https://{canondata_backend}/1871182/8bd84ab8578c2ebd4af82266ee441200daed8d95/resource.tar.gz#test.test_blocks-coalesce_pg_types-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-coalesce_pg_types-default.txt-Results]": [
@@ -323,9 +323,9 @@
     ],
     "test.test[blocks-exists-default.txt-Peephole]": [
         {
-            "checksum": "fe4b8e508f707b10f04202f1c79b69ba",
-            "size": 559,
-            "uri": "https://{canondata_backend}/1917492/6fdf85f7e05da60eed58efcacce70c29bce9a047/resource.tar.gz#test.test_blocks-exists-default.txt-Peephole_/opt.yql"
+            "checksum": "973ad90642a043c89bbc84310a744dfb",
+            "size": 539,
+            "uri": "https://{canondata_backend}/1871182/8bd84ab8578c2ebd4af82266ee441200daed8d95/resource.tar.gz#test.test_blocks-exists-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-exists-default.txt-Results]": [
@@ -365,9 +365,9 @@
     ],
     "test.test[blocks-sort-default.txt-Peephole]": [
         {
-            "checksum": "fc3dd8d7c0631fdd696c87d359fd7c6b",
-            "size": 905,
-            "uri": "https://{canondata_backend}/1775059/6773e6533ba4ece8ecb355472912579ca2809089/resource.tar.gz#test.test_blocks-sort-default.txt-Peephole_/opt.yql"
+            "checksum": "c2f4de66ed094d5904374bfc1e06e1b2",
+            "size": 879,
+            "uri": "https://{canondata_backend}/1871182/8bd84ab8578c2ebd4af82266ee441200daed8d95/resource.tar.gz#test.test_blocks-sort-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-sort-default.txt-Results]": [
@@ -386,9 +386,9 @@
     ],
     "test.test[blocks-take_skip-default.txt-Peephole]": [
         {
-            "checksum": "de1c6349e4441b4e48c79285a966c8cd",
-            "size": 919,
-            "uri": "https://{canondata_backend}/1942100/9b98084d4439b1dd0f8d2398da8f0a45fa957bf8/resource.tar.gz#test.test_blocks-take_skip-default.txt-Peephole_/opt.yql"
+            "checksum": "deca93e055311b6938c37c945d445427",
+            "size": 879,
+            "uri": "https://{canondata_backend}/1871182/8bd84ab8578c2ebd4af82266ee441200daed8d95/resource.tar.gz#test.test_blocks-take_skip-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-take_skip-default.txt-Results]": [

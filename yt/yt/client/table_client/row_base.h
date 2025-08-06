@@ -342,7 +342,7 @@ public:
     using TIndexes = TCompactVector<int, TypicalColumnCount>;
 
     TColumnFilter();
-    TColumnFilter(const std::initializer_list<int>& indexes);
+    TColumnFilter(std::initializer_list<int> indexes);
     explicit TColumnFilter(TIndexes&& indexes);
     explicit TColumnFilter(const std::vector<int>& indexes);
     explicit TColumnFilter(int schemaColumnCount);

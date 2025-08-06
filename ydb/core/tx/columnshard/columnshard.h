@@ -238,6 +238,57 @@ namespace TEvColumnShard {
             Record.SetTxId(txId);
         }
     };
+
+    struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite> {
+        TEvWrite() = default;
+
+        TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, NColumnShard::TSchemeShardLocalPathId tableId,
+                 const TString& dedupId, const TString& data, const ui32 writePartId,
+                const NEvWrite::EModificationType modificationType) {
+            ActorIdToProto(source, Record.MutableSource());
+            tableId.ToProto(Record);
+            Record.SetDedupId(dedupId);
+            Record.SetData(data);
+            Record.SetWritePartId(writePartId);
+            Record.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(modificationType));
+            longTxId.ToProto(Record.MutableLongTxId());
+        }
+
+        // Optionally set schema to deserialize data with
+        void SetArrowSchema(const TString& arrowSchema) {
+            Record.MutableMeta()->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
+            Record.MutableMeta()->SetSchema(arrowSchema);
+        }
+
+        void SetArrowData(const TString& arrowSchema, const TString& arrowData) {
+            Record.MutableMeta()->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
+            Record.MutableMeta()->SetSchema(arrowSchema);
+            Record.SetData(arrowData);
+        }
+    };
+
+    struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult, TEvColumnShard::EvWriteResult> {
+        TEvWriteResult() = default;
+
+        TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, ui32 status)
+            : TEvWriteResult(origin, writeMeta, writeMeta.GetWriteId(), status)
+        {
+        }
+
+        TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, const i64 writeId, ui32 status) {
+            Record.SetOrigin(origin);
+            Record.SetTxInitiator(0);
+            Record.SetWriteId(writeId);
+            writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(Record);
+            Record.SetDedupId(writeMeta.GetDedupId());
+            Record.SetStatus(status);
+        }
+
+        Ydb::StatusIds::StatusCode GetYdbStatus() const  {
+            const auto status = (NKikimrTxColumnShard::EResultStatus)Record.GetStatus();
+            return NColumnShard::ConvertToYdbStatus(status);
+        }
+    };
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

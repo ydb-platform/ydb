@@ -9,8 +9,10 @@
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
+#include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -60,6 +62,46 @@ public:
     virtual TConclusion<THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
         THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> result;
         return result;
+    }
+
+    void Insert(const TInsertedData& data) override {
+        Inserted.emplace(data.GetInsertWriteId(), data);
+    }
+
+    void Commit(const TCommittedData& data) override {
+        Committed[data.GetPathId()].emplace(data);
+    }
+
+    void Abort(const TInsertedData& data) override {
+        Aborted.emplace(data.GetInsertWriteId(), data);
+    }
+
+    void EraseInserted(const TInsertedData& data) override {
+        Inserted.erase(data.GetInsertWriteId());
+    }
+
+    void EraseCommitted(const TCommittedData& data) override {
+        Committed[data.GetPathId()].erase(data);
+    }
+
+    void EraseAborted(const TInsertedData& data) override {
+        Aborted.erase(data.GetInsertWriteId());
+    }
+
+    bool Load(TInsertTableAccessor& accessor, const TInstant&) override {
+        for (auto&& i : Inserted) {
+            accessor.AddInserted(std::move(i.second), true);
+        }
+        for (auto&& i : Aborted) {
+            accessor.AddAborted(std::move(i.second), true);
+        }
+        for (auto&& i : Committed) {
+            for (auto&& c : i.second) {
+                auto copy = c;
+                accessor.AddCommitted(std::move(copy), true);
+            }
+        }
+        return true;
     }
 
     virtual void WritePortion(const NOlap::TPortionInfo& portion) override {
@@ -180,6 +222,9 @@ public:
     }
 
 private:
+    THashMap<TInsertWriteId, TInsertedData> Inserted;
+    THashMap<TInternalPathId, TSet<TCommittedData>> Committed;
+    THashMap<TInsertWriteId, TInsertedData> Aborted;
     THashMap<ui64, std::shared_ptr<NOlap::TPortionInfo>> Portions;
     THashMap<ui32, TIndex> Indices;
 };

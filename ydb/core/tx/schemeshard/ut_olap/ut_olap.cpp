@@ -940,6 +940,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
             NTxUT::PlanCommit(runtime, sender, shardId, planStep, { txId });
         }
+        csController->WaitIndexation(TDuration::Seconds(5));
         {
             auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
             Cerr << description.DebugString() << Endl;

@@ -354,9 +354,14 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             CheckCount(230000);
             i64 count = CSController->GetShardingFiltersCount().Val();
             AFL_VERIFY(count >= 16)("count", count);
+            CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+            CSController->WaitIndexation(TDuration::Seconds(3));
             CSController->WaitCompactions(TDuration::Seconds(3));
             WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+            CheckCount(230000);
+            CSController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+            CSController->WaitIndexation(TDuration::Seconds(5));
             CheckCount(230000);
             CSController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->WaitCompactions(TDuration::Seconds(5));

@@ -16,6 +16,8 @@ private:
     TCurrentCompaction ActiveCompactionInfo;
     std::optional<ui64> WaitingCompactionPriority;
 
+    THashMap<TString, TMonotonic> ActiveIndexationTasks;
+
     std::shared_ptr<TBackgroundControllerCounters> Counters;
     bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
@@ -85,6 +87,15 @@ public:
     }
     bool IsCleanupInsertTableActive() const {
         return ActiveCleanupInsertTable;
+    }
+
+    void CheckDeadlinesIndexation();
+
+    void StartIndexing(const NOlap::TColumnEngineChanges& changes);
+    void FinishIndexing(const NOlap::TColumnEngineChanges& changes);
+    TString DebugStringIndexation() const;
+    i64 GetIndexingActiveCount() const {
+        return ActiveIndexationTasks.size();
     }
 };
 

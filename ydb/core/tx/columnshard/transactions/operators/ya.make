@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     GLOBAL schema.cpp
+    GLOBAL long_tx_write.cpp
     GLOBAL backup.cpp
     GLOBAL sharing.cpp
     propose_tx.cpp

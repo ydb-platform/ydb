@@ -9,6 +9,7 @@ struct TReadStats {
     ui64 IndexGranules{0};
     ui64 IndexPortions{0};
     ui64 IndexBatches{0};
+    ui64 CommittedBatches{0};
     ui64 CommittedPortionsBytes = 0;
     ui64 InsertedPortionsBytes = 0;
     ui64 CompactedPortionsBytes = 0;

@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         while (csController->GetCompactionStartedCounter().Val() == 0) {
-            Cout << "Wait compaction..." << Endl;
+            Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
         while (!Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount() ||
@@ -67,6 +67,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                  << csController->GetIndexWriteControllerBrokeCount().Val() << Endl;
             Sleep(TDuration::Seconds(2));
         }
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         const auto startInstant = TMonotonic::Now();
         while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() &&
@@ -82,6 +83,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
         csController->SetIndexWriteControllerEnabled(false);
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
@@ -95,7 +97,9 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         TTypedLocalHelper("Utf8", kikimr).ExecuteSchemeQuery("DROP TABLE `/Root/olapStore/olapTable`;");
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->WaitIndexation(TDuration::Seconds(5));
         csController->WaitCompactions(TDuration::Seconds(5));
     }
 
@@ -120,7 +124,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
 
         while (csController->GetCompactionStartedCounter().Val() == 0) {
-            Cout << "Wait compaction..." << Endl;
+            Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
         while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount() < 20 ||
@@ -129,6 +133,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                  << csController->GetIndexWriteControllerBrokeCount().Val() << Endl;
             Sleep(TDuration::Seconds(2));
         }
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         csController->WaitCompactions(TDuration::Seconds(5));
         AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
@@ -340,7 +345,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         }
 
         while (csController->GetCompactionStartedCounter().Val() == 0) {
-            Cerr << "Wait compaction..." << Endl;
+            Cerr << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
         {

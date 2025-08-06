@@ -1735,9 +1735,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         // Add sleep to ensure create operation completes
         runtime.SimulateSleep(TDuration::Seconds(1));
 
-        // Drop backup collection using SQL - this should resolve the path correctly
-        // The key issue is that when using SQL (no explicit WorkingDir), 
-        // the system must resolve "TestCollection" to "/Root/.backups/collections/TestCollection"
         ExecSQL(server, edgeActor, R"(DROP BACKUP COLLECTION `TestCollection`;)", false);
 
         // Verify collection was deleted by trying to drop it again (should fail)
@@ -1802,9 +1799,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
 
-        // Try to drop non-existent collection - should fail with proper error
-        // This test ensures the path resolution logic correctly identifies when
-        // a collection doesn't exist vs when path resolution fails
         ExecSQL(server, edgeActor, R"(DROP BACKUP COLLECTION `NonExistentCollection`;)", 
                 false, Ydb::StatusIds::SCHEME_ERROR);
     }

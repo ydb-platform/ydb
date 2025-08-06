@@ -1407,14 +1407,12 @@ public:
                 tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropBackupCollection);
             }
 
-            // Set working directory to the collections directory, not the database root
             TString database = GetDatabase() ? GetDatabase() : NSchemeHelpers::GetDomainDatabase(AppData(ActorSystem));
             tx.SetWorkingDir(database + "/.backups/collections");
 
             auto& op = *tx.MutableDrop();
-            op.SetName(settings.Name);  // Just the collection name
+            op.SetName(settings.Name);
             
-            // Also set the specific DropBackupCollection name field
             auto& dropBackupOp = *tx.MutableDropBackupCollection();
             dropBackupOp.SetName(settings.Name);
 

@@ -562,6 +562,25 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
             env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
         }
+
+        env.AdvanceCurrentTime(TDuration::Minutes(30));
+
+        {
+            // This will trigger CMS cleanup.
+            env.CheckPermissionRequest(MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+            ), TStatus::DISALLOW_TEMP);
+
+            auto list = env.CheckListRequests("user", 2);
+            auto reqs = list.GetRequests();
+            for (const auto& req : reqs) {
+                UNIT_ASSERT_VALUES_UNEQUAL("user-r-1", req.GetRequestId());
+            }
+         
+            // Check that manually approved permission was cleaned up
+            env.CheckGetPermission("user", permissionId, false, TStatus::WRONG_REQUEST);
+        }
     }
 
     Y_UNIT_TEST(ManualRequestApprovalLockingAllNodes)

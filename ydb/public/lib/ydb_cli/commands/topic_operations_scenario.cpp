@@ -286,7 +286,10 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .UseAutoPartitioning = useAutoPartitioning,
             .CommitIntervalMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion
             .CommitMessages = CommitMessages,
-            .UseCpuTimestamp = UseCpuTimestamp
+            .UseCpuTimestamp = UseCpuTimestamp,
+            .KeyPrefix = KeyPrefix,
+            .KeyCount = KeyCount,
+            .KeySeed = writerIdx,
         };
 
         threads.push_back(std::async([writerParams = std::move(writerParams)]() { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));

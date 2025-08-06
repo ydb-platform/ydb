@@ -69,6 +69,15 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
     config.Opts->AddLongOption("direct", "Direct write to a partition node.")
         .Hidden()
         .StoreTrue(&Scenario.Direct);
+    config.Opts->AddLongOption("key-prefix", "Generate keys with this prefix. Put pair '__key':'{key-prefix}.{key-index}' in the message metadata.")
+        .Optional()
+        .Hidden()
+        .StoreResult(&Scenario.KeyPrefix);
+    config.Opts->AddLongOption("key-count", "The number of different keys to generate. The --key-prefix parameter must be set.")
+        .Optional()
+        .Hidden()
+        .DefaultValue(1)
+        .StoreResult(&Scenario.KeyCount);
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 

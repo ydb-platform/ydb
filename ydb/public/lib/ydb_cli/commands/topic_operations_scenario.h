@@ -80,6 +80,8 @@ public:
     bool UseTableSelect = false;
     bool ReadWithoutConsumer = false;
     bool UseCpuTimestamp = false;
+    TMaybe<TString> KeyPrefix;
+    ui32 KeyCount = 0;
 
 protected:
     void CreateTopic(const TString& database,

@@ -111,7 +111,7 @@ void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
         AFL_VERIFY(*LastSourceIdx < source->GetSourceIdx())("idx_last", *LastSourceIdx)("idx_new", source->GetSourceIdx());
     }
     LastSourceIdx = source->GetSourceIdx();
-    if (auto genSource = OnAddSource(source)) {
+    if (const auto& genSource = OnAddSource(std::move(source))) {
         genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
     }
 }
@@ -120,7 +120,7 @@ void ISyncPoint::OnSourceFinished() {
     if (Next) {
         Next->OnSourceFinished();
     }
-    if (auto genSource = DoOnSourceFinishedOnPreviouse()) {
+    if (const auto& genSource = DoOnSourceFinishedOnPreviouse()) {
         genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
     }
 }

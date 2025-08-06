@@ -145,7 +145,7 @@ public:
         return PKRangesFilter;
     }
 
-    ISnapshotSchema::TPtr GetResultSchema() const {
+    const ISnapshotSchema::TPtr& GetResultSchema() const {
         AFL_VERIFY(ResultIndexSchema);
         return ResultIndexSchema;
     }

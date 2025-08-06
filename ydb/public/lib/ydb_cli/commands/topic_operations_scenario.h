@@ -41,6 +41,7 @@ public:
 
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
+    void EnsureRatesIsValid() const;
 
     TString GetReadOnlyTableName() const;
     TString GetWriteOnlyTableName() const;
@@ -66,8 +67,8 @@ public:
     bool Direct = false;
     TString ConsumerPrefix;
     size_t MessageSizeBytes;
-    size_t MessagesPerSec;
-    size_t BytesPerSec;
+    double MessagesPerSec;
+    double BytesPerSec;
     ui32 Codec;
     TString TableName;
     ui32 TablePartitionCount = 1;

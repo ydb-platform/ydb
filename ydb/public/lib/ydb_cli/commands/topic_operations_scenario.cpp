@@ -44,6 +44,12 @@ void TTopicOperationsScenario::EnsureWarmupSecIsValid() const
     }
 }
 
+void TTopicOperationsScenario::EnsureRatesIsValid() const
+{
+    Y_ENSURE_EX(MessagesPerSec >= 0, TMisuseException() << "--messages-per-sec should be non negative.");
+    Y_ENSURE_EX(BytesPerSec >= 0, TMisuseException() << "--bytes-per-sec should be non negative.");
+}
+
 TString TTopicOperationsScenario::GetReadOnlyTableName() const
 {
     return TableName + "-ro";

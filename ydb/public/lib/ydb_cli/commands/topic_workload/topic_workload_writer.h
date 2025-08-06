@@ -23,7 +23,7 @@ namespace NYdb {
             const std::vector<TString>& GeneratedMessages;
             TString Database;
             TString TopicName;
-            size_t BytesPerSec;
+            double BytesPerSec;
             size_t MessageSize;
             ui32 ProducerThreadCount;
             ui32 WriterIdx;

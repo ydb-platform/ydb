@@ -114,6 +114,7 @@ void TCommandWorkloadTopicRunWrite::Parse(TConfig& config)
 
     Scenario.EnsurePercentileIsValid();
     Scenario.EnsureWarmupSecIsValid();
+    Scenario.EnsureRatesIsValid();
 }
 
 int TCommandWorkloadTopicRunWrite::Run(TConfig& config)

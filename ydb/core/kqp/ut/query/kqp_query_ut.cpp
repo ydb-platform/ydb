@@ -1835,7 +1835,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();

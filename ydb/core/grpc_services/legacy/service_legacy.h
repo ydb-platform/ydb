@@ -56,9 +56,8 @@ struct TGetYdbTokenLegacyTraits {
 
 template <class TReq>
 struct TGetYdbTokenUnsecureTraits {
-    static const TMaybe<TString> GetYdbToken(const TReq&, const NYdbGrpc::IRequestContextBase* ctx) {
-        // Fallback on headers
-        return ExtractYdbTokenFromHeaders(ctx);
+    static const TMaybe<TString> GetYdbToken(const TReq&, const NYdbGrpc::IRequestContextBase*) {
+        return Nothing();
     }
 
     static_assert(!THasGetSecurityToken<TReq>::value, "Request class has GetSecurityToken method, so TGetYdbTokenUnsecureTraits must not be used");
@@ -80,86 +79,10 @@ struct TResponseLegacyCommonTraits {
 template <class TReq, class TResp>
 struct TLegacyGrpcMethodAccessorTraits;
 
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeOperation, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeOperation>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
 
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeOperationStatus, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeOperationStatus>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeDescribe, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeDescribe>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TChooseProxyRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TChooseProxyRequest>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TPersQueueRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TPersQueueRequest>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeInitRoot, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TSchemeInitRoot>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TResolveNodeRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TResolveNodeRequest>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TFillNodeRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TFillNodeRequest>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TDrainNodeRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TDrainNodeRequest>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TBlobStorageConfigRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TBlobStorageConfigRequest>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::THiveCreateTablet, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::THiveCreateTablet>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TTestShardControlRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TTestShardControlRequest>
+template <class TReq>
+struct TLegacyGrpcMethodAccessorTraits<TReq, NKikimrClient::TResponse>
+    : NPrivate::TGetYdbTokenLegacyTraits<TReq>
     , NPrivate::TResponseLegacyCommonTraits
 {
 };
@@ -192,20 +115,6 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TConsoleRequest, NKikimrCl
         resp.MutableStatus()->SetCode(status);
         resp.MutableStatus()->SetReason(issues.ToString());
     }
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TInterconnectDebug, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TInterconnectDebug>
-    , NPrivate::TResponseLegacyCommonTraits
-{
-};
-
-template <>
-struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TTabletStateRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TTabletStateRequest>
-    , NPrivate::TResponseLegacyCommonTraits
-{
 };
 
 // Requests that should be forwarded to msg bus proxy

@@ -221,4 +221,5 @@ message TFeatureFlags {
     optional bool EnableCSOverloadsSubscriptionRetries = 195 [default = false];
     optional bool EnableTopicCompactificationByKey = 196 [default = false];
     optional bool EnableChangeNotNullConstraint = 194 [default = true];
+    optional bool EnableSetConstraint = 194 [default = true];
 }

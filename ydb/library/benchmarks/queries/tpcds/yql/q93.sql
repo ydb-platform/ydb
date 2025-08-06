@@ -12,9 +12,9 @@ select  ss_customer_sk
             from {{store_sales}} as store_sales
             left join {{store_returns}} as store_returns on (store_returns.sr_item_sk = store_sales.ss_item_sk
                                                                and store_returns.sr_ticket_number = store_sales.ss_ticket_number)
-                cross join {{reason}} as reason
-            where sr_reason_sk = r_reason_sk
-              and r_reason_desc = 'reason 28') t
+                inner join {{reason}} as reason
+                on store_returns.sr_reason_sk = reason.r_reason_sk
+              where r_reason_desc = 'reason 28') t
       group by ss_customer_sk
       order by sumsales, ss_customer_sk
 limit 100;

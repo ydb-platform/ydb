@@ -51,7 +51,7 @@ select d_week_seq1
         ,sat_sales sat_sales1
   from $wswscs wswscs cross join {{date_dim}} as date_dim
   where date_dim.d_week_seq = wswscs.d_week_seq and
-        d_year = 2001) y cross join
+        d_year = 2001) y inner join
  (select wswscs.d_week_seq d_week_seq2
         ,sun_sales sun_sales2
         ,mon_sales mon_sales2
@@ -64,7 +64,7 @@ select d_week_seq1
         cross join {{date_dim}} as date_dim
   where date_dim.d_week_seq = wswscs.d_week_seq and
         d_year = 2001+1) z
- where d_week_seq1=d_week_seq2-53
+ on y.d_week_seq1 = z.d_week_seq2-53
  order by d_week_seq1;
 
 -- end query 1 in stream 0 using template query2.tpl

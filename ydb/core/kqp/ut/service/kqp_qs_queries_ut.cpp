@@ -5472,7 +5472,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableChangeNotNullConstraint(true);
+        appConfig.MutableFeatureFlags()->SetEnableSetConstraint(true);
 
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -5532,7 +5532,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableChangeNotNullConstraint(true);
+        appConfig.MutableFeatureFlags()->SetEnableSetConstraint(true);
 
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)

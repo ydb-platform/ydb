@@ -8,10 +8,10 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
-    TVector<ISubOperation::TPtr> CreateChangeConstraint(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-        Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateChangeConstraint);
+    TVector<ISubOperation::TPtr> CreateSetConstraintLock(TOperationId opId, const TTxTransaction& tx) {
+        // Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateChangeConstraint);
         Y_UNUSED(opId);
-        Y_UNUSED(context);
+        Y_UNUSED(tx);
         return {};
     }
 } // namespace NKikimr

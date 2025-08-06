@@ -1592,8 +1592,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         };
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        appConfig.MutableFeatureFlags()->SetEnableChangeNotNullConstraint(true);
+        // appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableFeatureFlags()->SetEnableSetConstraint(true);
 
         TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );

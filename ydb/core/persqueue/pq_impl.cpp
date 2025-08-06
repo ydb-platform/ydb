@@ -170,18 +170,17 @@ private:
         responseRecord.SetErrorCode(NPersQueue::NErrorCode::OK);
 
         Y_ABORT_UNLESS(readResult.ResultSize() > 0 || isDirectRead);
-        bool isStart = false;
         if (!responseRecord.HasPartitionResponse()) {
             auto partResp = responseRecord.MutablePartitionResponse();
             auto readRes = partResp->MutableCmdReadResult();
             readRes->SetBlobsFromDisk(readRes->GetBlobsFromDisk() + readResult.GetBlobsFromDisk());
             readRes->SetBlobsFromCache(readRes->GetBlobsFromCache() + readResult.GetBlobsFromCache());
-            isStart = true;
         }
         ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
-                                    ? (isStart ? readResult.GetReadFromTimestampMs()
-                                                : responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs())
-                                    : 0;
+                                   ? (!responseRecord.HasPartitionResponse()
+                                        ? readResult.GetReadFromTimestampMs()
+                                        : responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs())
+                                   : 0;
 
         if (record.GetPartitionResponse().HasCookie())
             responseRecord.MutablePartitionResponse()->SetCookie(record.GetPartitionResponse().GetCookie());
@@ -196,36 +195,53 @@ private:
 
         partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), readResult.GetRealReadOffset()));
 
+        auto removeIncompleteMessageIfAny = [&] () {
+            if (partResp->ResultSize() == 0)
+                return;
+            auto& back = partResp->GetResult(partResp->ResultSize() - 1);
+            if (back.GetPartNo() + 1 < back.GetTotalParts()) {
+                partResp->MutableResult()->RemoveLast();
+            }
+        };
+
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
-            bool isNewMsg = !readResult.GetResult(i).HasPartNo() || readResult.GetResult(i).GetPartNo() == 0;
-            bool isEmptyPart = readResult.GetResult(i).GetTotalParts() > 1 && readResult.GetResult(i).GetData().empty();
-            if (!isStart) {
+            auto currentReadResult = readResult.GetResult(i);
+            if (currentReadResult.GetData().empty() && currentReadResult.GetUncompressedSize() == 0) { // This is empty parted removed by compactification
+                LastSkipOffset = currentReadResult.GetOffset();
+                removeIncompleteMessageIfAny(); // Also drop previous incomplete message
+                continue; // Skip the empty part;
+              }
+            if (LastSkipOffset.Defined() && currentReadResult.GetOffset() == *LastSkipOffset) {
+                continue; // This is part of the message which is already being skipped due to empty parts. Skip all other parts as well;
+            }
+            if (!InitialRequest) {
+                // This is followup request to read missing parts;
+                // There must be some data in response already.
                 Y_ABORT_UNLESS(partResp->ResultSize() > 0);
-                auto& back = partResp->GetResult(partResp->ResultSize() - 1);
-                bool lastMsgIsNotFull = back.GetPartNo() + 1 < back.GetTotalParts();
-                bool trancate = lastMsgIsNotFull && (
-                        isNewMsg  // Multipart message with missing part, remove it.
-                        || isEmptyPart && back.GetOffset() == readResult.GetResult(i).GetOffset()); // Got empty part for multipart message
-                        // which was already stored in partResp; This message should've been cut out by compactification. Remove it from response;
-
-                if (trancate) {
-                    partResp->MutableResult()->RemoveLast();
-                    if (partResp->GetResult().empty()) isStart = true;
+                if (currentReadResult.GetPartNo() == 0) {
+                    // This is new message. If we still have another incomplete message stored previously, its' last parts were probably deleted by retention of compactification.
+                    // This is fine, we can drop last message (if incomplete) and go on;
+                    removeIncompleteMessageIfAny();
+                } else {
+                    // Otherwise this must be the next part of previously read message.
+                    Y_ABORT_UNLESS(currentReadResult.GetOffset() == partResp->GetResult(partResp->ResultSize() - 1).GetOffset());
                 }
             }
-            if (isEmptyPart) { //Multipart message containing empty part. Ignore the part.
-                continue;
-            }
-            if (isNewMsg) {
-                if (!isStart && readResult.GetResult(i).HasTotalParts()
-                             && readResult.GetResult(i).GetTotalParts() + i > readResult.ResultSize()) //last blob is not full
-                    break;
-                if (!readResult.GetResult(i).GetData().empty()) {
-                    partResp->AddResult()->CopyFrom(readResult.GetResult(i));
-                    isStart = false;
-                }
 
-            } else { //glue to last res
+            // If we already have some data and encounter new message that doesn't fit into current response, we don't go any further, just stop;
+            // (And throw away that message to)
+            if (partResp->ResultSize() > 0 && currentReadResult.GetPartNo() == 0 &&
+                currentReadResult.HasTotalParts() && currentReadResult.GetTotalParts() + i > readResult.ResultSize())
+            {
+                break;
+            }
+
+            // Now actually add some data;
+            if (currentReadResult.GetPartNo() == 0) {
+                // Create new message for first part;
+                partResp->AddResult()->CopyFrom(readResult.GetResult(i));
+            } else { // Glue next part to prevous otherwise
+                Y_ABORT_UNLESS(partResp->ResultSize() > 0); // Must have some data at this point;
                 auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
                 if (rr->GetSeqNo() != readResult.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != readResult.GetResult(i).GetPartNo()) {
                     PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
@@ -239,14 +255,29 @@ private:
                 rr->SetPartNo(readResult.GetResult(i).GetPartNo());
                 rr->SetUncompressedSize(rr->GetUncompressedSize() + readResult.GetResult(i).GetUncompressedSize());
                 if (readResult.GetResult(i).GetPartNo() + 1 == readResult.GetResult(i).GetTotalParts()) {
+                    // This is the last part, validate data size;
                     Y_ABORT_UNLESS((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
                 }
             }
         }
+        // We got no data during initial request - possibly skipped all the data due to compactification.
+        if (InitialRequest && partResp->GetResult().empty() && LastSkipOffset.Defined()
+            // Check if we did actually skip anything so we don't request the same offset again.
+            && Request.GetPartitionRequest().GetCmdRead().GetOffset() < *LastSkipOffset
+        ) {
+            //Try another read. Set TMP_MARKER so that response is redirected to proxy, but here we will treat is as "initial" response still.
+            Request.SetRequestId(TMP_REQUEST_MARKER);
 
+            Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
+            THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+            req->Record = Request;
+            ctx.Send(Tablet, req.Release());
+            return;
+        }
         if (!partResp->GetResult().empty()) {
             const auto& lastRes = partResp->GetResult(partResp->GetResult().size() - 1);
-            if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) { //last res is not full
+            if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) {
+                // Need more data to complete the big message. Send followup read request (and switch to non-initial request state)
                 Request.SetRequestId(TMP_REQUEST_MARKER);
 
                 auto read = Request.MutablePartitionRequest()->MutableCmdRead();
@@ -261,6 +292,7 @@ private:
                 THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
                 req->Record = Request;
                 ctx.Send(Tablet, req.Release());
+                InitialRequest = false;
                 return;
             }
         }
@@ -319,7 +351,8 @@ private:
     THolder<TEvPersQueue::TEvResponse> Response;
     std::shared_ptr<NKikimrClient::TResponse> PreparedResponse;
     TDirectReadKey DirectReadKey;
-
+    bool InitialRequest = true;
+    TMaybe<ui64> LastSkipOffset;
 };
 
 

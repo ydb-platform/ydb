@@ -40,7 +40,7 @@ public:
 template <class TPolicy>
 class ICallback {
 private:
-    bool IsDone = false;
+    mutable bool IsDone = false;
 
     using TAddress = typename TPolicy::TAddress;
     using TObject = typename TPolicy::TObject;
@@ -51,11 +51,15 @@ private:
 
 public:
     virtual ~ICallback() {
-        AFL_VERIFY(IsDone || IsAborted());
+        AFL_VERIFY(IsDone);
     }
 
     bool IsAborted() const {
-        return DoIsAborted();
+        if (DoIsAborted()) {
+            IsDone = true;
+            return true;
+        }
+        return false;
     }
     void OnResultReady(
         THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses, TErrorAddresses<TPolicy>&& errorAddresses) {

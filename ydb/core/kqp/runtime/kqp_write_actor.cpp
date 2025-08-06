@@ -915,17 +915,11 @@ public:
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         YQL_ENSURE(metadata);
         if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
-            CA_LOG_E("ShardId=" << shardId
+            CA_LOG_W("ShardId=" << shardId
                     << " for table '" << TablePath
                     << "': retry limit exceeded."
                     << " Sink=" << this->SelfId() << ".");
-            RuntimeError(
-                NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                TStringBuilder()
-                    << "ShardId=" << shardId
-                    << " for table '" << TablePath
-                    << "': retry limit exceeded.");
+            RetryResolve();
             return false;
         }
 
@@ -1052,11 +1046,14 @@ public:
     void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (!metadata || (ifCookieEqual && metadata->Cookie != ifCookieEqual)) {
-            CA_LOG_D("Retry failed: not found ShardID=" << shardId << " with Cookie=" << ifCookieEqual.value_or(0));
+            CA_LOG_W("Retry failed: not found ShardID=" << shardId << " with Cookie=" << ifCookieEqual.value_or(0));
             return;
         }
 
-        CA_LOG_D("Retry ShardID=" << shardId << " with Cookie=" << ifCookieEqual.value_or(0));
+        CA_LOG_D("Retry ShardID=" << shardId
+            << ", Cookie=" << ifCookieEqual.value_or(0)
+            << ", Attempt=" << metadata->SendAttempts
+            << ", Next Delay=" << CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts));
         SendDataToShard(shardId);
     }
 
@@ -1072,10 +1069,13 @@ public:
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
-        const auto state = TxManager->GetState(ev->Get()->TabletId);
         if (InconsistentTx) {
             RetryShard(ev->Get()->TabletId, std::nullopt);
-        } else if ((state == IKqpTransactionManager::PREPARED
+            return;
+        }
+
+        const auto state = TxManager->GetState(ev->Get()->TabletId);
+        if ((state == IKqpTransactionManager::PREPARED
                     || state == IKqpTransactionManager::EXECUTING)
                 && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
             // Disconnected while waiting for other shards to prepare
@@ -1211,6 +1211,13 @@ public:
         } else {
             ShardedWriteController->OnPartitioningChanged(Partitioning);
             Partitioning.reset();
+        }
+
+        if (InconsistentTx && Closed) {
+            FlushBuffers();
+            YQL_ENSURE(ShardedWriteController);
+            YQL_ENSURE(ShardedWriteController->IsAllWritesClosed());
+            ShardedWriteController->Close();
         }
 
         Callbacks->OnReady();

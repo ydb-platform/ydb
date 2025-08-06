@@ -188,5 +188,8 @@ enum EOperationType {
     // Change Path State
     ESchemeOpChangePathState = 119;
 
+    // Alter Table Alter Column Set
+    ESchemeOpCreateSetConstraint = 123;
+
     // Some entries are grouped by semantics, so are out of order
 }

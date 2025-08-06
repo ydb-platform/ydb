@@ -161,8 +161,8 @@ namespace NSQLHighlight {
                 TRegexPattern{s.Get("STRING_VALUE", /* ansi = */ true)},
             },
             .RangePattern = TRangePattern{
-                .Begin = "@@",
-                .End = "@@",
+                .Begin = R"(@@)",
+                .End = R"(@@)",
             },
             .IsPlain = false,
         };
@@ -175,8 +175,8 @@ namespace NSQLHighlight {
             .Patterns = {{s.Get("COMMENT")}},
             .PatternsANSI = Nothing(),
             .RangePattern = TRangePattern{
-                .Begin = R"re(/\*)re",
-                .End = R"re(\*/)re",
+                .Begin = R"(/*)",
+                .End = R"(*/)",
             },
             .IsPlain = false,
         };

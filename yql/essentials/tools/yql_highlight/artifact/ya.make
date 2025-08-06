@@ -16,6 +16,16 @@ RUN_PROGRAM(
 )
 
 RUN_PROGRAM(
+    yql/essentials/tools/yql_highlight --language="yql" --generate="monarch"
+    STDOUT YQL.monarch.json
+)
+
+RUN_PROGRAM(
+    yql/essentials/tools/yql_highlight --language="yqls" --generate="monarch"
+    STDOUT YQLs.monarch.json
+)
+
+RUN_PROGRAM(
     yql/essentials/tools/yql_highlight --generate="vim"
     STDOUT yql_new.vim
 )

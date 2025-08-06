@@ -7,6 +7,8 @@ namespace NSQLHighlight {
 
     THighlighting MakeYQLsHighlighting() {
         TString id = R"re([A-Za-z_\-0-9]+)re";
+        TString lower = R"re([a-z_0-9])re" + SubstGlobalCopy(id, '+', '*');
+        TString title = R"re([A-Z])re" + SubstGlobalCopy(id, '+', '*');
 
         TRe keywords = Merged({
             {"let"},
@@ -51,7 +53,7 @@ namespace NSQLHighlight {
                 TUnit{
                     .Kind = EUnitKind::FunctionIdentifier,
                     .Patterns = {
-                        TRe{.Body = id, .Before = R"re(\()re"},
+                        TRe{.Body = title, .Before = R"re(\()re"},
                         TRe{.Body = "'" + id + "\\." + id},
                     },
                     .IsPlain = false,
@@ -63,7 +65,7 @@ namespace NSQLHighlight {
                 },
                 TUnit{
                     .Kind = EUnitKind::Identifier,
-                    .Patterns = {TRe{id}},
+                    .Patterns = {TRe{lower}},
                 },
                 TUnit{
                     .Kind = EUnitKind::StringLiteral,

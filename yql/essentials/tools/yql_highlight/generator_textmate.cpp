@@ -2,6 +2,8 @@
 
 #include "json.h"
 
+#include <contrib/libs/re2/re2/re2.h>
+
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/on_disk/tar_archive/archive_writer.h>
@@ -109,8 +111,8 @@ namespace NSQLHighlight {
                 .Name = ToTextMateName(unit.Kind),
                 .Group = ToTextMateGroup(unit.Kind),
                 .Pattern = NTextMate::TRange{
-                    .Begin = range->Begin,
-                    .End = range->End,
+                    .Begin = RE2::QuoteMeta(range->Begin),
+                    .End = RE2::QuoteMeta(range->End),
                 },
             };
         }

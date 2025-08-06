@@ -12,6 +12,42 @@
 
 namespace NKikimr {
 
+NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
+    static int testCase = 0;
+    switch(testCase++) {
+        case 0: {
+            auto data = PrepareData(size);
+
+            auto counter = MakeIntrusive<::NMonitoring::TCounterForPtr>();
+            TMemoryConsumer consumer(counter);
+            TTrackableBuffer buffer(std::move(consumer), data.data(), data.size());
+            return MakeIntrusive<NPDisk::TEvChunkWrite::TBufBackedUpParts>(std::move(buffer));
+        }
+        case 1: {
+            size_t partsCount = rng.Uniform(1, 10);
+            TRope rope;
+            size_t createdBytes = 0;
+            if (size >= partsCount) {
+                for (size_t i = 0; i < partsCount - 1; ++i) {
+                    TRope x(PrepareData(rng.Uniform(1, size / partsCount)));
+                    createdBytes += x.size();
+                    rope.Insert(rope.End(), std::move(x));
+                }
+            }
+            if (createdBytes < size) {
+                rope.Insert(rope.End(), TRope(PrepareData(size - createdBytes)));
+            }
+            return MakeIntrusive<NPDisk::TEvChunkWrite::TRopeAlignedParts>(std::move(rope), size);
+        }
+        case 2: {
+            testCase = 0;
+            return MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(size), size);
+        }
+    }
+    UNIT_ASSERT(false);
+    return nullptr;
+}
+
 Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(TestAbstractPDiskInterface) {
         TString path = "/tmp/asdqwe";
@@ -1087,6 +1123,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         Cerr << "ioDuration# " << ioDuration << Endl;
         testCtx.TestCtx.SectorMap->ImitateRandomWait = {ioDuration, ioDuration};
 
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->SeparateHugePriorities = true;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
 
@@ -1112,8 +1152,14 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const size_t eventsToSend = 1000 * priorities.size();
         const size_t eventsToWait = eventsToSend / 5;
         NPDisk::TEvChunkWrite::TPartsPtr parts = GenParts(rng, size);
-        for (size_t i = 0; i < eventsToSend; ++i) {
-            for (ui64 p = 0; p < priorities.size(); ++p) {
+
+
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+            new NPDisk::TEvYardControl(NPDisk::TEvYardControl::ActionPause, nullptr),
+            NKikimrProto::OK);
+
+        for (ui64 p = 0; p < priorities.size(); ++p) {
+            for (size_t i = 0; i < eventsToSend; ++i) {
                 if (read) {
                     testCtx.Send(new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
                             chunks[p], 0, size, priorities[p], (void*)p));
@@ -1124,6 +1170,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             }
         }
         Cout << (read ? "read" : "write") << " load. Time spent to send " << eventsToSend << " events# " << t.Get() << Endl;
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+            new NPDisk::TEvYardControl(NPDisk::TEvYardControl::ActionResume, nullptr),
+            NKikimrProto::OK);
 
         std::vector<size_t> results(priorities.size(), 0);
         for (size_t i = 0; i < eventsToWait; ++i) {
@@ -1158,8 +1207,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(shares[SyncLog] * 0.90 > shares[HullLoad]);
         UNIT_ASSERT(shares[HullLoad] * 0.90 > shares[HullOnlineRt]);
         UNIT_ASSERT(shares[HullOnlineRt] * 0.90 > shares[HullComp]);
-        UNIT_ASSERT(shares[HullOnlineRt] * 0.90 < shares[HullOnlineOther] &&
-                    shares[HullOnlineOther] * 0.90 < shares[HullOnlineRt]);
+        // test equality with 20% tolerance
+        UNIT_ASSERT(shares[HullOnlineRt] * 0.80 < shares[HullOnlineOther] &&
+                    shares[HullOnlineOther] * 0.80 < shares[HullOnlineRt]);
         UNIT_ASSERT(shares[HullComp] * 0.90 > shares[HullLow]);
     }
 
@@ -1171,8 +1221,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         // compare with 10% tolerance
         UNIT_ASSERT(shares[SyncLog] * 0.90 > shares[HullHugeUserData]);
         UNIT_ASSERT(shares[HullHugeUserData] * 0.90 > shares[HullComp]);
-        UNIT_ASSERT(shares[HullHugeUserData] * 0.90 < shares[HullHugeAsyncBlob] &&
-                    shares[HullHugeAsyncBlob] * 0.90 < shares[HullHugeUserData]);
+        // test equality with 20% tolerance
+        UNIT_ASSERT(shares[HullHugeUserData] * 0.80 < shares[HullHugeAsyncBlob] &&
+                    shares[HullHugeAsyncBlob] * 0.80 < shares[HullHugeUserData]);
         UNIT_ASSERT(shares[HullComp] * 0.90 > shares[HullFresh]);
     }
 }

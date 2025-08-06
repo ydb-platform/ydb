@@ -291,6 +291,7 @@ message THiveCreateTablet {
     repeated TCmdLookupTablet CmdLookupTablet = 3;
     optional uint32 DomainUid = 2; // mandatory, Domain unique id, in most cases 1
     optional uint64 HiveId = 4;
+    optional string SecurityToken = 5;
 }
 
 message THiveCreateTabletResult {

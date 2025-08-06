@@ -146,7 +146,7 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TBlobStorageConfigRequest,
 
 template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::THiveCreateTablet, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::THiveCreateTablet>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::THiveCreateTablet>
     , NPrivate::TResponseLegacyCommonTraits
 {
 };

@@ -889,6 +889,12 @@ protected:
         }
     }
 
+    void PrepareRequest(NKikimrClient::THiveCreateTablet& request) const {
+        if (!SecurityToken.empty()) {
+            request.SetSecurityToken(SecurityToken);
+        }
+    }
+
     TString SecurityToken;
     THolder<TImpl> Impl;
 };

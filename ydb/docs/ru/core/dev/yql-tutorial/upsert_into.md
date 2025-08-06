@@ -1,13 +1,5 @@
 # Вставка и модификация данных с помощью UPSERT
 
-{% note warning %}
-
-{% include [not_allow_for_olap](../../_includes/not_allow_for_olap_text.md) %}
-
-{% include [not_allow_for_olap](../../_includes/ways_add_data_to_olap.md) %}
-
-{% endnote %}
-
 Добавьте данные в строковою таблицу с помощью конструкции [UPSERT INTO](../../yql/reference/syntax/upsert_into.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}

@@ -60,3 +60,9 @@ A [topic](../topic.md) in {{ ydb-short-name }} can be sharded into several parti
 {{ ydb-short-name }} supports transactions involving [row-oriented tables](../glossary.md#row-oriented-table) and/or [topics](../glossary.md#topic). This makes it possible to transactionally transfer data from tables to topics and vice versa, as well as between topics. This ensures that data is neither lost nor duplicated in case of a network outage or other issues. This enables the implementation of the transactional outbox pattern within {{ ydb-short-name }}.
 
 For more information about transactions with tables and topics in {{ ydb-short-name }}, see [{#T}](../topic.md#topic-transactions) and [{#T}](../../reference/ydb-sdk/topic.md).
+
+## Transactions with Column and Row Tables {#mixed-transactions}
+
+The simultaneous use of [column-oriented tables](../glossary.md#column-oriented-table)  and [row-oriented tables](../glossary.md#row-oriented-table) is possible only in Read-Only transactions. Support for write transactions is under development.
+
+If a write transaction includes both types of tables, it will fail with the following error: `Write transactions between column and row tables are disabled at current time`.

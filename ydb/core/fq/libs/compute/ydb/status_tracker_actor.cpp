@@ -149,9 +149,9 @@ public:
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
             case NYdb::NQuery::EExecStatus::Running:
-                SendGetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
                 QueryStats = response.QueryStats;
                 UpdateProgress();
+                SendGetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
                 break;
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:

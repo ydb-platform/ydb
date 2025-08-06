@@ -776,6 +776,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTables(true);
         TKikimrRunner kikimr(settings);
         if (UseAdmin) {
             kikimr.GetTestClient().GrantConnect("user_write@builtin");

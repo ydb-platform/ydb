@@ -37,6 +37,7 @@ public:
     {
         StartClearingIdempotencyKeys();
         CheckWorkersAliveStatus();
+        GcService_->ClearAll();
     }
 
     ~TFmrCoordinator() {

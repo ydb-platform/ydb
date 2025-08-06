@@ -113,6 +113,24 @@ public:
         return WaitExceptionOrAll(allNodesDeletions);
     }
 
+    NThreading::TFuture<void> Clear() override {
+        TString clearRequestUrl = "/clear";
+        ui64 totalWorkersNum = TableDataServiceDiscovery_->GetHostCount();
+        for (ui64 workerNum = 0; workerNum < totalWorkersNum; ++workerNum) {
+            auto workerConnection = TableDataServiceDiscovery_->GetHosts()[workerNum];
+            auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
+            YQL_CLOG(TRACE, FastMapReduce) << "Sending clear request with url: " << clearRequestUrl <<
+                " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
+            try {
+                httpClient.DoPost(clearRequestUrl, TString(), nullptr, GetHeadersWithLogContext(Headers_));
+            } catch (...) {
+                YQL_CLOG(ERROR, FastMapReduce) << "Failed to clear table data service host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port)
+                    << "with error message: " << CurrentExceptionMessage();
+            }
+        }
+        return NThreading::MakeFuture(); // For now just log errors and ignore request failiures.
+    }
+
 private:
     ITableDataServiceDiscovery::TPtr TableDataServiceDiscovery_;
     TKeepAliveHttpClient::THeaders Headers_{};

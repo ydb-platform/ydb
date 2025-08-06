@@ -20,6 +20,8 @@ public:
     virtual NThreading::TFuture<void> Delete(const TString& group, const TString& chunkId) = 0;
 
     virtual NThreading::TFuture<void> RegisterDeletion(const std::vector<TString>& groupsToDelete) = 0;
+
+    virtual NThreading::TFuture<void> Clear() = 0;
 };
 
 } // namespace NYql::NFmr

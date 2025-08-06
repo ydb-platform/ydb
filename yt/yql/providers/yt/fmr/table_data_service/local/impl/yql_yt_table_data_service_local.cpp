@@ -49,6 +49,7 @@ public:
     }
 
     NThreading::TFuture<TTableDataServiceStats> GetStatistics() const override {
+        TGuard<TMutex> guard(Mutex_);
         ui64 keysNum = 0, dataWeight = 0;
         for (auto& [group, chunks]: Data_) {
             for (auto& [chunkId, value]: chunks) {
@@ -57,6 +58,12 @@ public:
             }
         }
         return NThreading::MakeFuture(TTableDataServiceStats{.KeysNum = keysNum, .DataWeight = dataWeight});
+    }
+
+    NThreading::TFuture<void> Clear() override {
+        TGuard<TMutex> guard(Mutex_);
+        Data_.clear();
+        return NThreading::MakeFuture();
     }
 
 private:

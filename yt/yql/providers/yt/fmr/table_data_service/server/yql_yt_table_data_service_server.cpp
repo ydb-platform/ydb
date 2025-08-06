@@ -24,7 +24,8 @@ enum class ETableDataServiceRequestHandler {
     Put,
     Get,
     Delete,
-    DeleteGroups
+    DeleteGroups,
+    Clear
 };
 
 class TReplier: public TRequestReplier {
@@ -66,6 +67,9 @@ private:
         } else if (queryPath == "get_data") {
             YQL_ENSURE(httpRequest.Method == "GET");
             return ETableDataServiceRequestHandler::Get;
+        } else if (queryPath == "clear") {
+            YQL_ENSURE(httpRequest.Method == "POST");
+            return ETableDataServiceRequestHandler::Clear;
         }
         return Nothing();
     }
@@ -89,12 +93,14 @@ public:
         THandler getTableDataServiceHandler = std::bind(&TTableDataServiceServer::GetTableDataServiceHandler, this, std::placeholders::_1);
         THandler deleteTableDataServiceHandler = std::bind(&TTableDataServiceServer::DeleteTableDataServiceHandler, this, std::placeholders::_1);
         THandler deleteGroupsTableDataServiceHandler = std::bind(&TTableDataServiceServer::DeleteGroupsTableDataServiceHandler, this, std::placeholders::_1);
+        THandler clearTableDataServiceHandler = std::bind(&TTableDataServiceServer::ClearTableDataServiceHander, this, std::placeholders::_1);
 
         Handlers_ = std::unordered_map<ETableDataServiceRequestHandler, THandler>{
             {ETableDataServiceRequestHandler::Put, putTableDataServiceHandler},
             {ETableDataServiceRequestHandler::Get, getTableDataServiceHandler},
             {ETableDataServiceRequestHandler::Delete, deleteTableDataServiceHandler},
-            {ETableDataServiceRequestHandler::DeleteGroups, deleteGroupsTableDataServiceHandler}
+            {ETableDataServiceRequestHandler::DeleteGroups, deleteGroupsTableDataServiceHandler},
+            {ETableDataServiceRequestHandler::Clear, clearTableDataServiceHandler}
         };
     }
 
@@ -177,6 +183,13 @@ private:
         auto deletionRequest = TTableDataServiceGroupDeletionRequestFromProto(protoGroupDeletionRequest);
         TableDataService_->RegisterDeletion(deletionRequest).GetValueSync();
         YQL_CLOG(TRACE, FastMapReduce) << "Deleting groups in table data service" << JoinRange(' ', deletionRequest.begin(), deletionRequest.end());        return THttpResponse(HTTP_OK);
+    }
+
+    THttpResponse ClearTableDataServiceHander(THttpInput& input) {
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetLogContext(input));
+        YQL_CLOG(TRACE, FastMapReduce) << "Clearing table data service";
+        TableDataService_->Clear().GetValueSync();
+        return THttpResponse(HTTP_OK);
     }
 };
 

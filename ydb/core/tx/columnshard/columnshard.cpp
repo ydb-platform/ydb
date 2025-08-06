@@ -185,12 +185,12 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TAc
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
-    Y_UNUSED(ev);
+    OverloadSubscribers.AddPipeServer(ev->Get()->ServerId, ev->Get()->InterconnectSession);
     LOG_S_DEBUG("Server pipe connected at tablet " << TabletID());
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext&) {
-    Y_UNUSED(ev);
+    OverloadSubscribers.RemovePipeServer(ev->Get()->ServerId);
     LOG_S_DEBUG("Server pipe reset at tablet " << TabletID());
 }
 

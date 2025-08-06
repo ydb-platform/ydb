@@ -328,7 +328,8 @@ struct TPDiskMon {
     // write queue duration
     TDurationTracker WriteQueueSyncLog;
     TDurationTracker WriteQueueHullFresh;
-    TDurationTracker WriteQueueHullHuge;
+    TDurationTracker WriteQueueHullHugeAsync;
+    TDurationTracker WriteQueueHullHugeUser;
     TDurationTracker WriteQueueHullComp;
 
     // incoming flow burstiness
@@ -357,7 +358,8 @@ struct TPDiskMon {
 
     TSizeTracker WriteSyncLogSizeBytes;
     TSizeTracker WriteHullFreshSizeBytes;
-    TSizeTracker WriteHullHugeSizeBytes;
+    TSizeTracker WriteHullHugeAsyncSizeBytes;
+    TSizeTracker WriteHullHugeUserSizeBytes;
     TSizeTracker WriteHullCompSizeBytes;
 
     // log response time
@@ -372,7 +374,8 @@ struct TPDiskMon {
     // write response time
     THistogram WriteResponseSyncLog;
     THistogram WriteResponseHullFresh;
-    THistogram WriteResponseHullHuge;
+    THistogram WriteResponseHullHugeAsync;
+    THistogram WriteResponseHullHugeUser;
     THistogram WriteResponseHullComp;
 
     // scheduler subgroup
@@ -470,7 +473,8 @@ struct TPDiskMon {
 
     TIoCounters WriteSyncLog;
     TIoCounters WriteFresh;
-    TIoCounters WriteHuge;
+    TIoCounters WriteHugeAsync;
+    TIoCounters WriteHugeUser;
     TIoCounters WriteComp;
     TIoCounters Trim;
 

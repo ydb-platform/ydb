@@ -161,6 +161,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     bool PlainDataChunks = false;
 
+    bool SeparateHugePriorities = false;
+
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}
@@ -310,6 +312,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
+        str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
         str << "}";
         return str.Str();
     }
@@ -397,6 +400,10 @@ struct TPDiskConfig : public TThrRefBase {
         }
         if (cfg->HasPlainDataChunks()) {
             PlainDataChunks = cfg->GetPlainDataChunks();
+        }
+
+        if (cfg->HasSeparateHugePriorities()) {
+            SeparateHugePriorities = cfg->GetSeparateHugePriorities();
         }
     }
 };

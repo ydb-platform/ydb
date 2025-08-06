@@ -95,4 +95,8 @@ message TPDiskConfig {
     optional uint32 CompletionThreadsCount = 2003;
     reserved 2004;
     optional bool PlainDataChunks = 2005;
+
+    reserved 2006; // optional uint32 SlotSizeInUnits = 2006;
+
+    optional bool SeparateHugePriorities = 2007;
 };

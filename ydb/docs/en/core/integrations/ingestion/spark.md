@@ -38,15 +38,15 @@ To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ yd
 
 ### Use DataFrame API {#dataframe-api}
 
-The DataFrame API allows you to work with {{ ydb-short-name }} in an interactive `spark-shell` or `pyspark` session, as well as when writing code in `Java`, `Scala`, or `Python` for `spark-submit`.
+[The DataFrame API](https://spark.apache.org/docs/latest/sql-data-sources-load-save-functions.html) allows you to work with {{ ydb-short-name }} in an interactive `spark-shell` or `pyspark` session, as well as when writing code in `Java`, `Scala`, or `Python` for `spark-submit`.
 
-Create a `DataFrame` referencing a {{ ydb-short-name }} table:
+To create a `DataFrame`, you need to specify the `ydb` format, pass a set of [connection options](#connection-options) and the path to the {{ ydb-short-name }} table:
 
 ```scala
 val ydb_df = spark.read.format("ydb").option("url", "grpc://<options>).load("<table-path>")
 ```
 
-Write a `DataFrame` to a {{ ydb-short-name }} table:
+To save any `DataFrame` in the table {{ ydb-short-name }}, you similarly need to specify the `ydb` format, [connection options](#connection-options) and the path to the table:
 
 ```scala
 any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
@@ -109,7 +109,7 @@ The behavior of the {{ ydb-short-name }} Spark Connector is configured using opt
 
 ### Table autocreation Options {#autocreate-options}
 
-* `table.autocreate` — аutomatically create a table if it doesn't exist. Enabled by default.
+* `table.autocreate` — if set to `true`, then when writing to a non-existent table, it will be created automatically. Enabled by default;
 * `table.type` — the type of automatically created table. Possible values:
     - `rows` for creating a row-oriented table (default).
     - `columns` for creating a column-oriented table.

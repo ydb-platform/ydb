@@ -38,15 +38,15 @@
 
 ### Работа через DataFrame API {#dataframe-api}
 
-DataFrame API позволяет работать с {{ ydb-short-name }} в интерактивных `spark-shell` или `pyspark`, а так же при написании кода на `Java`, `Scala` или `Python` для `spark-submit`.
+[DataFrame API](https://spark.apache.org/docs/latest/sql-data-sources-load-save-functions.html) позволяет работать с {{ ydb-short-name }} в интерактивных `spark-shell` или `pyspark`, а так же при написании кода на `Java`, `Scala` или `Python` для `spark-submit`.
 
-Создать `DataFrame`, ссылающийся на таблицу {{ ydb-short-name }}:
+Для создания `DataFrame` нужно указать формат `ydb`, передать набор [опций подключения](#connection-options) и путь к таблице {{ ydb-short-name }}:
 
 ```scala
-val ydb_df = spark.read.format("ydb").options(<options>).load("<table-path>")
+val ydb_df = spark.read.format("ydb").option("url", "").load("<table-path>")
 ```
 
-Записать `DataFrame` в таблицу {{ ydb-short-name }}:
+Для сохранения любого `DataFrame` в таблице {{ ydb-short-name }} аналогично нужно указать формат `ydb`, [опции подключения](#connection-options) и путь к таблице:
 
 ```scala
 any_dataframe.write.format("ydb").options(<options>).mode("append").save("<table-path>")
@@ -95,23 +95,23 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
    - Экземпляр облачной базы данных с токеном:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
    - Экземпляр облачной базы данных с файлом сервисного аккаунта:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
 
-* `auth.use_env` — если указано `true`, то будет использоваться режим аутентификации на основе [переменных среды окружения](../../reference/ydb-sdk/auth#env);
-* `auth.use_metadata` — если указано `true`, то будет использоваться режим аутентификации [Metadata](../../security/authentication.md#iam). Может быть указан прямо в `url` в виде опции `useMetadata`;
-* `auth.login` и `auth.password` — логин и пароль для [статической аутентификации](../../security/authentication.md#static-credentials);
-* `auth.token` — аутентификация с использованием указанного [Access Token](../../security/authentication.md#iam);
-* `auth.token.file` — аутентификация с использованием [Access Token](../../security/authentication.md#iam) из указанного файла. Может быть указан прямо в `url` в виде опции `tokenFile`;
-* `auth.ca.text` — указывает значение [сертификата](../../concepts/connect.md#tls-cert) для установки TLS-соединения;
-* `auth.ca.file` — указывает путь к [сертификату](../../concepts/connect.md#tls-cert) для установки TLS-соединения. Может быть указан прямо в `url` в виде опции `secureConnectionCertificate`;
-* `auth.sakey.text` — можно указать содержимое ключа для аутентификации [по ключу сервисного аккаунта](../../security/authentication.md#iam);
+* `auth.use_env` — если указано `true`, то будет использоваться режим аутентификации на основе [переменных среды окружения](../../reference/ydb-sdk/auth#env).
+* `auth.use_metadata` — если указано `true`, то будет использоваться режим аутентификации [Metadata](../../security/authentication.md#iam). Может быть указан прямо в `url` в виде опции `useMetadata`.
+* `auth.login` и `auth.password` — логин и пароль для [статической аутентификации](../../security/authentication.md#static-credentials).
+* `auth.token` — аутентификация с использованием указанного [Access Token](../../security/authentication.md#iam).
+* `auth.token.file` — аутентификация с использованием [Access Token](../../security/authentication.md#iam) из указанного файла. Может быть указан прямо в `url` в виде опции `tokenFile`.
+* `auth.ca.text` — указывает значение [сертификата](../../concepts/connect.md#tls-cert) для установки TLS-соединения.
+* `auth.ca.file` — указывает путь к [сертификату](../../concepts/connect.md#tls-cert) для установки TLS-соединения. Может быть указан прямо в `url` в виде опции `secureConnectionCertificate`.
+* `auth.sakey.text` — можно указать содержимое ключа для аутентификации [по ключу сервисного аккаунта](../../security/authentication.md#iam).
 * `auth.sakey.file` — можно указать путь к файлу ключа для аутентификации [по ключу сервисного аккаунта](../../security/authentication.md#iam). Может быть указан прямо в `url` в виде опции `saKeyFile`.
 
 ### Опции автоматического создания таблиц {#autocreate-options}
 
-* `table.autocreate` — автоматически создавать таблицу при ее отсутствии. По умолчанию включено;
+* `table.autocreate` — если указано `true`, то при записи в несуществующую таблицу она будет создана автоматически. По умолчанию включено.
 * `table.type` — тип автоматически создаваемой таблицы. Возможные варианты:
     - `rows` — для создания строчной таблицы (по умолчанию);
     - `columns` — для создания колоночной таблицы;
-* `table.primary_keys` — разделённый запятой список колонок для использования в качестве первичного ключа. При отсутствии этой опции для ключа будет использоваться новая колонка со случайным содержимым;
+* `table.primary_keys` — разделённый запятой список колонок для использования в качестве первичного ключа. При отсутствии этой опции для ключа будет использоваться новая колонка со случайным содержимым.
 * `table.auto_pk_name` — имя колонки для случайного создаваемого ключа. По умолчанию `_spark_key`.
 
 ## Пример работы с {{ ydb-short-name }} в spark-shell {#example-spark-shell}

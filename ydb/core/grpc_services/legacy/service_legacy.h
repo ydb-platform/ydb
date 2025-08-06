@@ -197,7 +197,7 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TInterconnectDebug, NKikim
 
 template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TTabletStateRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TTabletStateRequest>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TTabletStateRequest>
     , NPrivate::TResponseLegacyCommonTraits
 {
 };

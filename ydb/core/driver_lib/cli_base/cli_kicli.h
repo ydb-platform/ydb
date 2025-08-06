@@ -65,6 +65,7 @@ void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBus
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusHiveCreateTablet>& request);
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTestShardControlRequest>& request);
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusInterconnectDebug>& request);
+void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTabletStateRequest>& request);
 
 template <typename ResponseType>
 int OnMessageBus(const TClientCommand::TConfig& config, const ResponseType& response);

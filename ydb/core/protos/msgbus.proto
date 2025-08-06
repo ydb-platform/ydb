@@ -366,6 +366,7 @@ message TTabletStateRequest {
     optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
     optional bool Alive = 2;
     repeated fixed64 TabletIDs = 3;
+    optional string SecurityToken = 4;
 };
 
 message TFlatTxPollOptions {

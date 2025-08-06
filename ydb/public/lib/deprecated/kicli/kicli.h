@@ -907,6 +907,12 @@ protected:
         }
     }
 
+    void PrepareRequest(NKikimrClient::TTabletStateRequest& request) const {
+        if (!SecurityToken.empty()) {
+            request.SetSecurityToken(SecurityToken);
+        }
+    }
+
     TString SecurityToken;
     THolder<TImpl> Impl;
 };

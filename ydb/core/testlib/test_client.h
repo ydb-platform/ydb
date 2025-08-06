@@ -560,6 +560,11 @@ namespace Tests {
                 request->Record.SetSecurityToken(SecurityToken);
         }
 
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusTabletStateRequest>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
         template <typename T>
         NBus::EMessageStatus SyncCall(TAutoPtr<T> msgHolder, TAutoPtr<NBus::TBusMessage> &reply) {
             NBus::EMessageStatus msgbusStatus = NBus::EMessageStatus::MESSAGE_TIMEOUT;

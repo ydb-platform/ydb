@@ -34,7 +34,7 @@ AS SELECT ...
 
 * `CREATE TABLE AS` не имеет ограничений на записываемый объем данных.
 
-* `CREATE TABLE AS` не использует локи и устойчив к балансировке и разделению [таблеток](./concepts/glossary#tablet).
+* `CREATE TABLE AS` не использует локи и устойчив к балансировке и разделению [таблеток](./concepts/glossary#tablet). Все чтения производятся из консистентного снапшота. С другими транзакциями `CREATE TABLE AS` не конфликтует.
 
 * `CREATE TABLE AS` позволяет использовать в одном запросе и [столбцовые таблицы](../glossary.md#column-oriented-table), и [строковые таблицы](../glossary.md#row-oriented-table).
 

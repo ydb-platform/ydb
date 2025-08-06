@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NGranules {
 
 NArrow::TSimpleRowContent TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TSchemeShardLocalPathId& pathId, const ui64 tabletId) {
-    NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 2);
+    NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 2 + 16);
     writer.Append<ui64>(pathId.GetRawValue());
     writer.Append<ui64>(tabletId);
     return NArrow::TSimpleRowContent(writer.Finish());

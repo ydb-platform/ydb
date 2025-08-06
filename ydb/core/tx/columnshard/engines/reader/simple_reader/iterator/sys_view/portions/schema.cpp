@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 
 NArrow::TSimpleRowContent TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TUnifiedPathId pathId, const ui64 tabletId, const ui64 portionId) {
-    NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 3);
+    NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 3 + 16);
     writer.Append<ui64>(pathId.SchemeShardLocalPathId.GetRawValue());
     writer.Append<ui64>(tabletId);
     writer.Append<ui64>(portionId);

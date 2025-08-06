@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
 
 NArrow::TSimpleRowContent TSchemaAdapter::GetPKSimpleRow(const ui64 tabletId, const ui64 presetId, const ui64 schemaVersion) {
-    NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 2);
+    NArrow::TSimpleRowViewV0::TWriter writer(sizeof(ui64) * 2 + 16);
     writer.Append<ui64>(tabletId);
     writer.Append<ui64>(presetId);
     writer.Append<ui64>(schemaVersion);

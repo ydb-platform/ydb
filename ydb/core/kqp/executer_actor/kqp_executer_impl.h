@@ -367,7 +367,7 @@ protected:
                 protoBuilder.BuildYdbResultSet(*streamEv->Record.MutableResultSet(), std::move(batches),
                     txResult.MkqlItemType, ResultSetFormatSettings, fillSchema, txResult.ColumnOrder, txResult.ColumnHints);
 
-                // TODO: rows size for arrow
+                // TODO: Calculate rows/bytes count for the arrow format of result set
                 LOG_D("Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
                     << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
 

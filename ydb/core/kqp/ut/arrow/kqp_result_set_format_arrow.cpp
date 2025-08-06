@@ -21,10 +21,14 @@ namespace NTypeIds = NScheme::NTypeIds;
 namespace {
 
 TKikimrRunner CreateKikimrRunner(bool withSampleTables, ui64 channelBufferSize = 8_MB) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableArrowResultSetFormat(true);
+
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(channelBufferSize);
-    auto settings = TKikimrSettings(appConfig).SetWithSampleTables(withSampleTables);
+
+    auto settings = TKikimrSettings(appConfig).SetFeatureFlags(featureFlags).SetWithSampleTables(withSampleTables);
     return TKikimrRunner(settings);
 }
 
@@ -570,7 +574,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Arrow format is supported for returning.
      */
-    Y_UNIT_TEST_TWIN(Arrow_Returning, isOlap) {
+    Y_UNIT_TEST_TWIN(ArrowFormat_Returning, isOlap) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 

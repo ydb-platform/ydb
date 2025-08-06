@@ -70,11 +70,8 @@ struct TArrowFormatSettings {
                 return arrow::Compression::LZ4_FRAME;
             case TCompressionCodec::EType::ZSTD:
                 return arrow::Compression::ZSTD;
-            default:
-                YQL_ENSURE(false, "Unexpected compression codec type");
-                return arrow::Compression::UNCOMPRESSED;
+        }
     }
-}
 
     std::optional<TCompressionCodec> CompressionCodec;
 };

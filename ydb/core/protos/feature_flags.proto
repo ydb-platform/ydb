@@ -217,4 +217,5 @@ message TFeatureFlags {
     optional bool EnableRealSystemViewPaths = 191 [default = false, (RequireRestart) = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = true];
     optional bool EnableMoveColumnTable = 193 [default = false];
+    optional bool EnableArrowResultSetFormat = 194 [default = false];
 }

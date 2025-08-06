@@ -34,7 +34,7 @@ namespace NKikimr::NStorage {
 
                 TGroupId groupId = TGroupId::Zero();
 
-                auto allocateGroup = [&](std::optional<TBridgePileId> bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
+                auto allocateGroup = [&](TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
                     AllocateStaticGroup(config, groupId, /*groupGeneration=*/ 1, TBlobStorageGroupType(species),
                         smConfig.GetGeometry(), smConfig.GetPDiskFilter(),
                         smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt, {}, {}, 0,
@@ -55,12 +55,12 @@ namespace NKikimr::NStorage {
                     const auto& piles = bridge->GetPiles();
                     for (int i = 0; i < piles.size(); ++i) {
                         prefix << "pile# " << i << ' ';
-                        allocateGroup(TBridgePileId::FromValue(i), bridgeProxyGroupId);
+                        allocateGroup(TBridgePileId::FromPileIndex(i), bridgeProxyGroupId);
                         groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::AddBridgeGroupIds);
                         ++groupId;
                     }
                 } else {
-                    allocateGroup(std::nullopt, std::nullopt);
+                    allocateGroup(TBridgePileId(), std::nullopt);
                 }
             } catch (const TExConfigError& ex) {
                 return TStringBuilder() << "failed to allocate static group: " << ex.what() << ' ' << prefix.Str();
@@ -136,8 +136,7 @@ namespace NKikimr::NStorage {
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid, i64 requiredSpace,
             NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
-            bool isSelfHealReasonDecommit, std::optional<TBridgePileId> bridgePileId,
-            std::optional<TGroupId> bridgeProxyGroupId) {
+            bool isSelfHealReasonDecommit, TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
         using TPDiskId = NBsController::TPDiskId;
 
         NKikimrConfig::TBlobStorageConfig *bsConfig = config->MutableBlobStorageConfig();
@@ -148,7 +147,7 @@ namespace NKikimr::NStorage {
         for (const auto& node : config->GetAllNodes()) {
             TNodeLocation location(node.GetLocation());
             nodeLocations.try_emplace(node.GetNodeId(), location);
-            if (bridgePileId && *bridgePileId == ResolveNodePileId(location)) {
+            if (bridgePileId == ResolveNodePileId(location)) {
                 allowedNodeIds.insert(node.GetNodeId());
             }
         }
@@ -500,9 +499,7 @@ namespace NKikimr::NStorage {
         if (bridgeProxyGroupId) {
             bridgeProxyGroupId->CopyToProto(sGroup, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
         }
-        if (bridgePileId) {
-            bridgePileId->CopyToProto(sGroup, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
-        }
+        bridgePileId.CopyToProto(sGroup, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
 
         TVDiskIdShort prev;
         NKikimrBlobStorage::TGroupInfo::TFailRealm *sRealm = nullptr;
@@ -580,11 +577,11 @@ namespace NKikimr::NStorage {
 
     bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig, std::unordered_set<ui32>& usedNodes) {
-        std::map<std::optional<TBridgePileId>, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
+        std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
         for (const auto& node : baseConfig.GetAllNodes()) {
             TNodeLocation location(node.GetLocation());
-            std::optional<TBridgePileId> pileId = ResolveNodePileId(location);
+            TBridgePileId pileId = ResolveNodePileId(location);
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {

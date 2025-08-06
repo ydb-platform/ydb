@@ -1527,7 +1527,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 *errorReason = "missing pile name";
                 return false;
             }
-            const auto [it, inserted] = piles.try_emplace(p[i].GetName(), TBridgePileId::FromValue(i));
+            const auto [it, inserted] = piles.try_emplace(p[i].GetName(), TBridgePileId::FromPileIndex(i));
             if (!inserted) {
                 *errorReason = TStringBuilder() << "duplicate pile name " << p[i].GetName();
                 return false;

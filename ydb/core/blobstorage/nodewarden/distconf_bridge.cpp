@@ -213,12 +213,12 @@ namespace NKikimr::NStorage {
             bool clusterStateUpdated = false;
             for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
                 if (clusterState->GetPerPileState(i) == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 &&
-                        ConnectedUnsyncedPiles.contains(TBridgePileId::FromValue(i))) {
+                        ConnectedUnsyncedPiles.contains(TBridgePileId::FromPileIndex(i))) {
                     clusterState->SetPerPileState(i, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
                     clusterStateUpdated = true;
 
                     auto *state = details->AddPileSyncState();
-                    state->SetBridgePileId(i);
+                    TBridgePileId::FromPileIndex(i).CopyToProto(state, &std::decay_t<decltype(*state)>::SetBridgePileId);
                     state->SetUnsyncedBSC(true);
                     if (config->HasBlobStorageConfig()) {
                         if (const auto& bsConfig = config->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
@@ -285,6 +285,8 @@ namespace NKikimr::NStorage {
         for (size_t i = 0; i < cfg.BridgeConfig->PilesSize(); ++i) {
             piles->Add(NKikimrBridge::TClusterState::SYNCHRONIZED);
         }
+        TBridgePileId::FromPileIndex(0).CopyToProto(state, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        TBridgePileId::FromPileIndex(0).CopyToProto(state, &NKikimrBridge::TClusterState::SetPromotedPile);
 
         auto *details = config->MutableClusterStateDetails();
         auto *entry = details->AddUnsyncedHistory();

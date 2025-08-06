@@ -6,8 +6,10 @@ from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHe
 from time import time, sleep
 import yatest.common
 import allure
+import json
 import logging
 import ydb.tests.olap.lib.remote_execution as re
+import ydb
 import pytest
 from .tpch import TpchSuiteBase
 
@@ -101,6 +103,24 @@ class UploadClusterBase(UploadSuiteBase):
                 return False
         return True
 
+    @allure.step
+    def __stats_ready_for_table(self,  table_full_path: str) -> bool:
+        def __max_e_rows(node: dict):
+            if node.get('Name') == 'TableFullScan' and node.get('Path') == table_full_path:
+                return int(node.get('E-Rows', 0))
+            children = [__max_e_rows(o) for o in node.get('Operators', [])] + [__max_e_rows(p) for p in node.get('Plans', [])]
+            return max(children) if len(children) > 0 else 0
+
+        driver: ydb.Driver = YdbCluster.get_ydb_driver()
+        plan = json.loads(driver.table_client.session().create().explain(f'SELECT COUNT(*) FROM `{table_full_path}`').query_plan)
+        return __max_e_rows(plan.get('Plan', {})) > 0
+
+    def __stats_ready(self) -> bool:
+        for table in YdbCluster.get_tables(self.get_path()):
+            if not self.__stats_ready_for_table(table):
+                return False
+        return True
+
     def __get_tables_size_bytes(self) -> tuple[int, int]:
         sth = ScenarioTestHelper(None)
         raw_bytes = 0
@@ -146,7 +166,14 @@ class UploadClusterBase(UploadSuiteBase):
         raw_tables_size_bytes, tables_size_bytes = self.__get_tables_size_bytes()
         result.add_stat(self.query_name, 'tables_size_bytes', tables_size_bytes)
         result.add_stat(self.query_name, 'raw_tables_size_bytes', raw_tables_size_bytes)
-        sleep(120)  # wait statistics
+        with allure.step("wait tables statistics"):
+            MAX_TIMEOUT = 1200
+            start_wait = time()
+            while not self.__stats_ready():
+                if time() - start_wait > MAX_TIMEOUT:
+                    pytest.fail(f'Stats not ready before timeout {MAX_TIMEOUT}s')
+                sleep(1)
+            result.add_stat(self.query_name, 'wait_stats_seconds', time() - start_wait)
 
 
 class UploadTpchBase(UploadClusterBase):

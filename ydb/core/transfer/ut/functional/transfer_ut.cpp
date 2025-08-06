@@ -1257,5 +1257,59 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
         testCase.DropTable();
     }
+
+    Y_UNIT_TEST(AlterLambdaOnWork)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TableName.data()));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithTransformLambda(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST("NEW LAMBDA " || $x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )"));
+
+        testCase.Write({"Message-2"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }, {
+            _C("Message", TString("NEW LAMBDA Message-2"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
 }
 

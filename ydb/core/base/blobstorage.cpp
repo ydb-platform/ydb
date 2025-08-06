@@ -269,3 +269,8 @@ template<>
 void Out<NKikimr::TPDiskCategory>(IOutputStream &str, const NKikimr::TPDiskCategory &value) {
     str << value.ToString();
 }
+
+template<>
+void Out<NKikimr::TBridgePileId>(IOutputStream& str, const NKikimr::TBridgePileId& bridgePileId) {
+    str << bridgePileId.ToString();
+}

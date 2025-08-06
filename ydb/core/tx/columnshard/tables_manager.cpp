@@ -89,16 +89,21 @@ bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionConte
 }
 
 void TTablesManager::Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tabletSchemeShardLocalPathId, const TTabletStorageInfo* info) {
-    AFL_VERIFY(!TabletPathId.has_value());
     AFL_VERIFY(info);
     const auto& tabletInternalPathId = GetOrCreateInternalPathId(tabletSchemeShardLocalPathId);
-    TabletPathId.emplace(TUnifiedPathId::BuildValid(tabletInternalPathId, tabletSchemeShardLocalPathId));
-    AFL_VERIFY(!SchemaObjectsCache);
-    SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(tabletInternalPathId, info->TenantPathId);
-    Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, tabletSchemeShardLocalPathId.GetRawValue());
-    Schema::SaveSpecialValue(db, Schema::EValueIds::InternalOwnerPathId, tabletInternalPathId.GetRawValue());
-    if (GenerateInternalPathId) {
-        Schema::SaveSpecialValue(db, Schema::EValueIds::MaxInternalPathId, MaxInternalPathId.GetRawValue());
+    const auto& tabletPathId = TUnifiedPathId::BuildValid(tabletInternalPathId, tabletSchemeShardLocalPathId);
+    if (TabletPathId.has_value()) {
+        AFL_VERIFY(tabletPathId == *TabletPathId)("old", *TabletPathId)("new", tabletPathId);
+        AFL_VERIFY(SchemaObjectsCache);
+    } else {
+        TabletPathId.emplace(tabletPathId);
+        AFL_VERIFY(!SchemaObjectsCache);
+        SchemaObjectsCache = NOlap::TSchemaCachesManager::GetCache(tabletInternalPathId, info->TenantPathId);
+        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, tabletSchemeShardLocalPathId.GetRawValue());
+        Schema::SaveSpecialValue(db, Schema::EValueIds::InternalOwnerPathId, tabletInternalPathId.GetRawValue());
+        if (GenerateInternalPathId) {
+            Schema::SaveSpecialValue(db, Schema::EValueIds::MaxInternalPathId, MaxInternalPathId.GetRawValue());
+        }
     }
 }
 

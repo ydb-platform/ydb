@@ -21,12 +21,12 @@ using namespace Ydb;
 
 namespace {
     Ydb::Bridge::PileState::State GetPublicState(const NKikimrBridge::TClusterState& from, TBridgePileId pileId) {
-        if (pileId.GetRawId() == from.GetPrimaryPile()) {
+        if (pileId == TBridgePileId::FromProto(&from, &NKikimrBridge::TClusterState::GetPrimaryPile)) {
             return Ydb::Bridge::PileState::PRIMARY;
-        } else if (pileId.GetRawId() == from.GetPromotedPile()) {
+        } else if (pileId == TBridgePileId::FromProto(&from, &NKikimrBridge::TClusterState::GetPromotedPile)) {
             return Ydb::Bridge::PileState::PROMOTE;
         } else {
-            switch (from.GetPerPileState(pileId.GetRawId())) {
+            switch (from.GetPerPileState(pileId.GetPileIndex())) {
                 case NKikimrBridge::TClusterState::DISCONNECTED:
                     return Ydb::Bridge::PileState::DISCONNECTED;
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
@@ -45,9 +45,9 @@ namespace {
 void CopyFromInternalClusterState(const NKikimrBridge::TClusterState& from, const TBridgeInfo& bridgeInfo, Ydb::Bridge::GetClusterStateResult& to) {
     for (ui32 i = 0; i < from.PerPileStateSize(); ++i) {
         auto* state = to.add_pile_states();
-        const auto* pile = bridgeInfo.GetPile(TBridgePileId::FromValue(i));
+        const auto* pile = bridgeInfo.GetPile(TBridgePileId::FromPileIndex(i));
         state->set_pile_name(pile->Name);
-        state->set_state(GetPublicState(from, TBridgePileId::FromValue(i)));
+        state->set_state(GetPublicState(from, TBridgePileId::FromPileIndex(i)));
     }
 }
 
@@ -148,6 +148,7 @@ private:
         }
 
         const auto& currentClusterState = config->GetClusterState();
+
         for (const auto& update : GetProtoRequest()->updates()) {
             if (nameToId.find(update.pile_name()) == nameToId.end()) {
                  self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid pile name# " << update.pile_name(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
@@ -166,7 +167,7 @@ private:
         std::optional<TBridgePileId> finalPromoted;
 
         for (ui32 i = 0; i < currentClusterState.PerPileStateSize(); ++i) {
-            const TBridgePileId pileId = TBridgePileId::FromValue(i);
+            const TBridgePileId pileId = TBridgePileId::FromPileIndex(i);
             Ydb::Bridge::PileState::State publicState;
             if (auto it = updates.find(pileId); it != updates.end()) {
                 publicState = it->second;
@@ -205,16 +206,19 @@ private:
                     self->Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unsupported pile state", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                     return;
             }
-            newClusterState.SetPerPileState(pileId.GetRawId(), internalState);
+            newClusterState.SetPerPileState(pileId.GetPileIndex(), internalState);
         }
 
         if (!finalPrimary) {
             self->Reply(Ydb::StatusIds::BAD_REQUEST, "Request must result in a state with one primary pile", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             return;
         }
+        if (!finalPromoted) {
+            finalPromoted = finalPrimary;
+        }
 
-        newClusterState.SetPrimaryPile(finalPrimary->GetRawId());
-        newClusterState.SetPromotedPile(finalPromoted.value_or(*finalPrimary).GetRawId());
+        finalPrimary->CopyToProto(&newClusterState, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        finalPromoted->CopyToProto(&newClusterState, &NKikimrBridge::TClusterState::SetPromotedPile);
         newClusterState.SetGeneration(currentClusterState.GetGeneration() + 1);
 
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
@@ -223,7 +227,7 @@ private:
 
         for (const auto& name : GetProtoRequest()->quorum_piles()) {
             if (const auto it = nameToId.find(name); it != nameToId.end()) {
-                cmd->AddSpecificBridgePileIds(it->second.GetRawId());
+                it->second.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::AddSpecificBridgePileIds);
             } else {
                 self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown pile name in quorum: " << name,
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());

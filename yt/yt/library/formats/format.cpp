@@ -349,6 +349,7 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
                 keyColumnCount);
         case EFormatType::Arrow:
             return CreateWriterForArrow(
+                format.Attributes(),
                 nameTable,
                 tableSchemas,
                 columns,

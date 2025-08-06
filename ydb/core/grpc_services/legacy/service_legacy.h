@@ -97,7 +97,7 @@ struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TSchemeDescribe, NKikimrCl
 
 template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TChooseProxyRequest, NKikimrClient::TResponse>
-    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TChooseProxyRequest>
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TChooseProxyRequest>
     , NPrivate::TResponseLegacyCommonTraits
 {
 };

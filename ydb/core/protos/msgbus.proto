@@ -419,6 +419,7 @@ message TChooseProxyRequest {
     optional uint32 DataCenterNum = 1;
     optional string DataCenter = 3;
     optional bool PreferLocalProxy = 2 [default = false];
+    optional string SecurityToken = 4;
 }
 
 message TBlobStorageConfigRequest {

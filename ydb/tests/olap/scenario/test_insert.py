@@ -7,7 +7,7 @@ from ydb.tests.olap.scenario.helpers import (
 )
 from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 from ydb import PrimitiveType, issues
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 from ydb.tests.olap.lib.utils import get_external_param
 
 import random

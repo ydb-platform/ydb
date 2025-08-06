@@ -312,7 +312,7 @@ void TPCCRunner::RunSync() {
     // produced after this point and before the first screen update
     if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
         LogBackend->StartCapture(); // start earlier?
-        Tui = std::make_unique<TRunnerTui>(*LogBackend, DataToDisplay);
+        Tui = std::make_unique<TRunnerTui>(Log, *LogBackend, DataToDisplay);
     }
 
     if (forcedWarmup) {
@@ -754,8 +754,13 @@ void TRunConfig::SetDisplay() {
 //-----------------------------------------------------------------------------
 
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
-    TPCCRunner runner(connectionConfig, runConfig);
-    runner.RunSync();
+    try {
+        TPCCRunner runner(connectionConfig, runConfig);
+        runner.RunSync();
+    } catch (const std::exception& ex) {
+        std::cerr << "Exception while execution: " << ex.what() << std::endl;
+        std::exit(1);
+    }
 }
 
 } // namespace NYdb::NTPCC

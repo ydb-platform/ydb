@@ -343,26 +343,30 @@ void TControlPlaneStorageBase::FillGetTaskResult(Fq::Private::GetTaskResult& res
     }
 }
 
-static TSet<ui64> ParseNodeIds(const TString& nodes) {
+static TSet<ui64> ParseNodeIds(NActors::TActorSystem* actorSystem, const TString& nodes) {
     TSet<ui64> result;
-    const auto split = SplitString(nodes, ",");
-    for (const auto& item : split) {
-        auto it = std::find(item.begin(), item.end(), '-');
-        if (it != item.end()) {
-            auto beginStr = StripString(item.substr(0, it - item.begin()));
-            auto endStr = StripString(item.substr(it - item.begin() + 1));
-            ui64 begin, end;
-            if (beginStr.empty() || endStr.empty() || !TryFromString(beginStr, begin) || !TryFromString(endStr, end)) {
+    try {
+        const auto split = SplitString(nodes, ",");
+        for (const auto& item : split) {
+            auto it = std::find(item.begin(), item.end(), '-');
+            if (it != item.end()) {
+                auto beginStr = StripString(item.substr(0, it - item.begin()));
+                auto endStr = StripString(item.substr(it - item.begin() + 1));
+                if (beginStr.empty() || endStr.empty()) {
+                    CPS_LOG_AS_E(*actorSystem, "Failed to parse mapping nodes: db value " << nodes << ", empty token");
+                    break;
+                }
+                ui64 begin = FromString(beginStr);
+                ui64 end = FromString(endStr);
+                for (; begin <= end; ++begin) {
+                    result.insert(begin);
+                }
                 continue;
             }
-            for (; begin <= end; ++begin) {
-                result.insert(begin);
-            }
-            continue;
+            result.insert(FromString<ui64>(StripString(item)));
         }
-        if (ui64 value = 0; TryFromString(StripString(item), value)) {
-            result.insert(value);
-        }
+    } catch (...) {
+        CPS_LOG_AS_E(*actorSystem, "Failed to parse mapping nodes (db value " << nodes << "): " << CurrentExceptionMessage());
     }
     return result;
 }
@@ -444,7 +448,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             auto lastSeenAt = parser.ColumnParser(LAST_SEEN_AT_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero());
             auto node = parser.ColumnParser(NODE_COLUMN_NAME).GetOptionalString();
             if (node) {
-                task.NodeIdsSet = ParseNodeIds(TString(*node));
+                task.NodeIdsSet = ParseNodeIds(actorSystem, TString(*node));
                 task.NodeIds = *node;
             }
             if (!previousOwner.empty()) { // task lease timeout case only, other cases are updated at ping time

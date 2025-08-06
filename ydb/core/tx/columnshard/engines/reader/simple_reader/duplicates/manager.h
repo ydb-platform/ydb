@@ -3,7 +3,6 @@
 #include "common.h"
 #include "context.h"
 #include "events.h"
-#include "private_events.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
@@ -30,8 +29,6 @@ private:
     class TPortionsSlice;
 
 private:
-    inline static const ui64 FILTER_CACHE_SIZE_CNT = 100;
-
     inline static TAtomicCounter NextRequestId = 0;
 
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
@@ -39,8 +36,6 @@ private:
     std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
     const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
-    TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
-    THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
@@ -71,8 +66,6 @@ private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
-            hFunc(NPrivate::TEvFilterConstructionResult, Handle);
-            hFunc(NPrivate::TEvDuplicateSourceCacheResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
@@ -80,20 +73,7 @@ private:
     }
 
     void Handle(const TEvRequestFilter::TPtr&);
-    void Handle(const NPrivate::TEvFilterConstructionResult::TPtr&);
-    void Handle(const NPrivate::TEvDuplicateSourceCacheResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
-        AbortAndPassAway("aborted by actor system");
-    }
-
-    void AbortAndPassAway(const TString& reason) {
-        for (auto& [_, constructors] : BuildingFilters) {
-            for (auto& constructor : constructors) {
-                if (!constructor->IsDone()) {
-                    constructor->Abort(reason);
-                }
-            }
-        }
         PassAway();
     }
 

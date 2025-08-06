@@ -4,19 +4,22 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-    namespace {
+namespace {
 
-        static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> DeduplicationStageFeatures =
-            NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> DeduplicationStageFeatures =
+    NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+}
 
-    }
-
-TInternalFilterConstructor::TInternalFilterConstructor(const TEvRequestFilter::TPtr& request, TColumnDataSplitter&& splitter)
+TInternalFilterConstructor::TInternalFilterConstructor(const TEvRequestFilter::TPtr& request, const TPortionInfo& portionInfo,
+    const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, const std::shared_ptr<arrow::Schema>& pkSchema)
     : OriginalRequest(request)
-    , Intervals(std::move(splitter))
     , ProcessGuard(NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard({ DeduplicationStageFeatures }))
     , ScopeGuard(ProcessGuard->BuildScopeGuard(1))
     , GroupGuard(ScopeGuard->BuildGroupGuard())
+    , Counters(counters)
+    , PKSchema(pkSchema)
+    , MinPK(portionInfo.IndexKeyStart())
+    , MaxPK(portionInfo.IndexKeyEnd())
 {
     AFL_VERIFY(!!OriginalRequest);
 }

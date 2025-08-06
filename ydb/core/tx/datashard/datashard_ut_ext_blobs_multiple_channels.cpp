@@ -28,6 +28,14 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
         std::unordered_map<ui8, ui32> PutsByChannel;
     };
 
+    inline auto KqpExec(TTestActorRuntime& runtime, const TString& query) {
+        return KqpSimpleSend(runtime, query, false, "/Root");
+    }
+
+    inline auto KqpExecSync(TTestActorRuntime& runtime, const TString& query) {
+        return AwaitResponse(runtime, KqpSimpleSend(runtime, query, false, "/Root"));
+    }
+
     std::shared_ptr<TEvPutChannelCounter> SetupPutCounter(TTestActorRuntime& runtime, ui32 blobSize = 2_KB) {
         auto putsCounter = std::make_shared<TEvPutChannelCounter>();
 
@@ -64,12 +72,13 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
                 .SetUseRealThreads(false)
                 .AddStoragePool("ssd")
                 .AddStoragePool("hdd")
-                .AddStoragePool("ext")
+                .AddStoragePool("ext", "ext", 10)
                 .SetEnableUuidAsPrimaryKey(true);
 
             Server = new TServer(ServerSettings);
             
             Runtime = Server->GetRuntime();
+            Runtime->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NLog::PRI_ERROR);
 
             Sender = Runtime->AllocateEdgeActor();
         
@@ -166,7 +175,7 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
             TString chunkNum = ToString(i);
             TString query = "UPSERT INTO `/Root/table-1` (blob_id, data0) VALUES(" + chunkNum + ", \"" + largeValue + "\");";
             
-            ExecSQL(server, sender, query);    
+            KqpExecSync(runtime, query);
         }
 
         auto shard1 = node.Shard;
@@ -176,7 +185,7 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
 
         RebootTablet(runtime, shard1, sender);
 
-        auto readFuture = KqpSimpleSend(runtime, "SELECT blob_id, data0 FROM `/Root/table-1`;");
+        auto readFuture = KqpExec(runtime, "SELECT blob_id, data0 FROM `/Root/table-1`;");
 
         ValidateReadResult(runtime, std::move(readFuture));
 
@@ -200,14 +209,13 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
             TString chunkNum = ToString(i);
             TString query = "UPSERT INTO `/Root/table-1` (blob_id, data0) VALUES(" + chunkNum + ", \"" + largeValue + "\");";
             
-            ExecSQL(server, sender, query);
+            KqpExecSync(runtime, query);
         }
 
         // Before compaction and changing the external threshold there should be no external blobs
         UNIT_ASSERT_VALUES_EQUAL(putCounter->PutsByChannel.size(), 0);
 
-        auto lsResult = NKqp::DescribeTable(server.Get(), sender, "/Root/table-1");
-        auto schemeShardId = lsResult.GetPathDescription().GetSelf().GetSchemeshardId();
+        auto schemeShardId = tableId1.PathId.OwnerId;
 
         auto req = CreateRequest(schemeShardId, 100, "/Root/", R"(
                             Name: "table-1"
@@ -235,7 +243,7 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
         
         CompactTable(runtime, shard1, tableId1, false);
 
-        auto readFuture = KqpSimpleSend(runtime, "SELECT blob_id, data0 FROM `/Root/table-1`;");
+        auto readFuture = KqpExec(runtime, "SELECT blob_id, data0 FROM `/Root/table-1`;");
 
         ValidateReadResult(runtime, std::move(readFuture), 512_B);
 
@@ -284,8 +292,7 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
 
         TString largeValue(512_B, 'L');
 
-        auto lsResult = NKqp::DescribeTable(server.Get(), sender, "/Root/table-1");
-        auto schemeShardId = lsResult.GetPathDescription().GetSelf().GetSchemeshardId();
+        auto schemeShardId = tableId1.PathId.OwnerId;
 
         auto req = CreateRequest(schemeShardId, 100, "/Root/", R"(
                             Name: "table-1"
@@ -346,8 +353,8 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
         for (int i = 0; i < 100; i++) {
             TString chunkNum = ToString(i);
             TString query = "UPSERT INTO `/Root/table-1` (blob_id, data) VALUES(" + chunkNum + ", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);
+
+            KqpExecSync(runtime, query);
         }
         
         UNIT_ASSERT_VALUES_EQUAL(putCounter->PutsByChannel.size(), 3);
@@ -358,7 +365,7 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
 
         RebootTablet(runtime, shard1, sender);
 
-        auto readFuture = KqpSimpleSend(runtime, "SELECT blob_id, data FROM `/Root/table-1`;");
+        auto readFuture = KqpExec(runtime, "SELECT blob_id, data FROM `/Root/table-1`;");
 
         ValidateReadResult(runtime, std::move(readFuture), 512_B);
 
@@ -370,7 +377,6 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
 
         auto server = node.Server;
         auto& runtime = *node.Runtime;
-        auto& sender = node.Sender;
 
         TString largeValue(2_KB, 'L');
 
@@ -379,11 +385,11 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
         for (int i = 0; i < 100; i++) {
             TString chunkNum = ToString(i);
             TString query = "UPSERT INTO `/Root/table-1` (blob_id, data0, data1) VALUES(" + chunkNum + ", \"" + largeValue + "\", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);    
+
+            KqpExecSync(runtime, query);
         }
 
-        auto readFuture = KqpSimpleSend(runtime, "SELECT blob_id, data0, data1 FROM `/Root/table-1`;");
+        auto readFuture = KqpExec(runtime, "SELECT blob_id, data0, data1 FROM `/Root/table-1`;");
 
         ValidateReadResult(runtime, std::move(readFuture), 2_KB, 2);
 
@@ -395,7 +401,6 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
 
         auto server = node.Server;
         auto& runtime = *node.Runtime;
-        auto& sender = node.Sender;
 
         TString largeValue(2_KB, 'L');
 
@@ -405,14 +410,151 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
             TString chunkNum = ToString(i);
             TString query = "UPSERT INTO `/Root/table-1` (blob_id, data0) VALUES(" + chunkNum + ", \"" + largeValue + "\");";
             
-            ExecSQL(server, sender, query);    
+            KqpExecSync(runtime, query);
         }
 
-        auto readFuture = KqpSimpleSend(runtime, "SELECT blob_id, data0 FROM `/Root/table-1`;");
+        auto readFuture = KqpExec(runtime, "SELECT blob_id, data0 FROM `/Root/table-1`;");
 
         ValidateReadResult(runtime, std::move(readFuture));
 
         UNIT_ASSERT_VALUES_EQUAL(putCounter->PutsByChannel.size(), 1);
+    }
+
+    std::vector<ui64> GetTabletGroups(TNode& node, ui64 hiveId, ui64 shardTabletId) {
+        auto& runtime = *node.Runtime;
+        auto& sender = node.Sender;
+
+        TEvHive::TEvRequestHiveInfo::TRequestHiveInfoInitializer initializer = {
+            .TabletId = shardTabletId,
+            .ReturnChannelHistory = true,
+        };
+
+        runtime.SendToPipe(hiveId, sender, new TEvHive::TEvRequestHiveInfo(initializer), 0, GetPipeConfigWithRetries());
+
+        auto hiveInfo = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(sender);
+
+        std::vector<ui64> groups;
+
+        for (auto& tabletInfo : hiveInfo->Get()->Record.GetTablets()) {
+            if (tabletInfo.GetTabletID() == shardTabletId) {
+                UNIT_ASSERT(tabletInfo.TabletChannelsSize() > 2); // first 2 channels are not external
+                for (size_t i = 2; i < tabletInfo.TabletChannelsSize(); ++i) {
+                    // Only get external data channels
+                    auto& channelInfo = tabletInfo.GetTabletChannels(i);
+                    auto& historyEl = channelInfo.GetHistory(channelInfo.HistorySize() - 1);
+                    groups.push_back(historyEl.GetGroup());
+                }
+            }
+        }
+
+        return groups;
+    }
+
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> ChangeExternalChannelsCountRequest(ui64 schemeShardId, ui32 externalChannelsCount, ui64 txId) {
+        TString scheme = Sprintf(R"(
+                Name: "table-1"
+                PartitionConfig {
+                    ColumnFamilies {
+                        Id: 0
+                        StorageConfig {
+                            SysLog {
+                                PreferredPoolKind: "ssd"
+                            }
+                            Log {
+                                PreferredPoolKind: "ssd"
+                            }
+                            Data {
+                                PreferredPoolKind: "ssd"
+                            }
+                            External {
+                                PreferredPoolKind: "ext"
+                                AllowOtherKinds: false
+                            }
+                            ExternalThreshold: 300
+                            ExternalChannelsCount: %u
+                        }
+                    }
+                    ColumnFamilies {
+                        Id: 1
+                        Name: "non_default"
+                        StorageConfig {
+                            Data {
+                                PreferredPoolKind: "ssd"
+                            }
+                        }
+                    }
+                }
+                Columns {
+                    Name: "data0"
+                    Id: 2
+                    Family: 1
+                    FamilyName: "non_default"
+                })", externalChannelsCount);
+
+        return CreateRequest(schemeShardId, txId, "/Root/", scheme);
+    }
+
+    Y_UNIT_TEST(ChangeExternalCount) {
+        TNode node(1, 1);
+
+        auto server = node.Server;
+        auto& runtime = *node.Runtime;
+        auto& sender = node.Sender;
+
+        auto shard1 = node.Shard;
+        auto tableId1 = node.TableId;
+
+        ui64 hiveId = runtime.GetAppData(0).DomainsInfo->GetHive();
+        ui64 schemeShardId = tableId1.PathId.OwnerId;
+
+        auto groups1 = GetTabletGroups(node, hiveId, shard1);
+
+        auto waitModify = [&](ui64 txId) {
+            auto txRes = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
+            auto status = txRes->Get()->Record.GetStatus();
+
+            UNIT_ASSERT_VALUES_EQUAL(NKikimrScheme::StatusAccepted, status);
+
+            auto evSubscribe = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(txId);
+            runtime.SendToPipe(schemeShardId, sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
+        };
+
+        {
+            auto req = ChangeExternalChannelsCountRequest(schemeShardId, 3, 100);
+            runtime.SendToPipe(schemeShardId, sender, req.release(), 0, GetPipeConfigWithRetries());
+            waitModify(100);
+        }
+
+        auto groups2 = GetTabletGroups(node, hiveId, shard1);
+
+        {
+            auto req = ChangeExternalChannelsCountRequest(schemeShardId, 2, 101);
+            runtime.SendToPipe(schemeShardId, sender, req.release(), 0, GetPipeConfigWithRetries());
+            waitModify(101);
+        }
+
+        auto groups3 = GetTabletGroups(node, hiveId, shard1);
+
+        auto printGroups = [](const std::vector<ui64>& groups) {
+            TStringStream ss;
+            ss << "Groups: ";
+            for (auto group : groups) {
+                ss << group << " ";
+            }
+            ss << Endl;
+            return ss.Str();
+        };
+
+        // Channels should be reused, so we expect the same groups
+        UNIT_ASSERT_VALUES_EQUAL_C(groups1.size(), 1, printGroups(groups1));
+        UNIT_ASSERT_VALUES_EQUAL_C(groups2.size(), 3, printGroups(groups2));
+        UNIT_ASSERT_VALUES_EQUAL_C(groups3.size(), 3, printGroups(groups3));
+
+        UNIT_ASSERT_VALUES_EQUAL(groups2, groups3);
     }
 
 }

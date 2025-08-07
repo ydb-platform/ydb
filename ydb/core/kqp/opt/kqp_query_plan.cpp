@@ -1014,6 +1014,8 @@ private:
     TVector<std::variant<ui32, TArgContext>> Visit(TExprNode::TPtr node, TQueryPlanNode& planNode) {
         TMaybe<std::variant<ui32, TArgContext>> operatorId;
 
+        auto maybeCallable = TMaybeNode<TCallable>(node);
+
         if (auto maybeRead = TMaybeNode<TKqlReadTableBase>(node)) {
             auto read = maybeRead.Cast();
             TString table = TString(read.Table().Path()); TKqlKeyRange range = read.Range();
@@ -1066,6 +1068,11 @@ private:
             operatorId = Visit(maybeCombiner.Cast(), planNode);
         } else if (auto maybeBlockCombine = TMaybeNode<TCoBlockCombineHashed>(node)) {
             operatorId = Visit(maybeBlockCombine.Cast(), planNode);
+        } else if (maybeCallable && (maybeCallable.Cast().CallableName() == "BlockMergeFinalizeHashed" || maybeCallable.Cast().CallableName() == "BlockMergeManyFinalizeHashed")) {
+            TOperator op;
+            op.Properties["Name"] = "Aggregate";
+            op.Properties["Phase"] = "Final";
+            operatorId = AddOperator(planNode, "Aggregate", std::move(op));
         } else if (auto maybeCombiner = TMaybeNode<TCoWideCombiner>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
@@ -1128,6 +1135,23 @@ private:
                     if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
                 };
 
+                auto aggr = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeAggregation = TMaybeNode<TKqpOlapAgg>(n)) { return true; } return false;
+                };
+
+                if (auto maybeKqpOlapAggregation = FindNode(olapTable.Process().Body().Ptr(), aggr)) {
+                    auto kqpOlapAggregation = TExprBase(maybeKqpOlapAggregation).Cast<TKqpOlapAgg>();
+
+                    TOperator op;
+                    op.Properties["Name"] = "Aggregate";
+                    op.Properties["Phase"] = "Intermediate";
+                    op.Properties["Pushdown"] = "True";
+
+                    AddOptimizerEstimates(op, kqpOlapAggregation);
+
+                    operatorId = AddOperator(planNode, "Aggregate", std::move(op));
+                }
+
                 if (auto maybeKqpOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
                     auto kqpOlapFilter = TExprBase(maybeKqpOlapFilter).Cast<TKqpOlapFilter>();
 
@@ -1138,10 +1162,19 @@ private:
 
                     AddOptimizerEstimates(op, kqpOlapFilter);
 
-                    operatorId = AddOperator(planNode, "Filter", std::move(op));
-                    inputIds.push_back(Visit(olapTable, planNode));
+                    auto filterOperatorId = AddOperator(planNode, "Filter", std::move(op));
+                    if (operatorId) {
+                        inputIds.push_back(filterOperatorId);
+                    } else {
+                        operatorId = filterOperatorId;
+                    }
+                }
+
+                auto tableOperatorId = Visit(olapTable, planNode);
+                if (operatorId) {
+                    inputIds.push_back(tableOperatorId);
                 } else {
-                    operatorId = Visit(olapTable, planNode);
+                    operatorId = tableOperatorId;
                 }
             } else if (TMaybeNode<TCoToFlow>(node)) {
                 // do nothing

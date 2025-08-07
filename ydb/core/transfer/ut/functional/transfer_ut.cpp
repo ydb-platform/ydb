@@ -1311,5 +1311,39 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
         testCase.DropTable();
     }
+
+    Y_UNIT_TEST(CreateAndAlterTransferInDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateDirectory("/local/subdir");
+        testCase.CreateTransfer(TStringBuilder() << "subdir/" << testCase.TransferName, Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TableName.data()));
+
+        testCase.AlterTransfer(TStringBuilder() << "subdir/" << testCase.TransferName,
+            MainTestCase::AlterTransferSettings::WithBatching(TDuration::Seconds(1), 1));
+
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
 }
 

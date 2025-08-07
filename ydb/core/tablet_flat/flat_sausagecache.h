@@ -152,7 +152,7 @@ public:
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
 
     THashMap<TLogoBlobID, TVector<TPageId>> GetToLoad();
-    void TranslatePinnedToSharedCacheTouches(ui64 &pinnedMemory);
+    void TranslatePinnedToSharedCacheTouches();
     THashMap<TLogoBlobID, THashSet<TPageId>> GetSharedCacheTouches();
 
 private:

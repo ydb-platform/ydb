@@ -170,16 +170,13 @@ THashMap<TLogoBlobID, TVector<TPageId>> TPrivatePageCache::GetToLoad() {
     return result;
 }
 
-void TPrivatePageCache::TranslatePinnedToSharedCacheTouches(ui64 &pinnedMemory) {
+void TPrivatePageCache::TranslatePinnedToSharedCacheTouches() {
     Y_ENSURE(Pinned, "can be called only in a transaction context");
 
     for (const auto& [pageCollectionId, pages] : *Pinned) {
         if (auto *info = Info(pageCollectionId)) {
             auto& touches = SharedCacheTouches[pageCollectionId];
             for (const auto& [pageId, pinnedPageRef] : pages) {
-                if (!info->IsStickyPage(pageId)) {
-                    pinnedMemory += pinnedPageRef->size();
-                }
                 touches.insert(pageId);
             }
         }

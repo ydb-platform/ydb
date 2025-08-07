@@ -2159,11 +2159,7 @@ void TExecutor::UnpinTransactionPages(TSeat &seat) {
     Y_ENSURE(TransactionPagesMemory >= seat.MemoryTouched);
     TransactionPagesMemory -= seat.MemoryTouched;
 
-    ui64 pinnedMemory = 0;
-    PrivatePageCache->TranslatePinnedToSharedCacheTouches(pinnedMemory);
-    Y_ENSURE(pinnedMemory == PrivatePageCache->GetStats().NewlyPinnedSize + seat.MemoryTouched,
-        NFmt::Do(*this) << " " << NFmt::Do(seat) << " memory counters mismatch:"
-        << " pinned = " << pinnedMemory << " newly = " << PrivatePageCache->GetStats().NewlyPinnedSize << " touched = " << seat.MemoryTouched);
+    PrivatePageCache->TranslatePinnedToSharedCacheTouches();
     seat.Pinned.clear();
     seat.MemoryTouched = 0;
 

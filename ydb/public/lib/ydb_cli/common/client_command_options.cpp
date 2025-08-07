@@ -284,12 +284,20 @@ TClientCommandOption& TClientCommandOption::ManualDefaultValueDescription(const 
     return *this;
 }
 
+bool TClientCommandOption::NeedPrintDefinitionsPriority() const {
+    return CanParseFromProfile || !EnvInfo.empty(); // If only this option and default value => no need to print priority
+}
+
 void TClientCommandOption::RebuildHelpMessage() {
     NColorizer::TColors& colors = NColorizer::AutoColors(Cout);
     TStringBuilder helpMessage;
     helpMessage << Help;
-    if (ClientOptions->HelpCommandVerbosiltyLevel <= 1 && DefaultOptionValue) {
-        helpMessage << " (default: " << colors.Cyan() << DefaultOptionValue << colors.OldColor() << ")";
+    const bool needDefinitionsPriority = ClientOptions->HelpCommandVerbosiltyLevel >= 2 && NeedPrintDefinitionsPriority();
+
+    if (!needDefinitionsPriority && (DefaultOptionValue || ManualDefaultOptionValueDescription)) {
+        helpMessage << " (default: " << colors.Cyan()
+            << (DefaultOptionValue ? DefaultOptionValue : ManualDefaultOptionValueDescription)
+            << colors.OldColor() << ")";
     }
 
     bool multiline = false;
@@ -309,7 +317,7 @@ void TClientCommandOption::RebuildHelpMessage() {
         makeMultiline();
         helpMessage << indent << "For more info go to: " << Documentation << Endl;
     }
-    if (ClientOptions->HelpCommandVerbosiltyLevel >= 2) {
+    if (needDefinitionsPriority) {
         makeMultiline();
         helpMessage << indent << "Definition priority:";
         size_t currentPoint = 1;

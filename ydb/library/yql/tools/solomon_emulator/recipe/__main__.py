@@ -60,6 +60,8 @@ def start(argv):
     set_env("SOLOMON_HOST", "localhost")
     set_env("SOLOMON_HTTP_ENDPOINT", http_endpoint)
     set_env("SOLOMON_GRPC_ENDPOINT", grpc_endpoint)
+    set_env("SOLOMON_HTTP_PORT", str(http_port))
+    set_env("SOLOMON_GRPC_PORT", str(grpc_port))
 
     pid = os.fork()
     if pid == 0:

@@ -85,12 +85,12 @@ async def write(request):
 
 
 @routes.get("/api/v2/projects/{project}/sensors/names")
-async def sensors_data(request):
+async def sensors_names(request):
     return web.json_response({"names": ["test_type, test_label"]})
 
 
 @routes.get("/api/v2/projects/{project}/sensors")
-async def sensors_data(request):
+async def sensors(request):
     return web.json_response({"result": [], "page": {"pagesCount": 1, "totalCount": 5}})
 
 
@@ -128,6 +128,7 @@ async def config(request):
     request.app["features"] = json.loads(await request.read())
     return web.Response(status=200)
 
+
 def _dict_to_labels(request: ReadRequest):
     result = dict()
 
@@ -143,6 +144,7 @@ def _dict_to_labels(request: ReadRequest):
         result["downsampling.disabled"] = f"bool {False}"
 
     return result
+
 
 class DataService(DataServiceServicer):
     def Read(self, request: ReadRequest, context) -> ReadResponse:
@@ -173,6 +175,7 @@ class DataService(DataServiceServicer):
 
         return response
 
+
 def handle_auth(request):
     config = _config_from_request(request)
     if config.auth:
@@ -188,7 +191,7 @@ def create_web_app(config, grpc_port):
         DataService(), grpc_server
     )
     grpc_server.add_insecure_port(f'[::]:{grpc_port}')
-    
+
     webapp = web.Application()
     webapp.add_routes(routes)
     webapp["config"] = config

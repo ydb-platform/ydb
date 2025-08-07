@@ -100,6 +100,7 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvYdbCompute::TEvGetOperationResponse, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
     )
 
     void Handle(const TEvents::TEvForwardPingResponse::TPtr& ev) {
@@ -231,7 +232,7 @@ public:
             GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
-        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest), 0, 1);
+        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest), IEventHandle::FlagTrackDelivery, 1);
     }
 
     void UpdateCpuQuota(double cpuUsage) {
@@ -254,7 +255,7 @@ public:
         ReportPublicCounters(Builder.PublicStat);
         UpdateCpuQuota(Builder.CpuUsage);
 
-        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
+        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest), IEventHandle::FlagTrackDelivery);
     }
 
     void Complete() {
@@ -270,7 +271,12 @@ public:
         ReportPublicCounters(Builder.PublicStat);
         UpdateCpuQuota(Builder.CpuUsage);
 
-        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
+        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest), IEventHandle::FlagTrackDelivery);
+    }
+
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        LOG_W("TEvUndelivered, from " << ev->Sender << ", reason " << ev->Get()->Reason);
+        FailedAndPassAway();
     }
 
 private:

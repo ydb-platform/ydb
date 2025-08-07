@@ -519,10 +519,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     }
     TxSourceIdForPostPersist.clear();
 
-    TxAffectedSourcesIds.clear();
-    WriteAffectedSourcesIds.clear();
-    TxAffectedConsumers.clear();
-    SetOffsetAffectedConsumers.clear();
     if (UserActionAndTransactionEvents.empty()) {
         WriteInfosToTx.clear();
     }
@@ -947,7 +943,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMs
     if (TxAffectedSourcesIds.contains(msg.Body.SourceId)) {
         return EProcessResult::Blocked;
     }
-    WriteAffectedSourcesIds.insert(msg.Body.SourceId);
+    WriteAffectedSourcesIds[msg.Body.SourceId] = BatchingState;
     return EProcessResult::Continue;
 }
 
@@ -979,7 +975,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroup
     if (TxAffectedSourcesIds.contains(msg.Body.SourceId)) {
         return EProcessResult::Blocked;
     }
-    WriteAffectedSourcesIds.insert(msg.Body.SourceId);
+    WriteAffectedSourcesIds[msg.Body.SourceId] = BatchingState;
     return EProcessResult::Continue;
 }
 
@@ -1004,13 +1000,13 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& 
         if (TxAffectedSourcesIds.contains(body.SourceId)) {
             return EProcessResult::Blocked;
         }
-        WriteAffectedSourcesIds.insert(body.SourceId);
+        WriteAffectedSourcesIds[body.SourceId] = BatchingState;
     }
     for (auto& body : msg.Deregistrations) {
         if (TxAffectedSourcesIds.contains(body.SourceId)) {
             return EProcessResult::Blocked;
         }
-        WriteAffectedSourcesIds.insert(body.SourceId);
+        WriteAffectedSourcesIds[body.SourceId] = BatchingState;
     }
     return EProcessResult::Continue;
 
@@ -1048,7 +1044,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {
         return EProcessResult::Blocked;
     }
-    WriteAffectedSourcesIds.insert(p.Msg.SourceId);
+    WriteAffectedSourcesIds[p.Msg.SourceId] = BatchingState;
     return EProcessResult::Continue;
 }
 

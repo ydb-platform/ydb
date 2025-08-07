@@ -315,7 +315,7 @@ private:
     void ProcessCommitQueue();
     void RunPersist();
 
-    void MoveUserActOrTxToCommitState();
+    void MoveUserActOrTxToPendingState();
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event);
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
     void PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
@@ -666,10 +666,16 @@ private:
         ui64 Offset = 0;
     };
 
-    THashSet<TString> TxAffectedSourcesIds;
-    THashSet<TString> WriteAffectedSourcesIds;
-    THashSet<TString> TxAffectedConsumers;
-    THashSet<TString> SetOffsetAffectedConsumers;
+    enum class ETxBatchingState{
+        PreProcessing,
+        Executing,
+        Finishing
+    };
+
+    std::unordered_map<TString, ETxBatchingState> TxAffectedSourcesIds;
+    std::unordered_map<TString, ETxBatchingState> WriteAffectedSourcesIds;
+    std::unordered_map<TString, ETxBatchingState> TxAffectedConsumers;
+    std::unordered_map<TString, ETxBatchingState> SetOffsetAffectedConsumers;
     THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
 
     ui32 MaxBlobSize;
@@ -792,6 +798,7 @@ private:
     };
 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
+    std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingPredicates;
     std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingCommit;
     TVector<THolder<TEvPQ::TEvGetWriteInfoResponse>> WriteInfosApplied;
 
@@ -814,11 +821,6 @@ private:
     TMessageQueue Responses;
     ui64 CurrentBatchSize = 0;
 
-    enum class ETxBatchingState{
-        PreProcessing,
-        Executing,
-        Finishing
-    };
     ETxBatchingState BatchingState = ETxBatchingState::PreProcessing;
     //
     //
@@ -1004,7 +1006,12 @@ private:
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
-    bool CanProcessUserActionAndTransactionEvents() const;
+    void MovePendingPredicatesToPendingCommits();
+
+    static void ClearForPreProcessing(std::unordered_map<TString, ETxBatchingState>& kv);
+    static void SetAllForPreProcessing(std::unordered_map<TString, ETxBatchingState>& kv);
+
+    auto AddToTransactions(TSimpleSharedPtr<TTransaction> tx);
 };
 
 } // namespace NKikimr::NPQ

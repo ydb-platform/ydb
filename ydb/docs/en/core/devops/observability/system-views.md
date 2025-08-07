@@ -44,7 +44,9 @@ Additionally, there is a separate view that shows statistics on the usage of gro
 | NumActiveSlots        | Uint32    |         | Number of currently occupied VSlots with respect to GroupSizeInUnits of VDisks                                                                                   |
 | SlotSizeInUnits       | Uint32    |         | Size of VSlot in abstract units. Either user-defined or inferred from InferPDiskSlotCountFromUnitSize.                                                           |
 | DecommitStatus        | String    |         | Status of PDisk [decommissioning](../deployment-options/manual/decommissioning.md) (DECOMMIT_NONE, DECOMMIT_PENDING, DECOMMIT_IMMINENT, DECOMMIT_REJECTED)       |
-| InferPDiskSlotCountFromUnitSize  | Uint64    |         | Size of VSlot in bytes from which ExpectedSlotCount and SlotSizeInUnits values are inferred (unless user-defined) by the formula `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, where `SlotSizeInUnits = 2^N` is chosen to meet `ExpectedSlotCount <= 16`. |
+| InferPDiskSlotCountFromUnitSize  | Uint64    |         | Size of VSlot in bytes from which ExpectedSlotCount and SlotSizeInUnits values are inferred unless user-defined. |
+
+The inferred values of ExpectedSlotCount and SlotSizeInUnits are defined by the formula `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, where `SlotSizeInUnits = 2^N` is chosen to meet `ExpectedSlotCount <= 16`.
 
 ### ds_vslots
 
@@ -84,7 +86,9 @@ Note that the tuple (NodeId, PDiskId) forms a foreign key to the `ds_pdisks` vie
 | GetFastLatency      | Interval |         | 90th percentile of GetFast request execution time                                                         |
 | OperatingStatus     | String   |         | Group status based on latest VDisk reports only (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED)         |
 | ExpectedStatus      | String   |         | Status based not only on operational report, but on PDisk status and plans too (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED) |
-| GroupSizeInUnits    | Uint32   |         | Size of the group in abstract units. The number of VSlots occupied by VDisk is defined as `ceil(VDisk.GroupSizeInUnits / PDisk.SlotSizeInUnits)`. In proportion to it VDisks receive storage quota. |
+| GroupSizeInUnits    | Uint32   |         | Size of the group in abstract units. In proportion to it VDisks receive storage quota. |
+
+The number of VSlots occupied by VDisk is defined as `ceil(VDisk.GroupSizeInUnits / PDisk.SlotSizeInUnits)`.
 
 In this view, the tuple (BoxId, StoragePoolId) forms a foreign key to the `ds_storage_pools` view.
 

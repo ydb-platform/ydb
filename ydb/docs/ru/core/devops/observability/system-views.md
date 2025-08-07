@@ -44,7 +44,9 @@
 | NumActiveSlots        | Uint32    |          | Количество занятых VSlot с учетом значений GroupSizeInUnits у VDisk                                                                                              |
 | SlotSizeInUnits       | Uint32    |          | Размер VSlot в условных единицах. Либо заданный пользователем, либо вычисленный из параметра InferPDiskSlotCountFromUnitSize.                                    |
 | DecommitStatus        | String    |          | Статус вывода из эксплуатации ([декоммиссии](../deployment-options/manual/decommissioning.md)) PDisk (DECOMMIT_NONE, DECOMMIT_PENDING, DECOMMIT_IMMINENT, DECOMMIT_REJECTED)                                                      |
-| InferPDiskSlotCountFromUnitSize  | Uint64    |          | Размер VSlot в байтах, исходя из которого вычисляются ExpectedSlotCount и SlotSizeInUnits (если не заданы пользователем) по формуле `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, где `SlotSizeInUnits = 2^N` выбирается так, чтобы выполнялось условие `ExpectedSlotCount <= 16`. |
+| InferPDiskSlotCountFromUnitSize  | Uint64    |          | Размер VSlot в байтах, исходя из которого вычисляются ExpectedSlotCount и SlotSizeInUnits если не заданы пользователем. |
+
+Вычисленные значения ExpectedSlotCount и SlotSizeInUnits определяются по формуле `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, где `SlotSizeInUnits = 2^N` выбирается так, чтобы выполнялось условие `ExpectedSlotCount <= 16`.
 
 ### ds_vslots
 
@@ -84,7 +86,9 @@
 | GetFastLatency      | Interval |          | 90 процентиль времени выполнения запроса GetFast                                                           |
 | OperatingStatus     | String   |          | Статус группы по последним отчетам VDisk (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED)                 |
 | ExpectedStatus      | String   |          | Статус, основанный не только на операционном отчете, но и на статусе PDisk и планах (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED) |
-| GroupSizeInUnits    | Uint32   |          | Размер группы в абстрактных единицах. Количество VSlot, занимаемых VDisk, вычисляется как `ceil(VDisk.GroupSizeInUnits / PDisk.SlotSizeInUnits)`. Пропорционально ему VDisk получают квоту на хранение. |
+| GroupSizeInUnits    | Uint32   |          | Размер группы в абстрактных единицах. Пропорционально ему VDisk получают квоту на хранение. |
+
+Количество VSlot, занимаемых VDisk, определяется как `ceil(VDisk.GroupSizeInUnits / PDisk.SlotSizeInUnits)`.
 
 В данном представлении кортеж (BoxId, StoragePoolId) формирует внешний ключ к представлению `ds_storage_pools`.
 

@@ -113,6 +113,7 @@ public:
         }
 
         if (ev->Cookie) {
+            SendGetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
             return;
         }
 
@@ -149,7 +150,6 @@ public:
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
             case NYdb::NQuery::EExecStatus::Running:
-                SendGetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
                 QueryStats = response.QueryStats;
                 UpdateProgress();
                 break;

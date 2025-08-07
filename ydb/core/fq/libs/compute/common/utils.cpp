@@ -11,6 +11,7 @@
 
 namespace NFq {
 
+namespace {
 using TAggregates = std::map<TString, std::optional<ui64>>;
 
 void WriteValue(NYson::TYsonWriter& writer, const TString& name, ui64 value) {
@@ -85,6 +86,7 @@ struct TTotalStatistics {
     TAggregate IngressQueuedBytes;
     TAggregate IngressQueuedRows;
 };
+}
 
 TString FormatDurationMs(ui64 durationMs) {
     TStringBuilder builder;
@@ -233,6 +235,7 @@ TString FormatInstant(TInstant instant) {
     return builder;
 }
 
+namespace {
 void WriteNamedNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& name, TTotalStatistics& totals) {
     switch (node.GetType()) {
         case NJson::JSON_INTEGER:
@@ -445,6 +448,7 @@ void EnumeratePlans(NYson::TYsonWriter& writer, const NJson::TJsonValue& value, 
         writer.OnEndMap();
     }
 }
+} // namespace anonymous
 
 TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline) {
     TStringStream out;
@@ -710,6 +714,7 @@ std::optional<ui64> WriteMetric(NYson::TYsonWriter& writer, const NJson::TJsonVa
     return value;
 }
 
+namespace {
 const std::vector<std::pair<TString, TString>> columns = {
     std::make_pair<TString, TString>("id", ""), 
     std::make_pair<TString, TString>("cpu", ""), 
@@ -906,6 +911,7 @@ void EnumeratePlansV2(NYson::TYsonWriter& writer, const NJson::TJsonValue& value
         writer.OnEndMap();
     }
 }
+} // namespace anonymous
 
 TString GetV1StatFromV2PlanV2(const TString& plan, double* cpuUsage) {
     TStringStream out;
@@ -1066,6 +1072,7 @@ TString GetPrettyStatistics(const TString& statistics) {
     return NJson2Yson::ConvertYson2Json(out.Str());
 }
 
+namespace {
 std::optional<int> GetValue(const NJson::TJsonValue& node, const TString& name) {
     if (auto* keyNode = node.GetValueByPath(name)) {
         auto result = keyNode->GetInteger();
@@ -1121,6 +1128,7 @@ std::optional<int> Sum(const std::optional<int>& a, const std::optional<int>& b)
 
     return *a + *b;
 }
+} // namespace anonymous
 
 TPublicStat GetPublicStat(const TString& statistics) {
     TPublicStat counters;
@@ -1146,6 +1154,7 @@ TPublicStat GetPublicStat(const TString& statistics) {
     return counters;
 }
 
+namespace {
 void CleanupPlans(NJson::TJsonValue& node) {
     node.EraseValue("Stats");
     if (auto* plans = node.GetValueByPath("Plans")) {
@@ -1271,6 +1280,7 @@ struct TProdStatProcessor : TFullStatProcessor {
         return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline));
     }
 };
+} // namespace anonymous
 
 std::unique_ptr<IPlanStatProcessor> CreateStatProcessor(const TString& statViewName) {
     // disallow none and basic stat since they do not support metering

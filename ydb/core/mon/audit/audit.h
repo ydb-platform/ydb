@@ -10,11 +10,19 @@ namespace NMonitoring::NAudit {
 
 using TAuditParts = TVector<std::pair<TString, TString>>;
 
+enum ERequestStatus {
+    Success,
+    Process,
+    Error,
+};
+
 class TAuditCtx {
 public:
     void InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev);
     void AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
-    void FinishAudit(const NHttp::THttpOutgoingResponsePtr& response);
+    void LogAudit(ERequestStatus status, const TString& reason);
+    void LogOnExecute();
+    void LogOnResult(const NHttp::THttpOutgoingResponsePtr& response);
 
 private:
     void AddAuditLogPart(TStringBuf name, const TString& value);

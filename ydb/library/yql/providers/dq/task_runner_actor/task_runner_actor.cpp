@@ -592,10 +592,10 @@ private:
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
             if (input.HasSource()) {
-                Sources.emplace(inputId);
+                Sources.emplace_back(inputId);
             } else {
                 for (auto& channel : input.GetChannels()) {
-                    Inputs.emplace(channel.GetId());
+                    Inputs.emplace_back(channel.GetId());
                 }
             }
         }
@@ -674,11 +674,11 @@ private:
         auto cookie = ev->Cookie;
         auto inputMap = ev->Get()->AskFreeSpace
             ? Inputs
-            : ev->Get()->InputChannels;
+            : std::move(ev->Get()->InputChannels);
 
         auto sourcesMap = Sources;
 
-        Invoker->Invoke([selfId, cookie, actorSystem, replyTo, taskRunner=TaskRunner, inputMap, sourcesMap, memLimit=ev->Get()->MemLimit, settings=Settings, stageId=StageId, runtimeData=RuntimeData]() mutable {
+        Invoker->Invoke([selfId, cookie, actorSystem, replyTo, taskRunner=TaskRunner, inputMap=std::move(inputMap), sourcesMap=std::move(sourcesMap), memLimit=ev->Get()->MemLimit, settings=Settings, stageId=StageId, runtimeData=RuntimeData]() mutable {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 // guard.GetMutex()->SetLimit(memLimit);
@@ -760,8 +760,8 @@ private:
     NTaskRunnerProxy::ITaskRunner::TPtr TaskRunner;
     ITaskRunnerInvoker::TPtr Invoker;
     bool Local;
-    THashSet<ui32> Inputs;
-    THashSet<ui32> Sources;
+    TVector<ui32> Inputs;
+    TVector<ui32> Sources;
     TIntrusivePtr<TDqConfiguration> Settings;
     NDqProto::EDataTransportVersion DataTransportVersion;
     NKikimr::NMiniKQL::EValuePackerVersion ValuePackerVersion;
@@ -789,7 +789,6 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
-        THashSet<ui32>&&,
         THolder<NYql::NDq::TDqMemoryQuota>&&) override
     {
         auto* actor = new TTaskRunnerActor(parent, alloc, ProxyFactory, InvokerFactory->Create(), txId, taskId, RuntimeData);

@@ -43,9 +43,17 @@ public:
     // After pause IDqInput::Pop() stops return batches that were pushed before pause
     // and returns Empty() after all the data before pausing was read.
     // Compute Actor can push data after pause, but program won't receive it until Resume() is called.
-    virtual void Pause() = 0;
-    virtual void Resume() = 0;
-    virtual bool IsPaused() const = 0;
+    virtual void PauseByCheckpoint() = 0;
+    virtual void ResumeByCheckpoint() = 0;
+    virtual bool IsPausedByCheckpoint() const = 0;
+    // Watermarks
+    // Called after receiving watermark
+    virtual void AddWatermark(TInstant watermark) = 0;
+    // Called after watermarks received by all channels and ready for TaskRunner
+    virtual void PauseByWatermark(TInstant watermark) = 0;
+    // Called after watermark processed by TaskRunner
+    virtual void ResumeByWatermark(TInstant watermark) = 0;
+    virtual bool IsPausedByWatermark() const = 0;
 };
 
 } // namespace NYql::NDq

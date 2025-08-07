@@ -55,6 +55,7 @@ enum class EResumeSource : ui32 {
     CADataSent,
     CAPendingOutput,
     CATaskRunnerCreated,
+    CAWatermarkInject,
 
     Last,
 };

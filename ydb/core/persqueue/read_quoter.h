@@ -236,7 +236,7 @@ const static ui64 DEFAULT_READ_SPEED_AND_BURST = 1'000'000'000;
 
 public:
     TReadQuoter(
-        const TActorContext& ctx,
+        const NKikimrPQ::TPQConfig& pqConfig,
         const NPersQueue::TTopicConverterPtr& topicConverter,
         const NKikimrPQ::TPQTabletConfig& config,
         const TPartitionId& partition,
@@ -247,7 +247,7 @@ public:
     )
         : TPartitionQuoterBase(
                 topicConverter, config, partition, tabletActor, true, tabletId, counters,
-                AppData(ctx)->PQConfig.GetMaxInflightReadRequestsPerPartition()
+                pqConfig.GetMaxInflightReadRequestsPerPartition()
         )
         , Parent(parent)
     {

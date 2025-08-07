@@ -758,6 +758,12 @@ inline NYql::NDecimal::TInt128 TUnboxedValuePod::Get<NYql::NDecimal::TInt128>() 
 }
 
 template <>
+inline NYql::NUuid::TUuid TUnboxedValuePod::Get<NYql::NUuid::TUuid>() const
+{
+    return GetUuid();
+}
+
+template <>
 inline TUnboxedValuePod::TUnboxedValuePod(bool value)
 {
     Raw.Simple.ui8_ = value ? 1 : 0;
@@ -792,6 +798,19 @@ inline TUnboxedValuePod::TUnboxedValuePod(NYql::NDecimal::TUint128 value)
 {
     *reinterpret_cast<NYql::NDecimal::TUint128*>(&Raw) = value;
     Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
+}
+
+inline TUnboxedValuePod::TUnboxedValuePod(NYql::NUuid::TUuid value):
+    TUnboxedValuePod(TStringValue(TStringRef(value.Data, sizeof(value))))
+{
+}
+
+inline NYql::NUuid::TUuid TUnboxedValuePod::GetUuid() const {
+    UDF_VERIFY(EMarkers::Empty != Raw.GetMarkers(), "Value is empty.");
+    const auto strRef = AsStringRef();
+    UDF_VERIFY(strRef.Size() == sizeof(NYql::NUuid::TUuid), "Uuid size mismatch.");
+    NYql::NUuid::TUuid value(strRef.Data(), strRef.Size());
+    return value;
 }
 
 inline const void* TUnboxedValuePod::GetRawPtr() const

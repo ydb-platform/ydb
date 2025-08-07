@@ -1,9 +1,11 @@
 #include "csv_arrow.h"
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NFormats {
@@ -102,6 +104,24 @@ namespace {
         return *res;
     }
 
+    std::shared_ptr<arrow::Array> ConvertStringToUuidArray(std::shared_ptr<arrow::ArrayData> data) {
+        auto originalArr = std::make_shared<arrow::StringArray>(data);
+        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(NUuid::UUID_LEN));
+        Y_ABORT_UNLESS(builder.Reserve(originalArr->length()).ok());
+        for (long i = 0; i < originalArr->length(); ++i) {
+            if (originalArr->IsNull(i)) {
+                Y_ABORT_UNLESS(builder.AppendNull().ok());
+            } else {
+                ui16 dw[8];
+                Y_ABORT_UNLESS(NUuid::ParseUuidToArray(originalArr->Value(i), dw, false));
+                builder.UnsafeAppend(arrow::Buffer(reinterpret_cast<const uint8_t*>(dw), sizeof(dw)));
+            }
+        }
+        auto res = builder.Finish();
+        Y_ABORT_UNLESS(res.ok());
+        return *res;
+    }
+
 }
 
 std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_ptr<arrow::RecordBatch> parsedBatch) const {
@@ -145,6 +165,8 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                     Y_ABORT_UNLESS(false);
                 }
             }());
+        } else if (fArr->type()->id() == arrow::StringType::type_id && originalType->id() == arrow::FixedSizeBinaryType::type_id) {
+            resultColumns.emplace_back(ConvertStringToUuidArray(fArr->data()));
         } else {
             Y_ABORT_UNLESS(false);
         }

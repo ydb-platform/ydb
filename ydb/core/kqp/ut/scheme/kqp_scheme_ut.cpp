@@ -12189,7 +12189,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Uuid).SetNullable(true)
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::DyNumber).SetNullable(true)
         };
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);

@@ -192,6 +192,18 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
         }
     }
 
+    {
+        auto program = NKikimrSSA::TProgram();
+        auto* command = program.AddCommand();
+        NKikimrSSA::TProgram::TProjection proj;
+        for (const auto& col : ydbSchema.Columns) {
+            proj.AddColumns()->SetId(col.second.Id);
+        }
+        *command->MutableProjection() = proj;
+        record.SetOlapProgram(program.SerializeAsString());
+        record.SetOlapProgramType(NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS);
+    }
+
     for (ui64 pathId : pathIds) {
         std::vector<TCell> pk{ TCell::Make<ui64>(pathId) };
         TSerializedTableRange range(TConstArrayRef<TCell>(pk), true, TConstArrayRef<TCell>(pk), true);

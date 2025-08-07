@@ -199,7 +199,7 @@ TTerminalTask TTerminal::Run() {
             co_return;
         }
 
-        // only here if exception cought
+        // only here if exception caught
 
         TaskQueue.DecInflight();
     }

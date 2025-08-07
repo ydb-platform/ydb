@@ -1530,14 +1530,14 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
     // Create a permission for each action in the scheduled request
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
     resp->Record.MutableStatus()->SetCode(TStatus::ALLOW);
-    const ui32 priority = copy->Request.GetPriority();
     for (const auto& action : copy->Request.GetActions()) {
         auto items = ClusterInfo->FindLockedItems(action, &ctx);
         for (const auto& item : items) {
             TErrorInfo error;
             TDuration duration = TDuration::MicroSeconds(action.GetDuration());
             duration += TDuration::MicroSeconds(copy->Request.GetDuration());
-            item->DeactivateScheduledLocks(priority);
+            // To get permissions ASAP and not in the priority order.
+            item->DeactivateScheduledLocks(0);
             bool isLocked = item->IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration);
             item->ReactivateScheduledLocks();
             if (isLocked) {

@@ -112,7 +112,6 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
     auto emplaced = pinnedCollection.emplace(pageId, TPinnedPage(std::move(sharedBody)));
     Y_ENSURE(emplaced.second);
 
-    // a transaction has pinned a new page, count it as a cache hit:
     Stats.NewlyPinnedCount++;
     if (!page->IsSticky()) {
         Stats.NewlyPinnedSize += page->Size;

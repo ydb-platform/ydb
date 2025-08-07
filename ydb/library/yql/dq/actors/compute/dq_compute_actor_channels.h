@@ -229,7 +229,9 @@ private:
     bool SupportCheckpoints = false;
     ICallbacks* const Cbs;
     THashSet<ui32> TrackingNodes;
+public:     // temporary added to fix YQ-4412
     THashMap<ui64, TInputChannelState> InputChannelsMap;
+private:
     THashMap<ui64, TOutputChannelState> OutputChannelsMap;
     TInstant LastOutputMessageTime;
 };

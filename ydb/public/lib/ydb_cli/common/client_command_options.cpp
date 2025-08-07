@@ -269,6 +269,7 @@ TClientCommandOption& TClientCommandOption::LogToConnectionParams(const TString&
 
 TClientCommandOption& TClientCommandOption::DocLink(const TString& link) {
     Documentation = link;
+    RebuildHelpMessage();
     return *this;
 }
 

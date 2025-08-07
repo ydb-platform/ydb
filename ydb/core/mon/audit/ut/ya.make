@@ -9,6 +9,7 @@ PEERDIR(
 )
 
 SRCS(
+    redirect_ut.cpp
     url_matcher_ut.cpp
 )
 

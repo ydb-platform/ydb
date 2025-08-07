@@ -37,8 +37,6 @@ NKikimrCms::TStatus::ECode ToCmsStatus(Ydb::StatusIds::StatusCode status);
 
 const TMaybe<TString> ExtractYdbTokenFromHeaders(const NYdbGrpc::IRequestContextBase* ctx);
 
-Y_HAS_MEMBER(GetSecurityToken);
-
 template <class TReq>
 struct TGetYdbTokenLegacyTraits {
     static const TMaybe<TString> GetYdbToken(const TReq& req, const NYdbGrpc::IRequestContextBase* ctx) {
@@ -50,17 +48,6 @@ struct TGetYdbTokenLegacyTraits {
         // Fallback on headers
         return ExtractYdbTokenFromHeaders(ctx);
     }
-
-    static_assert(THasGetSecurityToken<TReq>::value, "Request class must have GetSecurityToken method");
-};
-
-template <class TReq>
-struct TGetYdbTokenUnsecureTraits {
-    static const TMaybe<TString> GetYdbToken(const TReq&, const NYdbGrpc::IRequestContextBase*) {
-        return Nothing();
-    }
-
-    static_assert(!THasGetSecurityToken<TReq>::value, "Request class has GetSecurityToken method, so TGetYdbTokenUnsecureTraits must not be used");
 };
 
 struct TResponseLegacyCommonTraits {
@@ -89,7 +76,7 @@ struct TLegacyGrpcMethodAccessorTraits<TReq, NKikimrClient::TResponse>
 
 template <>
 struct TLegacyGrpcMethodAccessorTraits<NKikimrClient::TNodeRegistrationRequest, NKikimrClient::TNodeRegistrationResponse>
-    : NPrivate::TGetYdbTokenUnsecureTraits<NKikimrClient::TNodeRegistrationRequest> // Unsecure because authorization is performed using client certificates
+    : NPrivate::TGetYdbTokenLegacyTraits<NKikimrClient::TNodeRegistrationRequest>
 {
     static void FillResponse(NKikimrClient::TNodeRegistrationResponse& resp, const NYql::TIssues& issues, Ydb::CostInfo*, Ydb::StatusIds::StatusCode status) {
         resp.MutableStatus()->SetCode(NPrivate::ToNodeBrokerStatus(status));

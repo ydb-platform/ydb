@@ -457,6 +457,7 @@ message TNodeRegistrationRequest {
     optional string DomainPath = 6;
     optional bool FixedNodeId = 7;
     optional string Path = 8;
+    optional string SecurityToken = 9 [(Ydb.sensitive) = true];
 }
 
 message TNodeRegistrationResponse {

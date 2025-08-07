@@ -845,9 +845,6 @@ protected:
         }
     }
 
-    void PrepareRequest(NKikimrClient::TNodeRegistrationRequest&) const { // Authorization is performed using client certificates
-    }
-
     TString SecurityToken;
     THolder<TImpl> Impl;
 };

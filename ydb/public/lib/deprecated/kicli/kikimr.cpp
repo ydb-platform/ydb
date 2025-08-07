@@ -576,6 +576,9 @@ NThreading::TFuture<TResult> TKikimr::RegisterNode(const TString& domainPath, co
     if (path) {
         request->Record.SetPath(*path);
     }
+    if (SecurityToken) {
+        request->Record.SetSecurityToken(SecurityToken);
+    }
     return ExecuteRequest(request.Release());
 }
 

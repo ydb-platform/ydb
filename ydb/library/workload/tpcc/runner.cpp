@@ -759,7 +759,7 @@ void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, co
         runner.RunSync();
     } catch (const std::exception& ex) {
         std::cerr << "Exception while execution: " << ex.what() << std::endl;
-        throw TNeedToExitWithCode(EXIT_FAILURE);
+        throw NConsoleClient::TNeedToExitWithCode(EXIT_FAILURE);
     }
 }
 

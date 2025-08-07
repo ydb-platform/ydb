@@ -82,9 +82,9 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
     addControl(DisableByKeyFilter, "DataShardControls.DisableByKeyFilter");
     addControl(MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds");
     addControl(CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets");
-    addControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs");
-    addControl(DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfile.BufferThresholdMs");
-    addControl(DataTxProfileBufferSize, "DataShardControls.DataTxProfile.BufferSize");
+    addControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfileLogThresholdMs");
+    addControl(DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfileBufferThresholdMs");
+    addControl(DataTxProfileBufferSize, "DataShardControls.DataTxProfileBufferSize");
     addControl(PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit");
 
     auto completed = Pipeline.GetExecutionUnit(EExecutionUnitKind::CompletedOperations).GetInFly();

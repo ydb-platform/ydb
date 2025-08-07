@@ -3201,10 +3201,10 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
         } else {
             ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
             if (IntermediatesInFlight < limit) {
-                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Create storage read request, Marker# KV54");
-                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 ++IntermediatesInFlight;
+                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Create storage read request, InFlight# " << IntermediatesInFlight << "/" << limit << ", Marker# KV54");
+                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             } else {
                 ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                     << " Enqueue storage read request " << IntermediatesInFlight << '/' << limit << ", Marker# KV56");
@@ -3238,10 +3238,10 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
         } else {
             ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
             if (IntermediatesInFlight < limit) {
-                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Create storage read range request, Marker# KV66");
-                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 ++IntermediatesInFlight;
+                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Create storage read range request, InFlight# " << IntermediatesInFlight << "/" << limit << ", Marker# KV66");
+                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             } else {
                 ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                     << " Enqueue storage read range request, Marker# KV59");

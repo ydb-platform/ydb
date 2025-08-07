@@ -955,22 +955,13 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         return node;
     }
 
-    if (!node.Maybe<TCoFlatMap>().Input().Maybe<TKqpReadOlapTableRanges>() &&
-        !node.Maybe<TCoFlatMap>().Input().Maybe<TCoExtractMembers>().Input().Maybe<TKqpReadOlapTableRanges>()) {
+    if (!node.Maybe<TCoFlatMap>().Input().Maybe<TKqpReadOlapTableRanges>()) {
         return node;
     }
 
     auto flatmap = node.Cast<TCoFlatMap>();
+    auto read = flatmap.Input().Cast<TKqpReadOlapTableRanges>();
 
-    TExprNode::TPtr readPtr;
-    if (flatmap.Input().Maybe<TKqpReadOlapTableRanges>()) {
-        readPtr = flatmap.Input().Cast<TKqpReadOlapTableRanges>().Ptr();
-    } else {
-        readPtr = flatmap.Input().Cast<TCoExtractMembers>().Input().Cast<TKqpReadOlapTableRanges>().Ptr();
-    }
-    Y_ENSURE(readPtr);
-
-    auto read = TExprBase(readPtr).Cast<TKqpReadOlapTableRanges>();
     if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
         return node;
     }

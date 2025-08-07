@@ -1653,55 +1653,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(PushdownFilterMultiConsumersRead) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-
-        auto tableClient = kikimr.GetTableClient();
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
-
-        auto queryClient = kikimr.GetQueryClient();
-        auto result = queryClient.GetSession().GetValueSync();
-        NStatusHelpers::ThrowOnError(result);
-        auto session2 = result.GetSession();
-
-        auto res = session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/t1` (
-                a Int64	NOT NULL,
-                b Int32,
-                primary key(a)
-            )
-            PARTITION BY HASH(a)
-            WITH (STORE = COLUMN);
-        )").GetValueSync();
-        UNIT_ASSERT(res.IsSuccess());
-
-        std::vector<TString> queries = {
-            R"(
-                $sub = (select distinct (b) from `/Root/t1` where b > 10);
-
-                select count(*) from `/Root/t1` as t1
-                where t1.b = $sub;
-            )",
-        };
-
-        for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto query = queries[i];
-            auto result =
-                session2
-                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-            auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Olap filter not pushed down. Query: " << query);
-
-            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-    }
-
     Y_UNIT_TEST(ProjectionPushDown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

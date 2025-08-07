@@ -775,7 +775,7 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0) {
     auto& r0 = *result.TopicData[0].PartitionData[0].Records;
     UNIT_ASSERT_EQUAL(r0.BaseOffset, 0);
     UNIT_ASSERT_EQUAL(r0.BatchLength, 0);
-    UNIT_ASSERT_EQUAL(r0.PartitionLeaderEpoch, 0);
+    UNIT_ASSERT_EQUAL(r0.PartitionLeaderEpoch, -1);
     UNIT_ASSERT_EQUAL(r0.Magic, 0);
     UNIT_ASSERT_EQUAL(r0.Crc, 544167206);
     UNIT_ASSERT_EQUAL(r0.Attributes, 0);

@@ -1302,8 +1302,22 @@ public:
                     auto temporary = settings.Temporary.IsValid()
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
+                    
+                    const bool isCreateTableAs = std::any_of(
+                        settings.Other.Ptr()->Children().begin(),
+                        settings.Other.Ptr()->Children().end(),
+                        [&](const TExprNode::TPtr& child) {
+                            Cerr << KqpExprToPrettyString(*node, ctx) << Endl;
+                            NYql::NNodes::TExprBase expr(child);
+                            if (auto maybeTuple = expr.Maybe<TCoNameValueTuple>()) {
+                                const auto tuple = maybeTuple.Cast();
+                                const auto name = tuple.Name().Value();
+                                return name == "ctas";
+                            }
+                            return false;
+                        });
 
-                    if (temporary.Value() == "true" && !SessionCtx->Config().EnableTempTables) {
+                    if (temporary.Value() == "true" && !SessionCtx->Config().EnableTempTables && !isCreateTableAs) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary table is not supported."));
                         return nullptr;
                     }

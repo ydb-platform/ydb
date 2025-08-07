@@ -148,10 +148,6 @@ public:
 
     const TSharedData* Lookup(TPageId pageId, TInfo *info);
 
-    void CountTouches(ui32 &touchedUnpinnedPages, ui64 &touchedUnpinnedMemory, ui64 &touchedPinnedMemory);
-    void PinTouches(ui32 &touchedPages, ui32 &pinnedPages, ui64 &pinnedMemory);
-    void CountToLoad(ui32 &toLoadPages, ui64 &toLoadMemory);
-
     // TODO: move this methods somewhere else (probably to TPageCollectionTxEnv)
     // and keep page states and counters there
     void BeginTransaction(TPinned* pinned);

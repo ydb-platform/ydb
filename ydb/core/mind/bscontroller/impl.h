@@ -2176,15 +2176,45 @@ public:
     }
 
     void UpdatePDisksCounters() {
-        ui32 numWithoutSlotCount = 0;
+        ui32 numWithoutExpectedSlotCount = 0;
         ui32 numWithoutSerial = 0;
+        ui32 numWithoutInferredSettings = 0;
+        ui32 numWithInferredSettingsUnknown = 0;
+        ui32 numVDisksTooSmall = 0;
+        ui32 numVDisksTooLarge = 0;
         for (const auto& [id, pdisk] : PDisks) {
-            numWithoutSlotCount += !pdisk->HasExpectedSlotCount;
+            ui32 effectiveSlotCount, effectiveSlotSizeInUnits;
+            pdisk->ExtractInferredPDiskSettings(effectiveSlotCount, effectiveSlotSizeInUnits);
+            bool settingsShouldBeInferred = !pdisk->HasExpectedSlotCount && pdisk->InferPDiskSlotCountFromUnitSize;
+
+            numWithoutExpectedSlotCount += !effectiveSlotCount;
             numWithoutSerial += !pdisk->ExpectedSerial;
+            numWithoutInferredSettings += !settingsShouldBeInferred;
+            numWithInferredSettingsUnknown += settingsShouldBeInferred && !effectiveSlotCount;
+
+            if (!effectiveSlotCount) {
+                continue;
+            }
+
+            for (const auto& [_, vslot] : pdisk->VSlotsOnPDisk) {
+                if (!vslot->Group) {
+                    continue;
+                }
+                const ui32 groupSizeInUnits = Max(vslot->Group->GroupSizeInUnits, 1u);
+                if (groupSizeInUnits < effectiveSlotSizeInUnits) {
+                    numVDisksTooSmall++;
+                } else if (groupSizeInUnits > effectiveSlotSizeInUnits) {
+                    numVDisksTooLarge++;
+                }
+            }
         }
         auto& counters = TabletCounters->Simple();
-        counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutSlotCount);
+        counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutExpectedSlotCount);
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL].Set(numWithoutSerial);
+        counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_INFERRED_SETTINGS].Set(numWithoutInferredSettings);
+        counters[NBlobStorageController::COUNTER_PDISKS_WITH_INFERRED_SETTINGS_UNKNOWN].Set(numWithInferredSettingsUnknown);
+        counters[NBlobStorageController::COUNTER_VDISKS_WITH_SMALL_SIZE_IN_UNITS_OCCUPYING_LARGER_VSLOT].Set(numVDisksTooSmall);
+        counters[NBlobStorageController::COUNTER_VDISKS_WITH_LARGE_SIZE_IN_UNITS_OCCUPYING_MULTIPLE_SMALLER_VSLOTS].Set(numVDisksTooLarge);
 
         ui32 numFree = 0;
         ui32 numAdded = 0;

@@ -274,6 +274,18 @@ private:
                 DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
                 DUMP_PREFIXED("InputChannelStats.", (*channelStats), ResentMessages);
             }
+            {   // temporary added to fix YQ-4412
+                const auto it = Channels->InputChannelsMap.find(id);
+                if (it != Channels->InputChannelsMap.end()) {
+                    const auto& state = it->second;
+                    html << "LastRecvSeqNo: " << state.LastRecvSeqNo << "<br />";
+                    html << "InFlight size: " << state.InFlight.size() << "<br />";
+                    if (state.PollRequest) {
+                        html << "PollRequest.SeqNo: " << state.PollRequest->SeqNo << "<br />";  
+                        html << "PollRequest.FreeSpace: " << state.PollRequest->FreeSpace << "<br />";    
+                    }
+                }
+            }
 
             auto channel = info.Channel;
             if (!channel) {

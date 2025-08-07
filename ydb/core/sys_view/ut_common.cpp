@@ -67,6 +67,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
     appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
     appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(settings.AlterObjectEnabled);
+    appConfig.MutableTableServiceConfig()->SetEnableTempTables(true);
     Settings->SetAppConfig(appConfig);
 
     for (ui32 i : xrange(settings.StoragePools)) {

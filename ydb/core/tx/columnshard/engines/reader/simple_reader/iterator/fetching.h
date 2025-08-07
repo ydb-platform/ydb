@@ -283,23 +283,12 @@ private:
         std::weak_ptr<NCommon::IDataSource> Source;
         TFetchingScriptCursor Step;
         NColumnShard::TCounterGuard TaskGuard;
-        bool IsDone = false;
 
         virtual void OnFilterReady(NArrow::TColumnFilter&& filter) override;
         virtual void OnFailure(const TString& reason) override;
 
-    private:
-        void OnDone() {
-            AFL_VERIFY(!IsDone);
-            IsDone = true;
-        }
-
     public:
         TFilterSubscriber(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step);
-
-        ~TFilterSubscriber() {
-            AFL_VERIFY(IsDone);
-        }
     };
 
 public:
@@ -309,7 +298,6 @@ public:
         : TBase("DUPLICATE") {
     }
 };
-
 
 class TUpdateAggregatedMemoryStep: public IFetchingStep {
 private:

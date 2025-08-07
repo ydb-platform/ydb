@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/rows/view.h>
+#include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -93,6 +94,46 @@ public:
 
     const TRowRange& GetRows() const {
         return Rows;
+    }
+};
+
+class TDuplicateSourceCacheResult {
+private:
+    std::shared_ptr<ISnapshotSchema> Schema;
+    using TColumnData = THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
+    TColumnData DataByAddress;
+
+public:
+    TDuplicateSourceCacheResult(TColumnData&& data, const std::shared_ptr<ISnapshotSchema>& fieldByColumnId)
+        : Schema(fieldByColumnId)
+        , DataByAddress(std::move(data))
+    {
+    }
+
+    THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> ExtractDataByPortion() {
+        THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> dataByPortion;
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        for (const auto& columnId : Schema->GetColumnIds()) {
+            fields.emplace_back(Schema->GetFieldByColumnIdVerified(columnId));
+        }
+
+        THashMap<ui64, THashMap<ui32, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>> columnsByPortion;
+        for (auto&& [address, data] : DataByAddress) {
+            AFL_VERIFY(columnsByPortion[address.GetPortionId()].emplace(address.GetColumnId(), data).second);
+        }
+
+        for (auto& [portion, columns] : columnsByPortion) {
+            std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> sortedColumns;
+            for (const auto columnId : Schema->GetColumnIds()) {
+                auto column = columns.FindPtr(columnId);
+                AFL_VERIFY(column);
+                sortedColumns.emplace_back(*column);
+            }
+            std::shared_ptr<NArrow::TGeneralContainer> container = std::make_shared<NArrow::TGeneralContainer>(fields, std::move(sortedColumns));
+            AFL_VERIFY(dataByPortion.emplace(portion, std::move(container)).second);
+        }
+
+        return dataByPortion;
     }
 };
 

@@ -5,6 +5,7 @@
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/context.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
@@ -14,15 +15,9 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 
 class TBuildDuplicateFilters: public NConveyor::ITask {
 private:
-    THashMap<TDuplicateMapInfo, std::shared_ptr<NArrow::TGeneralContainer>> SourcesById;
-    std::shared_ptr<arrow::Schema> PKSchema;
-    std::vector<std::string> VersionColumnNames;
-    TActorId Owner;
-    std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
-    std::optional<NArrow::NMerger::TCursor> MaxVersion;
-    NArrow::NMerger::TSortableBatchPosition Finish;
-    bool IncludeFinish;
-    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> AllocationGuards;
+    TDuplicateSourceCacheResult ColumnData;
+    std::shared_ptr<TInternalFilterConstructor> Context;
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
 private:
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override;
@@ -33,41 +28,8 @@ private:
     }
 
 public:
-    TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& sortingSchema, const std::optional<NArrow::NMerger::TCursor>& maxVersion,
-        const NArrow::NMerger::TSortableBatchPosition& finishKey, const bool includeFinish,
-        const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, const TActorId& owner)
-        : PKSchema(sortingSchema)
-        , VersionColumnNames(IIndexInfo::GetSnapshotColumnNames())
-        , Owner(owner)
-        , Counters(counters)
-        , MaxVersion(maxVersion)
-        , Finish(finishKey)
-        , IncludeFinish(includeFinish)
-    {
-        AFL_VERIFY(finishKey.IsSameSortingSchema(*sortingSchema));
-    }
-
-    void AddSource(const std::shared_ptr<NArrow::TGeneralContainer>& batch,
-        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard, const TDuplicateMapInfo& interval) {
-        AFL_VERIFY(guard);
-        AFL_VERIFY(interval.GetRows().NumRows());
-        AFL_VERIFY(interval.GetRows().GetBegin() < batch->GetRecordsCount())("interval", interval.DebugString())(
-                                                     "records", batch->GetRecordsCount());
-        AFL_VERIFY(SourcesById.emplace(interval, batch).second);
-        AllocationGuards.push_back(guard);
-    }
-
-    TString DebugString() const {
-        TStringBuilder sb;
-        sb << '{';
-        sb << "sources=";
-        sb << '[';
-        for (const auto& [range, _] : SourcesById) {
-            sb << range.DebugString() << ';';
-        }
-        sb << ']';
-        sb << '}';
-        return sb;
+    TBuildDuplicateFilters(TDuplicateSourceCacheResult&& columnData, const std::shared_ptr<TInternalFilterConstructor>& context, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard)
+        : ColumnData(columnData), Context(context), AllocationGuard(guard){
     }
 };
 

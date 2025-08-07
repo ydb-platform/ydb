@@ -1643,6 +1643,15 @@ message TImmediateControlsConfig {
         map<string, TRequestConfig> RequestConfigs = 1;
     }
 
+    message TKeyValueVolumeControls {
+        optional uint64 ReadRequestsInFlightLimit = 1 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous read requests",
+            MinValue: 1,
+            MaxValue: 4096,
+            DefaultValue: 3
+        }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1656,6 +1665,7 @@ message TImmediateControlsConfig {
     optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
     optional TTableServiceControls TableServiceControls = 12;
     optional TGRpcControls GRpcControls = 14;
+    optional TKeyValueVolumeControls KeyValueVolumeControls = 15;
 };
 
 message TMeteringConfig {

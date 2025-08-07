@@ -81,9 +81,12 @@ public:
 class TAlterObject final: public TCreateObject {
 private:
     using TBase = TCreateObject;
+    bool MissingOk() const {
+        return ExistingOk_; // Because we were derived from TCreateObject
+    }
 protected:
     virtual INode::TPtr BuildOptions() const override {
-        return Y(Q(Y(Q("mode"), Q("alterObject"))));
+        return Y(Q(Y(Q("mode"), Q(MissingOk() ? "alterObjectIfExists" : "alterObject"))));
     }
 public:
     using TBase::TBase;

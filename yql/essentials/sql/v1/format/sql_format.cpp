@@ -1605,6 +1605,21 @@ private:
         VisitAllFields(TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateStreamingQuery(const TRule_create_streaming_query_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_streaming_query_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterStreamingQuery(const TRule_alter_streaming_query_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_alter_streaming_query_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropStreamingQuery(const TRule_drop_streaming_query_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_streaming_query_stmt::GetDescriptor(), msg);
+    }
+
     void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
         VisitAllFieldsImpl<TPrettyVisitor, &TPrettyVisitor::Visit>(this, descr, msg);
     }
@@ -3097,6 +3112,9 @@ TStaticData::TStaticData()
         {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
         {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
         {TRule_show_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShowCreateTable)},
+        {TRule_create_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateStreamingQuery)},
+        {TRule_alter_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterStreamingQuery)},
+        {TRule_drop_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropStreamingQuery)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

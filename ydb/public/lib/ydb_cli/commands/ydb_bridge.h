@@ -53,7 +53,7 @@ public:
 
 private:
     bool AllowEmptyDatabase = false;
-    TString PrimaryPile;
+    TString NewPrimaryPile;
 };
 
 class TCommandBridgeFailover : public TYdbCommand {
@@ -66,7 +66,7 @@ public:
 private:
     bool AllowEmptyDatabase = false;
     TString DownPile;
-    TString PrimaryPile;
+    TString NewPrimaryPile;
 };
 
 
@@ -80,7 +80,7 @@ public:
 private:
     bool AllowEmptyDatabase = false;
     TString DownPile;
-    TString PrimaryPile;
+    TString NewPrimaryPile;
 };
 
 class TCommandBridgeRejoin : public TYdbCommand {

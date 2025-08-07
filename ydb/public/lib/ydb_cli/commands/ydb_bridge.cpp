@@ -151,7 +151,7 @@ int TCommandBridgeUpdate::Run(TConfig& config) {
 }
 
 TCommandBridgeList::TCommandBridgeList(bool allowEmptyDatabase)
-    : TYdbReadOnlyCommand("list", {}, "List current bridge cluster state")
+    : TYdbReadOnlyCommand("list", {}, "List state of each pile in bridge mode")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {}
 
@@ -224,8 +224,8 @@ TCommandBridgeSwitchover::TCommandBridgeSwitchover(bool allowEmptyDatabase)
 
 void TCommandBridgeSwitchover::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("primary", "Name of the pile to become the new primary.")
-        .Required().RequiredArgument("PILE_NAME").StoreResult(&PrimaryPile);
+    config.Opts->AddLongOption("new-primary", "Name of the pile to become the new primary.")
+        .Required().RequiredArgument("PILE_NAME").StoreResult(&NewPrimaryPile);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
@@ -239,7 +239,7 @@ int TCommandBridgeSwitchover::Run(TConfig& config) {
     auto client = NYdb::NBridge::TBridgeClient(*driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
-    updates.push_back({PrimaryPile, NYdb::NBridge::EPileState::PROMOTE});
+    updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTE});
 
     auto result = client.UpdateClusterState(updates, {}).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -259,8 +259,8 @@ void TCommandBridgeFailover::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("pile", "Name of the pile that is down.")
         .Required().RequiredArgument("PILE_NAME").StoreResult(&DownPile);
-    config.Opts->AddLongOption("primary", "Name of the pile to become the new primary (optional, only if the target pile was the primary).")
-        .Optional().RequiredArgument("PILE_NAME").StoreResult(&PrimaryPile);
+    config.Opts->AddLongOption("new-primary", "Name of the pile to become the new primary (optional, only if the target pile was the primary).")
+        .Optional().RequiredArgument("PILE_NAME").StoreResult(&NewPrimaryPile);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
@@ -275,8 +275,8 @@ int TCommandBridgeFailover::Run(TConfig& config) {
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({DownPile, NYdb::NBridge::EPileState::DISCONNECTED});
-    if (!PrimaryPile.empty()) {
-        updates.push_back({PrimaryPile, NYdb::NBridge::EPileState::PRIMARY});
+    if (!NewPrimaryPile.empty()) {
+        updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PRIMARY});
     }
 
     auto result = client.UpdateClusterState(updates, {}).GetValueSync();
@@ -297,8 +297,8 @@ void TCommandBridgeTakedown::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("pile", "Name of the pile to take down.")
         .Required().RequiredArgument("PILE_NAME").StoreResult(&DownPile);
-    config.Opts->AddLongOption("primary", "Name of the pile to become the new primary (optional, only if the target pile was the primary).")
-        .Optional().RequiredArgument("PILE_NAME").StoreResult(&PrimaryPile);
+    config.Opts->AddLongOption("new-primary", "Name of the pile to become the new primary (optional, only if the target pile was the primary).")
+        .Optional().RequiredArgument("PILE_NAME").StoreResult(&NewPrimaryPile);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
@@ -313,8 +313,8 @@ int TCommandBridgeTakedown::Run(TConfig& config) {
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({DownPile, NYdb::NBridge::EPileState::SUSPENDED});
-    if (!PrimaryPile.empty()) {
-        updates.push_back({PrimaryPile, NYdb::NBridge::EPileState::PRIMARY});
+    if (!NewPrimaryPile.empty()) {
+        updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTE});
     }
 
     auto result = client.UpdateClusterState(updates, {}).GetValueSync();

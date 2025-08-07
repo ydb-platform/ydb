@@ -18,23 +18,51 @@ To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ yd
 
 * Download the connector dependency directly from Maven Central using the `--packages` option. It's recommended to use the latest published [version](https://central.sonatype.com/artifact/tech.ydb.spark/ydb-spark-connector):
 
-  ```shell
-  # Run spark-shell
-  ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
-  # Or spark-sql
-  ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
-  ```
+  {% list tabs %}
+
+  - Spark Shell
+
+    ```shell
+    ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+    ```
+
+  - PySpark
+
+    ```shell
+    ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+    ```
+
+  - Spark SQL
+
+    ```shell
+    ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+    ```
+
+  {% endlist %}
 
 * Download the latest version of the shaded connector (a connector build that includes all dependencies) from [GitHub](https://github.com/ydb-platform/ydb-spark-connector/releases) or [Maven Central](https://central.sonatype.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) and specify the downloaded artifact in the `--jars` option:
 
-  ```shell
-  # Run spark-shell
-  ~ $ spark-shell --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
-  # Or pyspark
-  ~ $ pyspark --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
-  # Or spark-sql
-  ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
-  ```
+  {% list tabs %}
+
+  - Spark Shell
+
+    ```shell
+    ~ $ spark-shell --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar --conf spark.executor.memory=4g
+    ```
+
+  - PySpark
+
+    ```shell
+    ~ $ pyspark --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar  --conf spark.executor.memory=4g
+    ```
+
+  - Spark SQL
+
+    ```shell
+    ~ $ spark-sql --master <master-url> --jars ~/Download/ydb-spark-connector-shaded-2.0.1.jar  --conf spark.executor.memory=4g
+    ```
+
+  {% endlist %}
 
 * You can also copy the downloaded shaded artifact to the `jars` folder of your {{ spark-name }} distribution. In this case, no additional options need to be specified.
 

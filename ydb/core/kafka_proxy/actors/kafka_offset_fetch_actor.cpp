@@ -491,7 +491,7 @@ bool TKafkaOffsetFetchActor::CreateTopicIfNecessary(const TString& topicName,
     auto message = std::make_shared<NKafka::TCreateTopicsRequestData>();
     TCreateTopicsRequestData::TCreatableTopic topicToCreate;
     topicToCreate.Name = topicName;
-    topicToCreate.NumPartitions = Context->Config.GetDefaultNumOfPartitions();
+    topicToCreate.NumPartitions = Context->Config.GetTopicCreationDefaultPartitions();
     message->Topics.push_back(topicToCreate);
 
     TContext::TPtr ContextForTopicCreation;

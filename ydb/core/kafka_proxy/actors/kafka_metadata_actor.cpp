@@ -292,7 +292,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
     auto message = std::make_shared<NKafka::TCreateTopicsRequestData>();
     TCreateTopicsRequestData::TCreatableTopic topicToCreate;
     topicToCreate.Name = topicName;
-    topicToCreate.NumPartitions = Context->Config.GetDefaultNumOfPartitions();
+    topicToCreate.NumPartitions = Context->Config.GetTopicCreationDefaultPartitions();
     message->Topics.push_back(topicToCreate);
     TContext::TPtr ContextForTopicCreation;
     ContextForTopicCreation = std::make_shared<TContext>(TContext(Context->Config));

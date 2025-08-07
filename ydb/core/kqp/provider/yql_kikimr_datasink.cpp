@@ -1307,7 +1307,6 @@ public:
                         settings.Other.Ptr()->Children().begin(),
                         settings.Other.Ptr()->Children().end(),
                         [&](const TExprNode::TPtr& child) {
-                            Cerr << KqpExprToPrettyString(*node, ctx) << Endl;
                             NYql::NNodes::TExprBase expr(child);
                             if (auto maybeTuple = expr.Maybe<TCoNameValueTuple>()) {
                                 const auto tuple = maybeTuple.Cast();

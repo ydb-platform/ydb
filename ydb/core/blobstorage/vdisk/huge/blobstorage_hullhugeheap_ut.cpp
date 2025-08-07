@@ -330,6 +330,68 @@ namespace NKikimr {
             FreeScenary(newHeap, arr);
         }
 
+        Y_UNIT_TEST(AllocateOrder) {
+            ui32 chunkSize = 134274560u;
+            ui32 appendBlockSize = 56896u;
+            ui32 minHugeBlobInBytes = 56u << 10u;
+            ui32 maxBlobInBytes = 10u << 20u;
+            ui32 overhead = 8;
+            ui32 freeChunksReservation = 0;
+            THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
+                    maxBlobInBytes, overhead, freeChunksReservation);
+            heap.FinishRecovery();
+            TVector<THugeSlot> arr;
+
+            // allocate 2 chunks full of slots
+            ui32 hugeBlobSize = 6u << 18u;
+            AllocateScenary(heap, hugeBlobSize, arr);
+
+            std::unordered_map<ui32, std::vector<THugeSlot>> slotsByChunk;
+            std::vector<ui32> chunkIds;
+            for (const auto &x : arr) {
+                slotsByChunk[x.GetChunkId()].push_back(x);
+            }
+            for (const auto& [chunkId, _]: slotsByChunk) {
+                chunkIds.push_back(chunkId);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(chunkIds.size(), 2);
+            ui32 c1 = chunkIds[0], c2 = chunkIds[1];
+            UNIT_ASSERT_VALUES_EQUAL(slotsByChunk[c1].size(), slotsByChunk[c2].size());
+            UNIT_ASSERT_GT(slotsByChunk[c1].size(), 50);
+            std::random_shuffle(slotsByChunk[c1].begin(), slotsByChunk[c1].end());
+            std::random_shuffle(slotsByChunk[c2].begin(), slotsByChunk[c2].end());
+
+
+            ui32 deletedOffset1 = 0, deletedOffset2 = 0;
+            for (; deletedOffset1 + 2 < slotsByChunk[c1].size() && deletedOffset2 + 2 < slotsByChunk[c2].size();) {
+                // delete 1 slot from each chunk, and 1 random slot from one of them
+                heap.Free(slotsByChunk[c1][deletedOffset1++].GetDiskPart());
+                heap.Free(slotsByChunk[c2][deletedOffset2++].GetDiskPart());
+                if (rand() % 2 == 0) {
+                    heap.Free(slotsByChunk[c1][deletedOffset1++].GetDiskPart());
+                } else {
+                    heap.Free(slotsByChunk[c2][deletedOffset2++].GetDiskPart());
+                }
+                // count how many slots are left in each chunk
+                ui32 usedSlots1 = slotsByChunk[c1].size() - deletedOffset1;
+                ui32 usedSlots2 = slotsByChunk[c2].size() - deletedOffset2;
+
+                // allocate one slot, it should be allocated in chunk with more used slots
+                THugeSlot slot;
+                ui32 slotSize;
+                bool res = heap.Allocate(hugeBlobSize, &slot, &slotSize);
+                UNIT_ASSERT_EQUAL(res, true);
+
+                if (usedSlots1 > usedSlots2) {
+                    UNIT_ASSERT(slot.GetChunkId() == c1);
+                } else if (usedSlots1 < usedSlots2) {
+                    UNIT_ASSERT(slot.GetChunkId() == c2);
+                }
+
+                slotsByChunk[slot.GetChunkId()].push_back(slot);
+            }
+        }
+
         Y_UNIT_TEST(RecoveryMode) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;

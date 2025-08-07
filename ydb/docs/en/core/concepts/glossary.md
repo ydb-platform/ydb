@@ -104,11 +104,11 @@ The implementation of distributed transactions is covered in a separate article 
 
 ### Explicit Transactions {#explicit-transactions}
 
-Transactions that are explicitly defined and managed by the user are called **explicit transactions**. This type of transaction is initiated manually with selection of isolation level and transactional behavior. It is described in more detail in a separate article [{#T}](./transactions.md#modes).
+Transactions that are explicitly defined and managed by the user are called **explicit transactions**. This type of transaction is initiated manually with selection of isolation level and transactional behavior. They are explained in more detail in [{#T}](./transactions.md#modes).
 
 ### Implicit Transactions {#implicit-transactions}
 
-Transactions that are automatically created and managed by {{ ydb-short-name }} when no transaction mode is specified are called **implicit transactions**. {{ ydb-short-name }} automatically determines the transactional behavior based on the provided query. It is described in more detail in a separate article [{#T}](./transactions.md#implicit).
+Transactions that are automatically created and managed by {{ ydb-short-name }} when no transaction mode is specified are called **implicit transactions**. {{ ydb-short-name }} automatically determines the transactional behavior based on the provided query. They are explained in more detail in [{#T}](./transactions.md#modes).
 
 ### Interactive transactions {#interactive-transaction}
 

@@ -10,6 +10,8 @@ items:
     mode: link
 - name: Cluster topology
   href: topology.md
+- name: Query execution
+  href: query_execution.md
 - name: Transactions
   href: transactions.md
 - name: Secondary indexes

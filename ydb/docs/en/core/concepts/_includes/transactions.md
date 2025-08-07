@@ -20,7 +20,7 @@ If consistency or freshness requirement for data read by a transaction can be re
 * *Stale Read-Only*: Read operations within a transaction may return results that are slightly out-of-date (lagging by fractions of a second). Each individual read returns consistent data, but no consistency between different reads is guaranteed.
 * *Snapshot Read-Only*: All the read operations within a transaction access the database snapshot. All the data reads are consistent. The snapshot is taken when the transaction begins, meaning the transaction sees all changes committed before it began.
 
-### Implicit Transactions in {{ ydb-short-name }} {#implicit}
+### Implicit Transactions {#implicit}
 
 When a transaction is not explicitly defined for a query, {{ ydb-short-name }} automatically manages transactional behavior. This is referred to as an implicit transaction. Unlike explicit transactions, where applications initiate and commit transactions directly, implicit transactions are internally handled by the {{ ydb-short-name }} server when no [explicit transaction mode](../transactions.md#modes) is specified.
 

@@ -24,6 +24,7 @@ DATA(
 PEERDIR(
     ydb/public/api/protos
     ydb/tests/fq/tools
+    yt/yql/tests/common/test_framework
     yql/essentials/tests/common/test_framework
 )
 

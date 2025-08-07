@@ -29,13 +29,16 @@ def start(argv):
     logger.debug("Starting Solomon recipe")
     args = parse_args(argv)
     pm = PortManager()
-    port = pm.get_port()
+    http_port = pm.get_port()
+    grpc_port = pm.get_port()
     binary_path = ya_common.binary_path("ydb/library/yql/tools/solomon_emulator/bin/solomon_emulator")
     assert binary_path
     cmd = [
         binary_path,
-        "--port",
-        str(port)
+        "--http-port",
+        str(http_port),
+        "--grpc-port",
+        str(grpc_port)
     ]
 
     if args.auth:
@@ -52,12 +55,11 @@ def start(argv):
     )
     set_env("SOLOMON_EMULATOR_PID", str(res.process.pid))
 
-    endpoint = f"localhost:{port}"
-    url = f"http://{endpoint}"
+    http_endpoint = f"localhost:{http_port}"
+    grpc_endpoint = f"localhost:{grpc_port}"
     set_env("SOLOMON_HOST", "localhost")
-    set_env("SOLOMON_PORT", str(port))
-    set_env("SOLOMON_ENDPOINT", endpoint)
-    set_env("SOLOMON_URL", url)
+    set_env("SOLOMON_HTTP_ENDPOINT", http_endpoint)
+    set_env("SOLOMON_GRPC_ENDPOINT", grpc_endpoint)
 
     pid = os.fork()
     if pid == 0:
@@ -66,7 +68,7 @@ def start(argv):
         with open(PID_FILENAME, "w") as f:
             f.write(str(pid))
 
-    logger.debug(f"Solomon recipe has been started, url: {url}")
+    logger.debug(f"Solomon recipe has been started, http_endpoint: {http_endpoint}, grpc_endpoint: {grpc_endpoint}")
 
 
 def stop(argv):

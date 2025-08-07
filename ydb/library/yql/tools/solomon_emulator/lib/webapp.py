@@ -1,9 +1,15 @@
 from aiohttp import web
 import json
 import logging
+from concurrent import futures
 
 from library.python.monlib.encoder import loads
 from .multi_shard import MultiShard
+
+import grpc
+from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2_grpc import \
+    DataServiceServicer, add_DataServiceServicer_to_server
+from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2 import ReadRequest, ReadResponse, MetricType
 
 routes = web.RouteTableDef()
 logger = logging.getLogger(__name__)
@@ -78,76 +84,14 @@ async def write(request):
     return web.json_response({"writtenMetricsCount": shard.add_metrics(metrics_json)})
 
 
-def _dict_to_labels(body):
-    """
-    Possible input
-    {
-    "downsampling": {
-         "aggregation": "MAX",
-         "disabled": true,
-         "fill": "PREVIOUS",
-         "gridMillis": 3600000,
-         "ignoreMinStepMillis": true,
-         "maxPoints": 500
-     },
-     "forceCluster": "",
-     "from": "2023-12-08T14:40:39Z",
-     "program": "{execpool=User,activity=YQ_STORAGE_PROXY,sensor=ActorsAliveByActivity}",
-     "to": "2023-12-08T14:45:39Z"
-     })";
-
-    :param body:
-    :return:
-    """
-    result = dict()
-    for key, value in body.items():
-
-        if isinstance(value, dict):
-            sublabels = _dict_to_labels(value)
-            for subkey, subvalue in sublabels.items():
-                result[f"{key}.{subkey}"] = subvalue
-            continue
-
-        label_name = key
-        if key == "program":
-            label_value = f"program length {str(len(value))}"
-        else:
-            if isinstance(value, bool):
-                label_value = f"bool {value}"
-            elif isinstance(value, int):
-                label_value = f"int {value}"
-            else:
-                label_value = str(value)
-
-        result[label_name] = label_value
-    return result
-
-
-@routes.post("/api/v2/projects/{project}/sensors/data")
+@routes.get("/api/v2/projects/{project}/sensors/names")
 async def sensors_data(request):
-    project = request.match_info["project"]
-    if project == "invalid":
-        return web.HTTPNotFound(text=f"Project {project} does not exist")
+    return web.json_response({"names": ["test_type, test_label"]})
 
-    if project == "broken_json":
-        return web.Response(text="{ broken json", content_type="application/json")
 
-    labels = _dict_to_labels(await request.json())
-    labels["project"] = project
-    timeseries = {
-        "timeseries": {
-            "kind": "MY_KIND",
-            "type": "MY_TYPE",
-            "labels": labels,
-            "timestamps": [1, 2, 3],
-            "values": [100, 200, 300],
-        }
-    }
-
-    if project == "hist":
-        return web.json_response(timeseries)
-
-    return web.json_response({"vector": [timeseries]})
+@routes.get("/api/v2/projects/{project}/sensors")
+async def sensors_data(request):
+    return web.json_response({"result": [], "page": {"pagesCount": 1, "totalCount": 5}})
 
 
 @routes.get("/metrics")
@@ -184,6 +128,50 @@ async def config(request):
     request.app["features"] = json.loads(await request.read())
     return web.Response(status=200)
 
+def _dict_to_labels(request: ReadRequest):
+    result = dict()
+
+    result["from"] = str(request.from_time)
+    result["to"] = str(request.to_time)
+    result["program"] = f"program length {len(str(request.queries[0].value))}"
+    if request.downsampling.HasField("disabled"):
+        result["downsampling.disabled"] = f"bool {True}"
+    else:
+        result["downsampling.aggregation"] = request.downsampling.grid_aggregation
+        result["downsampling.fill"] = request.downsampling.gap_filling
+        result["downsampling.gridMillis"] = f"int {request.downsampling.grid_interval}"
+        result["downsampling.disabled"] = f"bool {False}"
+
+    return result
+
+class DataService(DataServiceServicer):
+    def Read(self, request: ReadRequest, context) -> ReadResponse:
+        logger.debug('ReadRequest: %s', request)
+
+        project = request.container.project_id
+        if project == "invalid":
+            logger.debug("invalid project_id, sending error")
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(f"Project {project} does not exist")
+            return ReadResponse()
+
+        labels = _dict_to_labels(request)
+        labels["project"] = project
+
+        response = ReadResponse()
+
+        response_query = response.response_per_query.add()
+        response_query.query_name = "query"
+
+        timeseries = response_query.timeseries_vector.values.add()
+        for key, value in labels.items():
+            timeseries.labels[key] = str(value)
+        timeseries.type = MetricType.RATE
+
+        timeseries.timestamp_values.values.extend([10000, 20000, 30000])
+        timeseries.double_values.values.extend([100, 200, 300])
+
+        return response
 
 def handle_auth(request):
     config = _config_from_request(request)
@@ -194,13 +182,24 @@ def handle_auth(request):
             raise web.HTTPForbidden()
 
 
-def create_web_app(config):
+def create_web_app(config, grpc_port):
+    grpc_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
+    add_DataServiceServicer_to_server(
+        DataService(), grpc_server
+    )
+    grpc_server.add_insecure_port(f'[::]:{grpc_port}')
+    
     webapp = web.Application()
     webapp.add_routes(routes)
     webapp["config"] = config
     webapp["data"] = MultiShard()
+    webapp["grpc_server"] = grpc_server
+
     return webapp
 
 
-def run_web_app(config, port):
-    web.run_app(create_web_app(config), port=port)
+def run_web_app(config, http_port, grpc_port):
+    app = create_web_app(config, grpc_port)
+
+    app["grpc_server"].start()
+    web.run_app(app, port=http_port)

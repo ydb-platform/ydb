@@ -178,6 +178,7 @@ public:
 
     STRICT_STFUNC(LimitedModeState,
         hFunc(TEvSolomonProvider::TEvNewDataBatch, HandleNewDataBatchLimited);
+        hFunc(TEvSolomonProvider::TEvRetryDataRequest, HandleRetryDataRequest);
     )
 
     void HandleMetricsBatch(TEvSolomonProvider::TEvMetricsBatch::TPtr& metricsBatch) {

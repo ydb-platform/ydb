@@ -96,7 +96,7 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
     auto* pinnedPage = pinnedCollection.FindPtr(pageId);
     if (pinnedPage) {
         // pinned pages do not need to be counted again
-        return &pinnedPage->GetData();
+        return &pinnedPage->PinnedBody;
     }
 
     auto page = info->FindPage(pageId);
@@ -112,7 +112,7 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
         return nullptr;
     }
 
-    auto emplaced = pinnedCollection.emplace(pageId, TPinnedPageRef(std::move(sharedBody)));
+    auto emplaced = pinnedCollection.emplace(pageId, TPinnedPage(std::move(sharedBody)));
     Y_ENSURE(emplaced.second);
 
     // a transaction has pinned a new page, count it as a cache hit:
@@ -121,7 +121,7 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
         Stats.NewlyPinnedSize += page->Size;
     }
     
-    return &emplaced.first->second.GetData();
+    return &emplaced.first->second.PinnedBody;
 }
 
 void TPrivatePageCache::BeginTransaction(TPinned* pinned) {

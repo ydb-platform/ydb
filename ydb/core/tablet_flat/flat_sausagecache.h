@@ -12,7 +12,18 @@ using namespace NSharedCache;
 
 class TPrivatePageCache {
 public:
-    using TPinned = THashMap<TLogoBlobID, THashMap<TPageId, TPinnedPageRef>>;
+    // TODO: provide a way to get TSharedData from used TSharedPageRef directly
+    struct TPinnedPage {
+        TSharedPageRef SharedBody;
+        TSharedData PinnedBody;
+
+        explicit TPinnedPage(TSharedPageRef sharedBody)
+            : SharedBody(std::move(sharedBody))
+            , PinnedBody(TPinnedPageRef(SharedBody).GetData())
+        {}
+    };
+
+    using TPinned = THashMap<TLogoBlobID, THashMap<TPageId, TPinnedPage>>;
 
     struct TInfo;
 

@@ -56,8 +56,10 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kCoalesce:
                 case NYql::NConnector::NApi::TExpression::kIf:
                 case NYql::NConnector::NApi::TExpression::kCast:
-                case NYql::NConnector::NApi::TExpression::kUnaryOp:
-                case NYql::NConnector::NApi::TExpression::kVarArgOp:
+                case NYql::NConnector::NApi::TExpression::kUnwrap:
+                case NYql::NConnector::NApi::TExpression::kMinOf:
+                case NYql::NConnector::NApi::TExpression::kMaxOf:
+                case NYql::NConnector::NApi::TExpression::kCurrentUtcTimestamp:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return false;
             }
@@ -74,8 +76,10 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kCoalesce:
                 case NYql::NConnector::NApi::TExpression::kIf:
                 case NYql::NConnector::NApi::TExpression::kCast:
-                case NYql::NConnector::NApi::TExpression::kUnaryOp:
-                case NYql::NConnector::NApi::TExpression::kVarArgOp:
+                case NYql::NConnector::NApi::TExpression::kUnwrap:
+                case NYql::NConnector::NApi::TExpression::kMinOf:
+                case NYql::NConnector::NApi::TExpression::kMaxOf:
+                case NYql::NConnector::NApi::TExpression::kCurrentUtcTimestamp:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return false;
             }
@@ -294,8 +298,10 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kCoalesce:
                 case NYql::NConnector::NApi::TExpression::kIf:
                 case NYql::NConnector::NApi::TExpression::kCast:
-                case NYql::NConnector::NApi::TExpression::kUnaryOp:
-                case NYql::NConnector::NApi::TExpression::kVarArgOp:
+                case NYql::NConnector::NApi::TExpression::kUnwrap:
+                case NYql::NConnector::NApi::TExpression::kMinOf:
+                case NYql::NConnector::NApi::TExpression::kMaxOf:
+                case NYql::NConnector::NApi::TExpression::kCurrentUtcTimestamp:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return Triple::Unknown;
             }

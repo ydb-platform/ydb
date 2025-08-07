@@ -27,8 +27,10 @@ namespace NYql {
     TString FormatIn(const TPredicate_TIn& in);
     TString FormatCoalesce(const TExpression::TCoalesce& coalesce);
     TString FormatIfExpression(const TExpression::TIf& sqlIf);
-    TString FormatUnaryOperation(const TExpression::TUnaryOperation& expression);
-    TString FormatVarArgOperation(const TExpression::TVarArgOperation& expression);
+    TString FormatUnwrap(const TExpression::TUnwrap& unwrap);
+    TString FormatMinOf(const TExpression::TMinOf& minOf);
+    TString FormatMaxOf(const TExpression::TMaxOf& maxOf);
+    TString FormatCurrentUtcTimestamp(const TExpression::TCurrentUtcTimestamp& currentUtcTimestamp);
 
     namespace {
         TString ToIso8601(TDuration duration) {
@@ -243,11 +245,10 @@ namespace NYql {
         return SerializeExpression(expr.Left(), exprProto->mutable_left_value(), ctx, depth + 1) && SerializeExpression(expr.Right(), exprProto->mutable_right_value(), ctx, depth + 1); \
     }
 
-#define MATCH_UNARY_OP(OpType, OP_ENUM)                                                             \
+#define MATCH_UNARY_OP(OpType, op_name)                                                             \
     if (auto maybeExpr = expression.Maybe<Y_CAT(TCo, OpType)>()) {                                  \
         auto expr = maybeExpr.Cast();                                                               \
-        auto* exprProto = proto->mutable_unary_op();                                                \
-        exprProto->set_operation(TExpression::TUnaryOperation::OP_ENUM);                            \
+        auto* exprProto = proto->Y_CAT(mutable_, op_name)();                                        \
         const auto child = expression.Ptr()->Child(0);                                              \
         if (!SerializeExpression(TExprBase(child), exprProto->mutable_operand(), ctx, depth + 1)) { \
             return false;                                                                           \
@@ -255,12 +256,11 @@ namespace NYql {
         return true;                                                                                \
     }
 
-#define MATCH_VAR_ARG_OP(OpType, OP_ENUM)                                                            \
+#define MATCH_VAR_ARG_OP(OpType, op_name)                                                            \
     if (auto maybeExpr = expression.Maybe<Y_CAT(TCo, OpType)>()) {                                   \
         auto expr = maybeExpr.Cast();                                                                \
-        auto* exprProto = proto->mutable_var_arg_op();                                               \
-        exprProto->set_operation(TExpression::TVarArgOperation::OP_ENUM);                            \
-        for (const auto& child : expr.Args()) {                                                      \
+        auto* exprProto = proto->Y_CAT(mutable_, op_name)();                                         \
+        for (const auto& child : expr.Ref().Children()) {                                            \
             if (!SerializeExpression(TExprBase(child), exprProto->add_operands(), ctx, depth + 1)) { \
                 return false;                                                                        \
             }                                                                                        \
@@ -322,10 +322,10 @@ namespace NYql {
             MATCH_ARITHMETICAL(Mul, MUL);
             MATCH_ARITHMETICAL(Div, DIV);
             MATCH_ARITHMETICAL(Mod, MOD);
-            MATCH_UNARY_OP(Unwrap, UNWRAP);
-            MATCH_VAR_ARG_OP(Max, MAX);
-            MATCH_VAR_ARG_OP(Min, MIN);
-            MATCH_VAR_ARG_OP(CurrentUtcTimestamp, CURRENT_UTC_TIMESTAMP);
+            MATCH_UNARY_OP(Unwrap, unwrap);
+            MATCH_VAR_ARG_OP(Min, min_of);
+            MATCH_VAR_ARG_OP(Max, max_of);
+            MATCH_VAR_ARG_OP(CurrentUtcTimestamp, current_utc_timestamp);
 
             if (auto maybeNull = expression.Maybe<TCoNull>()) {
                 proto->mutable_null();
@@ -712,41 +712,50 @@ namespace NYql {
         return TStringBuilder() << "CAST(" << value << " AS " << type << ")";
     }
 
-    TString FormatUnaryOperation(const TExpression_TUnaryOperation& expression) {
+    TString FormatUnwrap(const TExpression_TUnwrap& unwrap) {
+        return TStringBuilder() << "Unwrap(" << FormatExpression(unwrap.operand()) << ")";
+    }
+
+    TString FormatMinOf(const TExpression_TMinOf& minOf) {
         TStringBuilder sb;
-        switch (expression.operation()) {
-            case TExpression_TUnaryOperation::UNWRAP:
-                sb << "Unwrap";
-                break;
-            default:
-                throw yexception() << "ErrUnimplementedUnaryOperation, operation " << static_cast<ui64>(expression.operation());
+        sb << "MIN_OF(";
+
+        bool isFirst = true;
+        for (const auto& operand : minOf.operands()) {
+            if (!isFirst) {
+                sb << ", ";
+            }
+            sb << FormatExpression(operand);
+            isFirst = false;
         }
-        sb << "(" << FormatExpression(expression.operand()) << ")";
+        sb << ")";
+
         return sb;
     }
 
-    TString FormatVarArgOperation(const TExpression_TVarArgOperation& expression) {
+    TString FormatMaxOf(const TExpression_TMaxOf& maxOf) {
         TStringBuilder sb;
-        switch (expression.operation()) {
-            case TExpression_TVarArgOperation::COALESCE:
-                sb << "COALESCE";
-                break;
-            case TExpression_TVarArgOperation::MIN:
-                sb << "MIN_OF";
-                break;
-            case TExpression_TVarArgOperation::MAX:
-                sb << "MAX_OF";
-                break;
-            case TExpression_TVarArgOperation::CURRENT_UTC_TIMESTAMP:
-                sb << "CurrentUtcTimestamp";
-                break;
-            default:
-                throw yexception() << "ErrUnimplementedVarArgOperation, operation " << static_cast<ui64>(expression.operation());
-        }
-        sb << "(";
+        sb << "MAX_OF(";
 
         bool isFirst = true;
-        for (const auto& operand : expression.operands()) {
+        for (const auto& operand : maxOf.operands()) {
+            if (!isFirst) {
+                sb << ", ";
+            }
+            sb << FormatExpression(operand);
+            isFirst = false;
+        }
+        sb << ")";
+
+        return sb;
+    }
+
+    TString FormatCurrentUtcTimestamp(const TExpression_TCurrentUtcTimestamp& currentUtcTimestamp) {
+        TStringBuilder sb;
+        sb << "CurrentUtcTimestamp(";
+
+        bool isFirst = true;
+        for (const auto& operand : currentUtcTimestamp.operands()) {
             if (!isFirst) {
                 sb << ", ";
             }
@@ -776,10 +785,14 @@ namespace NYql {
                 return FormatIfExpression(expression.if_());
             case TExpression::kCast:
                 return FormatCast(expression.cast());
-            case TExpression::kUnaryOp:
-                return FormatUnaryOperation(expression.unary_op());
-            case TExpression::kVarArgOp:
-                return FormatVarArgOperation(expression.var_arg_op());
+            case TExpression::kUnwrap:
+                return FormatUnwrap(expression.unwrap());
+            case TExpression::kMinOf:
+                return FormatMinOf(expression.min_of());
+            case TExpression::kMaxOf:
+                return FormatMaxOf(expression.max_of());
+            case TExpression::kCurrentUtcTimestamp:
+                return FormatCurrentUtcTimestamp(expression.current_utc_timestamp());
             default:
                 throw yexception() << "Failed to format expression, unimplemented payload_case " << static_cast<ui64>(expression.payload_case());
         }

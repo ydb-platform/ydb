@@ -367,25 +367,20 @@ message TExpression {
     message TNull {
     }
 
-    message TUnaryOperation {
-        enum EOperation {
-            OPERATION_UNSPECIFIED = 0;
-            UNWRAP = 1; // Unwrap(operand)
-        }
-        EOperation operation = 1;
-        TExpression operand = 2;
+    message TUnwrap {
+        TExpression operand = 1;
     }
 
-    message TVarArgOperation {
-        enum EOperation {
-            OPERATION_UNSPECIFIED = 0;
-            COALESCE = 1;              // Coalesce(operands...)
-            MIN = 2;                   // Min(operands...)
-            MAX = 3;                   // Max(operands...)
-            CURRENT_UTC_TIMESTAMP = 4; // CurrentUtcTime(operands...)
-        }
-        EOperation operation = 1;
-        repeated TExpression operands = 2;
+    message TMinOf {
+        repeated TExpression operands = 1;
+    }
+
+    message TMaxOf {
+        repeated TExpression operands = 1;
+    }
+
+    message TCurrentUtcTimestamp {
+        repeated TExpression operands = 1;
     }
 
     oneof payload {
@@ -404,9 +399,13 @@ message TExpression {
 
         TCast cast = 7;
 
-        TUnaryOperation unary_op = 8;
+        TUnwrap unwrap = 8;
 
-        TVarArgOperation var_arg_op = 9;
+        TMinOf min_of = 9;
+
+        TMaxOf max_of = 10;
+
+        TCurrentUtcTimestamp current_utc_timestamp = 11;
     }
 }
 

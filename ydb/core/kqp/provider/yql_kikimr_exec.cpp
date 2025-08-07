@@ -1551,6 +1551,8 @@ public:
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
+            TVector<TSetConstraintSettings> constraintSetObjects;
+
             for (auto action : maybeAlter.Cast().Actions()) {
                 auto name = action.Name().Value();
                 if (name == "renameTo") {
@@ -1662,13 +1664,15 @@ public:
                 } else if (name == "alterColumns") {
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
-                        auto alter_columns = alterTableRequest.add_alter_columns();
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
-                        alter_columns->set_name(TString(columnName));
                         auto alterColumnList = columnTuple.Item(1).Cast<TExprList>();
                         auto alterColumnAction = TString(alterColumnList.Item(0).Cast<TCoAtom>());
+
+                        auto alter_columns = alterTableRequest.add_alter_columns();
+                        alter_columns->set_name(TString(columnName));
+
                         if (alterColumnAction == "setDefault") {
                             auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
                             if (setDefault.Size() == 1) {
@@ -1727,7 +1731,14 @@ public:
                                         << "SET NOT NULL is currently not supported."));
                                     return SyncError();
                                 } else {
-                                    alter_columns->set_not_null(true);
+                                    alterTableRequest.mutable_alter_columns()->RemoveLast();
+
+                                    TSetConstraintSettings value;
+                                    value.SetTablePath(table.Metadata->Name);
+                                    value.SetColumnName(TString(columnName));
+                                    value.SetConstraint(TSetConstraintSettings::NotNull);
+
+                                    constraintSetObjects.push_back(std::move(value));
                                 }
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
@@ -2198,8 +2209,11 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
+            bool isSetConstraint = (!constraintSetObjects.empty());
 
-            if (isTableStore) {
+            if (isSetConstraint) {
+                future = Gateway->SetConstraint(cluster, constraintSetObjects);
+            } else if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),

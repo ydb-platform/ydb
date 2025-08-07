@@ -643,6 +643,21 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
+    TFuture<TGenericResult> SetConstraint(const TString& cluster, const TVector<TSetConstraintSettings>& settings) override {
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            Y_UNUSED(settings);
+            // NKikimrSchemeOp::TSetConstraintRequest setConstraintRequestSettings;
+            return {};
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
         if (TIssue error; !NSchemeHelpers::Validate(settings, error)) {
             TGenericResult result;

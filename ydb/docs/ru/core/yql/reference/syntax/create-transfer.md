@@ -62,8 +62,7 @@ $transformation_lambda = ($msg) -> {
 };
 
 CREATE TRANSFER example_transfer
-    FROM example_topic TO example_table USING $transformation_lambda
-);
+    FROM example_topic TO example_table USING $transformation_lambda;
 
 ```
 

@@ -177,7 +177,9 @@ void TPrivatePageCache::TranslatePinnedToSharedCacheTouches(ui64 &pinnedMemory) 
         if (auto *info = Info(pageCollectionId)) {
             auto& touches = SharedCacheTouches[pageCollectionId];
             for (const auto& [pageId, pinnedPageRef] : pages) {
-                pinnedMemory += pinnedPageRef->size();
+                if (!info->IsStickyPage(pageId)) {
+                    pinnedMemory += pinnedPageRef->size();
+                }
                 touches.insert(pageId);
             }
         }

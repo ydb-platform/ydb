@@ -394,7 +394,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
-        AuditCtx.FinishAudit(response);
+        AuditCtx.LogOnResult(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -527,6 +527,7 @@ public:
             AuditCtx.AddAuditLogParts(result->UserToken);
             serializedToken = result->UserToken->GetSerializedToken();
         }
+        AuditCtx.LogOnExecute();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
     }
@@ -593,9 +594,10 @@ public:
     }
 
     void ProcessRequest() {
+        AuditCtx.LogOnExecute();
         Container.Page->Output(Container);
         NHttp::THttpOutgoingResponsePtr response = Event->Get()->Request->CreateResponseString(Container.Str());
-        AuditCtx.FinishAudit(response);
+        AuditCtx.LogOnResult(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
         PassAway();
     }
@@ -1063,7 +1065,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
-        AuditCtx.FinishAudit(response);
+        AuditCtx.LogOnResult(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
@@ -1172,6 +1174,7 @@ public:
             AuditCtx.AddAuditLogParts(result->UserToken);
             Event->Get()->UserToken = result->UserToken->GetSerializedToken();
         }
+        AuditCtx.LogOnExecute();
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
 
@@ -1206,7 +1209,7 @@ public:
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& ev) {
         bool endOfData = ev->Get()->Response->IsDone();
-        AuditCtx.FinishAudit(ev->Get()->Response);
+        AuditCtx.LogOnResult(ev->Get()->Response);
         Forward(ev, Event->Sender);
         if (endOfData) {
             return PassAway();

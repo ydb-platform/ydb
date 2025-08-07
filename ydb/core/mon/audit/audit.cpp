@@ -17,15 +17,10 @@ namespace {
     const TString EMPTY_VALUE = "{none}";
     const TString X_FORWARDED_FOR_HEADER = "X-Forwarded-For";
     const TStringBuf TRUNCATED_SUFFIX = "**TRUNCATED_BY_YDB**";
+    const TString REASON_EXECUTE = "Execute";
 
     // audit event has limit of 4 MB, but we limit body size to 2 MB
     const size_t MAX_AUDIT_BODY_SIZE = 2_MB - TRUNCATED_SUFFIX.size();
-
-    enum ERequestStatus {
-        Success,
-        Process,
-        Error,
-    };
 
     ERequestStatus GetStatus(const NHttp::THttpOutgoingResponsePtr response) {
         auto status = response.Get()->Status;
@@ -45,6 +40,12 @@ namespace {
             case ERequestStatus::Error: return "ERROR";
         }
         return EMPTY_VALUE;
+    }
+
+    TString GetReason(const NHttp::THttpOutgoingResponsePtr& response) {
+        TStringBuilder reason;
+        reason << response.Get()->Status << " " << response.Get()->Message;
+        return reason;
     }
 
     inline TUrlMatcher CreateAuditableActionsMatcher() {
@@ -126,28 +127,37 @@ void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& u
     }
 }
 
-void TAuditCtx::FinishAudit(const NHttp::THttpOutgoingResponsePtr& response) {
-    AuditEnabled &= NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, SubjectType);
+void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason) {
+    AuditEnabled &= NKikimr::AppData()->AuditConfig.EnableLogging(
+        NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, SubjectType);
 
     if (!AuditEnabled) {
         return;
     }
-
-    auto status = GetStatus(response);
 
     AUDIT_LOG(
         AddAuditLogPart("subject", (Subject ? Subject : EMPTY_VALUE));
         AddAuditLogPart("sanitized_token", (SanitizedToken ? SanitizedToken : EMPTY_VALUE));
 
         for (const auto& [name, value] : Parts) {
-            AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE))
+            AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
         }
 
         AUDIT_PART("status", ToString(status));
         if (status != ERequestStatus::Success) {
-            AUDIT_PART("reason", response.Get()->Message);
+            AUDIT_PART("reason", (!reason.empty() ? reason : EMPTY_VALUE));
         }
     );
+}
+
+void TAuditCtx::LogOnExecute() {
+    LogAudit(ERequestStatus::Process, REASON_EXECUTE);
+}
+
+void TAuditCtx::LogOnResult(const NHttp::THttpOutgoingResponsePtr& response) {
+    auto status = GetStatus(response);
+    auto reason = GetReason(response);
+    LogAudit(status, reason);
 }
 
 }

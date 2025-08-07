@@ -40,13 +40,11 @@ Additionally, there is a separate view that shows statistics on the usage of gro
 | TotalSize             | Uint64    |         | Total number of bytes on PDisk                                                                                                                                   |
 | Status                | String    |         | PDisk operating mode that affects its participation in group allocation (ACTIVE, INACTIVE, BROKEN, FAULTY, TO_BE_REMOVED)                                       |
 | StatusChangeTimestamp | Timestamp |         | Time when Status last changed; if NULL, Status has not changed since PDisk creation                                                                              |
-| ExpectedSlotCount     | Uint32    |         | Maximum number of slots (VSlot) that can be created on this PDisk. Either user-defined or inferred.                                                              |
-| NumActiveSlots        | Uint32    |         | Number of currently occupied slots (VSlot) with respect to GroupSizeInUnits of VDisks                                                                            |
-| SlotSizeInUnits       | Uint32    |         | Slot size in units. Either user-defined or inferrerd.                                                                                                            |
+| ExpectedSlotCount     | Uint32    |         | Maximum number of VSlots that can be created on this PDisk. Either user-defined or inferred from InferPDiskSlotCountFromUnitSize.                                |
+| NumActiveSlots        | Uint32    |         | Number of currently occupied VSlots with respect to GroupSizeInUnits of VDisks                                                                                   |
+| SlotSizeInUnits       | Uint32    |         | Size of VSlot in abstract units. Either user-defined or inferred from InferPDiskSlotCountFromUnitSize.                                                           |
 | DecommitStatus        | String    |         | Status of PDisk [decommissioning](../deployment-options/manual/decommissioning.md) (DECOMMIT_NONE, DECOMMIT_PENDING, DECOMMIT_IMMINENT, DECOMMIT_REJECTED)       |
-| InferPDiskSlotCountFromUnitSize  | Uint64    |         | If not zero, ExpectedSlotCount and SlotSizeInUnits values are inferred (unless user-defined) from TotalSize and this value                           |
-
-The inferred values are calculated by the formula `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, where `SlotSizeInUnits = 2^N` is chosen to meet `ExpectedSlotCount <= 16`.
+| InferPDiskSlotCountFromUnitSize  | Uint64    |         | If not zero, ExpectedSlotCount and SlotSizeInUnits values are defined (unless user-defined) by the formula `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, where `SlotSizeInUnits = 2^N` is chosen to meet `ExpectedSlotCount <= 16`. |
 
 ### ds_vslots
 
@@ -86,7 +84,7 @@ Note that the tuple (NodeId, PDiskId) forms a foreign key to the `ds_pdisks` vie
 | GetFastLatency      | Interval |         | 90th percentile of GetFast request execution time                                                         |
 | OperatingStatus     | String   |         | Group status based on latest VDisk reports only (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED)         |
 | ExpectedStatus      | String   |         | Status based not only on operational report, but on PDisk status and plans too (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED) |
-| GroupSizeInUnits    | Uint32   |         | Matching this value with PDisk.SlotSizeInUnits allows VDisks to acquire proportionally large storage size quota |
+| GroupSizeInUnits    | Uint32   |         | Size of the group in abstract units. The number of VSlots occupied by VDisk is defined as `ceil(VDisk.GroupSizeInUnits / PDisk.SlotSizeInUnits)`. In proportion to it VDisks receive storage quota. |
 
 In this view, the tuple (BoxId, StoragePoolId) forms a foreign key to the `ds_storage_pools` view.
 

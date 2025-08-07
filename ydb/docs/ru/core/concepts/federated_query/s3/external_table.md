@@ -8,7 +8,7 @@
 SELECT
     *
 FROM
-    `s3_test_data`
+    s3_test_data
 WHERE
     version > 1
 ```
@@ -18,7 +18,7 @@ WHERE
 Чтобы создать внешнюю таблицу, описывающую бакет S3 ({{ objstorage-name }}), выполните следующий SQL-запрос. Запрос создает внешнюю таблицу с именем `s3_test_data`, в котором расположены файлы в формате `CSV` со строковыми полями `key` и `value`, находящиеся внутри бакета по пути `test_folder`, при этом для указания реквизитов подключения используется объект [внешний источник данных](../../datamodel/external_data_source.md) `bucket`:
 
 ```yql
-CREATE EXTERNAL TABLE `s3_test_data` (
+CREATE EXTERNAL TABLE s3_test_data (
   key Utf8 NOT NULL,
   value Utf8 NOT NULL
 ) WITH (
@@ -33,7 +33,7 @@ CREATE EXTERNAL TABLE `s3_test_data` (
 
 - `key, value` - список колонок данных и их типов, список допустимых типов описан в разделе [{#T}](formats.md#types);
 - `bucket` - имя [внешнего источника данных](../../datamodel/external_data_source.md) к S3 ({{ objstorage-name }});
-- `folder` - путь внутри бакета с данными. Поддерживаются wildcards, подробнее [в разделе](external_data_source.md#path_format);
+- `folder` - путь внутри бакета с данными. Поддерживаются подстановочные знаки `*`, `?`, `{ ... }`; подробнее [в разделе](external_data_source.md#path_format);
 - `csv_with_names` - один из [допустимых типов хранения данных](formats.md);
 - `gzip` - один из [допустимых алгоритмов сжатия](formats.md#compression).
 
@@ -47,7 +47,7 @@ CREATE EXTERNAL TABLE `s3_test_data` (
 SELECT
     <expression>
 FROM
-    `s3_test_data`
+    s3_test_data
 WHERE
     <filter>;
 ```

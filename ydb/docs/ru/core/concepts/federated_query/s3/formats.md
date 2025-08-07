@@ -33,7 +33,7 @@ Year,Manufacturer,Model,Price
 ```yql
 SELECT
     *
-FROM `external_source`.`path`
+FROM external_source.`path`
 WITH
 (
     FORMAT = "csv_with_names",
@@ -73,7 +73,7 @@ Year    Manufacturer    Model   Price
 ```yql
 SELECT
     *
-FROM `external_source`.`path`
+FROM external_source.`path`
 WITH
 (
     FORMAT = "tsv_with_names",
@@ -121,7 +121,7 @@ WITH
 ```yql
 SELECT
     *
-FROM `external_source`.`path`
+FROM external_source.`path`
 WITH
 (
     FORMAT = "json_list",
@@ -160,7 +160,7 @@ WITH
 ```yql
 SELECT
     *
-FROM `external_source`.`path`
+FROM external_source.`path`
 WITH
 (
     FORMAT = "json_each_row",
@@ -209,7 +209,7 @@ SELECT
     JSON_VALUE(Data, "$.Attrs.Manufacturer") AS Manufacturer,
     JSON_VALUE(Data, "$.Attrs.Model") AS Model,
     CAST(JSON_VALUE(Data, "$.Price") AS Double) AS Price
-FROM `external_source`.`path`
+FROM external_source.`path`
 WITH
 (
     FORMAT = "json_as_string",
@@ -245,7 +245,7 @@ WITH
 
 {% note info %}
 
-Запись в формате Parquet возможна только с использованием алгоритма сжатия [Snappy](https://ru.wikipedia.org/wiki/Snappy_(библиотека)).
+Запись в формате Parquet будет производится с использованием алгоритма сжатия [Snappy](https://ru.wikipedia.org/wiki/Snappy_(библиотека)).
 
 {% endnote %}
 
@@ -254,7 +254,7 @@ WITH
 ```yql
 SELECT
     *
-FROM `external_source`.`path`
+FROM external_source.`path`
 WITH
 (
     FORMAT = "parquet",
@@ -283,6 +283,12 @@ WITH
 
 Этот формат стоит использовать, если встроенных возможностей парсинга исходных данных в {{ ydb-full-name }} недостаточно. В этом формате [схема](external_data_source.md#schema) данных для чтения и записи должна состоять только из одной колонки с одним из разрешённых типов данных, подробнее см. [ниже](#types).
 
+{% note info %}
+
+Размер каждого из считываемых файлов в формате `raw` не может превышать общего ограничения на потребление памяти одним запросом в {{ ydb-short-name }}.
+
+{% endnote %}
+
 {% cut "Пример запроса" %}
 
 Для парсинга следующих данных, где строки разделены точкой с запятой, а значения запятой:
@@ -300,7 +306,7 @@ $input = SELECT
         String::Strip(RowData), -- удаление всех пробельных символов из начала и конца строк
         ","
     ) AS Row
-FROM `external_source`.`path`
+FROM external_source.`path`
 WITH
 (
     FORMAT = "raw",
@@ -376,15 +382,15 @@ FROM $input
 
 |Тип                                  |csv_with_names|tsv_with_names|json_list|json_each_row|parquet|raw|
 |-------------------------------------|--------------|--------------|---------|-------------|-------|---|
-|`Bool`,<br/>`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓|✓|✓|✓|✓|✓|
-|`DyNumber`                           |             |                |✓       |             |      |✓  |
+|`Bool`,<br/>`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓|✓|✓|✓|✓||
+|`DyNumber`                           |             |                |✓       |             |      |   |
 |`String`, `Utf8`, `Json`             |✓            |✓              |✓       |✓            |✓     |✓  |
-|`JsonDocument`                       |             |               |         |             |       |✓  |
+|`JsonDocument`                       |             |               |         |             |       |   |
 |`Yson`                               |             |               |✓        |             |       |✓  |
-|`Uuid`                               |✓            |✓              |         |✓           |       |✓   |
-|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|✓|✓||✓         |✓      |✓  |
-|`Interval`                           |              |               |        |             |       | ✓  |
-|`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`||||||✓|
+|`Uuid`                               |✓            |✓              |         |✓           |       |    |
+|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|✓|✓||✓         |✓      |   |
+|`Interval`                           |              |               |        |             |       |    |
+|`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`|||||||
 |`Optional<T>`                        |✓            |✓              |✓       |✓            |✓     |    |
 
 Для всех форматов чтения из S3 и записи в S3, кроме `json_list`, разрешено использовать тип `Optional<T>` только в том случае, если `T` — [примитивный YQL тип](../../../yql/reference/types/primitive.md). Подробнее об опциональных типах см. в статье [{#T}](../../../yql/reference/types/optional.md).

@@ -70,7 +70,7 @@ WITH
 SELECT
   <expression>
 FROM
-  <object_storage_external_datasource_name>.`<file_path>`
+  <s3_external_datasource_name>.`<file_path>`
 WITH
 (
   FORMAT = "<file_format>",
@@ -84,8 +84,8 @@ WHERE
 
 Где:
 
-* `object_storage_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
-* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards, подробнее [в разделе](#path_format).
+* `s3_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
+* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются подстановочные знаки `*`, `?`, `{ ... }`; подробнее [в разделе](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах, обязательно.
 * `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
 * `schema_definition` — [описание схемы хранимых данных](#schema) в файлах, обязательно.
@@ -125,7 +125,7 @@ Year Int32 NOT NULL
 SELECT
   <expression>
 FROM
-  <object_storage_external_datasource_name>.`<file_path>`
+  <s3_external_datasource_name>.`<file_path>`
 WITH
 (
   FORMAT = "<file_format>",
@@ -138,8 +138,8 @@ WHERE
 
 Где:
 
-* `object_storage_external_datasource_name` — название внешнего источника данных, ведущего на S3 бакет ({{ objstorage-full-name }}).
-* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards, подробнее [ниже](#path_format).
+* `s3_external_datasource_name` — название внешнего источника данных, ведущего на S3 бакет ({{ objstorage-full-name }}).
+* `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются подстановочные знаки `*`, `?`, `{ ... }`; подробнее [ниже](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах. Поддерживаются все форматы, кроме `raw` и `json_as_string`.
 * `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
 
@@ -147,7 +147,7 @@ WHERE
 
 Ограничения для автоматического вывода схемы:
 
-* Вывод схемы делается по данным только из одного произвольного не пустого файла.
+* Вывод схемы делается по данным только из одного произвольного непустого файла.
 * Для форматов данных `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row` вывод схемы выполняется по первым 10 МБ данных из файла.
 * Вывод схемы для файлов с форматом `parquet` возможен только в случае, если размер метаданных файла не превышает 10 МБ.
 * Если файлы имеют разную схему, то запрос завершится с ошибкой парсинга данных в случае несовпадения типов колонок или пропуска не опциональных колонок.
@@ -166,7 +166,7 @@ WHERE
 
 {% include [!](_includes/format_settings.md) %}
 
-Подробное описание поддерживаемых wildcards для параметра `file_pattern` приведено [выше](#path_format). Параметр `file_pattern` можно использовать только в том случае, если `file_path` — путь к каталогу.
+Подробное описание поддерживаемых подстановочных знаков для параметра `file_pattern` приведено [выше](#path_format). Параметр `file_pattern` можно использовать только в том случае, если `file_path` — путь к каталогу.
 
 В строках форматирования для даты и времени можно использовать любые шаблонные переменные, поддерживаемые функцией [`strftime` (C99)](https://en.cppreference.com/w/c/chrono/strftime). В {{ ydb-full-name }} поддерживаются следующие форматы типов `Datetime` и `Timestamp`:
 

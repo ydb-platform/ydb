@@ -8,7 +8,7 @@
 
 ```yql
 INSERT INTO
-    <object_storage_external_datasource_name>.`<write_folder>`
+    <s3_external_datasource_name>.`<write_folder>`
 WITH
 (
     FORMAT = "<file_format>",
@@ -21,7 +21,7 @@ WITH
 
 Где:
 
-* `object_storage_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
+* `s3_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
 * `write_folder` — путь к директории внутри бакета, в которую будет вестись запись;  путь должен быть не пустым и заканчиваться на `/`; запись в корень бакета не поддерживается.
 * `file_format` — [формат данных](formats.md#formats) в файлах, обязательно.
 * `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
@@ -31,7 +31,7 @@ WITH
 SQL-выражение иллюстрирует запись данных во внешний источник данных напрямую.
 
 ```yql
-INSERT INTO `external_source`.`test/`
+INSERT INTO external_source.`test/`
 WITH
 (
     FORMAT = "csv_with_names"
@@ -49,7 +49,7 @@ SELECT
 Если записывать данные нужно регулярно, то удобно делать это с помощью внешних таблиц. При этом нет необходимости указывать все детали работы с этими данными в каждом запросе. Для записи данных в бакет создайте [внешнюю таблицу](external_table.md) в S3 ({{ objstorage-full-name }}) и используйте обычное SQL-выражение `INSERT INTO`:
 
 ```yql
-INSERT INTO `test`
+INSERT INTO test
 SELECT
     "value" AS value, "name" AS name
 ```
@@ -61,7 +61,7 @@ SELECT
 Для экспорта необходимо использовать запрос [записи во внешний источник данных](#external-source-write) с указанием [формата экспортируемых файлов](./formats.md#formats):
 
 ```yql
-INSERT INTO `external_source`.`test/`
+INSERT INTO external_source.`test/`
 WITH
 (
     FORMAT = "parquet"

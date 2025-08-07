@@ -15,7 +15,7 @@
 
 {% endnote %}
 
-Пример импорта данных из внешнего источника данных, указывающего на [PostgreSQL](postgresql.md#query), в существующую таблицу:
+Пример импорта данных из PostgreSQL таблицы в {{ ydb-short-name }} таблицу:
 
 ```yql
 UPSERT INTO target_table

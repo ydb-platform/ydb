@@ -44,7 +44,7 @@
 | NumActiveSlots        | Uint32    |          | Количество занятых VSlot с учетом значений GroupSizeInUnits у VDisk                                                                                              |
 | SlotSizeInUnits       | Uint32    |          | Размер VSlot в условных единицах. Либо заданный пользователем, либо вычисленный из параметра InferPDiskSlotCountFromUnitSize.                                    |
 | DecommitStatus        | String    |          | Статус вывода из эксплуатации ([декоммиссии](../deployment-options/manual/decommissioning.md)) PDisk (DECOMMIT_NONE, DECOMMIT_PENDING, DECOMMIT_IMMINENT, DECOMMIT_REJECTED)                                                      |
-| InferPDiskSlotCountFromUnitSize  | Uint64    |          | Если не ноль, то значения ExpectedSlotCount и SlotSizeInUnits вычисляются (если не заданы пользователем) по формуле `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, где `SlotSizeInUnits = 2^N` выбирается так, чтобы выполнялось условие `ExpectedSlotCount <= 16`. |
+| InferPDiskSlotCountFromUnitSize  | Uint64    |          | Размер VSlot в байтах, исходя из которого вычисляются ExpectedSlotCount и SlotSizeInUnits (если не заданы пользователем) по формуле `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, где `SlotSizeInUnits = 2^N` выбирается так, чтобы выполнялось условие `ExpectedSlotCount <= 16`. |
 
 ### ds_vslots
 

@@ -44,7 +44,7 @@ Additionally, there is a separate view that shows statistics on the usage of gro
 | NumActiveSlots        | Uint32    |         | Number of currently occupied VSlots with respect to GroupSizeInUnits of VDisks                                                                                   |
 | SlotSizeInUnits       | Uint32    |         | Size of VSlot in abstract units. Either user-defined or inferred from InferPDiskSlotCountFromUnitSize.                                                           |
 | DecommitStatus        | String    |         | Status of PDisk [decommissioning](../deployment-options/manual/decommissioning.md) (DECOMMIT_NONE, DECOMMIT_PENDING, DECOMMIT_IMMINENT, DECOMMIT_REJECTED)       |
-| InferPDiskSlotCountFromUnitSize  | Uint64    |         | If not zero, ExpectedSlotCount and SlotSizeInUnits values are defined (unless user-defined) by the formula `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, where `SlotSizeInUnits = 2^N` is chosen to meet `ExpectedSlotCount <= 16`. |
+| InferPDiskSlotCountFromUnitSize  | Uint64    |         | Size of VSlot in bytes from which ExpectedSlotCount and SlotSizeInUnits values are inferred (unless user-defined) by the formula `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, where `SlotSizeInUnits = 2^N` is chosen to meet `ExpectedSlotCount <= 16`. |
 
 ### ds_vslots
 

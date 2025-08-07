@@ -731,7 +731,7 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView, const THash
 
 void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info)
 {
-    PrivatePageCache->RegisterPageCollection(info);
+    PrivatePageCache->AddPageCollection(info);
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, info->GetCacheMode()));
 
     StickyPagesMemory += info->GetStickySize();
@@ -771,7 +771,7 @@ void TExecutor::DropSingleCache(const TLogoBlobID &label)
     Y_ENSURE(TryKeepInMemoryMemory >= tryKeepInMemorySize);
     TryKeepInMemoryMemory -= tryKeepInMemorySize;
 
-    PrivatePageCache->ForgetPageCollection(pageCollection);
+    PrivatePageCache->DropPageCollection(pageCollection);
 
     // Note: Shared Cache will send TEvResult with NKikimrProto::RACE status
     // it activates all transactions that are waiting for being dropped page collection
@@ -2284,7 +2284,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
             logl << "]";
         }
 
-        auto request = new NSharedCache::TEvRequest(NBlockIO::EPriority::Fast, PrivatePageCache->Info(pageCollectionId)->PageCollection, std::move(pages));
+        auto request = new NSharedCache::TEvRequest(NBlockIO::EPriority::Fast, PrivatePageCache->GetPageCollection(pageCollectionId)->PageCollection, std::move(pages));
         request->TraceId = waitPad->GetWaitingTraceId();
         request->WaitPad = waitPad;
         ++waitPad->PendingRequests;
@@ -3075,10 +3075,10 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     case ESharedCacheRequestType::Transaction:
     case ESharedCacheRequestType::InMemPages:
         {
-            TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->PageCollection->Label());
-            if (!collectionInfo) {
+            TPrivatePageCache::TInfo *pageCollection = PrivatePageCache->FindPageCollection(msg->PageCollection->Label());
+            if (!pageCollection) {
                 if (requestType == ESharedCacheRequestType::Transaction) {
-                    TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), collectionInfo);
+                    TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
                 }
                 return;
             }
@@ -3099,10 +3099,10 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 StickInMemPages(msg);
             }
             for (auto& loaded : msg->Pages) {
-                PrivatePageCache->AddPage(loaded.PageId, loaded.Page, collectionInfo);
+                PrivatePageCache->AddPage(loaded.PageId, loaded.Page, pageCollection);
             }
             if (requestType == ESharedCacheRequestType::Transaction) {
-                TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), collectionInfo);
+                TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
             }
         }
         return;
@@ -3169,9 +3169,9 @@ void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
     const auto *msg = ev->Get();
 
     for (auto &kv : msg->DroppedPages) {
-        if (auto *info = PrivatePageCache->Info(kv.first)) {
+        if (auto *pageCollection = PrivatePageCache->FindPageCollection(kv.first)) {
             for (ui32 pageId : kv.second) {
-                PrivatePageCache->DropPage(pageId, info);
+                PrivatePageCache->DropPage(pageId, pageCollection);
             }
         }
     }

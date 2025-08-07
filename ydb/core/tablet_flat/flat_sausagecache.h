@@ -138,11 +138,10 @@ public:
     };
 
 public:
-    TIntrusivePtr<TInfo> GetPageCollection(const TLogoBlobID &id) const;
-    void RegisterPageCollection(TIntrusivePtr<TInfo> info);
-    void ForgetPageCollection(TIntrusivePtr<TInfo> info);
-
-    TInfo* Info(TLogoBlobID id);
+    TInfo* FindPageCollection(const TLogoBlobID &id) const;
+    TInfo* GetPageCollection(const TLogoBlobID &id) const;
+    void AddPageCollection(TIntrusivePtr<TInfo> info);
+    void DropPageCollection(TInfo *info);
 
     const TStats& GetStats() const { return Stats; }
 

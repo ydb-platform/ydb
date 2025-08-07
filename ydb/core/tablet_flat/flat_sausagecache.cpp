@@ -39,13 +39,18 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     }
 }
 
-TIntrusivePtr<TPrivatePageCache::TInfo> TPrivatePageCache::GetPageCollection(const TLogoBlobID &id) const {
-    auto it = PageCollections.find(id);
-    Y_ENSURE(it != PageCollections.end(), "trying to get unknown page collection");
-    return it->second;
+TPrivatePageCache::TInfo* TPrivatePageCache::FindPageCollection(const TLogoBlobID &id) const {
+    auto *pageCollection = PageCollections.FindPtr(id);
+    return pageCollection ? pageCollection->Get() : nullptr;
 }
 
-void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
+TPrivatePageCache::TInfo* TPrivatePageCache::GetPageCollection(const TLogoBlobID &id) const {
+    auto pageCollection = FindPageCollection(id);
+    Y_ENSURE(pageCollection, "trying to get unknown page collection");
+    return pageCollection;
+}
+
+void TPrivatePageCache::AddPageCollection(TIntrusivePtr<TInfo> info) {
     auto inserted = PageCollections.insert(decltype(PageCollections)::value_type(info->Id, info));
     Y_ENSURE(inserted.second, "double registration of page collection is forbidden");
     ++Stats.TotalCollections;
@@ -60,7 +65,7 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
     }
 }
 
-void TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
+void TPrivatePageCache::DropPageCollection(TInfo *info) {
     for (const auto& [pageId, page] : info->GetPageMap()) {
         Y_ASSERT(page);
 
@@ -69,17 +74,9 @@ void TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
 
     info->Clear();
 
-    PageCollections.erase(info->Id);
     SharedCacheTouches.erase(info->Id);
+    PageCollections.erase(info->Id);
     --Stats.TotalCollections;
-}
-
-TPrivatePageCache::TInfo* TPrivatePageCache::Info(TLogoBlobID id) {
-    auto *x = PageCollections.FindPtr(id);
-    if (x)
-        return x->Get();
-    else
-        return nullptr;
 }
 
 void TPrivatePageCache::ToLoadPage(TPageId pageId, TInfo *info) {
@@ -174,7 +171,7 @@ void TPrivatePageCache::TranslatePinnedToSharedCacheTouches() {
     Y_ENSURE(Pinned, "can be called only in a transaction context");
 
     for (const auto& [pageCollectionId, pages] : *Pinned) {
-        if (auto *info = Info(pageCollectionId)) {
+        if (FindPageCollection(pageCollectionId)) {
             auto& touches = SharedCacheTouches[pageCollectionId];
             for (const auto& [pageId, pinnedPageRef] : pages) {
                 touches.insert(pageId);

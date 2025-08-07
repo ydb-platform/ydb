@@ -16,7 +16,7 @@ def external_param_is_true(name: str) -> bool:
 
 def get_ci_version() -> str:
     if 'CI_REVISION' in os.environ or 'CI_BRANCH' in os.environ:
-        return f'{os.getenv("CI_BRANCH", '')}.{os.getenv("CI_REVISION", '')[0:9]}'
+        return f'{os.getenv("CI_BRANCH", '').replace(':', '-')}.{os.getenv("CI_REVISION", '')[0:9]}'
 
 
 def get_self_version() -> str:

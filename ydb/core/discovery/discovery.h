@@ -15,6 +15,7 @@ namespace NDiscovery {
         TString CachedMessage;
         TString CachedMessageSsl;
         TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
+        TBridgeInfo::TPtr BridgeInfo;
         TEvStateStorage::TEvBoardInfo::EStatus Status = TEvStateStorage::TEvBoardInfo::EStatus::Ok;
     };
 }

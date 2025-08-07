@@ -62,14 +62,33 @@ struct TEndpointInfo {
     std::vector<std::string> IPv4Addrs;
     std::vector<std::string> IPv6Addrs;
     std::string SslTargetNameOverride;
+    std::string BridgePileName;
+};
+
+struct TPileState {
+    enum EState {
+        UNSPECIFIED = 0,
+        PRIMARY = 1,
+        PROMOTE = 2,
+        SYNCHRONIZED = 3,
+        NOT_SYNCHRONIZED = 4,
+        SUSPENDED = 5,
+        DISCONNECTED = 6,
+    };
+
+    EState State;
+    std::string PileName;
 };
 
 class TListEndpointsResult : public TStatus {
 public:
     TListEndpointsResult(TStatus&& status, const Ydb::Discovery::ListEndpointsResult& endpoints);
     const std::vector<TEndpointInfo>& GetEndpointsInfo() const;
+    const std::vector<TPileState>& GetPileStates() const;
+
 private:
     std::vector<TEndpointInfo> Info_;
+    std::vector<TPileState> PileStates_;
 };
 
 using TAsyncListEndpointsResult = NThreading::TFuture<TListEndpointsResult>;

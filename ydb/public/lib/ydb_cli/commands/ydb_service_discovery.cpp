@@ -3,6 +3,27 @@
 namespace NYdb {
 namespace NConsoleClient {
 
+namespace {
+    std::string PileStateToString(NDiscovery::TPileState::EState state) {
+        switch (state) {
+            case NDiscovery::TPileState::EState::DISCONNECTED:
+                return "DISCONNECTED";
+            case NDiscovery::TPileState::EState::NOT_SYNCHRONIZED:
+                return "NOT_SYNCHRONIZED";
+            case NDiscovery::TPileState::EState::SYNCHRONIZED:
+                return "SYNCHRONIZED";
+            case NDiscovery::TPileState::EState::PROMOTE:
+                return "PROMOTE";
+            case NDiscovery::TPileState::EState::PRIMARY:
+                return "PRIMARY";
+            case NDiscovery::TPileState::EState::UNSPECIFIED:
+                return "UNSPECIFIED";
+            case NDiscovery::TPileState::EState::SUSPENDED:
+                return "SUSPENDED";
+        }
+    }
+}
+
 TCommandDiscovery::TCommandDiscovery()
     : TClientCommandTree("discovery", {}, "Discovery service operations")
 {
@@ -42,6 +63,9 @@ void TCommandListEndpoints::PrintResponse(NDiscovery::TListEndpointsResult& resu
             if (!endpoint.Location.empty()) {
                 Cout << " [" << endpoint.Location << "]";
             }
+            if (!endpoint.BridgePileName.empty()) {
+                Cout << " (" << endpoint.BridgePileName << ")";
+            }
             for (const auto& service : endpoint.Services) {
                 Cout << " #" << service;
             }
@@ -49,6 +73,14 @@ void TCommandListEndpoints::PrintResponse(NDiscovery::TListEndpointsResult& resu
         }
     } else {
         Cout << "Endpoint list Is empty." << Endl;
+    }
+
+    const auto& pileStates = result.GetPileStates();
+    if (pileStates.size()) {
+        Cout << Endl;
+        for (const auto& pileState : pileStates) {
+            Cout << "Pile \"" << pileState.PileName << "\": " << PileStateToString(pileState.State) << Endl;
+        }
     }
 }
 

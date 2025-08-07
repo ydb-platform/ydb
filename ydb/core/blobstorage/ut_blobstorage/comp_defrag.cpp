@@ -100,6 +100,7 @@ struct TTestEnv {
         SetFilterFunction(NKikimr::TEvDefragQuantumResult::EventType, [this](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             auto res = ev->Get<NKikimr::TEvDefragQuantumResult>();
             ChunksFreedByDefragPerNode[nodeId] += res->Stat.FreedChunks.size();
+            DefragQuantumsPerNode[nodeId]++;
             return true;
         });
     }
@@ -166,6 +167,7 @@ struct TTestEnv {
     ui64 BytesWrittenSmall = 0, BytesWrittenLarge = 0;
     std::unordered_map<ui32, ui32> CompactionsPerNode;
     std::unordered_map<ui32, ui32> ChunksFreedByDefragPerNode;
+    std::unordered_map<ui32, ui32> DefragQuantumsPerNode;
     std::unordered_set<std::pair<ui32, ui32>> SeenParts;
 };
 
@@ -336,6 +338,133 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT_VALUES_EQUAL(metrics.HugeChunksCanBeFreed, 0);
         UNIT_ASSERT_LT(env.GetLsmMetrics().HugeUsedChunks, totalHugeChunks);
 
+    }
+
+    Y_UNIT_TEST(ZeroThresholdDefragWithCompaction) {
+        TTestEnv env(0.0); // Zero threshold - compaction should run immediately
+        ui32 N = 50000;
+        ui32 batchSize = 1000;
+
+        WriteData(env, N, batchSize);
+        RunFullCompaction(env);
+        ui32 totalHugeChunks = env.GetLsmMetrics().HugeUsedChunks;
+
+        // Clear counters before deletion
+        env.CompactionsPerNode.clear();
+        env.DefragQuantumsPerNode.clear();
+        env.ChunksFreedByDefragPerNode.clear();
+
+        DeleteHugeBlobsOfTablet(env, N, 1);
+        env.Env.Sim(TDuration::Minutes(30)); // defrag scheduler runs every 5-5.5 minutes
+
+        // Check that defragmentation is working
+        auto metrics = PrintMetrics(env);
+        UNIT_ASSERT_LT(env.GetLsmMetrics().HugeUsedChunks, totalHugeChunks);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.HugeChunksCanBeFreed, 0);
+
+        // Verify that number of compactions equals number of defragmentation quantums
+        ui32 totalCompactions = 0;
+        ui32 totalDefragQuanta = 0;
+        
+        for (const auto& [nodeId, compactions] : env.CompactionsPerNode) {
+            ui32 defragQuantums = env.DefragQuantumsPerNode[nodeId];
+            Cerr << "Node " << nodeId << " had " << compactions << " compactions and " << defragQuantums << " defrag quantums" << Endl;
+            
+            totalCompactions += compactions;
+            totalDefragQuanta += defragQuantums;
+            
+            // Each defrag quantum should trigger exactly one compaction with zero threshold
+            UNIT_ASSERT_VALUES_EQUAL(compactions, defragQuantums);
+        }
+
+        UNIT_ASSERT_GT(totalCompactions, 0);
+        UNIT_ASSERT_GT(totalDefragQuanta, 0);
+        UNIT_ASSERT_VALUES_EQUAL(totalCompactions, totalDefragQuanta);
+
+        Cerr << "Total compactions: " << totalCompactions << ", Total defrag quantums: " << totalDefragQuanta << Endl;
+    }
+
+    Y_UNIT_TEST(DynamicThresholdChange) {
+        TTestEnv env(0.0); // Start with zero threshold
+        ui32 N = 75000; // Increased from 50000 to create more data
+        ui32 batchSize = 1000;
+
+        WriteData(env, N, batchSize);
+        RunFullCompaction(env);
+        ui32 totalHugeChunks = env.GetLsmMetrics().HugeUsedChunks;
+
+        // Clear counters before deletion
+        env.CompactionsPerNode.clear();
+        env.DefragQuantumsPerNode.clear();
+        env.ChunksFreedByDefragPerNode.clear();
+
+        // Track quantums per node and threshold change status
+        std::unordered_map<ui32, ui32> quantumsBeforeThresholdChange;
+        std::unordered_set<ui32> nodesWithThresholdChanged;
+        ui32 targetQuantums = 2;
+
+        // Add filter to track defrag quantums and change threshold dynamically
+        env.SetFilterFunction(NKikimr::TEvDefragQuantumResult::EventType, [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            auto res = ev->Get<NKikimr::TEvDefragQuantumResult>();
+            env.ChunksFreedByDefragPerNode[nodeId] += res->Stat.FreedChunks.size();
+            env.DefragQuantumsPerNode[nodeId]++;
+            
+            // Check if this node has reached target quantums and threshold hasn't been changed yet
+            if (env.DefragQuantumsPerNode[nodeId] == targetQuantums && !nodesWithThresholdChanged.count(nodeId)) {
+                Cerr << "Node " << nodeId << " reached " << targetQuantums << " quantums, changing threshold to 0.01" << Endl;
+                
+                // Change threshold for this specific node
+                env.Env.SetIcbControl(nodeId, "VDiskControls.DefragThresholdToRunCompactionPerMille", 10); // 0.01 * 1000 = 10
+                nodesWithThresholdChanged.insert(nodeId);
+                
+                // Record quantums before threshold change for this node
+                quantumsBeforeThresholdChange[nodeId] = env.DefragQuantumsPerNode[nodeId];
+            }
+            
+            return true;
+        });
+
+        DeleteHugeBlobsOfTablet(env, N, 1);
+        env.Env.Sim(TDuration::Minutes(30)); // Wait for defrag to complete
+
+        // Verify results
+        ui32 totalCompactions = 0;
+        ui32 totalQuantums = 0;
+        
+        for (ui32 nodeId = 1; nodeId <= env.Env.Settings.NodeCount; ++nodeId) {
+            ui32 compactions = env.CompactionsPerNode[nodeId];
+            ui32 quantums = env.DefragQuantumsPerNode[nodeId];
+            ui32 quantumsBeforeChange = quantumsBeforeThresholdChange[nodeId];
+            ui32 quantumsAfterChange = quantums - quantumsBeforeChange;
+            
+            Cerr << "Node " << nodeId << " had " << compactions << " compactions and " << quantums << " defrag quantums" << Endl;
+            Cerr << "  - Before threshold change: " << quantumsBeforeChange << " quantums" << Endl;
+            Cerr << "  - After threshold change: " << quantumsAfterChange << " quantums" << Endl;
+            
+            totalCompactions += compactions;
+            totalQuantums += quantums;
+            
+            // Verify that with zero threshold, we have 1:1 ratio for the first 2 quantums
+            UNIT_ASSERT_GE(quantumsBeforeChange, targetQuantums);
+            
+            // For quantums after threshold change, should have fewer compactions than quantums
+            if (quantumsAfterChange > 0) {
+                // With 0.01 threshold, we should have fewer compactions than total quantums
+                // but more than just the quantums before threshold change
+                UNIT_ASSERT_GT(compactions, quantumsBeforeChange); // Should have more compactions than just the first 2
+                UNIT_ASSERT_LT(compactions, quantums); // Should have fewer compactions than total quantums
+            }
+        }
+
+        UNIT_ASSERT_GT(totalCompactions, 0);
+        UNIT_ASSERT_GT(totalQuantums, 0);
+
+        Cerr << "Total compactions: " << totalCompactions << ", Total defrag quantums: " << totalQuantums << Endl;
+
+        // Verify defragmentation completed successfully
+        auto metrics = PrintMetrics(env);
+        UNIT_ASSERT_LT(env.GetLsmMetrics().HugeUsedChunks, totalHugeChunks);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.HugeChunksCanBeFreed, 0);
     }
 
 }

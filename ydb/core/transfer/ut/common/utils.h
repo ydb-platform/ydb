@@ -64,6 +64,26 @@ struct DateTimeChecker : public Checker<TInstant> {
     }
 };
 
+struct Timestamp64Checker : public Checker<TInstant> {
+    Timestamp64Checker(TInstant&& expected, TDuration&& precision)
+        : Checker<TInstant>(std::move(expected))
+        , Precision(precision) {
+    }
+
+    TInstant Get(const ::Ydb::Value& value) override {
+        return TInstant::MilliSeconds(value.int64_value());
+    }
+
+    void Assert(const std::string& msg, const ::Ydb::Value& value) override {
+        auto v = Get(value);
+        if (Expected - Precision > v || Expected + Precision < v) {
+            UNIT_ASSERT_VALUES_EQUAL_C(Get(value), Expected, msg);
+        }
+    }
+
+    TDuration Precision;
+};
+
 template<>
 inline bool Checker<bool>::Get(const ::Ydb::Value& value) {
     return value.bool_value();
@@ -127,11 +147,11 @@ std::pair<TString, std::shared_ptr<IChecker>> _C(std::string&& name, T&& expecte
     };
 }
 
-template<typename C, typename T>
-std::pair<TString, std::shared_ptr<IChecker>> _T(std::string&& name, T&& expected) {
+template<typename C, typename... T>
+std::pair<TString, std::shared_ptr<IChecker>> _T(std::string&& name, T&&... expected) {
     return {
         std::move(name),
-        std::make_shared<C>(std::move(expected))
+        std::make_shared<C>(std::forward<T>(expected)...)
     };
 }
 
@@ -141,6 +161,7 @@ struct TMessage {
     std::optional<std::string> ProducerId = std::nullopt;
     std::optional<std::string> MessageGroupId = std::nullopt;
     std::optional<ui64> SeqNo = std::nullopt;
+    std::optional<TInstant> CreateTimestamp = std::nullopt;
 };
 
 inline TMessage _withSeqNo(ui64 seqNo) {
@@ -170,6 +191,17 @@ inline TMessage _withMessageGroupId(const std::string& messageGroupId) {
         .ProducerId = messageGroupId,
         .MessageGroupId = messageGroupId,
         .SeqNo = std::nullopt
+    };
+}
+
+inline TMessage _withCreateTimestamp(const TInstant& timestamp) {
+    return {
+        .Message = TStringBuilder() << "Message-" << timestamp,
+        .Partition = 0,
+        .ProducerId = std::nullopt,
+        .MessageGroupId = std::nullopt,
+        .SeqNo = std::nullopt,
+        .CreateTimestamp = timestamp,
     };
 }
 
@@ -677,7 +709,7 @@ struct MainTestCase {
         }
         auto writeSession = TopicClient.CreateSimpleBlockingWriteSession(writeSettings);
 
-        UNIT_ASSERT(writeSession->Write(message.Message, message.SeqNo));
+        UNIT_ASSERT(writeSession->Write(message.Message, message.SeqNo, message.CreateTimestamp));
         writeSession->Close(TDuration::Seconds(1));
     }
 

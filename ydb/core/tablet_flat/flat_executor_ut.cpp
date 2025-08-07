@@ -37,7 +37,7 @@ namespace NTabletFlatExecutor {
 
                 if (Groups) {
                     txc.DB.Alter()
-                        .AddFamily(TableId, AltFamilyId, 0)
+                        .AddFamily(TableId, AltFamilyId, NTable::TScheme::DefaultRoom)
                         .AddColumnToFamily(TableId, ColumnValueId, AltFamilyId);
                 }
 

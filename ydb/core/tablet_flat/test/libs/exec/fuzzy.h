@@ -25,13 +25,13 @@ namespace NFake {
 
                 delta.SetRedo(8000 /* always put blobs below to redo log */);
                 delta.AddTable("test" + ToString(table), table);
-                delta.SetRoom(table, 0 /* default room */, 1, {3}, 2);
+                delta.SetRoom(table, TScheme::DefaultRoom, 1, {3}, 2);
 
                 if (Compress) { /* setup default family for page compression */
-                    delta.AddFamily(table, 0, 0);
+                    delta.AddFamily(table, TColumn::LeaderFamily, TScheme::DefaultRoom);
                     delta.SetFamilyCompression(table, 0, NPage::ECodec::LZ4);
                 } else {
-                    delta.AddFamily(table, 0, 0);
+                    delta.AddFamily(table, TColumn::LeaderFamily, TScheme::DefaultRoom);
                     delta.SetFamilyBlobs(table, 0, 6500, 7000);
                 }
 

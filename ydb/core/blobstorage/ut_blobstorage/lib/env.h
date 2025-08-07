@@ -352,7 +352,6 @@ struct TEnvironmentSetup {
     void SetupLogging() {
         Runtime->SetLogPriority(NKikimrServices::BS_HULLCOMP, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_VDISK_SCRUB, NLog::PRI_NOTICE);
-        Runtime->SetLogPriority(NKikimrServices::BS_VDISK_DEFRAG, NLog::PRI_INFO);
 
         auto prio = NLog::PRI_ERROR;
         Runtime->SetLogPriority(NKikimrServices::TABLET_MAIN, prio);
@@ -477,6 +476,8 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
 
                 ADD_ICB_CONTROL("VDiskControls.MaxChunksToDefragInflight", 10, 1, 50, 10);
+                ADD_ICB_CONTROL("VDiskControls.DefragThresholdToRunCompactionPerMille", 0, 0, 300, 0);
+                ADD_ICB_CONTROL("VDiskControls.DefaultHugeGarbagePerMille", 300, 0, 1000, 300);
                 
 #undef ADD_ICB_CONTROL
 

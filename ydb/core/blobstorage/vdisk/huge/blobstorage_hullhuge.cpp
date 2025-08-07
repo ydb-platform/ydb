@@ -1011,17 +1011,11 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                         "THullHugeKeeper: TEvHugeLockChunks: %s", msg->ToString().data()));
 
-            TDefragChunks lockedChunks;
-            lockedChunks.reserve(msg->Chunks.size());
             for (const auto &d : msg->Chunks) {
-                bool locked = State.Pers->Heap->LockChunkForAllocation(d.ChunkId, d.SlotSize);
-                if (locked) {
-                    lockedChunks.push_back(d);
-                }
+                State.Pers->Heap->LockChunkForAllocation(d.ChunkId, d.SlotSize);
             }
 
-            auto response = std::make_unique<TEvHugeLockChunksResult>(std::move(lockedChunks));
-            auto handle = std::make_unique<IEventHandle>(ev->Sender, SelfId(), response.release());
+            auto handle = std::make_unique<IEventHandle>(ev->Sender, SelfId(), new TEvHugeLockChunksResult());
             if (WritesInFlight.empty()) {
                 TActivationContext::Send(handle.release());
             } else {

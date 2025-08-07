@@ -228,7 +228,7 @@ namespace NKikimr {
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             heap.FinishRecovery();
             ui32 hugeBlobSize = 6u << 20u;
 
@@ -253,7 +253,7 @@ namespace NKikimr {
             // just serialize/deserialize
             TString serialized = heap.Serialize();
             THeap newHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             newHeap.ParseFromString(serialized);
             newHeap.FinishRecovery();
         }
@@ -297,7 +297,7 @@ namespace NKikimr {
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             heap.FinishRecovery();
             TVector<THugeSlot> arr;
 
@@ -313,7 +313,7 @@ namespace NKikimr {
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             heap.FinishRecovery();
             TVector<THugeSlot> arr;
 
@@ -322,7 +322,7 @@ namespace NKikimr {
             TString serialized = heap.Serialize();
             UNIT_ASSERT(THeap::CheckEntryPoint(serialized));
             THeap newHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             newHeap.ParseFromString(serialized);
             newHeap.FinishRecovery();
             TString heap2 = newHeap.ToString();
@@ -338,7 +338,7 @@ namespace NKikimr {
             ui32 overhead = 8;
             ui32 freeChunksReservation = 0;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             heap.FinishRecovery();
 
             heap.RecoveryModeAddChunk(2);
@@ -368,7 +368,7 @@ namespace NKikimr {
             ui32 overhead = 8u;
             ui32 freeChunksReservation = 1;
             THeap heap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, minHugeBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             heap.FinishRecovery();
 
             THugeSlot hugeSlot;
@@ -395,11 +395,11 @@ namespace NKikimr {
             ui32 freeChunksReservation = 0;
 
             THeap oldHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             oldHeap.FinishRecovery();
 
             THeap fromHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             fromHeap.ParseFromString(oldHeap.Serialize());
             fromHeap.FinishRecovery();
             TVector<THugeSlot> arr;
@@ -408,7 +408,7 @@ namespace NKikimr {
             TString serialized = fromHeap.Serialize();
             UNIT_ASSERT(THeap::CheckEntryPoint(serialized));
             THeap toHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, freeChunksReservation);
+                    maxBlobInBytes, overhead, freeChunksReservation, false);
             toHeap.ParseFromString(serialized);
             toHeap.FinishRecovery();
             FreeScenary(toHeap, arr);

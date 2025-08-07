@@ -20,17 +20,10 @@ namespace {
         std::vector<TActorId> GetQueueIds;
         std::vector<TRope> Parts;
         ui8 TestSubgroupNodeId = 6;
-
-        TFeatureFlags MakeFeatureFlags(bool enableCompDefragIndependacy) const {
-            TFeatureFlags featureFlags;
-            featureFlags.SetEnableCompDefragIndependacy(enableCompDefragIndependacy);
-            return featureFlags;
-        }
     public:
-        THugeBlobTest(bool enableCompDefragIndependacy)
+        THugeBlobTest(double defragThresholdToRunCompaction)
             : Env{{
                     .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-                    .FeatureFlags = MakeFeatureFlags(enableCompDefragIndependacy),
                     .UseFakeConfigDispatcher = true,
                 }}
             , Runtime(*Env.Runtime)
@@ -54,6 +47,10 @@ namespace {
             Parts.resize(GType.TotalPartCount());
             const bool success = ErasureSplit(TErasureType::CrcModeNone, GType, TRope(Data), Parts);
             UNIT_ASSERT(success);
+
+            for (ui32 i = 1; i <= Env.Settings.NodeCount; ++i) {
+                Env.SetIcbControl(i, "VDiskControls.DefragThresholdToRunCompactionPerMille", defragThresholdToRunCompaction * 1000);
+            }
 
 //            for (ui32 i = 0; i < 6; ++i) { // put main parts
 //                Put(i, i);
@@ -212,7 +209,7 @@ namespace {
             }
         }
 
-        static void CompactionTest(bool enableCompDefragIndependacy) {
+        static void CompactionTest(double defragThresholdToRunCompaction) {
             for (ui32 fresh1 = 0; fresh1 < 8; ++fresh1) {
             for (ui32 fresh2 = 0; fresh2 < 2; ++fresh2) {
             for (ui32 huge1 = 0; huge1 < 4; ++huge1) {
@@ -229,7 +226,7 @@ namespace {
                     << " targetHuge2# " << targetHuge2
                     << " targetHuge3# " << targetHuge3
                     << Endl;
-                THugeBlobTest test(enableCompDefragIndependacy);
+                THugeBlobTest test(defragThresholdToRunCompaction);
                 test.RunTest(fresh1, fresh2, huge1, huge2, targetHuge, fresh3, huge3, targetHuge2, targetHuge3);
             }}}}}}}}}
         }
@@ -240,10 +237,10 @@ namespace {
 Y_UNIT_TEST_SUITE(HugeBlobOnlineSizeChange) {
 
     Y_UNIT_TEST(Compaction) {
-        THugeBlobTest::CompactionTest(false);
+        THugeBlobTest::CompactionTest(0);
     }
     Y_UNIT_TEST(CompactionIndependenceWithDefrag) {
-        THugeBlobTest::CompactionTest(true);
+        THugeBlobTest::CompactionTest(0.001);
     }
 
 }

@@ -262,11 +262,6 @@ namespace NKikimr {
 
                 for (const auto *kv : chunks) {
                     const auto& [chunkIdx, chunk] = *kv;
-                    // Cerr << "ChunkIdx# " << chunkIdx
-                    //     << " UsefulSlots# " << chunk.UsefulSlots
-                    //     << " UselessSlots# " << chunk.UselessSlots
-                    //     << " NumberOfSlotsInChunk# " << chunk.NumberOfSlotsInChunk
-                    //     << Endl;
                     if (chunk.UsefulSlots == 0) {
                         continue;
                     }
@@ -304,6 +299,16 @@ namespace NKikimr {
                 return totalSpaceCouldBeFreed;
             }
 
+            ui64 GetFreedChunks() const {
+                ui64 res = 0;
+                for (const auto& [_, chunk] : PerChunkMap) {
+                    if (chunk.UsefulSlots == 0) {
+                        ++res; // this chunk is useless, so it can be freed
+                    }
+                }
+                return res;
+            }
+
             void Output(IOutputStream &str) const {
                 str << "{ChunksMap# [";
                 bool first = true;
@@ -338,6 +343,10 @@ namespace NKikimr {
 
         ui64 GetTotalSpaceCouldBeFreedViaCompaction() const {
             return ChunksMap.GetTotalSpaceCouldBeFreedViaCompaction();
+        }
+
+        ui64 GetFreedChunks() const {
+            return ChunksMap.GetFreedChunks();
         }
 
         void Add(TDiskPart part, const TLogoBlobID& id, bool useful, const void* /*sst*/) {
@@ -469,6 +478,10 @@ namespace NKikimr {
 
         ui32 GetTotalChunks() {
             return Chunks.size();
+        }
+
+        ui32 GetFreedChunks() {
+            return TDefragQuantumChunkFinder::GetFreedChunks();
         }
 
         ui32 GetUsefulChunks() {

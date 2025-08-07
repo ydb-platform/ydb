@@ -91,10 +91,11 @@ namespace NKikimr {
                     stat.Eof = stat.FoundChunksToDefrag < maxChunksToDefrag;
                     stat.FreedChunks = ChunksToDefrag->Chunks;
 
-                    lockedChunks = LockChunks(*ChunksToDefrag);
+                    LockChunks(*ChunksToDefrag);
+                    lockedChunks = ChunksToDefrag->Chunks;
 
                     STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD11, DCtx->VCtx->VDiskLogPrefix << "locked chunks",
-                        (ActorId, SelfActorId), (LockedChunks, lockedChunks));
+                        (ActorId, SelfActorId));
                 } else {
                     auto forbiddenChunks = GetForbiddenChunks();
 
@@ -177,7 +178,7 @@ namespace NKikimr {
                     }
                 }
 
-                if (!DCtx->VCfg->FeatureFlags.GetEnableCompDefragIndependacy()) {
+                if (DCtx->VCfg->DefragThresholdToRunCompactionPerMille == 0) {
                     // scan index again to find tables we have to compact
                     for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
                     if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {
@@ -213,10 +214,9 @@ namespace NKikimr {
             WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; }, &TDefragQuantum::ProcessUnexpectedEvent);
         }
 
-        TDefragChunks LockChunks(const TChunksToDefrag& chunks) {
+        void LockChunks(const TChunksToDefrag& chunks) {
             Send(DCtx->HugeKeeperId, new TEvHugeLockChunks(chunks.Chunks));
-            auto res = WaitForSpecificEvent<TEvHugeLockChunksResult>(&TDefragQuantum::ProcessUnexpectedEvent);
-            return res->Get()->LockedChunks;
+            WaitForSpecificEvent<TEvHugeLockChunksResult>(&TDefragQuantum::ProcessUnexpectedEvent);
         }
 
         THashSet<TChunkIdx> GetForbiddenChunks() {

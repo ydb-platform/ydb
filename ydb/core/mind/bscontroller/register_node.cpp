@@ -667,9 +667,12 @@ void TBlobStorageController::EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo)
 
 void TBlobStorageController::SendToWarden(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie) {
     Y_ABORT_UNLESS(nodeId);
-    if (auto *node = FindNode(nodeId); node && node->ConnectedServerId) {
+    bool isLocal = nodeId == SelfId().NodeId();
+    TNodeInfo* node = FindNode(nodeId);
+
+    if (isLocal || (node && node->ConnectedServerId)) {
         auto h = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), SelfId(), ev.release(), 0, cookie);
-        if (node->InterconnectSessionId) {
+        if (!isLocal && node->InterconnectSessionId) {
             h->Rewrite(TEvInterconnect::EvForward, node->InterconnectSessionId);
         }
         TActivationContext::Send(h.release());

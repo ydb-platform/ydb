@@ -287,33 +287,30 @@ public:
         if (!findNodeWithoutVDisks) {
             chosenNodeId = NodeCount;
         } else {
-            std::set<ui32> nodesWithoutVDisks;
-            for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
-                nodesWithoutVDisks.insert(nodeId);
-            }
-    
-            for (const auto& vslot : BaseConfig.GetVSlot()) {
-                nodesWithoutVDisks.erase(vslot.GetVSlotId().GetNodeId());
-            }
-
-            if (!nodesWithoutVDisks.empty()) {
-                chosenNodeId = *nodesWithoutVDisks.begin();
-            }
+            std::set<ui32> nodesWOVDisks = GetComplementNodeSet(GetNodesWithVDisks());
+            chosenNodeId = *nodesWOVDisks.begin();
         }
 
         Y_VERIFY_S(chosenNodeId != 0, "No available nodes to allocate");
-        Edge = Env->Runtime->AllocateEdgeActor(NodeCount);
+        Edge = Env->Runtime->AllocateEdgeActor(chosenNodeId);
+    }
+
+    void AllocateEdgeActorOnSpecificNode(ui32 nodeId) {
+        Edge = Env->Runtime->AllocateEdgeActor(nodeId);
     }
 
     void FetchBaseConfig() {
         BaseConfig = Env->FetchBaseConfig();
     }
 
-    TAutoPtr<TEventHandle<TEvBlobStorage::TEvStatusResult>> GetGroupStatus(ui32 groupId) {
-        Env->Runtime->WrapInActorContext(Edge, [&] {
-            SendToBSProxy(Edge, groupId, new TEvBlobStorage::TEvStatus(TInstant::Max()));
+    TAutoPtr<TEventHandle<TEvBlobStorage::TEvStatusResult>> GetGroupStatus(ui32 groupId,
+            TDuration waitTime = TDuration::Max(), TActorId actorId = {}) {
+        TInstant ts = (waitTime == TDuration::Max()) ? TInstant::Max() : Env->Now() + waitTime;
+        TActorId edge = (actorId == TActorId{}) ? Edge : actorId; 
+        Env->Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvStatus(ts));
         });
-        return Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(Edge, false, TInstant::Max());
+        return Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(edge, false, ts);
     }
 
     virtual void Initialize() {
@@ -429,6 +426,24 @@ public:
             }
         }
         return blobs;
+    }
+
+    std::set<ui32> GetNodesWithVDisks() {
+        std::set<ui32> res;
+        for (const auto& vslot : BaseConfig.GetVSlot()) {
+            res.insert(vslot.GetVSlotId().GetNodeId());
+        }
+        return res;
+    }
+
+    std::set<ui32> GetComplementNodeSet(std::set<ui32> nodes) {
+        std::set<ui32> res;
+        for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+            if (!nodes.contains(nodeId)) {
+                res.insert(nodeId);
+            }
+        }
+        return res;
     }
 
 public:

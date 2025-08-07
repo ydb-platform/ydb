@@ -99,6 +99,7 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTabe.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
@@ -106,6 +107,7 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTabe.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
         }

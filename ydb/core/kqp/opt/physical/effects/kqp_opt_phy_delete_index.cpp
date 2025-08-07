@@ -41,42 +41,47 @@ TDqPhyPrecompute PrecomputeDictKeys(const TCondenseInputResult& condenseResult, 
         .Done();
 }
 
-} // namespace
-
-TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!node.Maybe<TKqlDeleteRowsIndex>()) {
-        return node;
+TDqStageBase ReadTableToStage(const TExprBase& expr, TExprContext& ctx) {
+    if (expr.Maybe<TDqStageBase>()) {
+        return expr.Cast<TDqStageBase>();
     }
-
-    auto del = node.Cast<TKqlDeleteRowsIndex>();
-    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, del.Table().Path());
-    const auto& pk = table.Metadata->KeyColumnNames;
-
-    auto payloadSelector = Build<TCoLambda>(ctx, del.Pos())
-        .Args({"stub"})
-        .Body<TCoVoid>().Build()
-        .Done();
-
-    auto condenseResult = CondenseInputToDictByPk(del.Input(), table, payloadSelector, ctx);
-    if (!condenseResult) {
-        return node;
+    if (expr.Maybe<TDqCnUnionAll>()) {
+        return expr.Cast<TDqCnUnionAll>().Output().Stage();
     }
-
-    auto lookupKeys = PrecomputeDictKeys(*condenseResult, del.Pos(), ctx);
-
-    const auto indexes = BuildSecondaryIndexVector(table, del.Pos(), ctx, nullptr, true);
-    YQL_ENSURE(indexes);
-    THashSet<TString> keyColumns;
-    for (const auto& pair : indexes) {
-        for (const auto& col : pair.second->KeyColumns) {
-            keyColumns.emplace(col);
+    auto pos = expr.Pos();
+    TVector<TExprNode::TPtr> inputs;
+    TVector<TExprNode::TPtr> args;
+    TNodeOnNodeOwnedMap replaces;
+    int i = 1;
+    VisitExpr(expr.Ptr(), [&](const TExprNode::TPtr& node) {
+        TExprBase expr(node);
+        if (auto cast = expr.Maybe<TDqCnUnionAll>()) {
+            auto newArg = ctx.NewArgument(pos, TStringBuilder() << "rows" << i);
+            inputs.emplace_back(node);
+            args.emplace_back(newArg);
+            replaces.emplace(expr.Raw(), newArg);
+            return false;
         }
-    }
+        return true;
+    });
+    return Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(inputs)
+            .Build()
+        .Program()
+            .Args(args)
+            .Body(ctx.ReplaceNodes(expr.Ptr(), replaces))
+            .Build()
+        .Settings()
+            .Build()
+        .Done();
+}
 
-    auto lookupDict = PrecomputeTableLookupDict(lookupKeys, table, {}, keyColumns, del.Pos(), ctx);
-    if (!lookupDict) {
-        return node;
-    }
+TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
+    const TSecondaryIndexes& indexes, const TKqlDeleteRowsIndex& del,
+    const TExprBase& lookupKeys, std::function<TExprBase(const TVector<TStringBuf>&)> project,
+    TExprContext& ctx) {
+    const auto& pk = table.Metadata->KeyColumnNames;
 
     auto tableDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
         .Table(del.Table())
@@ -103,7 +108,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
             }
         }
 
-        auto deleteIndexKeys = MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumns, del.Pos(), ctx);
+        auto deleteIndexKeys = project(indexTableColumns);
 
         if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
             // Generate input type for vector resolve
@@ -119,28 +124,21 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
             YQL_ENSURE(rowType->Validate(del.Pos(), ctx));
             const TTypeAnnotationNode* resolveInputType = ctx.MakeType<TListExprType>(rowType);
 
-            auto resolveOutput = Build<TKqpCnVectorResolve>(ctx, del.Pos())
-                .Output()
-                    .Stage<TDqStage>()
-                        .Inputs()
-                            .Add(deleteIndexKeys)
-                            .Build()
-                        .Program()
-                            .Args({"vector_resolve_rows"})
-                            .Body<TCoToStream>()
-                                .Input("vector_resolve_rows")
-                                .Build()
-                            .Build()
-                        .Settings().Build()
-                        .Build()
+            auto resolveInput = (deleteIndexKeys.Maybe<TDqCnUnionAll>()
+                ? deleteIndexKeys.Maybe<TDqCnUnionAll>().Cast().Output()
+                : Build<TDqOutput>(ctx, del.Pos())
+                    .Stage(ReadTableToStage(deleteIndexKeys, ctx))
                     .Index().Build(0)
-                    .Build()
+                    .Done());
+
+            auto resolveOutput = Build<TKqpCnVectorResolve>(ctx, del.Pos())
+                .Output(resolveInput)
                 .Table(del.Table())
                 .InputType(ExpandType(del.Pos(), *resolveInputType, ctx))
                 .Index(ctx.NewAtom(del.Pos(), indexDesc->Name))
                 .Done();
 
-            auto deleteIndexStage = Build<TDqStage>(ctx, del.Pos())
+            auto resolveStage = Build<TDqStage>(ctx, del.Pos())
                 .Inputs()
                     .Add(resolveOutput)
                     .Build()
@@ -153,16 +151,16 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 .Settings().Build()
                 .Done();
 
-            auto deleteUnion = Build<TDqCnUnionAll>(ctx, del.Pos())
+            auto resolveUnion = Build<TDqCnUnionAll>(ctx, del.Pos())
                 .Output()
-                    .Stage(deleteIndexStage)
-                    .Index().Build("0")
+                    .Stage(resolveStage)
+                    .Index().Build(0)
                     .Build()
                 .Done();
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
                 .Table(tableNode)
-                .Input(deleteUnion)
+                .Input(resolveUnion)
                 .ReturningColumns<TCoAtomList>().Build()
                 .IsBatch(ctx.NewAtom(del.Pos(), "false"))
                 .Done();
@@ -183,6 +181,59 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     return Build<TExprList>(ctx, del.Pos())
         .Add(effects)
         .Done();
+}
+
+} // namespace
+
+TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TKqlDeleteRowsIndex>()) {
+        return node;
+    }
+
+    auto del = node.Cast<TKqlDeleteRowsIndex>();
+    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, del.Table().Path());
+    const auto& pk = table.Metadata->KeyColumnNames;
+
+    const auto indexes = BuildSecondaryIndexVector(table, del.Pos(), ctx);
+    YQL_ENSURE(indexes);
+
+    // Skip lookup means that the input already has all required columns and we only need to project them
+    auto settings = TKqpDeleteRowsIndexSettings::Parse(del);
+
+    if (settings.SkipLookup) {
+        auto lookupKeys = ProjectColumns(del.Input(), pk, ctx);
+        return BuildDeleteIndexStagesImpl(table, indexes, del, lookupKeys, [&](const TVector<TStringBuf>& indexTableColumns) {
+            return ProjectColumns(del.Input(), indexTableColumns, ctx);
+        }, ctx);
+    }
+
+    auto payloadSelector = Build<TCoLambda>(ctx, del.Pos())
+        .Args({"stub"})
+        .Body<TCoVoid>().Build()
+        .Done();
+
+    auto condenseResult = CondenseInputToDictByPk(del.Input(), table, payloadSelector, ctx);
+    if (!condenseResult) {
+        return node;
+    }
+
+    auto lookupKeys = PrecomputeDictKeys(*condenseResult, del.Pos(), ctx);
+
+    THashSet<TString> keyColumns;
+    for (const auto& pair : indexes) {
+        for (const auto& col : pair.second->KeyColumns) {
+            keyColumns.emplace(col);
+        }
+    }
+
+    auto lookupDict = PrecomputeTableLookupDict(lookupKeys, table, {}, keyColumns, del.Pos(), ctx);
+    if (!lookupDict) {
+        return node;
+    }
+
+    return BuildDeleteIndexStagesImpl(table, indexes, del, lookupKeys, [&](const TVector<TStringBuf>& indexTableColumns) {
+        return MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumns, del.Pos(), ctx);
+    }, ctx);
 }
 
 } // namespace NKikimr::NKqp::NOpt

@@ -72,6 +72,14 @@ struct TKqpStreamLookupSettings {
     static TKqpStreamLookupSettings Parse(const NNodes::TCoNameValueTupleList& node);
 };
 
+struct TKqpDeleteRowsIndexSettings {
+    bool SkipLookup = false;
+    static constexpr TStringBuf SkipLookupSettingName = "SkipLookup";
+
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
+    static TKqpDeleteRowsIndexSettings Parse(const NNodes::TKqlDeleteRowsIndex& node);
+};
+
 enum class ERequestSorting {
     NONE = 0,
     ASC,

@@ -412,7 +412,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(VectorIndexIsNotUpdatable) {
+    Y_UNIT_TEST(VectorIndexIsUpdatable) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -445,10 +445,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         // Insert to the table with index should succeed
         {
-            //, (11, "\x77\x75\x03", "11")
             const TString query1(Q_(R"(
                 INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
-                (10, "\x76\x77\x03", "10");
+                (10, "\x76\x77\x03", "10"),
+                (11, "\x77\x75\x03", "11");
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -496,9 +496,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
 
         const TString postingTable1_del = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable1_del);
+        UNIT_ASSERT_STRINGS_UNEQUAL(postingTable1_ins, postingTable1_del);
 
-/*
-        // Normal delete from the table with index should succeed (it uses a different code path)
+        // Normal delete from the table with index should succeed too (it uses a different code path)
         {
             const TString query1(Q_(R"(
                 DELETE FROM `/Root/TestTable` WHERE pk=11;
@@ -511,11 +512,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT(result.IsSuccess());
         }
 
-        const TString postingTable1_del = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
-*/
+        const TString postingTable2_del = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
 
         // First index is updated
-        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_del);
+        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable2_del);
     }
 
     Y_UNIT_TEST_TWIN(SimpleVectorIndexOrderByCosineDistanceWithCover, Nullable) {

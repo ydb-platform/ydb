@@ -732,7 +732,7 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         settings = node->ChildPtr(TKqpUpsertRows::idx_Settings);
     }
     if (settings) {
-       upsertSettings = TKqpUpsertRowsSettings::Parse(settings.Cast());
+        upsertSettings = TKqpUpsertRowsSettings::Parse(settings.Cast());
     }
     if (!upsertSettings.IsUpdate) {
         for (auto& [name, meta] : table.second->Metadata->Columns) {
@@ -950,7 +950,12 @@ TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         }
     }
 
-    if (rowType->GetItems().size() != table.second->Metadata->KeyColumnNames.size()) {
+    bool allowNonKey = false;
+    if (TKqlDeleteRowsIndex::Match(node.Get())) {
+        auto settings = TKqpDeleteRowsIndexSettings::Parse(TExprBase(node).Cast<TKqlDeleteRowsIndex>());
+        allowNonKey = settings.SkipLookup;
+    }
+    if (!allowNonKey && rowType->GetItems().size() != table.second->Metadata->KeyColumnNames.size()) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Input type contains non-key columns"));
         return TStatus::Error;
     }

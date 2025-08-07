@@ -572,121 +572,15 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
 TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx)
 {
-    auto indexes = BuildSecondaryIndexVector(tableData, del.Pos(), ctx, nullptr, true,
-        [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
-            return BuildTableMeta(meta, pos, ctx);
-        });
-    YQL_ENSURE(indexes);
-
+    TKqpDeleteRowsIndexSettings settings;
+    settings.SkipLookup = true;
     auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.IsBatch(), del.Pos(), ctx);
-
-    const auto& pk = tableData.Metadata->KeyColumnNames;
-
-    auto tableMeta = BuildTableMeta(tableData, del.Pos(), ctx);
-    auto tableDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
-        .Table(tableMeta)
-        .Input(ProjectColumns(rowsToDelete, pk, ctx))
-        .ReturningColumns<TCoAtomList>().Build()
-        .IsBatch(del.IsBatch())
-        .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
+    return Build<TKqlDeleteRowsIndex>(ctx, del.Pos())
+        .Table(BuildTableMeta(tableData, del.Pos(), ctx))
+        .Input(rowsToDelete)
+        .ReturningColumns(del.ReturningColumns())
+        .Settings(settings.BuildNode(ctx, del.Pos()))
         .Done();
-
-    TVector<TExprBase> effects;
-    effects.push_back(tableDelete);
-
-    for (const auto& [tableNode, indexDesc] : indexes) {
-        TVector<TString> indexTableColumns;
-        THashSet<TString> keyColumns;
-        for (const auto& column : indexDesc->KeyColumns) {
-            YQL_ENSURE(keyColumns.emplace(column).second);
-            indexTableColumns.push_back(column);
-        }
-
-        for (const auto& column : pk) {
-            if (keyColumns.insert(column).second) {
-                indexTableColumns.push_back(column);
-            }
-        }
-
-        auto projectedInput = ProjectColumns(rowsToDelete, indexTableColumns, ctx);
-
-        if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            // Generate input type for vector resolve
-            TVector<const TItemExprType*> rowItems;
-            for (const auto& column : indexTableColumns) {
-                auto type = tableData.GetColumnType(column);
-                YQL_ENSURE(type, "No key column: " << column);
-                auto itemType = ctx.MakeType<TItemExprType>(column, type);
-                YQL_ENSURE(itemType->Validate(del.Pos(), ctx));
-                rowItems.push_back(itemType);
-            }
-            auto rowType = ctx.MakeType<TStructExprType>(rowItems);
-            YQL_ENSURE(rowType->Validate(del.Pos(), ctx));
-            const TTypeAnnotationNode* resolveInputType = ctx.MakeType<TListExprType>(rowType);
-
-            auto deleteIndexKeys = Build<TKqpCnVectorResolve>(ctx, del.Pos())
-                // NB: Output() is a bad name, it's actually TakeOutputFrom()
-                .Output()
-                    .Stage<TDqStage>()
-                        .Inputs()
-                            .Build()
-                        .Program()
-                            .Args({})
-                            .Body<TCoToStream>()
-                                .Input(projectedInput)
-                                .Build()
-                            .Build()
-                        .Settings().Build()
-                        .Build()
-                    .Index().Build(0)
-                    .Build()
-                .Table(tableMeta)
-                .InputType(ExpandType(del.Pos(), *resolveInputType, ctx))
-                .Index(ctx.NewAtom(del.Pos(), indexDesc->Name))
-                .Done();
-
-            auto deleteIndexStage = Build<TDqStage>(ctx, del.Pos())
-                .Inputs()
-                    .Add(deleteIndexKeys)
-                    .Build()
-                .Program()
-                    .Args({"rows"})
-                    .Body<TCoToStream>()
-                        .Input("rows")
-                        .Build()
-                    .Build()
-                .Settings().Build()
-                .Done();
-
-            auto deleteUnion = Build<TDqCnUnionAll>(ctx, del.Pos())
-                .Output()
-                    .Stage(deleteIndexStage)
-                    .Index().Build("0")
-                    .Build()
-                .Done();
-
-            auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
-                .Table(tableNode)
-                .Input(deleteUnion)
-                .ReturningColumns<TCoAtomList>().Build()
-                .IsBatch(ctx.NewAtom(del.Pos(), "false"))
-                .Done();
-
-            effects.emplace_back(indexDelete);
-        } else {
-            auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
-                .Table(tableNode)
-                .Input(projectedInput)
-                .ReturningColumns<TCoAtomList>().Build()
-                .IsBatch(del.IsBatch())
-                .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
-                .Done();
-
-            effects.push_back(indexDelete);
-        }
-    }
-
-    return Build<TExprList>(ctx, del.Pos()).Add(effects).Done();
 }
 
 TExprBase BuildRowsToUpdate(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,

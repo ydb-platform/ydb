@@ -5,7 +5,6 @@
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
 #include "schemeshard.h"
-#include "schemeshard_continuous_backup_cleaner.h"
 #include "schemeshard__shred_manager.h"
 #include "schemeshard_svp_migration.h"
 
@@ -215,6 +214,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     ResumeExports(opts.ExportIds, ctx);
     ResumeImports(opts.ImportsIds, ctx);
     ResumeCdcStreamScans(opts.CdcStreamScans, ctx);
+    ResumeIncrementalBackups(opts.IncrementalBackupIds, ctx);
 
     ParentDomainLink.SendSync(ctx);
 
@@ -1734,6 +1734,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateResourcePool:
     case TTxState::TxCreateBackupCollection:
     case TTxState::TxCreateSysView:
+    case TTxState::TxCreateLongIncrementalBackupOp:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1828,6 +1829,8 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxRestoreIncrementalBackupAtTable:
     case TTxState::TxCreateLongIncrementalRestoreOp: // Set this state for now, maybe we need to be more precise
         return TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+    case TTxState::TxIncrementalRestoreFinalize:
+        return TPathElement::EPathState::EPathStateAlter; // Finalization is an alter operation to normalize path states
     }
     return oldState;
 }
@@ -5205,6 +5208,10 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvBackup::TEvReadBackupCollectionRequest, Handle);
         HFuncTraced(TEvBackup::TEvUpdateBackupCollectionRequest, Handle);
         HFuncTraced(TEvBackup::TEvDeleteBackupCollectionRequest, Handle);
+
+        HFuncTraced(TEvBackup::TEvGetIncrementalBackupRequest, Handle);
+        HFuncTraced(TEvBackup::TEvForgetIncrementalBackupRequest, Handle);
+        HFuncTraced(TEvBackup::TEvListIncrementalBackupsRequest, Handle);
         // } // NBackup
 
 
@@ -6041,6 +6048,17 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, co
     if (!PathsById.contains(pathId)) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvSyncTenantSchemeShard, at schemeshard: " << TabletID()
             << ", ignore spurious message from dropped subdomain's schemeshard (full cleanup)" << pathId
+        );
+        return;
+    }
+
+    if (PathsById.at(pathId)->Dropped()) {
+        // This could happen when root schemeshard reboots just after marking subdomain's path as dropped
+        // but before being able to begin subdomain cleanup. Then, if tenant schemeshard tablet is still alive,
+        // it will detect disconnect error in pipe-to-parent, re-establish connection and send TEvSyncTenantSchemeShard.
+        // Root schemeshard should ignore it and should not register dropped subdomain in subdomain links again.
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvSyncTenantSchemeShard, at schemeshard: " << TabletID()
+            << ", ignore spurious message from dropped subdomain's schemeshard (pre cleanup)" << pathId
         );
         return;
     }
@@ -8057,53 +8075,6 @@ void TSchemeShard::Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, 
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunShredBSC::TPtr&, const TActorContext&) {
     ShredManager->SendRequestToBSC();
-}
-
-void TSchemeShard::Handle(TEvPersQueue::TEvOffloadStatus::TPtr& ev, const TActorContext&) {
-    auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
-    auto shardIdx = MustGetShardIdx(tabletId);
-
-    Y_ABORT_UNLESS(ShardInfos.contains(shardIdx));
-    const auto& shardInfo = ShardInfos.at(shardIdx);
-    Y_ABORT_UNLESS(shardInfo.TabletType == ETabletType::PersQueue);
-
-    Y_ABORT_UNLESS(Topics.contains(shardInfo.PathId));
-    const auto& topic = Topics.at(shardInfo.PathId);
-
-    ui32 partitionId = ev->Get()->Record.GetPartitionId();
-    Y_ABORT_UNLESS(topic->Partitions.contains(partitionId));
-
-    topic->OffloadDonePartitions.insert(partitionId);
-    if (topic->OffloadDonePartitions.size() == topic->TotalPartitionCount) {
-        Y_ABORT_UNLESS(PathsById.contains(shardInfo.PathId));
-        const auto& topicPath = PathsById.at(shardInfo.PathId);
-        const auto& streamPath = PathsById.at(topicPath->ParentPathId);
-        const auto& tablePath = PathsById.at(streamPath->ParentPathId);
-        const auto& workingDir = PathToString(PathsById.at(tablePath->ParentPathId));
-
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Starting continuous backup cleaner:"
-            << " workingDir# " << workingDir
-            << " table# " << tablePath->Name
-            << " stream# " << streamPath->Name);
-
-        auto cleaner = CreateContinuousBackupCleaner(
-            TxAllocatorClient,
-            SelfId(),
-            workingDir,
-            tablePath->Name,
-            streamPath->Name
-        );
-        RunningContinuousBackupCleaners.insert(Register(cleaner));
-    }
-}
-
-void TSchemeShard::Handle(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev, const TActorContext&) {
-    RunningContinuousBackupCleaners.erase(ev->Sender);
-    if (!ev->Get()->Success) {
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Continuous backup cleaner has failed: " << ev->Get()->Error);
-    }
 }
 
 void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {

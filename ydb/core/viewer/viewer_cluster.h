@@ -15,6 +15,7 @@ class TJsonCluster : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfigResponse;
+    bool NodeWardenStorageConfigResponseProcessed = false;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse>> PDisksResponse;
@@ -350,7 +351,7 @@ private:
             StorageStatsResponse.reset();
         }
 
-        if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone()) {
+        if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone() && !NodeWardenStorageConfigResponseProcessed) {
             if (NodeWardenStorageConfigResponse->IsOk()) {
                 if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
                     const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
@@ -381,6 +382,7 @@ private:
             } else {
                 AddProblem("no-node-warden-storage-config");
             }
+            NodeWardenStorageConfigResponseProcessed = true;
         }
 
         if (TimeToAskWhiteboard()) {

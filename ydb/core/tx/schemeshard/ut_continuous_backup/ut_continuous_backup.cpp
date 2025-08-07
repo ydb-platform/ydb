@@ -121,8 +121,9 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
                             OwnerId: %)" PRIu64 R"(
                             LocalId: %)" PRIu64 R"(
                         }
+                        TxId: %)" PRIu64 R"(
                     }
-                )", ownerId, localId)),
+                )", ownerId, localId, txId)),
         });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/1_continuousBackupImpl"), {

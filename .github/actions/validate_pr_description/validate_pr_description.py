@@ -110,8 +110,11 @@ def check_pr_description(description, is_not_for_cl_valid=True) -> Tuple[bool, s
 
 def validate_pr_description_from_file(file_path) -> Tuple[bool, str]:
     try:
-        with open(file_path, 'r') as file:
-            description = file.read()
+        if file_path:
+            with open(file_path, 'r') as file:
+                description = file.read()
+        else:
+            description = sys.stdin.read()
         return check_pr_description(description)
     except Exception as e:
         txt = f"Failed to validate PR description: {e}"
@@ -119,12 +122,7 @@ def validate_pr_description_from_file(file_path) -> Tuple[bool, str]:
         return False, txt
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: validate_pr_description.py <path_to_pr_description_file>")
-        sys.exit(1)
-    
-    file_path = sys.argv[1]
-    is_valid, txt = validate_pr_description_from_file(file_path)
+    is_valid, txt = validate_pr_description_from_file(sys.argv[1] if len(sys.argv) > 1 else None)
     from post_status_to_github import post
     post(is_valid, txt)
     if not is_valid:

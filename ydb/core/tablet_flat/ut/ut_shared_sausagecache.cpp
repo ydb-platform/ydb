@@ -1091,7 +1091,7 @@ Y_UNIT_TEST(ZeroCache_FlatIndex) {
 
 }
 
-Y_UNIT_TEST_SUITE(TSharedPageCache_WaitPads) {
+Y_UNIT_TEST_SUITE(TSharedPageCache_Transactions) {
 
 void BasicSetup(TMyEnvBase& env) {
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);

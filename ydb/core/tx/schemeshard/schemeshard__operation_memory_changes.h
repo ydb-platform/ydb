@@ -69,6 +69,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TLongIncrementalRestoreOpState = std::pair<TOperationId, std::optional<NKikimrSchemeOp::TLongIncrementalRestoreOp>>;
     TStack<TLongIncrementalRestoreOpState> LongIncrementalRestoreOps;
 
+    using TIncrementalBackupState = std::pair<ui64, TIncrementalBackupInfo::TPtr>;
+    TStack<TIncrementalBackupState> IncrementalBackups;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -115,6 +118,8 @@ public:
 
     void GrabNewLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId);
     void GrabLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId);
+
+    void GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id);
 
     void UnDo(TSchemeShard* ss);
 };

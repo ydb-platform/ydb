@@ -331,6 +331,7 @@ private:
         request.set_owner_id(GetOwnerId());
         request.set_host(HostName());
         request.set_tenant(TenantName);
+        request.set_node_id(SelfId().NodeId());
         GetTaskCounters.InFly->Inc();
         StartGetTaskTime = TInstant::Now();
         Send(InternalServiceId, new TEvInternalService::TEvGetTaskRequest(request));
@@ -484,7 +485,8 @@ private:
             S3ActorsFactory,
             ComputeConfig.GetWorkloadManagerConfig(task.scope()),
             PqGatewayFactory,
-            std::vector<std::pair<TString, TString>>{sensorLabels.begin(), sensorLabels.end()}
+            std::vector<std::pair<TString, TString>>{sensorLabels.begin(), sensorLabels.end()},
+            std::vector<ui64>{task.node_id().begin(), task.node_id().end()}
             );
 
         auto runActorId =

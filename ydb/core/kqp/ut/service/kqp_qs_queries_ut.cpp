@@ -1960,6 +1960,34 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(CreateTempTableDisabled) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting}).SetAuthToken("user0@builtin");
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableTempTables(false);
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+
+        TString SessionId;
+        {
+            auto session = client.GetSession().GetValueSync().GetSession();
+            auto id = session.GetId();
+
+            const auto queryCreate = Q_(R"(
+                --!syntax_v1
+                CREATE TEMP TABLE Temp (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );)");
+
+            auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(resultCreate.GetStatus(), NYdb::EStatus::GENERIC_ERROR, resultCreate.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(resultCreate.GetIssues().ToString(), "Creating temporary table is not supported", resultCreate.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(AlterTempTable) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});

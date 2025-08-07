@@ -890,6 +890,11 @@ public:
             ? settings.Temporary.Cast()
             : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
 
+        if (temporary.Value() == "true") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary sequence data is not supported."));
+            return nullptr;
+        }
+
         auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");
 
         return Build<TKiCreateSequence>(ctx, node->Pos())
@@ -1297,6 +1302,11 @@ public:
                     auto temporary = settings.Temporary.IsValid()
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
+
+                    if (temporary.Value() == "true" && !SessionCtx->Config().EnableTempTables) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary table is not supported."));
+                        return nullptr;
+                    }
 
                     auto replaceIfExists = (settings.Mode.Cast().Value() == "create_or_replace");
                     auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");

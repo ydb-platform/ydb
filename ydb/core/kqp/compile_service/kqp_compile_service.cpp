@@ -345,6 +345,8 @@ private:
 
         bool enableOlapPushdownProjections = TableServiceConfig.GetEnableOlapPushdownProjections();
 
+        bool enableTempTables = TableServiceConfig.GetEnableTempTables();
+
         ui32 defaultLangVer = TableServiceConfig.GetDefaultLangVer();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
@@ -385,6 +387,7 @@ private:
             TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
             TableServiceConfig.GetEnableIndexStreamWrite() != enableIndexStreamWrite ||
             TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections ||
+            TableServiceConfig.GetEnableTempTables() != enableTempTables ||
             TableServiceConfig.GetDefaultLangVer() != defaultLangVer)
         {
 

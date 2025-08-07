@@ -210,6 +210,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableIndexStreamWrite = false;
     bool EnableOlapPushdownProjections = false;
     bool EnableParallelUnionAllConnectionsForExtend = false;
+    bool EnableTempTables = false;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;

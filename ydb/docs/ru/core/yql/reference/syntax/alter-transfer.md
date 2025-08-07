@@ -11,9 +11,7 @@ ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
 где:
 
 * `name` — имя экземпляра трансфера.
-
-{% include [x](../_includes/transfer_lambda.md) %}
-
+* `lambda` — [lambda-функция](#lambda) преобразования сообщений.
 * `SET (option = value [, ...])` — [параметры](#params) трансфера.
 
 ### Параметры {#params}
@@ -60,6 +58,8 @@ ALTER TRANSFER my_transfer SET (
     FLUSH_INTERVAL = Interval('PT60S')
 );
 ```
+
+{% include [x](../_includes/transfer_lambda.md) %}
 
 ## См. также
 

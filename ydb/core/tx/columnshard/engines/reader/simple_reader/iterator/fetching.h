@@ -299,7 +299,6 @@ public:
     }
 };
 
-
 class TUpdateAggregatedMemoryStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

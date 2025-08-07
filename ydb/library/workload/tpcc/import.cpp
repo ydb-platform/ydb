@@ -1162,7 +1162,7 @@ void ImportSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig,
         loader.ImportSync();
     } catch (const std::exception& ex) {
         std::cerr << "Exception while execution: " << ex.what() << std::endl;
-        std::exit(1);
+        throw TNeedToExitWithCode(EXIT_FAILURE);
     }
 }
 

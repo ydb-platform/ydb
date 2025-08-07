@@ -86,23 +86,28 @@ public:
         , SchemaInclusionMode(schemaInclusionMode)
         , ArrowFormatSettings(std::move(arrowFormatSettings))
     {
+        if (Format == ::Ydb::ResultSet::FORMAT_UNSPECIFIED) {
+            Format = ::Ydb::ResultSet::FORMAT_VALUE;
+        }
+
+        if (SchemaInclusionMode == ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED) {
+            SchemaInclusionMode = ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS;
+        }
+
         YQL_ENSURE(IsValueFormat() || IsArrowFormat(), "Unsupported result set format");
+        YQL_ENSURE(IsSchemaInclusionAlways() || IsSchemaInclusionFirstOnly(), "Unsupported schema inclusion mode");
     }
 
     bool IsValueFormat() const {
-        return Format == ::Ydb::ResultSet::FORMAT_UNSPECIFIED || Format == ::Ydb::ResultSet::FORMAT_VALUE;
+        return Format == ::Ydb::ResultSet::FORMAT_VALUE;
     }
 
     bool IsArrowFormat() const {
         return Format == ::Ydb::ResultSet::FORMAT_ARROW;
     }
 
-    bool IsSchemaInclusionUnspecified() const {
-        return SchemaInclusionMode == ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED;
-    }
-
     bool IsSchemaInclusionAlways() const {
-        return IsSchemaInclusionUnspecified() || SchemaInclusionMode == ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS;
+        return SchemaInclusionMode == ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS;
     }
 
     bool IsSchemaInclusionFirstOnly() const {

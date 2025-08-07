@@ -928,7 +928,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& typeId = Id(node.GetRule_object_type_ref7().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
             if (node.HasBlock9()) {
-                if (!ParseObjectFeatures(kv, node.GetBlock9().GetRule_create_object_features1().GetRule_object_features2())) {
+                if (!ParseObjectFeatures(kv, node.GetBlock9().GetRule_create_object_features1().GetRule_object_features2(), {})) {
                     return false;
                 }
             }
@@ -950,11 +950,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
-            if (!ParseObjectFeatures(kv, node.GetRule_alter_object_features8().GetRule_object_features2())) {
+            if (!ParseObjectFeatures(kv, node.GetRule_alter_object_features8().GetRule_object_features2(), {})) {
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, typeId, std::move(kv), std::set<TString>(), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, typeId, false, std::move(kv), std::set<TString>(), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore29: {
@@ -981,7 +981,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& typeId = Id(node.GetRule_object_type_ref7().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
             if (node.HasBlock9()) {
-                if (!ParseObjectFeatures(kv, node.GetBlock9().GetRule_drop_object_features1().GetRule_object_features2())) {
+                if (!ParseObjectFeatures(kv, node.GetBlock9().GetRule_drop_object_features1().GetRule_object_features2(), {})) {
                     return false;
                 }
             }
@@ -1053,7 +1053,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "EXTERNAL_DATA_SOURCE", std::move(kv), std::move(toReset), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "EXTERNAL_DATA_SOURCE", false, std::move(kv), std::move(toReset), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore32: {
@@ -1323,7 +1323,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, typeId, std::move(kv), std::set<TString>(), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, typeId, false, std::move(kv), std::set<TString>(), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore41:
@@ -1342,7 +1342,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
             std::map<TString, TDeferredAtom> kv;
             if (node.HasBlock8()) {
-                if (!ParseObjectFeatures(kv, node.GetBlock8().GetRule_create_object_features1().GetRule_object_features2())) {
+                if (!ParseObjectFeatures(kv, node.GetBlock8().GetRule_create_object_features1().GetRule_object_features2(), {})) {
                     return false;
                 }
             }
@@ -1367,7 +1367,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             std::map<TString, TDeferredAtom> features;
             if (node.HasBlock5()) {
-                if (!ParseObjectFeatures(features, node.GetBlock5().GetRule_create_object_features1().GetRule_object_features2())) {
+                if (!ParseObjectFeatures(features, node.GetBlock5().GetRule_create_object_features1().GetRule_object_features2(), {})) {
                     return false;
                 }
             }
@@ -1486,7 +1486,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL", std::move(kv), std::move(toReset), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL", false, std::move(kv), std::move(toReset), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore47: {
@@ -1722,7 +1722,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", std::move(kv), std::move(toReset), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, std::move(kv), std::move(toReset), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore54: {
@@ -1999,6 +1999,119 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             AddStatementToBlocks(blocks, BuildShowCreate(Ctx_.Pos(), tr, type, Ctx_.Scoped));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore63: {
+            // create_streaming_query_stmt: CREATE (OR REPLACE)? STREAMING QUERY (IF NOT EXISTS)? name
+            //     (WITH (k=v,...))?
+            //     (AS into_table_stmt);
+            const auto& node = core.GetAlt_sql_stmt_core63().GetRule_create_streaming_query_stmt1();
+
+            // name
+            const auto& name = node.GetRule_object_ref6();
+            TObjectOperatorContext context(Ctx_.Scoped);
+            if (name.HasBlock1()) {
+                if (!ClusterExpr(name.GetBlock1().GetRule_cluster_expr1(), false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            // OR REPLACE
+            const bool replaceIfExists = node.HasBlock2();
+            if (replaceIfExists) {
+                Y_DEBUG_ABORT_UNLESS(
+                    IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock2().GetToken1().GetId(), OR) &&
+                    IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock2().GetToken2().GetId(), REPLACE)
+                );
+            }
+
+            // IF NOT EXISTS
+            const bool existingOk = node.HasBlock5();
+            if (existingOk) {
+                Y_DEBUG_ABORT_UNLESS(
+                    IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock5().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock5().GetToken2().GetId(), NOT) &&
+                    IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock5().GetToken3().GetId(), EXISTS)
+                );
+            }
+
+            // WITH (k=v,...)
+            std::map<TString, TDeferredAtom> features;
+            if (node.HasBlock7()) {
+                const TObjectFeaturesOptions opts = {.KeysToLower = true, .UniqueKeys = true};
+                if (!ParseObjectFeatures(features, node.GetBlock7().GetRule_create_object_features1().GetRule_object_features2(), opts)) {
+                    return false;
+                }
+            }
+
+            // AS into_table_stmt
+            if (!ParseStreamingQuery(features, node.GetRule_streaming_query_definition8().GetRule_into_table_stmt2())) {
+                return false;
+            }
+
+            const TString& objectId = Id(name.GetRule_id_or_at2(), *this).second;
+            const TString& objectPath = BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId);
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), objectPath, "STREAMING_QUERY", existingOk, replaceIfExists, std::move(features), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore64: {
+            // alter_streaming_query_stmt: ALTER STREAMING QUERY (IF EXISTS)? name alter_streaming_query_action
+            const auto& node = core.GetAlt_sql_stmt_core64().GetRule_alter_streaming_query_stmt1();
+
+            // name
+            const auto& name = node.GetRule_object_ref5();
+            TObjectOperatorContext context(Ctx_.Scoped);
+            if (name.HasBlock1()) {
+                if (!ClusterExpr(name.GetBlock1().GetRule_cluster_expr1(), false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            // IF EXISTS
+            const bool missingOk = node.HasBlock4();
+            if (missingOk) {
+                Y_DEBUG_ABORT_UNLESS(
+                    IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock4().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock4().GetToken2().GetId(), EXISTS)
+                );
+            }
+
+            // alter_streaming_query_action
+            std::map<TString, TDeferredAtom> features;
+            if (!ParseAlterStreamingQuery(features, node.GetRule_alter_streaming_query_action6())) {
+                return false;
+            }
+
+            const TString& objectId = Id(name.GetRule_id_or_at2(), *this).second;
+            const TString& objectPath = BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId);
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectPath, "STREAMING_QUERY", missingOk, std::move(features), {}, context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore65: {
+            // drop_streaming_query_stmt: DROP STREAMING QUERY (IF EXISTS)? name;
+            const auto& node = core.GetAlt_sql_stmt_core65().GetRule_drop_streaming_query_stmt1();
+
+            // name
+            const auto& name = node.GetRule_object_ref5();
+            TObjectOperatorContext context(Ctx_.Scoped);
+            if (name.HasBlock1()) {
+                if (!ClusterExpr(name.GetBlock1().GetRule_cluster_expr1(), false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            // IF EXISTS
+            const bool missingOk = node.HasBlock4();
+            if (missingOk) {
+                Y_DEBUG_ABORT_UNLESS(
+                    IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock4().GetToken1().GetId(), IF) &&
+                    IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock4().GetToken2().GetId(), EXISTS)
+                );
+            }
+
+            const TString& objectId = Id(name.GetRule_id_or_at2(), *this).second;
+            const TString& objectPath = BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId);
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), objectPath, "STREAMING_QUERY", missingOk, {}, context));
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:

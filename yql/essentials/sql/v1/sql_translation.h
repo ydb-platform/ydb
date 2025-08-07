@@ -229,14 +229,22 @@ protected:
     bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
     bool IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const;
 
-    bool AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature);
+    struct TObjectFeaturesOptions {
+        bool KeysToLower = false;
+        bool UniqueKeys = false;
+        THashSet<TString> KeysBlackList = {};
+    };
+    bool StoreObjectFeatureEntry(std::map<TString, TDeferredAtom>& result, const TString& key, TDeferredAtom&& value, const TObjectFeaturesOptions& opts);
+    bool AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature, const TObjectFeaturesOptions& opts);
     bool BindParameterClause(const TRule_bind_parameter& node, TDeferredAtom& result);
     bool ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result);
-    bool ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features);
+    bool ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features, const TObjectFeaturesOptions& opts);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_external_data_source_action& alterActions);
     bool ParseViewOptions(std::map<TString, TDeferredAtom>& features, const TRule_with_table_settings& options);
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);
+    bool ParseStreamingQuery(std::map<TString, TDeferredAtom>& features, const TRule_into_table_stmt& query);
+    bool ParseAlterStreamingQuery(std::map<TString, TDeferredAtom>& features, const TRule_alter_streaming_query_action& alter);
     bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction);
     bool ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);

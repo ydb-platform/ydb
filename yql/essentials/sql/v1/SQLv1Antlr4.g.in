@@ -80,6 +80,9 @@ sql_stmt_core:
   | drop_transfer_stmt
   | alter_database_stmt
   | show_create_table_stmt
+  | create_streaming_query_stmt
+  | alter_streaming_query_stmt
+  | drop_streaming_query_stmt
 ;
 
 expr:
@@ -611,6 +614,22 @@ alter_external_data_source_action:
 ;
 
 drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
+
+create_streaming_query_stmt: CREATE (OR REPLACE)? STREAMING QUERY (IF NOT EXISTS)? object_ref
+    create_object_features?
+    streaming_query_definition
+;
+
+alter_streaming_query_stmt: ALTER STREAMING QUERY (IF EXISTS)? object_ref alter_streaming_query_action;
+
+alter_streaming_query_action:
+    alter_object_features
+  | alter_object_features? streaming_query_definition
+;
+
+streaming_query_definition: AS into_table_stmt;
+
+drop_streaming_query_stmt: DROP STREAMING QUERY (IF EXISTS)? object_ref;
 
 create_view_stmt: CREATE VIEW (IF NOT EXISTS)? object_ref
     create_object_features?
@@ -1508,6 +1527,7 @@ keyword_as_compat:
   | SEQUENCE
   | SOURCE
   | START
+  | STREAMING
   | SUBQUERY
   | SUBSET
   | SYMBOLS
@@ -1737,6 +1757,7 @@ keyword_compat: (
   | SEQUENCE
   | SOURCE
   | START
+  | STREAMING
   | SUBQUERY
   | SUBSET
   | SYMBOLS
@@ -2117,6 +2138,7 @@ SEQUENCE: S E Q U E N C E;
 SOURCE: S O U R C E;
 START: S T A R T;
 STREAM: S T R E A M;
+STREAMING: S T R E A M I N G;
 STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;
 SUBSET: S U B S E T;

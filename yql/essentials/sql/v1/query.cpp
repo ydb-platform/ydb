@@ -2456,9 +2456,9 @@ TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, cons
     return new TCreateObject(pos, objectId, typeId, existingOk, replaceIfExists, std::move(features), std::set<TString>(), context);
 }
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-    std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
+    bool missingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
 {
-    return new TAlterObject(pos, secretId, typeId, false, false, std::move(features), std::move(featuresToReset), context);
+    return new TAlterObject(pos, secretId, typeId, missingOk, false, std::move(features), std::move(featuresToReset), context);
 }
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
     bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context)

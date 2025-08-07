@@ -50,9 +50,9 @@ struct TTokenCollector {
     TStringBuilder Tokens;
 };
 
-TString CollectTokens(const TRule_select_stmt& selectStatement) {
+TString CollectTokens(const NProtoBuf::Message& statement) {
     TTokenCollector tokenCollector;
-    VisitAllFields(selectStatement, tokenCollector);
+    VisitAllFields(statement, tokenCollector);
     return tokenCollector.Tokens;
 }
 
@@ -5013,39 +5013,81 @@ bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value&
     return true;
 }
 
-bool TSqlTranslation::AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature) {
-    if (feature.has_alt_object_feature1()) {
-        auto& kv = feature.GetAlt_object_feature1().GetRule_object_feature_kv1();
-        const TString& key = Id(kv.GetRule_an_id_or_type1(), *this);
-        auto& ruleValue = kv.GetRule_object_feature_value3();
-        TDeferredAtom value;
-        if (!ObjectFeatureValueClause(ruleValue, value)) {
+bool TSqlTranslation::StoreObjectFeatureEntry(std::map<TString, TDeferredAtom>& result, const TString& key, TDeferredAtom&& value, const TObjectFeaturesOptions& opts) {
+    const TString& storeKey = opts.KeysToLower ? to_lower(key) : key;
+
+    if (opts.KeysBlackList.contains(storeKey)) {
+        Error() << "Parameter " << to_upper(storeKey) << " is not allowed to set";
+        return false;
+    }
+
+    if (opts.UniqueKeys) {
+        if (!result.emplace(storeKey, std::move(value)).second) {
+            Error() << "Found duplicated parameter: " << to_upper(storeKey);
             return false;
         }
-        result[key] = value;
-    } else if (feature.has_alt_object_feature2()) {
-        result[Id(feature.GetAlt_object_feature2().GetRule_object_feature_flag1().GetRule_an_id_or_type1(), *this)] = TDeferredAtom();
+    } else {
+        result[storeKey] = std::move(value);
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature, const TObjectFeaturesOptions& opts) {
+    switch (feature.GetAltCase()) {
+        case NSQLv1Generated::TRule_object_feature::kAltObjectFeature1: {
+            const auto& kv = feature.GetAlt_object_feature1().GetRule_object_feature_kv1();
+            const TString& key = Id(kv.GetRule_an_id_or_type1(), *this);
+            const auto& ruleValue = kv.GetRule_object_feature_value3();
+            TDeferredAtom value;
+            if (!ObjectFeatureValueClause(ruleValue, value)) {
+                return false;
+            }
+            if (!StoreObjectFeatureEntry(result, key, std::move(value), opts)) {
+                return false;
+            }
+            break;
+        }
+        case NSQLv1Generated::TRule_object_feature::kAltObjectFeature2: {
+            const auto& key = Id(feature.GetAlt_object_feature2().GetRule_object_feature_flag1().GetRule_an_id_or_type1(), *this);
+            if (!StoreObjectFeatureEntry(result, key, TDeferredAtom(), opts)) {
+                return false;
+            }
+            break;
+        }
+        case NSQLv1Generated::TRule_object_feature::ALT_NOT_SET: {
+            Y_ABORT("You should change implementation according to grammar changes");
+            return false;
+        }
     }
     return true;
 }
 
-bool TSqlTranslation::ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features) {
-    if (features.has_alt_object_features1()) {
-        if (!AddObjectFeature(result, features.alt_object_features1().GetRule_object_feature1())) {
-            return false;
-        }
-
-    } else if (features.has_alt_object_features2()) {
-        if (!AddObjectFeature(result, features.alt_object_features2().GetRule_object_feature2())) {
-            return false;
-        }
-        for (auto&& i : features.alt_object_features2().GetBlock3()) {
-            if (!AddObjectFeature(result, i.GetRule_object_feature2())) {
+bool TSqlTranslation::ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features, const TObjectFeaturesOptions& opts) {
+    switch (features.GetAltCase()) {
+        case NSQLv1Generated::TRule_object_features::kAltObjectFeatures1: {
+            const auto& node = features.alt_object_features1();
+            if (!AddObjectFeature(result, node.GetRule_object_feature1(), opts)) {
                 return false;
             }
+            break;
         }
-    } else {
-        return false;
+        case NSQLv1Generated::TRule_object_features::kAltObjectFeatures2: {
+            const auto& node = features.alt_object_features2();
+            if (!AddObjectFeature(result, node.GetRule_object_feature2(), opts)) {
+                return false;
+            }
+            for (const auto& i : node.GetBlock3()) {
+                if (!AddObjectFeature(result, i.GetRule_object_feature2(), opts)) {
+                    return false;
+                }
+            }
+            break;
+        }
+        case NSQLv1Generated::TRule_object_features::ALT_NOT_SET: {
+            Y_ABORT("You should change implementation according to grammar changes");
+            return false;
+        }
     }
     return true;
 }
@@ -5216,6 +5258,49 @@ bool TSqlTranslation::ParseViewQuery(
     features["query_ast"] = { viewSelect, Ctx_ };
 
     return true;
+}
+
+bool TSqlTranslation::ParseStreamingQuery(std::map<TString, TDeferredAtom>& features, const TRule_into_table_stmt& query) {
+    TStringBuilder queryText;
+    if (!BuildContextRecreationQuery(Ctx_, queryText)) {
+        return false;
+    }
+
+    queryText << CollectTokens(query);
+
+    if (!features.emplace("query_text", TDeferredAtom(Ctx_.Pos(), queryText)).second) {
+        Error() << "Parameter QUERY_TEXT is not allowed to set";
+        return false;
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::ParseAlterStreamingQuery(std::map<TString, TDeferredAtom>& features, const TRule_alter_streaming_query_action& alter) {
+    const TObjectFeaturesOptions opts = {
+        .KeysToLower = true,
+        .UniqueKeys = true,
+        .KeysBlackList = {"query_text"}
+    };
+    switch (alter.GetAltCase()) {
+        case TRule_alter_streaming_query_action::kAltAlterStreamingQueryAction1: {
+            const auto& node = alter.GetAlt_alter_streaming_query_action1();
+            return ParseObjectFeatures(features, node.GetRule_alter_object_features1().GetRule_object_features2(), opts);
+        }
+        case TRule_alter_streaming_query_action::kAltAlterStreamingQueryAction2: {
+            const auto& node = alter.GetAlt_alter_streaming_query_action2();
+            if (node.HasBlock1()) {
+                if (!ParseObjectFeatures(features, node.GetBlock1().GetRule_alter_object_features1().GetRule_object_features2(), opts)) {
+                    return false;
+                }
+            }
+            return ParseStreamingQuery(features, node.GetRule_streaming_query_definition2().GetRule_into_table_stmt2());
+        }
+        case TRule_alter_streaming_query_action::ALT_NOT_SET: {
+            Y_ABORT("You should change implementation according to grammar changes");
+            return false;
+        }
+    }
 }
 
 namespace {

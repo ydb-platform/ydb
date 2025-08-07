@@ -34,7 +34,7 @@ class TJsonCluster : public TViewerPipeClient {
         TNodeId NodeId;
         TString DataCenter;
         TSubDomainKey SubDomainKey;
-        std::optional<ui32> PileId;
+        std::optional<ui32> PileNum;
         bool Static = false;
         bool Connected = false;
         bool Disconnected = false;
@@ -259,13 +259,13 @@ private:
                     NodeCache.emplace(node.NodeInfo.NodeId, &node);
                 }
                 if (NodesInfoResponse->Get()->PileMap) {
-                    for (ui32 pileId = 0; pileId < NodesInfoResponse->Get()->PileMap->size(); ++pileId) {
-                        for (ui32 nodeId : (*NodesInfoResponse->Get()->PileMap)[pileId]) {
+                    for (ui32 pileNum = 0; pileNum < NodesInfoResponse->Get()->PileMap->size(); ++pileNum) {
+                        for (ui32 nodeId : (*NodesInfoResponse->Get()->PileMap)[pileNum]) {
                             auto itNode = NodeCache.find(nodeId);
                             if (itNode == NodeCache.end()) {
                                 continue;
                             }
-                            itNode->second->PileId = pileId;
+                            itNode->second->PileNum = pileNum;
                         }
                     }
                 }
@@ -366,15 +366,17 @@ private:
                         pbBridgePileInfo.SetIsBeingPromoted(pile.IsBeingPromoted);
                     }
                     for (const auto& node : NodeData) {
-                        if (node.PileId) {
-                            pileNodes[*node.PileId]++;
+                        if (node.PileNum) {
+                            pileNodes[*node.PileNum]++;
                         }
                     }
+                    ui32 pileNum = 0;
                     for (auto& pile : *pbBridgeInfo.MutablePiles()) {
-                        auto it = pileNodes.find(pile.GetPileId());
+                        auto it = pileNodes.find(pileNum);
                         if (it != pileNodes.end()) {
                             pile.SetNodes(it->second);
                         }
+                        ++pileNum;
                     }
                 } else {
                     AddProblem("empty-node-warden-bridge-info");

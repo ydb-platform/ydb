@@ -100,10 +100,10 @@ public:
         return ProcessGuard->GetProcessId();
     }
     ui64 GetMemoryScopeId() const {
-        return ScopeGuard->GetProcessId();
+        return ScopeGuard->GetScopeId();
     }
     ui64 GetMemoryGroupId() const {
-        return GroupGuard->GetProcessId();
+        return GroupGuard->GetGroupId();
     }
 };
 

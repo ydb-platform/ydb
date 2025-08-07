@@ -2513,6 +2513,7 @@ message TAppConfig {
     optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
     optional TGeneralCacheConfig PortionsMetadataCache = 110;
     optional TGeneralCacheConfig ColumnDataCache = 111;
+    optional TGroupedMemoryLimiterConfig DeduplicationGroupedMemoryLimiterConfig = 112;
 }
 
 message TYdbVersion {

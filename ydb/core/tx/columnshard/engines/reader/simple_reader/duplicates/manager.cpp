@@ -69,7 +69,7 @@ private:
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         AFL_VERIFY(Callback);
-        Callback->OnError(errorMessage);
+        Callback->OnError(TStringBuilder() << "cannot allocate memory: " << errorMessage);
     }
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {

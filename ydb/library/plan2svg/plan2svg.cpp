@@ -727,6 +727,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     info = builder;
+                    if (auto* pushdownNode = subNode.GetValueByPath("Pushdown")) {
+                        externalOperator = pushdownNode->GetStringSafe() == "True";
+                    }
                 } else if (name == "TableFullScan" || name == "TablePointLookup" || name == "TableRangeScan") {
                     TStringBuilder builder;
                     if (auto* tableNode = subNode.GetValueByPath("Table")) {

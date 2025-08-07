@@ -31,7 +31,7 @@ private:
 private:
     inline static TAtomicCounter NextRequestId = 0;
 
-    const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
+    const std::shared_ptr<ISnapshotSchema> FetchingSchema;
     const std::shared_ptr<arrow::Schema> PKSchema;
     std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
@@ -57,6 +57,8 @@ private:
             });
         return portions;
     }
+
+    static std::shared_ptr<ISnapshotSchema> MakeFetchingSchema(const TSpecialReadContext& context);
 
     void BuildFilterForSlice(const TPortionsSlice& slice, const std::shared_ptr<TInternalFilterConstructor>& constructor,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard,
@@ -85,19 +87,6 @@ private:
 
     ui64 MakeRequestId() {
         return NextRequestId.Inc();
-    }
-
-    std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const {
-        std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
-        {
-            for (const auto& columnId : PKColumns->GetColumnIds()) {
-                fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
-            }
-            for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
-                fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
-            }
-        }
-        return fieldsByColumn;
     }
 
 public:

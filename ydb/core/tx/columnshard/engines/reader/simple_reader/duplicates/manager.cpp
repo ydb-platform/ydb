@@ -16,7 +16,7 @@ private:
     using TAddress = NGeneralCache::TGlobalColumnAddress;
 
     std::shared_ptr<TInternalFilterConstructor> Context;
-    std::map<ui32, std::shared_ptr<arrow::Field>> Schema;
+    std::shared_ptr<ISnapshotSchema> Schema;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
 private:
@@ -39,7 +39,7 @@ private:
     }
 
 public:
-    TColumnFetchingCallback(std::shared_ptr<TInternalFilterConstructor>&& context, std::map<ui32, std::shared_ptr<arrow::Field>>&& schema,
+    TColumnFetchingCallback(std::shared_ptr<TInternalFilterConstructor>&& context, const std::shared_ptr<ISnapshotSchema>& schema,
         std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard)
         : Context(std::move(context))
         , Schema(schema)
@@ -62,7 +62,7 @@ class TColumnDataAllocation: public NGroupedMemoryManager::IAllocation {
 private:
     std::shared_ptr<TInternalFilterConstructor> Context;
     THashSet<TPortionAddress> Portions;
-    std::map<ui32, std::shared_ptr<arrow::Field>> Schema;
+    std::shared_ptr<ISnapshotSchema> Schema;
     std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
 private:
@@ -73,19 +73,16 @@ private:
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         AFL_VERIFY(Context);
-        std::set<ui32> columnIds;
-        for (const auto& [columnId, _] : Schema) {
-            columnIds.insert(columnId);
-        }
-        ColumnDataManager->AskColumnData(NBlobOperations::EConsumer::DUPLICATE_FILTERING, Portions, columnIds,
+        ColumnDataManager->AskColumnData(NBlobOperations::EConsumer::DUPLICATE_FILTERING, Portions,
+            { Schema->GetColumnIds().begin(), Schema->GetColumnIds().end() },
             std::make_shared<TColumnFetchingCallback>(std::move(Context), std::move(Schema), std::move(guard)));
         return true;
     }
 
 public:
     TColumnDataAllocation(const std::shared_ptr<TInternalFilterConstructor>& context, const THashSet<TPortionAddress>& portions,
-        const std::map<ui32, std::shared_ptr<arrow::Field>>& schema,
-        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const ui64 mem)
+        const std::shared_ptr<ISnapshotSchema>& schema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
+        const ui64 mem)
         : NGroupedMemoryManager::IAllocation(mem)
         , Context(context)
         , Portions(portions)
@@ -100,7 +97,7 @@ class TColumnDataAccessorFetching: public IDataAccessorRequestsSubscriber {
 private:
     std::shared_ptr<TInternalFilterConstructor> Context;
     THashSet<TPortionAddress> Portions;
-    std::map<ui32, std::shared_ptr<arrow::Field>> Schema;
+    std::shared_ptr<ISnapshotSchema> Schema;
     std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
 private:
@@ -113,11 +110,7 @@ private:
 
         ui64 mem = 0;
         for (const auto& accessor : result.ExtractPortionsVector()) {
-            std::set<ui32> columnIds;
-            for (const auto& [columnId, _] : Schema) {
-                columnIds.insert(columnId);
-            }
-            mem += accessor->GetColumnRawBytes(columnIds, false);
+            mem += accessor->GetColumnRawBytes({ Schema->GetColumnIds().begin(), Schema->GetColumnIds().end() }, false);
         }
 
         NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(Context->GetMemoryProcessId(), Context->GetMemoryScopeId(),
@@ -130,8 +123,7 @@ private:
 
 public:
     TColumnDataAccessorFetching(const std::shared_ptr<TInternalFilterConstructor>& context, const THashSet<TPortionAddress>& portions,
-        const std::map<ui32, std::shared_ptr<arrow::Field>>& schema,
-        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager)
+        const std::shared_ptr<ISnapshotSchema>& schema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager)
         : Context(context)
         , Portions(portions)
         , Schema(schema)
@@ -145,9 +137,19 @@ public:
 #define LOCAL_LOG_TRACE \
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
 
+std::shared_ptr<ISnapshotSchema> TDuplicateManager::MakeFetchingSchema(const TSpecialReadContext& context) {
+    const auto& schema = context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetLastSchema();
+    std::set<ui32> columnIds = schema->GetPkColumnsIds();
+    for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
+        columnIds.emplace(columnId);
+    }
+    return std::make_shared<TFilteredSnapshotSchema>(
+        context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetLastSchema(), columnIds);
+}
+
 TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<NSimple::TSourceConstructor>& portions)
     : TActor(&TDuplicateManager::StateMain)
-    , PKColumns(context.GetPKColumns())
+    , FetchingSchema(MakeFetchingSchema(context))
     , PKSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetPrimaryKey())
     , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
     , Intervals(MakeIntervalTree(portions))
@@ -190,7 +192,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
 
     std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>(NBlobOperations::EConsumer::DUPLICATE_FILTERING);
     request->RegisterSubscriber(std::make_shared<TColumnDataAccessorFetching>(
-        std::move(constructor), std::move(portionAddresses), GetFetchingColumns(), ColumnDataManager));
+        std::move(constructor), std::move(portionAddresses), FetchingSchema, ColumnDataManager));
     for (auto&& source : sourcesToFetch) {
         request->AddPortion(source);
     }

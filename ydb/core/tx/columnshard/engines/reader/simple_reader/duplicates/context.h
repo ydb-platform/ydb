@@ -37,7 +37,7 @@ public:
         const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, const std::shared_ptr<arrow::Schema>& pkSchema);
 
     ~TInternalFilterConstructor() {
-        AFL_VERIFY(IsDone);
+        AFL_VERIFY(IsDone || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()));
     }
 
     ui64 GetMemoryProcessId() const {

@@ -99,13 +99,13 @@ public:
 
 class TDuplicateSourceCacheResult {
 private:
-    std::map<ui32, std::shared_ptr<arrow::Field>> FieldByColumnId;
+    std::shared_ptr<ISnapshotSchema> Schema;
     using TColumnData = THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
     TColumnData DataByAddress;
 
 public:
-    TDuplicateSourceCacheResult(TColumnData&& data, const std::map<ui32, std::shared_ptr<arrow::Field>>& fieldByColumnId)
-        : FieldByColumnId(fieldByColumnId)
+    TDuplicateSourceCacheResult(TColumnData&& data, const std::shared_ptr<ISnapshotSchema>& fieldByColumnId)
+        : Schema(fieldByColumnId)
         , DataByAddress(std::move(data))
     {
     }
@@ -113,8 +113,8 @@ public:
     THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> ExtractDataByPortion() {
         THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> dataByPortion;
         std::vector<std::shared_ptr<arrow::Field>> fields;
-        for (const auto& [_, field] : FieldByColumnId) {
-            fields.emplace_back(field);
+        for (const auto& columnId : Schema->GetColumnIds()) {
+            fields.emplace_back(Schema->GetFieldByColumnIdVerified(columnId));
         }
 
         THashMap<ui64, THashMap<ui32, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>> columnsByPortion;
@@ -124,7 +124,7 @@ public:
 
         for (auto& [portion, columns] : columnsByPortion) {
             std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> sortedColumns;
-            for (const auto& [columnId, _] : FieldByColumnId) {
+            for (const auto columnId : Schema->GetColumnIds()) {
                 auto column = columns.FindPtr(columnId);
                 AFL_VERIFY(column);
                 sortedColumns.emplace_back(*column);

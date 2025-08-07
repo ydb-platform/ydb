@@ -34,7 +34,7 @@ TCommandImport::TCommandImport()
 
 /// S3
 TCommandImportFromS3::TCommandImportFromS3()
-    : TYdbOperationCommand("s3", {}, "Create import from S3")
+    : TYdbOperationCommand("s3", {}, "Create import from S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/import-s3")
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "S3 object key prefix", true}},
@@ -59,12 +59,12 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("bucket", "S3 bucket")
         .Required().RequiredArgument("BUCKET").StoreResult(&AwsBucket);
 
-    config.Opts->AddLongOption("access-key", "Access key id")
+    config.Opts->AddLongOption("access-key", "AWS access key id")
         .Env("AWS_ACCESS_KEY_ID", false)
         .ManualDefaultValueDescription(TStringBuilder() << colors.Cyan() << "aws_access_key_id" << colors.OldColor() << " key in AWS credentials file \"" << AwsCredentialsFile << "\"")
         .RequiredArgument("STRING");
 
-    config.Opts->AddLongOption("secret-key", "Secret key")
+    config.Opts->AddLongOption("secret-key", "AWS secret key")
         .Env("AWS_SECRET_ACCESS_KEY", false)
         .ManualDefaultValueDescription(TStringBuilder() << colors.Cyan() << "aws_secret_access_key" << colors.OldColor() << " key in AWS credentials file \"" << AwsCredentialsFile << "\"")
         .RequiredArgument("STRING");
@@ -77,10 +77,10 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("source-prefix", "Source prefix for export in the bucket")
         .RequiredArgument("PREFIX").StoreResult(&CommonSourcePrefix);
 
-    config.Opts->AddLongOption("destination-path", "Destination folder for the objects being imported")
+    config.Opts->AddLongOption("destination-path", "Destination folder in database for the objects being imported")
         .RequiredArgument("PATH").StoreResult(&CommonDestinationPath);
 
-    config.Opts->AddLongOption("include", "Schema objects to be included in the import. Directories are traversed recursively")
+    config.Opts->AddLongOption("include", "Schema objects to be included in the import. Directories are traversed recursively. The option can be used multiple times")
         .RequiredArgument("PATH").AppendTo(&IncludePaths);
 
     config.Opts->AddLongOption("item", TItem::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))

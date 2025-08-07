@@ -211,7 +211,7 @@ int TCommandExportToYt::Run(TConfig& config) {
 
 /// S3
 TCommandExportToS3::TCommandExportToS3()
-    : TYdbOperationCommand("s3", {}, "Create export to S3")
+    : TYdbOperationCommand("s3", {}, "Create export to S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/export-s3")
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
@@ -260,12 +260,12 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("bucket", "S3 bucket")
         .Required().RequiredArgument("BUCKET").StoreResult(&AwsBucket);
 
-    config.Opts->AddLongOption("access-key", "Access key id")
+    config.Opts->AddLongOption("access-key", "AWS access key id")
         .Env("AWS_ACCESS_KEY_ID", false)
         .ManualDefaultValueDescription(TStringBuilder() << colors.Cyan() << "aws_access_key_id" << colors.OldColor() << " key in AWS credentials file \"" << AwsCredentialsFile << "\"")
         .RequiredArgument("STRING");
 
-    config.Opts->AddLongOption("secret-key", "Secret key")
+    config.Opts->AddLongOption("secret-key", "AWS secret key")
         .Env("AWS_SECRET_ACCESS_KEY", false)
         .ManualDefaultValueDescription(TStringBuilder() << colors.Cyan() << "aws_secret_access_key" << colors.OldColor() << " key in AWS credentials file \"" << AwsCredentialsFile << "\"")
         .RequiredArgument("STRING");
@@ -281,7 +281,7 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("root-path", "Root directory in database for the objects being exported, database root if not provided")
         .RequiredArgument("PATH").StoreResult(&CommonSourcePath);
 
-    config.Opts->AddLongOption("include", "Schema objects to be included in the export. Directories are traversed recursively")
+    config.Opts->AddLongOption("include", "Schema objects to be included in the export. Directories are traversed recursively. The option can be used multiple times")
         .RequiredArgument("PATH").Handler([this](const TString& arg) {
             TItem item;
             item.Source = arg;

@@ -1340,9 +1340,6 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.AlterTransfer(TStringBuilder() << "subdir/" << testCase.TransferName,
             MainTestCase::AlterTransferSettings::WithBatching(TDuration::Seconds(1), 1));
-
-        testCase.DropTopic();
-        testCase.DropTable();
     }
 
 }

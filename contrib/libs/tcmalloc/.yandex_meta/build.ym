@@ -26,7 +26,6 @@ tcmalloc/internal/ya.make
 SUBSCRIBER(
     g:cpp-contrib
     ayles
-    mikailbag
 )
 
 SRCS(

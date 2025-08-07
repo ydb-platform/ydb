@@ -32,11 +32,37 @@ $lambda = ($msg) -> {
 | `_producer_id`      | `String`       | Идентификатор [писателя](../../../concepts/glossary.md#producer) |
 | `_seq_no`           | `Uint64`       | Порядковый номер сообщения    |
 
- Если lambda-функция содержит сложную логику преобразования, то ее можно выделить в отдельную lambda-функцию, что упростит тестирование.
+Для тестирования lambda-функции можно в качестве сообщения топика передавать структуру с такими же полями.
+
+Пример
+
+```yql
+$lambda = ($msg) -> {
+  return [
+    <|
+      offset: $msg._offset,
+      data: $msg._data
+    |>
+  ];
+};
+
+$msg = <|
+  _data: "value",
+  _offset: CAST(1 AS Uint64),
+  _partition: CAST(2 AS Uint32),
+  _producer_id: "producer",
+  _seq_no: CAST(3 AS Uint64)
+|>;
+
+SELECT $lambda($msg);
+```
+
+Если lambda-функция содержит сложную логику преобразования, то ее можно выделить в отдельную lambda-функцию, что упростит тестирование.
 
 ```yql
 $extract_value = ($data) -> {
-  -- сложные вычиления
+  -- сложные преобразования
+  return $data;
 };
 
 $lambda = ($msg) -> {

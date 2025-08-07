@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/threading/future/core/future.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NFmr {
 
@@ -10,11 +11,17 @@ public:
 
     virtual ~ITableDataService() = default;
 
-    virtual NThreading::TFuture<void> Put(const TString& id, const TString& data) = 0;
+    // Table data service key should consist of group (prefix) and chunkId.
 
-    virtual NThreading::TFuture<TMaybe<TString>> Get(const TString& id) = 0;
+    virtual NThreading::TFuture<void> Put(const TString& group, const TString& chunkId, const TString& value) = 0;
 
-    virtual NThreading::TFuture<void> Delete(const TString& id) = 0;
+    virtual NThreading::TFuture<TMaybe<TString>> Get(const TString& group, const TString& chunkId) const = 0;
+
+    virtual NThreading::TFuture<void> Delete(const TString& group, const TString& chunkId) = 0;
+
+    virtual NThreading::TFuture<void> RegisterDeletion(const std::vector<TString>& groupsToDelete) = 0;
+
+    virtual NThreading::TFuture<void> Clear() = 0;
 };
 
 } // namespace NYql::NFmr

@@ -3,7 +3,6 @@ syntax = "proto3";
 package NKikimrClient;
 
 import "ydb/core/protos/msgbus.proto";
-import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/msgbus_pq.proto";
 
 service TGRpcServer {

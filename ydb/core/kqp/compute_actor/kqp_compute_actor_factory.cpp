@@ -120,12 +120,21 @@ public:
         memoryLimits.MinMemAllocSize = MinMemAllocSize.load();
         memoryLimits.MinMemFreeSize = MinMemFreeSize.load();
         memoryLimits.ArrayBufferMinFillPercentage = args.Task->GetArrayBufferMinFillPercentage();
+        if (args.Task->HasBufferPageAllocSize()) {
+            memoryLimits.BufferPageAllocSize = args.Task->GetBufferPageAllocSize();
+        }
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
         NRm::TKqpResourcesRequest resourcesRequest;
         resourcesRequest.MemoryPool = args.MemoryPool;
         resourcesRequest.ExecutionUnits = 1;
-        resourcesRequest.Memory =  memoryLimits.MkqlLightProgramMemoryLimit;
+        resourcesRequest.Memory = memoryLimits.MkqlLightProgramMemoryLimit;
+
+        NScheduler::TSchedulableActorHelper::TOptions schedulableOptions;
+        if (args.Query) {
+            schedulableOptions.SchedulableTask = MakeHolder<NScheduler::TSchedulableTask>(args.Query);
+        }
+        schedulableOptions.IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID;
 
         TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);
 
@@ -214,12 +223,12 @@ public:
 
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
             YQL_ENSURE(args.ComputesByStages);
-            auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
+            auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta);
             IActor* computeActor = CreateKqpScanComputeActor(
                 args.ExecuterId, args.TxId,
                 args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
-                std::move(args.SchedulingOptions), args.BlockTrackingMode);
+                std::move(schedulableOptions), args.BlockTrackingMode);
             TActorId result = TlsActivationContext->Register(computeActor);
             info.MutableActorIds().emplace_back(result);
             return result;
@@ -230,7 +239,7 @@ public:
             }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(args.ExecuterId, args.TxId, args.Task, AsyncIoFactory,
                 runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings,
-                std::move(args.SchedulingOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
+                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);
         }
@@ -245,4 +254,4 @@ std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfi
     return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, federatedQuerySetup);
 }
 
-}
+} // namespace NKikimr::NKqp::NComputeActor

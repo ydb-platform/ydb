@@ -109,6 +109,11 @@
             "uri": "file://test.test_ImplicitFromRes_/results.txt"
         }
     ],
+    "test.test[InvalidMapKey]": [
+        {
+            "uri": "file://test.test_InvalidMapKey_/extracted"
+        }
+    ],
     "test.test[IsType]": [
         {
             "uri": "file://test.test_IsType_/results.txt"
@@ -137,6 +142,11 @@
     "test.test[Lookup]": [
         {
             "uri": "file://test.test_Lookup_/results.txt"
+        }
+    ],
+    "test.test[MapKeyEscape]": [
+        {
+            "uri": "file://test.test_MapKeyEscape_/results.txt"
         }
     ],
     "test.test[NegativeArrayIndex]": [

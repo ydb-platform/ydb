@@ -28,6 +28,9 @@ const std::string AlienCellSynchronizerUserName("alien_cell_synchronizer");
 const std::string QueueAgentUserName("queue_agent");
 const std::string YqlAgentUserName("yql_agent");
 const std::string TabletBalancerUserName("tablet_balancer");
+const std::string PermissionCacheUserName("yt-permission-cache");
+const std::string ReplicatedTableTrackerUserName("yt-replicated-table-tracker");
+const std::string ChunkReplicaCacheUserName("yt-chunk-replica-cache");
 
 const std::string EveryoneGroupName("everyone");
 const std::string UsersGroupName("users");

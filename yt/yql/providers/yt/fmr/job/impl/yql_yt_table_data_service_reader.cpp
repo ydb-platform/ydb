@@ -1,4 +1,5 @@
 #include "yql_yt_table_data_service_reader.h"
+#include <library/cpp/threading/future/wait/wait.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
@@ -9,16 +10,23 @@ TFmrTableDataServiceReader::TFmrTableDataServiceReader(
     const TString& tableId,
     const std::vector<TTableRange>& tableRanges,
     ITableDataService::TPtr tableDataService,
+    const std::vector<TString>& neededColumns,
+    const TString& columnGroupSpec,
     const TFmrReaderSettings& settings
 )
     : TableId_(tableId),
     TableRanges_(tableRanges),
     TableDataService_(tableDataService),
-    ReadAheadChunks_(settings.ReadAheadChunks)
+    ReadAheadChunks_(settings.ReadAheadChunks),
+    NeededColumns_(neededColumns),
+    ColumnGroupSpec_(GetColumnGroupsFromSpec(columnGroupSpec))
 {
     SetMinChunkInNewRange();
     ReadAhead();
+
 }
+
+// TODO  - написать логику с NeededColumns
 
 size_t TFmrTableDataServiceReader::DoRead(void* buf, size_t len) {
     ui64 totalRead = 0;
@@ -67,14 +75,46 @@ void TFmrTableDataServiceReader::ReadAhead() {
         }
         auto currentPartId = TableRanges_[CurrentRange_].PartId;
         if (CurrentChunk_ < TableRanges_[CurrentRange_].MaxChunk) {
-            auto key = GetTableDataServiceKey(TableId_, currentPartId, CurrentChunk_);
-            PendingChunks_.push({.Data=TableDataService_->Get(key), .Meta={TableId_, currentPartId, CurrentChunk_}});
+            auto tableDataServiceGetFuture = GetTableDataServiceValueFuture(currentPartId, CurrentChunk_);
+            PendingChunks_.push({.Data=tableDataServiceGetFuture, .Meta={TableId_, currentPartId, CurrentChunk_}});
             CurrentChunk_++;
         } else {
             CurrentRange_++;
             SetMinChunkInNewRange();
         }
     }
+}
+
+NThreading::TFuture<TMaybe<TString>> TFmrTableDataServiceReader::GetTableDataServiceValueFuture(const TString& partId, ui64 chunkNum) {
+    const auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, partId);
+    if (ColumnGroupSpec_.IsEmpty()) {
+        // Column group spec is not set, so table data service has single value with all columns.
+        auto tableDataServiceChunkId = GetTableDataServiceChunkId(chunkNum, TString());
+        return TableDataService_->Get(tableDataServiceGroup, tableDataServiceChunkId);
+    }
+
+    std::vector<NThreading::TFuture<TMaybe<TString>>> getTableDataServiceColumnGroupValueFutures;
+    for (auto& [groupName, cols]: ColumnGroupSpec_.ColumnGroups) {
+        auto tableDataServiceChunkId = GetTableDataServiceChunkId(chunkNum, groupName);
+        getTableDataServiceColumnGroupValueFutures.emplace_back(TableDataService_->Get(tableDataServiceGroup, tableDataServiceChunkId));
+    }
+
+    if (!ColumnGroupSpec_.DefaultColumnGroupName.empty()) {
+        getTableDataServiceColumnGroupValueFutures.emplace_back(TableDataService_->Get(tableDataServiceGroup, GetTableDataServiceChunkId(chunkNum, ColumnGroupSpec_.DefaultColumnGroupName)));
+
+    }
+
+    return NThreading::WaitExceptionOrAll(getTableDataServiceColumnGroupValueFutures).Apply([&getTableDataServiceColumnGroupValueFutures] (const auto& f) {
+        f.GetValue(); // rethrow error if any
+        std::vector<TString> columnGroupsYsonValues;
+        for (auto& future: getTableDataServiceColumnGroupValueFutures) {
+            TMaybe<TString> colGroupYsonValue = future.GetValue();
+            YQL_ENSURE(colGroupYsonValue.Defined());
+            columnGroupsYsonValues.emplace_back(*colGroupYsonValue);
+        }
+        return NThreading::MakeFuture<TMaybe<TString>>(GetYsonUnion(columnGroupsYsonValues));
+    });
+
 }
 
 void TFmrTableDataServiceReader::SetMinChunkInNewRange() {
@@ -94,7 +134,7 @@ bool TFmrTableDataServiceReader::HasRangeIndices() const {
 }
 
 TString TFmrTableDataServiceReader::TFmrChunkMeta::ToString() const {
-    return TStringBuilder() << TableId << ":" << PartId << ":" << std::to_string(Chunk);
+    return TStringBuilder() << TableId << "_" << PartId << ":" << Chunk;
 }
 
 } // namespace NYql::NFmr

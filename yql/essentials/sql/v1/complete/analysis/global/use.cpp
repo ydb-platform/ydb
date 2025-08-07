@@ -9,12 +9,9 @@ namespace NSQLComplete {
 
         class TVisitor: public TSQLv1NarrowingVisitor {
         public:
-            TVisitor(
-                antlr4::TokenStream* tokens,
-                size_t cursorPosition,
-                const TEnvironment* env)
-                : TSQLv1NarrowingVisitor(tokens, cursorPosition)
-                , Env_(env)
+            TVisitor(const TParsedInput& input, const TNamedNodes* nodes)
+                : TSQLv1NarrowingVisitor(input)
+                , Nodes_(nodes)
             {
             }
 
@@ -54,13 +51,6 @@ namespace NSQLComplete {
                 };
             }
 
-            std::any aggregateResult(std::any aggregate, std::any nextResult) override {
-                if (nextResult.has_value()) {
-                    return nextResult;
-                }
-                return aggregate;
-            }
-
         private:
             TMaybe<TString> GetId(SQLv1::Pure_column_or_namedContext* ctx) const {
                 if (auto* x = ctx->bind_parameter()) {
@@ -73,24 +63,21 @@ namespace NSQLComplete {
             }
 
             TMaybe<TString> GetId(SQLv1::Bind_parameterContext* ctx) const {
-                NYT::TNode node = Evaluate(ctx, *Env_);
+                NYT::TNode node = Evaluate(ctx, *Nodes_);
                 if (!node.HasValue() || !node.IsString()) {
                     return Nothing();
                 }
                 return node.AsString();
             }
 
-            const TEnvironment* Env_;
+            const TNamedNodes* Nodes_;
         };
 
     } // namespace
 
-    TMaybe<TUseContext> FindUseStatement(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition,
-        const TEnvironment& env) {
-        std::any result = TVisitor(tokens, cursorPosition, &env).visit(ctx);
+    // TODO(YQL-19747): Use any to maybe conversion function
+    TMaybe<TUseContext> FindUseStatement(TParsedInput input, const TNamedNodes& nodes) {
+        std::any result = TVisitor(input, &nodes).visit(input.SqlQuery);
         if (!result.has_value()) {
             return Nothing();
         }

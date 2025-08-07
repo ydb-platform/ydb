@@ -89,6 +89,18 @@ std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForJson(
     return CreateJsonConsumer(output, DataTypeToYsonType(dataType), config);
 }
 
+std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForWebJson(
+    EDataType dataType,
+    const IAttributeDictionary& attributes,
+    IOutputStream* output)
+{
+    if (dataType != EDataType::Structured) {
+        THROW_ERROR_EXCEPTION("Web JSON is supported only for structured data");
+    }
+    auto config = ConvertTo<NJson::TWebJsonFormatConfigPtr>(&attributes);
+    return CreateWebJsonConsumer(output, DataTypeToYsonType(dataType), config);
+}
+
 std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForDsv(
     EDataType dataType,
     const IAttributeDictionary& attributes,
@@ -173,6 +185,8 @@ std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForFormat(
             return CreateConsumerForYson(dataType, format.Attributes(), output);
         case EFormatType::Json:
             return CreateConsumerForJson(dataType, format.Attributes(), output);
+        case EFormatType::WebJson:
+            return CreateConsumerForWebJson(dataType, format.Attributes(), output);
         case EFormatType::Dsv:
             return CreateConsumerForDsv(dataType, format.Attributes(), output);
         case EFormatType::Yaml:
@@ -335,6 +349,7 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
                 keyColumnCount);
         case EFormatType::Arrow:
             return CreateWriterForArrow(
+                format.Attributes(),
                 nameTable,
                 tableSchemas,
                 columns,
@@ -424,6 +439,18 @@ TYsonProducer CreateProducerForJson(
     });
 }
 
+TYsonProducer CreateProducerForWebJson(
+    EDataType dataType,
+    const IAttributeDictionary& attributes,
+    IInputStream* input)
+{
+    auto ysonType = DataTypeToYsonType(dataType);
+    auto config = ConvertTo<NJson::TWebJsonFormatConfigPtr>(&attributes);
+    return BIND([=] (IYsonConsumer* consumer) {
+        ParseWebJson(input, consumer, config, ysonType);
+    });
+}
+
 TYsonProducer CreateProducerForYaml(
     EDataType dataType,
     const IAttributeDictionary& attributes,
@@ -452,6 +479,8 @@ TYsonProducer CreateProducerForFormat(const TFormat& format, EDataType dataType,
             return CreateProducerForYson(dataType, input);
         case EFormatType::Json:
             return CreateProducerForJson(dataType, format.Attributes(), input);
+        case EFormatType::WebJson:
+            return CreateProducerForWebJson(dataType, format.Attributes(), input);
         case EFormatType::Dsv:
             return CreateProducerForDsv(dataType, format.Attributes(), input);
         case EFormatType::Yamr:
@@ -501,9 +530,6 @@ std::unique_ptr<IParser> CreateParserForFormat(const TFormat& format, EDataType 
             return CreateParserForYson(consumer, DataTypeToYsonType(dataType));
         case EFormatType::Json: {
             auto config = ConvertTo<TJsonFormatConfigPtr>(&format.Attributes());
-            if (config->NestingLevelLimit == 0) {
-                config->NestingLevelLimit = NJson::NestingLevelLimit;
-            }
             return std::unique_ptr<IParser>(new TParserAdapter<TJsonParser>(consumer, config, DataTypeToYsonType(dataType)));
         }
         case EFormatType::Dsv: {

@@ -39,11 +39,11 @@ struct TStdAllocatorForUdf
     ~TStdAllocatorForUdf() noexcept = default;
 
     template<typename U> TStdAllocatorForUdf(const TStdAllocatorForUdf<U>&) noexcept {};
-    template<typename U> struct rebind { typedef TStdAllocatorForUdf<U> other; };
+    template<typename U> struct rebind { typedef TStdAllocatorForUdf<U> other; }; // NOLINT(readability-identifier-naming)
     template<typename U> bool operator==(const TStdAllocatorForUdf<U>&) const { return true; };
     template<typename U> bool operator!=(const TStdAllocatorForUdf<U>&) const { return false; }
 
-    static pointer allocate(size_type n, const void* = nullptr)
+    static pointer allocate(size_type n, const void* = nullptr) // NOLINT(readability-identifier-naming)
     {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
         return static_cast<pointer>(UdfAllocateWithSize(n * sizeof(value_type)));
@@ -52,7 +52,7 @@ struct TStdAllocatorForUdf
 #endif
     }
 
-    static void deallocate(const_pointer p, size_type n) noexcept
+    static void deallocate(const_pointer p, size_type n) noexcept // NOLINT(readability-identifier-naming)
     {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
         (void)(n);

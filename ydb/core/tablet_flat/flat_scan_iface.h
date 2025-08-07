@@ -80,6 +80,8 @@ namespace NTable {
 
         // Stops scan and calls IScan::Finish(const std::exception&)
         virtual void Throw(const std::exception& exc) = 0;
+
+        virtual ui64 GetTotalCpuTimeUs() const = 0;
     };
 
 

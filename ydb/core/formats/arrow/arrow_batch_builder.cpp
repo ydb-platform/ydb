@@ -147,7 +147,7 @@ NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::InitColumns(c
     return *this;
 }
 
-NKikimr::NArrow::TRecordBatchReader TRecordBatchConstructor::Finish() {
+TRecordBatchReader TRecordBatchConstructor::Finish() {
     Y_ABORT_UNLESS(!InConstruction);
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(Builders.size());
@@ -217,7 +217,7 @@ void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
     NumBytes += cell.Size();
     auto ydbType = YdbSchema[colNum].second;
     auto status = NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType);
-    Y_ABORT_UNLESS(status.ok(), "Faield to append cell: %s", status.ToString().c_str());
+    Y_ABORT_UNLESS(status.ok(), "Failed to append cell: %s", status.ToString().c_str());
 }
 
 void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value) {

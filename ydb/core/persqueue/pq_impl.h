@@ -94,6 +94,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
+    bool OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
+    TString RenderSendReadSetHtmlForms(const TDistributedTransaction& tx, const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter) const;
 
     void HandleDie(const TActorContext& ctx) override;
 
@@ -205,6 +207,8 @@ private:
         TMaybe<ui64> TxId;
         NKikimrLongTxService::TEvLockStatus::EStatus LongTxSubscriptionStatus = NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED;
         bool Deleting = false;
+        bool KafkaTransaction = false;
+        TInstant CreatedAt;
     };
 
     THashMap<TWriteId, TTxWriteInfo> TxWrites;
@@ -288,6 +292,15 @@ private:
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
     TMaybe<NKikimrPQ::TPartitions> PartitionsDataConfigTx;
+    /**
+    Requests are placed in this queue when there is a GetOwnership request with writeId that is being deleted.
+    In kafka transactions (kafka api prior to 4.0.0 version) all transactional writes in same session will have
+    same producerId+producerEpoch pairs. Thus we can't distinguish write to one transaction from the write to the next one.
+    
+    But we know for sure that all writes coming after the commit of the kafka transaction refer to the next transaction. 
+    That's why we queue them here till previous transaction is completely deleted (all supportive partitions are deleted and writeId is erased from TxWrites).
+     */
+    THashMap<NKafka::TProducerInstanceId, TEvPersQueue::TEvRequest::TPtr, NKafka::TProducerInstanceIdHashFn> KafkaNextTransactionRequests;
 
     // PLANNED -> CALCULATING -> CALCULATED -> WAIT_RS -> EXECUTING -> EXECUTED
     THashMap<TDistributedTransaction::EState, TDeque<ui64>> TxsOrder;
@@ -452,6 +465,8 @@ private:
     TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
 
     void DeleteExpiredTransactions(const TActorContext& ctx);
+    void ScheduleDeleteExpiredKafkaTransactions();
+    void TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
     void SetTxCounters();

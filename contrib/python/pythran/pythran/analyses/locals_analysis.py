@@ -33,11 +33,12 @@ class Locals(ModuleAnalysis):
     ['b', 'm', 'n']
     """
 
+    ResultType = dict
+
     def __init__(self):
-        self.result = dict()
+        super().__init__()
         self.locals = set()
         self.nesting = 0
-        super(Locals, self).__init__()
 
     def generic_visit(self, node):
         super(Locals, self).generic_visit(node)

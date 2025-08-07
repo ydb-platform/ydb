@@ -1,8 +1,8 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
-#include "schemeshard_path_element.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_path_element.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
@@ -41,6 +41,11 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> AlterSequences;
 
     TDeque<TPathId> SysViews;
+
+    // Can we have multiple long incremental restore operations?
+    TDeque<NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
+
+    TDeque<ui64> IncrementalBackups;
 
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
@@ -132,6 +137,14 @@ public:
 
     void PersistSysView(const TPathId& pathId) {
         SysViews.emplace_back(pathId);
+    }
+
+    void PersistLongIncrementalRestoreOp(const NKikimrSchemeOp::TLongIncrementalRestoreOp& op) {
+        LongIncrementalRestoreOps.emplace_back(op);
+    }
+
+    void PersistLongIncrementalBackupOp(ui64 id) {
+        IncrementalBackups.emplace_back(id);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

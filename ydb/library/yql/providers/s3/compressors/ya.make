@@ -1,8 +1,9 @@
 LIBRARY()
+
 PEERDIR(
     contrib/libs/fmt
     contrib/libs/poco/Util
-    contrib/libs/brotli/dec
+    contrib/libs/brotli/c/dec
     contrib/libs/libbz2
     contrib/libs/lz4
     contrib/libs/lzma

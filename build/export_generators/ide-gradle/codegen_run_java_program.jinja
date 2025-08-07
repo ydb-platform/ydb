@@ -1,4 +1,5 @@
 {%- if current_target.runs|length -%}
+{%-     set current_target_object_indexes = current_target_object_indexes + current_target.runs|map(attribute='_object_index') -%}
 {%-     for run in current_target.runs %}
 
 val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{{ run['_object_index'] }}") {
@@ -28,7 +29,7 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
     args = listOf(
 {%-            for arg in run.args -%}
 {%-                if not loop.first %}
-{%-                    if run.out_dir|select("eq", arg)|length or run.out|select("eq", arg)|length -%}
+{%-                    if (run.out_dir|select("eq", arg)|length) or (run.out_dir[0] == '/' and run.out_dir|select("in", arg)|length) or (run.out|select("eq", arg)|length) or (run.out[0] == '/' and run.out|select("in", arg)|length) -%}
 {%-                        if proto_template %}
         {{ PatchGeneratedProto(arg) }},
 {%-                        else %}
@@ -84,7 +85,6 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
 
 {#-
     Не использованы атрибуты
-    run-in_dirs_inputs="list"
     run-tool="list"
 #}
 }

@@ -102,8 +102,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        auto kikimr = TKikimrRunner(TKikimrSettings()
-            .SetAppConfig(config)
+        auto kikimr = TKikimrRunner(TKikimrSettings(config)
             .SetEnableResourcePools(true)
             .SetEnableScriptExecutionOperations(true));
         auto db = kikimr.GetQueryClient();

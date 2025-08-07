@@ -9,4 +9,13 @@ pkgs: attrs: with pkgs; with attrs; rec {
   };
 
   patches = [];
+
+  cmakeFlags = [
+    "-DFTXUI_BUILD_EXAMPLES=OFF"
+    "-DFTXUI_BUILD_DOCS=OFF"
+    "-DFTXUI_BUILD_TESTS=OFF"
+  ] ++ lib.optionals (!stdenv.isLinux && !stdenv.isDarwin) [
+    "-DUNICODE=ON"
+    "-D_UNICODE=ON"
+  ];
 }

@@ -119,8 +119,10 @@ class TGranuleMeta: TNonCopyable {
 private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
+    TAtomic LastInsertWriteId = 1;
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
-    THashMap<TInsertWriteId, TPortionDataAccessor> InsertedAccessors;
+    THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
+    THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
     void RebuildHardMetrics() const;
@@ -167,6 +169,10 @@ public:
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
 
+    TInsertWriteId BuildNextInsertWriteId() {
+        return (TInsertWriteId)AtomicIncrement(LastInsertWriteId);
+    }
+
     const NStorageOptimizer::IOptimizerPlanner& GetOptimizerPlanner() const {
         return *OptimizerPlanner;
     }
@@ -175,12 +181,6 @@ public:
     bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
         return DataAccessorsManager;
-    }
-
-    std::unique_ptr<NDataAccessorControl::IGranuleDataAccessor> BuildDataAccessor() {
-        AFL_VERIFY(!DataAccessorConstructed);
-        DataAccessorConstructed = true;
-        return MetadataMemoryManager->BuildCollector(PathId);
     }
 
     void RefreshTiering(const std::optional<TTiering>& tiering) {
@@ -199,7 +199,7 @@ public:
             auto accessorCopy = portion.SwitchPortionInfo(std::move(copy));
             accessorCopy.SaveToDatabase(wrapper, firstPKColumnId, false);
         } else {
-            wrapper.WritePortion(*copy);
+            wrapper.WritePortion(portion.GetBlobIds(), *copy);
         }
     }
 
@@ -213,8 +213,8 @@ public:
     }
 
     void InsertPortionOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion, const ui64 firstPKColumnId) const;
-    void InsertPortionOnComplete(const TPortionDataAccessor& portion, IColumnEngine& engine);
+        NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TPortionDataAccessor>& portion, const ui64 firstPKColumnId) const;
+    void InsertPortionOnComplete(const std::shared_ptr<TPortionDataAccessor>& portion, IColumnEngine& engine);
 
     void CommitPortionOnExecute(
         NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const;
@@ -224,10 +224,11 @@ public:
         NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot ssRemove) const {
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
+        AFL_VERIFY(InsertedPortionsById.contains(it->second->GetPortionId()));
         it->second->SetCommitSnapshot(ssRemove);
         it->second->SetRemoveSnapshot(ssRemove);
         TDbWrapper wrapper(txc.DB, nullptr);
-        wrapper.WritePortion(*it->second);
+        it->second->CommitToDatabase(wrapper);
     }
 
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
@@ -305,7 +306,7 @@ public:
             OnAfterChangePortion(i.second, &g, true);
         }
         if (MetadataMemoryManager->NeedPrefetch() && Portions.size()) {
-            auto request = std::make_shared<TDataAccessorsRequest>("PREFETCH_GRANULE::" + ::ToString(PathId));
+            auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::FETCH_ON_LOAD);
             for (auto&& p : Portions) {
                 request->AddPortion(p.second);
             }
@@ -339,7 +340,7 @@ public:
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();
 
-    void AppendPortion(const TPortionDataAccessor& info);
+    void AppendPortion(const std::shared_ptr<TPortionDataAccessor>& info);
     void AppendPortion(const std::shared_ptr<TPortionInfo>& info);
 
     TString DebugString() const {
@@ -360,6 +361,12 @@ public:
         return InsertedPortions;
     }
 
+    const std::shared_ptr<TWrittenPortionInfo>& GetInsertedPortionVerifiedPtr(const TInsertWriteId portionId) const {
+        auto it = InsertedPortions.find(portionId);
+        AFL_VERIFY(it != InsertedPortions.end());
+        return it->second;
+    }
+
     std::vector<std::shared_ptr<TPortionInfo>> GetPortionsVector() const {
         std::vector<std::shared_ptr<TPortionInfo>> result;
         for (auto&& i : Portions) {
@@ -376,6 +383,21 @@ public:
         auto it = Portions.find(portion);
         AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
         return *it->second;
+    }
+
+    TPortionInfo::TPtr GetPortionVerifiedPtr(const ui64 portion, const bool committedOnly = true) const {
+        {
+            auto it = Portions.find(portion);
+            if (it != Portions.end()) {
+                return it->second;
+            }
+        }
+        AFL_VERIFY(!committedOnly);
+        {
+            auto it = InsertedPortionsById.find(portion);
+            AFL_VERIFY(it != InsertedPortionsById.end());
+            return it->second;
+        }
     }
 
     std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion) const {

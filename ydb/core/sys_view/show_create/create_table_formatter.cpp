@@ -457,14 +457,14 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         }
     }
 
-    TString statement = Stream.Str();
-    TString formattedStatement;
+    TString createQuery = Stream.Str();
+    TString formattedCreateQuery;
     NYql::TIssues issues;
-    if (!NYdb::NDump::Format(statement, formattedStatement, issues)) {
+    if (!NYdb::NDump::Format(createQuery, formattedCreateQuery, issues)) {
         return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
     }
 
-    auto result = TFormatResult(std::move(formattedStatement));
+    auto result = TFormatResult(std::move(formattedCreateQuery));
 
     return result;
 }
@@ -1265,14 +1265,14 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         }
     }
 
-    TString statement = Stream.Str();
-    TString formattedStatement;
+    TString createQuery = Stream.Str();
+    TString formattedCreateQuery;
     NYql::TIssues issues;
-    if (!NYdb::NDump::Format(statement, formattedStatement, issues)) {
+    if (!NYdb::NDump::Format(createQuery, formattedCreateQuery, issues)) {
         return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
     }
 
-    auto result = TFormatResult(std::move(formattedStatement));
+    auto result = TFormatResult(std::move(formattedCreateQuery));
 
     return result;
 }

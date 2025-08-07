@@ -2,6 +2,10 @@
 
 #include <ydb/core/backup/common/proto/encrypted_file.pb.h>
 
+#ifndef NDEBUG
+#include <ydb/core/util/source_location.h>
+#endif
+
 #include <util/generic/hash.h>
 #include <util/generic/yexception.h>
 #include <util/generic/size_literals.h>
@@ -30,7 +34,7 @@ namespace {
 
 static constexpr size_t MAC_SIZE = 16;
 static constexpr size_t MAX_HEADER_SIZE = 16_KB; // Header does not contain much data
-static constexpr size_t MAX_BLOCK_SIZE = 30_MB; // Max block size must always be at least size of table row (~8 MB) serialized into text csv format.
+static constexpr size_t MAX_BLOCK_SIZE = 50_MB; // Max block size must always be at least size of table row (~8 MB) serialized into text csv format. // Real value is bound to 32 MB in TBackupTask.TScanSettings.BytesBatchSize setting.
 
 THashMap<TString, TString> AlgNames = {
     {"aes128gcm", "AES-128-GCM"},
@@ -746,9 +750,17 @@ public:
         }
     }
 
+#ifndef NDEBUG
+    static void ThrowFileIsCorrupted(const NKikimr::NCompat::TSourceLocation& location = NKikimr::NCompat::TSourceLocation::current()) {
+        throw yexception() << "File is corrupted:\n"
+            << NKikimr::NUtil::TrimSourceFileName(location.file_name()) << ":" << location.line()
+            << "\n" << location.function_name();
+    }
+#else
     static void ThrowFileIsCorrupted() {
         throw yexception() << "File is corrupted";
     }
+#endif
 
     TString GetState() const {
         TEncryptedFileDeserializerState state;

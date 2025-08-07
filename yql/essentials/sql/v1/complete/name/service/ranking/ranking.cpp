@@ -15,7 +15,7 @@ namespace NSQLComplete {
 
     public:
         explicit TRanking(TFrequencyData frequency)
-            : Frequency_(frequency)
+            : Frequency_(std::move(frequency))
         {
         }
 
@@ -92,7 +92,8 @@ namespace NSQLComplete {
                 }
 
                 if constexpr (std::is_same_v<T, TFolderName> ||
-                              std::is_same_v<T, TTableName>) {
+                              std::is_same_v<T, TTableName> ||
+                              std::is_same_v<T, TColumnName>) {
                     return std::numeric_limits<size_t>::max();
                 }
 
@@ -108,16 +109,16 @@ namespace NSQLComplete {
             return std::numeric_limits<size_t>::max() - weight;
         }
 
-        const TStringBuf ContentView(const TGenericName& name Y_LIFETIME_BOUND) const {
+        TStringBuf ContentView(const TGenericName& name Y_LIFETIME_BOUND) const {
             return std::visit([](const auto& name) -> TStringBuf {
                 using T = std::decay_t<decltype(name)>;
                 if constexpr (std::is_base_of_v<TKeyword, T>) {
                     return name.Content;
                 }
-                if constexpr (std::is_base_of_v<TIndentifier, T>) {
-                    return name.Indentifier;
+                if constexpr (std::is_base_of_v<TIdentifier, T>) {
+                    return name.Identifier;
                 }
-                if constexpr (std::is_base_of_v<TUnkownName, T>) {
+                if constexpr (std::is_base_of_v<TUnknownName, T>) {
                     return name.Content;
                 }
             }, name);

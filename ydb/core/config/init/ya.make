@@ -17,6 +17,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/public/udf
     ydb/public/lib/deprecated/kicli
+    ydb/public/sdk/cpp/src/client/config
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/driver
 )

@@ -124,6 +124,13 @@ TYtRunTool::TYtRunTool(TString name)
         opts.AddLongOption( "fmr-operation-spec-path", "Path to file with fmr operation spec settings")
             .Optional()
             .StoreResult(&FmrOperationSpecFilePath_);
+        opts.AddLongOption( "table-data-service-discovery-file-path", "Table data service discovery file path")
+            .Optional()
+            .StoreResult(&TableDataServiceDiscoveryFilePath_);
+        opts.AddLongOption( "fmrjob-bin", "Path to fmrjob binary")
+            .Optional()
+            .StoreResult(&FmrJobBin_);
+
 
     });
 
@@ -193,7 +200,18 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
         return ytGateway;
     }
 
-    auto [fmrGateway, worker] = NFmr::InitializeFmrGateway(ytGateway, DisableLocalFmrWorker_, FmrCoordinatorServerUrl_, false, FmrOperationSpecFilePath_);
+    NFmr::TFmrServices fmrServices;
+    fmrServices.FunctionRegistry = GetFuncRegistry().Get();
+    fmrServices.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
+    fmrServices.DisableLocalFmrWorker = DisableLocalFmrWorker_;
+    fmrServices.CoordinatorServerUrl = FmrCoordinatorServerUrl_;
+    fmrServices.TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_;
+    fmrServices.YtJobService = NFmr::MakeYtJobSerivce();
+    fmrServices.YtCoordinatorService = NFmr::MakeYtCoordinatorService();
+    fmrServices.FmrOperationSpecFilePath = FmrOperationSpecFilePath_;
+    fmrServices.JobLauncher = MakeIntrusive<NFmr::TFmrUserJobLauncher>(true, FmrJobBin_);
+
+    auto [fmrGateway, worker] = NFmr::InitializeFmrGateway(ytGateway, MakeIntrusive<NFmr::TFmrServices>(fmrServices));
     FmrWorker_ = std::move(worker);
     return fmrGateway;
 }

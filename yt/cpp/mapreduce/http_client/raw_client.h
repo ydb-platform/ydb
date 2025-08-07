@@ -210,6 +210,11 @@ public:
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) override;
 
+    std::unique_ptr<IOutputStream> WriteFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileWriterOptions& options = {}) override;
+
     // File cache
 
     TMaybe<TYPath> GetFileFromCache(

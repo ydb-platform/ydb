@@ -33,7 +33,7 @@ private:
 public:
     TStorageStatsCoroCalculatorImpl(
         const TControllerSystemViewsState& systemViewsState,
-        const TBlobStorageController::THostRecordMap& hostRecordMap,
+        const THostRecordMap& hostRecordMap,
         ui32 groupReserveMin,
         ui32 groupReservePart)
         : TActorCoroImpl(/* stackSize */ 640_KB, /* allowUnhandledDtor */ true) // 640 KiB should be enough for anything!
@@ -142,7 +142,8 @@ public:
                                 .Location = location,
                                 .Usable = usable,
                                 .NumSlots = pdisk.GetNumActiveSlots(),
-                                .MaxSlots = pdisk.GetExpectedSlotCount(),
+                                .MaxSlots = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
+                                .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
                                 .Groups = {},
                                 .SpaceAvailable = 0,
                                 .Operational = true,
@@ -158,7 +159,7 @@ public:
                 TGroupMapper::TGroupDefinition group;
                 TString error;
                 std::deque<ui64> groupSizes;
-                while (mapper.AllocateGroup(groupSizes.size(), group, {}, {}, 0, false, error)) {
+                while (mapper.AllocateGroup(groupSizes.size(), group, {}, {}, 1u, 0, false, {}, error)) {
                     std::vector<TGroupDiskInfo> disks;
                     std::deque<NKikimrBlobStorage::TPDiskMetrics> pdiskMetrics;
                     std::deque<NKikimrBlobStorage::TVDiskMetrics> vdiskMetrics;
@@ -230,14 +231,14 @@ private:
 
 private:
     TControllerSystemViewsState SystemViewsState;
-    TBlobStorageController::THostRecordMap HostRecordMap;
+    THostRecordMap HostRecordMap;
     ui32 GroupReserveMin = 0;
     ui32 GroupReservePart = 0;
 };
 
 std::unique_ptr<IActor> CreateStorageStatsCoroCalculator(
     const TControllerSystemViewsState& systemViewsState,
-    const TBlobStorageController::THostRecordMap& hostRecordMap,
+    const THostRecordMap& hostRecordMap,
     ui32 groupReserveMin,
     ui32 groupReservePart)
 {

@@ -72,13 +72,13 @@ private:
                 continue;
             }
             AFL_VERIFY(!!StorageId);
-            i.SetBlobData(blobs.Extract(*StorageId, *i.GetBlobRangeOptional()));
+            i.SetBlobData(blobs.ExtractVerified(*StorageId, *i.GetBlobRangeOptional()));
         }
     }
 
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override {
         auto source = context.GetSource();
-        auto columnChunks = source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
+        auto columnChunks = source->GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         IsEmptyChunks.emplace(columnChunks.empty());
         if (columnChunks.empty()) {
             ColumnChunks.emplace_back(source->GetRecordsCount(),
@@ -88,9 +88,9 @@ private:
         StorageId = source->GetColumnStorageId(GetEntityId());
         TBlobsAction blobsAction(source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
-        auto filterPtr = source->GetStageData().GetAppliedFilter();
+        auto filterPtr = context.GetAppliedFilter();
         const NArrow::TColumnFilter& cFilter = filterPtr ? *filterPtr : NArrow::TColumnFilter::BuildAllowFilter();
-        auto itFilter = cFilter.GetIterator(false, source->GetRecordsCount());
+        auto itFilter = cFilter.GetBegin(false, source->GetRecordsCount());
         bool itFinished = false;
         for (auto&& c : columnChunks) {
             AFL_VERIFY(!itFinished);

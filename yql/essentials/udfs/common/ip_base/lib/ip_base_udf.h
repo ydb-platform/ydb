@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/public/udf/udf_helpers.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/ipv6_address/ipv6_address.h>
 #include <library/cpp/ipmath/ipmath.h>
@@ -8,7 +9,9 @@
 
 namespace {
     using TAutoMapString = NKikimr::NUdf::TAutoMap<char*>;
+    using TAutoMapUint32 = NKikimr::NUdf::TAutoMap<ui32>;
     using TOptionalString = NKikimr::NUdf::TOptional<char*>;
+    using TOptionalUint32 = NKikimr::NUdf::TOptional<ui32>;
     using TOptionalByte = NKikimr::NUdf::TOptional<ui8>;
     using TStringRef = NKikimr::NUdf::TStringRef;
     using TUnboxedValue = NKikimr::NUdf::TUnboxedValue;
@@ -27,7 +30,7 @@ namespace {
     }
 
     struct TRawIp4 {
-        ui8 a, b, c, d;
+        ui8 A, B, C, D;
 
         static TRawIp4 FromIpAddress(const TIpv6Address& addr) {
             ui128 x = addr;
@@ -46,39 +49,39 @@ namespace {
         }
 
         TIpv6Address ToIpAddress() const {
-            return {a, b, c, d};
+            return {A, B, C, D};
         }
 
         std::pair<TRawIp4, TRawIp4> ApplyMask(const TRawIp4& mask) const {
             return {{
-                    ui8(a & mask.a),
-                    ui8(b & mask.b),
-                    ui8(c & mask.c),
-                    ui8(d & mask.d)
+                    ui8(A & mask.A),
+                    ui8(B & mask.B),
+                    ui8(C & mask.C),
+                    ui8(D & mask.D)
                 },{
-                    ui8(a | ~mask.a),
-                    ui8(b | ~mask.b),
-                    ui8(c | ~mask.c),
-                    ui8(d | ~mask.d)
+                    ui8(A | ~mask.A),
+                    ui8(B | ~mask.B),
+                    ui8(C | ~mask.C),
+                    ui8(D | ~mask.D)
             }};
         }
     };
 
     struct TRawIp4Subnet {
-        TRawIp4 base, mask;
+        TRawIp4 Base, Mask;
 
         static TRawIp4Subnet FromIpRange(const TIpAddressRange& range) {
             return {TRawIp4::FromIpAddress(*range.Begin()), TRawIp4::MaskFromPrefix(GetAddressRangePrefix(range))};
         }
 
         TIpAddressRange ToIpRange() const {
-            auto range = base.ApplyMask(mask);
+            auto range = Base.ApplyMask(Mask);
             return {range.first.ToIpAddress(), range.second.ToIpAddress()};
         }
     };
 
     struct TRawIp6 {
-        ui8 a1, a0, b1, b0, c1, c0, d1, d0, e1, e0, f1, f0, g1, g0, h1, h0;
+        ui8 A1, A0, B1, B0, C1, C0, D1, D0, E1, E0, F1, F0, G1, G0, H1, H0;
 
         static TRawIp6 FromIpAddress(const TIpv6Address& addr) {
             ui128 x = addr;
@@ -100,65 +103,65 @@ namespace {
         }
 
         TIpv6Address ToIpAddress() const {
-            return {ui16(ui32(a1) << ui32(8) | ui32(a0)),
-               ui16(ui32(b1) << ui32(8) | ui32(b0)),
-               ui16(ui32(c1) << ui32(8) | ui32(c0)),
-               ui16(ui32(d1) << ui32(8) | ui32(d0)),
-               ui16(ui32(e1) << ui32(8) | ui32(e0)),
-               ui16(ui32(f1) << ui32(8) | ui32(f0)),
-               ui16(ui32(g1) << ui32(8) | ui32(g0)),
-               ui16(ui32(h1) << ui32(8) | ui32(h0)),
+            return {ui16(ui32(A1) << ui32(8) | ui32(A0)),
+               ui16(ui32(B1) << ui32(8) | ui32(B0)),
+               ui16(ui32(C1) << ui32(8) | ui32(C0)),
+               ui16(ui32(D1) << ui32(8) | ui32(D0)),
+               ui16(ui32(E1) << ui32(8) | ui32(E0)),
+               ui16(ui32(F1) << ui32(8) | ui32(F0)),
+               ui16(ui32(G1) << ui32(8) | ui32(G0)),
+               ui16(ui32(H1) << ui32(8) | ui32(H0)),
             };
         }
 
         std::pair<TRawIp6, TRawIp6> ApplyMask(const TRawIp6& mask) const {
             return { {
-                    ui8(a1 & mask.a1),
-                    ui8(a0 & mask.a0),
-                    ui8(b1 & mask.b1),
-                    ui8(b0 & mask.b0),
-                    ui8(c1 & mask.c1),
-                    ui8(c0 & mask.c0),
-                    ui8(d1 & mask.d1),
-                    ui8(d0 & mask.d0),
-                    ui8(e1 & mask.e1),
-                    ui8(e0 & mask.e0),
-                    ui8(f1 & mask.f1),
-                    ui8(f0 & mask.f0),
-                    ui8(g1 & mask.g1),
-                    ui8(g0 & mask.g0),
-                    ui8(h1 & mask.h1),
-                    ui8(h0 & mask.h0)
+                    ui8(A1 & mask.A1),
+                    ui8(A0 & mask.A0),
+                    ui8(B1 & mask.B1),
+                    ui8(B0 & mask.B0),
+                    ui8(C1 & mask.C1),
+                    ui8(C0 & mask.C0),
+                    ui8(D1 & mask.D1),
+                    ui8(D0 & mask.D0),
+                    ui8(E1 & mask.E1),
+                    ui8(E0 & mask.E0),
+                    ui8(F1 & mask.F1),
+                    ui8(F0 & mask.F0),
+                    ui8(G1 & mask.G1),
+                    ui8(G0 & mask.G0),
+                    ui8(H1 & mask.H1),
+                    ui8(H0 & mask.H0)
                 }, {
-                    ui8(a1 | ~mask.a1),
-                    ui8(a0 | ~mask.a0),
-                    ui8(b1 | ~mask.b1),
-                    ui8(b0 | ~mask.b0),
-                    ui8(c1 | ~mask.c1),
-                    ui8(c0 | ~mask.c0),
-                    ui8(d1 | ~mask.d1),
-                    ui8(d0 | ~mask.d0),
-                    ui8(e1 | ~mask.e1),
-                    ui8(e0 | ~mask.e0),
-                    ui8(f1 | ~mask.f1),
-                    ui8(f0 | ~mask.f0),
-                    ui8(g1 | ~mask.g1),
-                    ui8(g0 | ~mask.g0),
-                    ui8(h1 | ~mask.h1),
-                    ui8(h0 | ~mask.h0)
+                    ui8(A1 | ~mask.A1),
+                    ui8(A0 | ~mask.A0),
+                    ui8(B1 | ~mask.B1),
+                    ui8(B0 | ~mask.B0),
+                    ui8(C1 | ~mask.C1),
+                    ui8(C0 | ~mask.C0),
+                    ui8(D1 | ~mask.D1),
+                    ui8(D0 | ~mask.D0),
+                    ui8(E1 | ~mask.E1),
+                    ui8(E0 | ~mask.E0),
+                    ui8(F1 | ~mask.F1),
+                    ui8(F0 | ~mask.F0),
+                    ui8(G1 | ~mask.G1),
+                    ui8(G0 | ~mask.G0),
+                    ui8(H1 | ~mask.H1),
+                    ui8(H0 | ~mask.H0)
             }};
         }
     };
 
     struct TRawIp6Subnet {
-        TRawIp6 base, mask;
+        TRawIp6 Base, Mask;
 
         static TRawIp6Subnet FromIpRange(const TIpAddressRange& range) {
             return {TRawIp6::FromIpAddress(*range.Begin()), TRawIp6::MaskFromPrefix(GetAddressRangePrefix(range))};
         }
 
         TIpAddressRange ToIpRange() const {
-            auto range = base.ApplyMask(mask);
+            auto range = Base.ApplyMask(Mask);
             return {range.first.ToIpAddress(), range.second.ToIpAddress()};
         }
     };
@@ -229,6 +232,13 @@ namespace {
         return valueBuilder->NewString(SerializeAddress(addr));
     }
 
+    SIMPLE_STRICT_UDF_OPTIONS(TIpv4FromUint32, char*(TAutoMapUint32), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3))) {
+        // in_addr expects bytes in network byte order.
+        in_addr addr;
+        addr.s_addr = htonl(args[0].Get<ui32>());
+        return valueBuilder->NewString(SerializeAddress(TIpv6Address{addr}));
+    }
+
     SIMPLE_STRICT_UDF(TSubnetFromString, TOptionalString(TAutoMapString)) {
         TIpAddressRange range = TIpAddressRange::FromCompactString(args[0].AsStringRef());
         auto res = SerializeSubnet(range);
@@ -237,6 +247,19 @@ namespace {
 
     SIMPLE_UDF(TToString, char*(TAutoMapString)) {
         return valueBuilder->NewString(DeserializeAddress(args[0].AsStringRef()).ToString(false));
+    }
+
+    SIMPLE_UDF_OPTIONS(TIpv4ToUint32, TOptionalUint32(TAutoMapString), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3))) {
+        Y_UNUSED(valueBuilder);
+        TIpv6Address addr = DeserializeAddress(args[0].AsStringRef());
+        if (addr.Type() != TIpv6Address::Ipv4) {
+            return TUnboxedValue();
+        }
+
+        in_addr tmp;
+        addr.ToInAddr(tmp);
+        ui32 ret = ntohl(tmp.s_addr);
+        return TUnboxedValuePod(ret);
     }
 
     SIMPLE_UDF(TSubnetToString, char*(TAutoMapString)) {
@@ -345,8 +368,10 @@ namespace {
 
 #define EXPORTED_IP_BASE_UDF \
     TFromString, \
+    TIpv4FromUint32, \
     TSubnetFromString, \
     TToString, \
+    TIpv4ToUint32, \
     TSubnetToString, \
     TIsIPv4, \
     TIsIPv6, \

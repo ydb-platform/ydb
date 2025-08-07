@@ -22,7 +22,7 @@ public:
     TStatusCallbackPair CallbackTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 
     bool CanExec(const TExprNode& node) const {
-        return Handlers.contains(node.Content());
+        return Handlers_.contains(node.Content());
     }
 
 protected:
@@ -64,7 +64,7 @@ protected:
         TPrerequisite Prerequisite;
         THandler Handler;
     };
-    THashMap<TStringBuf, THandlerInfo> Handlers;
+    THashMap<TStringBuf, THandlerInfo> Handlers_;
 };
 
 } // NYql

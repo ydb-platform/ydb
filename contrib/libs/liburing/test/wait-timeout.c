@@ -69,7 +69,7 @@ static int t_io_uring_wait(struct io_uring *ring, int nr, unsigned enter_flags,
 
 	enter_flags |= IORING_ENTER_GETEVENTS | IORING_ENTER_EXT_ARG;
 	ret = io_uring_enter2(ring->ring_fd, 0, nr, enter_flags,
-			      (void *)&arg, sizeof(arg));
+			      &arg, sizeof(arg));
 	return ret;
 }
 

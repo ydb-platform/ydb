@@ -24,8 +24,8 @@ public:
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
         const auto check = IsExists(value, block, context);
-        if (Node->IsTemporaryValue())
-            ValueCleanup(Node->GetRepresentation(), value, ctx, block);
+        if (Node_->IsTemporaryValue())
+            ValueCleanup(Node_->GetRepresentation(), value, ctx, block);
         return MakeBoolean(check, context, block);
     }
 #endif

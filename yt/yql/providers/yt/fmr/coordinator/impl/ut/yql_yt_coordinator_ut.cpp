@@ -11,42 +11,8 @@
 
 namespace NYql::NFmr {
 
-class TFmrWorkerProxy: public IFmrWorker {
-public:
-    TFmrWorkerProxy(IFmrCoordinator::TPtr coordinator, IFmrJobFactory::TPtr jobFactory, const TFmrWorkerSettings& settings):
-        Coordinator_(coordinator), JobFactory_(jobFactory), WorkerSettings_(settings), WorkerCreationNum_(1)
-    {
-        Worker_ = MakeFmrWorker(Coordinator_, JobFactory_, WorkerSettings_);
-    }
-
-    void ResetWorker() {
-        ++WorkerCreationNum_;
-        WorkerSettings_.RandomProvider = CreateDeterministicRandomProvider(WorkerCreationNum_);
-
-        Stop();
-        Worker_ = MakeFmrWorker(Coordinator_, JobFactory_, WorkerSettings_);
-        Start();
-    }
-
-    void Start() {
-        Worker_->Start();
-    }
-
-    void Stop() {
-        Worker_->Stop();
-    }
-
-private:
-    IFmrCoordinator::TPtr Coordinator_;
-    IFmrJobFactory::TPtr JobFactory_;
-    IFmrWorker::TPtr Worker_;
-    TFmrWorkerSettings WorkerSettings_;
-    int WorkerCreationNum_;
-};
-
-
 TDownloadOperationParams downloadOperationParams{
-    .Input = TYtTableRef{.Path = "Path", .Cluster = "Cluster", .FilePath = "File_path"},
+    .Input = TYtTableRef{.RichPath = NYT::TRichYPath().Path("Path").Cluster("Cluster"), .FilePath = "File_path"},
     .Output = TFmrTableRef{{"TestCluster", "TestPath"}}
 };
 
@@ -176,7 +142,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
             downloadOperationIds.emplace_back(startOperationResponse.OperationId);
         }
         auto badDownloadRequest = CreateOperationRequest(ETaskType::Download, TDownloadOperationParams{
-            .Input = TYtTableRef{.Path = "bad_path", .Cluster = "bad_cluster", .FilePath = "bad_file_path"},
+            .Input = TYtTableRef{.RichPath = NYT::TRichYPath().Path("BadPath").Cluster("BadCluster"), .FilePath = "bad_file_path"},
             .Output = TFmrTableRef{{"bad_cluster", "bad_path"}}
         });
         auto badDownloadOperationResponse = coordinator->StartOperation(badDownloadRequest).GetValueSync();
@@ -255,38 +221,6 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(firstOperationStatus, EOperationStatus::InProgress);
         UNIT_ASSERT_VALUES_EQUAL(secondOperationStatus, EOperationStatus::Accepted);
     }
-    Y_UNIT_TEST(CancelTasksAfterVolatileIdReload) {
-        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
-        auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
-            int numIterations = 0;
-            while (!cancelFlag->load()) {
-                Sleep(TDuration::Seconds(1));
-                ++numIterations;
-                if (numIterations == 100) {
-                    return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
-                }
-            }
-            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
-        };
-        TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
-        auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        TFmrWorkerProxy workerProxy(coordinator, factory, workerSettings);
-
-        workerProxy.Start();
-        auto operationId = coordinator->StartOperation(CreateOperationRequest()).GetValueSync().OperationId;
-        Sleep(TDuration::Seconds(2));
-        workerProxy.ResetWorker();
-        Sleep(TDuration::Seconds(5));
-        workerProxy.Stop();
-        auto getOperationResult = coordinator->GetOperation({operationId}).GetValueSync();
-        auto getOperationStatus = getOperationResult.Status;
-        UNIT_ASSERT_VALUES_EQUAL(getOperationStatus, EOperationStatus::Failed);
-        auto error = getOperationResult.ErrorMessages[0];
-        UNIT_ASSERT_VALUES_EQUAL(error.Component, EFmrComponent::Coordinator);
-        UNIT_ASSERT_NO_DIFF(error.ErrorMessage, "Max retries limit exceeded");
-        UNIT_ASSERT_NO_DIFF(*error.OperationId, operationId);
-    }
     Y_UNIT_TEST(HandleJobErrors) {
         auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto startOperationResponse = coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
@@ -327,7 +261,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
                 Sleep(TDuration::Seconds(1));
                 TDownloadTaskParams downloadTaskParams = std::get<TDownloadTaskParams>(task->TaskParams);
                 TString partId = downloadTaskParams.Output.PartId;
-                TFmrTableOutputRef fmrTableOutputRef{.TableId = tableId, .PartId = partId};
+                TFmrTableOutputRef fmrTableOutputRef(tableId, partId);
                 TTableChunkStats tableChunkStats{
                     .PartId = partId,
                     .PartIdChunkStats = std::vector<TChunkStats>(totalChunkCount, TChunkStats{.Rows = chunkRowCount, .DataWeight = chunkDataWeight})

@@ -96,6 +96,7 @@ public:
 
         virtual void AddWorker(ui64 id) = 0;
         virtual void RemoveWorker(ui64 id) = 0;
+        virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
         virtual const TMaybe<TDuration> GetLag() const = 0;
 
@@ -119,9 +120,9 @@ public:
     };
 
 public:
-    explicit TReplication(ui64 id, const TPathId& pathId, const NKikimrReplication::TReplicationConfig& config);
-    explicit TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config);
-    explicit TReplication(ui64 id, const TPathId& pathId, const TString& config);
+    explicit TReplication(ui64 id, const TPathId& pathId, const NKikimrReplication::TReplicationConfig& config, const TString& database);
+    explicit TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config, TString&& database);
+    explicit TReplication(ui64 id, const TPathId& pathId, const TString& config, const TString& database);
 
     ui64 AddTarget(ETargetKind kind, const ITarget::IConfig::TPtr& config);
     ITarget* AddTarget(ui64 id, ETargetKind kind, const ITarget::IConfig::TPtr& config);
@@ -139,6 +140,7 @@ public:
     ui64 GetSchemeShardId() const;
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
+    const TString& GetDatabase() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
     EState GetDesiredState() const;

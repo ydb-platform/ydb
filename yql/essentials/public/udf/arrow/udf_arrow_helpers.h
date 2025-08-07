@@ -214,11 +214,10 @@ public:
 
                 return valueBuilder->ImportArrowBlock(a.data(), a.size(), false, *ReturnArrowTypeHandle_);
             }
-        } catch (const std::exception&) {
+        } catch (const std::exception& ex) {
             TStringBuilder sb;
-            sb << Pos_ << " ";
-            sb << CurrentExceptionMessage();
-            sb << Endl << "[" << Name_ << "]";
+            APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_)
+            sb << ex.what();
             UdfTerminate(sb.c_str());
         }
     }
@@ -332,7 +331,7 @@ TBuilder* CastToArrayBuilderImpl(IArrayBuilder& builder) {
     static_assert(std::is_base_of_v<IArrayBuilder, TBuilder>);
 
     auto* builderImpl = dynamic_cast<TBuilder*>(&builder);
-    Y_ENSURE(builderImpl, TStringBuilder() << "Got " << typeid(builder).name() << " as ArrayBuilder");
+    Y_ENSURE(builderImpl, TStringBuilder() << "Got " << TypeName(builder) << " as ArrayBuilder");
     return builderImpl;
 }
 
@@ -341,7 +340,7 @@ TScalarBuilderImpl* CastToScalarBuilderImpl(IScalarBuilder& builder) {
     static_assert(std::is_base_of_v<IScalarBuilder, TScalarBuilderImpl>);
 
     auto* builderImpl = dynamic_cast<TScalarBuilderImpl*>(&builder);
-    Y_ENSURE(builderImpl, TStringBuilder() << "Got " << typeid(builder).name() << " as ArrayBuilder");
+    Y_ENSURE(builderImpl, TStringBuilder() << "Got " << TypeName(builder) << " as ScalarBuilder");
     return builderImpl;
 }
 
@@ -350,7 +349,7 @@ TReader* CastToBlockReaderImpl(IBlockReader& reader) {
     static_assert(std::is_base_of_v<IBlockReader, TReader>);
 
     auto* readerImpl = dynamic_cast<TReader*>(&reader);
-    Y_ENSURE(readerImpl, TStringBuilder() << "Got " << typeid(reader).name() << " as BlockReader");
+    Y_ENSURE(readerImpl, TStringBuilder() << "Got " << TypeName(reader) << " as BlockReader");
     return readerImpl;
 }
 

@@ -34,7 +34,9 @@ private:
         return 0;
     }
 
-    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
+    virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(
+        const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
+        std::vector<TPortionInfo::TPtr> problems;
         const bool constructionFlag = Portions.empty();
         if (constructionFlag) {
             std::vector<TOrderedPortion> ordered;
@@ -54,6 +56,7 @@ private:
         for (auto&& i : remove) {
             AFL_VERIFY(Portions.erase(i));
         }
+        return problems;
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {

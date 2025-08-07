@@ -1,15 +1,14 @@
 #pragma once
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/core/protos/replication.pb.h>
-
-#include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/follower_group.pb.h>
-#include <ydb/core/protos/subdomains.pb.h>
-
 #include <ydb/public/api/protos/ydb_table.pb.h>
+
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
 
 #include <functional>
 
@@ -65,6 +64,7 @@ namespace NLs {
     TCheckFunc ShardsInsideDomain(ui64 count);
     TCheckFunc ShardsInsideDomainOneOf(TSet<ui64> variants);
     TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions = 0);
+    TCheckFunc SchemeLimits(const NKikimrSubDomains::TSchemeLimits& expected);
 
     TCheckFunc FreezeStateEqual(NKikimrSchemeOp::EFreezeState expectedState);
 
@@ -91,6 +91,7 @@ namespace NLs {
     TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVPId);
     TCheckFunc ExtractTenantStatisticsAggregator(ui64* tenantSAId);
     TCheckFunc ExtractDomainHive(ui64* domainHiveId);
+    TCheckFunc ExtractChildren(TVector<TString>* children);
 
     void NotFinished(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void Finished(const NKikimrScheme::TEvDescribeSchemeResult& record);

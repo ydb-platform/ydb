@@ -6,10 +6,10 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -69,7 +69,7 @@ static int PrintDescription(TCommand* self, EDataFormat format, const TValue& va
                  << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
         case EDataFormat::ProtoJsonBase64:
-            return PrintProtoJsonBase64(TProtoAccessor::GetProto(value));
+            return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(value));
         default:
             throw TMisuseException() << "This command doesn't support " << format << " output format";
     }
@@ -102,6 +102,9 @@ private:
     int DescribeReplication(const TDriver& driver);
     int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
 
+    int DescribeTransfer(const TDriver& driver);
+    int PrintTransferResponsePretty(const NYdb::NReplication::TDescribeTransferResult& result) const;
+
     int DescribeView(const TDriver& driver);
     int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
 
@@ -110,6 +113,9 @@ private:
 
     int DescribeExternalTable(const TDriver& driver);
     int PrintExternalTableResponsePretty(const NYdb::NTable::TExternalTableDescription& result) const;
+
+    int DescribeSystemView(const TDriver& driver);
+    int PrintSystemViewResponsePretty(const NYdb::NTable::TSystemViewDescription& result) const;
 
     int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
     std::pair<TString, TString> ParseTopicConsumer() const;

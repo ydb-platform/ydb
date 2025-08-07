@@ -12,6 +12,11 @@
 
 namespace NYdb::NConsoleClient {
 
+TClientCommandOptions::TClientCommandOptions()
+    : Opts()
+{
+}
+
 TClientCommandOptions::TClientCommandOptions(NLastGetopt::TOpts opts)
     : Opts(std::move(opts))
 {
@@ -135,6 +140,11 @@ TClientCommandOption& TClientCommandOption::AddLongName(const TString& name) {
     return *this;
 }
 
+TClientCommandOption&  TClientCommandOption::IfPresentDisableCompletion() {
+    Opt->IfPresentDisableCompletion();
+    return *this;
+}
+
 const NLastGetopt::EHasArg& TClientCommandOption::GetHasArg() const {
     return Opt->GetHasArg();
 }
@@ -172,6 +182,11 @@ TClientCommandOption& TClientCommandOption::Handler(THandler handler) {
 TClientCommandOption& TClientCommandOption::Validator(TValidator validator) {
     ValidatorHandler = std::move(validator);
     return SetHandler();
+}
+
+TClientCommandOption& TClientCommandOption::Handler(void (*handler)(const NLastGetopt::TOptsParser*)) {
+    Opt->Handler(handler);
+    return *this;
 }
 
 TClientCommandOption& TClientCommandOption::SetHandler() {
@@ -233,8 +248,9 @@ TClientCommandOption& TClientCommandOption::Env(const TString& envName, bool isF
     return *this;
 }
 
-TClientCommandOption& TClientCommandOption::ProfileParam(const TString& profileParamName) {
+TClientCommandOption& TClientCommandOption::ProfileParam(const TString& profileParamName, bool isFileName) {
     ProfileParamName = profileParamName;
+    ProfileParamIsFileName = isFileName;
     CanParseFromProfile = true;
     RebuildHelpMessage();
     return *this;
@@ -327,12 +343,15 @@ void TClientCommandOption::RebuildHelpMessage() {
     Opt->Help(helpMessage);
 }
 
-bool TClientCommandOption::TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, std::vector<TString>* errors, bool parseOnly) const {
+bool TClientCommandOption::TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, bool* isFileName, std::vector<TString>* errors, bool parseOnly) const {
     Y_UNUSED(errors, parseOnly);
     if (profile && ProfileParamName && profile->Has(ProfileParamName)) {
         TString value = profile->GetValue(ProfileParamName).as<TString>();
         if (parsedValue) {
             *parsedValue = value;
+        }
+        if (isFileName) {
+            *isFileName = ProfileParamIsFileName;
         }
         return true;
     }
@@ -357,7 +376,7 @@ TAuthMethodOption& TAuthMethodOption::AuthProfileParser(TProfileParser parser, c
 }
 
 TAuthMethodOption& TAuthMethodOption::SimpleProfileDataParam(const TString& authMethod, bool isFileName) {
-    auto parser = [this, isFileName, authMethod](const YAML::Node& authData, TString* value, std::vector<TString>* errors, bool parseOnly) -> bool {
+    auto parser = [this, isFileName, authMethod](const YAML::Node& authData, TString* value, bool* isFileNameOut, std::vector<TString>* errors, bool parseOnly) -> bool {
         Y_UNUSED(errors, parseOnly);
 
         const bool needData = GetHasArg() != NLastGetopt::NO_ARGUMENT;
@@ -368,24 +387,18 @@ TAuthMethodOption& TAuthMethodOption::SimpleProfileDataParam(const TString& auth
             return true;
         }
 
-        if (!isFileName) {
-            if (value) {
-                *value = authData.as<TString>();
-            }
-            return true;
-        }
-
-        TString path = authData.as<TString>();
-        TString val = ReadFromFile(path, path);
         if (value) {
-            *value = std::move(val);
+            *value = authData.as<TString>();
+        }
+        if (isFileNameOut) {
+            *isFileNameOut = isFileName;
         }
         return true;
     };
     return AuthProfileParser(std::move(parser), authMethod);
 }
 
-bool TAuthMethodOption::TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, std::vector<TString>* errors, bool parseOnly) const {
+bool TAuthMethodOption::TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, bool* isFileName, std::vector<TString>* errors, bool parseOnly) const {
     if (!profile || !profile->Has("authentication")) {
         return false;
     }
@@ -404,7 +417,7 @@ bool TAuthMethodOption::TryParseFromProfile(const std::shared_ptr<IProfile>& pro
     if (parser == ProfileParsers.end()) {
         return false;
     }
-    return parser->second(authValue["data"], parsedValue, errors, parseOnly);
+    return parser->second(authValue["data"], parsedValue, isFileName, errors, parseOnly);
 }
 
 
@@ -417,9 +430,9 @@ TAnonymousAuthMethodOption::TAnonymousAuthMethodOption(TClientCommandOptions* cl
 }
 
 
-TOptionsParseResult::TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv, bool throwOnParseError)
+TOptionsParseResult::TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv)
     : ClientOptions(options)
-    , ParseFromCommandLineResult(&options->GetOpts(), argc, argv, throwOnParseError)
+    , ParseFromCommandLineResult(&options->GetOpts(), argc, argv)
 {
     for (const auto& clientOption : ClientOptions->ClientOpts) {
         if (const auto* optResult = ParseFromCommandLineResult.FindOptParseResult(&clientOption->GetOpt())) {
@@ -497,7 +510,7 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
     std::vector<TString> messages;
     auto getProfileOpt = [&](const TIntrusivePtr<TClientCommandOption>& opt, const std::shared_ptr<IProfile>& profile) -> TString {
         TString value;
-        if (opt->TryParseFromProfile(profile, &value, &messages, true)) {
+        if (opt->TryParseFromProfile(profile, &value, nullptr, &messages, true)) {
             return value;
         }
         return {};
@@ -639,8 +652,9 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
             continue;
         }
 
-        if (TString value; clientOption->TryParseFromProfile(ExplicitProfile, &value, &errors, false)) {
-            applyOption(clientOption, value, false, clientOption->HumanReadableFileName, EOptionValueSource::ExplicitProfile);
+        bool isFileName = false;
+        if (TString value; clientOption->TryParseFromProfile(ExplicitProfile, &value, &isFileName, &errors, false)) {
+            applyOption(clientOption, value, isFileName, clientOption->HumanReadableFileName, EOptionValueSource::ExplicitProfile);
             continue;
         }
         if (isAuthOption) {
@@ -660,8 +674,8 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
         }
 
         if (ActiveProfile != ExplicitProfile) {
-            if (TString value; clientOption->TryParseFromProfile(ActiveProfile, &value, &errors, false)) {
-                applyOption(clientOption, value, false, clientOption->HumanReadableFileName, EOptionValueSource::ActiveProfile);
+            if (TString value; clientOption->TryParseFromProfile(ActiveProfile, &value, &isFileName, &errors, false)) {
+                applyOption(clientOption, value, isFileName, clientOption->HumanReadableFileName, EOptionValueSource::ActiveProfile);
                 continue;
             }
         }
@@ -692,8 +706,9 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
             }
 
             if (ActiveProfile != ExplicitProfile) {
-                if (TString value; clientOption->TryParseFromProfile(ActiveProfile, &value, &errors, false)) {
-                    applyOption(clientOption, value, false, clientOption->HumanReadableFileName, EOptionValueSource::ActiveProfile);
+                bool isFileName = false;
+                if (TString value; clientOption->TryParseFromProfile(ActiveProfile, &value, &isFileName, &errors, false)) {
+                    applyOption(clientOption, value, isFileName, clientOption->HumanReadableFileName, EOptionValueSource::ActiveProfile);
                     continue;
                 }
             }

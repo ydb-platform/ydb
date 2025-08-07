@@ -23,6 +23,7 @@ namespace NKikimr {
         std::optional<NKikimrConfig::TDomainsConfig> DomainsConfig;
         std::optional<NKikimrConfig::TSelfManagementConfig> SelfManagementConfig;
         std::optional<NKikimrConfig::TBridgeConfig> BridgeConfig;
+        std::optional<NKikimrConfig::TDynamicNodeConfig> DynamicNodeConfig;
         TString ConfigDirPath;
         std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
         TString StartupConfigYaml;
@@ -68,5 +69,11 @@ namespace NKikimr {
     bool ObtainPDiskKey(NPDisk::TMainKey *key, const NKikimrProto::TKeyConfig& keyConfig);
 
     std::unique_ptr<ICacheAccessor> CreateFileCacheAccessor(const TString& templ, const std::unordered_map<char, TString>& vars);
+
+    inline TActorId MakeDistconfBridgeConnectionCheckerActorId() {
+        return TActorId(0, TStringBuf("DistConfCCkr", 12));
+    }
+
+    IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId);
 
 } // NKikimr

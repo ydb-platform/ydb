@@ -5,6 +5,7 @@
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/string/builder.h>
@@ -188,6 +189,10 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
         return "ALTER TABLE DROP CHANGEFEED";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
+        return "ALTER TABLE ROTATE CHANGEFEED";
     // sequence
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         return "CREATE SEQUENCE";
@@ -269,14 +274,22 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
         return "BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         return "BACKUP INCREMENTAL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return "RESTORE";
+    // long incremental restore
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        return "RESTORE INCREMENTAL";
     // system view
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
         return "CREATE SYSTEM VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
         return "DROP SYSTEM VIEW";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        return "CHANGE PATH STATE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        return "RESTORE INCREMENTAL FINALIZE";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -487,13 +500,30 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterCdcStream().GetTableName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName(), tx.GetDropCdcStream().GetStreamName()}));
+        {
+            const auto& tablePath = NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName()});
+            // Add entry for each stream being dropped
+            for (const auto& streamName : tx.GetDropCdcStream().GetStreamName()) {
+                result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName(), streamName}));
+            }
+        }
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName(), tx.GetRotateCdcStream().GetOldStreamName()}));
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName(), tx.GetRotateCdcStream().GetNewStream().GetStreamDescription().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetOldStreamName()}));
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetNewStream().GetStreamDescription().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable:
         result.emplace_back(tx.GetMoveTable().GetSrcPath());
@@ -611,7 +641,14 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        // For long incremental restore operations, extract the backup collection name
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
@@ -619,6 +656,13 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetChangePathState().GetPath()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        // For incremental restore finalization, we don't have a specific path in the message
+        // since it operates on paths determined at runtime
         break;
     }
 

@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+//import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+import "ydb/public/api/client/nc_private/common/v1/metadata.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "UserAccountProto";
+option java_package = "ai.nebius.iam.identity.v1";
+
+// this proto describes global user accounts that
+//   - should not be exposed to end-users directly
+//   - should not have any binding
+//   - keep mapping from IdPs' unique ids (federation_id + user id inside that federation)
+//     to their internal ids like 'useraccount-someuniquesuffix'
+//   - keep references to personal data storage blocks
+// their projection to tenants is described separately in tenant_user_account*.proto
+
+message UserAccount {
+  option (resource_behavior) = UNNAMED;
+  // option (resource) = "useraccount"; // This option conflicts with other options by its number
+
+  common.v1.ResourceMetadata metadata = 1; // [(buf.validate.field).required = true];
+  UserAccountSpec spec = 2; // [(buf.validate.field).required = true];
+  UserAccountStatus status = 3 [(field_behavior) = OUTPUT_ONLY];
+}
+
+message UserAccountExternalId {
+  string federation_user_account_id = 1 [(sensitive) = true];
+  string federation_id = 2;
+}
+
+message UserAccountSpec {
+  UserAccountExternalId external_id = 1 [(field_behavior) = IMMUTABLE];
+}
+
+message UserAccountStatus {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    ACTIVE = 1;
+    INACTIVE = 2; // actually this state is unused, blocking/unblocking is available at the tenant level where admins can block tenant user accounts
+    DELETING = 3; // user account enters into this state when delete/forget is called and removal interactions with PDS are in progress
+  }
+
+  State state = 1;
+}
+
+// This structure is used for passing user claims to the login method
+// it's very similar to nebius/pds/inner/v1/iam_identifier.proto/IamIdentifierV1
+// with the exception that boolean fields email/phone_number_verified are not deprecated here
+// (they are not propagated to the PDS but still can be used by the logic of login method)
+message UserClaims {
+  string sub = 1 [(sensitive) = true];
+  string name = 2 [(sensitive) = true];
+  string given_name = 3 [(sensitive) = true];
+  string family_name = 4 [(sensitive) = true];
+  string preferred_username = 7 [(sensitive) = true];
+  string picture = 9 [(sensitive) = true];
+  string email = 11 [
+  //   (buf.validate.field) = {
+  //     cel: {
+  //       id: "string.email",
+  //       message: "value must be a valid email address",
+  //       expression: "this == \'\' || this.isEmail()"
+  //     }
+  //   },
+    (sensitive) = true
+  ];
+  bool email_verified = 12;
+  string locale = 16 [(sensitive) = true];
+  string phone_number = 17 [(sensitive) = true];
+  bool phone_number_verified = 18;
+}

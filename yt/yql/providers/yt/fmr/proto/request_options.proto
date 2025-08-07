@@ -51,9 +51,8 @@ message TFmrError {
 }
 
 message TYtTableRef {
-    string Path = 1;
-    string Cluster = 2;
-    optional string FilePath = 3;
+    string RichPath = 1;
+    optional string FilePath = 2;
 }
 
 message TYtTableTaskRef {
@@ -67,6 +66,8 @@ message TFmrTableId {
 
 message TFmrTableRef {
     TFmrTableId FmrTableId = 1;
+    repeated string Columns = 2;
+    optional string ColumnGroups = 3;
 }
 
 message TTableRange {
@@ -78,11 +79,14 @@ message TTableRange {
 message TFmrTableInputRef {
     string TableId = 1;
     repeated TTableRange TableRanges = 2;
+    repeated string Columns = 3;
+    optional string ColumnGroups = 4;
 }
 
 message TFmrTableOutputRef {
     string TableId = 1;
     string PartId = 2;
+    optional string ColumnGroups = 3;
 }
 
 message TTableStats {
@@ -161,13 +165,13 @@ message TMergeTaskParams {
 message TMapOperationParams {
     repeated TOperationTableRef Input = 1;
     repeated TFmrTableRef Output = 2;
-    string Executable = 3;
+    string SerializedMapJobState = 3;
 }
 
 message TMapTaskParams {
     TTaskTableInputRef Input = 1;
     repeated TFmrTableOutputRef Output = 2;
-    string Executable = 3;
+    string SerializedMapJobState = 3;
 }
 
 message TOperationParams {

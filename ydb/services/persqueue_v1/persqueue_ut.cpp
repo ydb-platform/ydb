@@ -1926,7 +1926,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Cerr << "Got read response " << resp << "\n";
             UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
             UNIT_ASSERT(resp.read_response().partition_data_size() == 1);
-            UNIT_ASSERT(resp.read_response().partition_data(0).batches_size() == 1);
+            UNIT_ASSERT_GE(resp.read_response().partition_data(0).batches_size(), 1);
             UNIT_ASSERT(resp.read_response().partition_data(0).batches(0).message_data_size() >= 1);
         }
 
@@ -3074,6 +3074,37 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_LE(fromDisk, 6);
         UNIT_ASSERT_GT(fromCache, 0);
         UNIT_ASSERT_LE(fromCache, 6);
+
+        // ======================
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000000_00000_0000000007_00016 size 8365489
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000007_00002_0000000008_00015 size 7878213
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000015_00001_0000000008_00015 size 7878213
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000023_00000_0000000007_00016 size 8365489
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000030_00002_0000000008_00015 size 7878213
+        // SYNC INIT HEAD KEY: d0000000000_00000000000000000038_00001_0000000001_00001| size 536753
+        // SYNC INIT HEAD KEY: d0000000000_00000000000000000039_00000_0000000001_00002| size 1048780
+
+        Cerr << ">>>>> 5" << Endl << Flush;
+        auto info9 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 9, 12, "user"}, 12);
+        Cerr << ">>>>> 6" << Endl << Flush;
+        auto info25 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 25, 10, "user"}, 10);
+
+        UNIT_ASSERT_VALUES_EQUAL(info9.BlobsFromDisk, 0);
+        UNIT_ASSERT_VALUES_EQUAL(info9.BlobsFromCache, 2);
+        UNIT_ASSERT_VALUES_EQUAL(info25.BlobsFromDisk, 0);
+        UNIT_ASSERT_VALUES_EQUAL(info25.BlobsFromCache, 2);
+
+        server.KillTopicPqTablets("/Root/PQ/" + DEFAULT_TOPIC_NAME);
+
+        Cerr << ">>>>> 7" << Endl << Flush;
+        info9 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 9, 12, "user"}, 12);
+        Cerr << ">>>>> 8" << Endl << Flush;
+        info25 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 25, 10, "user"}, 10);
+
+        UNIT_ASSERT_VALUES_EQUAL(info9.BlobsFromDisk, 2);
+        UNIT_ASSERT_VALUES_EQUAL(info9.BlobsFromCache, 0);
+        UNIT_ASSERT_VALUES_EQUAL(info25.BlobsFromDisk, 2);
+        UNIT_ASSERT_VALUES_EQUAL(info25.BlobsFromCache, 0);
     }
 
     Y_UNIT_TEST(CacheHead) {

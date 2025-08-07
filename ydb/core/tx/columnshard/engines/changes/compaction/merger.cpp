@@ -187,6 +187,8 @@ public:
                     }
                 }
                 if (!colStatsOpt) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("event", "incorrect_case_stat")("stat", Stats->DebugString())(
+                        "column_id", c)("schema", resultFiltered->DebugString());
                     chunks = NArrow::NSplitter::TSimilarPacker::SplitWithExpected(p, settings.GetExpectedRecordsCountOnPage());
                 } else {
                     chunks = colStatsOpt->SplitRecords(

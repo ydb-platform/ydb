@@ -720,6 +720,15 @@ TEST(TYsonStructTest, LoadSingleParameter)
     EXPECT_FALSE(config->IsSet("sub"));
 }
 
+TEST(TYsonStructTest, LoadBadSingleParameter)
+{
+    auto config = New<TTestConfig>();
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        config->LoadParameter("my_string", ConvertToNode(42)),
+        NYT::TErrorException,
+        "has invalid type: expected \"string\", actual \"int64\"");
+}
+
 TEST(TYsonStructTest, LoadSingleParameterOverwriteDefaults)
 {
     auto builder = CreateBuilderFromFactory(GetEphemeralNodeFactory());

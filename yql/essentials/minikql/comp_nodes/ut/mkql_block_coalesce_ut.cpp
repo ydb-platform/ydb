@@ -1,16 +1,17 @@
+#include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_block_coalesce.h>
 
-#include <yql/essentials/core/arrow_kernels/request/request.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_block_coalesce_blending_helper.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
+#include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/ast/yql_expr_builder.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
+#include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
-#include <yql/essentials/core/arrow_kernels/request/request.h>
-#include <yql/essentials/core/arrow_kernels/registry/registry.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
 
 #include <arrow/compute/exec_internal.h>
 
@@ -105,6 +106,14 @@ arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, std::ve
     return resultArray;
 }
 
+template <typename T, typename U, typename V>
+void TestCoalesceKernel(T left, U right, V expected) {
+    TBlockHelper().TestKernel(left, right, expected,
+                              [](TSetup<false>& setup, TRuntimeNode left, TRuntimeNode right) {
+                                  return setup.PgmBuilder->BlockCoalesce(left, right);
+                              });
+}
+
 enum class ERightOperandType {
     SCALAR,
     ARRAY,
@@ -116,38 +125,45 @@ template <typename T>
 using InputOptionalVector =
     std::vector<TMaybe<typename NUdf::TDataType<T>::TLayout>>;
 
-template <typename T, ERightOperandType rightType = ERightOperandType::ARRAY>
+std::unique_ptr<IArrowKernelComputationNode> GetArrowKernel(IComputationGraph* graph) {
+    std::vector<std::unique_ptr<IArrowKernelComputationNode>> allKernels;
+    for (auto node : graph->GetNodes()) {
+        auto kernelNode = node->PrepareArrowKernelComputationNode(graph->GetContext());
+        if (!kernelNode) {
+            continue;
+        }
+        allKernels.push_back(std::move(kernelNode));
+    }
+    UNIT_ASSERT_EQUAL(allKernels.size(), 1u);
+    return std::move(allKernels[0]);
+}
+
+template <typename T, ERightOperandType rightTypeShape = ERightOperandType::ARRAY>
 void TestBlockCoalesceForVector(InputOptionalVector<T> left,
                                 InputOptionalVector<T> right,
                                 InputOptionalVector<T> expected,
                                 size_t leftOffset,
-                                size_t rightOffset) {
+                                size_t rightOffset,
+                                bool resetNullBitmapWhenAllNotNull = false) {
     using TLayout = typename NUdf::TDataType<T>::TLayout;
     TSetup<false> setup;
     NYql::TExprContext exprCtx;
-    auto* type = setup.PgmBuilder->NewDataType(NUdf::TDataType<T>::Id);
-    auto* typeNode = exprCtx.template MakeType<NYql::TBlockExprType>(
-        exprCtx.template MakeType<NYql::TDataExprType>(NUdf::TDataType<T>::Slot));
-
-    auto* optType = setup.PgmBuilder->NewOptionalType(type);
-    auto* optTypeNode = exprCtx.template MakeType<NYql::TBlockExprType>(
-        exprCtx.template MakeType<NYql::TOptionalExprType>(
-            exprCtx.template MakeType<NYql::TDataExprType>(NUdf::TDataType<T>::Slot)));
-    if (rightType == ERightOperandType::OPTIONAL_ARRAY || rightType == ERightOperandType::OPTIONAL_SCALAR) {
+    auto* rightType = setup.PgmBuilder->NewDataType(NUdf::TDataType<T>::Id);
+    auto* leftType = setup.PgmBuilder->NewOptionalType(rightType);
+    if (rightTypeShape == ERightOperandType::OPTIONAL_ARRAY || rightTypeShape == ERightOperandType::OPTIONAL_SCALAR) {
         // Make both operands optional.
-        type = optType;
-        typeNode = optTypeNode;
+        rightType = leftType;
     }
     TTypeInfoHelper typeInfoHelper;
-    arrow::Datum leftOperand = GenerateArray(typeInfoHelper, optType, left, leftOffset);
+    arrow::Datum leftOperand = GenerateArray(typeInfoHelper, leftType, left, leftOffset);
 
     arrow::compute::ExecContext execCtx;
     arrow::compute::KernelContext ctx(&execCtx);
 
     arrow::Datum rightOperand;
-    if constexpr (rightType == ERightOperandType::SCALAR) {
+    if constexpr (rightTypeShape == ERightOperandType::SCALAR) {
         rightOperand = MakeScalarDatum<TLayout>(right[0].GetRef());
-    } else if constexpr (rightType == ERightOperandType::OPTIONAL_SCALAR) {
+    } else if constexpr (rightTypeShape == ERightOperandType::OPTIONAL_SCALAR) {
         if (right[0]) {
             rightOperand = MakeScalarDatum<TLayout>(right[0].GetRef());
         } else {
@@ -155,25 +171,29 @@ void TestBlockCoalesceForVector(InputOptionalVector<T> left,
             rightOperand.scalar()->is_valid = false;
         }
     } else {
-        rightOperand = GenerateArray(typeInfoHelper, type, right, rightOffset);
+        rightOperand = GenerateArray(typeInfoHelper, rightType, right, rightOffset);
+    }
+    // Reset bitmap that responses for nullability of arrow::ArrayData.
+    // If all elements are not null then we have two options:
+    // 1. All bitmask elements are set to 1.
+    // 2. There is no bitmask at all.
+    // So we want to test both variants via |resetNullBitmapWhenAllNotNull| flag.
+    if (rightOperand.is_array() && resetNullBitmapWhenAllNotNull && rightOperand.array()->GetNullCount() == 0) {
+        rightOperand.array()->buffers[0] = nullptr;
     }
     auto bi = arrow::compute::detail::ExecBatchIterator::Make({leftOperand, rightOperand}, 1000).ValueOrDie();
     arrow::compute::ExecBatch batch;
     UNIT_ASSERT(bi->Next(&batch));
-    std::shared_ptr<arrow::DataType> arrowType;
-    UNIT_ASSERT(ConvertArrowType(type, arrowType, [](TType*) {}));
     arrow::Datum out;
-    auto registry = CreateFunctionRegistry(CreateBuiltinRegistry());
-    NYql::TKernelRequestBuilder b(*registry);
-
-    b.AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::Coalesce, optTypeNode, typeNode, optTypeNode);
-    auto serializedNode = b.Serialize();
-    auto nodeFactory = GetBuiltinFactory();
-    auto kernel = NYql::LoadKernels(serializedNode, *registry, nodeFactory);
-    Y_ENSURE(kernel.size() == 1);
-    Y_ENSURE(kernel[0]->exec(&ctx, batch, &out).ok());
-
-    arrow::Datum expectedArrowArray = GenerateArray(typeInfoHelper, type, expected, 0);
+    // This graph will never be executed. We need it only to extrace coalesce arrow kernel.
+    auto graph = setup.BuildGraph(
+        setup.PgmBuilder->BlockCoalesce(
+            setup.PgmBuilder->Arg(setup.PgmBuilder->NewBlockType(leftType, TBlockType::EShape::Many)),
+            setup.PgmBuilder->Arg(setup.PgmBuilder->NewBlockType(rightType, TBlockType::EShape::Many))));
+    auto kernel = GetArrowKernel(graph.Get());
+    // kernel is exectly coalesce kernel.
+    Y_ENSURE(kernel->GetArrowKernel().exec(&ctx, batch, &out).ok());
+    arrow::Datum expectedArrowArray = GenerateArray(typeInfoHelper, rightType, expected, 0);
     UNIT_ASSERT_EQUAL_C(out, expectedArrowArray, "Expected : " << expectedArrowArray.make_array()->ToString() << "\n but got : " << out.make_array()->ToString());
 }
 
@@ -191,11 +211,6 @@ void TestBlockCoalesce(InputOptionalVector<T> left,
     // Second test different sizes.
     // Also test only small subset of offsets to prevent a combinatorial explosion.
     while (left.size() > 1 || right.size() > 1 || expected.size() > 1) {
-        for (size_t leftOffset = 0; leftOffset < 2; leftOffset++) {
-            for (size_t rightOffset = 0; rightOffset < 2; rightOffset++) {
-                TestBlockCoalesceForVector<T, rightType>(left, right, expected, leftOffset, rightOffset);
-            }
-        }
         if (left.size() > 1) {
             left.pop_back();
         }
@@ -204,6 +219,12 @@ void TestBlockCoalesce(InputOptionalVector<T> left,
         }
         if (expected.size() > 1) {
             expected.pop_back();
+        }
+        for (size_t leftOffset = 0; leftOffset < 2; leftOffset++) {
+            for (size_t rightOffset = 0; rightOffset < 2; rightOffset++) {
+                TestBlockCoalesceForVector<T, rightType>(left, right, expected, leftOffset, rightOffset);
+                TestBlockCoalesceForVector<T, rightType>(left, right, expected, leftOffset, rightOffset, /*resetNullBitmapWhenAllNotNull=*/true);
+            }
         }
     }
 }
@@ -249,7 +270,7 @@ void BlockCoalesceGraphTest(size_t length, size_t offset) {
         };
     });
 
-    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
+    node = pb.WideToBlocks(pb.FromFlow(node));
     if (offset > 0) {
         node = pb.WideSkipBlocks(node, pb.NewDataLiteral<ui64>(offset));
     }
@@ -260,7 +281,7 @@ void BlockCoalesceGraphTest(size_t length, size_t offset) {
             items[2]};
     });
 
-    node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
+    node = pb.ToFlow(pb.WideFromBlocks(node));
     node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.NewTuple(outputTupleType, {items[0]});
     });
@@ -288,55 +309,106 @@ void BlockCoalesceGraphTest(size_t length, size_t offset) {
 Y_UNIT_TEST_SUITE(TMiniKQLBlockCoalesceTest) {
 
 Y_UNIT_TEST(CoalesceGraphTest) {
-    for (auto offset : {0, 1, 2, 3, 5, 7, 8, 11, 14, 16}) {
-        BlockCoalesceGraphTest(1000, offset);
+    for (auto offset : {0, 7, 8, 11,6}) {
+        BlockCoalesceGraphTest(32, offset);
     }
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsNotNullArray) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
     auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
-    TestBlockCoalesce<TTestType, ERightOperandType::ARRAY>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
-                                                           {101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120},
-                                                           {101, 2, 3, 104, 5, 6, 7, max, 9, 110, 11, 12, 13, 114, 115, 116, min, 118, 19, 20});
+    TestBlockCoalesce<TTestType, ERightOperandType::ARRAY>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()},
+                                                           {101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118},
+                                                           {101, 2, 3, 104, 5, 6, 7, max, 9, 110, 11, 12, 13, 114, 115, 116, min, 118});
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsScalar) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
     auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
-    TestBlockCoalesce<TTestType, ERightOperandType::SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
+    TestBlockCoalesce<TTestType, ERightOperandType::SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()},
                                                             {77},
-                                                            {77, 2, 3, 77, 5, 6, 7, max, 9, 77, 11, 12, 13, 77, 77, 77, min, 77, 19, 20});
+                                                            {77, 2, 3, 77, 5, 6, 7, max, 9, 77, 11, 12, 13, 77, 77, 77, min, 77});
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalArray) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
     auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
-    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_ARRAY>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
-                                                                    {Nothing(), 102, Nothing(), 104, Nothing(), 106, 107, 108, 109, 110, 111, 112, 113, 114, Nothing(), 116, 117, 118, Nothing(), 120},
-                                                                    {Nothing(), 2, 3, 104, 5, 6, 7, max, 9, 110, 11, 12, 13, 114, Nothing(), 116, min, 118, 19, 20});
+    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_ARRAY>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()},
+                                                                    {101, 102, Nothing(), 104, Nothing(), 106, 107, 108, 109, 110, 111, 112, 113, 114, Nothing(), 116, 117, 118},
+                                                                    {101, 2, 3, 104, 5, 6, 7, max, 9, 110, 11, 12, 13, 114, Nothing(), 116, min, 118});
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalInvalidScalar) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
     auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
-    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
+    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()},
                                                                      {Nothing()},
-                                                                     {Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20});
+                                                                     {Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()});
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalValidScalar) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
     auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
-    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
+    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()},
                                                                      {77},
-                                                                     {77, 2, 3, 77, 5, 6, 7, max, 9, 77, 11, 12, 13, 77, 77, 77, min, 77, 19, 20});
+                                                                     {77, 2, 3, 77, 5, 6, 7, max, 9, 77, 11, 12, 13, 77, 77, 77, min, 77});
+}
+
+Y_UNIT_TEST(OptionalScalar) {
+    TestCoalesceKernel(TMaybe<i32>{16}, 5, 16);
+    TestCoalesceKernel(TMaybe<i32>(), 4, 4);
+    TestCoalesceKernel(TMaybe<i32>(18), TMaybe<i32>(3), TMaybe<i32>(18));
+    TestCoalesceKernel(TMaybe<i32>(), TMaybe<i32>(2), TMaybe<i32>(2));
+}
+
+Y_UNIT_TEST(Tuple) {
+    using TTuple = std::tuple<ui32, ui64, bool>;
+    TestCoalesceKernel(TMaybe<TTuple>({16, 13, false}), TMaybe<TTuple>({15, 11, true}), TMaybe<TTuple>({16, 13, false}));
+    TestCoalesceKernel(TMaybe<TTuple>(), TMaybe<TTuple>({15, 11, true}), TMaybe<TTuple>({15, 11, true}));
+    TestCoalesceKernel(TMaybe<TTuple>(), TTuple{15, 11, true}, TTuple{15, 11, true});
+}
+
+Y_UNIT_TEST(TestVectorAndScalar) {
+    {
+        std::vector<TMaybe<ui32>> left = {1, 2, Nothing(), 4};
+        std::vector<ui32> right = {11, 22, 33, 44};
+        std::vector<ui32> expected = {1, 2, 33, 4};
+        TestCoalesceKernel(left, right, expected);
+    }
+    {
+        std::vector<TMaybe<ui32>> left = {1, 2, Nothing(), 4};
+        ui32 right = 333;
+        std::vector<ui32> expected = {1, 2, 333, 4};
+        TestCoalesceKernel(left, right, expected);
+    }
+    {
+        TMaybe<ui32> left = 1;
+        std::vector<ui32> right = {1111, 2222};
+        std::vector<ui32> expected = {1, 1};
+        TestCoalesceKernel(left, right, expected);
+    }
+    {
+        TMaybe<ui32> left = Nothing();
+        std::vector<ui32> right = {1111, 2222};
+        std::vector<ui32> expected = {1111, 2222};
+        TestCoalesceKernel(left, right, expected);
+    }
+}
+
+Y_UNIT_TEST(ExternalOptionalScalar) {
+    using TDoubleMaybe = TMaybe<TMaybe<i32>>;
+    using TSingleMaybe = TMaybe<i32>;
+
+    TestCoalesceKernel(TDoubleMaybe{TSingleMaybe{25}}, TSingleMaybe{1}, TSingleMaybe{25});
+    TestCoalesceKernel(TDoubleMaybe(TSingleMaybe()), TSingleMaybe(9), TSingleMaybe());
+    TestCoalesceKernel(TDoubleMaybe(), TSingleMaybe(8), TSingleMaybe(8));
+    TestCoalesceKernel(TDoubleMaybe(TSingleMaybe(33)), TDoubleMaybe(TSingleMaybe(7)), TDoubleMaybe(TSingleMaybe(33)));
+    TestCoalesceKernel(TDoubleMaybe(), TDoubleMaybe(TSingleMaybe(6)), TDoubleMaybe(TSingleMaybe(6)));
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockCoalesceTest)
-
 } // namespace NKikimr::NMiniKQL

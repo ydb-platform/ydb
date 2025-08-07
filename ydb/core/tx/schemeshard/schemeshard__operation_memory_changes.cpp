@@ -1,4 +1,5 @@
 #include "schemeshard__operation_memory_changes.h"
+
 #include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
@@ -126,6 +127,21 @@ void TMemoryChanges::GrabNewSysView(TSchemeShard* ss, const TPathId& pathId) {
 
 void TMemoryChanges::GrabSysView(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TSysViewInfo>(pathId, ss->SysViews, SysViews);
+}
+
+void TMemoryChanges::GrabNewLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId) {
+    Y_ABORT_UNLESS(!ss->LongIncrementalRestoreOps.contains(opId));
+    LongIncrementalRestoreOps.emplace(opId, std::nullopt);
+}
+
+void TMemoryChanges::GrabLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId) {
+    Y_ABORT_UNLESS(ss->LongIncrementalRestoreOps.contains(opId));
+    LongIncrementalRestoreOps.emplace(opId, ss->LongIncrementalRestoreOps.at(opId));
+}
+
+void TMemoryChanges::GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id) {
+    Y_ABORT_UNLESS(!ss->IncrementalBackups.contains(id));
+    IncrementalBackups.emplace(id, nullptr);
 }
 
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
@@ -283,6 +299,26 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->SysViews.erase(id);
         }
         SysViews.pop();
+    }
+
+    while (LongIncrementalRestoreOps) {
+        const auto& [id, elem] = LongIncrementalRestoreOps.top();
+        if (elem.has_value()) {
+            ss->LongIncrementalRestoreOps[id] = elem.value();
+        } else {
+            ss->LongIncrementalRestoreOps.erase(id);
+        }
+        LongIncrementalRestoreOps.pop();
+    }
+
+    while (IncrementalBackups) {
+        const auto& [id, elem] = IncrementalBackups.top();
+        if (elem) {
+            ss->IncrementalBackups[id] = elem;
+        } else {
+            ss->IncrementalBackups.erase(id);
+        }
+        IncrementalBackups.pop();
     }
 }
 

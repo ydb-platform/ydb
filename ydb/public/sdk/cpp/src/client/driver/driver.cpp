@@ -70,8 +70,8 @@ public:
         };
     bool DrainOnDtors = true;
     TBalancingSettings BalancingSettings = TBalancingSettings{EBalancingPolicy::UsePreferableLocation, std::string()};
-    TDuration GRpcKeepAliveTimeout;
-    bool GRpcKeepAlivePermitWithoutCalls = false;
+    TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
+    bool GRpcKeepAlivePermitWithoutCalls = true;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     uint64_t MemoryQuota = 0;
     uint64_t MaxInboundMessageSize = 0;

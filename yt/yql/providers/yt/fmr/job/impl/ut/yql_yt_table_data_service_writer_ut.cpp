@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/join.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/local/yql_yt_table_data_service_local.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.h>
 
 namespace NYql::NFmr {
 
@@ -22,7 +22,7 @@ TTableChunkStats WriteDataToTableDataSerice(
     if (maxRowWeight) {
         settings.MaxRowWeight = *maxRowWeight;
     }
-    TFmrTableDataServiceWriter outputWriter("tableId", "partId", tableDataService, settings);
+    TFmrTableDataServiceWriter outputWriter("tableId", "partId", tableDataService, TString(), settings);
 
     for (auto& row: tableYsonRows) {
         outputWriter.Write(row.data(), row.size());
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
         }
 
         ui64 chunkSize = totalSize / 2;
-        ITableDataService::TPtr tableDataService = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataService = MakeLocalTableDataService();
 
         auto stats = WriteDataToTableDataSerice(tableDataService, TableYsonRows, chunkSize);
         UNIT_ASSERT_VALUES_EQUAL(stats.PartId, "partId");
@@ -60,10 +60,9 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
         TString expectedFirstChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin(), TableYsonRows.begin() + 2);
         TString expectedSecondChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin() + 2, TableYsonRows.end());
 
-        auto firstChunkTableKey = GetTableDataServiceKey("tableId", "partId", 0);
-        auto firstChunkTableContent = tableDataService->Get(firstChunkTableKey).GetValueSync();
-        auto secondChunkTableKey = GetTableDataServiceKey("tableId", "partId", 1);
-        auto secondChunkTableContent = tableDataService->Get(secondChunkTableKey).GetValueSync();
+        TString group = GetTableDataServiceGroup("tableId", "partId");
+        auto firstChunkTableContent = tableDataService->Get(group, "0").GetValueSync();
+        auto secondChunkTableContent = tableDataService->Get(group, "1").GetValueSync();
 
         UNIT_ASSERT_NO_DIFF(*firstChunkTableContent, expectedFirstChunkTableContent);
         UNIT_ASSERT_NO_DIFF(*secondChunkTableContent, expectedSecondChunkTableContent);
@@ -71,7 +70,7 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
     Y_UNIT_TEST(RecordIsLargerThanMaxRowWeight) {
         ui64 chunkSize = 1, maxRowWeight = 3;
         auto rowSize = TableYsonRows[0].size();
-        ITableDataService::TPtr tableDataService = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataService = MakeLocalTableDataService();
         TString expectedErrorMessage = TStringBuilder() << rowSize << " is larger than max row weight: " << maxRowWeight;
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             WriteDataToTableDataSerice(tableDataService, TableYsonRows, chunkSize, maxRowWeight),

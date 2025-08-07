@@ -1,7 +1,7 @@
 #pragma once
-#include <ydb/library/actors/core/actorsystem.h>
 
 #include <util/generic/ptr.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NFq {
 

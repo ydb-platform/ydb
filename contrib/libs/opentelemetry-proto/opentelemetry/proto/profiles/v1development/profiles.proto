@@ -43,15 +43,15 @@ option go_package = "go.opentelemetry.io/proto/otlp/profiles/v1development";
 
 //                Relationships Diagram
 //
-// ┌──────────────────┐                LEGEND
-// │   ProfilesData   │
-// └──────────────────┘            ─────▶ embedded
-//   │
-//   │ 1-n                         ─────▷ referenced by index
-//   ▼
-// ┌──────────────────┐
-// │ ResourceProfiles │
-// └──────────────────┘
+// ┌──────────────────┐                      LEGEND
+// │   ProfilesData   │ ─────┐
+// └──────────────────┘      │           ─────▶ embedded
+//   │                       │
+//   │ 1-n                   │           ─────▷ referenced by index
+//   ▼                       ▼
+// ┌──────────────────┐   ┌────────────────────┐
+// │ ResourceProfiles │   │ ProfilesDictionary │
+// └──────────────────┘   └────────────────────┘
 //   │
 //   │ 1-n
 //   ▼
@@ -90,6 +90,33 @@ option go_package = "go.opentelemetry.io/proto/otlp/profiles/v1development";
 // └──────────────────┘
 //
 
+// ProfilesDictionary represents the profiles data shared across the
+// entire message being sent.
+message ProfilesDictionary {
+  // Mappings from address ranges to the image/binary/library mapped
+  // into that address range referenced by locations via Location.mapping_index.
+  repeated Mapping mapping_table = 1;
+
+  // Locations referenced by samples via Profile.location_indices.
+  repeated Location location_table = 2;
+
+  // Functions referenced by locations via Line.function_index.
+  repeated Function function_table = 3;
+
+  // Links referenced by samples via Sample.link_index.
+  repeated Link link_table = 4;
+
+  // A common table for strings referenced by various messages.
+  // string_table[0] must always be "".
+  repeated string string_table = 5;
+
+  // A common table for attributes referenced by various messages.
+  repeated opentelemetry.proto.common.v1.KeyValue attribute_table = 6;
+
+  // Represents a mapping between Attribute Keys and Units.
+  repeated AttributeUnit attribute_units = 7;
+}
+
 // ProfilesData represents the profiles data that can be stored in persistent storage,
 // OR can be embedded by other protocols that transfer OTLP profiles data but do not
 // implement the OTLP protocol.
@@ -110,28 +137,8 @@ message ProfilesData {
   // Resource.attributes and semantic conventions.
   repeated ResourceProfiles resource_profiles = 1;
 
-  // Mappings from address ranges to the image/binary/library mapped
-  // into that address range referenced by locations via Location.mapping_index.
-  repeated Mapping mapping_table = 2;
-
-  // Locations referenced by samples via Profile.location_indices.
-  repeated Location location_table = 3;
-
-  // Functions referenced by locations via Line.function_index.
-  repeated Function function_table = 4;
-
-  // Links referenced by samples via Sample.link_index.
-  repeated Link link_table = 5;
-
-  // A common table for strings referenced by various messages.
-  // string_table[0] must always be "".
-  repeated string string_table = 6;
-
-  // A common table for attributes referenced by various messages.
-  repeated opentelemetry.proto.common.v1.KeyValue attribute_table = 7;
-
-  // Represents a mapping between Attribute Keys and Units.
-  repeated AttributeUnit attribute_units = 8;
+  // One instance of ProfilesDictionary
+  ProfilesDictionary dictionary = 2;
 }
 
 
@@ -217,7 +224,7 @@ message Profile {
   // The set of samples recorded in this profile.
   repeated Sample sample = 2;
 
-  // References to locations in ProfilesData.location_table.
+  // References to locations in ProfilesDictionary.location_table.
   repeated int32 location_indices = 3;
 
   // The following fields 4-14 are informational, do not affect
@@ -237,7 +244,7 @@ message Profile {
   // should not be used to store any machine-readable information, it is only
   // for human-friendly content. The profile must stay functional if this field
   // is cleaned.
-  repeated int32 comment_strindices = 8; // Indices into ProfilesData.string_table.
+  repeated int32 comment_strindices = 8; // Indices into ProfilesDictionary.string_table.
   // Index into the sample_type array to the default sample type.
   int32 default_sample_type_index = 9;
 
@@ -368,8 +375,8 @@ enum AggregationTemporality {
 
 // ValueType describes the type and units of a value, with an optional aggregation temporality.
 message ValueType {
-  int32 type_strindex = 1; // Index into ProfilesData.string_table.
-  int32 unit_strindex = 2; // Index into ProfilesData.string_table.
+  int32 type_strindex = 1; // Index into ProfilesDictionary.string_table.
+  int32 unit_strindex = 2; // Index into ProfilesDictionary.string_table.
 
   AggregationTemporality aggregation_temporality = 3;
 }
@@ -391,10 +398,10 @@ message Sample {
   // result has a list of values that is the element-wise sum of the
   // lists of the originals.
   repeated int64 value = 3;
-  // References to attributes in ProfilesData.attribute_table. [optional]
+  // References to attributes in ProfilesDictionary.attribute_table. [optional]
   repeated int32 attribute_indices = 4;
 
-  // Reference to link in ProfilesData.link_table. [optional]
+  // Reference to link in ProfilesDictionary.link_table. [optional]
   optional int32 link_index = 5;
 
   // Timestamps associated with Sample represented in nanoseconds. These timestamps are expected
@@ -414,8 +421,8 @@ message Mapping {
   // The object this entry is loaded from.  This can be a filename on
   // disk for the main binary and shared libraries, or virtual
   // abstractions like "[vdso]".
-  int32 filename_strindex = 4;  // Index into ProfilesData.string_table.
-  // References to attributes in ProfilesData.attribute_table. [optional]
+  int32 filename_strindex = 4;  // Index into ProfilesDictionary.string_table.
+  // References to attributes in ProfilesDictionary.attribute_table. [optional]
   repeated int32 attribute_indices = 5;
   // The following fields indicate the resolution of symbolic info.
   bool has_functions = 6;
@@ -426,7 +433,7 @@ message Mapping {
 
 // Describes function and line table debug information.
 message Location {
-  // Reference to mapping in ProfilesData.mapping_table.
+  // Reference to mapping in ProfilesDictionary.mapping_table.
   // It can be unset if the mapping is unknown or not applicable for
   // this profile type.
   optional int32 mapping_index = 1;
@@ -451,13 +458,13 @@ message Location {
   // profile changes.
   bool is_folded = 4;
 
-  // References to attributes in ProfilesData.attribute_table. [optional]
+  // References to attributes in ProfilesDictionary.attribute_table. [optional]
   repeated int32 attribute_indices = 5;
 }
 
 // Details a specific line in a source code, linked to a function.
 message Line {
-  // Reference to function in ProfilesData.function_table.
+  // Reference to function in ProfilesDictionary.function_table.
   int32 function_index = 1;
   // Line number in source code. 0 means unset.
   int64 line = 2;

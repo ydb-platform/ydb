@@ -3,6 +3,7 @@ option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 import "ydb/core/protos/kqp_physical.proto";
@@ -12,7 +13,6 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_query.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
@@ -100,11 +100,10 @@ message TTopicOperationsRequest {
 }
 
 message TKafkaApiOperationsRequest {
-    optional string TransactionalId = 1;
-    optional int64 ProducerId = 2;
-    optional int32 ProducerEpoch = 3;
-    repeated TKafkaApiOperationsRequest.KafkaApiPartitionInTxn PartitionsInTxn = 4;
-    repeated TKafkaApiOperationsRequest.KafkaApiOffsetInTxn OffsetsInTxn = 5;
+    optional int64 ProducerId = 1;
+    optional int32 ProducerEpoch = 2;
+    repeated TKafkaApiOperationsRequest.KafkaApiPartitionInTxn PartitionsInTxn = 3;
+    repeated TKafkaApiOperationsRequest.KafkaApiOffsetInTxn OffsetsInTxn = 4;
 
     message KafkaApiPartitionInTxn {
         optional string TopicPath = 1;
@@ -115,15 +114,21 @@ message TKafkaApiOperationsRequest {
         optional string TopicPath = 1;
         optional uint32 PartitionId = 2;
         optional string ConsumerName = 3;
-        optional int64 ConsumerGeneration = 4;
-        optional int64 Offset = 5;
+        optional int64 Offset = 4;
     }
 }
 
 message TTopicOperationsResponse {
     message TWriteId {
+        message TKafkaProducerInstanceId {
+            optional int64 Id = 1;
+            optional int32 Epoch = 2;
+        };
+
         optional uint64 NodeId = 1;
         optional uint64 KeyId = 2;
+        optional bool KafkaTransaction = 3 [default = false];
+        optional TKafkaProducerInstanceId KafkaProducerInstanceId = 4;
     }
 
     optional TWriteId WriteId = 1;
@@ -349,6 +354,15 @@ message TEvCloseSessionResponse {
     optional TCloseSessionResponse Response = 3;
 }
 
+message TCompileCacheQueryInfo {
+    // optional uint32 NodeId = 1;
+    optional string QueryId = 2;
+    optional string Query = 3;
+    optional uint64 AccessCount = 4;
+    optional int64 CompiledQueryAt = 5;
+    optional string UserSID = 6;
+}
+
 message TSessionInfo {
     optional string SessionId = 1;
     /// optional ui32 NodeId = 2;
@@ -382,6 +396,24 @@ message TEvListSessionsRequest {
 message TEvListSessionsResponse {
     optional int64 NodeId = 1;
     repeated TSessionInfo Sessions = 2;
+    optional bool Finished = 3;
+    optional string ContinuationToken = 4;
+}
+
+message TEvListCompileCacheQueriesRequest {
+    optional string QueryIdStart = 1;
+    optional bool QueryIdStartInclusive = 2;
+    optional string QueryIdEnd = 3;
+    optional bool QueryIdEndInclusive = 4;
+    repeated uint32 Columns = 5;
+    optional int64 FreeSpace = 6;
+    optional int64 Limit = 7;
+    optional string TenantName = 8;
+}
+
+message TEvListCompileCacheQueriesResponse {
+    optional int64 NodeId = 1;
+    repeated TCompileCacheQueryInfo CacheCacheQueries = 2;
     optional bool Finished = 3;
     optional string ContinuationToken = 4;
 }
@@ -603,20 +635,19 @@ message TEvStartKqpTasksRequest {
     optional bool StartAllOrFail = 6 [default = true];
     optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value
     optional string SerializedGUCSettings = 8;
-    optional string SchedulerGroup = 9;
+    optional string PoolId = 9;
     optional double MemoryPoolPercent = 10 [default = 100];
     optional string Database = 11;
-    optional string DatabaseId = 17;
+    optional string DatabaseId = 17; // used as unique id in case database was removed/added with the same name
     optional uint64 LockTxId = 13;
     optional uint32 LockNodeId = 14;
-
-    optional double PoolMaxCpuShare = 12;
-    optional double QueryCpuShare = 16;
-    optional double ResourceWeight = 18;
-
+    optional double PoolMaxCpuShare = 12; // used for TCPULimits for ColumnShards
     optional NKikimrDataEvents.ELockMode LockMode = 19;
-
     optional string UserToken = 20;
+
+    reserved 15;
+    reserved 16;
+    reserved 18;
 }
 
 message TEvStartKqpTasksResponse {
@@ -816,6 +847,7 @@ message TKqpTableSinkSettings {
     repeated string InputColumns = 18; // Only for MODE_FILL
     repeated TKqpTableSinkIndexSettings Indexes = 19;
     repeated TKqpColumnMetadataProto LookupColumns = 20;
+    optional bool IsIndexImplTable = 21;
 }
 
 message TKqpStreamLookupSettings {
@@ -874,6 +906,51 @@ message TEvCheckAliveResponse {
 message TScriptExecutionOperationMeta {
     optional google.protobuf.Duration OperationTtl = 1;
     optional google.protobuf.Duration ResultsTtl = 2;
+    optional google.protobuf.Timestamp TimeoutAt = 3;
+    optional google.protobuf.Timestamp CancelAt = 4;
+
+    optional string TraceId = 5;
+    optional string ResourcePoolId = 6;
+    optional string ClientAddress = 7;
+    optional Ydb.Table.QueryStatsCollection.Mode CollectStats = 8;
+    optional google.protobuf.Duration LeaseDuration = 9;
+    optional google.protobuf.Duration ProgressStatsPeriod = 10;
+    optional TRlPath RlPath = 11;
+    optional bool SaveQueryPhysicalGraph = 12;
+}
+
+// stored in column "retry_state" of .metadata/script_executions table
+message TScriptExecutionRetryState {
+    message TBackoffPolicy {
+        optional uint64 RetryPeriodMs = 1;
+        optional uint64 BackoffPeriodMs = 2;
+        optional uint64 RetryRateLimit = 3;
+        optional uint64 RetryCountLimit = 4;
+    }
+
+    message TMapping {
+        repeated Ydb.StatusIds.StatusCode StatusCode = 1;
+
+        oneof Policy {
+            TBackoffPolicy BackoffPolicy = 2;
+        }
+    }
+
+    repeated TMapping RetryPolicyMapping = 1;
+    optional uint64 RetryCounter = 2;
+    optional google.protobuf.Timestamp RetryCounterUpdatedAt = 3;
+    optional double RetryRate = 4;
+}
+
+// stored in column "physical_graph" of .metadata/script_executions table
+message TQueryPhysicalGraph {
+    message TTask {
+        optional uint64 TxId = 1;
+        optional NYql.NDqProto.TDqTask DqTask = 2;
+    }
+
+    optional TPreparedQuery PreparedQuery = 1;
+    repeated TTask Tasks = 2;
 }
 
 /// KQP workload manager Events

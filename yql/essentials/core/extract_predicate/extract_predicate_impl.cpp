@@ -45,7 +45,9 @@ bool IsPgOrDataOrMultiOptionalOfData(const TTypeAnnotationNode* type) {
     return GetBasePgOrDataType(type) != nullptr;
 }
 
-TMaybe<size_t> GetSqlInCollectionSize(const TExprNode::TPtr& collection) {
+TMaybe<size_t> GetSqlInCollectionSize(const TExprNode::TPtr& collection, const TMaybe<size_t>& parameterMaxSize,
+    size_t& usedStatsCount)
+{
     TExprNode::TPtr curr = collection;
     if (curr->IsCallable("Just")) {
         curr = curr->HeadPtr();
@@ -55,7 +57,25 @@ TMaybe<size_t> GetSqlInCollectionSize(const TExprNode::TPtr& collection) {
         return std::max<size_t>(curr->ChildrenSize(), 1);
     }
 
+    if (curr->IsCallable("Parameter") && curr->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
+        YQL_ENSURE(curr->ChildrenSize() > 0);
+        TStringBuf paramName =curr->Child(0)->Content();
+        if (parameterMaxSize.Defined()) {
+            ++usedStatsCount;
+            YQL_CLOG(DEBUG, Core) << "strict size of parameter " << paramName << " is "
+                << *parameterMaxSize;
+            return *parameterMaxSize;
+        } else {
+            YQL_CLOG(DEBUG, Core) << "strict size of parameter " << paramName << " is undefined";
+        }
+    }
+
     return {};
+}
+
+TMaybe<size_t> GetSqlInCollectionSize(const TExprNode::TPtr& collection) {
+    size_t tmp = 0;
+    return GetSqlInCollectionSize(collection, {}, tmp);
 }
 
 const TTypeAnnotationNode* GetSqlInCollectionItemType(const TTypeAnnotationNode* collectionType) {
@@ -1372,7 +1392,9 @@ TExprNode::TPtr RebuildRangeForIndexKeys(const TStructExprType& rowType, const T
     return result;
 }
 
-TMaybe<size_t> CalcMaxRanges(const TExprNode::TPtr& range, const THashMap<TString, size_t>& indexKeysOrder) {
+TMaybe<size_t> CalcMaxRanges(const TExprNode::TPtr& range, const THashMap<TString, size_t>& indexKeysOrder,
+    const TMaybe<size_t>& parameterMaxSize, size_t& usedStatsCount)
+{
     if (range->IsCallable("RangeConst")) {
         return 1;
     }
@@ -1385,7 +1407,7 @@ TMaybe<size_t> CalcMaxRanges(const TExprNode::TPtr& range, const THashMap<TStrin
         auto opNode = GetOpFromRange(*range);
         if (opNode->IsCallable("SqlIn")) {
             TCoSqlIn sqlIn(opNode);
-            return GetSqlInCollectionSize(sqlIn.Collection().Ptr());
+            return GetSqlInCollectionSize(sqlIn.Collection().Ptr(), parameterMaxSize, usedStatsCount);
         }
 
         return opNode->IsCallable("!=") ? 2 : 1;
@@ -1395,7 +1417,7 @@ TMaybe<size_t> CalcMaxRanges(const TExprNode::TPtr& range, const THashMap<TStrin
         size_t result = 0;
         for (auto& child : range->ChildrenList()) {
             YQL_ENSURE(!child->IsCallable("RangeRest"));
-            auto childRanges = CalcMaxRanges(child, indexKeysOrder);
+            auto childRanges = CalcMaxRanges(child, indexKeysOrder, parameterMaxSize, usedStatsCount);
             if (!childRanges) {
                 return {};
             }
@@ -1410,7 +1432,7 @@ TMaybe<size_t> CalcMaxRanges(const TExprNode::TPtr& range, const THashMap<TStrin
     for (auto& child : range->ChildrenList()) {
         TMaybe<size_t> childRanges;
         if (child->IsCallable("Range") || !child->IsCallable("RangeRest")) {
-            childRanges = CalcMaxRanges(child, indexKeysOrder);
+            childRanges = CalcMaxRanges(child, indexKeysOrder, parameterMaxSize, usedStatsCount);
             if (!childRanges) {
                 return {};
             }
@@ -2176,10 +2198,10 @@ bool TPredicateRangeExtractor::Prepare(const TExprNode::TPtr& filterLambdaNode, 
     THashSet<TString>& possibleIndexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx)
 {
     possibleIndexKeys.clear();
-    YQL_ENSURE(!FilterLambda, "Prepare() should be called only once");
-    FilterLambda = filterLambdaNode;
+    YQL_ENSURE(!FilterLambda_, "Prepare() should be called only once");
+    FilterLambda_ = filterLambdaNode;
     YQL_ENSURE(rowType.GetKind() == ETypeAnnotationKind::Struct);
-    RowType = rowType.Cast<TStructExprType>();
+    RowType_ = rowType.Cast<TStructExprType>();
 
     TCoLambda filterLambda = OptimizeLambdaForRangeExtraction(filterLambdaNode, ctx, typesCtx);
 
@@ -2196,22 +2218,22 @@ bool TPredicateRangeExtractor::Prepare(const TExprNode::TPtr& filterLambdaNode, 
     YQL_ENSURE(EnsureSpecificDataType(*pred, EDataSlot::Bool, ctx));
     YQL_ENSURE(rowArgType->GetKind() == ETypeAnnotationKind::Struct);
     for (auto& item : rowArgType->Cast<TStructExprType>()->GetItems()) {
-        auto idx = RowType->FindItem(item->GetName());
+        auto idx = RowType_->FindItem(item->GetName());
         YQL_ENSURE(idx,
             "RowType/lambda arg mismatch: column " << item->GetName() << " is missing in original table");
-        YQL_ENSURE(IsSameAnnotation(*RowType->GetItems()[*idx]->GetItemType(), *item->GetItemType()),
+        YQL_ENSURE(IsSameAnnotation(*RowType_->GetItems()[*idx]->GetItemType(), *item->GetItemType()),
             "RowType/lambda arg mismatch: column " << item->GetName() << " has type: " << *item->GetItemType() <<
-            " expecting: " << *RowType->GetItems()[*idx]->GetItemType());
+            " expecting: " << *RowType_->GetItems()[*idx]->GetItemType());
     }
 
     TSet<TString> keysInScope;
-    DoBuildRanges(rowArg, pred, Settings, Range, keysInScope, ctx, false);
+    DoBuildRanges(rowArg, pred, Settings_, Range_, keysInScope, ctx, false);
     possibleIndexKeys.insert(keysInScope.begin(), keysInScope.end());
 
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
     // replace plain predicate in Range/RangeRest with lambda
-    auto status = OptimizeExpr(Range, Range, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+    auto status = OptimizeExpr(Range_, Range_, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (node->IsCallable({"Range", "RangeRest"}) && node->ChildrenSize() == 1) {
             auto pos = node->Pos();
             // use lambda in Range/RangeRest
@@ -2237,10 +2259,10 @@ bool TPredicateRangeExtractor::Prepare(const TExprNode::TPtr& filterLambdaNode, 
 TPredicateRangeExtractor::TBuildResult TPredicateRangeExtractor::BuildComputeNode(const TVector<TString>& indexKeys,
     TExprContext& ctx, TTypeAnnotationContext& typesCtx) const
 {
-    YQL_ENSURE(FilterLambda && Range && RowType, "Prepare() is not called");
+    YQL_ENSURE(FilterLambda_ && Range_ && RowType_, "Prepare() is not called");
 
     TBuildResult result;
-    result.PrunedLambda = ctx.DeepCopyLambda(*FilterLambda);
+    result.PrunedLambda = ctx.DeepCopyLambda(*FilterLambda_);
 
     {
         THashSet<TString> uniqIndexKeys;
@@ -2252,9 +2274,9 @@ TPredicateRangeExtractor::TBuildResult TPredicateRangeExtractor::BuildComputeNod
     THashMap<TString, size_t> indexKeysOrder;
     TVector<TString> effectiveIndexKeys = indexKeys;
     for (size_t i = 0; i < effectiveIndexKeys.size(); ++i) {
-        TMaybe<ui32> idx = RowType->FindItem(effectiveIndexKeys[i]);
+        TMaybe<ui32> idx = RowType_->FindItem(effectiveIndexKeys[i]);
         if (idx) {
-            auto keyBaseType = GetBasePgOrDataType(RowType->GetItems()[*idx]->GetItemType());
+            auto keyBaseType = GetBasePgOrDataType(RowType_->GetItems()[*idx]->GetItemType());
             if (!(keyBaseType && keyBaseType->IsComparable() && keyBaseType->IsEquatable())) {
                 idx = {};
             }
@@ -2270,14 +2292,15 @@ TPredicateRangeExtractor::TBuildResult TPredicateRangeExtractor::BuildComputeNod
         return result;
     }
 
-    TExprNode::TPtr rebuiltRange = RebuildRangeForIndexKeys(*RowType, Range, indexKeysOrder, result.UsedPrefixLen, ctx);
+    TExprNode::TPtr rebuiltRange = RebuildRangeForIndexKeys(*RowType_, Range_, indexKeysOrder, result.UsedPrefixLen, ctx);
     TExprNode::TPtr prunedRange;
-    result.ComputeNode = BuildMultiColumnComputeNode(*RowType, rebuiltRange, effectiveIndexKeys, indexKeysOrder,
-        prunedRange, Settings, result.UsedPrefixLen, result.PointPrefixLen, ctx, typesCtx, result.LiteralRange);
+    result.ComputeNode = BuildMultiColumnComputeNode(*RowType_, rebuiltRange, effectiveIndexKeys, indexKeysOrder,
+        prunedRange, Settings_, result.UsedPrefixLen, result.PointPrefixLen, ctx, typesCtx, result.LiteralRange);
 
     if (result.ComputeNode) {
-        result.ExpectedMaxRanges = CalcMaxRanges(rebuiltRange, indexKeysOrder);
-        if (!Settings.MaxRanges || (result.ExpectedMaxRanges && *result.ExpectedMaxRanges < *Settings.MaxRanges)) {
+        result.ExpectedMaxRanges = CalcMaxRanges(rebuiltRange, indexKeysOrder,
+            Settings_.ExternalParameterMaxSize, result.ExternalParameterMaxSizesLookups);
+        if (!Settings_.MaxRanges || (result.ExpectedMaxRanges && *result.ExpectedMaxRanges < *Settings_.MaxRanges)) {
             TCoLambda lambda(result.PrunedLambda);
             auto newPred = MakePredicateFromPrunedRange(prunedRange, lambda.Args().Arg(0).Ptr(), ctx);
 

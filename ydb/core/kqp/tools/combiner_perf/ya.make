@@ -21,6 +21,10 @@ PEERDIR(
 
     library/cpp/testing/unittest
 
+    ydb/core/kqp/runtime
+
+    ydb/library/yql/dq/comp_nodes
+
     contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/ExecutionEngine/MCJIT
     contrib/libs/llvm16/lib/Linker
@@ -42,6 +46,7 @@ ENDIF()
 
 SRCS(
     converters.cpp
+    dq_combine_vs.cpp
     factories.cpp
     printout.cpp
     simple.cpp

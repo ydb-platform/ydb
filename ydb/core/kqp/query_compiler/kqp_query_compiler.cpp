@@ -179,8 +179,8 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     FillTableId(tableMeta, *tableProto.MutableId());
     tableProto.SetKind(GetPhyTableKind(tableMeta.Kind));
 
-    if (tableMeta.SysViewType) {
-        tableProto.SetSysViewType(static_cast<ui32>(*tableMeta.SysViewType));
+    if (tableMeta.SysViewInfo) {
+        *tableProto.MutableSysViewInfo() = *tableMeta.SysViewInfo;
     }
 
     for (const auto& keyColumnName : tableMeta.KeyColumnNames) {
@@ -493,6 +493,93 @@ std::optional<std::pair<TString, TString>> FindOneSecureParam(const TExprNode::T
     return *secureParams.begin();
 }
 
+TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpProto::TKqpPhyQuery& queryProto) {
+    TIssues issues;
+    NJson::TJsonValue jsonNode;
+    try {
+        NJson::TJsonReaderConfig jsonConfig;
+        NJson::ReadJsonTree(overridePlannerJson, &jsonConfig, &jsonNode, true);
+        if (!jsonNode.IsArray()) {
+            issues.AddIssue("Expected array json value");
+            return issues;
+        }
+    } catch (const std::exception& e) {
+        issues.AddIssue(TStringBuilder() << "Failed to parse json: " << e.what());
+        return issues;
+    }
+
+    const auto extractUint = [](const NJson::TJsonValue& node, ui32* result) -> TString {
+        if (!node.IsUInteger()) {
+            return "Expected non negative integer json value";
+        }
+
+        *result = node.GetUIntegerSafe();
+        return "";
+    };
+
+    THashSet<std::pair<ui32, ui32>> updatedStages;
+    const auto& jsonArray = jsonNode.GetArray();
+    for (size_t i = 0; i < jsonArray.size(); ++i) {
+        const auto& stageOverride = jsonArray[i];
+        if (!stageOverride.IsMap()) {
+            issues.AddIssue(TStringBuilder() << "Expected map json value for stage override " << i);
+            continue;
+        }
+
+        ui32 txId = 0;
+        ui32 stageId = 0;
+        std::optional<ui32> tasks;
+        for (const auto& [key, value] : stageOverride.GetMap()) {
+            ui32* result = nullptr;
+            if (key == "tx") {
+                result = &txId;
+            } else if (key == "stage") {
+                result = &stageId;
+            } else if (key == "tasks") {
+                tasks = 0;
+                result = &(*tasks);
+            } else {
+                issues.AddIssue(TStringBuilder() << "Unknown key '" << key << "' in stage override " << i);
+                continue;
+            }
+
+            if (const auto& error = extractUint(value, result)) {
+                issues.AddIssue(TStringBuilder() << error << " for key '" << key << "' in stage override " << i);
+                continue;
+            }
+        }
+
+        if (!updatedStages.emplace(txId, stageId).second) {
+            issues.AddIssue(TStringBuilder() << "Duplicate stage override " << i << " for tx " << txId << " and stage " << stageId);
+            continue;
+        }
+
+        if (!tasks) {
+            issues.AddIssue(TStringBuilder() << "Missing stage settings for tx " << txId << " and stage " << stageId << " in stage override " << i);
+            continue;
+        }
+
+        auto& txs = *queryProto.MutableTransactions();
+        if (txId >= static_cast<ui32>(txs.size())) {
+            issues.AddIssue(TStringBuilder() << "Invalid tx id: " << txId << " in stage override " << i << ", number of transactions in query: " << txs.size());
+            continue;
+        }
+
+        auto& stages = *txs[txId].MutableStages();
+        if (stageId >= static_cast<ui32>(stages.size())) {
+            issues.AddIssue(TStringBuilder() << "Invalid stage id: " << stageId << " in stage override " << i << ", number of stages in transaction " << txId << ": " << stages.size());
+            continue;
+        }
+
+        auto& stage = stages[stageId];
+        if (tasks) {
+            stage.SetTaskCount(*tasks);
+        }
+    }
+
+    return issues;
+}
+
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
     TKqpQueryCompiler(const TString& cluster, const TIntrusivePtr<TKikimrTablesData> tablesData,
@@ -523,6 +610,14 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
+        queryProto.SetEnableOltpSink(Config->EnableOltpSink);
+        queryProto.SetEnableOlapSink(Config->EnableOlapSink);
+        queryProto.SetEnableHtapTx(Config->EnableHtapTx);
+        queryProto.SetLangVer(Config->LangVer);
+
+        queryProto.SetForceImmediateEffectsExecution(
+            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
             if (queryBlockSettings.HasUncommittedChangesRead) {
@@ -545,30 +640,14 @@ public:
             CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
         }
 
-        auto overridePlanner = Config->OverridePlanner.Get();
-        if (overridePlanner) {
-            NJson::TJsonReaderConfig jsonConfig;
-            NJson::TJsonValue jsonNode;
-            if (NJson::ReadJsonTree(*overridePlanner, &jsonConfig, &jsonNode)) {
-                for (auto& stageOverride : jsonNode.GetArray()) {
-                    ui32 txId = 0;
-                    if (auto* txNode = stageOverride.GetValueByPath("tx")) {
-                        txId = txNode->GetIntegerSafe();
-                    }
-                    if (txId < static_cast<ui32>(queryProto.GetTransactions().size())) {
-                        auto& tx = *queryProto.MutableTransactions(txId);
-                        ui32 stageId = 0;
-                        if (auto* stageNode = stageOverride.GetValueByPath("stage")) {
-                            stageId = stageNode->GetIntegerSafe();
-                        }
-                        if (stageId < static_cast<ui32>(tx.GetStages().size())) {
-                            auto& stage = *tx.MutableStages(stageId);
-                            if (auto* tasksNode = stageOverride.GetValueByPath("tasks")) {
-                                stage.SetTaskCount(tasksNode->GetIntegerSafe());
-                            }
-                        }
-                    }
+        if (const auto overridePlanner = Config->OverridePlanner.Get()) {
+            if (const auto& issues = ApplyOverridePlannerSettings(*overridePlanner, queryProto)) {
+                NYql::TIssue rootIssue("Invalid override planner settings");
+                rootIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+                for (auto issue : issues) {
+                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
                 }
+                ctx.AddError(rootIssue);
             }
         }
 
@@ -597,10 +676,10 @@ public:
             YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Struct);
 
             NKikimrMiniKQL::TType kikimrProto;
+            auto typeBuilder = NKikimr::NMiniKQL::TTypeBuilder(TypeEnv);
+            NKikimr::NMiniKQL::TType* resultType = NYql::NCommon::BuildType(result.Pos(), *type, typeBuilder);
 
-            if (!NYql::ExportTypeToKikimrProto(*type, kikimrProto, ctx)) {
-                return false;
-            }
+            ExportTypeToProto(resultType, kikimrProto);
 
             auto resultMetaColumns = queryBindingProto.MutableResultSetMeta()->Mutablecolumns();
             for (size_t i = 0; i < kikimrProto.GetStruct().MemberSize(); i++) {
@@ -854,6 +933,7 @@ private:
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         programProto.SetRaw(programBytecode);
+        programProto.SetLangVer(Config->LangVer);
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
 
@@ -1238,15 +1318,15 @@ private:
                 AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "false");
                 settingsProto.SetInconsistentTx(false);
 
-                const bool canUseStreamIndex = Config->EnableIndexStreamWrite
-                    && std::all_of(tableMeta->Indexes.begin(), tableMeta->Indexes.end(), [](const auto& index) {
-                        return index.Type == TIndexDescription::EType::GlobalSync;
-                    });
-
-                if (canUseStreamIndex && settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                if (Config->EnableIndexStreamWrite && settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
                     for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
                         const auto& indexDescription = tableMeta->Indexes[index];
+
+                        if (indexDescription.Type != TIndexDescription::EType::GlobalSync
+                               && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
+                            continue;
+                        }
                         const auto& implTable = tableMeta->ImplTables[index];
 
                         AFL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync);
@@ -1315,6 +1395,10 @@ private:
                 settingsProto.SetIsBatch(true);
             }
 
+            if (const auto isIndexImplTable = settings.IsIndexImplTable().Cast(); isIndexImplTable.StringValue() == "true") {
+                settingsProto.SetIsIndexImplTable(true);
+            }
+
             internalSinkProto.MutableSettings()->PackFrom(settingsProto);
         } else {
             YQL_ENSURE(false, "Unsupported sink type");
@@ -1374,6 +1458,11 @@ private:
             return;
         }
 
+        if (connection.Maybe<TDqCnParallelUnionAll>()) {
+            connectionProto.MutableParallelUnionAll();
+            return;
+        }
+
         if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
             const auto& shuffle = maybeShuffle.Cast();
             auto& shuffleProto = *connectionProto.MutableHashShuffle();
@@ -1381,45 +1470,60 @@ private:
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
 
-            if (Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination)) {
-                auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
-
-                const auto& outputType = NYql::NDq::GetDqConnectionType(connection, ctx);
-                auto structType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-                for (const auto& column: shuffle.KeyColumns().Ptr()->Children()) {
-                    auto ty = NYql::NDq::GetColumnType(connection, *structType, column->Content(), column->Pos(), ctx);
-                    if (ty->GetKind() == ETypeAnnotationKind::List) {
-                        ty = ty->Cast<TListExprType>()->GetItemType();
-                    }
-                    NYql::NUdf::EDataSlot slot;
-                    switch (ty->GetKind()) {
-                        case ETypeAnnotationKind::Data: {
-                            slot = ty->Cast<TDataExprType>()->GetSlot();
-                            break;
-                        }
-                        case ETypeAnnotationKind::Optional: {
-                            auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
-                            if (optionalType->GetKind() == ETypeAnnotationKind::List) {
-                                optionalType = optionalType->Cast<TListExprType>()->GetItemType();
-                            }
-                            Y_ENSURE(
-                                optionalType->GetKind() == ETypeAnnotationKind::Data,
-                                TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
-                            );
-                            slot = optionalType->Cast<TDataExprType>()->GetSlot();
-                            break;
-                        }
-                        default: {
-                            Y_ENSURE(false, TStringBuilder{} << "Can't get type for ColumnHashV1 Shuffling: " << static_cast<std::int64_t>(ty->GetKind()));
-                        }
-                    }
-
-                    auto typeId = GetDataTypeInfo(slot).TypeId;
-                    columnHashV1.AddKeyColumnTypes(typeId);
-                }
-            } else {
-                shuffleProto.MutableHashV1();
+            NDq::EHashShuffleFuncType hashFuncType = NDq::EHashShuffleFuncType::HashV1;
+            if (shuffle.HashFunc().IsValid()) {
+                hashFuncType = FromString<NDq::EHashShuffleFuncType>(shuffle.HashFunc().Cast().StringValue());
             }
+
+            switch (hashFuncType) {
+                using enum NDq::EHashShuffleFuncType;
+                case HashV1: {
+                    shuffleProto.MutableHashV1();
+                    break;
+                }
+                case HashV2: {
+                    shuffleProto.MutableHashV2();
+                    break;
+                }
+                case ColumnShardHashV1: {
+                    auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
+
+                    const auto& outputType = NYql::NDq::GetDqConnectionType(connection, ctx);
+                    auto structType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                    for (const auto& column: shuffle.KeyColumns().Ptr()->Children()) {
+                        auto ty = NYql::NDq::GetColumnType(connection, *structType, column->Content(), column->Pos(), ctx);
+                        if (ty->GetKind() == ETypeAnnotationKind::List) {
+                            ty = ty->Cast<TListExprType>()->GetItemType();
+                        }
+                        NYql::NUdf::EDataSlot slot;
+                        switch (ty->GetKind()) {
+                            case ETypeAnnotationKind::Data: {
+                                slot = ty->Cast<TDataExprType>()->GetSlot();
+                                break;
+                            }
+                            case ETypeAnnotationKind::Optional: {
+                                auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
+                                if (optionalType->GetKind() == ETypeAnnotationKind::List) {
+                                    optionalType = optionalType->Cast<TListExprType>()->GetItemType();
+                                }
+                                Y_ENSURE(
+                                    optionalType->GetKind() == ETypeAnnotationKind::Data,
+                                    TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
+                                );
+                                slot = optionalType->Cast<TDataExprType>()->GetSlot();
+                                break;
+                            }
+                            default: {
+                                Y_ENSURE(false, TStringBuilder{} << "Can't get type for ColumnHashV1 Shuffling: " << static_cast<std::int64_t>(ty->GetKind()));
+                            }
+                        }
+
+                        auto typeId = GetDataTypeInfo(slot).TypeId;
+                        columnHashV1.AddKeyColumnTypes(typeId);
+                    }
+                    break;
+                }
+            };
 
             if (Config->EnableSpillingInHashJoinShuffleConnections && shuffle.UseSpilling()) {
                 shuffleProto.SetUseSpilling(FromStringWithDefault<bool>(shuffle.UseSpilling().Cast().StringValue(), false));

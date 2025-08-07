@@ -7,6 +7,7 @@
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
+#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 
@@ -980,16 +981,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushPruneKeysIntoYtOper
         return {};
     }
 
-    auto mapper = ctx.Builder(node.Pos())
-        .Lambda()
-            .Param("stream")
-            .Callable(node.Ref().Content())
-                .Arg(0, "stream")
-                .Add(1, extractorLambda.Ptr())
-            .Seal()
-        .Seal()
-        .Build();
-
     auto outItemType = SilentGetSequenceItemType(op.Input().Ref(), true);
     if (!outItemType || !outItemType->IsPersistable()) {
         return node;
@@ -998,40 +989,19 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushPruneKeysIntoYtOper
         return {};
     }
 
-    bool sortedOutput = TCoPruneAdjacentKeys::Match(node.Raw());
-    TVector<TYtOutTable> outTables = ConvertOutTablesWithSortAware(mapper, sortedOutput, node.Pos(),
-        outItemType, ctx, State_, node.Ref().GetConstraintSet());
-
-    auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos());
-    if (sortedOutput) {
-        settingsBuilder
-            .Add()
-                .Name()
-                    .Value(ToString(EYtSettingType::Ordered))
-                .Build()
-            .Build();
-    }
-    if (State_->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW)) {
-        settingsBuilder
-            .Add()
-                .Name()
-                    .Value(ToString(EYtSettingType::Flow))
-                .Build()
-            .Build();
-    }
-
-    auto map = Build<TYtMap>(ctx, node.Pos())
-        .World(GetWorld(op.Input(), {}, ctx))
-        .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
-        .Input(ConvertInputTable(op.Input(), ctx))
-        .Output()
-            .Add(outTables)
-        .Build()
-        .Settings(settingsBuilder.Done())
-        .Mapper(std::move(mapper))
-        .Done();
-
-    return WrapOp(map, ctx);
+    bool isOrdered = TCoPruneAdjacentKeys::Match(node.Raw());
+    auto pruneKeysCallable = isOrdered ? "PruneAdjacentKeys" : "PruneKeys";
+    YQL_CLOG(DEBUG, Core) << "Push " << pruneKeysCallable << " into YT Operation";
+    return BuildMapForPruneKeys(
+        node,
+        extractorLambda.Ptr(),
+        isOrdered,
+        *cluster,
+        GetWorld(op.Input(), {}, ctx).Ptr(),
+        ConvertInputTable(op.Input(), ctx),
+        outItemType,
+        ctx,
+        State_);
 }
 
 }  // namespace NYql

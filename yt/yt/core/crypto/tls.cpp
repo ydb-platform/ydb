@@ -19,11 +19,14 @@
 
 #include <library/cpp/openssl/io/stream.h>
 
+#include <util/string/hex.h>
+
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#include <openssl/x509v3.h>
 
 namespace NYT::NCrypto {
 
@@ -88,6 +91,19 @@ void TSslDeleter::operator()(SSL_CTX* ctx) const noexcept
 void TSslDeleter::operator()(SSL* ssl) const noexcept
 {
     SSL_free(ssl);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString GetFingerprintSHA256(const TX509Ptr& certificate)
+{
+    auto mdType = EVP_sha256();
+    unsigned char md[EVP_MAX_MD_SIZE];
+    unsigned int mdLen = 0;
+    if (!X509_digest(certificate.get(), mdType, md, &mdLen)) {
+        THROW_ERROR GetLastSslError("X509_digest() failed");
+    }
+    return HexEncode(md, mdLen);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -168,6 +184,8 @@ struct TSslContextImpl
         return SSL_get_SSL_CTX(ssl) == ActiveContext_.get();
     }
 
+    DEFINE_BYVAL_RW_BOOLEAN_PROPERTY(InsecureSkipVerify, DefaultInsecureSkipVerify);
+
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
     TSslCtxPtr Context_;
@@ -212,6 +230,10 @@ public:
 
     void SetHost(const TString& host)
     {
+        // Verify hostname in server certificate.
+        SSL_set_hostflags(Ssl_.get(), X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+        SSL_set1_host(Ssl_.get(), host.c_str());
+
         SSL_set_tlsext_host_name(Ssl_.get(), host.c_str());
     }
 
@@ -219,8 +241,14 @@ public:
     {
     }
 
-    void StartClient()
+    void StartClient(bool insecureSkipVerify)
     {
+        YT_LOG_WARNING_IF(insecureSkipVerify, "Started insecure TLS client connection");
+        if (!insecureSkipVerify) {
+            // Require and verify server certificate.
+            SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nullptr);
+        }
+
         SSL_set_connect_state(Ssl_.get());
         auto sslResult = SSL_do_handshake(Ssl_.get());
         sslResult = SSL_get_error(Ssl_.get(), sslResult);
@@ -611,15 +639,20 @@ public:
 
     TFuture<IConnectionPtr> Dial(const TNetworkAddress& remoteAddress, TDialerContextPtr context) override
     {
-        return Underlying_->Dial(remoteAddress)
-            .Apply(BIND([ctx = Context_, poller = Poller_, context = std::move(context)] (const IConnectionPtr& underlying) -> IConnectionPtr {
+        return Underlying_->Dial(remoteAddress).Apply(BIND(
+            [
+                ctx = Context_,
+                poller = Poller_,
+                context = std::move(context),
+                insecureSkipVerify = Context_->IsInsecureSkipVerify()
+            ] (const IConnectionPtr& underlying) -> IConnectionPtr {
                 auto connection = New<TTlsConnection>(ctx, poller, underlying);
                 if (context && context->Host) {
                     connection->SetHost(*context->Host);
                 }
-                connection->StartClient();
+                connection->StartClient(insecureSkipVerify);
                 return connection;
-        }));
+            }));
     }
 
 private:
@@ -727,6 +760,7 @@ void TSslContext::ApplyConfig(const TSslContextConfigPtr& config, TCertificatePa
     AddCertificateAuthority(config->CertificateAuthority, pathResolver);
     AddCertificateChain(config->CertificateChain, pathResolver);
     AddPrivateKey(config->PrivateKey, pathResolver);
+    Impl_->SetInsecureSkipVerify(config->InsecureSkipVerify);
 }
 
 void TSslContext::UseBuiltinOpenSslX509Store()
@@ -867,48 +901,28 @@ void TSslContext::AddPrivateKey(const TString& privateKey)
 void TSslContext::AddCertificateAuthority(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddCertificateAuthorityFromFile(filePath);
-        } else {
-            AddCertificateAuthority(pem->LoadBlob());
-        }
+        AddCertificateAuthority(pem->LoadBlob(resolver));
     }
 }
 
 void TSslContext::AddCertificate(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddCertificateFromFile(filePath);
-        } else {
-            AddCertificate(pem->LoadBlob());
-        }
+        AddCertificate(pem->LoadBlob(resolver));
     }
 }
 
 void TSslContext::AddCertificateChain(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddCertificateChainFromFile(filePath);
-        } else {
-            AddCertificateChain(pem->LoadBlob());
-        }
+        AddCertificateChain(pem->LoadBlob(resolver));
     }
 }
 
 void TSslContext::AddPrivateKey(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddPrivateKeyFromFile(filePath);
-        } else {
-            AddPrivateKey(pem->LoadBlob());
-        }
+        AddPrivateKey(pem->LoadBlob(resolver));
     }
 }
 

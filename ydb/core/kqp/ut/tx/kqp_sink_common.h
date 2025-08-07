@@ -14,7 +14,6 @@ using namespace NYdb::NQuery;
 
 class TTableDataModificationTester {
 protected:
-    NKikimrConfig::TAppConfig AppConfig;
     std::unique_ptr<TKikimrRunner> Kikimr;
     YDB_ACCESSOR(bool, IsOlap, false);
     YDB_ACCESSOR(bool, FastSnapshotExpiration, false);
@@ -23,10 +22,10 @@ protected:
     virtual void DoExecute() = 0;
 public:
     void Execute() {
-        AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
-        AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
-        AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
-        auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
         if (FastSnapshotExpiration) {
             settings.SetKeepSnapshotTimeout(TDuration::Seconds(1));
         }
@@ -39,7 +38,6 @@ public:
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
         {
             auto type = IsOlap ? "COLUMN" : "ROW";
@@ -100,8 +98,6 @@ public:
         }
 
         DoExecute();
-        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
     }
 
 };

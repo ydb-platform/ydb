@@ -29,6 +29,11 @@
             "uri": "file://test.test_BlockTo_/results.txt"
         }
     ],
+    "test.test[DateTimeInvalidSpecifierFail]": [
+        {
+            "uri": "file://test.test_DateTimeInvalidSpecifierFail_/extracted"
+        }
+    ],
     "test.test[EndOf]": [
         {
             "uri": "file://test.test_EndOf_/results.txt"
@@ -47,6 +52,16 @@
     "test.test[Format]": [
         {
             "uri": "file://test.test_Format_/results.txt"
+        }
+    ],
+    "test.test[FromSeconds_2025.02]": [
+        {
+            "uri": "file://test.test_FromSeconds_2025.02_/extracted"
+        }
+    ],
+    "test.test[FromSeconds_2025.03]": [
+        {
+            "uri": "file://test.test_FromSeconds_2025.03_/results.txt"
         }
     ],
     "test.test[From]": [
@@ -117,6 +132,16 @@
     "test.test[StartOf]": [
         {
             "uri": "file://test.test_StartOf_/results.txt"
+        }
+    ],
+    "test.test[ToSeconds_2025.02]": [
+        {
+            "uri": "file://test.test_ToSeconds_2025.02_/results.txt"
+        }
+    ],
+    "test.test[ToSeconds_2025.03]": [
+        {
+            "uri": "file://test.test_ToSeconds_2025.03_/results.txt"
         }
     ],
     "test.test[To]": [

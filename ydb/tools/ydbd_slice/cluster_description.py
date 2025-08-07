@@ -1,13 +1,34 @@
 import os
-import yaml
 import random
 from collections import namedtuple
 from functools import reduce
+
+import yaml
 
 from ydb.tools.cfg.base import ClusterDetailsProvider
 from ydb.tools.cfg.dynamic import DynamicConfigGenerator
 from ydb.tools.cfg.static import StaticConfigGenerator
 from ydb.tools.cfg.utils import write_to_file
+
+
+# --- Add custom loader for duplicate key detection ---
+class UniqueKeyLoader(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        mapping = {}
+        for key_node, value_node in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise yaml.constructor.ConstructorError(
+                    f"Duplicate key: {key!r} at line {key_node.start_mark.line + 1}"
+                )
+            value = self.construct_object(value_node, deep=deep)
+            mapping[key] = value
+        return mapping
+
+
+def safe_load_no_duplicates(content: str) -> dict:
+    return yaml.load(content, Loader=UniqueKeyLoader)
+# -----------------------------------------------------
 
 
 DynamicSlot = namedtuple(
@@ -28,7 +49,7 @@ class ClusterDetails(ClusterDetailsProvider):
     SLOTS_PORTS_START = 31000
     PORTS_SHIFT = 10
 
-    def __init__(self, cluster_description_path, walle_provider, validator=None):
+    def __init__(self, cluster_description_path, walle_provider=None, validator=None):
         self.__template = None
         self.__details = None
         self.__databases = None
@@ -42,13 +63,21 @@ class ClusterDetails(ClusterDetailsProvider):
     def template(self):
         if self.__template is None:
             with open(self._cluster_description_file, 'r') as file:
-                content = file.read()
-            self.__template = yaml.safe_load(content)
+                self.__template = safe_load_no_duplicates(file.read())
+
+        # for V2 configs, we need to use the config field
+        if 'config' in self.__template:
+            return self.__template['config']
+
         return self.__template
 
     @property
     def hosts_names(self):
         return sorted(list(set(node.hostname for node in self.hosts)))
+
+    @property
+    def hosts_datacenters(self):
+        return {host.get('host'): host.get('location', {}).get('data_center') for host in self.hosts}
 
     @staticmethod
     def __is_oneof_in(oneof, container):
@@ -68,7 +97,7 @@ class ClusterDetails(ClusterDetailsProvider):
     @property
     def dynamic_slots(self):
         if self.__dynamic_slots is None:
-            self.__dynamic_slots = {}
+            self.__dynamic_slots = []
             for slot in super(ClusterDetails, self).dynamic_slots:
                 mbus_port = self.SLOTS_PORTS_START + 0
                 grpc_port = self.SLOTS_PORTS_START + 1
@@ -77,7 +106,7 @@ class ClusterDetails(ClusterDetailsProvider):
                 kafka_port = self.SLOTS_PORTS_START + 5
                 full_name = str(ic_port)
 
-                self.__dynamic_slots[full_name] = DynamicSlot(
+                self.__dynamic_slots.append(DynamicSlot(
                     slot=full_name,
                     domain=slot.domain,
                     mbus=mbus_port,
@@ -85,7 +114,7 @@ class ClusterDetails(ClusterDetailsProvider):
                     mon=mon_port,
                     ic=ic_port,
                     kafka_port=kafka_port,
-                )
+                ))
                 self.SLOTS_PORTS_START += self.PORTS_SHIFT
         return self.__dynamic_slots
 
@@ -138,6 +167,28 @@ class Configurator(object):
     @property
     def hosts_names(self):
         return self.detail.hosts_names
+
+    @property
+    def group_hosts_by_datacenter(self):
+        """
+        Groups hosts by datacenter.
+        Stub implementation - returns empty dict.
+
+        Returns:
+            dict: Empty dictionary (stub)
+        """
+        return {}
+
+    @property
+    def group_hosts_by_bridge_pile(self):
+        """
+        Groups hosts by bridge pile name.
+        Stub implementation - returns empty dict.
+
+        Returns:
+            dict: Empty dictionary (stub)
+        """
+        return {}
 
     @staticmethod
     def _generate_fake_keys():

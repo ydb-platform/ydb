@@ -1,5 +1,6 @@
 #include "ydb_workload.h"
 #include "ydb_workload_import.h"
+#include "ydb_workload_tpcc.h"
 
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
@@ -46,7 +47,7 @@ TCommandWorkload::TCommandWorkload()
 {
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
-    //AddCommand(std::make_unique<TCommandTPCC>());
+    AddCommand(std::make_unique<TCommandTPCC>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
     }
@@ -345,13 +346,18 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
     : TWorkloadCommand(workload.CommandName, std::initializer_list<TString>(), workload.Description)
     , Params(params)
     , Type(workload.Type)
-{}
+{
+}
 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
+    Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
     Params.DbPath = config.Database;
+    Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
+    Params.Init();
+    workloadGen->Init();
     return RunWorkload(*workloadGen, Type);
 }
 
@@ -387,11 +393,14 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         TopicClient = MakeHolder<NTopic::TTopicClient>(*Driver);
         SchemeClient = MakeHolder<NScheme::TSchemeClient>(*Driver);
         QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
+        Params.SetClients(QueryClient.Get(), SchemeClient.Get(), TableClient.Get(), TopicClient.Get());
     }
     Params.DbPath = config.Database;
+    Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     auto result = DoRun(*workloadGen, config);
     if (!DryRun) {
+        Params.SetClients(nullptr, nullptr, nullptr, nullptr);
         TableClient->Stop().Wait();
         QueryClient.Reset();
         SchemeClient.Reset();
@@ -492,6 +501,16 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
         if (DryRun) {
             Cout << ddlQueries << Endl;
         } else {
+            TVector<TString> existPaths;
+            for (const auto& path: workloadGen.GetCleanPaths()) {
+                const auto fullPath = config.Database + "/" + path.c_str();
+                if (SchemeClient->DescribePath(fullPath).GetValueSync().IsSuccess()) {
+                    existPaths.emplace_back(path);
+                }
+            }
+            if (existPaths) {
+                throw yexception() << "Paths " << JoinSeq(", ", existPaths) << " already exist. Use 'ydb wokload " << Params.GetWorkloadName() << " clean' command or '--clear' option of 'init' command to cleanup tables.";
+            }
             auto result = TableClient->RetryOperationSync([ddlQueries](NTable::TSession session) {
                 return session.ExecuteSchemeQuery(ddlQueries.c_str()).GetValueSync();
             });

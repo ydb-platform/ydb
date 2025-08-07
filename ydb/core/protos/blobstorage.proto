@@ -128,6 +128,9 @@ message TGroupInfo {
     optional uint64 BlobDepotId = 15; // if filled, then this is virtual group
     optional NKikimrBlobStorage.TGroupDecommitStatus.E DecommitStatus = 16;
     repeated uint32 BridgeGroupIds = 17; // filled in for common group when operating in bridge mode
+    optional uint32 GroupSizeInUnits = 18;
+    optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
+    optional uint32 BridgePileId = 20;
 }
 
 message TEvVPatchStart {
@@ -310,6 +313,7 @@ message TEvVPut {
 
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
+    optional bool IssueKeepFlag = 12; // when set, blob is written along with keep flag
 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
 
@@ -345,6 +349,8 @@ message TEvVPutResult {
 message TVMultiPutItem {
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
+    optional bool IssueKeepFlag = 7;
+    optional bool IgnoreBlock = 8;
 
     optional uint64 FullDataSize = 3;
     optional uint64 Cookie = 4;
@@ -539,6 +545,7 @@ message TEvVAssimilate {
     optional NKikimrProto.TLogoBlobID SkipBlobsUpTo = 12; // the same behaviour
 
     optional bool IgnoreDecommitState = 13 [default = false]; // do not check if VDisk belongs to a being-decommitted group
+    optional bool Reverse = 14 [default = false]; // generate records in reverse order
 }
 
 message TEvVAssimilateResult {
@@ -617,6 +624,7 @@ message TEvVCollectGarbage {
     optional uint32 CollectGeneration = 4;
     optional uint32 CollectStep = 5;
     optional bool Hard = 12 [default = false];
+    optional bool IgnoreBlock = 13;
 
     repeated NKikimrProto.TLogoBlobID Keep = 6;
     repeated NKikimrProto.TLogoBlobID DoNotKeep = 7;
@@ -787,8 +795,18 @@ enum ESyncFullStage {
     Blocks = 2;
     Barriers = 3;
 }
+// Legacy protocol relies on linear order of blobs, barriers and blocks,
+// because it uses new snapshot on every TEvVSyncFull event and so it requires
+// these keys to know, where to continue from.
+// New protocol takes snapshot only once and then sends portions of unordered
+// data until it reaches the end.
+enum EFullSyncProtocol {
+    Legacy = 1;
+    UnorderedData = 2;
+}
 
 message TEvVSyncFull {
+
     optional TSyncState SyncState = 1;
 
     optional NKikimrBlobStorage.TVDiskID SourceVDiskID = 2; // sync this vdisk with ...
@@ -797,10 +815,16 @@ message TEvVSyncFull {
 
     optional uint64 Cookie = 5;
 
+    /////////////////////////////////////////////////////////////////////////////////
+    // Fields [11, 12, 13, 14] are used in legacy FullSync protocol.
     optional ESyncFullStage Stage = 11;
     optional NKikimrProto.TLogoBlobID LogoBlobFrom = 12;
     optional uint64 BlockTabletFrom = 13;
     optional TBarrierKey BarrierFrom = 14;
+    /////////////////////////////////////////////////////////////////////////////////
+
+    // If specified use new FullSync protocol, otherwise use the legacy protocol
+    optional EFullSyncProtocol Protocol = 20;
 }
 
 message TEvVSyncFullResult {
@@ -812,10 +836,17 @@ message TEvVSyncFullResult {
     optional NKikimrBlobStorage.TVDiskID VDiskID = 6;
     optional uint64 Cookie = 7;
 
+    /////////////////////////////////////////////////////////////////////////////////
+    // Fields [11, 12, 13, 14] are used in legacy FullSync protocol.
+    // Read comment in TEvVSyncFull message for details
     optional ESyncFullStage Stage = 11;
     optional NKikimrProto.TLogoBlobID LogoBlobFrom = 12;
     optional uint64 BlockTabletFrom = 13;
     optional TBarrierKey BarrierFrom = 14;
+    /////////////////////////////////////////////////////////////////////////////////
+
+    // If specified use new FullSync protocol, otherwise use the legacy protocol
+    optional EFullSyncProtocol Protocol = 20;
 }
 
 message THandoffDelLogoBlob {
@@ -1013,6 +1044,10 @@ message TNodeWardenServiceSet {
         optional TPDiskSpaceColor.E SpaceColorBorder = 13;
         optional bool ReadOnly = 14;
         optional bool Stop = 15;
+
+        // If not zero, NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits (if unset)
+        // from drive size and this value
+        optional uint64 InferPDiskSlotCountFromUnitSize = 16;
     }
 
     message TVDisk {
@@ -1036,6 +1071,7 @@ message TNodeWardenServiceSet {
         optional TDonorMode DonorMode = 9; // vdisk runs in read-only limited mode without interaction with other disks of group
         repeated TDonor Donors = 10; // a set of donor disks used to accelerate replication
         optional bool ReadOnly = 11;
+        optional uint32 GroupSizeInUnits = 12;
     }
 
     message TReplBrokerConfig {
@@ -1271,7 +1307,7 @@ message TEvControllerSelectGroupsResult {
             optional double IOPS = 2; // operations per second
             optional uint64 ReadThroughput = 3; // bytes per second
             optional uint64 WriteThroughput = 4; // bytes per second
-            optional double Occupancy = 5; // part of full slot size of the worst VDisk of group
+            optional double Occupancy = 5; // the worst occupancy among all VDisks in group
         }
 
         // assured part of group metrics -- when the underlying PDisks have all possible VSlots created; these metrics
@@ -1285,6 +1321,7 @@ message TEvControllerSelectGroupsResult {
         optional uint64 AvailableSize = 9; // bytes as reported by VDisk metrics (pessimistic case)
         optional uint64 AllocatedSize = 10; // the same basis
         optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 11;
+        optional uint32 GroupSizeInUnits = 14;
     }
     message TMatchingGroupList {
         repeated TGroupParameters Groups = 1;

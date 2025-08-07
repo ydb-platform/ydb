@@ -210,6 +210,19 @@ public:
         return result;
     }
 
+    const THashMap<TString, ESysViewType>& GetSystemViewsTypes(ETarget target) const override {
+        switch (target) {
+        case ETarget::Domain:
+            return DomainSystemViewTypes;
+        case ETarget::SubDomain:
+            return SubDomainSystemViewTypes;
+        case ETarget::OlapStore:
+            return OlapStoreSystemViewTypes;
+        case ETarget::ColumnTable:
+            return ColumnTableSystemViewTypes;
+        }
+    }
+
     bool IsSystemView(const TStringBuf viewName) const override final {
         return DomainSystemViews.contains(viewName) ||
             SubDomainSystemViews.contains(viewName) ||
@@ -221,7 +234,9 @@ private:
     void RegisterPgTablesSystemViews() {
         auto registerView = [&](TStringBuf tableName, ESysViewType type, const TVector<Schema::PgColumn>& columns) {
             auto& dsv  = DomainSystemViews[tableName];
+            DomainSystemViewTypes[tableName] = type;
             auto& sdsv = SubDomainSystemViews[tableName];
+            SubDomainSystemViewTypes[tableName] = type;
             auto& sv = SystemViews[type];
             for (const auto& column : columns) {
                 dsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
@@ -255,13 +270,16 @@ private:
     template <typename Table>
     void RegisterSystemView(const TStringBuf& name, ESysViewType type) {
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
+        DomainSystemViewTypes[name] = type;
         TSchemaFiller<Table>::Fill(SubDomainSystemViews[name]);
+        SubDomainSystemViewTypes[name] = type;
         TSchemaFiller<Table>::Fill(SystemViews[type]);
     }
 
     template <typename Table>
     void RegisterDomainSystemView(const TStringBuf& name, ESysViewType type) {
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
+        DomainSystemViewTypes[name] = type;
         TSchemaFiller<Table>::Fill(SystemViews[type]);
     }
 
@@ -289,6 +307,8 @@ private:
         RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1MinuteName, ESysViewType::ETopQueriesByRequestUnitsOneMinute);
         RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1HourName, ESysViewType::ETopQueriesByRequestUnitsOneHour);
         RegisterSystemView<Schema::QuerySessions>(QuerySessions, ESysViewType::EQuerySessions);
+        // don't have approved schema yet
+        // RegisterSystemView<Schema::CompileCacheQueries>(CompileCacheQueries, ESysViewType::ECompileCacheQueries);
 
         RegisterDomainSystemView<Schema::PDisks>(PDisksName, ESysViewType::EPDisks);
         RegisterDomainSystemView<Schema::VSlots>(VSlotsName, ESysViewType::EVSlots);
@@ -301,10 +321,12 @@ private:
         RegisterSystemView<Schema::QueryMetrics>(QueryMetricsName, ESysViewType::EQueryMetricsOneMinute);
 
         RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
+        RegisterOlapStoreSystemView<Schema::PrimaryIndexSchemaStats>(StorePrimaryIndexSchemaStatsName);
         RegisterOlapStoreSystemView<Schema::PrimaryIndexPortionStats>(StorePrimaryIndexPortionStatsName);
         RegisterOlapStoreSystemView<Schema::PrimaryIndexGranuleStats>(StorePrimaryIndexGranuleStatsName);
         RegisterOlapStoreSystemView<Schema::PrimaryIndexOptimizerStats>(StorePrimaryIndexOptimizerStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexStats>(TablePrimaryIndexStatsName);
+        RegisterColumnTableSystemView<Schema::PrimaryIndexSchemaStats>(TablePrimaryIndexSchemaStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexPortionStats>(TablePrimaryIndexPortionStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexGranuleStats>(TablePrimaryIndexGranuleStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexOptimizerStats>(TablePrimaryIndexOptimizerStatsName);
@@ -332,9 +354,13 @@ private:
 
 private:
     THashMap<TString, TSchema> DomainSystemViews;
+    THashMap<TString, ESysViewType> DomainSystemViewTypes;
     THashMap<TString, TSchema> SubDomainSystemViews;
+    THashMap<TString, ESysViewType> SubDomainSystemViewTypes;
     THashMap<TString, TSchema> OlapStoreSystemViews;
+    THashMap<TString, ESysViewType> OlapStoreSystemViewTypes;
     THashMap<TString, TSchema> ColumnTableSystemViews;
+    THashMap<TString, ESysViewType> ColumnTableSystemViewTypes;
     THashMap<ESysViewType, TSchema> SystemViews;
 };
 
@@ -375,20 +401,26 @@ public:
         return {};
     }
 
+    const THashMap<TString, ESysViewType>& GetSystemViewsTypes(ETarget target) const override {
+        Y_UNUSED(target);
+        return SystemViewTypes;
+    }
+
     bool IsSystemView(const TStringBuf viewName) const override final {
         return SystemViews.contains(viewName);
     }
 
 private:
     THashMap<TString, TSchema> SystemViews;
+    THashMap<TString, ESysViewType> SystemViewTypes;
 };
 
-ISystemViewResolver* CreateSystemViewResolver() {
-    return new TSystemViewResolver();
+THolder<ISystemViewResolver> CreateSystemViewResolver() {
+    return MakeHolder<TSystemViewResolver>();
 }
 
-ISystemViewResolver* CreateSystemViewRewrittenResolver() {
-    return new TSystemViewRewrittenResolver();
+THolder<ISystemViewResolver> CreateSystemViewRewrittenResolver() {
+    return MakeHolder<TSystemViewRewrittenResolver>();
 }
 
 } // NSysView

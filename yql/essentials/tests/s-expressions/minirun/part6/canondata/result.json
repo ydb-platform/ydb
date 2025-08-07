@@ -64,9 +64,9 @@
     ],
     "test.test[Config-DataSources-default.txt-Results]": [
         {
-            "checksum": "ec2a2ec8d3b155be221ac79f9c82e5a7",
-            "size": 203,
-            "uri": "https://{canondata_backend}/1777230/2f576fca9b0ae86029eb18255a004de1e2ecdf2b/resource.tar.gz#test.test_Config-DataSources-default.txt-Results_/results.txt"
+            "checksum": "03d58202103acf2dd6af856a8b09403c",
+            "size": 201,
+            "uri": "https://{canondata_backend}/1937001/2c97af103d08d86d366e60795dc76d18ae8dc92a/resource.tar.gz#test.test_Config-DataSources-default.txt-Results_/results.txt"
         }
     ],
     "test.test[EquiJoin-JoinInMem3Alias12-default.txt-Debug]": [

@@ -1,5 +1,7 @@
-#include "row_helpers.h"
 #include "yson_helpers.h"
+
+#include <yt/yt/tests/cpp/library/row_helpers.h>
+
 #include "yt/yt/client/table_client/public.h"
 
 #include <yt/yt/core/test_framework/framework.h>
@@ -27,6 +29,8 @@
 
 #include <yt/yt/library/named_value/named_value.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 #include <util/random/fast.h>
 
 #include <google/protobuf/text_format.h>
@@ -45,6 +49,7 @@ using namespace NTableClient;
 using namespace NConcurrency;
 using namespace NProtobufFormatTest;
 
+using NYT::ToProto;
 using ::google::protobuf::FileDescriptor;
 using NNamedValue::MakeRow;
 
@@ -2699,7 +2704,7 @@ TEST_P(TProtobufFormatStructuredMessage, Parse)
         .BeginMap()
             .Item("other_complex_field").Value(otherComplexField)
         .EndMap();
-    message.set_other_columns_field(otherColumnsYson.ToString());
+    message.set_other_columns_field(ToProto(otherColumnsYson));
 
     message.add_packed_repeated_int64_field(-123456789000LL);
     message.add_packed_repeated_int64_field(0);
@@ -3946,10 +3951,10 @@ TEST_P(TProtobufFormatAllFields, Parser)
         .EndMap();
 
     if (!IsLegacyFormat()) {
-        message.set_any_field_with_map(ConvertToYsonString(mapNode).ToString());
+        message.set_any_field_with_map(ToProto(ConvertToYsonString(mapNode)));
         message.set_any_field_with_int64(BuildYsonStringFluently().Value(22).ToString());
-        message.set_any_field_with_string(BuildYsonStringFluently().Value("some_string").ToString());
-        message.set_other_columns_field(ConvertToYsonString(otherColumnsNode).ToString());
+        message.set_any_field_with_string(ToProto(BuildYsonStringFluently().Value("some_string")));
+        message.set_other_columns_field(ToProto(ConvertToYsonString(otherColumnsNode)));
     }
 
     auto rowCollector = ParseRows(

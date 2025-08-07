@@ -98,6 +98,7 @@ public:
         AddHandler(0, &TDqPhyCrossJoin::Match, HNDL(RewriteCrossJoin));
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
+        AddHandler(0, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
@@ -142,14 +143,20 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildWideReadTable(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildWideReadTable(node, ctx, *Types);
+        TExprBase output = KqpBuildWideReadTable(node, ctx, *GetTypes());
         DumpAppliedRule("BuildWideReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
     TMaybeNode<TExprBase> RewriteLength(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteLength(node, ctx, *Types);
+        TExprBase output = DqPeepholeRewriteLength(node, ctx, *GetTypes());
         DumpAppliedRule("RewriteLength", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteBlockHashJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteBlockHashJoin(node, ctx);
+        DumpAppliedRule("RewriteBlockHashJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -182,6 +189,25 @@ struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
 private:
     TKikimrConfiguration::TPtr Config;
     TSet<TString> DisabledOpts;
+};
+
+class TKqpPeepholeNewOperatorTransformer : public TOptimizeTransformerBase {
+public:
+    TKqpPeepholeNewOperatorTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
+        : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+    {
+#define HNDL(name) "KqpPeepholeNewOperator-"#name, Hndl(&TKqpPeepholeNewOperatorTransformer::name)
+        if (config->UseDqHashCombine.Get().GetOrElse(false)) {
+            AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashCombiner));
+        }
+#undef HNDL
+    }
+
+    TMaybeNode<TExprBase> RewriteWideCombinerToDqHashCombiner(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteWideCombiner(node, ctx);
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
 };
 
 class TKqpPeepholeFinalTransformer : public TOptimizeTransformerBase {
@@ -217,7 +243,9 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
         pipeline->Add(new TKqpPeepholeFinalTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeFinal");
     }
 
-    void AfterOptimize(TTransformationPipeline*) const override {}
+    void AfterOptimize(TTransformationPipeline* pipeline) const override {
+        pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+    }
 private:
     const TKikimrConfiguration::TPtr Config;
 };

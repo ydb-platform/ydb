@@ -6,6 +6,8 @@ SRCS(
     yql_callable_transform.h
     yql_cost_function.cpp
     yql_data_provider.h
+    yql_default_valid_value.cpp
+    yql_default_valid_value.h
     yql_execution.cpp
     yql_execution.h
     yql_expr_constraint.cpp
@@ -30,6 +32,8 @@ SRCS(
     yql_opt_hopping.cpp
     yql_opt_match_recognize.cpp
     yql_opt_match_recognize.h
+    yql_opt_normalize_depends_on.cpp
+    yql_opt_normalize_depends_on.h
     yql_opt_proposed_by_data.cpp
     yql_opt_proposed_by_data.h
     yql_opt_range.cpp

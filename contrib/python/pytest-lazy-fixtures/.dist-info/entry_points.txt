@@ -1,3 +1,2 @@
 [pytest11]
-pytest_lazyfixture=pytest_lazy_fixtures.plugin
-
+pytest_lazyfixture = pytest_lazy_fixtures.plugin

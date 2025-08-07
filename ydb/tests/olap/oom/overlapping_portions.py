@@ -23,10 +23,13 @@ class TestOverlappingPortions(object):
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
             column_shard_config={"compaction_enabled": False},
-            grouped_memory_limiter_config={
+            scan_grouped_memory_limiter_config={
                 "enabled": True,
-                "memory_limit": 100 * 1024 * 1024,
-                "hard_memory_limit": 100 * 1024 * 1024,
+                "memory_limit": 300 * 1024 * 1024,
+                "hard_memory_limit": 300 * 1024 * 1024,
+            },
+            memory_controller_config={
+                "column_tables_read_execution_limit_bytes": 300 * 1024 * 1024
             },
         )
         cls.cluster = KiKiMR(config)
@@ -53,7 +56,7 @@ class TestOverlappingPortions(object):
             data = [
                 {
                     "ts": timestamp_from_ms + i,
-                    "s": random.randbytes(1024 * 10),
+                    "s": random.randbytes(1024),
                     "val": value,
                 }
                 for i in range(current_chunk_size)
@@ -70,7 +73,7 @@ class TestOverlappingPortions(object):
     def write_and_check(self, table_path, count):
         ts_start = int(datetime.datetime.now().timestamp() * 1000000)
         for value in range(count):
-            self.write_data(table_path, ts_start, 100, value)
+            self.write_data(table_path, ts_start, 10, value)
 
         self.ydb_client.query(
             f"""
@@ -101,4 +104,4 @@ class TestOverlappingPortions(object):
         self.write_and_check(table_path, 1)
 
         with pytest.raises(ydb.issues.GenericError, match=r'.*cannot allocate memory.*'):
-            self.write_and_check(table_path, 300)
+            self.write_and_check(table_path, 600)

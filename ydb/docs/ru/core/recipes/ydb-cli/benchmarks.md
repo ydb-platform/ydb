@@ -4,6 +4,7 @@
 
 | Бенчмарк                             | Справка                                                  |
 |--------------------------------------|----------------------------------------------------------|
+| [TPC-C](https://tpc.org/tpcc/)       | [tpcc](../../reference/ydb-cli/workload-tpcc.md) |
 | [TPC-H](https://tpc.org/tpch/)       | [tpch](../../reference/ydb-cli/workload-tpch.md)|
 | [TPC-DS](https://tpc.org/tpcds/)     | [tpcds](../../reference/ydb-cli/workload-tpcds.md)|
 | [ClickBench](https://benchmark.clickhouse.com/) | [clickbench](../../reference/ydb-cli/workload-click-bench.md)|
@@ -15,10 +16,11 @@
 Все команды для работы с бенчмарками сгруппированы в соответствующие категории:
 
 ```bash
-{{ ydb-cli }} workload clickbench ...
-{{ ydb-cli }} workload tpch ...
-{{ ydb-cli }} workload tpcds ...
-{{ ydb-cli }} workload query ...
+{{ ydb-cli }} workload tpcc --path path/in/database ...
+{{ ydb-cli }} workload clickbench --path path/in/database ...
+{{ ydb-cli }} workload tpch --path path/in/database ...
+{{ ydb-cli }} workload tpcds --path path/in/database ...
+{{ ydb-cli }} workload query --path path/in/database ...
 ```
 
 Нагрузочное тестирование состоит из трёх этапов:
@@ -36,13 +38,14 @@
 Инициализация производится командой `init`:
 
 ```bash
+{{ ydb-cli }} workload tpcc --path tpcc/10wh init
 {{ ydb-cli }} workload clickbench --path clickbench/hits init --store=row
 {{ ydb-cli }} workload tpch --path tpch/s1 init --store=column
 {{ ydb-cli }} workload tpcds --path tpcds/s1 init --store=external-s3
 {{ ydb-cli }} workload query --path user/suite1 init --suite-path /home/user/user_suite
 ```
 
-На этапе создания таблиц возможно дополнительно настроить следующие параметры:
+На этапе создания таблиц, если вы запускаете `tpch`, `tpcds` или `clickbench`, возможно дополнительно настроить создаваемые таблицы:
 
   * Выбрать тип используемых таблиц: строковые, колоночные, внешние и тд. (параметр `--store`);
   * Выбрать типы используемых колонок: строк (параметр `--string`), дат и времени (`--datetime`) и тип вещественных чисел (`--float-mode`).
@@ -51,6 +54,7 @@
 
 Подробнее см. описание команд для каждого бенчмарка:
 
+* [tpcc init](../../reference/ydb-cli/workload-tpcc.md#init)
 * [clickbench init](../../reference/ydb-cli/workload-click-bench.md#init)
 * [tpch init](../../reference/ydb-cli/workload-tpch.md#init)
 * [tpcds init](../../reference/ydb-cli/workload-tpcds.md#init)
@@ -62,6 +66,7 @@
 
 Подробное описание см. в соответствующих разделах:
 
+* [tpcc import](../../reference/ydb-cli/workload-tpcc.md#load)
 * [clickbench import](../../reference/ydb-cli/workload-click-bench.md#load)
 * [tpch import](../../reference/ydb-cli/workload-tpch.md#load)
 * [tpcds import](../../reference/ydb-cli/workload-tpcds.md#load)
@@ -70,6 +75,7 @@
 Примеры:
 
 ```bash
+{{ ydb-cli }} workload tpcc --path tpcc/10wh import
 {{ ydb-cli }} workload clickbench --path clickbench/hits import files --input hits.csv.gz
 {{ ydb-cli }} workload tpch --path tpch/s1 import generator --scale 1
 {{ ydb-cli }} workload tpcds --path tpcds/s1 import generator --scale 1
@@ -83,6 +89,7 @@
 Примеры:
 
 ```bash
+{{ ydb-cli }} workload tpcc --path tpcc/10wh run
 {{ ydb-cli }} workload clickbench --path clickbench/hits run --include 1-5,8
 {{ ydb-cli }} workload tpch --path tpch/s1 run --exсlude 3,4 --iterations 3
 {{ ydb-cli }} workload tpcds --path tpcds/s1 run --plan ~/query_plan --include 2 --iterations 5
@@ -93,6 +100,7 @@
 
 Подробное описание см. в соответствующих разделах:
 
+* [tpcc run](../../reference/ydb-cli/workload-tpcc.md#run)
 * [clickbench run](../../reference/ydb-cli/workload-click-bench.md#run)
 * [tpch run](../../reference/ydb-cli/workload-tpch.md#run)
 * [tpcds run](../../reference/ydb-cli/workload-tpcds.md#run)
@@ -103,6 +111,7 @@
 При завершении работ по нагрузочному тестированию тестовые данные и таблицы можно удалить командой `clean`:
 
 ```bash
+{{ ydb-cli }} workload tpcc --path tpcc/10wh clean
 {{ ydb-cli }} workload clickbench --path clickbench/hits clean
 {{ ydb-cli }} workload tpch --path tpch/s1 clean
 {{ ydb-cli }} workload tpcds --path tpcds/s1 clean
@@ -111,6 +120,7 @@
 
 Подробное описание см. в соответствующих разделах:
 
+* [tpcc clean](../../reference/ydb-cli/workload-tpcc.md#cleanup)
 * [clickbench clean](../../reference/ydb-cli/workload-click-bench.md#cleanup)
 * [tpch clean](../../reference/ydb-cli/workload-tpch.md#cleanup)
 * [tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)

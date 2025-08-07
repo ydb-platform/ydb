@@ -1,3 +1,4 @@
+#include <library/cpp/retry/retry.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
@@ -5,6 +6,7 @@
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/signals/object_counter.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -105,14 +107,14 @@ private:
     }
     virtual void DoAddTask(NActors::TActorSystem& actorSystem, const NActors::TActorId distributorId) override {
         actorSystem.Send(distributorId,
-            new TEvExecution::TEvNewTask(std::make_shared<TSleepTask>(TDuration::MicroSeconds(40), Counter), Category, ScopeId, ProcessId));
+            new TEvExecution::TEvNewTask(std::make_shared<TSleepTask>(TDuration::MicroSeconds(40), Counter), Category, ProcessId));
         CounterTasks.Inc();
     }
     virtual bool DoCheckFinished() override {
         return CounterTasks.Val() == Counter.Val();
     }
     virtual void DoFinish(NActors::TActorSystem& actorSystem, const NActors::TActorId distributorId, const TDuration /*d*/) override {
-        actorSystem.Send(distributorId, new TEvExecution::TEvUnregisterProcess(Category, ScopeId, ProcessId));
+        actorSystem.Send(distributorId, new TEvExecution::TEvUnregisterProcess(Category, ProcessId));
     }
 
 public:
@@ -131,6 +133,7 @@ private:
     virtual ui32 GetTasksCount() const {
         return 1000000;
     }
+
 public:
     virtual double GetThreadsCount() const {
         return 9.5;
@@ -147,9 +150,8 @@ public:
         NKikimrConfig::TCompositeConveyorConfig protoConfig;
         AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
 
-        NConfig::TConfig config;
-        config.DeserializeFromProto(protoConfig, threadsCount).Validate();
-        const auto actorId = actorSystem.Register(TCompServiceOperator::CreateService(config, counters));
+        NConfig::TConfig config = NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
+        const auto actorId = actorSystem.Register(TServiceOperator::CreateService(config, counters));
 
         std::vector<std::shared_ptr<IRequestProcessor>> requests = GetRequests();
         for (auto&& i : requests) {
@@ -191,14 +193,26 @@ public:
                 ++idx;
             }
         }
-        Cerr << (GetThreadsCount() * (TMonotonic::Now() - globalStart) / (1.0 * requests.size() * GetTasksCount())).MicroSeconds() << "us per task"
-             << Endl;
+        Cerr << (GetThreadsCount() * (TMonotonic::Now() - globalStart) / (1.0 * requests.size() * GetTasksCount())).MicroSeconds()
+             << "us per task" << Endl;
         TStringBuilder sb;
         for (auto&& i : durations) {
             sb << i << ";";
         }
         Cerr << sb << Endl;
-        Sleep(TDuration::Seconds(5));
+
+        int expected = 5;
+        ui32 retries = 60;
+        auto sleep = TDuration::Seconds(1);
+        auto getCount = []() {
+            return NKikimr::NColumnShard::TMonitoringObjectsCounter<TProcessScope>::GetCounter().Val();
+        };
+        auto checkCount = [&]() {
+            return getCount() == expected;
+        };
+
+        bool result = DoWithRetryOnRetCode(checkCount, TRetryOptions{retries, sleep});
+        AFL_VERIFY(result)("count", getCount());
 
         actorSystem.Stop();
         actorSystem.Cleanup();
@@ -347,8 +361,8 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         }
         virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() override {
             return { std::make_shared<TSimpleRequest>("1", ESpecialTaskCategory::Insert, "1", 1),
-                std::make_shared<TSimpleRequest>("2", ESpecialTaskCategory::Insert, "2", 1),
-                std::make_shared<TSimpleRequest>("3", ESpecialTaskCategory::Insert, "3", 1) };
+                std::make_shared<TSimpleRequest>("2", ESpecialTaskCategory::Insert, "2", 2),
+                std::make_shared<TSimpleRequest>("3", ESpecialTaskCategory::Insert, "3", 3) };
         }
 
     public:
@@ -395,26 +409,24 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
                 GetThreadsCount());
         }
         virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() override {
-            return { 
-                std::make_shared<TSimpleRequest>("I_1_1", ESpecialTaskCategory::Insert, "1", 1),
-                std::make_shared<TSimpleRequest>("I_2_1", ESpecialTaskCategory::Insert, "2", 1),
-                std::make_shared<TSimpleRequest>("I_3_1", ESpecialTaskCategory::Insert, "3", 1),
-                std::make_shared<TSimpleRequest>("S_1_1", ESpecialTaskCategory::Scan, "1", 1),
-                std::make_shared<TSimpleRequest>("S_2_1", ESpecialTaskCategory::Scan, "2", 1),
-                std::make_shared<TSimpleRequest>("S_3_1", ESpecialTaskCategory::Scan, "3", 1),
-                std::make_shared<TSimpleRequest>("N_1_1", ESpecialTaskCategory::Normalizer, "1", 1),
-                std::make_shared<TSimpleRequest>("N_2_1", ESpecialTaskCategory::Normalizer, "2", 1),
-                std::make_shared<TSimpleRequest>("N_3_1", ESpecialTaskCategory::Normalizer, "3", 1),
-                std::make_shared<TSimpleRequest>("I_1_2", ESpecialTaskCategory::Insert, "1", 2),
-                std::make_shared<TSimpleRequest>("I_2_2", ESpecialTaskCategory::Insert, "2", 2),
-                std::make_shared<TSimpleRequest>("I_3_2", ESpecialTaskCategory::Insert, "3", 2),
-                std::make_shared<TSimpleRequest>("S_1_2", ESpecialTaskCategory::Scan, "1", 2),
-                std::make_shared<TSimpleRequest>("S_2_2", ESpecialTaskCategory::Scan, "2", 2),
-                std::make_shared<TSimpleRequest>("S_3_2", ESpecialTaskCategory::Scan, "3", 2),
-                std::make_shared<TSimpleRequest>("N_1_2", ESpecialTaskCategory::Normalizer, "1", 2),
-                std::make_shared<TSimpleRequest>("N_2_2", ESpecialTaskCategory::Normalizer, "2", 2),
-                std::make_shared<TSimpleRequest>("N_3_2", ESpecialTaskCategory::Normalizer, "3", 2)
-            };
+            return { std::make_shared<TSimpleRequest>("I_1_1", ESpecialTaskCategory::Insert, "1", 1),
+                std::make_shared<TSimpleRequest>("I_2_1", ESpecialTaskCategory::Insert, "2", 2),
+                std::make_shared<TSimpleRequest>("I_3_1", ESpecialTaskCategory::Insert, "3", 3),
+                std::make_shared<TSimpleRequest>("S_1_1", ESpecialTaskCategory::Scan, "1", 4),
+                std::make_shared<TSimpleRequest>("S_2_1", ESpecialTaskCategory::Scan, "2", 5),
+                std::make_shared<TSimpleRequest>("S_3_1", ESpecialTaskCategory::Scan, "3", 6),
+                std::make_shared<TSimpleRequest>("N_1_1", ESpecialTaskCategory::Normalizer, "1", 7),
+                std::make_shared<TSimpleRequest>("N_2_1", ESpecialTaskCategory::Normalizer, "2", 8),
+                std::make_shared<TSimpleRequest>("N_3_1", ESpecialTaskCategory::Normalizer, "3", 9),
+                std::make_shared<TSimpleRequest>("I_1_2", ESpecialTaskCategory::Insert, "1", 21),
+                std::make_shared<TSimpleRequest>("I_2_2", ESpecialTaskCategory::Insert, "2", 22),
+                std::make_shared<TSimpleRequest>("I_3_2", ESpecialTaskCategory::Insert, "3", 23),
+                std::make_shared<TSimpleRequest>("S_1_2", ESpecialTaskCategory::Scan, "1", 24),
+                std::make_shared<TSimpleRequest>("S_2_2", ESpecialTaskCategory::Scan, "2", 25),
+                std::make_shared<TSimpleRequest>("S_3_2", ESpecialTaskCategory::Scan, "3", 26),
+                std::make_shared<TSimpleRequest>("N_1_2", ESpecialTaskCategory::Normalizer, "1", 27),
+                std::make_shared<TSimpleRequest>("N_2_2", ESpecialTaskCategory::Normalizer, "2", 28),
+                std::make_shared<TSimpleRequest>("N_3_2", ESpecialTaskCategory::Normalizer, "3", 29) };
         }
 
     public:

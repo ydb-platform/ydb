@@ -2,18 +2,19 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_import.h"
 #include "schemeshard_import_flow_proposals.h"
-#include "schemeshard_import_helpers.h"
 #include "schemeshard_import_getters.h"
+#include "schemeshard_import_helpers.h"
 #include "schemeshard_import_scheme_query_executor.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
-#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
+
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
@@ -87,7 +88,10 @@ bool ValidateDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain)
 
     if (checks) {
         checks
-            .IsValidLeafName()
+            //NOTE: using TSystemUsers::Metadata() here allows restoration of paths with system-reserved names/prefixes.
+            // Reason is, that these names aren't being created anew but were legitimate elsewhere or
+            // at some other point in time, blocking them now would create unnecessary problems.
+            .IsValidLeafName(&NACLib::TSystemUsers::Metadata())
             .DepthLimit()
             .PathsLimit();
 
@@ -847,7 +851,7 @@ private:
             return Nothing();
         }
 
-        return indexInfo.Issue;
+        return indexInfo.GetIssue();
     }
 
     TString GetIssues(const NKikimrIndexBuilder::TEvCreateResponse& proto) {
@@ -1010,7 +1014,7 @@ private:
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
         }
-        
+
         if (IsCreatedByQuery(item)) {
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);

@@ -18,7 +18,7 @@ public:
     TDqAsyncStats IngressStats;
     TInstant StartingMessageTimestamp;
     TString LogPrefix;
-    NPq::NProto::TDqReadTaskParams ReadParams;
+    TVector<NPq::NProto::TDqReadTaskParams> ReadParams;
     const NActors::TActorId ComputeActorId;
     ui64 TaskId;
 
@@ -28,7 +28,7 @@ public:
         NActors::TActorId selfId,
         const TTxId& txId,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
-        NPq::NProto::TDqReadTaskParams&& readParams,
+        TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
         const NActors::TActorId& computeActorId);
 
 public:

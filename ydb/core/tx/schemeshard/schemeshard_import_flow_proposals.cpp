@@ -1,11 +1,13 @@
 #include "schemeshard_import_flow_proposals.h"
+
 #include "schemeshard_path_describer.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/ydb_convert/table_description.h>
-#include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/topic_description.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
+
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
 namespace NKikimr {
@@ -379,11 +381,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     auto& record = propose->Record;
     auto& modifyScheme = *record.AddTransaction();
 
-    const TFsPath dstPath = item.DstPathName;
-    modifyScheme.SetWorkingDir(dstPath.Dirname());
+    const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+    std::pair<TString, TString> wdAndPath;
+    if (!TrySplitPathByDb(item.DstPathName, domainPath.PathString(), wdAndPath, error)) {
+        return nullptr;
+    }
+
+    modifyScheme.SetWorkingDir(wdAndPath.first);
 
     auto codes =
-        NGRpcProxy::V1::FillProposeRequestImpl(dstPath.GetName(), *item.Topic, modifyScheme, AppData(), error, dstPath.Dirname());
+        NGRpcProxy::V1::FillProposeRequestImpl(wdAndPath.second, *item.Topic, modifyScheme, AppData(), error, wdAndPath.first);
 
     if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
         return nullptr;

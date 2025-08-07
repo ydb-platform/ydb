@@ -1,0 +1,11 @@
+--- a/y_absl/types/compare.h	(index)
++++ b/y_absl/types/compare.h	(working tree)
+@@ -69,7 +69,7 @@ using value_type = int8_t;
+ 
+ class OnlyLiteralZero {
+  public:
+-#if Y_ABSL_HAVE_ATTRIBUTE(enable_if)
++#if Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__CUDACC__)
+   // On clang, we can avoid triggering modernize-use-nullptr by only enabling
+   // this overload when the value is a compile time integer constant equal to 0.
+   //

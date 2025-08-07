@@ -59,9 +59,7 @@ class Dependencies(ModuleAnalysis):
         ast.FloorDiv: ('operator', 'ifloordiv'),
     }
 
-    def __init__(self):
-        self.result = set()
-        super(Dependencies, self).__init__()
+    ResultType = set
 
     def visit_List(self, node):
         self.result.add(('builtins', 'list'))

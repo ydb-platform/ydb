@@ -14,12 +14,10 @@ namespace NSQLComplete {
 
         class TVisitor: public TSQLv1NarrowingVisitor {
         public:
-            TVisitor(
-                antlr4::TokenStream* tokens,
-                size_t cursorPosition,
-                THashSet<TString>* names)
-                : TSQLv1NarrowingVisitor(tokens, cursorPosition)
+            TVisitor(const TParsedInput& input, TNamedNodes* names, const TEnvironment* env)
+                : TSQLv1NarrowingVisitor(input)
                 , Names_(names)
+                , Env_(env)
             {
             }
 
@@ -35,7 +33,26 @@ namespace NSQLComplete {
             }
 
             std::any visitDeclare_stmt(SQLv1::Declare_stmtContext* ctx) override {
-                VisitNullable(ctx->bind_parameter());
+                auto* parameter = ctx->bind_parameter();
+                if (!parameter) {
+                    return {};
+                }
+
+                TMaybe<std::string> id = GetName(parameter);
+                if (id.Empty() || id == "_") {
+                    return {};
+                }
+
+                id->insert(0, "$");
+                const NYT::TNode* node = Env_->Parameters.FindPtr(*id);
+                id->erase(0, 1);
+
+                if (node) {
+                    (*Names_)[*id] = *node;
+                } else {
+                    (*Names_)[*id] = std::monostate();
+                }
+
                 return {};
             }
 
@@ -56,8 +73,37 @@ namespace NSQLComplete {
             std::any visitNamed_nodes_stmt(SQLv1::Named_nodes_stmtContext* ctx) override {
                 VisitNullable(ctx->bind_parameter_list());
                 if (IsEnclosing(ctx)) {
-                    return visitChildren(ctx);
+                    visitChildren(ctx);
                 }
+
+                auto* list = ctx->bind_parameter_list();
+                if (!list) {
+                    return {};
+                }
+
+                auto parameters = list->bind_parameter();
+                if (parameters.size() != 1) {
+                    return {};
+                }
+
+                auto* parameter = parameters[0];
+                if (!parameter) {
+                    return {};
+                }
+
+                TMaybe<std::string> id = GetName(parameter);
+                if (id.Empty() || id == "_") {
+                    return {};
+                }
+
+                if (auto* expr = ctx->expr()) {
+                    (*Names_)[std::move(*id)] = expr;
+                } else if (auto* subselect = ctx->subselect_stmt()) {
+                    (*Names_)[std::move(*id)] = subselect;
+                } else {
+                    (*Names_)[std::move(*id)] = std::monostate();
+                }
+
                 return {};
             }
 
@@ -84,12 +130,16 @@ namespace NSQLComplete {
             }
 
             std::any visitBind_parameter(SQLv1::Bind_parameterContext* ctx) override {
-                TMaybe<std::string> id = GetId(ctx);
+                if (IsEnclosing(ctx)) {
+                    return {};
+                }
+
+                TMaybe<std::string> id = GetName(ctx);
                 if (id.Empty() || id == "_") {
                     return {};
                 }
 
-                Names_->emplace(std::move(*id));
+                (*Names_)[std::move(*id)] = std::monostate();
                 return {};
             }
 
@@ -101,18 +151,16 @@ namespace NSQLComplete {
                 visit(tree);
             }
 
-            THashSet<TString>* Names_;
+            TNamedNodes* Names_;
+            const TEnvironment* Env_;
         };
 
     } // namespace
 
-    TVector<TString> CollectNamedNodes(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition) {
-        THashSet<TString> names;
-        TVisitor(tokens, cursorPosition, &names).visit(ctx);
-        return TVector<TString>(begin(names), end(names));
+    TNamedNodes CollectNamedNodes(TParsedInput input, const TEnvironment& env) {
+        TNamedNodes names;
+        TVisitor(input, &names, &env).visit(input.SqlQuery);
+        return names;
     }
 
 } // namespace NSQLComplete

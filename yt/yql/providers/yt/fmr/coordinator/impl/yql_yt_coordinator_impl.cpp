@@ -2,6 +2,7 @@
 #include <library/cpp/resource/resource.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_partitioner.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include "yql_yt_coordinator_impl.h"
@@ -9,32 +10,40 @@
 namespace NYql::NFmr {
 
 TFmrCoordinatorSettings::TFmrCoordinatorSettings() {
-    DefaultFmrOperationSpec = NYT::NodeFromYsonString(NResource::Find("default_coordinator_settings.yson"));
+    DefaultFmrOperationSpec = NYT::NodeFromYsonString(NResource::Find("default_operation_settings.yson"));
     WorkersNum = 1;
     RandomProvider = CreateDefaultRandomProvider(),
     IdempotencyKeyStoreTime = TDuration::Seconds(10);
     TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(1);
+    WorkerDeadlineLease = TDuration::Seconds(5);
+    TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(1);
 }
 
 namespace {
 
 class TFmrCoordinator: public IFmrCoordinator {
 public:
-    TFmrCoordinator(const TFmrCoordinatorSettings& settings, IYtCoordinatorService::TPtr ytCoordinatorService)
+    TFmrCoordinator(const TFmrCoordinatorSettings& settings, IYtCoordinatorService::TPtr ytCoordinatorService, IFmrGcService::TPtr gcService)
         : WorkersNum_(settings.WorkersNum),
         RandomProvider_(settings.RandomProvider),
         StopCoordinator_(false),
         TimeToSleepBetweenClearKeyRequests_(settings.TimeToSleepBetweenClearKeyRequests),
         IdempotencyKeyStoreTime_(settings.IdempotencyKeyStoreTime),
+        WorkerDeadlineLease_(settings.WorkerDeadlineLease),
+        TimeToSleepBetweenCheckWorkerStatusRequests_(settings.TimeToSleepBetweenCheckWorkerStatusRequests),
         DefaultFmrOperationSpec_(settings.DefaultFmrOperationSpec),
-        YtCoordinatorService_(ytCoordinatorService)
+        YtCoordinatorService_(ytCoordinatorService),
+        GcService_(gcService)
     {
         StartClearingIdempotencyKeys();
+        CheckWorkersAliveStatus();
+        GcService_->ClearAll();
     }
 
     ~TFmrCoordinator() {
         StopCoordinator_ = true;
         ClearIdempotencyKeysThread_.join();
+        CheckWorkersAliveStatusThread_.join();
     }
 
     NThreading::TFuture<TStartOperationResponse> StartOperation(const TStartOperationRequest& request) override {
@@ -47,6 +56,7 @@ public:
             return NThreading::MakeFuture(TStartOperationResponse(operationInfo.OperationStatus, operationId));
         }
         auto operationId = GenerateId();
+        Sessions_[request.SessionId].emplace_back(operationId);
         if (IdempotencyKey) {
             IdempotencyKeys_[*IdempotencyKey] = TIdempotencyKeyInfo{.OperationId = operationId, .OperationCreationTime=TInstant::Now()};
         }
@@ -59,7 +69,7 @@ public:
         for (auto& currentTaskParams: taskParams) {
             TString taskId = GenerateId();
             TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, currentTaskParams, request.SessionId, request.ClusterConnections, fmrOperationSpec);
-            Tasks_[taskId] = TCoordinatorTaskInfo{.Task = createdTask, .TaskStatus = ETaskStatus::Accepted, .OperationId = operationId};
+            Tasks_[taskId] = TCoordinatorTaskInfo{.Task = createdTask, .TaskStatus = ETaskStatus::Accepted, .OperationId = operationId, .NumRetries = 0};
             TasksToRun_.emplace(createdTask, taskId);
             taskIds.emplace(taskId);
         }
@@ -104,8 +114,8 @@ public:
             auto taskStatus = Tasks_[taskId].TaskStatus;
             if (taskStatus == ETaskStatus::InProgress) {
                 TaskToDeleteIds_.insert(taskId); // Task is currently running, send signal to worker to cancel
-            } else {
-                ClearTask(taskId); // Task either hasn't begun running or finished, remove info
+            } else if (taskStatus == ETaskStatus::Accepted) {
+                ClearTask(taskId); // Task hasn't begun running, remove info
             }
         }
 
@@ -117,31 +127,45 @@ public:
 
         ui32 workerId = request.WorkerId;
         YQL_ENSURE(workerId >= 0 && workerId < WorkersNum_);
-        if (!WorkerToVolatileId_.contains(workerId)) {
-            WorkerToVolatileId_[workerId] = request.VolatileId;
-        } else if (request.VolatileId != WorkerToVolatileId_[workerId]) {
-            WorkerToVolatileId_[workerId] = request.VolatileId;
-            for (auto& [taskId, taskInfo]: Tasks_) {
-                auto taskStatus = Tasks_[taskId].TaskStatus;
-                auto operationId = Tasks_[taskId].OperationId;
-                if (taskStatus == ETaskStatus::InProgress) {
-                    TaskToDeleteIds_.insert(taskId); // Task is currently running, send signal to worker to cancel
-                    TFmrError error{
-                        .Component = EFmrComponent::Coordinator, .ErrorMessage = "Max retries limit exceeded", .OperationId = operationId};
-                    SetUnfinishedTaskStatus(taskId, ETaskStatus::Failed, error);
-                }
+
+        if (!Workers_.contains(workerId)) {
+            // first ever heartbeat from worker, initialize
+            Workers_[workerId] = TWorkerInfo{
+                .VolatileId = request.VolatileId,
+                .LatestPing = TInstant::Now(),
+                .NeedsToRestart = false
+            };
+        } else {
+            auto& workerInfo = Workers_[workerId];
+            workerInfo.LatestPing = TInstant::Now();
+            if (request.VolatileId != Workers_[workerId].VolatileId) {
+                // worker has restarted
+                YQL_ENSURE(workerInfo.NeedsToRestart = true);
+                YQL_ENSURE(request.TaskStates.empty());
+                workerInfo.NeedsToRestart = false; // Assume worker is alive again and can handle new tasks.
+                workerInfo.VolatileId = request.VolatileId;
+            } else if (workerInfo.NeedsToRestart) {
+                // Worker has awoken after downtime, send signal to restart
+                return NThreading::MakeFuture(THeartbeatResponse{.NeedToRestart = true});
             }
         }
 
         for (auto& requestTaskState: request.TaskStates) {
             auto taskId = requestTaskState->TaskId;
+            Workers_[request.WorkerId].TaskIds.emplace(taskId);
             YQL_ENSURE(Tasks_.contains(taskId));
             auto operationId = Tasks_[taskId].OperationId;
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(Operations_[operationId].SessionId);
             auto taskStatus = requestTaskState->TaskStatus;
             YQL_ENSURE(taskStatus != ETaskStatus::Accepted);
+            if (taskStatus != ETaskStatus::InProgress) {
+                // TODO - refactor the whole function
+                Workers_[request.WorkerId].TaskIds.erase(taskId);
+                // Task finished in some status, removing info from worker
+            }
             SetUnfinishedTaskStatus(taskId, taskStatus, requestTaskState->TaskErrorMessage);
             if (TaskToDeleteIds_.contains(taskId) && Tasks_[taskId].TaskStatus != ETaskStatus::InProgress) {
+                ClearPreviousPartIdsForTask(Tasks_[taskId].Task);
                 ClearTask(taskId); // Task finished, so we don't need to cancel it, just remove info
             }
 
@@ -173,12 +197,13 @@ public:
             auto& taskInfo = Tasks_[taskId];
             YQL_ENSURE(taskInfo.TaskStatus == ETaskStatus::Accepted);
             SetUnfinishedTaskStatus(taskId, ETaskStatus::InProgress);
-            SetPartIdsForTask(task);
+            ClearPreviousPartIdsForTask(task);
+            SetNewPartIdsForTask(task);
             currentTasksToRun.emplace_back(task);
             ++filledSlots;
         }
 
-        return NThreading::MakeFuture(THeartbeatResponse{.TasksToRun = currentTasksToRun, .TaskToDeleteIds = TaskToDeleteIds_});
+        return NThreading::MakeFuture(THeartbeatResponse{.TasksToRun = currentTasksToRun, .TaskToDeleteIds = TaskToDeleteIds_, .NeedToRestart = false});
     }
 
     NThreading::TFuture<TGetFmrTableInfoResponse> GetFmrTableInfo(const TGetFmrTableInfoRequest& request) override {
@@ -195,8 +220,27 @@ public:
         return NThreading::MakeFuture(response);
     }
 
-private:
+    NThreading::TFuture<void> ClearSession(const TClearSessionRequest& request) override {
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(request.SessionId);
+        TGuard<TMutex> guard(Mutex_);
+        YQL_CLOG(INFO, FastMapReduce) << "Clearing fmr tables and coordinator state for session Id " << request.SessionId;
+        if (!Sessions_.contains(request.SessionId)) {
+            return NThreading::MakeFuture();
+        }
+        for (auto& operationId: Sessions_[request.SessionId]) {
+            auto& operationInfo = Operations_[operationId];
+            std::unordered_set<TString> taskIdsToClear = operationInfo.TaskIds;
+            for (auto& taskId: taskIdsToClear) {
+                auto task = Tasks_[taskId].Task;
+                ClearPreviousPartIdsForTask(task);
+                ClearTask(taskId);
+            }
+        }
+        Sessions_.erase(request.SessionId);
+        return NThreading::MakeFuture();
+    }
 
+private:
     void StartClearingIdempotencyKeys() {
         auto ClearIdempotencyKeysFunc = [&] () {
             while (!StopCoordinator_) {
@@ -207,16 +251,6 @@ private:
                         auto operationId = it->second.OperationId;
                         if (currentTime - operationCreationTime > IdempotencyKeyStoreTime_) {
                             it = IdempotencyKeys_.erase(it);
-                            if (Operations_.contains(operationId)) {
-                                auto& operationInfo = Operations_[operationId];
-                                auto operationStatus = operationInfo.OperationStatus;
-                                if (operationStatus != EOperationStatus::Accepted && operationStatus != EOperationStatus::InProgress) {
-                                    auto& taskIds = operationInfo.TaskIds;
-                                    for (auto& taskId: taskIds) {
-                                        ClearTask(taskId);
-                                    }
-                                }
-                            }
                         } else {
                             ++it;
                         }
@@ -227,6 +261,35 @@ private:
         };
         ClearIdempotencyKeysThread_ = std::thread(ClearIdempotencyKeysFunc);
     }
+
+    void CheckWorkersAliveStatus() {
+        auto checkWorkersAliveStatusFunc = [&] () {
+            while (!StopCoordinator_) {
+                with_lock(Mutex_) {
+                    auto currentTime = TInstant::Now();
+                    for (auto& [workerId, workerInfo]: Workers_) {
+                        auto currentWorkerLatestPing = workerInfo.LatestPing;
+                        if (currentTime > currentWorkerLatestPing + WorkerDeadlineLease_) {
+                            // assuming worker is dead and should restart, cancelling tasks and rescheduling
+                            if (!workerInfo.NeedsToRestart) {
+                                YQL_CLOG(INFO, FastMapReduce) << "Worker with id " << workerId << " is assumed dead, sending restart request to coordinator";
+                            }
+                            workerInfo.NeedsToRestart = true;
+                            for (auto& taskId: workerInfo.TaskIds) {
+                                // resetting task, TODO - add max retry
+                                SetUnfinishedTaskStatus(taskId, ETaskStatus::Accepted);
+                                YQL_ENSURE(Tasks_.contains(taskId));
+                                TasksToRun_.emplace(Tasks_[taskId].Task, taskId);
+                            }
+                            workerInfo.TaskIds.clear();
+                        }
+                    }
+                }
+                Sleep(TimeToSleepBetweenCheckWorkerStatusRequests_);
+            }
+        };
+        CheckWorkersAliveStatusThread_ = std::thread(checkWorkersAliveStatusFunc);
+    };
 
     TString GenerateId() {
         return GetGuidAsString(RandomProvider_->GenGuid());
@@ -254,7 +317,7 @@ private:
         if (taskInfo.TaskStatus != ETaskStatus::Accepted && taskInfo.TaskStatus != ETaskStatus::InProgress) {
             return;
         }
-        YQL_CLOG(TRACE, FastMapReduce) << "Setting task status for task id" << taskId << " from " << taskInfo.TaskStatus << " to new Task status " << newTaskStatus << "\n";
+        YQL_CLOG(TRACE, FastMapReduce) << "Setting task status for task id" << taskId << " from " << taskInfo.TaskStatus << " to new Task status " << newTaskStatus;
         taskInfo.TaskStatus = newTaskStatus;
         operationInfo.OperationStatus = GetOperationStatus(taskInfo.OperationId);
         if (taskErrorMessage) {
@@ -355,28 +418,63 @@ private:
         return resultFmrOperationSpec;
     }
 
-    void SetPartIdsForTask(TTask::TPtr task) {
-        // TODO - add failover, clearing previous partId if exists
-        TString partId = GenerateId();
+    void SetNewPartIdsForTask(TTask::TPtr task) {
+        // TODO - remove code duplication
+        TString newPartId = GenerateId();
 
         auto* downloadTaskParams = std::get_if<TDownloadTaskParams>(&task->TaskParams);
         auto* mergeTaskParams = std::get_if<TMergeTaskParams>(&task->TaskParams);
         auto* mapTaskParams = std::get_if<TMapTaskParams>(&task->TaskParams);
         if (downloadTaskParams) {
             TString tableId = downloadTaskParams->Output.TableId;
-            downloadTaskParams->Output.PartId = partId;
-            PartIdsForTables_[tableId].emplace_back(partId);
+            downloadTaskParams->Output.PartId = newPartId;
+            PartIdsForTables_[tableId].emplace_back(newPartId);
         } else if (mergeTaskParams) {
             TString tableId = mergeTaskParams->Output.TableId;
-            mergeTaskParams->Output.PartId = partId;
-            PartIdsForTables_[tableId].emplace_back(partId);
+            mergeTaskParams->Output.PartId = newPartId;
+            PartIdsForTables_[tableId].emplace_back(newPartId);
         } else if (mapTaskParams) {
             for (auto& fmrTableOutputRef: mapTaskParams->Output) {
                 TString tableId = fmrTableOutputRef.TableId;
-                fmrTableOutputRef.PartId = partId;
-                PartIdsForTables_[tableId].emplace_back(partId);
+                fmrTableOutputRef.PartId = newPartId;
+                PartIdsForTables_[tableId].emplace_back(newPartId);
             }
         }
+    }
+
+    void ClearPreviousPartIdsForTask(TTask::TPtr task) {
+        // TODO - remove code duplication, templates?
+        std::vector<TString> groupsToClear; // (TableId, PartId)
+
+        auto* downloadTaskParams = std::get_if<TDownloadTaskParams>(&task->TaskParams);
+        auto* mergeTaskParams = std::get_if<TMergeTaskParams>(&task->TaskParams);
+        auto* mapTaskParams = std::get_if<TMapTaskParams>(&task->TaskParams);
+
+        if (downloadTaskParams) {
+            TString tableId = downloadTaskParams->Output.TableId;
+            if (!downloadTaskParams->Output.PartId.empty()) {
+                auto prevPartId = downloadTaskParams->Output.PartId;
+                groupsToClear.emplace_back(GetTableDataServiceGroup(tableId, prevPartId));
+                PartIdsForTables_.erase(prevPartId);
+            }
+        } else if (mergeTaskParams) {
+            TString tableId = mergeTaskParams->Output.TableId;
+            if (!mergeTaskParams->Output.PartId.empty()) {
+                auto prevPartId = mergeTaskParams->Output.PartId;
+                groupsToClear.emplace_back(GetTableDataServiceGroup(tableId, prevPartId));
+                PartIdsForTables_.erase(prevPartId);
+            }
+        } else if (mapTaskParams) {
+            for (auto& fmrTableOutputRef: mapTaskParams->Output) {
+                TString tableId = fmrTableOutputRef.TableId;
+                if (!fmrTableOutputRef.PartId.empty()) {
+                    auto prevPartId = fmrTableOutputRef.PartId;
+                    groupsToClear.emplace_back(GetTableDataServiceGroup(tableId, prevPartId));
+                    PartIdsForTables_.erase(prevPartId);
+                }
+            }
+        }
+        GcService_->ClearGarbage(groupsToClear).GetValueSync();
     }
 
     TTableStats CalculateTableStats(const TString& tableId, bool isOperationFinished = false) {
@@ -408,6 +506,7 @@ private:
         TTask::TPtr Task;
         ETaskStatus TaskStatus;
         TString OperationId;
+        ui64 NumRetries;
     };
 
     struct TOperationInfo {
@@ -423,28 +522,40 @@ private:
         TInstant OperationCreationTime;
     };
 
+    struct TWorkerInfo {
+        TString VolatileId;
+        TInstant LatestPing;
+        std::unordered_set<TString> TaskIds;
+        bool NeedsToRestart = false;
+    };
+
     std::unordered_map<TString, TCoordinatorTaskInfo> Tasks_; // TaskId -> current info about it
     std::queue<std::pair<TTask::TPtr, TString>> TasksToRun_; // Task, and TaskId
     std::unordered_set<TString> TaskToDeleteIds_; // TaskIds we want to pass to worker for deletion
     std::unordered_map<TString, TOperationInfo> Operations_; // OperationId -> current info about it
     std::unordered_map<TString, TIdempotencyKeyInfo> IdempotencyKeys_; // IdempotencyKey -> current info about it
+    std::unordered_map<TString, std::vector<TString>> Sessions_; // SessionId -> List of Operation Ids
+
+    std::unordered_map<ui64, TWorkerInfo> Workers_; // WorkerId -> Info About It
 
     TMutex Mutex_;
     const ui32 WorkersNum_;
-    std::unordered_map<ui32, TString> WorkerToVolatileId_; // worker id -> volatile id
+    std::unordered_map<ui32, TString> WorkerToVolatileId_; // worker id -> volatile id  // TODO - убрать это
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
-    std::thread ClearIdempotencyKeysThread_;
+    std::thread ClearIdempotencyKeysThread_, CheckWorkersAliveStatusThread_;
     std::atomic<bool> StopCoordinator_;
     TDuration TimeToSleepBetweenClearKeyRequests_;
     TDuration IdempotencyKeyStoreTime_;
+    TDuration WorkerDeadlineLease_;
+    TDuration TimeToSleepBetweenCheckWorkerStatusRequests_;
 
     std::unordered_map<TFmrTableId, std::vector<TString>> PartIdsForTables_; // TableId -> List of all corresponding partIds
     std::unordered_map<TString, std::vector<TChunkStats>> PartIdStats_; // PartId -> Detailed statistic for each chunk
     std::unordered_map<TString, TTableStats> OperationTableStats_; // TableId -> Statistic for fmr table, filled when operation completes
 
-
     NYT::TNode DefaultFmrOperationSpec_;
     IYtCoordinatorService::TPtr YtCoordinatorService_; // Needed for partitioning of yt tables
+    IFmrGcService::TPtr GcService_;
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -487,7 +598,7 @@ private:
                 YQL_ENSURE(task.Inputs.size() == 1, "Download task should have exactly one yt table partition input");
                 auto& ytTablePart = task.Inputs[0];
                 downloadTaskParams.Input = std::get<TYtTableTaskRef>(ytTablePart);
-                downloadTaskParams.Output = TFmrTableOutputRef{.TableId = downloadOperationParams.Output.FmrTableId.Id};
+                downloadTaskParams.Output = TFmrTableOutputRef(downloadOperationParams.Output);
                 // PartId for tasks which write to table data service will be set later
                 TaskParams.emplace_back(downloadTaskParams);
             }
@@ -496,7 +607,7 @@ private:
             for (auto& task: PartitionResult.TaskInputs) {
                 TMergeTaskParams mergeTaskParams;
                 mergeTaskParams.Input = task;
-                mergeTaskParams.Output = TFmrTableOutputRef{.TableId = mergeOperationParams.Output.FmrTableId.Id};
+                mergeTaskParams.Output = TFmrTableOutputRef(mergeOperationParams.Output);
                 TaskParams.emplace_back(mergeTaskParams);
             }
         }
@@ -506,11 +617,11 @@ private:
                 mapTaskParams.Input = task;
                 std::vector<TFmrTableOutputRef> fmrTableOutputRefs;
                 std::transform(mapOperationParams.Output.begin(), mapOperationParams.Output.end(), std::back_inserter(fmrTableOutputRefs), [] (const TFmrTableRef& fmrTableRef) {
-                    return TFmrTableOutputRef{.TableId = fmrTableRef.FmrTableId.Id};
+                    return TFmrTableOutputRef(fmrTableRef);
                 });
 
                 mapTaskParams.Output = fmrTableOutputRefs;
-                mapTaskParams.Executable = mapOperationParams.Executable; // TODO - change Executable to mapper
+                mapTaskParams.SerializedMapJobState = mapOperationParams.SerializedMapJobState;
                 TaskParams.emplace_back(mapTaskParams);
             }
         }
@@ -519,8 +630,12 @@ private:
 
 } // namespace
 
-IFmrCoordinator::TPtr MakeFmrCoordinator(const TFmrCoordinatorSettings& settings, IYtCoordinatorService::TPtr ytCoordinatorService) {
-    return MakeIntrusive<TFmrCoordinator>(settings, ytCoordinatorService);
+IFmrCoordinator::TPtr MakeFmrCoordinator(
+    const TFmrCoordinatorSettings& settings,
+    IYtCoordinatorService::TPtr ytCoordinatorService,
+    IFmrGcService::TPtr gcService
+) {
+    return MakeIntrusive<TFmrCoordinator>(settings, ytCoordinatorService, gcService);
 }
 
 } // namespace NYql::NFmr

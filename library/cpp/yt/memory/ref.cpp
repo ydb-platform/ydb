@@ -150,8 +150,8 @@ public:
         TRefCountedTypeCookie cookie)
     {
         if (options.ExtendToUsableSize) {
-            if (auto usableSize = GetUsableSpaceSize(); usableSize != 0) {
-                size = usableSize;
+            if (auto usableSize = GetUsableSpaceSize()) {
+                size = *usableSize;
             }
         }
         Initialize(size, options, cookie);
@@ -427,6 +427,21 @@ TSharedRefArray TSharedRefArray::MakeCopy(
         ::memcpy(partCopy.Begin(), part.Begin(), part.Size());
     }
     return builder.Finish();
+}
+
+bool TSharedRefArray::AreBitwiseEqual(
+    const TSharedRefArray& lhs,
+    const TSharedRefArray& rhs)
+{
+    if (lhs.Size() != rhs.Size()) {
+        return false;
+    }
+    for (size_t index = 0; index < lhs.Size(); ++index) {
+        if (!TRef::AreBitwiseEqual(lhs[index], rhs[index])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

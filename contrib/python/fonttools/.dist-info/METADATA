@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: fonttools
-Version: 4.58.0
+Version: 4.59.0
 Summary: Tools to manipulate font files
 Home-page: http://github.com/fonttools/fonttools
 Author: Just van Rossum
@@ -31,7 +31,6 @@ Description-Content-Type: text/x-rst
 License-File: LICENSE
 License-File: LICENSE.external
 Provides-Extra: ufo
-Requires-Dist: fs<3,>=2.2.0; extra == "ufo"
 Provides-Extra: lxml
 Requires-Dist: lxml>=4.0; extra == "lxml"
 Provides-Extra: woff
@@ -57,7 +56,6 @@ Requires-Dist: skia-pathops>=0.5.0; extra == "pathops"
 Provides-Extra: repacker
 Requires-Dist: uharfbuzz>=0.23.0; extra == "repacker"
 Provides-Extra: all
-Requires-Dist: fs<3,>=2.2.0; extra == "all"
 Requires-Dist: lxml>=4.0; extra == "all"
 Requires-Dist: brotli>=1.0.1; platform_python_implementation == "CPython" and extra == "all"
 Requires-Dist: brotlicffi>=0.8.0; platform_python_implementation != "CPython" and extra == "all"
@@ -387,6 +385,66 @@ Have fun!
 
 Changelog
 ~~~~~~~~~
+
+4.59.0 (released 2025-07-16)
+----------------------------
+
+- Removed hard-dependency on pyfilesystem2 (``fs`` package) from ``fonttools[ufo]`` extra.
+  This is replaced by the `fontTools.misc.filesystem` package, a stdlib-only, drop-in
+  replacement for the subset of the pyfilesystem2's API used by ``fontTools.ufoLib``.
+  The latter should continue to work with the upstream ``fs`` (we even test with/without).
+  Clients who wish to continue using ``fs`` can do so by depending on it directly instead
+  of via the ``fonttools[ufo]`` extra (#3885, #3620).
+- [xmlWriter] Replace illegal XML characters (e.g. control or non-characters) with "?"
+  when dumping to ttx (#3868, #71).
+- [varLib.hvar] Fixed vertical metrics fields copy/pasta error (#3884).
+- Micro optimizations in ttLib and sstruct modules (#3878, #3879).
+- [unicodedata] Add Garay script to RTL_SCRIPTS (#3882).
+- [roundingPen] Remove unreliable kwarg usage. Argument names aren’t consistent among
+  point pens’ ``.addComponent()`` implementations, in particular ``baseGlyphName``
+  vs ``glyphName`` (#3880).
+
+4.58.5 (released 2025-07-03)
+----------------------------
+
+- [feaLib] Don't try to combine ligature & multisub rules (#3874).
+- [feaLib/ast] Use weakref proxies to avoid cycles in visitor (#3873).
+- [varLib.instancer] Fixed instancing CFF2 fonts where VarData contains more than 64k items (#3858).
+
+4.58.4 (released 2025-06-13)
+----------------------------
+
+- [feaLib] Allow for empty MarkFilter & MarkAttach sets (#3856).
+
+4.58.3 (released 2025-06-13)
+----------------------------
+
+- [feaLib] Fixed iterable check for Python 3.13.4 and newer (#3854, #3855).
+
+4.58.2 (released 2025-06-06)
+----------------------------
+
+- [ttLib.reorderGlyphs] Handle CFF2 when reordering glyphs (#3852)
+- [subset] Copy name IDs in use before scrapping or scrambling them for webfonts (#3853)
+
+4.58.1 (released 2025-05-28)
+----------------------------
+
+- [varLib] Make sure that fvar named instances only reuse name ID 2 or 17 if they are at the default location across all axes, to match OT spec requirement (#3831).
+- [feaLib] Improve single substitution promotion to multiple/ligature substitutions, fixing a few bugs as well (#3849).
+- [loggingTools] Make ``Timer._time`` a static method that doesn't take self, makes it easier to override (#3836).
+- [featureVars] Use ``None`` for empty ConditionSet, which translates to a null offset in the compiled table (#3850).
+- [feaLib] Raise an error on conflicting ligature substitution rules instead of silently taking the last one (#3835).
+- Add typing annotations to T2CharStringPen (#3837).
+- [feaLib] Add single substitutions that were promoted to multiple or ligature substitutions to ``aalt`` feature (#3847).
+- [featureVars] Create a default ``LangSys`` in a ``ScriptRecord`` if missing when adding feature variations to existing GSUB later in the build (#3838).
+- [symfont] Added a ``main()``.
+- [cffLib.specializer] Fix rmoveto merging when blends used (#3839, #3840).
+- [pyftmerge] Add support for cmap format 14 in the merge tool (#3830).
+- [varLib.instancer/cff2] Fix vsindex of Private dicts when instantiating (#3828, #3232).
+- Update text file read to use UTF-8 with optional BOM so it works with e.g. Windows Notepad.exe (#3824).
+- [varLib] Ensure that instances only reuse name ID 2 or 17 if they are at the default location across all axes (#3831).
+- [varLib] Create a dflt LangSys in a ScriptRecord when adding variations later, to fix an avoidable crash in an edge case (#3838).
 
 4.58.0 (released 2025-05-10)
 ----------------------------

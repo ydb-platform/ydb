@@ -24,19 +24,19 @@
                                   [
                                     {
                                       "op_name":"TableFullScan",
-                                      "table":"test\/ds\/catalog_sales"
+                                      "table":"catalog_sales"
                                     }
                                   ]
                               },
                               {
                                 "op_name":"TableFullScan",
-                                "table":"test\/ds\/store"
+                                "table":"store"
                               }
                             ]
                         },
                         {
                           "op_name":"TableFullScan",
-                          "table":"test\/ds\/item"
+                          "table":"item"
                         }
                       ]
                   }
@@ -66,19 +66,19 @@
                                   [
                                     {
                                       "op_name":"TableFullScan",
-                                      "table":"test\/ds\/catalog_sales"
+                                      "table":"catalog_sales"
                                     }
                                   ]
                               },
                               {
                                 "op_name":"TableFullScan",
-                                "table":"test\/ds\/store"
+                                "table":"store"
                               }
                             ]
                         },
                         {
                           "op_name":"TableFullScan",
-                          "table":"test\/ds\/item"
+                          "table":"item"
                         }
                       ]
                   }

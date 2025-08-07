@@ -1131,9 +1131,7 @@ private:
             } else if (TMaybeNode<TKqpReadOlapTableRangesBase>(node)) {
                 auto olapTable = TExprBase(node).Cast<TKqpReadOlapTableRangesBase>();
 
-                auto pred = [](const TExprNode::TPtr& n) -> bool {
-                    if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
-                };
+                ui32 currentOperatorId = 0;
 
                 auto aggr = [](const TExprNode::TPtr& n) -> bool {
                     if (auto maybeAggregation = TMaybeNode<TKqpOlapAgg>(n)) { return true; } return false;
@@ -1148,9 +1146,13 @@ private:
                     op.Properties["Pushdown"] = "True";
 
                     AddOptimizerEstimates(op, kqpOlapAggregation);
-
-                    operatorId = AddOperator(planNode, "Aggregate", std::move(op));
+                    currentOperatorId = AddOperator(planNode, "Aggregate", std::move(op));
+                    operatorId = currentOperatorId;
                 }
+
+                auto pred = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
+                };
 
                 if (auto maybeKqpOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
                     auto kqpOlapFilter = TExprBase(maybeKqpOlapFilter).Cast<TKqpOlapFilter>();
@@ -1161,18 +1163,20 @@ private:
                     op.Properties["Pushdown"] = "True";
 
                     AddOptimizerEstimates(op, kqpOlapFilter);
-
                     auto filterOperatorId = AddOperator(planNode, "Filter", std::move(op));
+
                     if (operatorId) {
-                        inputIds.push_back(filterOperatorId);
+                        planNode.Operators[currentOperatorId].Inputs.push_back(filterOperatorId);
                     } else {
                         operatorId = filterOperatorId;
                     }
+                    currentOperatorId = filterOperatorId;
                 }
 
                 auto tableOperatorId = Visit(olapTable, planNode);
+
                 if (operatorId) {
-                    inputIds.push_back(tableOperatorId);
+                    planNode.Operators[currentOperatorId].Inputs.push_back(tableOperatorId);
                 } else {
                     operatorId = tableOperatorId;
                 }
@@ -1801,7 +1805,7 @@ private:
         return AddOperator(planNode, readName, std::move(op));
     }
 
-    std::variant<ui32, TArgContext> Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
+    ui32 Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
         const auto tablePath = TString(read.Table().Path());
         const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(read);
         const auto rangesDesc = NPlanUtils::PrettyExprStr(read.Ranges());

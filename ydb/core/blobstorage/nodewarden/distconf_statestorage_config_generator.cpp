@@ -162,12 +162,10 @@ namespace NKikimr::NStorage {
             nodesInGroup.insert(std::get<0>(n));
         }
         ui32 ringGroupIdx = 0;
-        if (PileId) {
-            for (ui32 i : xrange(OldConfig.RingGroupsSize())) {
-                if (PileId.value() == TBridgePileId::FromProto(&OldConfig.GetRingGroups(i), &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId)) {
-                    ringGroupIdx = i;
-                    break;
-                }
+        for (ui32 i : xrange(OldConfig.RingGroupsSize())) {
+            if (PileId == TBridgePileId::FromProto(&OldConfig.GetRingGroups(i), &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId)) {
+                ringGroupIdx = i;
+                break;
             }
         }
         std::vector<std::vector<ui32>> result;

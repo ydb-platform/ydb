@@ -304,13 +304,12 @@ public:
     }
 
     TAutoPtr<TEventHandle<TEvBlobStorage::TEvStatusResult>> GetGroupStatus(ui32 groupId,
-            TDuration waitTime = TDuration::Max(), TActorId actorId = {}) {
+            TDuration waitTime = TDuration::Max()) {
         TInstant ts = (waitTime == TDuration::Max()) ? TInstant::Max() : Env->Now() + waitTime;
-        TActorId edge = (actorId == TActorId{}) ? Edge : actorId; 
-        Env->Runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvStatus(ts));
+        Env->Runtime->WrapInActorContext(Edge, [&] {
+            SendToBSProxy(Edge, groupId, new TEvBlobStorage::TEvStatus(ts));
         });
-        return Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(edge, false, ts);
+        return Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(Edge, false, ts);
     }
 
     virtual void Initialize() {

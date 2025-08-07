@@ -275,6 +275,8 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        // Pinger may end (with ydb_run_actor); no one sends a poison pill to this status tracker.
+        // Therefore we'll finish ourselves.
         LOG_W("TEvUndelivered, from " << ev->Sender << ", reason " << ev->Get()->Reason);
         FailedAndPassAway();
     }

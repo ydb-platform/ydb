@@ -1348,7 +1348,7 @@ namespace NActors {
                 return true;
             }
 
-            if (options.FinalEvents.empty()) {
+            if (options.FinalEvents.empty() && !options.CustomFinalCondition) {
                 for (auto& mbox : currentMailboxes) {
                     if (!mbox.second->IsActive(TInstant::MicroSeconds(CurrentTimestamp)))
                         continue;

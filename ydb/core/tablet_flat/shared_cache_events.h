@@ -34,11 +34,6 @@ namespace NKikimr::NSharedCache {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
 
-    enum class ECacheMode {
-        Regular,
-        TryKeepInMemory,
-    };
-
     struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {
     };
 

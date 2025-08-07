@@ -23,6 +23,7 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     , PageCollection(info.PageCollection)
     , StickyPages(info.StickyPages)
     , StickyPagesSize(info.StickyPagesSize)
+    , CacheMode(info.CacheMode)
 {
     PageMap.resize(info.PageMap.size());
     for (const auto& [pageId, page] : info.PageMap) {

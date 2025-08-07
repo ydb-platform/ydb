@@ -9,6 +9,7 @@ SRCS(
     GLOBAL drop_index.cpp
     GLOBAL upsert_opt.cpp
     GLOBAL alter_sharding.cpp
+    GLOBAL alter_column_family.cpp
 )
 
 PEERDIR(

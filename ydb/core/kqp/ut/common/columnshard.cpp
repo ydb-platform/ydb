@@ -174,38 +174,30 @@ namespace NKqp {
         return str;
     }
 
-    bool TTestHelper::TCompression::IsEqual(const TCompression& rhs, TString& errorMessage) const {
+    TConclusionStatus TTestHelper::TCompression::IsEqual(const TCompression& rhs) const {
         if (SerializerClassName != rhs.GetSerializerClassName()) {
-            errorMessage = TStringBuilder() << "different serializer class name: in left value `" << SerializerClassName
-                                            << "` and in right value `" << rhs.GetSerializerClassName() << "`";
-            return false;
+            return TConclusionStatus::Fail(TStringBuilder() << "different serializer class name: in left value `" << SerializerClassName
+                                                            << "` and in right value `" << rhs.GetSerializerClassName() << "`");
         }
         if (CompressionType.has_value() && rhs.HasCompressionType() && CompressionType.value() != rhs.GetCompressionTypeUnsafe()) {
-            errorMessage = TStringBuilder() << "different compression type: in left value `"
-                                            << NArrow::CompressionToString(CompressionType.value()) << "` and in right value `"
-                                            << NArrow::CompressionToString(rhs.GetCompressionTypeUnsafe()) << "`";
-            return false;
+            return TConclusionStatus::Fail(TStringBuilder()
+                                        << "different compression type: in left value `" << NArrow::CompressionToString(CompressionType.value())
+                                        << "` and in right value `" << NArrow::CompressionToString(rhs.GetCompressionTypeUnsafe()) << "`");
         } else if (CompressionType.has_value() && !rhs.HasCompressionType()) {
-            errorMessage = TStringBuilder() << "compression type is set in left value, but not set in right value";
-            return false;
+            return TConclusionStatus::Fail(TStringBuilder() << "compression type is set in left value, but not set in right value");
         } else if (!CompressionType.has_value() && rhs.HasCompressionType()) {
-            errorMessage = TStringBuilder() << "compression type is not set in left value, but set in right value";
-            return false;
+            return TConclusionStatus::Fail(TStringBuilder() << "compression type is not set in left value, but set in right value");
         }
-        if (CompressionLevel.has_value() && rhs.GetCompressionLevel().has_value() &&
-            CompressionLevel.value() != rhs.GetCompressionLevel().value()) {
-            errorMessage = TStringBuilder() << "different compression level: in left value `" << CompressionLevel.value()
-                                            << "` and in right value `" << rhs.GetCompressionLevel().value() << "`";
-            return false;
+        if (CompressionLevel.has_value() && rhs.GetCompressionLevel().has_value() && CompressionLevel.value() != rhs.GetCompressionLevel().value()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "different compression level: in left value `" << CompressionLevel.value()
+                                                            << "` and in right value `" << rhs.GetCompressionLevel().value() << "`");
         } else if (CompressionLevel.has_value() && !rhs.GetCompressionLevel().has_value()) {
-            errorMessage = TStringBuilder() << "compression level is set in left value, but not set in right value";
-            return false;
+            return TConclusionStatus::Fail("compression level is set in left value, but not set in right value");
         } else if (!CompressionLevel.has_value() && rhs.GetCompressionLevel().has_value()) {
-            errorMessage = TStringBuilder() << "compression level not set in left value, but set in right value";
-            return false;
+            return TConclusionStatus::Fail("compression level not set in left value, but set in right");
         }
 
-        return true;
+        return TConclusionStatus::Success();
     }
 
     TString TTestHelper::TCompression::ToString() const {
@@ -213,7 +205,7 @@ namespace NKqp {
     }
 
     bool TTestHelper::TColumnFamily::DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family) {
-        if (!family.HasId() || !family.HasName()) {
+        if (!family.HasId() || !family.HasName() || (!family.HasColumnCodec() && family.HasColumnCodecLevel())) {
             return false;
         }
         Id = family.GetId();
@@ -224,6 +216,9 @@ namespace NKqp {
         }
         if (family.HasColumnCodecLevel()) {
             Compression.SetCompressionLevel(family.GetColumnCodecLevel());
+        }
+        if (family.HasDataAccessorConstructor()) {
+            DataAccessor = family.GetDataAccessorConstructor().GetClassName();
         }
         return true;
     }
@@ -238,18 +233,22 @@ namespace NKqp {
         return str;
     }
 
-    bool TTestHelper::TColumnFamily::IsEqual(const TColumnFamily& rhs, TString& errorMessage) const {
+    TConclusionStatus TTestHelper::TColumnFamily::IsEqual(const TColumnFamily& rhs) const {
         if (Id != rhs.GetId()) {
-            errorMessage = TStringBuilder() << "different family id: in left value `" << Id << "` and in right value `" << rhs.GetId() << "`";
-            return false;
+            return TConclusionStatus::Fail(
+                TStringBuilder() << "different family id: in left value `" << Id << "` and in right value `" << rhs.GetId() << "`");
         }
         if (FamilyName != rhs.GetFamilyName()) {
-            errorMessage = TStringBuilder() << "different family name: in left value `" << FamilyName << "` and in right value `"
-                                            << rhs.GetFamilyName() << "`";
-            return false;
+            return TConclusionStatus::Fail(TStringBuilder() << "different family name: in left value `" << FamilyName << "` and in right value `"
+                                                            << rhs.GetFamilyName() << "`");
         }
 
-        return Compression.IsEqual(rhs.GetCompression(), errorMessage);
+        if (DataAccessor != rhs.GetDataAccessor()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "different data accessor: in left value `" << DataAccessor << "` and in right value `"
+                                                            << rhs.GetDataAccessor() << "`");
+        }
+
+        return Compression.IsEqual(rhs.GetCompression());
     }
 
     TString TTestHelper::TColumnFamily::ToString() const {

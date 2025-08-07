@@ -1,14 +1,19 @@
-#include "helpers/local.h"
-#include "helpers/writer.h"
-#include "helpers/typed_local.h"
-#include "helpers/query_executor.h"
 #include "helpers/get_value.h"
+#include "helpers/local.h"
+#include "helpers/query_executor.h"
+#include "helpers/typed_local.h"
+#include "helpers/writer.h"
+
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/wrappers/fake_storage.h>
+
+#include <ydb/library/formats/arrow/accessor/common/const.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/wrappers/fake_storage.h>
-#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
 namespace NKikimr::NKqp {
 
@@ -371,6 +376,201 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
     }
 
+    Y_UNIT_TEST(DisabledSetSparsedViaColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(
+            TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableSparsedColumns(false));
+
+        TString tableName = "/Root/TableWithDefaultColumnFamily";
+        TTestHelper::TCompression offCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(offCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(offCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto alterQuery =
+            TStringBuilder() << R"(ALTER OBJECT `)" << tableName
+                             << R"(` (TYPE TABLE) SET (ACTION=ALTER_FAMILY, NAME=default, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`))";
+        auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(SetSparsedViaColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true));
+
+        TString tableName = "/Root/TableWithDefaultColumnFamily";
+        TTestHelper::TCompression offCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(offCompression),
+            TTestHelper::TColumnFamily().SetId(1).SetFamilyName("family1").SetCompression(offCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        {
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+            for (ui32 i = 0; i < families.size(); i++) {
+                TTestHelper::TColumnFamily familyFromScheme;
+                UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
+            }
+
+            auto columns = schema.GetColumns();
+            for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                UNIT_ASSERT(!columns[i].HasDataAccessorConstructor());
+            }
+        }
+
+        {
+            families[0].SetDataAccessor("SPARSED");
+            auto alterQuery = TStringBuilder()
+                              << R"(ALTER OBJECT `)" << tableName
+                              << R"(` (TYPE TABLE) SET (ACTION=ALTER_FAMILY, NAME=default, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`))";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_C(alterResult.IsSuccess(), alterResult.GetIssues().ToString());
+
+            {
+                auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+                auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+                UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+                for (ui32 i = 0; i < families.size(); i++) {
+                    TTestHelper::TColumnFamily familyFromScheme;
+                    UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                    TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
+                }
+
+                auto columns = schema.GetColumns();
+                for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                    auto column = columns[i];
+                    UNIT_ASSERT(column.HasDataAccessorConstructor());
+                    UNIT_ASSERT_EQUAL(
+                        column.GetDataAccessorConstructor().GetClassName(), NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
+                }
+            }
+        }
+
+        {
+            auto alterQuery = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(` ADD COLUMN Value3 Uint32)";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_C(alterResult.IsSuccess(), alterResult.GetIssues().ToString());
+
+            {
+                auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+                auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+                auto columns = schema.GetColumns();
+                for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                    auto column = columns[i];
+                    UNIT_ASSERT(column.HasDataAccessorConstructor());
+                    UNIT_ASSERT_EQUAL(
+                        column.GetDataAccessorConstructor().GetClassName(), NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
+                }
+            }
+        }
+
+        {
+            auto alterQuery = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(` ALTER COLUMN Value1 SET FAMILY family1)";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_C(alterResult.IsSuccess(), alterResult.GetIssues().ToString());
+
+            {
+                auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+                auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+                UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+                for (ui32 i = 0; i < families.size(); i++) {
+                    TTestHelper::TColumnFamily familyFromScheme;
+                    UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                    TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
+                }
+
+                auto columns = schema.GetColumns();
+                for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                    auto column = columns[i];
+                    if (column.GetName() == "Value1") {
+                        UNIT_ASSERT(!column.HasDataAccessorConstructor());
+                    } else {
+                        UNIT_ASSERT(column.HasDataAccessorConstructor());
+                        UNIT_ASSERT_EQUAL(
+                            column.GetDataAccessorConstructor().GetClassName(), NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
+                    }
+                }
+            }
+        }
+
+        {
+            families[0].SetDataAccessor("PLAIN");
+            auto alterQuery =
+                TStringBuilder() << R"(ALTER OBJECT `)" << tableName
+                                 << R"(` (TYPE TABLE) SET (ACTION=ALTER_FAMILY, NAME=default, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`))";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_C(alterResult.IsSuccess(), alterResult.GetIssues().ToString());
+
+            {
+                auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+                auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+
+                UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+                for (ui32 i = 0; i < families.size(); i++) {
+                    TTestHelper::TColumnFamily familyFromScheme;
+                    UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                    TConclusionStatus result = familyFromScheme.IsEqual(families[i]);
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
+                }
+
+                auto columns = schema.GetColumns();
+                for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                    auto column = columns[i];
+                    if (column.GetName() == "Value1") {
+                        UNIT_ASSERT(!column.HasDataAccessorConstructor());
+                    } else {
+                        UNIT_ASSERT(column.HasDataAccessorConstructor());
+                        UNIT_ASSERT_EQUAL(
+                            column.GetDataAccessorConstructor().GetClassName(), NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+                    }
+                }
+            }
+        }
+    }
 }
 
 } // namespace

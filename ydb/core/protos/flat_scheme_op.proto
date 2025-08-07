@@ -136,6 +136,7 @@ message TFamilyDescription {
     optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
     optional int32 ColumnCodecLevel = 10;
+    optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 11;
 }
 
 message TFastSplitSettings {

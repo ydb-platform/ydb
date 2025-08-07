@@ -68,6 +68,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTieringInColumnShard)
     FEATURE_FLAG_SETTER(EnableMetadataObjectsOnServerless)
     FEATURE_FLAG_SETTER(EnableOlapCompression)
+    FEATURE_FLAG_SETTER(EnableSparsedColumns)
     FEATURE_FLAG_SETTER(EnableParameterizedDecimal)
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForCDC)
     FEATURE_FLAG_SETTER(EnableFollowerStats)

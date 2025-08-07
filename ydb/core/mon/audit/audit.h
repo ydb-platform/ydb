@@ -23,14 +23,15 @@ public:
     void InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev);
     void AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
     void LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase);
-    void LogOnExecute();
-    void LogOnResult(const NHttp::THttpOutgoingResponsePtr& response);
+    void LogOnReceived();
+    void LogOnCompleted(const NHttp::THttpOutgoingResponsePtr& response);
 
 private:
     void AddAuditLogPart(TStringBuf name, const TString& value);
     bool AuditableRequest(const NHttp::THttpIncomingRequestPtr& request);
 
     TAuditParts Parts;
+    bool Redirect = false;
     bool Auditable = false;
     NACLibProto::ESubjectType SubjectType = NACLibProto::SUBJECT_TYPE_ANONYMOUS;
     TString Subject;

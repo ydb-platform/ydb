@@ -139,6 +139,7 @@ public:
     const TActorId& GetYdbProxy() const;
     ui64 GetSchemeShardId() const;
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
+    void ResetCredentials(const TActorContext& ctx);
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
     const TString& GetDatabase() const;
     void SetState(EState state, TString issue = {});

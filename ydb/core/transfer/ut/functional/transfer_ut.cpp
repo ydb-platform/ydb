@@ -976,7 +976,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(1), 1));
+            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(2), 1_MB));
 
         testCase.Write({"Message-1"});
 
@@ -1013,12 +1013,26 @@ Y_UNIT_TEST_SUITE(Transfer)
             _C("Message", TString("Message-2")),
         }});
 
+        testCase.Write({"Message-3"});
+        Sleep(TDuration::MilliSeconds(500));
+
         // More cycles for pause/resume
         testCase.PauseTransfer();
-        testCase.CheckTransferState(TTransferDescription::EState::Paused);
+
+        testCase.Write({"Message-4"});
 
         testCase.ResumeTransfer();
         testCase.CheckTransferState(TTransferDescription::EState::Running);
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }, {
+            _C("Message", TString("Message-2")),
+        }, {
+            _C("Message", TString("Message-3")),
+        }, {
+            _C("Message", TString("Message-4")),
+        }});
 
         testCase.DropTransfer();
         testCase.DropTable();

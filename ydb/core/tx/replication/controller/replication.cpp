@@ -135,10 +135,28 @@ public:
     }
 
     void Progress(const TActorContext& ctx) {
+        const auto& params = Config.GetSrcConnectionParams();
+        const auto& endpoint = params.GetEndpoint();
+        if (endpoint && !SecretResolver) {
+            switch (params.GetCredentialsCase()) {
+            case NKikimrReplication::TConnectionParams::kStaticCredentials:
+                if (!params.GetStaticCredentials().HasPassword()) {
+                    return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
+                }
+                break;
+            case NKikimrReplication::TConnectionParams::kOAuthToken:
+                if (!params.GetOAuthToken().HasToken()) {
+                    return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
+                }
+                break;
+            default:
+                ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
+                break;
+            }
+        }
+
         if (!YdbProxy && !(State == EState::Removing && !Targets)) {
             THolder<IActor> ydbProxy;
-            const auto& params = Config.GetSrcConnectionParams();
-            const auto& endpoint = params.GetEndpoint();
             const auto& database = params.GetDatabase();
             const bool ssl = params.GetEnableSsl();
             const auto& caCert = params.GetCaCert();
@@ -148,15 +166,9 @@ public:
             } else {
                 switch (params.GetCredentialsCase()) {
                 case NKikimrReplication::TConnectionParams::kStaticCredentials:
-                    if (!params.GetStaticCredentials().HasPassword()) {
-                        return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
-                    }
                     ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, caCert, params.GetStaticCredentials()));
                     break;
                 case NKikimrReplication::TConnectionParams::kOAuthToken:
-                    if (!params.GetOAuthToken().HasToken()) {
-                        return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
-                    }
                     ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken()));
                     break;
                 default:
@@ -213,6 +225,13 @@ public:
 
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         Config = config;
+    }
+
+    void ResetCredentials(const TActorContext& ctx) {
+        if (SecretResolver) {
+            ctx.Send(SecretResolver, new TEvents::TEvPoison());
+        }
+        SecretResolver = {};
     }
 
     void ErrorState(TString issue) {
@@ -321,6 +340,10 @@ ui64 TReplication::GetSchemeShardId() const {
 
 void TReplication::SetConfig(NKikimrReplication::TReplicationConfig&& config) {
     Impl->SetConfig(std::move(config));
+}
+
+void TReplication::ResetCredentials(const TActorContext& ctx) {
+    Impl->ResetCredentials(ctx);
 }
 
 const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {

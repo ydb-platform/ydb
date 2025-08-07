@@ -85,7 +85,7 @@ public:
         return result;
     }
 
-    std::optional<TString> ReadNullableString() override
+    std::optional<std::string> ReadNullableString() override
     {
         YT_LOG_TRACE("Reading nullable string");
         auto length = ReadInt16();
@@ -93,12 +93,12 @@ public:
             return {};
         }
 
-        TString result;
+        std::string result;
         ReadString(&result, length);
         return result;
     }
 
-    std::optional<TString> ReadCompactNullableString() override
+    std::optional<std::string> ReadCompactNullableString() override
     {
         YT_LOG_TRACE("Reading compact nullable string");
         auto length = ReadUnsignedVarInt();
@@ -106,16 +106,16 @@ public:
             return {};
         }
 
-        TString result;
+        std::string result;
         ReadString(&result, length - 1);
 
         return result;
     }
 
-    TString ReadCompactString() override
+    std::string ReadCompactString() override
     {
         YT_LOG_TRACE("Reading compact string");
-        TString result;
+        std::string result;
 
         auto length = ReadUnsignedVarInt();
         if (length <= 1) {
@@ -127,10 +127,10 @@ public:
         return result;
     }
 
-    TString ReadString() override
+    std::string ReadString() override
     {
         YT_LOG_TRACE("Reading string");
-        TString result;
+        std::string result;
 
         auto length = ReadInt16();
         if (length == -1) {
@@ -142,10 +142,10 @@ public:
         return result;
     }
 
-    TString ReadBytes() override
+    std::string ReadBytes() override
     {
         YT_LOG_TRACE("Reading bytes");
-        TString result;
+        std::string result;
 
         auto length = ReadInt32();
         if (length == -1) {
@@ -160,12 +160,12 @@ public:
     TGuid ReadUuid() override
     {
         YT_LOG_TRACE("Reading uuid");
-        TString value;
+        std::string value;
         ReadString(&value, 16);
         return TGuid::FromString(value);
     }
 
-    void ReadString(TString* result, int length) override
+    void ReadString(std::string* result, int length) override
     {
         YT_LOG_TRACE("Reading string with length (Length: %v, DataSize: %v, Offset: %v)",
             length,
@@ -179,10 +179,10 @@ public:
         Offset_ += length;
     }
 
-    TString ReadCompactBytes() override
+    std::string ReadCompactBytes() override
     {
         YT_LOG_TRACE("Reading compact bytes");
-        TString result;
+        std::string result;
 
         auto length = ReadUnsignedVarInt();
         if (length == 0) {

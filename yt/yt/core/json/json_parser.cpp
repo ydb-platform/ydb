@@ -238,6 +238,19 @@ void ParseJson(
     jsonParser.Parse(input);
 }
 
+void ParseWebJson(
+    IInputStream* input,
+    IYsonConsumer* consumer,
+    TWebJsonFormatConfigPtr /*config*/,
+    EYsonType type)
+{
+    TJsonParser jsonParser(
+        consumer,
+        New<TJsonFormatConfig>(),
+        type);
+    jsonParser.Parse(input);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NJson

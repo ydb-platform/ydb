@@ -8473,9 +8473,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 2, 6, ctx.Expr)) {
+    IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->ChildrenSize() > 6) {
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 6);
+            if (status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
         }
 
         if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
@@ -8601,15 +8608,24 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             .Seal()
             .Build();
 
+        const bool needNamedApply = namedArgs || input->ChildrenSize() > 6;
         TExprNodeList applyArgs = { udf };
-        if (namedArgs) {
+        if (needNamedApply) {
             applyArgs.push_back(ctx.Expr.NewList(input->Pos(), std::move(positionalArgs)));
-            applyArgs.push_back(namedArgs);
+            if (namedArgs) {
+                applyArgs.push_back(namedArgs);
+            } else {
+                applyArgs.push_back(ctx.Expr.NewCallable(input->Pos(), "AsStruct", {}));
+            }
+
+            for (ui32 i = 6; i < input->ChildrenSize(); ++i) {
+                applyArgs.push_back(input->ChildPtr(i));
+            }
         } else {
             applyArgs.insert(applyArgs.end(), positionalArgs.begin(), positionalArgs.end());
         }
 
-        output = ctx.Expr.NewCallable(input->Pos(), namedArgs ? "NamedApply" : "Apply", std::move(applyArgs));
+        output = ctx.Expr.NewCallable(input->Pos(), needNamedApply ? "NamedApply" : "Apply", std::move(applyArgs));
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -12972,7 +12988,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Apply"] = &ApplyWrapper;
         ExtFunctions["NamedApply"] = &NamedApplyWrapper;
         Functions["PositionalArgs"] = &PositionalArgsWrapper;
-        Functions["SqlCall"] = &SqlCallWrapper;
+        ExtFunctions["SqlCall"] = &SqlCallWrapper;
         Functions["Callable"] = &CallableWrapper;
         Functions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>;
         Functions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;

@@ -7671,6 +7671,20 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_udf-complex_return_type_/sql.yql"
         }
     ],
+    "test_sql2yql.test[udf-depends2]": [
+        {
+            "checksum": "3c6630dabef2aa876879e0357aa9df60",
+            "size": 1308,
+            "uri": "https://{canondata_backend}/1784826/0c5d7987ce729ca567cc30ed80a4ff0ffdaef7dd/resource.tar.gz#test_sql2yql.test_udf-depends2_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[udf-depends]": [
+        {
+            "checksum": "ea96daf76aa07b54fb22d8b577597f45",
+            "size": 1283,
+            "uri": "https://{canondata_backend}/1784826/0c5d7987ce729ca567cc30ed80a4ff0ffdaef7dd/resource.tar.gz#test_sql2yql.test_udf-depends_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[udf-error_type]": [
         {
             "checksum": "f45c5bc8c840d0fc7d5ff8fb667b3437",
@@ -12023,6 +12037,16 @@
     "test_sql_format.test[udf-complex_return_type]": [
         {
             "uri": "file://test_sql_format.test_udf-complex_return_type_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[udf-depends2]": [
+        {
+            "uri": "file://test_sql_format.test_udf-depends2_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[udf-depends]": [
+        {
+            "uri": "file://test_sql_format.test_udf-depends_/formatted.sql"
         }
     ],
     "test_sql_format.test[udf-error_type]": [

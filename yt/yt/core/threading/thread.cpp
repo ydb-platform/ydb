@@ -33,7 +33,7 @@ constinit const auto Logger = ThreadingLogger;
 ////////////////////////////////////////////////////////////////////////////////
 
 TThread::TThread(
-    TString threadName,
+    std::string threadName,
     TThreadOptions options)
     : ThreadName_(std::move(threadName))
     , Options_(std::move(options))

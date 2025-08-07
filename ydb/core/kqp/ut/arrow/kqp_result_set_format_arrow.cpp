@@ -1020,7 +1020,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
-     * By default, SchemaInclusionMode is FIRST_ONLY for Arrow format.
+     * By default, SchemaInclusionMode is ALWAYS for Arrow format.
      */
     Y_UNIT_TEST(ArrowFormat_SchemaInclusionMode_Unspecified) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
@@ -1028,7 +1028,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
         CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
 
-        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
+        auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow).SchemaInclusionMode(ESchemaInclusionMode::Always);
 
         auto it = client.StreamExecuteQuery(R"(
             SELECT * FROM LargeTable;
@@ -1055,17 +1055,17 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
                 UNIT_ASSERT_C(!batch.empty(), "Batch must not be empty");
 
-                if (count == 0) {
-                    // With Arrow format, the result set contains a YQL schema and an Arrow record batch schema
-                    UNIT_ASSERT_VALUES_UNEQUAL_C(resultSet.ColumnsCount(), 0, "Columns must not be empty for the first result set");
-                    UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty for the first result set");
+                // With Arrow format, the result set contains a YQL schema and an Arrow record batch schema
+                UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty");
+                UNIT_ASSERT_VALUES_UNEQUAL_C(resultSet.ColumnsCount(), 0, "Columns must not be empty for the first result set");
 
-                    arrowSchema = NArrow::DeserializeSchema(TString(schema));
+                auto curSchema = NArrow::DeserializeSchema(TString(schema));
+                UNIT_ASSERT_C(curSchema, "Schema must be deserialized");
 
-                    UNIT_ASSERT_C(arrowSchema, "Schema must be deserialized");
+                if (arrowSchema) {
+                    UNIT_ASSERT_VALUES_EQUAL(arrowSchema->ToString(), curSchema->ToString());
                 } else {
-                    UNIT_ASSERT_VALUES_EQUAL_C(resultSet.ColumnsCount(), 0, "Columns count must be empty for the rest result sets");
-                    UNIT_ASSERT_C(schema.empty(), "Schema must be empty for the rest result sets");
+                    arrowSchema = curSchema;
                 }
 
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchema);

@@ -157,9 +157,7 @@ enum StatsMode {
 }
 
 enum SchemaInclusionMode {
-    // Unspecified mode, corresponds to:
-    // - Ydb.ResultSet.Format.FORMAT_VALUE: SCHEMA_INCLUSION_MODE_ALWAYS
-    // - Ydb.ResultSet.Format.FORMAT_ARROW: SCHEMA_INCLUSION_MODE_FIRST_ONLY
+    // Unspecified mode, corresponds to SCHEMA_INCLUSION_MODE_ALWAYS.
     SCHEMA_INCLUSION_MODE_UNSPECIFIED = 0;
 
     // Always include schema in every Ydb.ResultSet in the response stream.
@@ -198,7 +196,7 @@ message ExecuteQueryRequest {
     int64 stats_period_ms = 11 [(Ydb.value) = ">= 0"];
 
     // Schema inclusion mode for the result sets.
-    // If is not specified, it depends on the result set format.
+    // If is not specified, SchemaInclusionMode.SCHEMA_INCLUSION_MODE_ALWAYS is used.
     SchemaInclusionMode schema_inclusion_mode = 12;
 
     // Format of the result sets.

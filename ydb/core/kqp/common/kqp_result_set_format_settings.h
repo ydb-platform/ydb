@@ -102,31 +102,11 @@ public:
     }
 
     bool IsSchemaInclusionAlways() const {
-        if (!IsSchemaInclusionUnspecified()) {
-            return SchemaInclusionMode == ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS;
-        }
-        if (IsValueFormat()) {
-            return true;
-        }
-        if (IsArrowFormat()) {
-            return false;
-        }
-        YQL_ENSURE(false, "Unreachable");
-        return true;
+        return IsSchemaInclusionUnspecified() || SchemaInclusionMode == ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_ALWAYS;
     }
 
     bool IsSchemaInclusionFirstOnly() const {
-        if (!IsSchemaInclusionUnspecified()) {
-            return SchemaInclusionMode == ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_FIRST_ONLY;
-        }
-        if (IsValueFormat()) {
-            return false;
-        }
-        if (IsArrowFormat()) {
-            return true;
-        }
-        YQL_ENSURE(false, "Unreachable");
-        return false;
+        return SchemaInclusionMode == ::Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_FIRST_ONLY;
     }
 
     const std::optional<TArrowFormatSettings>& GetArrowFormatSettings() const {

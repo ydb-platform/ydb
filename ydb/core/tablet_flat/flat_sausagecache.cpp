@@ -168,7 +168,9 @@ THashMap<TLogoBlobID, TVector<TPageId>> TPrivatePageCache::GetToLoad() {
 }
 
 void TPrivatePageCache::TranslatePinnedToSharedCacheTouches() {
-    Y_ENSURE(Pinned, "can be called only in a transaction context");
+    if (!Pinned) {
+        return; // canceling transaction may have no pinned pages yet
+    }
 
     for (const auto& [pageCollectionId, pages] : *Pinned) {
         if (FindPageCollection(pageCollectionId)) {

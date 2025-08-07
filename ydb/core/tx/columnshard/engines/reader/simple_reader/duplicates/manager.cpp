@@ -117,7 +117,7 @@ private:
             for (const auto& [columnId, _] : Schema) {
                 columnIds.insert(columnId);
             }
-            mem += accessor->GetColumnRawBytes(columnIds);
+            mem += accessor->GetColumnRawBytes(columnIds, false);
         }
 
         NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(Context->GetMemoryProcessId(), Context->GetMemoryScopeId(),

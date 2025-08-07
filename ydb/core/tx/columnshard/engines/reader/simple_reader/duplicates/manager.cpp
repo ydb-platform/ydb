@@ -35,7 +35,7 @@ private:
     }
 
     virtual bool DoIsAborted() const override {
-        return false;
+        return Context->GetRequest()->Get()->GetAbortionFlag() && Context->GetRequest()->Get()->GetAbortionFlag()->Val();
     }
 
 public:
@@ -118,7 +118,7 @@ private:
             std::nullopt);
     }
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        return Default<std::shared_ptr<const TAtomicCounter>>();
+        return Context->GetRequest()->Get()->GetAbortionFlag();
     }
 
 public:

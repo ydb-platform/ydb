@@ -1282,7 +1282,15 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
         return TStatus::Error;
     }
 
-    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(input->Child(5)->GetTypeAnn()));
+    const auto* outputTypeAnn = input->Child(5)->GetTypeAnn();
+    if (!outputTypeAnn) {
+        return TStatus::Error;
+    }
+    if (outputTypeAnn->GetKind() != ETypeAnnotationKind::Multi) {
+        TTypeAnnotationNode::TListType wrapper {outputTypeAnn};
+        outputTypeAnn = ctx.MakeType<TMultiExprType>(wrapper);
+    }
+    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputTypeAnn));
 
     return TStatus::Ok;
 }

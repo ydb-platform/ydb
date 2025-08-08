@@ -180,7 +180,9 @@ public:
         return rows;
     }
 
-    void SquashWatermarks() {
+private:
+    void SkipWatermarksBeforeBarrier() {
+        // Drop watermarks before current barrier
         while (!PendingBarriers.empty()) {
             auto& barrier = PendingBarriers.front();
             if (barrier.Barrier >= PauseBarrier) {
@@ -193,13 +195,14 @@ public:
         }
     }
 
+public:
     void PauseByWatermark(TInstant watermark) override {
         Y_ENSURE(PauseBarrier <= watermark);
         PauseBarrier = watermark;
         if (IsPausedByCheckpoint()) {
             return;
         }
-        SquashWatermarks();
+        SkipWatermarksBeforeBarrier();
         Y_ENSURE(!PendingBarriers.empty());
         Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
     }
@@ -287,7 +290,8 @@ public:
         Y_ENSURE(Empty());
         BeforeBarrier = PendingBarriers.front();
         PendingBarriers.pop_front();
-        SquashWatermarks();
+        // There can be watermarks before current barrier exposed by checkpoint removal
+        SkipWatermarksBeforeBarrier();
     }
 
     [[nodiscard]]
@@ -307,9 +311,9 @@ public:
 
         if (!PendingBarriers.empty() && !IsPaused()) {
             // There were watermarks, but channel is not paused
-            // Process data anyway and move watermarks behinda
+            // Process data anyway and move watermarks behind
             auto lastBarrier = PendingBarriers.back().Barrier;
-            for (auto& barrier : PendingBarriers) {
+            for (const auto& barrier : PendingBarriers) {
                 Y_ENSURE(!barrier.IsCheckpoint());
                 BeforeBarrier += barrier;
             }

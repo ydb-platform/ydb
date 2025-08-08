@@ -41,6 +41,8 @@ RECURSE_FOR_TESTS(
     ut_reboots
     ut_replication
     ut_replication_reboots
+    ut_resource_pool
+    ut_resource_pool_reboots
     ut_restore
     ut_rtmr
     ut_rtmr_reboots
@@ -52,6 +54,8 @@ RECURSE_FOR_TESTS(
     ut_split_merge
     ut_split_merge_reboots
     ut_stats
+    ut_streaming_query
+    ut_streaming_query_reboots
     ut_subdomain
     ut_subdomain_reboots
     ut_system_names
@@ -113,6 +117,7 @@ SRCS(
     schemeshard__operation_alter_resource_pool.cpp
     schemeshard__operation_alter_sequence.cpp
     schemeshard__operation_alter_solomon.cpp
+    schemeshard__operation_alter_streaming_query.cpp
     schemeshard__operation_alter_subdomain.cpp
     schemeshard__operation_alter_table.cpp
     schemeshard__operation_alter_user_attrs.cpp
@@ -131,6 +136,7 @@ SRCS(
     schemeshard__operation_common_external_table.cpp
     schemeshard__operation_common_pq.cpp
     schemeshard__operation_common_resource_pool.cpp
+    schemeshard__operation_common_streaming_query.cpp
     schemeshard__operation_common_subdomain.cpp
     schemeshard__operation_common_subdomain.h
     schemeshard__operation_consistent_copy_tables.cpp
@@ -159,6 +165,7 @@ SRCS(
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
     schemeshard__operation_create_solomon.cpp
+    schemeshard__operation_create_streaming_query.cpp
     schemeshard__operation_create_subdomain.cpp
     schemeshard__operation_create_sysview.cpp
     schemeshard__operation_create_table.cpp
@@ -181,6 +188,7 @@ SRCS(
     schemeshard__operation_drop_resource_pool.cpp
     schemeshard__operation_drop_sequence.cpp
     schemeshard__operation_drop_solomon.cpp
+    schemeshard__operation_drop_streaming_query.cpp
     schemeshard__operation_drop_subdomain.cpp
     schemeshard__operation_drop_sysview.cpp
     schemeshard__operation_drop_table.cpp

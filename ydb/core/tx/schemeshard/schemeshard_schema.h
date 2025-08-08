@@ -1997,6 +1997,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Description>;
     };
 
+    struct StreamingQuery : Table<112> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Properties : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
+    };
+
     // struct KMeansTreeState : Table<112> -- already was in trunk some time ago,
     // it was replaced with KMeansTreeProgress, before anyone really used it
     struct KMeansTreeProgress : Table<114> {
@@ -2331,7 +2341,8 @@ struct Schema : NIceDb::Schema {
         IncrementalRestoreShardProgress,
         SystemShardsToDelete,
         IncrementalBackups,
-        IncrementalBackupItems
+        IncrementalBackupItems,
+        StreamingQuery
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

@@ -1284,6 +1284,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateLongIncrementalBackupOp:
         return CreateLongIncrementalBackupOp(NextPartId(), txState);
 
+    // StreamingQuery
+    case TTxState::ETxType::TxCreateStreamingQuery:
+        return CreateNewStreamingQuery(NextPartId(), txState);
+    case TTxState::ETxType::TxDropStreamingQuery:
+        return CreateDropStreamingQuery(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterStreamingQuery:
+        return CreateAlterStreamingQuery(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1605,6 +1613,14 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     // Incremental Restore Finalization
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         return {CreateIncrementalRestoreFinalize(op.NextPartId(), tx)};
+
+    // StreamingQuery
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
+        return {CreateNewStreamingQuery(op.NextPartId(), tx, context)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
+        return {CreateDropStreamingQuery(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
+        return {CreateAlterStreamingQuery(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

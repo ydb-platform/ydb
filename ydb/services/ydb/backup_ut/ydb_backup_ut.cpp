@@ -2212,6 +2212,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeSolomonVolume:
             case EPathTypeFileStore:
                 break; // other projects
+            case EPathTypeStreamingQuery:
+                break; // https://github.com/ydb-platform/ydb/issues/22571
             default:
                 UNIT_FAIL("Client backup/restore were not implemented for this scheme object");
                 // please don't forget to add:
@@ -3014,6 +3016,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeSolomonVolume:
             case EPathTypeFileStore:
                 break; // other projects
+            case EPathTypeStreamingQuery:
+                break; // https://github.com/ydb-platform/ydb/issues/22571
             default:
                 UNIT_FAIL("S3 backup/restore were not implemented for this scheme object");
         }

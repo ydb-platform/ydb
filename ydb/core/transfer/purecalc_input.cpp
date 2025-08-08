@@ -89,43 +89,46 @@ struct TMessageWrapper {
         GetDictionaryKeyTypes(type->GetKeyType(), keyTypes, isTuple, encoded, useIHash);
 
         return nodeFactory.CreateDirectHashedDictHolder([&](TValuesDictHashMap& map) {
-                for (auto& [k, v] : Message.Attributes) {
-                    map.emplace(NKikimr::NMiniKQL::MakeString(k), NKikimr::NMiniKQL::MakeString(v));
+                const auto& m = Message.Message.GetMessageMeta();
+                if (m) {
+                    for (auto& [k, v] : m->Fields) {
+                        map.emplace(NKikimr::NMiniKQL::MakeString(k), NKikimr::NMiniKQL::MakeString(v));
+                    }
                 }
             },
             keyTypes, false, true, nullptr, nullptr, nullptr);
     }
 
     NYql::NUdf::TUnboxedValuePod GetCreateTimestamp() const {
-        return NYql::NUdf::TUnboxedValuePod(Message.CreateTimestamp.MilliSeconds());
+        return NYql::NUdf::TUnboxedValuePod(Message.Message.GetCreateTime().MilliSeconds());
     }
 
     NYql::NUdf::TUnboxedValuePod GetData() const {
-        return NKikimr::NMiniKQL::MakeString(Message.Data);
+        return NKikimr::NMiniKQL::MakeString(Message.Message.GetData());
     }
 
     NYql::NUdf::TUnboxedValuePod GetMessageGroupId() const {
-        return NKikimr::NMiniKQL::MakeString(Message.MessageGroupId);
+        return NKikimr::NMiniKQL::MakeString(Message.Message.GetMessageGroupId());
     }
 
     NYql::NUdf::TUnboxedValuePod GetOffset() const {
-        return NYql::NUdf::TUnboxedValuePod(Message.Offset);
+        return NYql::NUdf::TUnboxedValuePod(Message.Message.GetOffset());
     }
 
     NYql::NUdf::TUnboxedValuePod GetPartition() const {
-        return NYql::NUdf::TUnboxedValuePod(Message.Partition);
+        return NYql::NUdf::TUnboxedValuePod(Message.PartitionId);
     }
 
     NYql::NUdf::TUnboxedValuePod GetProducerId() const {
-        return NKikimr::NMiniKQL::MakeString(Message.ProducerId);
+        return NKikimr::NMiniKQL::MakeString(Message.Message.GetProducerId());
     }
 
     NYql::NUdf::TUnboxedValuePod GetSeqNo() const {
-        return NYql::NUdf::TUnboxedValuePod(Message.SeqNo);
+        return NYql::NUdf::TUnboxedValuePod(Message.Message.GetSeqNo());
     }
 
     NYql::NUdf::TUnboxedValuePod GetWriteTimestamp() const {
-        return NYql::NUdf::TUnboxedValuePod(Message.WriteTimestamp.MilliSeconds());
+        return NYql::NUdf::TUnboxedValuePod(Message.Message.GetWriteTime().MilliSeconds());
     }
 };
 

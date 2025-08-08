@@ -265,16 +265,10 @@ private:
         }
 
         for (auto& message : records) {
-            TMessage input;
-            input.Attributes = message.GetMessageMeta()->Fields;
-            input.CreateTimestamp = message.GetCreateTime();
-            input.Data = std::move(message.GetData());
-            input.MessageGroupId = std::move(message.GetMessageGroupId());
-            input.Partition = partitionId;
-            input.ProducerId = std::move(message.GetProducerId());
-            input.Offset = message.GetOffset();
-            input.SeqNo = message.GetSeqNo();
-            input.WriteTimestamp = message.GetWriteTime();
+            TMessage input {
+                .PartitionId = partitionId,
+                .Message = message
+            };
 
             auto setError = [&](const auto& msg) {
                 ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;

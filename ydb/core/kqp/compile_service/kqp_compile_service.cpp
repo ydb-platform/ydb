@@ -322,6 +322,8 @@ private:
         bool enableOlapScalarApply = TableServiceConfig.GetEnableOlapScalarApply();
         bool enableOlapSubstringPushdown = TableServiceConfig.GetEnableOlapSubstringPushdown();
 
+        bool enableTempTablesForUser = TableServiceConfig.GetEnableTempTablesForUser();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -357,7 +359,8 @@ private:
             TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination ||
             TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections ||
             TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
-            TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown
+            TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
+            TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser
         )
         {
 

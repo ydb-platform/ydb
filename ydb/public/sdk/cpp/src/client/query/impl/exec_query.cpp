@@ -10,6 +10,7 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
@@ -150,6 +151,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     std::vector<Ydb::ResultSet> ResultSets_;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Tx_;
+    std::unordered_map<size_t, TCollectedArrowResult> ResultsArrow_;
 
     void Next() {
         TPtr self(this);
@@ -169,14 +171,20 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     std::vector<NYdb::NIssue::TIssue> issues;
                     std::vector<Ydb::ResultSet> resultProtos;
                     std::optional<TTransaction> tx;
+                    std::unordered_map<size_t, TCollectedArrowResult> resultsArrow;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
                     std::swap(self->Tx_, tx);
+                    std::swap(self->ResultsArrow_, resultsArrow);
 
                     std::vector<TResultSet> resultSets;
                     for (auto& proto : resultProtos) {
                         resultSets.emplace_back(std::move(proto));
+                    }
+
+                    for (auto& [index, arrowResult] : resultsArrow) {
+                        TArrowAccessor::SetCollectedArrowResult(resultSets[index], std::move(arrowResult));
                     }
 
                     self->Promise_.SetValue(TExecuteQueryResult(
@@ -208,9 +216,27 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     resultSet.mutable_columns()->CopyFrom(inRsProto.columns());
                 }
 
-                resultSet.mutable_rows()->Reserve(resultSet.mutable_rows()->size() + inRsProto.rows_size());
-                for (const auto& row : inRsProto.rows()) {
-                    *resultSet.mutable_rows()->Add() = row;
+                resultSet.set_format(inRsProto.format());
+                switch (inRsProto.format()) {
+                    case Ydb::ResultSet::FORMAT_VALUE: {
+                        resultSet.mutable_rows()->Reserve(resultSet.mutable_rows()->size() + inRsProto.rows_size());
+                        for (const auto& row : inRsProto.rows()) {
+                            *resultSet.mutable_rows()->Add() = row;
+                        }
+                        break;
+                    }
+                    case Ydb::ResultSet::FORMAT_ARROW: {
+                        auto& arrowResult = self->ResultsArrow_[part.GetResultSetIndex()];
+                        if (arrowResult.Schema.empty()) {
+                            arrowResult.Schema = inRsProto.arrow_format_meta().schema();
+                        }
+                        if (!inRsProto.data().empty()) {
+                            arrowResult.Data.push_back(inRsProto.data());
+                        }
+                        break;
+                    }
+                    default:
+                        break;
                 }
             }
 
@@ -236,6 +262,8 @@ public:
         request.set_pool_id(TStringType{settings.ResourcePool_});
         request.mutable_query_content()->set_text(TStringType{query});
         request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
+        request.set_schema_inclusion_mode(::Ydb::Query::SchemaInclusionMode(settings.SchemaInclusionMode_));
+        request.set_result_set_format(::Ydb::ResultSet::Format(settings.Format_));
         if (session.has_value()) {
             request.set_session_id(TStringType{session->GetId()});
         } else if ((std::holds_alternative<TTxSettings>(txControl.Tx_) && !txControl.CommitTx_) ||
@@ -254,6 +282,19 @@ public:
 
         if (settings.StatsCollectPeriod_) {
             request.set_stats_period_ms(settings.StatsCollectPeriod_->count());
+        }
+
+        if (settings.ArrowFormatSettings_) {
+            auto formatSettings = request.mutable_arrow_format_settings();
+            if (settings.ArrowFormatSettings_->CompressionCodec_) {
+                auto codec = formatSettings->mutable_compression_codec();
+                auto type = settings.ArrowFormatSettings_->CompressionCodec_->Type_;
+                codec->set_type(::Ydb::Formats::ArrowFormatSettings::CompressionCodec::Type(type));
+
+                if (settings.ArrowFormatSettings_->CompressionCodec_->Level_) {
+                    codec->set_level(*settings.ArrowFormatSettings_->CompressionCodec_->Level_);
+                }
+            }
         }
 
         if (txControl.HasTx()) {

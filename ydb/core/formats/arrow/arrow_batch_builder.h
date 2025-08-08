@@ -183,7 +183,7 @@ public:
     }
 
     arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
-    std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize);
+    std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize, bool flushEmpty = false);
     std::shared_ptr<arrow::RecordBatch> GetBatch() const { return Batch; }
 
 protected:

@@ -1,6 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 
 #include <ydb/public/api/protos/ydb_common.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -58,6 +59,7 @@ public:
 public:
     const Ydb::ResultSet ProtoResultSet_;
     std::vector<TColumn> ColumnsMeta_;
+    TCollectedArrowResult ResultArrow_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,12 +82,32 @@ bool TResultSet::Truncated() const {
     return Impl_->ProtoResultSet_.truncated();
 }
 
+TResultSet::EFormat TResultSet::Format() const {
+    return static_cast<EFormat>(Impl_->ProtoResultSet_.format());
+}
+
 const std::vector<TColumn>& TResultSet::GetColumnsMeta() const {
     return Impl_->ColumnsMeta_;
 }
 
 const Ydb::ResultSet& TResultSet::GetProto() const {
     return Impl_->ProtoResultSet_;
+}
+
+const std::string& TResultSet::GetArrowSchema() const {
+    return Impl_->ProtoResultSet_.arrow_format_meta().schema();
+}
+
+const std::string& TResultSet::GetArrowData() const {
+    return Impl_->ProtoResultSet_.data();
+}
+
+void TResultSet::SetCollectedArrowResult(TCollectedArrowResult&& resultArrow) {
+    Impl_->ResultArrow_ = std::move(resultArrow);
+}
+
+const TCollectedArrowResult& TResultSet::GetCollectedArrowResult() const {
+    return Impl_->ResultArrow_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -191,6 +213,23 @@ private:
 
     size_t RowIndex_ = 0;
 };
+
+IOutputStream& operator<<(IOutputStream& out, const TResultSet::EFormat& format) {
+    out << "TResultSet::EFormat::";
+    switch (format) {
+        case TResultSet::EFormat::Unspecified:
+            out << "Unspecified";
+            break;
+        case TResultSet::EFormat::Value:
+            out << "Value";
+            break;
+        case TResultSet::EFormat::Arrow:
+            out << "Arrow";
+            break;
+    }
+
+    return out;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -13,6 +13,8 @@ namespace Ydb {
 namespace NYdb::inline Dev {
 
 class TProtoAccessor;
+class TArrowAccessor;
+struct TCollectedArrowResult;
 
 struct TColumn {
     std::string Name;
@@ -33,6 +35,15 @@ bool operator!=(const TColumn& col1, const TColumn& col2);
 class TResultSet {
     friend class TResultSetParser;
     friend class NYdb::TProtoAccessor;
+    friend class NYdb::TArrowAccessor;
+
+public:
+    enum class EFormat {
+        Unspecified = 0,
+        Value = 1,
+        Arrow = 2,
+    };
+
 public:
     TResultSet(const Ydb::ResultSet& proto);
     TResultSet(Ydb::ResultSet&& proto);
@@ -52,10 +63,20 @@ public:
 private:
     const Ydb::ResultSet& GetProto() const;
 
+    EFormat Format() const;
+
+    const std::string& GetArrowSchema() const;
+    const std::string& GetArrowData() const;
+
+    void SetCollectedArrowResult(TCollectedArrowResult&& resultArrow);
+    const TCollectedArrowResult& GetCollectedArrowResult() const;
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 };
+
+IOutputStream& operator<<(IOutputStream& out, const TResultSet::EFormat& format);
 
 //! Note: TResultSetParser - mutable object, iteration thougth it changes internal state
 class TResultSetParser : public TMoveOnly {

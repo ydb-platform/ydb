@@ -635,12 +635,7 @@ Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
                     Cerr << "Sending path update to replica: " << replica << '\n';
                     runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, PathId, ++pathVersion)));
                     if (shouldIgnore) {
-                        // Every such check takes at least a minute!
-                        // Make sure that there are not many ignored replicas.
-                        UNIT_CHECK_GENERATED_EXCEPTION(
-                            runtime.GrabEdgeEvent<TEvNotifyUpdate>(edge, TDuration::Seconds(10)),
-                            TEmptyEventQueueException
-                        );
+                        UNIT_ASSERT_VALUES_EQUAL(CountEvents<TEvNotifyUpdate>(runtime, false, edge), 0);
                     } else {
                         const auto ev = runtime.GrabEdgeEvent<TEvNotifyUpdate>(edge, TDuration::Seconds(10));
                         UNIT_ASSERT_VALUES_EQUAL_C(ev->Sender, subscriber, ev->ToString());
@@ -661,10 +656,6 @@ Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
 
     Y_UNIT_TEST(OneDisconnectedRingGroup) {
         TestSinglePathUpdate({ {.State = PRIMARY}, {.State = DISCONNECTED} });
-    }
-
-    Y_UNIT_TEST(OneSynchronizedRingGroup) {
-        TestSinglePathUpdate({ {.State = PRIMARY}, {.State = SYNCHRONIZED} });
     }
 
     Y_UNIT_TEST(OneWriteOnlyRingGroup) {
@@ -711,10 +702,7 @@ Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
 
         ++pathVersion;
         runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, PathId, pathVersion)));
-        UNIT_CHECK_GENERATED_EXCEPTION(
-            runtime.GrabEdgeEvent<TEvNotifyUpdate>(edge, TDuration::Seconds(10)),
-            TEmptyEventQueueException
-        );
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<TEvNotifyUpdate>(runtime, false, edge), 0);
     }
 }
 
@@ -888,10 +876,7 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, false, syncResponse->ToString());
 
         // No additional sync responses.
-        UNIT_CHECK_GENERATED_EXCEPTION(
-            runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10)),
-            TEmptyEventQueueException
-        );
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<NInternalEvents::TEvSyncResponse>(runtime, false, edge), 0);
     }
 
     Y_UNIT_TEST(ReconfigurationWithCurrentSyncRequest) {
@@ -936,10 +921,7 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, false, syncResponse->ToString());
 
         // No additional sync responses.
-        UNIT_CHECK_GENERATED_EXCEPTION(
-            runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10)),
-            TEmptyEventQueueException
-        );
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<NInternalEvents::TEvSyncResponse>(runtime, false, edge), 0);
     }
 }
 

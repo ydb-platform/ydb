@@ -158,9 +158,10 @@ void TPrivatePageCache::AddPage(TPageId pageId, TSharedPageRef sharedBody, TInfo
 
 THashMap<TLogoBlobID, TVector<TPageId>> TPrivatePageCache::GetToLoad() {
     THashMap<TLogoBlobID, TVector<TPageId>> result;
-    for (auto& [pageCollectionId, pages] : ToLoad) {
-        // TODO: support THashSet in TEvRequest 
-        result.emplace(pageCollectionId, TVector<TPageId>(pages.begin(), pages.end()));
+    for (auto& [pageCollectionId, pages_] : ToLoad) {
+        TVector<TPageId> pages(pages_.begin(), pages_.end());
+        std::sort(pages.begin(), pages.end());
+        result.emplace(pageCollectionId, std::move(pages));
     }
     ToLoad.clear();
     return result;

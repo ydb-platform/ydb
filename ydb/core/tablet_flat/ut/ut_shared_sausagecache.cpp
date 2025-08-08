@@ -234,11 +234,6 @@ auto MakeSharedCacheRequestsDeterministic(TTestActorRuntime& runtime) {
     // keep page ordered because their order doesn't matter
     // but may effect cache policies
     return std::make_tuple(
-        MakeHolder<TBlockEvents<NSharedCache::TEvRequest>>(runtime, [&](const auto& ev) {
-            auto &msg = *ev->Get();
-            Sort(msg.Pages);
-            return false;
-        }),
         MakeHolder<TBlockEvents<NSharedCache::TEvTouch>>(runtime, [&](const auto& ev) {
             auto &msg = *ev->Get();
 

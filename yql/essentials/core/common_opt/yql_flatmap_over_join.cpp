@@ -84,19 +84,25 @@ void MakeTransitiveClosure(TMap<TString, TSet<TString>>& aliases) {
     }
 }
 
+struct GatherOptionalKeyColumnsOptions {
+    const TJoinLabels& Labels;
+    ui32 InputIndex;
+    bool WithInnerOptionals;
+    bool BothSides;
+};
+
 void GatherOptionalKeyColumnsFromEquality(
     TExprNode::TPtr columns,
-    const TJoinLabels& labels,
-    ui32 inputIndex,
     TSet<TString>& optionalKeyColumns,
-    bool withInnerOptionals
+    const GatherOptionalKeyColumnsOptions& options
 ) {
     for (ui32 i = 0; i < columns->ChildrenSize(); i += 2) {
-        auto table = columns->Child(i)->Content();
-        auto column = columns->Child(i + 1)->Content();
-        if (*labels.FindInputIndex(table) == inputIndex) {
-            auto type = *labels.FindColumn(table, column);
-            if (type->GetKind() == ETypeAnnotationKind::Optional || withInnerOptionals && type->HasOptionalOrNull()) {
+        const auto table = columns->Child(i)->Content();
+        if (*options.Labels.FindInputIndex(table) == options.InputIndex) {
+            const auto column = columns->Child(i + 1)->Content();
+            const auto type = *options.Labels.FindColumn(table, column);
+            const bool isOptional = options.WithInnerOptionals ? type->HasOptionalOrNull() : type->GetKind() == ETypeAnnotationKind::Optional;
+            if (isOptional) {
                 optionalKeyColumns.insert(FullColumnName(table, column));
             }
         }
@@ -105,28 +111,39 @@ void GatherOptionalKeyColumnsFromEquality(
 
 void GatherOptionalKeyColumns(
     TExprNode::TPtr joinTree,
-    const TJoinLabels& labels,
-    ui32 inputIndex,
     TSet<TString>& optionalKeyColumns,
-    bool withInnerOptionals
+    const GatherOptionalKeyColumnsOptions& options
 ) {
     auto left = joinTree->Child(1);
     auto right = joinTree->Child(2);
     if (!left->IsAtom()) {
-        GatherOptionalKeyColumns(left, labels, inputIndex, optionalKeyColumns, withInnerOptionals);
+        GatherOptionalKeyColumns(left, optionalKeyColumns, options);
     }
 
     if (!right->IsAtom()) {
-        GatherOptionalKeyColumns(right, labels, inputIndex, optionalKeyColumns, withInnerOptionals);
+        GatherOptionalKeyColumns(right, optionalKeyColumns, options);
     }
 
-    auto joinType = joinTree->Child(0)->Content();
+    const auto joinType = joinTree->Child(0)->Content();
+    const auto leftColumns = joinTree->Child(3);
+    const auto rightColumns = joinTree->Child(4);
+
     if (joinType == "Inner" || joinType == "LeftSemi") {
-        GatherOptionalKeyColumnsFromEquality(joinTree->Child(3), labels, inputIndex, optionalKeyColumns, withInnerOptionals);
+        GatherOptionalKeyColumnsFromEquality(leftColumns, optionalKeyColumns, options);
     }
 
     if (joinType == "Inner" || joinType == "RightSemi") {
-        GatherOptionalKeyColumnsFromEquality(joinTree->Child(4), labels, inputIndex, optionalKeyColumns, withInnerOptionals);
+        GatherOptionalKeyColumnsFromEquality(rightColumns, optionalKeyColumns, options);
+    }
+
+    if (options.BothSides) {
+        if (joinType == "Right" || joinType == "RightSemi" || joinType == "RightOnly") {
+            GatherOptionalKeyColumnsFromEquality(leftColumns, optionalKeyColumns, options);
+        }
+
+        if (joinType == "Left" || joinType == "LeftSemi" || joinType == "LeftOnly") {
+            GatherOptionalKeyColumnsFromEquality(rightColumns, optionalKeyColumns, options);
+        }
     }
 }
 
@@ -308,8 +325,8 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(
     const bool pushdownBothSides = IsPredicatePushdownOverEquiJoinBothSides(types);
 
     auto ret = ctx.ShallowCopy(*equiJoin);
-    for (auto& inputIndex : candidates) {
-        const auto [required, skipNullsPossible] = IsRequiredSide(joinTree, labels, inputIndex);
+    for (const ui32 inputIndex : candidates) {
+        auto [required, skipNullsPossible] = IsRequiredSide(joinTree, labels, inputIndex);
         if (!pushdownBothSides && !required) {
             continue;
         }
@@ -319,21 +336,28 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(
             continue;
         }
 
-        auto prevInput = equiJoin->Child(inputIndex)->ChildPtr(0);
-        auto newInput = prevInput;
+        // TODO: Remove IsRequiredSide.second after enabling PredicatePushdownOverEquiJoinBothSides
+        if (pushdownBothSides) {
+            skipNullsPossible = true;
+        }
+
+        auto newInput = equiJoin->Child(inputIndex)->ChildPtr(0);
         if (skipNullsPossible && skipNullsEnabled) {
             // skip null key columns
             TSet<TString> optionalKeyColumns;
             GatherOptionalKeyColumns(
                 joinTree,
-                labels,
-                inputIndex,
                 optionalKeyColumns,
-                /*withInnerOptionals=*/IsSkipNullsUnessential(types)
+                {
+                    .Labels = labels,
+                    .InputIndex = inputIndex,
+                    .WithInnerOptionals = IsSkipNullsUnessential(types),
+                    .BothSides = pushdownBothSides,
+                }
             );
             newInput = FilterOutNullJoinColumns(
                 predicate->Pos(),
-                prevInput,
+                newInput,
                 labels.Inputs[inputIndex],
                 optionalKeyColumns,
                 ordered,
@@ -686,20 +710,24 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
 
     YQL_ENSURE(leftJoinTree->Child(2)->IsAtom());
     auto rightSideInput = equiJoinLabels.at(leftJoinTree->Child(2)->Content());
+    auto filteredInput = rightSideInput;
 
     if (NeedEmitSkipNullMembers(types)) {
         // skip null key columns
         TSet<TString> optionalKeyColumns;
         GatherOptionalKeyColumns(
             joinTree,
-            labels,
-            inputIndex,
             optionalKeyColumns,
-            /*withInnerOptionals=*/IsSkipNullsUnessential(types)
+            {
+                .Labels = labels,
+                .InputIndex = inputIndex,
+                .WithInnerOptionals = IsSkipNullsUnessential(types),
+                .BothSides = IsPredicatePushdownOverEquiJoinBothSides(types),
+            }
         );
-        rightSideInput = FilterOutNullJoinColumns(
+        filteredInput = FilterOutNullJoinColumns(
             predicate->Pos(),
-            rightSideInput,
+            filteredInput,
             labels.Inputs[inputIndex],
             optionalKeyColumns,
             ordered,
@@ -709,8 +737,8 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
     }
 
     // then apply predicate
-    auto filteredInput = ApplyJoinPredicate(
-        predicate, /*filterInput=*/rightSideInput, args, labels, {}, renameMap, onlyKeys,
+    filteredInput = ApplyJoinPredicate(
+        predicate, /*filterInput=*/filteredInput, args, labels, {}, renameMap, onlyKeys,
         inputIndex, inputIndex, ordered, /*substituteWithNulls=*/false, /*forceOptional=*/true, ctx
     );
 

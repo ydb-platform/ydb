@@ -570,6 +570,41 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    Y_UNIT_TEST(DescribeTransferWithErrorTopicNotFound)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(false));
+
+        testCase.CheckTransferStateError("Path not found");
+
+        auto d = testCase.DescribeTransfer();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetState(), TTransferDescription::EState::Error);
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetSrcPath(), TStringBuilder() << "local/" << testCase.TopicName);
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetDstPath(), TStringBuilder() << "/local/" << testCase.TableName);
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
     Y_UNIT_TEST(CustomConsumer)
     {
         MainTestCase testCase;
@@ -1312,7 +1347,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTable();
     }
 
-    Y_UNIT_TEST(DescribeTransferWithErrorTopicNotFound)
+    Y_UNIT_TEST(CreateAndAlterTransferInDirectory)
     {
         MainTestCase testCase;
         testCase.CreateTable(R"(
@@ -1324,8 +1359,10 @@ Y_UNIT_TEST_SUITE(Transfer)
                     STORE = %s
                 );
             )");
+        testCase.CreateTopic(1);
 
-        testCase.CreateTransfer(R"(
+        testCase.CreateDirectory("/local/subdir");
+        testCase.CreateTransfer(TStringBuilder() << "subdir/" << testCase.TransferName, Sprintf(R"(
                 $l = ($x) -> {
                     return [
                         <|
@@ -1334,19 +1371,10 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )", MainTestCase::CreateTransferSettings::WithLocalTopic(false));
+            )", testCase.TableName.data()));
 
-        testCase.CheckTransferStateError("Path not found");
-
-        auto d = testCase.DescribeTransfer();
-        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetState(), TTransferDescription::EState::Error);
-        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetSrcPath(), TStringBuilder() << "local/" << testCase.TopicName);
-        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetDstPath(), TStringBuilder() << "/local/" << testCase.TableName);
-
-        testCase.DropTransfer();
-        testCase.DropTable();
+        testCase.AlterTransfer(TStringBuilder() << "subdir/" << testCase.TransferName,
+            MainTestCase::AlterTransferSettings::WithBatching(TDuration::Seconds(1), 1));
     }
-
-
 }
 

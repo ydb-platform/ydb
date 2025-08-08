@@ -468,7 +468,8 @@ namespace NKikimr::NStorage {
 
         bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
             , const NKikimrBlobStorage::TStorageConfig& baseConfig
-            , std::unordered_set<ui32>& usedNodes);
+            , std::unordered_set<ui32>& usedNodes
+            , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge ops

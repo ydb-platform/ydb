@@ -426,6 +426,10 @@ struct MainTestCase {
     };
 
     void CreateTransfer(const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
+        CreateTransfer(TransferName, lambda, settings);
+    }
+
+    void CreateTransfer(const std::string& name, const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
         std::vector<std::string> options;
         if (!settings.LocalTopic) {
             options.push_back(TStringBuilder() << "CONNECTION_STRING = 'grpc://" << ConnectionString << "'");
@@ -457,7 +461,7 @@ struct MainTestCase {
             WITH (
                 %s
             );
-        )", lambda.data(), TransferName.data(), topicName.data(), TableName.data(), optionsStr.data());
+        )", lambda.data(), name.data(), topicName.data(), TableName.data(), optionsStr.data());
 
         ExecuteDDL(ddl, true, settings.ExpectedError);
     }
@@ -497,6 +501,10 @@ struct MainTestCase {
     }
 
     void AlterTransfer(const AlterTransferSettings& settings, bool success = true) {
+        AlterTransfer(TransferName, settings, success);
+    }
+
+    void AlterTransfer(const std::string& name, const AlterTransferSettings& settings, bool success = true) {
         std::string lambda = settings.TransformLambda ? *settings.TransformLambda : "";
         std::string setLambda = settings.TransformLambda ? "SET USING $l" : "";
 
@@ -523,7 +531,7 @@ struct MainTestCase {
             ALTER TRANSFER `%s`
             %s
             %s;
-        )", lambda.data(), TransferName.data(), setLambda.data(), setOptions.data()), success);
+        )", lambda.data(), name.data(), setLambda.data(), setOptions.data()), success);
     }
 
     void DropTransfer() {

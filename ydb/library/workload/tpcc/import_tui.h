@@ -1,6 +1,7 @@
 #pragma once
 
 #include "import_display_data.h"
+#include "log.h"
 #include "runner.h"
 
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
@@ -12,7 +13,7 @@ class TLogBackendWithCapture;
 
 class TImportTui {
 public:
-    TImportTui(const TRunConfig& runConfig, TLogBackendWithCapture& logBacked, const TImportDisplayData& data);
+    TImportTui(std::shared_ptr<TLog>& log, const TRunConfig& runConfig, TLogBackendWithCapture& logBacked, const TImportDisplayData& data);
     ~TImportTui();
 
     void Update(const TImportDisplayData& data);
@@ -22,6 +23,7 @@ private:
     ftxui::Component BuildComponent();
 
 private:
+    std::shared_ptr<TLog> Log;
     const TRunConfig Config;
     TLogBackendWithCapture& LogBackend;
     TImportDisplayData DataToDisplay;

@@ -529,9 +529,8 @@ namespace NKikimr {
             } else {
                 VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::LoadDb;
                 const auto &m = ev->Get();
-                LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
-
                 IsTinyDisk = m->PDiskParams->IsTinyDisk;
+                LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
 
                 LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
                     "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));

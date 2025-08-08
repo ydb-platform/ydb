@@ -122,6 +122,22 @@ public:
             StickyPagesSize = 0;
         }
 
+        bool UpdateCacheMode(ECacheMode newCacheMode) {
+            if (CacheMode == newCacheMode) {
+                return false;
+            }
+            CacheMode = newCacheMode;
+            return true;
+        }
+
+        ECacheMode GetCacheMode() const noexcept {
+            return CacheMode;
+        }
+
+        ui64 GetTryKeepInMemorySize() const noexcept {
+            return CacheMode == ECacheMode::TryKeepInMemory ? PageCollection->BackingSize() : 0;
+        }
+
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;
@@ -133,6 +149,7 @@ public:
         // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
         THashMap<TPageId, TSharedPageRef> StickyPages;
         ui64 StickyPagesSize = 0;
+        ECacheMode CacheMode = ECacheMode::Regular;
     };
 
 public:

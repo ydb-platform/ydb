@@ -80,7 +80,8 @@ public:
     TInternalFilterConstructor(const TEvRequestFilter::TPtr& request, TColumnDataSplitter&& splitter);
 
     ~TInternalFilterConstructor() {
-        AFL_VERIFY(IsDone())("state", DebugString());
+        AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()))(
+                                                                             "state", DebugString());
     }
 
     TString DebugString() const {

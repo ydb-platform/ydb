@@ -3781,7 +3781,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -3970,7 +3970,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -4524,7 +4524,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         virtual void DoExecute() = 0;
     public:
         void Execute() {
-            auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+            auto settings = TKikimrSettings().SetWithSampleTables(false);
             settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
             settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!IsOlap);
 
@@ -4870,7 +4870,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+            .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -6198,7 +6198,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        
+
         {
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
@@ -6248,16 +6248,16 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                         Key: Uint64,
                         Value: String
                     >>;
-                    
+
                     UPSERT INTO `/Root/DataShard`
                     SELECT * FROM AS_TABLE($rows);
                 )";
-                
+
                 auto result = session.ExecuteQuery(query, TTxControl::Tx(tx.GetId()), params.Build()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 Sleep(TDuration::MilliSeconds(500));
             }
-            
+
             auto commitResult = tx.Commit().GetValueSync();
             UNIT_ASSERT_C(commitResult.IsSuccess(), commitResult.GetIssues().ToString());
         }

@@ -339,6 +339,10 @@ public:
         if (NeedToRedirect()) {
             return;
         }
+        if (NeedToWriteAuditLog()) {
+            return;
+        }
+
         if (Query.empty() && Action != "cancel-query" && Action != "fetch-long-query") {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }

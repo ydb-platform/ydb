@@ -22,32 +22,6 @@ namespace {
     // audit event has limit of 4 MB, but we limit body size to 2 MB
     const size_t MAX_AUDIT_BODY_SIZE = 2_MB - TRUNCATED_SUFFIX.size();
 
-    ERequestStatus GetStatus(const NHttp::THttpOutgoingResponsePtr response) {
-        auto status = response.Get()->Status;
-        if (status.StartsWith("2")) {
-            return ERequestStatus::Success;
-        } else if (status.StartsWith("3")) {
-            return ERequestStatus::Process;
-        }
-
-        return ERequestStatus::Error;
-    }
-
-    TString ToString(const ERequestStatus value) {
-        switch (value) {
-            case ERequestStatus::Success: return "SUCCESS";
-            case ERequestStatus::Process: return "IN-PROCESS";
-            case ERequestStatus::Error: return "ERROR";
-        }
-        return EMPTY_VALUE;
-    }
-
-    TString GetReason(const NHttp::THttpOutgoingResponsePtr& response) {
-        TStringBuilder reason;
-        reason << response.Get()->Status << " " << response.Get()->Message;
-        return reason;
-    }
-
     inline TUrlMatcher CreateAuditableActionsMatcher() {
         TUrlMatcher policy;
         for (const auto& pattern : AUDITABLE_ACTIONS) {
@@ -55,6 +29,41 @@ namespace {
         }
         return policy;
     }
+
+    NACLibProto::ESubjectType GetSubjectType(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
+        return userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
+    }
+
+    bool HttpAuditEnabled(NACLibProto::ESubjectType subjectType) {
+        return NKikimr::AppData()->AuditConfig.EnableLogging(
+            NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, subjectType);
+    }
+}
+
+TAuditCtx::ERequestStatus TAuditCtx::GetStatus(const NHttp::THttpOutgoingResponsePtr response) {
+    auto status = response.Get()->Status;
+    if (status.StartsWith("2")) {
+        return TAuditCtx::ERequestStatus::Success;
+    } else if (status.StartsWith("3")) {
+        return TAuditCtx::ERequestStatus::Process;
+    }
+
+    return TAuditCtx::ERequestStatus::Error;
+}
+
+TString TAuditCtx::ToString(const TAuditCtx::ERequestStatus value) {
+    switch (value) {
+        case TAuditCtx::ERequestStatus::Success: return "SUCCESS";
+        case TAuditCtx::ERequestStatus::Process: return "IN-PROCESS";
+        case TAuditCtx::ERequestStatus::Error: return "ERROR";
+    }
+    return EMPTY_VALUE;
+}
+
+TString TAuditCtx::GetReason(const NHttp::THttpOutgoingResponsePtr& response) {
+    TStringBuilder reason;
+    reason << response.Get()->Status << " " << response.Get()->Message;
+    return reason;
 }
 
 void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
@@ -83,17 +92,18 @@ bool TAuditCtx::AuditableRequest(const TString& method, const TString& url, cons
 }
 
 void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+    if (State != EState::Init) {
+        return;
+    }
     const auto& request = ev->Get()->Request;
     const TString method(request->Method);
     const TString url(request->URL.Before('?'));
     const auto params = request->URL.After('?');
     const auto cgiParams = TCgiParameters(params);
-    if (!(AuditEnabled = AuditableRequest(method, url, cgiParams))) {
-        return;
-    }
+    Auditable = AuditableRequest(method, url, cgiParams);
 
     NHttp::THeaders headers(request->Headers);
-    auto remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    auto remoteAddress = ::ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
 
     AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
     AddAuditLogPart("remote_address", remoteAddress);
@@ -101,7 +111,7 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
     AddAuditLogPart("method", method);
     AddAuditLogPart("url", url);
     if (!params.Empty()) {
-        AddAuditLogPart("params", ToString(params));
+        AddAuditLogPart("params", ::ToString(params));
     }
     if (!request->Body.Empty()) {
         TStringBuilder auditBody;
@@ -114,12 +124,10 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
 
         AddAuditLogPart("body", auditBody);
     }
+    State = EState::PendingExecution;
 }
 
 void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
-    if (!AuditEnabled) {
-        return;
-    }
     SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
     if (userToken) {
         Subject = userToken->GetUserSID();
@@ -128,13 +136,6 @@ void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& u
 }
 
 void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason) {
-    AuditEnabled &= NKikimr::AppData()->AuditConfig.EnableLogging(
-        NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, SubjectType);
-
-    if (!AuditEnabled) {
-        return;
-    }
-
     AUDIT_LOG(
         AddAuditLogPart("subject", (Subject ? Subject : EMPTY_VALUE));
         AddAuditLogPart("sanitized_token", (SanitizedToken ? SanitizedToken : EMPTY_VALUE));
@@ -150,14 +151,43 @@ void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason) {
     );
 }
 
-void TAuditCtx::LogOnExecute() {
+void TAuditCtx::LogOnExecute(bool directed) {
+    if (State != EState::PendingExecution) {
+        return;
+    }
+
+    Auditable |= directed;
+    Auditable &= HttpAuditEnabled(SubjectType);
+    if (!Auditable) {
+        return;
+    }
+
     LogAudit(ERequestStatus::Process, REASON_EXECUTE);
+    State = EState::Executing;
 }
 
 void TAuditCtx::LogOnResult(const NHttp::THttpOutgoingResponsePtr& response) {
+    if (State != EState::Executing) {
+        return;
+    }
+
     auto status = GetStatus(response);
     auto reason = GetReason(response);
     LogAudit(status, reason);
+    State = EState::Completed;
+}
+
+bool HttpAuditEnabled(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
+    auto subjectType = GetSubjectType(userToken);
+    return HttpAuditEnabled(subjectType);
+}
+
+bool HttpAuditEnabled(TString serializedToken) {
+    NACLibProto::TUserToken userToken;
+    if (userToken.ParseFromString(serializedToken)) {
+        return HttpAuditEnabled(userToken.GetSubjectType());
+    }
+    return false;
 }
 
 }

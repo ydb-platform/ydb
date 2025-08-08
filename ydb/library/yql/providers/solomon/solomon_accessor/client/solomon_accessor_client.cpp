@@ -220,6 +220,10 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
         std::vector<int64_t> timestamps(queryResponse.timestamp_values().values().begin(), queryResponse.timestamp_values().values().end());
         std::vector<double> values(queryResponse.double_values().values().begin(), queryResponse.double_values().values().end());
 
+        if (TString name = queryResponse.name()) {
+            labels["name"] = name;
+        }
+
         TMetric metric {
             .Labels = labels,
             .Type = type,
@@ -235,18 +239,18 @@ class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable
 public:
     TSolomonAccessorClient(
         const TString& defaultReplica,
+        ui64 maxApiInflight,
         NYql::NSo::NProto::TDqSolomonSource&& settings,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
         : DefaultReplica(defaultReplica)
         , Settings(std::move(settings))
         , CredentialsProvider(credentialsProvider) {
 
-        HttpConfig.SetMaxInFlightCount(HttpMaxInflight);
+        HttpConfig.SetMaxInFlightCount(maxApiInflight);
         HttpGateway = IHTTPGateway::Make(&HttpConfig);
 
         GrpcConfig.Locator = GetGrpcSolomonEndpoint();
         GrpcConfig.EnableSsl = Settings.GetUseSsl();
-        GrpcConfig.MaxInFlight = GrpcMaxInflight;
         GrpcClient = std::make_shared<NYdbGrpc::TGRpcClientLow>();
         GrpcConnection = GrpcClient->CreateGRpcServiceConnection<DataService>(GrpcConfig);
     }
@@ -256,8 +260,8 @@ public:
     }
 
 public:
-    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const std::map<TString, TString>& selectors) const override final {
-        auto requestUrl = BuildGetLabelsUrl(selectors);
+    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const override final {
+        auto requestUrl = BuildGetLabelsUrl(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
         
@@ -273,8 +277,8 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TListMetricsResponse> ListMetrics(const std::map<TString, TString>& selectors, int pageSize, int page) const override final {
-        auto requestUrl = BuildListMetricsUrl(selectors, pageSize, page);
+    NThreading::TFuture<TListMetricsResponse> ListMetrics(const std::map<TString, TString>& selectors, TInstant from, TInstant to, int pageSize, int page) const override final {
+        auto requestUrl = BuildListMetricsUrl(selectors, from, to, pageSize, page);
 
         auto resultPromise = NThreading::NewPromise<TListMetricsResponse>();
         
@@ -290,11 +294,9 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors) const override final {        
+    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const override final {        
         auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
 
-        TInstant from = TInstant::Seconds(Settings.GetFrom());
-        TInstant to = TInstant::Seconds(Settings.GetTo());
         TInstant sevenDaysAgo = TInstant::Now() - TDuration::Days(7); // points older then a week ago are automatically downsampled by solomon backend
 
         TInstant downsamplingFrom = from;
@@ -421,7 +423,7 @@ private:
             },
             TDuration::MilliSeconds(25),
             TDuration::MilliSeconds(200),
-            TDuration::MilliSeconds(500),
+            TDuration::MilliSeconds(1000),
             10
         );
 
@@ -447,7 +449,7 @@ private:
         }
     }
 
-    TString BuildGetLabelsUrl(const std::map<TString, TString>& selectors) const {
+    TString BuildGetLabelsUrl(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -459,13 +461,13 @@ private:
 
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
-        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToString());
-        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToString());
+        builder.AddUrlParam("from", from.ToString());
+        builder.AddUrlParam("to", to.ToString());
 
         return builder.Build();
     }
 
-    TString BuildListMetricsUrl(const std::map<TString, TString>& selectors, int pageSize, int page) const {
+    TString BuildListMetricsUrl(const std::map<TString, TString>& selectors, TInstant from, TInstant to, int pageSize, int page) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -476,8 +478,8 @@ private:
 
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
-        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToString());
-        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToString());
+        builder.AddUrlParam("from", from.ToString());
+        builder.AddUrlParam("to", to.ToString());
         builder.AddUrlParam("pageSize", std::to_string(pageSize));
         builder.AddUrlParam("page", std::to_string(page));
 
@@ -580,8 +582,6 @@ private:
 private:
     const TString DefaultReplica;
     const ui64 ListSizeLimit = 1ull << 20;
-    const ui64 HttpMaxInflight = 50;
-    const ui64 GrpcMaxInflight = 50;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 
@@ -605,7 +605,12 @@ ISolomonAccessorClient::Make(
         defaultReplica = it->second;
     }
 
-    return std::make_shared<TSolomonAccessorClient>(defaultReplica, std::move(source), credentialsProvider);
+    ui64 maxApiInflight = 40;
+    if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
+        maxApiInflight = FromString<ui64>(it->second);
+    }
+
+    return std::make_shared<TSolomonAccessorClient>(defaultReplica, maxApiInflight, std::move(source), credentialsProvider);
 }
 
 } // namespace NYql::NSo

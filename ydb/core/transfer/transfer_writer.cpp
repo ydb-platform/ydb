@@ -266,6 +266,7 @@ private:
 
         for (auto& message : records) {
             TMessage input;
+            input.Attributes = message.GetMessageMeta()->Fields;
             input.CreateTimestamp = message.GetCreateTime();
             input.Data = std::move(message.GetData());
             input.MessageGroupId = std::move(message.GetMessageGroupId());

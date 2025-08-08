@@ -162,6 +162,7 @@ struct TMessage {
     std::optional<std::string> MessageGroupId = std::nullopt;
     std::optional<ui64> SeqNo = std::nullopt;
     std::optional<TInstant> CreateTimestamp = std::nullopt;
+    std::map<std::string, std::string> Attributes = {};
 };
 
 inline TMessage _withSeqNo(ui64 seqNo) {
@@ -201,7 +202,19 @@ inline TMessage _withCreateTimestamp(const TInstant& timestamp) {
         .ProducerId = std::nullopt,
         .MessageGroupId = std::nullopt,
         .SeqNo = std::nullopt,
-        .CreateTimestamp = timestamp,
+        .CreateTimestamp = timestamp
+    };
+}
+
+inline TMessage _withAttributes(std::map<std::string, std::string>&& attributes) {
+    return {
+        .Message = TStringBuilder() << "Message",
+        .Partition = 0,
+        .ProducerId = std::nullopt,
+        .MessageGroupId = std::nullopt,
+        .SeqNo = std::nullopt,
+        .CreateTimestamp = std::nullopt,
+        .Attributes = std::move(attributes)
     };
 }
 
@@ -717,7 +730,19 @@ struct MainTestCase {
         }
         auto writeSession = TopicClient.CreateSimpleBlockingWriteSession(writeSettings);
 
-        UNIT_ASSERT(writeSession->Write(message.Message, message.SeqNo, message.CreateTimestamp));
+        TWriteMessage msg(message.Message);
+        msg.SeqNo(message.SeqNo);
+        msg.CreateTimestamp(message.CreateTimestamp);
+
+        if (!message.Attributes.empty()) {
+            TWriteMessage::TMessageMeta meta;
+            for (auto& [k, v] : message.Attributes) {
+                meta.push_back({k , v});
+            }
+            msg.MessageMeta(meta);
+        }
+
+        UNIT_ASSERT(writeSession->Write(std::move(msg)));
         writeSession->Close(TDuration::Seconds(1));
     }
 

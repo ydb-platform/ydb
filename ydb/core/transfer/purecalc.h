@@ -13,6 +13,7 @@ using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
 
 struct TMessage {
+    std::vector<std::pair<std::string, std::string>> Attributes;
     TInstant CreateTimestamp;
     TString Data;
     TString MessageGroupId;

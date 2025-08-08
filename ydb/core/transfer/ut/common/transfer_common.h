@@ -25,6 +25,7 @@ void ColumnType_Double(const std::string& tableType);
 void ColumnType_Utf8_LongValue(const std::string& tableType);
 void ColumnType_Uuid(const std::string& tableType);
 
+void MessageField_Attributes(const std::string& tableType);
 void MessageField_CreateTimestamp(const std::string& tableType);
 void MessageField_MessageGroupId(const std::string& tableType);
 void MessageField_Partition(const std::string& tableType);

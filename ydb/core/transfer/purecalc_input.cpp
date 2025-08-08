@@ -12,6 +12,7 @@ namespace {
 using namespace NYql::NUdf;
 using namespace NKikimr::NMiniKQL;
 
+constexpr const char* AttributesFieldName = "_attributes";
 constexpr const char* CreateTimestampFieldName = "_create_timestamp";
 constexpr const char* DataFieldName = "_data";
 constexpr const char* MessageGroupIdFieldName = "_message_group_id";
@@ -21,7 +22,7 @@ constexpr const char* ProducerIdFieldName = "_producer_id";
 constexpr const char* SeqNoFieldName = "_seq_no";
 constexpr const char* WriteTimestampFieldName = "_write_timestamp";
 
-constexpr const size_t FieldCount = 8; // Change it when change fields
+constexpr const size_t FieldCount = 9; // Change it when change fields
 
 
 NYT::TNode CreateTypeNode(const TString& fieldType) {
@@ -38,9 +39,23 @@ void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldTy
     );
 }
 
+void AddAttributeField(NYT::TNode& node) {
+    node.Add(
+        NYT::TNode::CreateList()
+            .Add(AttributesFieldName)
+            .Add(NYT::TNode::CreateList()
+                .Add("DictType")
+                .Add(CreateTypeNode("String"))
+                .Add(CreateTypeNode("String"))
+            )
+    );
+}
+
 
 NYT::TNode CreateMessageScheme() {
     auto structMembers = NYT::TNode::CreateList();
+
+    AddAttributeField(structMembers);
     AddField(structMembers, CreateTimestampFieldName, "Timestamp");
     AddField(structMembers, DataFieldName, "String");
     AddField(structMembers, MessageGroupIdFieldName, "String");
@@ -59,6 +74,27 @@ static const TVector<NYT::TNode> InputSchema{ CreateMessageScheme() };
 
 struct TMessageWrapper {
     const TMessage& Message;
+
+    NYql::NUdf::TUnboxedValuePod GetAttributes(const THolderFactory& nodeFactory, const TTypeEnvironment& typeEnv) const {
+        auto type = TDictType::Create(
+                TDataType::Create(NUdf::TDataType<char*>::Id, typeEnv),
+                TDataType::Create(NUdf::TDataType<char*>::Id, typeEnv),
+                typeEnv
+            );
+
+        TKeyTypes keyTypes;
+        bool isTuple;
+        bool encoded;
+        bool useIHash;
+        GetDictionaryKeyTypes(type->GetKeyType(), keyTypes, isTuple, encoded, useIHash);
+
+        return nodeFactory.CreateDirectHashedDictHolder([&](TValuesDictHashMap& map) {
+                for (auto& [k, v] : Message.Attributes) {
+                    map.emplace(NKikimr::NMiniKQL::MakeString(k), NKikimr::NMiniKQL::MakeString(v));
+                }
+            },
+            keyTypes, false, true, nullptr, nullptr, nullptr);
+    }
 
     NYql::NUdf::TUnboxedValuePod GetCreateTimestamp() const {
         return NYql::NUdf::TUnboxedValuePod(Message.CreateTimestamp.MilliSeconds());
@@ -107,19 +143,21 @@ public:
 public:
     void DoConvert(const TMessage* message, TUnboxedValue& result) {
         auto& holderFactory = Worker_->GetGraph().GetHolderFactory();
+        auto& typeEnv = Worker_->GetGraph().GetContext().TypeEnv;
         TUnboxedValue* items = nullptr;
         result = Cache_.NewArray(holderFactory, static_cast<ui32>(FieldCount), items);
 
         TMessageWrapper wrap {*message};
         // lex order by field name
-        items[0] = wrap.GetCreateTimestamp();
-        items[1] = wrap.GetData();
-        items[2] = wrap.GetMessageGroupId();
-        items[3] = wrap.GetOffset();
-        items[4] = wrap.GetPartition();
-        items[5] = wrap.GetProducerId();
-        items[6] = wrap.GetSeqNo();
-        items[7] = wrap.GetWriteTimestamp();
+        items[0] = wrap.GetAttributes(holderFactory, typeEnv);
+        items[1] = wrap.GetCreateTimestamp();
+        items[2] = wrap.GetData();
+        items[3] = wrap.GetMessageGroupId();
+        items[4] = wrap.GetOffset();
+        items[5] = wrap.GetPartition();
+        items[6] = wrap.GetProducerId();
+        items[7] = wrap.GetSeqNo();
+        items[8] = wrap.GetWriteTimestamp();
     }
 
     void ClearCache() {

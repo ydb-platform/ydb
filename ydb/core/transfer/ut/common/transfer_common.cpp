@@ -601,6 +601,37 @@ void MessageField_MessageGroupId(const std::string& tableType) {
     });
 }
 
+void MessageField_Attributes(const std::string& tableType) {
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Offset Uint64 NOT NULL,
+                Value Utf8,
+                PRIMARY KEY (Offset)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Offset:CAST($x._offset AS Uint64),
+                        Value:CAST($x._attributes['attribute_key'] AS Utf8)
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {_withAttributes({ {"attribute_key", "attribute_value"} })},
+
+        .Expectations = {{
+            _C("Value", TString("attribute_value")),
+        }}
+    });
+}
+
 void MessageField_CreateTimestamp(const std::string& tableType) {
     TInstant timestamp = TInstant::Now() - TDuration::Minutes(1);
 

@@ -4,6 +4,7 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class TestTpchDuplicates(tpch.TestTpch1, FunctionalTestBase):
+    """https://github.com/ydb-platform/ydb/issues/22253"""
     iterations: int = 10
 
     @classmethod

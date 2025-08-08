@@ -166,20 +166,14 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     }
 
     // apply updates for the state storage proxy
-<<<<<<< HEAD
 #define FETCH_CONFIG(PART, PREFIX, PROTO) \
-    Y_ABORT_UNLESS(StorageConfig.Has##PROTO##Config()); \
+    Y_ABORT_UNLESS(StorageConfig->Has##PROTO##Config()); \
     char PART##Prefix[TActorId::MaxServiceIDLength] = PREFIX; \
-    TIntrusivePtr<TStateStorageInfo> PART##Info = BuildStateStorageInfo(PART##Prefix, StorageConfig.Get##PROTO##Config());
+    TIntrusivePtr<TStateStorageInfo> PART##Info = BuildStateStorageInfo(PART##Prefix, StorageConfig->Get##PROTO##Config());
 
     FETCH_CONFIG(stateStorage, "ssr", StateStorage)
     FETCH_CONFIG(board, "ssb", StateStorageBoard)
     FETCH_CONFIG(schemeBoard, "sbr", SchemeBoard)
-=======
-#define FETCH_CONFIG(PART, PROTO) \
-    Y_ABORT_UNLESS(StorageConfig->Has##PROTO##Config()); \
-    TIntrusivePtr<TStateStorageInfo> PART##Info = Build##PROTO##Info(StorageConfig->Get##PROTO##Config());
->>>>>>> a3fdda7cfea (Pass TStorageConfig through pointer to prevent copying when doing subscription fan-out (#18765))
 
     STLOG(PRI_DEBUG, BS_NODE, NW52, "ApplyStateStorageConfig",
         (StateStorageConfig, StorageConfig->GetStateStorageConfig()),

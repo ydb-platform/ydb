@@ -181,6 +181,7 @@ namespace NKikimr {
         // Info gathered per chunk
         struct TChunkInfo {
             ui32 UsefulSlots = 0;
+            ui32 UselessSlots = 0;
             const ui32 SlotSize;
             const ui32 NumberOfSlotsInChunk;
 
@@ -199,6 +200,7 @@ namespace NKikimr {
         // Aggregated info gathered per slotSize
         struct TAggrSlotInfo {
             ui64 UsefulSlots = 0;
+            ui64 OccupiedSlots = 0;
             ui32 UsedChunks = 0;
             const ui32 NumberOfSlotsInChunk;
 
@@ -221,6 +223,7 @@ namespace NKikimr {
                     auto it = aggrSlots.try_emplace(chunk.SlotSize, chunk.NumberOfSlotsInChunk).first;
                     TAggrSlotInfo& aggr = it->second;
                     aggr.UsefulSlots += chunk.UsefulSlots;
+                    aggr.OccupiedSlots += (chunk.UsefulSlots + chunk.UselessSlots);
                     ++aggr.UsedChunks;
                 }
                 return aggrSlots;
@@ -240,9 +243,10 @@ namespace NKikimr {
                         std::make_tuple(slotInfo->SlotSize, slotInfo->NumberOfSlotsInChunk)).first;
                 }
                 it->second.UsefulSlots += useful;
+                it->second.UselessSlots += !useful;
             }
 
-            TChunksToDefrag GetChunksToDefrag(size_t maxChunksToDefrag) const {
+            TChunksToDefrag GetChunksToDefrag(size_t maxChunksToDefrag, bool runCompAfterDefrag) const {
                 TAggrBySlotSize aggrSlots = AggregatePerSlotSize();
 
                 std::vector<const TPerChunkMap::value_type*> chunks;
@@ -260,12 +264,15 @@ namespace NKikimr {
 
                 for (const auto *kv : chunks) {
                     const auto& [chunkIdx, chunk] = *kv;
+                    if (chunk.UsefulSlots == 0 && !runCompAfterDefrag) {
+                        continue;
+                    }
                     auto it = aggrSlots.find(chunk.SlotSize);
                     Y_ABORT_UNLESS(it != aggrSlots.end());
                     auto& a = it->second;
 
                     // if we can put all current used slots into UsedChunks - 1, then defragment this chunk
-                    if (a.NumberOfSlotsInChunk * (a.UsedChunks - 1) >= a.UsefulSlots) {
+                    if (a.NumberOfSlotsInChunk * (a.UsedChunks - 1) >= (runCompAfterDefrag ? a.UsefulSlots : a.OccupiedSlots)) {
                         --a.UsedChunks;
                         ++result.FoundChunksToDefrag;
                         if (result.Chunks.size() < maxChunksToDefrag) {
@@ -278,6 +285,30 @@ namespace NKikimr {
                 }
 
                 return result;
+            }
+
+            ui64 GetTotalSpaceCouldBeFreedViaCompaction() const {
+                ui64 totalSpaceCouldBeFreed = 0;
+                for (const auto& [chunkIdx, chunk] : PerChunkMap) {
+                    if (chunk.UsefulSlots == 0) {
+                        // this chunk almost certainly in locked state, compaction will unlock it
+                        totalSpaceCouldBeFreed += chunk.NumberOfSlotsInChunk * chunk.SlotSize;
+                    } else {
+                        // this chunk has some obsolete or behind the barrier slots, so we can free them
+                        totalSpaceCouldBeFreed += chunk.UselessSlots * chunk.SlotSize;
+                    }
+                }
+                return totalSpaceCouldBeFreed;
+            }
+
+            ui64 GetFreedChunks() const {
+                ui64 res = 0;
+                for (const auto& [_, chunk] : PerChunkMap) {
+                    if (chunk.UsefulSlots == 0) {
+                        ++res; // this chunk is useless, so it can be freed
+                    }
+                }
+                return res;
             }
 
             void Output(IOutputStream &str) const {
@@ -308,8 +339,16 @@ namespace NKikimr {
             : ChunksMap(hugeBlobCtx)
         {}
 
-        TChunksToDefrag GetChunksToDefrag(size_t maxChunksToDefrag) {
-            return ChunksMap.GetChunksToDefrag(maxChunksToDefrag);
+        TChunksToDefrag GetChunksToDefrag(size_t maxChunksToDefrag, bool runCompAfterDefrag) {
+            return ChunksMap.GetChunksToDefrag(maxChunksToDefrag, runCompAfterDefrag);
+        }
+
+        ui64 GetTotalSpaceCouldBeFreedViaCompaction() const {
+            return ChunksMap.GetTotalSpaceCouldBeFreedViaCompaction();
+        }
+
+        ui64 GetFreedChunks() const {
+            return ChunksMap.GetFreedChunks();
         }
 
         void Add(TDiskPart part, const TLogoBlobID& id, bool useful, const void* /*sst*/) {
@@ -441,6 +480,10 @@ namespace NKikimr {
 
         ui32 GetTotalChunks() {
             return Chunks.size();
+        }
+
+        ui32 GetFreedChunks() {
+            return TDefragQuantumChunkFinder::GetFreedChunks();
         }
 
         ui32 GetUsefulChunks() {

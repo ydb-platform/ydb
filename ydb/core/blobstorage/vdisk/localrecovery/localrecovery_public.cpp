@@ -442,6 +442,7 @@ namespace NKikimr {
                             Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
+                            Config->DefragThresholdToRunCompactionPerMille,
                             logFunc);
             } else {
                 // read existing one
@@ -463,7 +464,7 @@ namespace NKikimr {
                             Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
-                            lsn, entryPoint, logFunc);
+                            lsn, entryPoint, Config->DefragThresholdToRunCompactionPerMille, logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
                     LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),

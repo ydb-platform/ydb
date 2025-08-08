@@ -1415,6 +1415,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 50,
             DefaultValue: 10 }];
+        optional uint64 DefragThresholdToRunCompactionPerMille = 33 [(ControlOptions) = {
+            Description: "Maximal allowed amount of garbage before compaction would be triggered. If value = 0 - compaction would run after every defragmentation quantum",
+            MinValue: 0,
+            MaxValue: 300,
+            DefaultValue: 0 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {

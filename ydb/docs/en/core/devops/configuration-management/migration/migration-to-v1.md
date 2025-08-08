@@ -29,7 +29,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V1, you need to per
 
     {% cut "More details" %}
 
-    The `--for-v1-migration` argument specifies that the full cluster configuration will be retrieved, including [State Storage](../../../reference/configuration/index.md#domains-state) and [static group](../../../reference/configuration/index.md#blob_storage_config) configuration parameters.
+    The `--for-v1-migration` argument specifies that the full cluster configuration will be retrieved, including [State Storage](../../../reference/configuration/domains_config.md#domains-state) and [static group](../../../reference/configuration/blob_storage_config.md#blob_storage_config) configuration parameters.
 
     {% endcut %}
 

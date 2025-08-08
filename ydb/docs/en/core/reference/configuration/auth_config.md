@@ -1,8 +1,8 @@
-# `auth_config` configuration section
+# auth_config
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
-## Configuring local {{ ydb-short-name }} user authentication {#local-auth-config}
+## Configuring Local {{ ydb-short-name }} User Authentication {#local-auth-config}
 
 For more information about the authentication of [local {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by username and password, define the following parameters in the `auth_config` section:
 
@@ -14,7 +14,7 @@ For more information about the authentication of [local {{ ydb-short-name }} use
 Default value: `true`
     ||
 || enable_login_authentication
-| Indicates whether to allow adding local users to {{ ydb-short-name }} databases and generating authentication tokens after an local user enters a username and password.
+| Indicates whether to allow adding local users to {{ ydb-short-name }} databases and generating authentication tokens after a local user enters a username and password.
 
 Default value: `true`
     ||
@@ -30,13 +30,13 @@ Valid values:
 Default value: `true`
     ||
 || login_token_expire_time
-| Specifies the expiration time of the authentication token created when an local user logs in to {{ ydb-short-name }}.
+| Specifies the expiration time of the authentication token created when a local user logs in to {{ ydb-short-name }}.
 
 Default value: `12h`
     ||
 |#
 
-### Configuring user lockout
+### Configuring User Lockout
 
 You can configure {{ ydb-short-name }} to lock a user account out after a specified number of failed attempts to enter the correct password. To configure user lockout, define the `account_lockout` subsection inside the `auth_config` section.
 
@@ -82,7 +82,7 @@ Default value: `1h`
     ||
 |#
 
-### Configuring password complexity requirements {#password-complexity}
+### Configuring Password Complexity Requirements {#password-complexity}
 
 {{ ydb-short-name }} allows local users to authenticate using a login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for the passwords of [local users](../../concepts/glossary.md#access-user) in the `password_complexity` subsection inside the `auth_config` section.
 
@@ -149,7 +149,7 @@ Any changes to the password policy do not affect existing user passwords, so it 
 
 {% endnote %}
 
-## Configuring LDAP authentication {#ldap-auth-config}
+## Configuring LDAP Authentication {#ldap-auth-config}
 
 One of the user authentication methods in {{ ydb-short-name }} is using an LDAP directory. For more details, see [Interacting with the LDAP directory](../../security/authentication.md#ldap-auth-provider). To configure LDAP authentication, define the `ldap_authentication` section inside the `auth_config` section.
 
@@ -255,7 +255,7 @@ Default value: `false`
     ||
 |#
 
-## Configuring third-party IAM authentication {#iam-auth-config}
+## Configuring Third-Party IAM Authentication {#iam-auth-config}
 
 {{ ydb-short-name }} supports Yandex Identity and Access Management (IAM) used in Yandex Cloud for user authentication. To configure IAM authentication, define the following parameters:
 
@@ -303,7 +303,7 @@ Default value: `false`
     ||
 |#
 
-## Configuring caching for authentication results
+## Configuring Caching for Authentication Results
 
 During the authentication process, a user session receives an authentication token, which is transmitted along with each request to the cluster {{ydb-short-name }}. Since {{ydb-short-name }} is a distributed system, user requests will eventually be processed on one or more {{ydb-short-name }} nodes. After receiving a request from the user, a {{ydb-short-name }} node verifies the authentication token. If successful, the node generates a **user token**, which is valid only inside the current node and is used to authorize the actions requested by the user. Subsequent requests with the same authentication token to the same node do not require verification of the authentication token.
 

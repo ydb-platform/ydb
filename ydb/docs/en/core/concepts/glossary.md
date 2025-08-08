@@ -493,7 +493,7 @@ A **shared cache** is an [actor](#actor) that stores data pages recently accesse
 
 ### Memory controller {#memory-controller}
 
-A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../reference/configuration/index.md#memory-controller).
+A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../reference/configuration/memory_controller_config.md).
 
 ### Tablet types {#tablet-types}
 

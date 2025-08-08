@@ -22,6 +22,9 @@ items:
       href: localdb-uncommitted-txs.md
   - name: Hive
     href: hive.md
+    items:
+     - name: Tablet Boot Process
+       href: hive-booting.md
   - name: DataShard
     items:
     - name: Locks and transaction change visibility

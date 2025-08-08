@@ -33,11 +33,16 @@ public:
         return Nothing();
     }
 
-    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& ) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
         if (const auto maybeClReadTable = TMaybeNode<TClReadTable>(read)) {
             const auto clReadTable = maybeClReadTable.Cast();
             const auto token = TString("cluster:default_") += clReadTable.DataSource().Cluster().StringValue();
             YQL_CLOG(INFO, ProviderClickHouse) << "Wrap " << read->Content() << " with token: " << token;
+
+            if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
+                ctx.AddError(TIssue(ctx.GetPosition(clReadTable.Pos()), "Cannot use watermarks in ClickHouse"));
+                return {};
+            }
 
             const auto rowType = clReadTable.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
             auto columns = clReadTable.Columns().Ptr();

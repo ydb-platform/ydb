@@ -416,7 +416,7 @@ void MessageField_CreateTimestamp(const std::string& tableType) {
         .TableDDL = R"(
             CREATE TABLE `%s` (
                 Offset Uint64 NOT NULL,
-                CreateTimestamp Timestamp64,
+                CreateTimestamp Timestamp,
                 PRIMARY KEY (Offset)
             )  WITH (
                 STORE = %s
@@ -449,7 +449,7 @@ void MessageField_WriteTimestamp(const std::string& tableType) {
         .TableDDL = R"(
             CREATE TABLE `%s` (
                 Offset Uint64 NOT NULL,
-                WriteTimestamp Timestamp64,
+                WriteTimestamp Timestamp,
                 PRIMARY KEY (Offset)
             )  WITH (
                 STORE = %s

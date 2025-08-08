@@ -860,7 +860,6 @@ public:
             FieldsRequired.reset(+EGroupFields::NodeId); // fields that are not available for database users
             FieldsRequired.reset(+EGroupFields::PDiskId);
             FieldsRequired.reset(+EGroupFields::PDisk);
-            FieldsRequired.reset(+EGroupFields::PileName);
         }
         FieldsRequested = FieldsRequired; // no dependent fields
         for (auto field = +EGroupFields::GroupId; field != +EGroupFields::COUNT; ++field) {

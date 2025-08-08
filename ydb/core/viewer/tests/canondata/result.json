@@ -2852,13 +2852,8 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 1,
-<<<<<<< HEAD
-                    "PathVersion": "9",
+                    "PathVersion": "13",
                     "SchemeshardId": "72075186232723360"
-=======
-                    "PathVersion": "16",
-                    "SchemeshardId": "72057594046678944"
->>>>>>> b4e49db1a6e... add database allowed sids - for database users only (#20991)
                 }
             },
             "PathId": "not-zero-number-text",
@@ -3617,23 +3612,11 @@
                 }
             ],
             "TotalNodes": "1"
-<<<<<<< HEAD
-        }
-    },
-    "test.test_viewer_nodes_all": {
-        "/Root": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
-            "FoundNodes": "1",
-            "MaximumDisksPerNode": "1",
-            "MaximumSlotsPerDisk": "5",
-=======
         },
         "no-database": {
-            "FieldsAvailable": "10000000010100110111111100000111",
-            "FieldsRequired": "00000000000100000000000000000101",
+            "FieldsAvailable": "0000000010100110111111100000111",
+            "FieldsRequired": "0000000000100000000000000000101",
             "FoundNodes": "3",
->>>>>>> d18580f3e9d... restrict database users access (#22513)
             "Nodes": [
                 {
                     "NodeId": 1,
@@ -3663,7 +3646,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -3728,7 +3710,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -3796,7 +3777,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 50000,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -3847,8 +3827,8 @@
     },
     "test.test_viewer_nodes_all": {
         "/Root": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -4819,19 +4799,10 @@
                 }
             ],
             "TotalNodes": "1"
-<<<<<<< HEAD
-        }
-    },
-    "test.test_viewer_nodes_issue_14992": {
-        "response_group": {
-            "FieldsAvailable": "0000000110111110111111100000111",
-            "FieldsRequired": "0000000001100000010000000000101",
-=======
         },
         "no-database": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
->>>>>>> d18580f3e9d... restrict database users access (#22513)
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -4882,93 +4853,11 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "6"
+                                "X1": "72075186232723360",
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
-<<<<<<< HEAD
-                        "MaxDiskUsage": "not-zero-number",
-                        "NodeId": 1,
-                        "NumberOfCpus": "not-zero-number",
-                        "PoolStats": [
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "System",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "User",
-                                "Threads": 3,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "Batch",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IO",
-                                "Threads": 1,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IC",
-                                "Threads": 1,
-                                "Usage": "number"
-                            }
-                        ],
-                        "RealNumberOfCpus": "not-zero-number",
-                        "Roles": "not-empty-array",
-                        "StartTime": "not-zero-number-text",
-                        "SystemState": "Green",
-                        "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
-                },
-                {
-                    "NodeId": 50001,
-                    "SystemState": {
-                        "ChangeTime": "not-zero-number-text",
-                        "CoresTotal": "not-zero-number",
-                        "CoresUsed": "not-zero-number",
-                        "Endpoints": [
-                            {
-                                "Address": "text",
-                                "Name": "grpc"
-                            },
-                            {
-                                "Address": "text",
-                                "Name": "http-mon"
-                            },
-                            {
-                                "Address": "text",
-                                "Name": "ic"
-                            }
-                        ],
-                        "Host": "text",
-                        "LoadAverage": "not-empty-array",
-                        "Location": {},
-                        "NodeId": 50001,
-                        "NumberOfCpus": "not-zero-number",
-                        "PoolStats": [
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "System",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "User",
-                                "Threads": 3,
-                                "Usage": "number"
-=======
                         {
                             "BytesWritten": "text",
                             "ChangeTime": "not-zero-number-text",
@@ -4981,9 +4870,8 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "7"
->>>>>>> d18580f3e9d... restrict database users access (#22513)
+                                "X1": "72075186232723360",
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -5051,20 +4939,14 @@
                         ],
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
-<<<<<<< HEAD
-                        "Location": {},
-                        "NodeId": 50000,
-=======
                         "Location": {
                             "DataCenter": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
                             {
@@ -5104,59 +4986,7 @@
                         "SystemState": "Green",
                         "TotalSessions": "number"
                     },
-<<<<<<< HEAD
-                    "UptimeSeconds": "number"
-                }
-            ],
-            "TotalNodes": "3"
-        },
-        "response_group_by": {
-            "FieldsAvailable": "0000000110111110111111100000111",
-            "FieldsRequired": "0000000001100000010000000000101",
-            "FoundNodes": "3",
-            "MaximumDisksPerNode": "1",
-            "NodeGroups": [
-                {
-                    "GroupName": "up <10m",
-                    "NodeCount": "3"
-                }
-            ],
-            "TotalNodes": "3"
-        }
-    },
-    "test.test_viewer_pdiskinfo": {
-        "PDiskStateInfo": [
-            {
-                "AvailableSize": "text",
-                "Category": "0",
-                "ChangeTime": "not-zero-number-text",
-                "Device": 1,
-                "EnforcedDynamicSlotSize": "not-zero-number-text",
-                "Guid": "1",
-                "LogTotalSize": "not-zero-number-text",
-                "LogUsedSize": "not-zero-number-text",
-                "NodeId": 1,
-                "NumActiveSlots": 5,
-                "PDiskId": 1,
-                "Path": "SectorMap:1:64",
-                "Realtime": 1,
-                "SerialNumber": "",
-                "State": 10,
-                "SystemSize": "not-zero-number-text",
-                "TotalSize": "not-zero-number-text"
-            }
-        ],
-        "ResponseDuration": "not-zero-number",
-        "ResponseTime": "not-zero-number-text"
-    },
-    "test.test_viewer_query": {
-        "/Root": {
-            "result": [
-                {
-                    "columns": [
-=======
                     "Tablets": [
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                         {
                             "Count": 1,
                             "State": "Green",
@@ -5429,8 +5259,8 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "6"
+                                "X1": "72075186232723360",
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         }
@@ -5453,8 +5283,8 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "7"
+                                "X1": "72075186232723360",
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         },
@@ -5470,8 +5300,8 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "7"
+                                "X1": "72075186232723360",
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -5499,7 +5329,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
@@ -5625,8 +5454,8 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "7"
+                                "X1": "72075186232723360",
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -5649,8 +5478,8 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "6"
+                                "X1": "72075186232723360",
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -5666,8 +5495,8 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "6"
+                                "X1": "72075186232723360",
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         }
@@ -5695,7 +5524,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 50000,
                         "NumberOfCpus": "not-zero-number",
@@ -5780,136 +5608,15 @@
                     "UptimeSeconds": "number"
                 }
             ],
-<<<<<<< HEAD
-            "version": 9
-        },
-        "fetch_error_no_id": {
-            "status_code": 400,
-            "text": "operation_id or execution_id required for fetch-long-query"
-        },
-        "fetch_invalid_operation_id": {
-            "status_code": 400,
-            "text": "operation_id or execution_id required for fetch-long-query"
-        }
-    },
-    "test.test_viewer_query_long_multipart": {
-        "execute_stream_response": {
-            "multipart_parts": [
-                {
-                    "exec_mode": "EXEC_MODE_EXECUTE",
-                    "exec_status": "EXEC_STATUS_STARTING",
-                    "execution_id": "text",
-                    "meta": {
-                        "event": "ScriptResponse"
-                    },
-                    "operation_id": "text",
-                    "status": "SUCCESS"
-                },
-                {
-                    "id": "text",
-                    "meta": {
-                        "event": "OperationResponse"
-                    },
-                    "metadata": {
-                        "exec_mode": "EXEC_MODE_EXECUTE",
-                        "exec_stats": {
-                            "query_plan": "{}"
-                        },
-                        "exec_status": "EXEC_STATUS_COMPLETED",
-                        "execution_id": "text",
-                        "result_sets_meta": [
-                            {
-                                "columns": [
-                                    {
-                                        "name": "id",
-                                        "type": {
-                                            "optional_type": {
-                                                "item": {
-                                                    "type_id": "INT64"
-                                                }
-                                            }
-                                        }
-                                    },
-                                    {
-                                        "name": "name",
-                                        "type": {
-                                            "optional_type": {
-                                                "item": {
-                                                    "type_id": "UTF8"
-                                                }
-                                            }
-                                        }
-                                    }
-                                ]
-                            }
-                        ],
-                        "script_content": {
-                            "text": "SELECT * FROM table1 LIMIT 3;"
-                        }
-                    },
-                    "ready": true
-                },
-                {
-                    "meta": {
-                        "event": "StreamData",
-                        "result_index": 0,
-                        "seq_no": 0
-                    },
-                    "result": {
-                        "columns": [
-                            {
-                                "name": "id",
-                                "type": "Int64?"
-                            },
-                            {
-                                "name": "name",
-                                "type": "Utf8?"
-                            }
-                        ],
-                        "rows": [
-                            [
-                                "1",
-                                "one"
-                            ],
-                            [
-                                "2",
-                                "two"
-                            ],
-                            [
-                                "3",
-                                "three"
-                            ]
-                        ]
-                    }
-                }
-            ]
-        },
-        "fetch_error_stream_response": {
-            "status_code": 400,
-            "text": "operation_id or execution_id required for fetch-long-query"
-        },
-        "fetch_invalid_stream_response": {
-            "status_code": 400,
-            "text": "operation_id or execution_id required for fetch-long-query"
-        }
-    },
-    "test.test_viewer_storage_nodes": {
-        "/Root": {
-            "FieldsAvailable": "0000000110000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000111",
-            "FoundNodes": "1",
-            "MaximumSlotsPerDisk": "5",
-=======
             "TotalNodes": "3"
         }
     },
     "test.test_viewer_nodes_issue_14992": {
         "response_group": {
-            "FieldsAvailable": "10000000110111110111111100000111",
-            "FieldsRequired": "00000000001100000010000000000101",
+            "FieldsAvailable": "0000000110111110111111100000111",
+            "FieldsRequired": "0000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
->>>>>>> d18580f3e9d... restrict database users access (#22513)
             "Nodes": [
                 {
                     "NodeId": 1,
@@ -5978,23 +5685,9 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-<<<<<<< HEAD
-                    }
-                }
-            ],
-            "TotalNodes": "1"
-        },
-        "/Root/dedicated_db": {
-            "FieldsAvailable": "0000000110000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000111",
-            "FoundNodes": "1",
-            "MaximumSlotsPerDisk": "5",
-            "Nodes": [
-=======
                     },
                     "UptimeSeconds": "number"
                 },
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                 {
                     "NodeId": 50001,
                     "SystemState": {
@@ -6017,19 +5710,8 @@
                         ],
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
-<<<<<<< HEAD
-                        "Location": {
-                            "DataCenter": "1",
-                            "Rack": "1",
-                            "Unit": "1"
-                        },
-                        "MaxDiskUsage": "not-zero-number",
-                        "NodeId": 1,
-=======
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 50001,
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
                             {
@@ -6071,23 +5753,9 @@
                             "/Root/shared_db"
                         ],
                         "TotalSessions": "number"
-<<<<<<< HEAD
-                    }
-                }
-            ],
-            "TotalNodes": "1"
-        },
-        "/Root/serverless_db": {
-            "FieldsAvailable": "0000000110000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000111",
-            "FoundNodes": "1",
-            "MaximumSlotsPerDisk": "5",
-            "Nodes": [
-=======
                     },
                     "UptimeSeconds": "number"
                 },
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                 {
                     "NodeId": 50000,
                     "SystemState": {
@@ -6110,19 +5778,8 @@
                         ],
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
-<<<<<<< HEAD
-                        "Location": {
-                            "DataCenter": "1",
-                            "Rack": "1",
-                            "Unit": "1"
-                        },
-                        "MaxDiskUsage": "not-zero-number",
-                        "NodeId": 1,
-=======
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 50000,
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
                             {
@@ -6170,92 +5827,15 @@
             ],
             "TotalNodes": "3"
         },
-<<<<<<< HEAD
-        "/Root/shared_db": {
-            "FieldsAvailable": "0000000110000110111111100000111",
-            "FieldsRequired": "0000000000000000000000000000111",
-            "FoundNodes": "1",
-            "MaximumSlotsPerDisk": "5",
-            "Nodes": [
-                {
-                    "NodeId": 1,
-                    "SystemState": {
-                        "ChangeTime": "not-zero-number-text",
-                        "CoresTotal": "not-zero-number",
-                        "CoresUsed": "not-zero-number",
-                        "Endpoints": [
-                            {
-                                "Address": "text",
-                                "Name": "grpc"
-                            },
-                            {
-                                "Address": "text",
-                                "Name": "http-mon"
-                            },
-                            {
-                                "Address": "text",
-                                "Name": "ic"
-                            }
-                        ],
-                        "Host": "text",
-                        "LoadAverage": "not-empty-array",
-                        "Location": {
-                            "DataCenter": "1",
-                            "Rack": "1",
-                            "Unit": "1"
-                        },
-                        "MaxDiskUsage": "not-zero-number",
-                        "NodeId": 1,
-                        "NumberOfCpus": "not-zero-number",
-                        "PoolStats": [
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "System",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "User",
-                                "Threads": 3,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "Batch",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IO",
-                                "Threads": 1,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IC",
-                                "Threads": 1,
-                                "Usage": "number"
-                            }
-                        ],
-                        "RealNumberOfCpus": "not-zero-number",
-                        "Roles": "not-empty-array",
-                        "StartTime": "not-zero-number-text",
-                        "SystemState": "Green",
-                        "TotalSessions": "number"
-                    }
-=======
         "response_group_by": {
-            "FieldsAvailable": "10000000110111110111111100000111",
-            "FieldsRequired": "00000000001100000010000000000101",
+            "FieldsAvailable": "0000000110111110111111100000111",
+            "FieldsRequired": "0000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "NodeGroups": [
                 {
                     "GroupName": "up <10m",
                     "NodeCount": "3"
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                 }
             ],
             "TotalNodes": "3"
@@ -6288,16 +5868,7 @@
     },
     "test.test_viewer_query": {
         "/Root": {
-<<<<<<< HEAD
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
-            "FoundNodes": "1",
-            "MaximumDisksPerNode": "1",
-            "MaximumSlotsPerDisk": "5",
-            "Nodes": [
-=======
             "result": [
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                 {
                     "columns": [
                         {
@@ -6305,42 +5876,6 @@
                             "type": "Int32"
                         }
                     ],
-<<<<<<< HEAD
-                    "Peers": [
-                        {
-                            "BytesWritten": "text",
-                            "ChangeTime": "not-zero-number-text",
-                            "ClockSkewUs": "text",
-                            "ConnectStatus": "Green",
-                            "ConnectTime": "not-zero-number-text",
-                            "Connected": true,
-                            "NodeId": 1,
-                            "PeerName": "text",
-                            "PeerNodeId": 50000,
-                            "PingTimeUs": "text",
-                            "ScopeId": {
-                                "X1": "72075186232723360",
-                                "X2": "2"
-                            },
-                            "Utilization": "number"
-                        },
-                        {
-                            "BytesWritten": "text",
-                            "ChangeTime": "not-zero-number-text",
-                            "ClockSkewUs": "text",
-                            "ConnectStatus": "Green",
-                            "ConnectTime": "not-zero-number-text",
-                            "Connected": true,
-                            "NodeId": 1,
-                            "PeerName": "text",
-                            "PeerNodeId": 50001,
-                            "PingTimeUs": "text",
-                            "ScopeId": {
-                                "X1": "72075186232723360",
-                                "X2": "3"
-                            },
-                            "Utilization": "number"
-=======
                     "rows": [
                         [
                             42
@@ -6357,7 +5892,6 @@
                         {
                             "name": "column0",
                             "type": "Int32"
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                         }
                     ],
                     "rows": [
@@ -6433,43 +5967,6 @@
                             "name": "id",
                             "type": "Int64?"
                         },
-<<<<<<< HEAD
-                        "MaxDiskUsage": "not-zero-number",
-                        "MemoryStats": "not-empty-object",
-                        "NodeId": 1,
-                        "NumberOfCpus": "not-zero-number",
-                        "PoolStats": [
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "System",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "User",
-                                "Threads": 3,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "Batch",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IO",
-                                "Threads": 1,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IC",
-                                "Threads": 1,
-                                "Usage": "number"
-                            }
-=======
                         {
                             "name": "name",
                             "type": "Utf8?"
@@ -6479,7 +5976,6 @@
                         [
                             "1",
                             "one"
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                         ],
                         [
                             "2",
@@ -6599,18 +6095,8 @@
             ],
             "version": 9
         },
-<<<<<<< HEAD
-        "/Root/dedicated_db": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
-            "FoundNodes": "1",
-            "MaximumDisksPerNode": "1",
-            "MaximumSlotsPerDisk": "5",
-            "Nodes": [
-=======
         "multi": {
             "result": [
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                 {
                     "columns": [
                         {
@@ -6662,47 +6148,12 @@
                 {
                     "columns": [
                         {
-<<<<<<< HEAD
-                            "BytesWritten": "text",
-                            "ChangeTime": "not-zero-number-text",
-                            "ClockSkewUs": "text",
-                            "ConnectStatus": "Green",
-                            "ConnectTime": "not-zero-number-text",
-                            "Connected": true,
-                            "NodeId": 1,
-                            "PeerName": "text",
-                            "PeerNodeId": 50000,
-                            "PingTimeUs": "text",
-                            "ScopeId": {
-                                "X1": "72075186232723360",
-                                "X2": "2"
-                            },
-                            "Utilization": "number"
-                        },
-                        {
-                            "BytesWritten": "text",
-                            "ChangeTime": "not-zero-number-text",
-                            "ClockSkewUs": "text",
-                            "ConnectStatus": "Green",
-                            "ConnectTime": "not-zero-number-text",
-                            "Connected": true,
-                            "NodeId": 1,
-                            "PeerName": "text",
-                            "PeerNodeId": 50001,
-                            "PingTimeUs": "text",
-                            "ScopeId": {
-                                "X1": "72075186232723360",
-                                "X2": "3"
-                            },
-                            "Utilization": "number"
-=======
                             "name": "id",
                             "type": "Int64?"
                         },
                         {
                             "name": "name",
                             "type": "Utf8?"
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                         }
                     ],
                     "rows": [
@@ -6740,33 +6191,6 @@
                                 "three": null,
                                 "two": "42"
                             }
-<<<<<<< HEAD
-                        ],
-                        "Host": "text",
-                        "LoadAverage": "not-empty-array",
-                        "Location": {
-                            "DataCenter": "1",
-                            "Rack": "1",
-                            "Unit": "1"
-                        },
-                        "MaxDiskUsage": "not-zero-number",
-                        "MemoryStats": "not-empty-object",
-                        "NodeId": 1,
-                        "NumberOfCpus": "not-zero-number",
-                        "PoolStats": [
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "System",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "User",
-                                "Threads": 3,
-                                "Usage": "number"
-                            },
-=======
                         ]
                     ]
                 }
@@ -6784,7 +6208,6 @@
                     ],
                     "rows": [
                         [
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                             {
                                 "three": null,
                                 "two": "42"
@@ -6897,16 +6320,7 @@
             "version": 9
         },
         "/Root/serverless_db": {
-<<<<<<< HEAD
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
-            "FoundNodes": "1",
-            "MaximumDisksPerNode": "1",
-            "MaximumSlotsPerDisk": "5",
-            "Nodes": [
-=======
             "result": [
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                 {
                     "columns": [
                         {
@@ -6914,42 +6328,6 @@
                             "type": "EmptyList"
                         }
                     ],
-<<<<<<< HEAD
-                    "Peers": [
-                        {
-                            "BytesWritten": "text",
-                            "ChangeTime": "not-zero-number-text",
-                            "ClockSkewUs": "text",
-                            "ConnectStatus": "Green",
-                            "ConnectTime": "not-zero-number-text",
-                            "Connected": true,
-                            "NodeId": 1,
-                            "PeerName": "text",
-                            "PeerNodeId": 50000,
-                            "PingTimeUs": "text",
-                            "ScopeId": {
-                                "X1": "72075186232723360",
-                                "X2": "2"
-                            },
-                            "Utilization": "number"
-                        },
-                        {
-                            "BytesWritten": "text",
-                            "ChangeTime": "not-zero-number-text",
-                            "ClockSkewUs": "text",
-                            "ConnectStatus": "Green",
-                            "ConnectTime": "not-zero-number-text",
-                            "Connected": true,
-                            "NodeId": 1,
-                            "PeerName": "text",
-                            "PeerNodeId": 50001,
-                            "PingTimeUs": "text",
-                            "ScopeId": {
-                                "X1": "72075186232723360",
-                                "X2": "3"
-                            },
-                            "Utilization": "number"
-=======
                     "rows": [
                         [
                             []
@@ -6966,7 +6344,6 @@
                         {
                             "name": "column0",
                             "type": "EmptyList"
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                         }
                     ],
                     "rows": [
@@ -7018,54 +6395,9 @@
                             "1",
                             "one"
                         ],
-<<<<<<< HEAD
-                        "Host": "text",
-                        "LoadAverage": "not-empty-array",
-                        "Location": {
-                            "DataCenter": "1",
-                            "Rack": "1",
-                            "Unit": "1"
-                        },
-                        "MaxDiskUsage": "not-zero-number",
-                        "MemoryStats": "not-empty-object",
-                        "NodeId": 1,
-                        "NumberOfCpus": "not-zero-number",
-                        "PoolStats": [
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "System",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "User",
-                                "Threads": 3,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "Batch",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IO",
-                                "Threads": 1,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IC",
-                                "Threads": 1,
-                                "Usage": "number"
-                            }
-=======
                         [
                             "2",
                             "two"
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                         ],
                         [
                             "3",
@@ -7141,11 +6473,6 @@
             ],
             "version": 9
         },
-<<<<<<< HEAD
-        "/Root/shared_db": {
-            "FieldsAvailable": "1111111110111111111111111111111",
-            "FieldsRequired": "1111111111111111111111111111111",
-=======
         "fetch_error_no_id": {
             "status_code": 400,
             "text": "operation_id or execution_id required for fetch-long-query"
@@ -7203,9 +6530,7 @@
                                             }
                                         }
                                     }
-                                ],
-                                "finished": true,
-                                "number_rows": "3"
+                                ]
                             }
                         ],
                         "script_content": {
@@ -7260,52 +6585,13 @@
     },
     "test.test_viewer_storage_nodes": {
         "/Root": {
-            "FieldsAvailable": "10000000110000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
->>>>>>> d18580f3e9d... restrict database users access (#22513)
+            "FieldsAvailable": "0000000110000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
                     "NodeId": 1,
-<<<<<<< HEAD
-                    "PDisks": [
-                        {
-                            "AvailableSize": "text",
-                            "Category": "0",
-                            "ChangeTime": "not-zero-number-text",
-                            "Device": "Green",
-                            "EnforcedDynamicSlotSize": "not-zero-number-text",
-                            "Guid": "1",
-                            "LogTotalSize": "not-zero-number-text",
-                            "LogUsedSize": "not-zero-number-text",
-                            "NodeId": 1,
-                            "NumActiveSlots": 5,
-                            "PDiskId": 1,
-                            "Path": "SectorMap:1:64",
-                            "Realtime": "Green",
-                            "SerialNumber": "",
-                            "State": "Normal",
-                            "SystemSize": "not-zero-number-text",
-                            "TotalSize": "not-zero-number-text"
-                        }
-                    ],
-                    "Peers": [
-                        {
-                            "BytesWritten": "text",
-                            "ChangeTime": "not-zero-number-text",
-                            "ClockSkewUs": "text",
-                            "ConnectStatus": "Green",
-                            "ConnectTime": "not-zero-number-text",
-                            "Connected": true,
-                            "NodeId": 1,
-                            "PeerName": "text",
-                            "PeerNodeId": 50000,
-                            "PingTimeUs": "text",
-                            "ScopeId": {
-                                "X1": "72075186232723360",
-                                "X2": "2"
-=======
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
                         "CoresTotal": "not-zero-number",
@@ -7314,7 +6600,6 @@
                             {
                                 "Address": "text",
                                 "Name": "grpc"
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                             },
                             {
                                 "Address": "text",
@@ -7332,24 +6617,7 @@
                             "Rack": "1",
                             "Unit": "1"
                         },
-<<<<<<< HEAD
-                        {
-                            "BytesWritten": "text",
-                            "ChangeTime": "not-zero-number-text",
-                            "ClockSkewUs": "text",
-                            "ConnectStatus": "Green",
-                            "ConnectTime": "not-zero-number-text",
-                            "Connected": true,
-                            "NodeId": 1,
-                            "PeerName": "text",
-                            "PeerNodeId": 50001,
-                            "PingTimeUs": "text",
-                            "ScopeId": {
-                                "X1": "72075186232723360",
-                                "X2": "3"
-=======
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -7358,7 +6626,6 @@
                                 "Name": "System",
                                 "Threads": 2,
                                 "Usage": "number"
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                             },
                             {
                                 "Limit": "not-zero-number",
@@ -7396,8 +6663,8 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "10000000110000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "0000000110000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
@@ -7429,11 +6696,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-<<<<<<< HEAD
-                        "MemoryStats": "not-empty-object",
-=======
-                        "MemoryLimit": "not-zero-number-text",
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -7479,8 +6741,8 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "10000000110000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "0000000110000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
@@ -7512,7 +6774,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -7561,8 +6822,8 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "10000000110000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "0000000110000110111111100000111",
+            "FieldsRequired": "0000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
@@ -7594,7 +6855,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -7640,8 +6900,8 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "10000000010100110111111100000111",
-            "FieldsRequired": "00000000000100000000000000000111",
+            "FieldsAvailable": "0000000010100110111111100000111",
+            "FieldsRequired": "0000000000100000000000000000111",
             "FoundNodes": "3",
             "NeedFilter": true,
             "Nodes": [
@@ -7673,7 +6933,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -7738,7 +6997,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -7806,7 +7064,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 50000,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -7857,8 +7114,8 @@
     },
     "test.test_viewer_storage_nodes_all": {
         "/Root": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -7910,8 +7167,8 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "6"
+                                "X1": "72075186232723360",
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -7927,8 +7184,8 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "7"
+                                "X1": "72075186232723360",
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -8002,7 +7259,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
@@ -8227,8 +7483,8 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -8279,8 +7535,8 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "6"
+                                "X1": "72075186232723360",
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -8296,8 +7552,8 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "7"
+                                "X1": "72075186232723360",
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -8371,7 +7627,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
@@ -8596,8 +7851,8 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -8648,8 +7903,8 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "6"
+                                "X1": "72075186232723360",
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -8665,8 +7920,8 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "7"
+                                "X1": "72075186232723360",
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -8740,7 +7995,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
@@ -8965,8 +8219,8 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -9017,8 +8271,8 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "6"
+                                "X1": "72075186232723360",
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -9034,8 +8288,8 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "7"
+                                "X1": "72075186232723360",
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -9109,7 +8363,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
@@ -9334,8 +8587,8 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "1111111110111111111111111111111",
+            "FieldsRequired": "1111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -9386,8 +8639,8 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "6"
+                                "X1": "72075186232723360",
+                                "X2": "2"
                             },
                             "Utilization": "number"
                         },
@@ -9403,8 +8656,8 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72057594046678944",
-                                "X2": "7"
+                                "X1": "72075186232723360",
+                                "X2": "3"
                             },
                             "Utilization": "number"
                         }
@@ -9478,7 +8731,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
@@ -9782,7 +9034,6 @@
                     "Rack": "",
                     "Unit": "0"
                 },
-                "MemoryLimit": "not-zero-number-text",
                 "NodeId": 50001,
                 "NumberOfCpus": "not-zero-number",
                 "PoolStats": [
@@ -9848,7 +9099,6 @@
                     "Rack": "",
                     "Unit": "0"
                 },
-                "MemoryLimit": "not-zero-number-text",
                 "NodeId": 50000,
                 "NumberOfCpus": "not-zero-number",
                 "PoolStats": [
@@ -9915,7 +9165,6 @@
                     "Unit": "1"
                 },
                 "MaxDiskUsage": "not-zero-number",
-                "MemoryLimit": "not-zero-number-text",
                 "NodeId": 1,
                 "NumberOfCpus": "not-zero-number",
                 "PoolStats": [
@@ -10071,7 +9320,7 @@
                         "NodeId": 1,
                         "Overall": 1,
                         "State": 10,
-                        "TabletId": "72057594046678944",
+                        "TabletId": "72075186232723360",
                         "Type": 16
                     }
                 ]
@@ -10093,7 +9342,7 @@
                         "TabletId": "72075186224037888",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 14
                     },
@@ -10109,7 +9358,7 @@
                         "TabletId": "72075186224037889",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
                     },
@@ -10125,7 +9374,7 @@
                         "TabletId": "72075186224037890",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
                     },
@@ -10141,7 +9390,7 @@
                         "TabletId": "72075186224037891",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 32
                     },
@@ -10157,7 +9406,7 @@
                         "TabletId": "72075186224037892",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
                     },
@@ -10173,7 +9422,7 @@
                         "TabletId": "72075186224037893",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
                     },
@@ -10189,7 +9438,7 @@
                         "TabletId": "72075186224037894",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 40
                     },
@@ -10205,7 +9454,7 @@
                         "TabletId": "72075186224037895",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
                     },
@@ -10221,7 +9470,7 @@
                         "TabletId": "72075186224037896",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
                     },
@@ -10237,27 +9486,11 @@
                         "TabletId": "72075186224037897",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 16
                     },
                     {
-<<<<<<< HEAD
-                        "Address": "text",
-                        "Name": "ic"
-                    }
-                ],
-                "Host": "text",
-                "LoadAverage": "not-empty-array",
-                "Location": {
-                    "DataCenter": "",
-                    "Rack": "",
-                    "Unit": "0"
-                },
-                "NodeId": 50001,
-                "NumberOfCpus": "not-zero-number",
-                "PoolStats": [
-=======
                         "ChangeTime": "not-zero-number-text",
                         "FollowerId": 0,
                         "Generation": 1,
@@ -10269,7 +9502,7 @@
                         "TabletId": "72075186224037898",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 18
                     }
@@ -10280,7 +9513,6 @@
                 "ResponseDuration": "not-zero-number-text",
                 "ResponseTime": "not-zero-number-text",
                 "TabletStateInfo": [
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                     {
                         "ChangeTime": "not-zero-number-text",
                         "FollowerId": 0,
@@ -10293,7 +9525,7 @@
                         "TabletId": "72075186224038899",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 16
                     },
@@ -10309,7 +9541,7 @@
                         "TabletId": "72075186224038900",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
                     },
@@ -10325,7 +9557,7 @@
                         "TabletId": "72075186224038901",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
                     },
@@ -10341,7 +9573,7 @@
                         "TabletId": "72075186224038902",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
                     },
@@ -10357,7 +9589,7 @@
                         "TabletId": "72075186224038903",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
                     },
@@ -10373,7 +9605,7 @@
                         "TabletId": "72075186224038904",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 32
                     },
@@ -10389,29 +9621,10 @@
                         "TabletId": "72075186224038906",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 18
                     }
-<<<<<<< HEAD
-                ],
-                "Host": "text",
-                "LoadAverage": "not-empty-array",
-                "Location": {
-                    "DataCenter": "",
-                    "Rack": "",
-                    "Unit": "0"
-                },
-                "NodeId": 50000,
-                "NumberOfCpus": "not-zero-number",
-                "PoolStats": [
-                    {
-                        "Limit": "not-zero-number",
-                        "Name": "System",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-=======
                 ]
             },
             "/Root/shared_db": {
@@ -10419,7 +9632,6 @@
                 "ResponseDuration": "not-zero-number-text",
                 "ResponseTime": "not-zero-number-text",
                 "TabletStateInfo": [
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                     {
                         "ChangeTime": "not-zero-number-text",
                         "FollowerId": 0,
@@ -10432,7 +9644,7 @@
                         "TabletId": "72075186224038889",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 14
                     },
@@ -10448,7 +9660,7 @@
                         "TabletId": "72075186224038890",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 40
                     },
@@ -10464,7 +9676,7 @@
                         "TabletId": "72075186224038891",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
                     },
@@ -10480,7 +9692,7 @@
                         "TabletId": "72075186224038892",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
                     },
@@ -10496,28 +9708,11 @@
                         "TabletId": "72075186224038893",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 32
                     },
                     {
-<<<<<<< HEAD
-                        "Address": "text",
-                        "Name": "ic"
-                    }
-                ],
-                "Host": "text",
-                "LoadAverage": "not-empty-array",
-                "Location": {
-                    "DataCenter": "1",
-                    "Rack": "1",
-                    "Unit": "1"
-                },
-                "MaxDiskUsage": "not-zero-number",
-                "NodeId": 1,
-                "NumberOfCpus": "not-zero-number",
-                "PoolStats": [
-=======
                         "ChangeTime": "not-zero-number-text",
                         "FollowerId": 0,
                         "Generation": 1,
@@ -10529,11 +9724,10 @@
                         "TabletId": "72075186224038894",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
                     },
->>>>>>> d18580f3e9d... restrict database users access (#22513)
                     {
                         "ChangeTime": "not-zero-number-text",
                         "FollowerId": 0,
@@ -10546,7 +9740,7 @@
                         "TabletId": "72075186224038895",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
                     },
@@ -10562,7 +9756,7 @@
                         "TabletId": "72075186224038896",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 13
                     },
@@ -10578,7 +9772,7 @@
                         "TabletId": "72075186224038897",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 5
                     },
@@ -10594,7 +9788,7 @@
                         "TabletId": "72075186224038898",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 16
                     },
@@ -10610,7 +9804,7 @@
                         "TabletId": "72075186224038905",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72057594046678944"
+                            "SchemeShard": "72075186232723360"
                         },
                         "Type": 18
                     }
@@ -10723,17 +9917,6 @@
                     {
                         "ChangeTime": "not-zero-number-text",
                         "FollowerId": 0,
-                        "Generation": 2,
-                        "Leader": true,
-                        "NodeId": 1,
-                        "Overall": 1,
-                        "State": 10,
-                        "TabletId": "72075186232723360",
-                        "Type": 16
-                    },
-                    {
-                        "ChangeTime": "not-zero-number-text",
-                        "FollowerId": 0,
                         "Generation": 1,
                         "HiveId": "72057594037968897",
                         "Leader": true,
@@ -11194,6 +10377,17 @@
                             "SchemeShard": "72075186232723360"
                         },
                         "Type": 18
+                    },
+                    {
+                        "ChangeTime": "not-zero-number-text",
+                        "FollowerId": 0,
+                        "Generation": 2,
+                        "Leader": true,
+                        "NodeId": 1,
+                        "Overall": 1,
+                        "State": 10,
+                        "TabletId": "72075186232723360",
+                        "Type": 16
                     }
                 ]
             }
@@ -11517,13 +10711,8 @@
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
-<<<<<<< HEAD
-                "Owner": "root@builtin",
-                "ResourceId": "72075186232723360-3",
-=======
                 "Owner": "root",
-                "ResourceId": "72057594046678944-7",
->>>>>>> b4e49db1a6e... add database allowed sids - for database users only (#20991)
+                "ResourceId": "72075186232723360-3",
                 "State": "RUNNING",
                 "StateStats": [
                     {
@@ -11727,13 +10916,8 @@
                     "Id": "72075186232723360-4",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
-<<<<<<< HEAD
-                    "Owner": "root@builtin",
-                    "ResourceId": "72075186232723360-3",
-=======
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
->>>>>>> b4e49db1a6e... add database allowed sids - for database users only (#20991)
+                    "ResourceId": "72075186232723360-3",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11817,8 +11001,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
-                    "Id": "72057594046678944-1",
-                    "MemoryLimit": "not-zero-number-text",
+                    "Id": "72075186232723360-1",
                     "MemoryStats": {},
                     "Metrics": {},
                     "Name": "/Root",
@@ -11864,8 +11047,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
-                    "MemoryLimit": "not-zero-number-text",
+                    "Id": "72075186232723360-2",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
                     "Name": "/Root/dedicated_db",
@@ -11931,12 +11113,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "72075186232723360-4",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "72075186232723360-3",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11951,8 +11133,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
-                    "MemoryLimit": "not-zero-number-text",
+                    "Id": "72075186232723360-3",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
                     "Name": "/Root/shared_db",

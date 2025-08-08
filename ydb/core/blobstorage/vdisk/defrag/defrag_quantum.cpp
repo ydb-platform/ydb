@@ -60,6 +60,7 @@ namespace NKikimr {
         void RunImpl() {
             TEvDefragQuantumResult::TStat stat{.Eof = true};
             ui32 maxChunksToDefrag = DCtx->VCfg->MaxChunksToDefragInflight;
+            bool runCompAfterDefrag = DCtx->VCfg->DefragThresholdToRunCompactionPerMille == 0;
 
             if (!ChunksToDefrag) {
                 STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD07, DCtx->VCtx->VDiskLogPrefix << "going to find chunks to defrag",
@@ -76,7 +77,7 @@ namespace NKikimr {
                     }
                     Yield();
                 }
-                ChunksToDefrag.emplace(findChunks.GetChunksToDefrag(maxChunksToDefrag));
+                ChunksToDefrag.emplace(findChunks.GetChunksToDefrag(maxChunksToDefrag, runCompAfterDefrag));
             }
             if (*ChunksToDefrag || ChunksToDefrag->IsShred) {
                 const bool isShred = ChunksToDefrag->IsShred;
@@ -178,7 +179,7 @@ namespace NKikimr {
                     }
                 }
 
-                if (DCtx->VCfg->DefragThresholdToRunCompactionPerMille == 0) {
+                if (runCompAfterDefrag) {
                     // scan index again to find tables we have to compact
                     for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
                     if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {

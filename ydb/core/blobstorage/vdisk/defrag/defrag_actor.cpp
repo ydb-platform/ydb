@@ -159,7 +159,8 @@ namespace NKikimr {
 
                     // check if we need to run defragmentation
                     if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks - freedChunks, totalChunks - freedChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
-                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflightDefragChunks(DCtx->VCfg->MaxChunksToDefragInflight, canBeFreedChunks - freedChunks));
+                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(
+                            MaxInflightDefragChunks(DCtx->VCfg->MaxChunksToDefragInflight, canBeFreedChunks - freedChunks), defragThresholdToRunCompaction == 0);
                         // Y_VERIFY_S(chunksToDefrag, DCtx->VCtx->VDiskLogPrefix);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (FreedChunks, freedChunks), (UsefulChunks, usefulChunks),

@@ -109,7 +109,7 @@ private:
 
         ui64 mem = 0;
         for (const auto& accessor : result.ExtractPortionsVector()) {
-            mem += accessor->GetColumnRawBytes(Columns);
+            mem += accessor->GetColumnRawBytes(Columns, false);
         }
 
         NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(Callback->GetContext()->GetMemoryProcessId(),

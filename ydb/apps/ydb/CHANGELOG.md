@@ -1,5 +1,5 @@
 * Added a new paths approach in `ydb export s3` and `ydb import s3` commands with the new `--include` option instead of the `--item` option. 
-* Added export encryption features to `ydb export s3` and `ydb import s3` commands.
+* Added support for encryption features in the `ydb export s3` and `ydb import s3` commands.
 
 ## 2.24.1 ##
 

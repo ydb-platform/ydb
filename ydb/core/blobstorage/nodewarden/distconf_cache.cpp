@@ -32,6 +32,7 @@ namespace NKikimr::NStorage {
                 };
                 Y_VERIFY_DEBUG_S(cacheItem.Value == newValue, "CachedItem# " <<
                         printOptionalString(cacheItem.Value) << " NewItem# " << printOptionalString(newValue));
+                Y_UNUSED(printOptionalString);  // for release build
             }
         }
 

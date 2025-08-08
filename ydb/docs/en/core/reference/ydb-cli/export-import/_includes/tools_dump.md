@@ -51,7 +51,7 @@ The `tools dump` command dumps the schema objects to the client file system in t
   - `database`: A fully consistent dump, with one snapshot taken before starting the dump. Applied by default.
   - `table`: Consistency within each dumped table, taking individual independent snapshots for each table. Might run faster and have less impact on the current workload processing in the database.
 
-- `--avoid-copy`: Do not create a snapshot before dumping. The default consistency snapshot might be inapplicable in some cases (for example, for tables with external blobs).
+- `--avoid-copy`: Do not create a snapshot before dumping. The default consistency snapshot might be inapplicable in some cases (for example, for tables with external blobs).{% if feature_serial %} For correct export of tables with [serial](../../../../yql/reference/types/serial.md) types, this parameter must not be set. Otherwise, the current value of the sequence generator will not be copied, and new values will start from the initial value, which may lead to primary key conflicts.{% endif %}
 
 - `--save-partial-result`: Retain the result of a partial dump. Without this option, dumps that terminate with an error are deleted.
 

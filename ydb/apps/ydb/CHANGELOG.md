@@ -1,3 +1,5 @@
+* Reworked paths approach in `ydb export s3` and `ydb import s3` commands.
+* Added export encryption features to `ydb export s3` and `ydb import s3` commands.
 
 ## 2.24.1 ##
 

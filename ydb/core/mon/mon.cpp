@@ -1174,7 +1174,9 @@ public:
             AuditCtx.AddAuditLogParts(result->UserToken);
             Event->Get()->UserToken = result->UserToken->GetSerializedToken();
         }
-        AuditCtx.LogOnExecute();
+        if (Fields.ManualAuditStart) {
+            AuditCtx.LogOnExecute();
+        }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
 
@@ -1226,6 +1228,13 @@ public:
 
     void Handle(NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr& ev) {
         CancelSubscriber = std::move(ev);
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvAuditProbe::TPtr& ev) {
+        AuditCtx.LogOnExecute();
+        if (ev->Get()->WithAck) {
+            Send(ev->Sender, new NHttp::TEvHttpProxy::TEvAuditAck(), 0, CancelSubscriber->Cookie);
+        }
     }
 
     STATEFN(StateWork) {

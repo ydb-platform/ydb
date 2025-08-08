@@ -58,6 +58,8 @@ struct TEvHttpProxy {
         EvHttpOutgoingDataChunk,
         EvSubscribeForCancel,
         EvRequestCancelled,
+        EvAuditProbe,
+        EvAuditAck,
         EvEnd
     };
 
@@ -294,6 +296,15 @@ struct TEvHttpProxy {
 
     struct TEvSubscribeForCancel : NActors::TEventLocal<TEvSubscribeForCancel, EvSubscribeForCancel> {};
     struct TEvRequestCancelled : NActors::TEventLocal<TEvRequestCancelled, EvRequestCancelled> {};
+
+    struct TEvAuditProbe : NActors::TEventLocal<TEvAuditProbe, EvAuditProbe> {
+        bool WithAck = false;
+        TEvAuditProbe(bool withAck = false)
+            : WithAck(withAck)
+        {}
+    };
+
+    struct TEvAuditAck : NActors::TEventLocal<TEvAuditAck, EvAuditAck> {};
 };
 
 struct TRateLimiter {

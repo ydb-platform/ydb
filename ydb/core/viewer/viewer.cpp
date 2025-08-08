@@ -103,18 +103,21 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .RelPath = "viewer/capabilities",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .Title = "Monitoring",
@@ -122,18 +125,21 @@ public:
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .RelPath = "healthcheck",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
@@ -141,6 +147,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
@@ -148,6 +155,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .RelPath = "operation",
@@ -155,6 +163,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .RelPath = "query",
@@ -162,6 +171,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .RelPath = "scheme",
@@ -169,6 +179,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
+                .ManualAuditStart = true,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
@@ -176,6 +187,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
+                .ManualAuditStart = true,
             });
             if (!KikimrRunConfig.AppConfig.GetMonitoringConfig().GetHideHttpEndpoint()) {
                 auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
@@ -219,6 +231,7 @@ public:
                         .Handler = ctx.SelfID,
                         .UseAuth = true,
                         .AllowedSIDs = databaseAllowedSIDs,
+                        .ManualAuditStart = true,
                     });
                 }
             }

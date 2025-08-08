@@ -1202,6 +1202,13 @@ STATEFN(TViewerPipeClient::StateResolveResource) {
     }
 }
 
+STATEFN(TViewerPipeClient::StateAudit) {
+    switch (ev->GetTypeRewrite()) {
+        cFunc(NHttp::TEvHttpProxy::EvAuditAck, Bootstrap);
+        cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+    }
+}
+
 void TViewerPipeClient::RedirectToDatabase(const TString& database) {
     DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(database);
     --DataRequests; // don't count this request
@@ -1222,6 +1229,21 @@ bool TViewerPipeClient::NeedToRedirect() {
             ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
             return true;
         }
+    }
+    return false;
+}
+
+bool TViewerPipeClient::NeedToWriteAuditLog() {
+    if (NeedAuditLog) {
+        NeedAuditLog = false;
+        auto event = std::make_unique<NHttp::TEvHttpProxy::TEvAuditProbe>(true);
+        if (Event) {
+            Send(Event->Sender, event.release(), IEventHandle::FlagTrackDelivery);
+        } else if (HttpEvent) {
+            Send(HttpEvent->Sender, event.release(), IEventHandle::FlagTrackDelivery);
+        }
+        Become(&TViewerPipeClient::StateAudit);
+        return true;
     }
     return false;
 }

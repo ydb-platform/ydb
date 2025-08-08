@@ -157,6 +157,10 @@ public:
         if (TBase::NeedToRedirect()) {
             return;
         }
+        static const THashSet<HTTP_METHOD> MODIFYING_METHODS = {HTTP_METHOD_POST, HTTP_METHOD_PUT, HTTP_METHOD_DELETE, HTTP_METHOD_EXTENSION};
+        if (std::find(MODIFYING_METHODS.begin(), MODIFYING_METHODS.end(), Event->Get()->Request.GetMethod()) == MODIFYING_METHODS.end() && TBase::NeedToWriteAuditLog()) {
+            return;
+        }
         TRequestProtoType request;
         if (!Params2Proto(request)) {
             return;

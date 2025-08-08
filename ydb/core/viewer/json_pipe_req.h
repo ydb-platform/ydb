@@ -44,6 +44,7 @@ protected:
     TString SharedDatabase;
     bool Direct = false;
     bool NeedRedirect = true;
+    bool NeedAuditLog = true;
     i32 DataRequests = 0; // how many requests we wait to process data
     bool PassedAway = false;
     bool ReplySent = false;
@@ -389,9 +390,12 @@ protected:
     void HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     STATEFN(StateResolveDatabase);
     STATEFN(StateResolveResource);
+    STATEFN(StateAudit);
     void RedirectToDatabase(const TString& database);
     bool NeedToRedirect();
+    bool NeedToWriteAuditLog();
     void HandleTimeout();
+    virtual void Execute() {};
     void PassAway() override;
 };
 

@@ -122,6 +122,11 @@ private:
             Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
             break;
         }
+        case TRule_table_hint::kAltTableHint4: {
+            const auto& alt = msg.GetAlt_table_hint4();
+            Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+            break;
+        }
         case TRule_table_hint::ALT_NOT_SET:
             return;
         }

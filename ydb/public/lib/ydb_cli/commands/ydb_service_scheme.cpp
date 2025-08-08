@@ -615,6 +615,9 @@ int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDes
     case NReplication::TTransferDescription::EState::Running:
         Cout << desc.GetState();
         break;
+    case NReplication::TTransferDescription::EState::Paused:
+        Cout << desc.GetState();
+        break;
     case NReplication::TTransferDescription::EState::Error:
         Cout << "Error: " << desc.GetErrorState().GetIssues().ToOneLineString();
         break;

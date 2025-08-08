@@ -7,6 +7,7 @@ PY3TEST()
         test_log_scenario.py
         upgrade_to_internal_path_id.py
         zip_bomb.py
+        test_cs_simple_reader_many_modifications.py
     )
     FORK_SUBTESTS()
 

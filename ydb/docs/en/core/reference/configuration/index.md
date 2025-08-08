@@ -304,6 +304,10 @@ Examples of components managed by the memory controller:
 
 Memory limits can be configured to control overall memory usage, ensuring the database operates efficiently within the available resources.
 
+
+Memory consumption overview:
+![Memory Controller](../../_assets/memory_controller.png)
+
 ### Hard memory limit {#hard-memory-limit}
 
 The hard memory limit specifies the total amount of memory available to {{ ydb-short-name }} process.
@@ -353,12 +357,15 @@ The cache components include:
 
 - Shared cache
 - MemTable
+- Compaction
 
 Each cache component's limits are dynamically recalculated every second to ensure that each component consumes memory proportionally to its limit thresholds while the total consumed memory stays close to the target memory utilization.
 
 The minimum memory limit threshold for cache components isn't reserved, meaning the memory remains available until it is actually used. However, once this memory is filled, the components typically retain the data, operating within their current memory limit. Consequently, the sum of the minimum memory limits for cache components is expected to be less than the target memory utilization.
 
 If needed, both the minimum and maximum thresholds should be overridden; otherwise, any missing threshold will have a default value.
+
+The percentage limit for the compaction cache component is specified as a fraction of the shared cache, not of the total soft memory limit.
 
 Example of the `memory_controller_config` section with specified shared cache limits:
 
@@ -412,6 +419,7 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
 | `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit. |
+| `compaction_limit_percent`&nbsp;/<br/>`compaction_limit_bytes` | 10% | Compaction memory limit as a percentage of the shared cache. |
 
 ## blob_storage_config: Static cluster group {#blob-storage-config}
 

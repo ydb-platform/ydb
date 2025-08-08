@@ -1,0 +1,32 @@
+@startuml
+
+skinparam rectangle {
+  BackgroundColor White
+  BorderColor Black
+  BorderThickness 1
+  roundCorner 15
+}
+skinparam shadowing false
+
+rectangle "Total Process Memory\n(HardLimit / 100%)" as hard {
+    rectangle "Soft Limit" as soft #DAE8FC {
+
+        rectangle "Activities\n(% limit)" as act {
+            rectangle "KQP (Query Execution)" as kqp #DAE8FC
+        }
+
+        rectangle "SharedCache\n(min/max limit)" as shared {
+            rectangle "Tables Caches" as ds #DAE8FC
+            rectangle "Compaction Caches" as cc #DAE8FC
+        }
+        rectangle "MemTable\n(min/max limit)" as mem {
+            rectangle "Local DB" #DAE8FC
+        }
+
+    }
+
+    rectangle "other auxiliary and uncontrolled memory" as uncontrolled #DAE8FC
+    soft -down[hidden]--> uncontrolled
+
+}
+@enduml

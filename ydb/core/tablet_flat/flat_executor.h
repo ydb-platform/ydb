@@ -556,7 +556,7 @@ class TExecutor
     void DropCachesOfBundle(const NTable::TPart &part);
     void DropSingleCache(const TLogoBlobID&);
 
-    void TranslateCacheTouchesToSharedCache();
+    void SendSharedCacheTouches(THashMap<TLogoBlobID, THashSet<TPageId>>&& touches);
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
     void RequestInMemPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);

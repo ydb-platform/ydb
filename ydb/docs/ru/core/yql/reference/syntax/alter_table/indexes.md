@@ -10,20 +10,57 @@
 
 ## Добавление индекса {#add-index}
 
-`ADD INDEX` — добавляет индекс с указанным именем и типом для заданного набора колонок в {% if backend_name == "YDB" and oss == true %}строковых таблицах.{% else %}таблицах.{% endif %} Приведенный ниже код добавит глобальный индекс с именем `title_index` для колонки `title`.
+`ADD INDEX` — добавляет индекс с указанным именем и типом для заданного набора колонок в {% if backend_name == "YDB" and oss == true %}строковых таблицах.{% else %}таблицах.{% endif %} Грамматика:
 
 ```yql
-ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
+ALTER TABLE `<table_name>`
+  ADD INDEX `<index_name>`
+    [GLOBAL|LOCAL]
+    [UNIQUE]
+    [SYNC|ASYNC]
+    [USING <index_type>]
+    ON ( <index_columns> )
+    [COVER ( <cover_columns> )]
+    [WITH ( <parameter_name> = <parameter_value>[, ...])]
+  [,   ...]
 ```
 
-Могут быть указаны все параметры [вторичного индекса](../../../../concepts/glossary.md#secondary-index), описанные в [команде](../create_table/secondary_index.md) `CREATE TABLE`.
-Могут быть указаны все параметры [векторного индекса](../../../../concepts/glossary.md#vector-index), описанные в [команде](../create_table/vector_index.md) `CREATE TABLE`.
+{% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
+
+Параметры, специфичные для векторных индексов:
+
+{% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
 
 {% if backend_name == "YDB" and oss == true %}
 
 Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
 
 {% endif %}
+
+### Примеры
+
+Вторичный индекс:
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX `title_index`
+  GLOBAL ON (`title`);
+```
+
+Векторный индекс:
+
+```yql
+ALTER TABLE `series`
+  INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
+  ON (embedding) COVER (title)
+  WITH (
+    distance="cosine",
+    vector_type="float",
+    vector_dimension=512,
+    clusters=128,
+    levels=2
+  );
+```
 
 ## Изменение параметров индекса {#alter-index}
 

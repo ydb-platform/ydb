@@ -12,44 +12,35 @@ You should use `ALTER TABLE ... ADD INDEX` [command](../alter_table/indexes.md))
 
 {% endnote %}
 
-The INDEX construct is used to define a [vector index](../../../../concepts/glossary.md#vector-index) in a [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) table:
+[Vector index](../../../../concepts/glossary.md#vector-index) in [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) tables is created using the same syntax as [secondary indexes](secondary_index.md), by specifying `vector_kmeans_tree` as the index type. Subset of syntax available for vector indexes:
 
 ```yql
-CREATE TABLE table_name (
+CREATE TABLE `<table_name>` (
     ...
-    INDEX <index_name> GLOBAL [SYNC] USING <index_type> ON ( <index_columns> ) COVER ( <cover_columns> ) WITH ( <index_parameters> ),
-    ...
+    INDEX `<index_name>`
+        GLOBAL
+        [SYNC]
+        USING vector_kmeans_tree
+        ON ( <index_columns> )
+        [COVER ( <cover_columns> )]
+        [WITH ( <parameter_name> = <parameter_value>[, ...])]
+    [,   ...]
 )
 ```
 
 Where:
 
-* **Index_name** is the unique name of the index to be used to access data.
-* **SYNC** indicates synchronous data writes to the index. If not specified, synchronous.
-* **Index_type** is the index type. Only `vector_kmeans_tree` is supported now.
-* **Index_columns** is a list of comma-separated column names in the created table to be used for a search in the index. The last column in the list is used as embedding, the other columns are used as filtering columns.
-* **Cover_columns** is a list of comma-separated column names in the created table, which will be stored in the index in addition to the search columns, making it possible to fetch additional data without accessing the table for it.
-* **Index_parameters** is a list of comma-separated key-value parameters:
-    * parameters for any vector **index_type**:
-        * `vector_dimension` is a number of dimension in the indexed embedding (<= 16384)
-        * `vector_type` is a type of value in the indexed embedding, can be `float`, `uint8`, `int8`, `bit`
-        * `distance` is a type of the distance function which will be used for this index. Valid values: `cosine`, `manhattan`, `euclidean`.
-        * `similarity` is a type of the similarity function which will be used for this index. Valid values: `inner_product`, `cosine`.
-    * parameters specific to `vector_kmeans_tree`:
-        * `clusters` is a `k` in each kmeans used for tree (values > 1000 can affect performance)
-        * `levels` is a level count in the tree
+* `<index_name>` - unique index name for data access
+* `SYNC` - indicates synchronous data writing to the index. This is the only currently available option, and it is used by default.
+* `<index_columns>` - comma-separated list of table columns used for index searches (the last column is used as embedding, others as filtering columns)
+* `<cover_columns>` - list of additional table columns stored in the index to enable retrieval without accessing the main table
+* `<parameter_name>` and `<parameter_value>` - list of key-value parameters:
 
+{% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
 
 {% note warning %}
 
-The `distance` and `similarity` parameters can not be specified together.
-
-{% endnote %}
-
-
-{% note warning %}
-
-The `vector_type=bit` vector index is not supported yet.
+Vector indexes with `vector_type=bit` are not currently supported.
 
 {% endnote %}
 
@@ -62,9 +53,15 @@ CREATE TABLE user_articles (
     title String,
     text String,
     embedding String,
-    INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree 
-    ON (user, embedding) COVER (title, text) 
-    WITH (distance="cosine", vector_type="float", vector_dimension=512, clusters=128, levels=2),
+    INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
+    ON (user, embedding) COVER (title, text)
+    WITH (
+        distance="cosine",
+        vector_type="float",
+        vector_dimension=512,
+        clusters=128,
+        levels=2
+    ),
     PRIMARY KEY (article_id)
 )
 ```

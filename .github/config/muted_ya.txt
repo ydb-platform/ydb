@@ -66,6 +66,7 @@ ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.ModifySysViewDirPermissions
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service unittest.[*/*] chunk
+ydb/core/kqp/ut/tx KqpSinkMvcc.OlapNamedStatement
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/kqp/workload_service/ut KqpWorkloadServiceDistributed.TestDistributedLessConcurrentQueryLimit
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient

@@ -3930,7 +3930,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST_TWIN(TableSink_Htap, withOltpSink) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
@@ -4117,7 +4117,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST_TWIN(TableSink_HtapComplex, withOltpSink) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+            .SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
@@ -4665,7 +4665,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         virtual void DoExecute() = 0;
     public:
         void Execute() {
-            auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+            auto settings = TKikimrSettings().SetWithSampleTables(false);
             settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
             settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!IsOlap);
 
@@ -5007,7 +5007,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(TableSink_ReplaceDuplicatesOlap) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TKikimrRunner kikimr(settings);

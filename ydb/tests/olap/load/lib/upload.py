@@ -80,7 +80,6 @@ class UploadSuiteBase(LoadSuiteBase):
         cls.save_result_additional_info(result)
         cls.upload_result = result
 
-
     def test(self):
         self.process_query_result(self.upload_result, self.query_name, True)
 

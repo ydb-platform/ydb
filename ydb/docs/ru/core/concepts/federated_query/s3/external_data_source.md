@@ -1,4 +1,4 @@
-# Работа с бакетами S3 ({{objstorage-full-name}})
+# Работа с бакетами S3-совместимых хранилищ данных
 
 Перед началом работы с S3 необходимо настроить подключение к хранилищу данных. Для этого существует DDL для настройки таких подключений. Далее рассмотрим SQL синтаксис и управление этими настройками.
 
@@ -8,12 +8,12 @@
 - `AWS_SECRET_ACCESS_KEY_SECRET_NAME` — ссылка на имя [секрета](../../datamodel/secrets.md), в котором хранится `AWS_SECRET_ACCESS_KEY`.
 - `AWS_REGION` — регион, из которого будет происходить чтение, например `ru-central-1`.
 
-Для настройки соединения с публичным бакетом достаточно выполнить следующий SQL-запрос. Запрос создаст внешний источник данных с именем `object_storage`, который будет указывать на конкретный S3-бакет с именем `bucket`.
+Для настройки соединения с публичным бакетом достаточно выполнить следующий SQL-запрос. Запрос создаст внешний источник данных с именем `s3_data_source`, который будет указывать на конкретный S3-бакет с именем `bucket`.
 
 ```yql
-CREATE EXTERNAL DATA SOURCE object_storage WITH (
+CREATE EXTERNAL DATA SOURCE s3_data_source WITH (
   SOURCE_TYPE="ObjectStorage",
-  LOCATION="https://object_storage_domain/bucket/",
+  LOCATION="https://s3_storage_domain/bucket/",
   AUTH_METHOD="NONE"
 );
 ```
@@ -21,16 +21,16 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 Для настройки соединения с приватным бакетом необходимо выполнить несколько SQL-запросов. Сначала нужно создать [секреты](../../datamodel/secrets.md), содержащие `AWS_ACCESS_KEY_ID` и `AWS_SECRET_ACCESS_KEY`.
 
 ```yql
-CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=`<id>`);
-CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
+CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=<id>);
+CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=<key>);
 ```
 
-Следующим шагом создаётся внешний источник данных с именем `object_storage`, который будет указывать на конкретный S3-бакет с именем `bucket`, а также использовать `AUTH_METHOD="AWS"`, для которого задаются параметры `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, `AWS_REGION`. Значения этих параметров описаны выше.
+Следующим шагом создаётся внешний источник данных с именем `s3_data_source`, который будет указывать на конкретный S3-бакет с именем `bucket`, а также использовать `AUTH_METHOD="AWS"`, для которого задаются параметры `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, `AWS_REGION`. Значения этих параметров описаны выше.
 
 ```yql
-CREATE EXTERNAL DATA SOURCE object_storage WITH (
+CREATE EXTERNAL DATA SOURCE s3_data_source WITH (
   SOURCE_TYPE="ObjectStorage",
-  LOCATION="https://object_storage_domain/bucket/",
+  LOCATION="https://s3_storage_domain/bucket/",
   AUTH_METHOD="AWS",
   AWS_ACCESS_KEY_ID_SECRET_NAME="aws_access_id",
   AWS_SECRET_ACCESS_KEY_SECRET_NAME="aws_access_key",
@@ -40,7 +40,7 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 
 ## Использование внешнего источника данных для S3-бакета {#external-data-source-settings}
 
-При работе с {{ objstorage-full-name }} с помощью [внешних источников данных](../../datamodel/external_data_source.md) удобно выполнять прототипирование, первоначальную настройку подключений к данным.
+При работе с S3-совместимым хранилищем данных с помощью [внешних источников данных](../../datamodel/external_data_source.md) удобно выполнять прототипирование, первоначальную настройку подключений к данным.
 
 Пример запроса для чтения данных:
 
@@ -48,7 +48,7 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 SELECT
   *
 FROM
-  object_storage.`*.tsv`
+  s3_data_source.`*.tsv`
 WITH
 (
   FORMAT = "tsv_with_names",
@@ -60,17 +60,17 @@ WITH
 );
 ```
 
-Список поддерживаемых форматов и алгоритмов сжатия данных для чтения данных в S3 ({{objstorage-full-name}}), приведен в разделе [{#T}](formats.md).
+Список поддерживаемых форматов и алгоритмов сжатия данных для чтения данных в S3-совместимом хранилище данных, приведен в разделе [{#T}](formats.md).
 
 ## Модель данных {#data_model}
 
-В {{ objstorage-full-name }} данные хранятся в файлах. Для чтения данных необходимо указать формат данных в файлах, сжатие, списки полей. Для этого используется следующее SQL-выражение:
+В S3 данные хранятся в файлах. Для чтения данных необходимо указать формат данных в файлах, сжатие, списки полей. Для этого используется следующее SQL-выражение:
 
 ```yql
 SELECT
   <expression>
 FROM
-  <s3_external_datasource_name>.`<file_path>`
+  <s3_external_datasource_name>.<file_path>
 WITH
 (
   FORMAT = "<file_format>",
@@ -84,12 +84,12 @@ WHERE
 
 Где:
 
-* `s3_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
+* `s3_external_datasource_name` — название внешнего источника данных, ведущего на бакет с S3-совместимым хранилищем данных.
 * `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются подстановочные знаки `*`, `?`, `{ ... }`; подробнее [в разделе](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах, обязательно.
-* `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
+* `compression` — [формат сжатия](formats.md#compression_formats) файлов, опционально.
 * `schema_definition` — [описание схемы хранимых данных](#schema) в файлах, обязательно.
-* `format_settings` — опциональные [параметры форматирования](#format_settings).
+* `format_settings` — [параметры форматирования](#format_settings), опционально.
 
 ### Описание схемы данных {#schema}
 
@@ -125,7 +125,7 @@ Year Int32 NOT NULL
 SELECT
   <expression>
 FROM
-  <s3_external_datasource_name>.`<file_path>`
+  <s3_external_datasource_name>.<file_path>
 WITH
 (
   FORMAT = "<file_format>",
@@ -138,7 +138,7 @@ WHERE
 
 Где:
 
-* `s3_external_datasource_name` — название внешнего источника данных, ведущего на S3 бакет ({{ objstorage-full-name }}).
+* `s3_external_datasource_name` — название внешнего источника данных, ведущего на S3 бакет.
 * `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются подстановочные знаки `*`, `?`, `{ ... }`; подробнее [ниже](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах. Поддерживаются все форматы, кроме `raw` и `json_as_string`.
 * `compression` — опциональный [формат сжатия](formats.md#compression_formats) файлов.
@@ -174,7 +174,7 @@ WHERE
 
 ## Пример {#read_example}
 
-Пример запроса для чтения данных из S3 ({{ objstorage-full-name }}):
+Пример запроса для чтения данных из S3-совместимого хранилища данных:
 
 ```yql
 SELECT
@@ -200,8 +200,8 @@ WITH(
 
 Где:
 
-* `external_source` — название внешнего источника данных, ведущего на бакет S3 ({{ objstorage-full-name }}).
-* `folder/` — путь к папке с данными в бакете S3 ({{ objstorage-full-name }}).
+* `external_source` — название внешнего источника данных, ведущего на бакет S3-совместимого хранилища данных.
+* `folder/` — путь к папке с данными в бакете S3.
 * `SCHEMA` — описание схемы данных в файле.
 * `*.csv.gz` — шаблон имени файлов с данными.
 * `%Y-%m-%d` — формат записи данных типа `Date` в S3.

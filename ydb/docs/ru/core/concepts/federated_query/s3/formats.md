@@ -33,7 +33,7 @@ Year,Manufacturer,Model,Price
 ```yql
 SELECT
     *
-FROM external_source.`path`
+FROM external_source.path
 WITH
 (
     FORMAT = "csv_with_names",
@@ -73,7 +73,7 @@ Year    Manufacturer    Model   Price
 ```yql
 SELECT
     *
-FROM external_source.`path`
+FROM external_source.path
 WITH
 (
     FORMAT = "tsv_with_names",
@@ -121,7 +121,7 @@ WITH
 ```yql
 SELECT
     *
-FROM external_source.`path`
+FROM external_source.path
 WITH
 (
     FORMAT = "json_list",
@@ -160,7 +160,7 @@ WITH
 ```yql
 SELECT
     *
-FROM external_source.`path`
+FROM external_source.path
 WITH
 (
     FORMAT = "json_each_row",
@@ -209,7 +209,7 @@ SELECT
     JSON_VALUE(Data, "$.Attrs.Manufacturer") AS Manufacturer,
     JSON_VALUE(Data, "$.Attrs.Model") AS Model,
     CAST(JSON_VALUE(Data, "$.Price") AS Double) AS Price
-FROM external_source.`path`
+FROM external_source.path
 WITH
 (
     FORMAT = "json_as_string",
@@ -254,7 +254,7 @@ WITH
 ```yql
 SELECT
     *
-FROM external_source.`path`
+FROM external_source.path
 WITH
 (
     FORMAT = "parquet",
@@ -306,7 +306,7 @@ $input = SELECT
         String::Strip(RowData), -- удаление всех пробельных символов из начала и конца строк
         ","
     ) AS Row
-FROM external_source.`path`
+FROM external_source.path
 WITH
 (
     FORMAT = "raw",

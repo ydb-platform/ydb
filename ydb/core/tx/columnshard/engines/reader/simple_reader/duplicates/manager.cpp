@@ -35,7 +35,7 @@ private:
     }
 
     virtual bool DoIsAborted() const override {
-        return false;
+        return Context->GetRequest()->Get()->GetAbortionFlag() && Context->GetRequest()->Get()->GetAbortionFlag()->Val();
     }
 
 public:
@@ -117,7 +117,7 @@ private:
             { std::make_shared<TColumnDataAllocation>(Callback, Portions, Columns, ColumnDataManager, mem) }, std::nullopt);
     }
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        return Default<std::shared_ptr<const TAtomicCounter>>();
+        return Callback->GetContext()->GetRequest()->Get()->GetAbortionFlag();
     }
 
 public:

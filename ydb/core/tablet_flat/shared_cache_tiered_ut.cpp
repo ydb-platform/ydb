@@ -7,6 +7,7 @@
 namespace NKikimr::NSharedCache {
 
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+using ECacheMode = NTable::NPage::ECacheMode;
 using namespace NKikimr::NSharedCache::NTest;
 
 Y_UNIT_TEST_SUITE(TieredCache) {
@@ -72,7 +73,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
         CheckCaches(caches, {.RegularBytes = 3, .TryKeepInMemoryBytes = 0, .RegularLimit = 5, .TryKeepInMemoryLimit = 5});
 
         TPage page2{2, 5};
-        page2.CacheTier = ECacheTier::TryKeepInMemory;
+        page2.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 3b}; TryKeepInMemoryTier: {2 5b}");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 8);
@@ -117,7 +118,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 0);
         CheckCaches(caches, {.RegularBytes = 0, .TryKeepInMemoryBytes = 0, .RegularLimit = 4, .TryKeepInMemoryLimit = 4});
 
-        page4.CacheTier = ECacheTier::TryKeepInMemory;
+        page4.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), (TVector<ui32>{}));
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: ; TryKeepInMemoryTier: {4 3b}");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 3);
@@ -139,10 +140,10 @@ Y_UNIT_TEST_SUITE(TieredCache) {
 
         TPage page1{1, 1};
         TPage page2{2, 2};
-        page2.CacheTier = ECacheTier::TryKeepInMemory;
+        page2.CacheMode = ECacheMode::TryKeepInMemory;
         TPage page3{3, 3};
         TPage page4{4, 4};
-        page4.CacheTier = ECacheTier::TryKeepInMemory;
+        page4.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
@@ -185,10 +186,10 @@ Y_UNIT_TEST_SUITE(TieredCache) {
 
         TPage page1{1, 1};
         TPage page2{2, 2};
-        page2.CacheTier = ECacheTier::TryKeepInMemory;
+        page2.CacheMode = ECacheMode::TryKeepInMemory;
         TPage page3{3, 3};
         TPage page4{4, 4};
-        page4.CacheTier = ECacheTier::TryKeepInMemory;
+        page4.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
@@ -242,10 +243,10 @@ Y_UNIT_TEST_SUITE(TieredCache) {
 
         TPage page1{1, 1};
         TPage page2{2, 2};
-        page2.CacheTier = ECacheTier::TryKeepInMemory;
+        page2.CacheMode = ECacheMode::TryKeepInMemory;
         TPage page3{3, 3};
         TPage page4{4, 4};
-        page4.CacheTier = ECacheTier::TryKeepInMemory;
+        page4.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page3), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
@@ -272,7 +273,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
         CheckCaches(caches, {.RegularBytes = 9, .TryKeepInMemoryBytes = 6, .RegularLimit = 4, .TryKeepInMemoryLimit = 11});
 
         cache.Erase(&page5);
-        page5.CacheTier = ECacheTier::TryKeepInMemory;
+        page5.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page5), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {3 3b}, {1 1b}; TryKeepInMemoryTier: {2 2b}, {4 4b}, {5 5b}");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 15);
@@ -320,7 +321,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
 
         TPage page1{1, 1};
         TPage page2{2, 2};
-        page2.CacheTier = ECacheTier::TryKeepInMemory;
+        page2.CacheMode = ECacheMode::TryKeepInMemory;
         TPage page3{3, 3};
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
@@ -343,7 +344,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
         cache.UpdateLimit(10, 6);
         TPage page4{4, 4};
-        page4.CacheTier = ECacheTier::TryKeepInMemory;
+        page4.CacheMode = ECacheMode::TryKeepInMemory;
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "RegularTier: {1 1b}, {3 3b}; TryKeepInMemoryTier: {4 4b}, {2 2b}");
         UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 10);

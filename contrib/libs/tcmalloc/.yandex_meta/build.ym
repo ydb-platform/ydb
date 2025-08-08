@@ -26,7 +26,6 @@ tcmalloc/internal/ya.make
 SUBSCRIBER(
     g:cpp-contrib
     ayles
-    mikailbag
 )
 
 SRCS(
@@ -55,6 +54,14 @@ IF (NOT DLL_FOR)
         tcmalloc/internal
     )
 ENDIF()
+{% endblock %}
+
+{% block patch_source %}
+{{super()}}
+find . -type f -name "ya.make" | while read -r file; do
+    sed -i -e 's/VERSION(.*)/VERSION({{self.date()}})/g' "$file"
+    sed -i -e 's|ORIGINAL_SOURCE(.*)|ORIGINAL_SOURCE({{self.current_url().strip()}})|g' "$file"
+done
 {% endblock %}
 
 {% block move_to_output %}

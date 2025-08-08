@@ -1385,7 +1385,7 @@ TMaybeNode<TCoFlatMapBase> GetFlatMapOverInputStream(TCoLambda opLambda, const T
                     continue;
             }
 
-            if (!TCoDependsOnBase::Match(parent)) {
+            if (!IsDependsOnUsage(*parent, parentsMap)) {
                 map = {};
                 break;
             }
@@ -2396,17 +2396,19 @@ bool IsYtTableSuitableForArrowInput(NNodes::TExprBase tableNode, std::function<v
         unsupportedHandler("can't use arrow input on tables with weak schema");
         return false;
     }
+    if (meta->Attrs.contains(NATIVE_STRICT_SCHEMA_ATTR_NAME) && meta->Attrs[NATIVE_STRICT_SCHEMA_ATTR_NAME] == "false") {
+        unsupportedHandler("can't use arrow input on tables with non-strict schema");
+        return false;
+    }
+    if (meta->Attrs.contains(QB2Premapper)) {
+        unsupportedHandler("can't use arrow input on tables with qb2 premapper");
+        return false;
+    }
 
     auto rowSpec = TYtTableBaseInfo::GetRowSpec(tableNode);
-    if (rowSpec) {
-        if (!rowSpec->StrictSchema) {
-            unsupportedHandler("can't use arrow input on tables with non-strict schema");
-            return false;
-        }
-        if (!rowSpec->DefaultValues.empty()) {
-            unsupportedHandler("can't use arrow input on tables with default values");
-            return false;
-        }
+    if (rowSpec && !rowSpec->DefaultValues.empty()) {
+        unsupportedHandler("can't use arrow input on tables with default values");
+        return false;
     }
 
     return true;

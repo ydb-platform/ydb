@@ -35,7 +35,7 @@ private:
     }
 
     virtual bool DoIsAborted() const override {
-        return false;
+        return Context->GetRequest()->Get()->GetAbortionFlag() && Context->GetRequest()->Get()->GetAbortionFlag()->Val();
     }
 
 public:
@@ -69,7 +69,7 @@ private:
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         AFL_VERIFY(Callback);
-        Callback->OnError(errorMessage);
+        Callback->OnError(TStringBuilder() << "cannot allocate memory: " << errorMessage);
     }
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
@@ -109,7 +109,7 @@ private:
 
         ui64 mem = 0;
         for (const auto& accessor : result.ExtractPortionsVector()) {
-            mem += accessor->GetColumnRawBytes(Columns);
+            mem += accessor->GetColumnRawBytes(Columns, false);
         }
 
         NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(Callback->GetContext()->GetMemoryProcessId(),
@@ -117,7 +117,7 @@ private:
             { std::make_shared<TColumnDataAllocation>(Callback, Portions, Columns, ColumnDataManager, mem) }, std::nullopt);
     }
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        return Default<std::shared_ptr<const TAtomicCounter>>();
+        return Callback->GetContext()->GetRequest()->Get()->GetAbortionFlag();
     }
 
 public:

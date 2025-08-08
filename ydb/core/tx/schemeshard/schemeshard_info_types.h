@@ -3818,6 +3818,13 @@ struct TIncrementalRestoreState {
     }
 
     bool AreAllCurrentOperationsComplete() const {
+        // If we started processing the current incremental but there are no operations at all,
+        // it means no table backups were found in this incremental backup, so consider it complete
+        // TODO: probably have to ensure that empty backups are impossible
+        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()) {
+            return true;
+        }
+        // Normal case: all operations have moved from InProgress to Completed
         return InProgressOperations.empty() && !CompletedOperations.empty();
     }
 
@@ -3868,6 +3875,74 @@ struct TIncrementalRestoreState {
 
     bool AllCurrentIncrementalOperationsComplete() const {
         return InProgressOperations.empty() && !CompletedOperations.empty();
+    }
+};
+
+struct TIncrementalBackupInfo : public TSimpleRefCount<TIncrementalBackupInfo> {
+    using TPtr = TIntrusivePtr<TIncrementalBackupInfo>;
+
+    enum class EState: ui8 {
+        Invalid = 0,
+        Transferring = 1,
+        Done = 240,
+        Cancellation = 250,
+        Cancelled = 251,
+    };
+
+    struct TItem {
+        enum class EState: ui8 {
+            Invalid = 0,
+            Transferring = 1,
+            Dropping = 230,
+            Done = 240,
+            Cancellation = 250,
+            Cancelled = 251,
+        };
+
+        TPathId PathId;
+        EState State;
+
+        bool IsDone() const {
+            return State == EState::Done;
+        }
+    };
+
+    ui64 Id;
+    EState State;
+    TPathId DomainPathId;
+
+    THashMap<TPathId, TItem> Items;
+
+    TMaybe<TString> UserSID;
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
+    explicit TIncrementalBackupInfo(
+            const ui64 id,
+            const TPathId domainPathId)
+        : Id(id)
+        , DomainPathId(domainPathId)
+    {}
+
+    bool IsDone() const {
+        return State == EState::Done;
+    }
+
+    bool IsCancelled() const {
+        return State == EState::Cancelled;
+    }
+
+    bool IsFinished() const {
+        return IsDone() || IsCancelled();
+    }
+
+    bool IsAllItemsDone() const {
+        for (const auto& item : Items) {
+            if (!item.second.IsDone()) {
+                return false;
+            }
+        }
+        return true;
     }
 };
 

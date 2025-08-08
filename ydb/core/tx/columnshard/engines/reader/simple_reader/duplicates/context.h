@@ -75,7 +75,8 @@ public:
     TInternalFilterConstructor(const TEvRequestFilter::TPtr& request);
 
     ~TInternalFilterConstructor() {
-        AFL_VERIFY(IsDone())("state", DebugString());
+        AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()))(
+                                                                             "state", DebugString());
     }
 
     TString DebugString() const {
@@ -95,10 +96,10 @@ public:
         return ProcessGuard->GetProcessId();
     }
     ui64 GetMemoryScopeId() const {
-        return ScopeGuard->GetProcessId();
+        return ScopeGuard->GetScopeId();
     }
     ui64 GetMemoryGroupId() const {
-        return GroupGuard->GetProcessId();
+        return GroupGuard->GetGroupId();
     }
 };
 

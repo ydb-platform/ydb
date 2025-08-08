@@ -167,10 +167,12 @@ namespace NSQLComplete {
                 .SqlQuery = sqlQuery,
             };
 
-            ctx.Use = FindUseStatement(parsed, env);
-            ctx.Names = CollectNamedNodes(parsed);
+            TNamedNodes nodes = CollectNamedNodes(parsed, env);
+
+            ctx.Use = FindUseStatement(parsed, nodes);
+            ctx.Names = Keys(nodes);
             ctx.EnclosingFunction = EnclosingFunction(parsed);
-            ctx.Column = InferColumnContext(parsed);
+            ctx.Column = InferColumnContext(parsed, nodes);
 
             if (ctx.Use && ctx.Column) {
                 EnrichTableClusters(*ctx.Column, *ctx.Use);
@@ -194,6 +196,15 @@ namespace NSQLComplete {
             Tokens_.setTokenSource(&Lexer_);
             Parser_.reset();
             return Parser_.sql_query();
+        }
+
+        TVector<TString> Keys(const TNamedNodes& nodes) {
+            TVector<TString> keys;
+            keys.reserve(nodes.size());
+            for (const auto& [name, _] : nodes) {
+                keys.emplace_back(name);
+            }
+            return keys;
         }
 
         void EnrichTableClusters(TColumnContext& column, const TUseContext& use) {

@@ -11,15 +11,23 @@ IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE OR OPENSOURCE_PROJECT != "yt")
 
     SRCS(
         generator_json.cpp
+        generator_monarch.cpp
         generator_textmate.cpp
         generator_vim.cpp
         generator.cpp
         json.cpp
         yql_highlight.cpp
+        yqls_highlight.cpp
     )
 
     END()
+
     RECURSE(
         artifact
     )
+
+    RECURSE_FOR_TESTS(
+        ut
+    )
+
 ENDIF()

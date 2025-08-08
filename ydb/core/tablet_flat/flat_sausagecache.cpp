@@ -21,51 +21,45 @@ TPrivatePageCache::TInfo::TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollect
 TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     : Id(info.Id)
     , PageCollection(info.PageCollection)
+    , StickyPages(info.StickyPages)
+    , StickyPagesSize(info.StickyPagesSize)
+    , CacheMode(info.CacheMode)
 {
     PageMap.resize(info.PageMap.size());
-    for (const auto& kv : info.PageMap) {
-        auto* src = kv.second.Get();
-        Y_DEBUG_ABORT_UNLESS(src);
-        if (src->LoadState == TPage::LoadStateLoaded) {
-            auto* dst = EnsurePage(src->Id);
-            dst->LoadState = TPage::LoadStateLoaded;
-            dst->SharedBody = src->SharedBody;
-            dst->PinnedBody = src->PinnedBody;
-        }
+    for (const auto& [pageId, page] : info.PageMap) {
+        Y_ASSERT(page);
+        EnsurePage(pageId)->ProvideSharedBody(page->SharedBody);
     }
 }
 
-TIntrusivePtr<TPrivatePageCache::TInfo> TPrivatePageCache::GetPageCollection(TLogoBlobID id) const {
+TIntrusivePtr<TPrivatePageCache::TInfo> TPrivatePageCache::GetPageCollection(const TLogoBlobID &id) const {
     auto it = PageCollections.find(id);
-    Y_ENSURE(it != PageCollections.end(), "trying to get unknown page collection. logic flaw?");
+    Y_ENSURE(it != PageCollections.end(), "trying to get unknown page collection");
     return it->second;
 }
 
 void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
-    auto itpair = PageCollections.insert(decltype(PageCollections)::value_type(info->Id, info));
-    Y_ENSURE(itpair.second, "double registration of page collection is forbidden. logic flaw?");
+    auto inserted = PageCollections.insert(decltype(PageCollections)::value_type(info->Id, info));
+    Y_ENSURE(inserted.second, "double registration of page collection is forbidden");
     ++Stats.TotalCollections;
 
-    for (const auto& kv : info->PageMap) {
-        auto* page = kv.second.Get();
-        Y_ENSURE(page);
-        Y_ENSURE(page->SharedBody, "New filled pages can't be without a shared body");
+    for (const auto& [pageId, page] : info->PageMap) {
+        Y_ASSERT(page);
+        Y_ENSURE(page->SharedBody, "new filled page can't be without a shared body");
 
         Stats.TotalSharedBody += page->Size;
         if (page->PinnedBody)
             Stats.TotalPinnedBody += page->Size;
 
-        TryUnload(page);
+        TryUnload(page.Get());
         // notify shared cache that we have a page handle
         SharedCacheTouches[page->Info->Id].insert(page->Id);
-        Y_DEBUG_ABORT_UNLESS(!page->IsUnnecessary());
     }
 }
 
 void TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
-    for (const auto& kv : info->PageMap) {
-        auto* page = kv.second.Get();
-        Y_DEBUG_ABORT_UNLESS(page);
+    for (const auto& [pageId, page] : info->PageMap) {
+        Y_ASSERT(page);
 
         if (page->SharedBody)
             Stats.TotalSharedBody -= page->Size;
@@ -75,7 +69,8 @@ void TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
             Stats.TotalExclusive -= page->Size;
     }
 
-    info->PageMap.clear();
+    info->Clear();
+
     PageCollections.erase(info->Id);
     SharedCacheTouches.erase(info->Id);
     --Stats.TotalCollections;
@@ -136,7 +131,8 @@ void TPrivatePageCache::TPrivatePageCache::TryEraseIfUnnecessary(TPage *page) {
         const TPageId pageId = page->Id;
         auto* info = page->Info;
         Y_DEBUG_ABORT_UNLESS(info->PageMap[pageId].Get() == page);
-        Y_ENSURE(info->PageMap.erase(pageId));
+        bool erased = info->PageMap.erase(pageId);
+        Y_ENSURE(erased);
     }
 }
 
@@ -157,7 +153,7 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
     }
 
     if (page->Empty()) {
-        Y_DEBUG_ABORT_UNLESS(info->GetPageType(page->Id) != EPage::FlatIndex, "Flat index pages should have been sticked and preloaded");
+        Y_DEBUG_ABORT_UNLESS(info->GetPageType(page->Id) != EPage::FlatIndex, "flat index pages should have been sticked and preloaded");
         ToLoad.PushBack(page);
         Stats.CurrentCacheMisses++;
     }
@@ -259,7 +255,7 @@ void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
     }
 }
 
-void TPrivatePageCache::DropSharedBody(TInfo *info, TPageId pageId) {
+void TPrivatePageCache::DropSharedBody(TPageId pageId, TInfo *info) {
     TPage *page = info->GetPage(pageId);
     if (!page)
         return;
@@ -278,7 +274,7 @@ void TPrivatePageCache::DropSharedBody(TInfo *info, TPageId pageId) {
 
 void TPrivatePageCache::ProvideBlock(TPageId pageId, TSharedPageRef sharedBody, TInfo *info)
 {
-    Y_DEBUG_ABORT_UNLESS(sharedBody && sharedBody.IsUsed());
+    Y_ENSURE(sharedBody.IsUsed());
     TPage *page = info->EnsurePage(pageId);
 
     if (Y_UNLIKELY(page->SharedBody))
@@ -288,10 +284,8 @@ void TPrivatePageCache::ProvideBlock(TPageId pageId, TSharedPageRef sharedBody, 
     if (Y_UNLIKELY(page->PinnedBody && !page->SharedBody))
         Stats.TotalExclusive -= page->Size;
 
-    page->Fill(std::move(sharedBody));
+    page->ProvideSharedBody(std::move(sharedBody));
     Stats.TotalSharedBody += page->Size;
-    Stats.TotalPinnedBody += page->Size;
-    TryUnload(page);
 }
 
 THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache::DetachPrivatePageCache() {

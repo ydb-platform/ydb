@@ -4,16 +4,9 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-    namespace {
-
-        static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> DeduplicationStageFeatures =
-            NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
-
-    }
-
 TInternalFilterConstructor::TInternalFilterConstructor(const TEvRequestFilter::TPtr& request)
     : OriginalRequest(request)
-    , ProcessGuard(NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard({ DeduplicationStageFeatures }))
+    , ProcessGuard(NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard({}))
     , ScopeGuard(ProcessGuard->BuildScopeGuard(1))
     , GroupGuard(ScopeGuard->BuildGroupGuard())
 {

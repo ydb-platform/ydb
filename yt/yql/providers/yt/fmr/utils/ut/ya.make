@@ -1,10 +1,11 @@
 UNITTEST()
 
 SRCS(
-    yql_yt_parse_records_ut.cpp
+    yql_yt_util_helpers_ut.cpp
 )
 
 PEERDIR(
+    yt/yql/providers/yt/fmr/test_tools/yson
     yt/yql/providers/yt/fmr/utils
     yt/yql/providers/yt/fmr/request_options
     yt/yql/providers/yt/fmr/yt_job_service/mock

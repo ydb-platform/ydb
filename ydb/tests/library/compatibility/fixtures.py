@@ -55,13 +55,13 @@ path_to_version = {
 }
 
 all_binary_combinations_restart = [
-    [[inter_stable_binary_path], [current_binary_path]],
-    [[current_binary_path], [inter_stable_binary_path]],
-    [[current_binary_path], [current_binary_path]],
+    [inter_stable_binary_path, current_binary_path],
+    [current_binary_path, inter_stable_binary_path],
+    [current_binary_path, current_binary_path],
 
-    [[init_stable_binary_path], [inter_stable_binary_path]],
-    [[inter_stable_binary_path], [init_stable_binary_path]],
-    [[inter_stable_binary_path], [inter_stable_binary_path]],
+    [init_stable_binary_path, inter_stable_binary_path],
+    [inter_stable_binary_path, init_stable_binary_path],
+    [inter_stable_binary_path, inter_stable_binary_path],
 ]
 all_binary_combinations_ids_restart = [
     "restart_{}_to_{}".format(inter_stable_name, current_name),
@@ -79,7 +79,7 @@ class RestartToAnotherVersionFixture:
     def base_setup(self, request):
         self.current_binary_paths_index = 0
         self.all_binary_paths = request.param
-        self.versions = list([path_to_version[path] for path_list in self.all_binary_paths for path in path_list])
+        self.versions = [path_to_version[path] for path in self.all_binary_paths]
 
     def setup_cluster(self, **kwargs):
         extra_feature_flags = kwargs.pop("extra_feature_flags", {})
@@ -87,7 +87,7 @@ class RestartToAnotherVersionFixture:
         extra_feature_flags["suppress_compatibility_check"] = True
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
-            binary_paths=self.all_binary_paths[self.current_binary_paths_index],
+            binary_paths=[self.all_binary_paths[self.current_binary_paths_index]],
             use_in_memory_pdisks=False,
             extra_feature_flags=extra_feature_flags,
             **kwargs,
@@ -110,7 +110,7 @@ class RestartToAnotherVersionFixture:
     def change_cluster_version(self):
         self.current_binary_paths_index = (self.current_binary_paths_index + 1) % len(self.all_binary_paths)
         new_binary_paths = self.all_binary_paths[self.current_binary_paths_index]
-        self.config.set_binary_paths(new_binary_paths)
+        self.config.set_binary_paths([new_binary_paths])
         self.cluster.update_configurator_and_restart(self.config)
         self.driver = ydb.Driver(
             ydb.DriverConfig(

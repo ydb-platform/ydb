@@ -561,7 +561,8 @@ namespace {
             }
         }
 
-        if (const auto kind = node.GetTypeAnn()->GetKind(); ETypeAnnotationKind::Flow != kind && ETypeAnnotationKind::Stream != kind || node.IsLambda()) {
+        if (const auto kind = node.GetTypeAnn()->GetKind(); node.IsCseeSafe() &&
+            (ETypeAnnotationKind::Flow != kind && ETypeAnnotationKind::Stream != kind || node.IsLambda())) {
             auto& nodesSet = node.IsComplete() ? uniqueNodes : incompleteNodes;
 
             const auto pair = nodesSet.equal_range(hash);

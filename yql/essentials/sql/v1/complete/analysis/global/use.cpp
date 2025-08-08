@@ -9,9 +9,9 @@ namespace NSQLComplete {
 
         class TVisitor: public TSQLv1NarrowingVisitor {
         public:
-            TVisitor(const TParsedInput& input, const TEnvironment* env)
+            TVisitor(const TParsedInput& input, const TNamedNodes* nodes)
                 : TSQLv1NarrowingVisitor(input)
-                , Env_(env)
+                , Nodes_(nodes)
             {
             }
 
@@ -63,21 +63,21 @@ namespace NSQLComplete {
             }
 
             TMaybe<TString> GetId(SQLv1::Bind_parameterContext* ctx) const {
-                NYT::TNode node = Evaluate(ctx, *Env_);
+                NYT::TNode node = Evaluate(ctx, *Nodes_);
                 if (!node.HasValue() || !node.IsString()) {
                     return Nothing();
                 }
                 return node.AsString();
             }
 
-            const TEnvironment* Env_;
+            const TNamedNodes* Nodes_;
         };
 
     } // namespace
 
     // TODO(YQL-19747): Use any to maybe conversion function
-    TMaybe<TUseContext> FindUseStatement(TParsedInput input, const TEnvironment& env) {
-        std::any result = TVisitor(input, &env).visit(input.SqlQuery);
+    TMaybe<TUseContext> FindUseStatement(TParsedInput input, const TNamedNodes& nodes) {
+        std::any result = TVisitor(input, &nodes).visit(input.SqlQuery);
         if (!result.has_value()) {
             return Nothing();
         }

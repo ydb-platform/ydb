@@ -575,7 +575,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             auto list = env.CheckListRequests("user", 2);
             auto reqs = list.GetRequests();
             for (const auto& req : reqs) {
-                UNIT_ASSERT_VALUES_UNEQUAL("user-r-1", req.GetRequestId());
+                UNIT_ASSERT_VALUES_UNEQUAL(req.GetRequestId(), "user-r-1");
             }
          
             // Check that manually approved permission was cleaned up
@@ -629,7 +629,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
 
         auto rec1 = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
-        UNIT_ASSERT_VALUES_EQUAL(1, rec1.PermissionsSize());
+        UNIT_ASSERT_VALUES_EQUAL(rec1.PermissionsSize(), 1);
         auto rec2 = env.CheckGetPermission("user", rec1.GetPermissions(0).GetId());
         UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), rec1.GetPermissions(0).GetId());

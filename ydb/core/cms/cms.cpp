@@ -1525,10 +1525,10 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             ev, TStatus::WRONG_REQUEST, "Unknown request for manual approval", ctx);
     }
 
-    TAutoPtr<TRequestInfo> copy = new TRequestInfo(it->second);
+    THolder<TRequestInfo> copy = MakeHolder<TRequestInfo>(it->second);
 
     // Create a permission for each action in the scheduled request
-    TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
+    THolder<TEvCms::TEvPermissionResponse> resp = MakeHolder<TEvCms::TEvPermissionResponse>();
     resp->Record.MutableStatus()->SetCode(TStatus::ALLOW);
     for (const auto& action : copy->Request.GetActions()) {
         auto items = ClusterInfo->FindLockedItems(action, &ctx);

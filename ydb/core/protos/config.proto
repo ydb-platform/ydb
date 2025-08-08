@@ -255,6 +255,7 @@ message TDomainsConfig {
         repeated string ViewerAllowedSIDs = 6;
         repeated string RegisterDynamicNodeAllowedSIDs = 8;
         repeated string BootstrapAllowedSIDs = 9;
+        repeated string DatabaseAllowedSIDs = 10;
 
         message TUser {
             optional string Name = 1;

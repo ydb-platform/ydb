@@ -15,8 +15,9 @@ using namespace ftxui;
 
 namespace NYdb::NTPCC {
 
-TImportTui::TImportTui(const TRunConfig& runConfig, TLogBackendWithCapture& logBacked, const TImportDisplayData& data)
-    : Config(runConfig)
+TImportTui::TImportTui(std::shared_ptr<TLog>& log, const TRunConfig& runConfig, TLogBackendWithCapture& logBacked, const TImportDisplayData& data)
+    : Log(log)
+    , Config(runConfig)
     , LogBackend(logBacked)
     , DataToDisplay(data)
     , Screen(ScreenInteractive::Fullscreen())
@@ -137,11 +138,17 @@ Element TImportTui::BuildUpperPart() {
 }
 
 Component TImportTui::BuildComponent() {
-    // Main layout
-    return Container::Vertical({
-        Renderer([=]{ return BuildUpperPart(); }),
-        LogsScroller(LogBackend),
-    });
+    try {
+        // Main layout
+        return Container::Vertical({
+            Renderer([=]{ return BuildUpperPart(); }),
+            LogsScroller(LogBackend),
+        });
+    } catch (const std::exception& ex) {
+        LOG_E("Exception in TUI: " << ex.what());
+        RequestStop();
+        return Renderer([] { return filler(); });
+    }
 }
 
 } // namespace NYdb::NTPCC

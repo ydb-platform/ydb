@@ -243,7 +243,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
 
     TQueryPtr query;
 
-    if (query = pool->GetQuery(queryId)) {
+    if (query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId))) {
         query->Update(attrs);
     } else {
         query = std::make_shared<TQuery>(queryId, &DelayParams, attrs);
@@ -278,7 +278,7 @@ void TComputeScheduler::UpdateFairShare() {
     {
         TWriteGuard lock(Mutex);
         if (auto oldSnapshot = Root->SetSnapshot(snapshot)) {
-            snapshot->AccountFairShare(oldSnapshot);
+            snapshot->AccountPreviousSnapshot(oldSnapshot);
         }
     }
 

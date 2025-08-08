@@ -4,6 +4,7 @@
 #include <util/generic/ptr.h>
 #include <util/stream/output.h>
 
+#include <list>
 #include <memory>
 
 namespace NKikimr::NKqp::NScheduler {
@@ -18,14 +19,11 @@ namespace NKikimr::NKqp::NScheduler {
         struct TStaticAttributes;
 
         namespace NDynamic {
-            struct TTreeElementBase;
-
             class TQuery;
             class TPool;
             class TDatabase;
             class TRoot;
 
-            using TTreeElementPtr = std::shared_ptr<TTreeElementBase>;
             using TQueryPtr = std::shared_ptr<TQuery>;
             using TPoolPtr = std::shared_ptr<TPool>;
             using TDatabasePtr = std::shared_ptr<TDatabase>;
@@ -33,14 +31,13 @@ namespace NKikimr::NKqp::NScheduler {
         } // namespace NDynamic
 
         namespace NSnapshot {
-            struct TTreeElementBase;
+            struct TTreeElement;
 
             class TQuery;
             class TPool;
             class TDatabase;
             class TRoot;
 
-            using TTreeElementPtr = std::shared_ptr<TTreeElementBase>;
             using TQueryPtr = std::shared_ptr<TQuery>;
             using TPoolPtr = std::shared_ptr<TPool>;
             using TDatabasePtr = std::shared_ptr<TDatabase>;
@@ -49,7 +46,8 @@ namespace NKikimr::NKqp::NScheduler {
     }
 
     struct TSchedulableTask;
-    using TSchedulableTaskPtr = THolder<TSchedulableTask>;
+    using TSchedulableTaskPtr = std::shared_ptr<TSchedulableTask>;
+    using TSchedulableTaskList = std::list<std::pair<TSchedulableTaskPtr::weak_type, std::atomic<bool> /* isThrottled */>>;
 
     // These params are used when calculating delay for schedulable task, but are taken from the scheduler configuration.
     struct TDelayParams {

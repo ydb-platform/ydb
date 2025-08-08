@@ -28,6 +28,7 @@ SRCS(
 
     scheduler/kqp_compute_scheduler_service.cpp
     scheduler/kqp_schedulable_actor.cpp
+    scheduler/kqp_schedulable_task.cpp
     scheduler/tree/dynamic.cpp
     scheduler/tree/snapshot.cpp
 )

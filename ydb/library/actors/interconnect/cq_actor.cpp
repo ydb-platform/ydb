@@ -188,7 +188,7 @@ private:
         auto it = CqMap.find(rdmaCtx);
         Y_ABORT_UNLESS(it != CqMap.end());
 
-        LOG_DEBUG_IC("ICRDMA", "RDMA async event issued on ctx %s, %s",
+        LOG_ERROR_IC("ICRDMA", "RDMA async event issued on ctx %s, %s",
             rdmaCtx->ToString().data(), GetAsyncEventDbg(rdmaCtx, async_event).data());
 
         switch (async_event.event_type) {

@@ -1,4 +1,4 @@
-#include <ydb/library/actors/interconnect/rdma/ut/utils.h>
+#include <ydb/library/actors/interconnect/rdma/ut/utils1.h>
 
 #include <ydb/library/actors/interconnect/channel_scheduler.h>
 #include <ydb/library/actors/interconnect/events_local.h>
@@ -491,7 +491,7 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
         std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool;
 
         TEventsForTest(ui32 numEvents)
-            : MemPool(NInterconnect::NRdma::CreateDummyMemPool())
+            : MemPool(NInterconnect::NRdma::CreateSlotMemPool())
         {
             Generate(numEvents, MemPool.get());
         }
@@ -512,9 +512,10 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
                     } else if (isXdc) {
                         ev->AddPayload(TRope(TString(5000 + j, j + i)));
                     } else if (isRdma) {
-                        auto buf = memPool->AllocRcBuf(5000 + j, 0).value();
-                        std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000 + j, j + i);
-                        ev->AddPayload(TRope(std::move(buf)));
+                        auto buf = memPool->AllocRcBuf(5000 + j, 0);
+                        UNIT_ASSERT(buf);
+                        std::fill(buf->GetDataMut(), buf->GetDataMut() + 5000 + j, j + i);
+                        ev->AddPayload(TRope(std::move(*buf)));
                         UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), 5000 + j);
                     }
                 }
@@ -544,7 +545,7 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
 
     Y_UNIT_TEST(SendMixBig) {
         TTestICCluster cluster(2);
-        TEventsForTest events(1000);
+        TEventsForTest events(10000);
 
         auto recieverPtr = new TReceiveActor([&events](TEvTestSerialization::TPtr ev) {
             ui64 blobId = ev->Get()->Record.GetBlobID();
@@ -552,6 +553,7 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
             UNIT_ASSERT(checkIt != events.Checks.end());
             checkIt->second(ev->Get());
             events.Checks.erase(checkIt);
+            Cerr << "Cnount = " << events.Checks.size() << Endl;
         });
         const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
         Sleep(TDuration::MilliSeconds(1000));
@@ -561,7 +563,8 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
             cluster.RegisterActor(senderPtr, 2);
         }
 
-        for (ui32 attempt = 0; attempt < 10 && !events.Checks.empty(); ++attempt) {
+        for (ui32 attempt = 0; attempt < 20 && !events.Checks.empty(); ++attempt) {
+            
             Sleep(TDuration::MilliSeconds(1000));
         }
         UNIT_ASSERT_VALUES_EQUAL(events.Checks.size(), 0);

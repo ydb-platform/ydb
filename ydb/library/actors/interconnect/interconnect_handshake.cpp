@@ -1380,7 +1380,7 @@ namespace NActors {
                 if (auto cqPtr = CreateRdmaCq()) {
                     LOG_DEBUG_IC("ICRDMA", "Got CQ handle at: %p", (void*)cqPtr.get());
                     RdmaQp.reset(new NInterconnect::NRdma::TQueuePair);
-                    int err = RdmaQp->Init(RdmaCtx, cqPtr.get(), 16); //TODO: move in to settings
+                    int err = RdmaQp->Init(RdmaCtx, cqPtr.get(), 1024); //TODO: move in to settings
                     if (err) {
                         LOG_ERROR_IC("ICRDMA", "Unable to initialize QP, no more attempt to use RDMA on this session");
                         RdmaQp.reset();

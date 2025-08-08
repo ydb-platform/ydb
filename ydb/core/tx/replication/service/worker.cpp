@@ -259,11 +259,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         if (ev->Sender == Reader) {
             LOG_I("Reader has gone"
-                << ": sender# " << ev->Sender);
+                << ": sender# " << ev->Sender
+                << ": " << ev->Get()->ToString());
             MaybeRecreateActor(ev, Reader);
         } else if (ev->Sender == Writer) {
             LOG_I("Writer has gone"
-                << ": sender# " << ev->Sender);
+                << ": sender# " << ev->Sender
+                << ": " << ev->Get()->ToString());
             MaybeRecreateActor(ev, Writer);
         } else {
             LOG_W("Unknown actor has gone"

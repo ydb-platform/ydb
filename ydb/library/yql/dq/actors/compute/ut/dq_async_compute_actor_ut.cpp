@@ -784,7 +784,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                         if (RowType->GetMemberName(column) == "ts") {
                             auto ts = val.Get<ui64>();
                             if (watermark) {
-                                WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), ts << " >= " << watermark->Seconds());
+                                UNIT_ASSERT_GT_C(ts, watermark->Seconds(), ts << " >= " << watermark->Seconds());
                             }
                             return true;
                         }
@@ -933,7 +933,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                         auto ts = val.Get<ui64>();
                         LOG_D(column << " ts = " << ts);
                         if (watermark) {
-                            WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
+                            UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
                         }
                     } else if (columnName == "u.key") {
                         if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {

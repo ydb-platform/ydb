@@ -977,6 +977,7 @@ private:
     NKikimr::NPQ::TMultiCounter WritesTotal;
 
     TPartitionCounterWrapper BytesWrittenTotal;
+    TPartitionCounterWrapper BytesWrittenPerPartition;
 
     TPartitionCounterWrapper BytesWrittenGrpc;
     TPartitionCounterWrapper BytesWrittenUncompressed;

@@ -2398,6 +2398,7 @@ void TPartition::RunPersist() {
 
             // Bytes Written
             BytesWrittenTotal.Inc(writeInfo->BytesWrittenTotal);
+            BytesWrittenPerPartition.Inc(writeInfo->BytesWrittenTotal);
             BytesWrittenGrpc.Inc(writeInfo->BytesWrittenGrpc);
             BytesWrittenUncompressed.Inc(writeInfo->BytesWrittenUncompressed);
             // Messages written

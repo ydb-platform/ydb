@@ -1396,6 +1396,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
+            TString query = "SELECT * FROM example.`/people` WHERE a#";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query).at(0).Content, "Age");
+        }
+        {
             TString query = "SELECT * FROM example.`/people` WHERE f(#)";
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
@@ -1404,12 +1408,20 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
+            TString query = "SELECT * FROM example.`/people` ORDER BY a#";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query).at(0).Content, "Age");
+        }
+        {
             TString query = "SELECT * FROM example.`/people` ORDER BY f(#)";
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
             TString query = "SELECT * FROM example.`/people` GROUP BY #";
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = "SELECT * FROM example.`/people` GROUP BY a#";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query).at(0).Content, "Age");
         }
         {
             TString query = R"(

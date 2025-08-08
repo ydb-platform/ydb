@@ -92,8 +92,6 @@ struct NullChecker : public IChecker {
     void Assert(const std::string& msg, const ::Ydb::Value& value) override {
         UNIT_ASSERT_VALUES_EQUAL_C(Get(value), true, msg);
     }
-
-    TDuration Precision;
 };
 
 template<>

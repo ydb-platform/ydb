@@ -67,6 +67,9 @@ private:
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard,
         const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion);
 
+    std::vector<TPortionsSlice> FindIntervalBorders(const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion,
+        const std::shared_ptr<TInternalFilterConstructor>& context) const;
+
 private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {

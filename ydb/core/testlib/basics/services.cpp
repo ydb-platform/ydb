@@ -189,7 +189,7 @@ namespace NPDisk {
     {
         runtime.AddLocalService(NBlobCache::MakeBlobCacheServiceId(),
             TActorSetupCmd(
-                NBlobCache::CreateBlobCache(20<<20, runtime.GetDynamicCounters(nodeIndex)),
+                NBlobCache::CreateBlobCache(std::nullopt, runtime.GetDynamicCounters(nodeIndex)->GetSubgroup("type", "BLOB_CACHE")),
                 TMailboxType::ReadAsFilled,
                 0),
             nodeIndex);

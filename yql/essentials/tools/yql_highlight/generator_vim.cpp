@@ -94,6 +94,11 @@ namespace NSQLHighlight {
             }
         }
 
+        TString VimRangeEscaped(TString range) {
+            SubstGlobal(range, "*", "\\*");
+            return range;
+        }
+
         void PrintRules(IOutputStream& out, const TUnit& unit) {
             TString name = ToVimName(unit.Kind);
             for (const auto& pattern : std::ranges::reverse_view(unit.Patterns)) {
@@ -102,8 +107,8 @@ namespace NSQLHighlight {
             }
             if (auto range = unit.RangePattern) {
                 out << "syntax region " << name << "Multiline" << " "
-                    << "start=\"" << range->Begin << "\" "
-                    << "end=\"" << range->End << "\""
+                    << "start=\"" << VimRangeEscaped(range->Begin) << "\" "
+                    << "end=\"" << VimRangeEscaped(range->End) << "\""
                     << '\n';
             }
         }

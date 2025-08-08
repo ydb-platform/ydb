@@ -205,7 +205,12 @@ def py_program(unit, py3):
     if py3:
         peers = ['library/python/runtime_py3/main']
         if unit.get('PYTHON_SQLITE3') != 'no':
-            peers.append('contrib/tools/python3/Modules/_sqlite')
+            peer = (
+                'contrib/tools/python3_prev/Modules/_sqlite'
+                if unit.get('USE_PYTHON3_PREV') == 'yes'
+                else 'contrib/tools/python3/Modules/_sqlite'
+            )
+            peers.append(peer)
     else:
         peers = ['library/python/runtime/main']
         if unit.get('PYTHON_SQLITE3') != 'no':

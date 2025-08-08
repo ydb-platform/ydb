@@ -107,6 +107,22 @@ inline bool IsIntegralTypeSigned(ESimpleLogicalValueType type)
     }
 }
 
+inline int IsTzTypeSigned(ESimpleLogicalValueType type)
+{
+    switch (type) {
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+            return false;
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            return true;
+        default:
+            YT_ABORT();
+    }
+}
+
 inline bool IsIntegralType(ESimpleLogicalValueType type)
 {
     switch (type) {
@@ -163,6 +179,23 @@ inline int GetIntegralTypeBitWidth(ESimpleLogicalValueType type)
             return 32;
         case ESimpleLogicalValueType::Int64:
         case ESimpleLogicalValueType::Uint64:
+            return 64;
+        default:
+            YT_ABORT();
+    }
+}
+
+inline int GetTzTypeBitWidth(ESimpleLogicalValueType type)
+{
+    switch (type) {
+        case ESimpleLogicalValueType::TzDate:
+            return 16;
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzDate32:
+            return 32;
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
             return 64;
         default:
             YT_ABORT();

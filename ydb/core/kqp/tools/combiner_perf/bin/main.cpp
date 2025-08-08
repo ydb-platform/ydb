@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/tools/combiner_perf/simple.h>
 #include <ydb/core/kqp/tools/combiner_perf/tpch_last.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_block.h>
+#include <ydb/core/kqp/tools/combiner_perf/dq_combine_vs.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
@@ -168,6 +169,7 @@ enum class ETestType {
     SimpleCombiner,
     SimpleLastCombiner,
     BlockCombiner,
+    DqHashCombinerVs,
 };
 
 void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spilling)
@@ -200,6 +202,11 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
                 NKikimr::NMiniKQL::RunTestCombineLastSimple<false, false>(params, printout);
             }
         }
+    } else if (testType == ETestType::DqHashCombinerVs) {
+        if (llvm || spilling) {
+            ythrow yexception() << "LLVM/spilling are not supported for DqHashCombiner perf test";
+        }
+        NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false>(params, printout);
     }
 }
 
@@ -279,7 +286,7 @@ int main(int argc, const char* argv[])
 
     options
         .AddLongOption('t', "test")
-        .Choices({"combiner", "last-combiner", "block-combiner"})
+        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner"})
         .RequiredArgument("TEST_TYPE")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
@@ -289,6 +296,8 @@ int main(int argc, const char* argv[])
                 testType = ETestType::SimpleLastCombiner;
             } else if (val == "block-combiner") {
                 testType = ETestType::BlockCombiner;
+            } else if (val == "dq-hash-combiner") {
+                testType = ETestType::DqHashCombinerVs;
             } else {
                 ythrow yexception() << "Unknown test type: " << val;
             }

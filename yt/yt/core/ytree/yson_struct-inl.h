@@ -453,7 +453,7 @@ private: \
     if (std::type_index(typeid(TStruct)) == this->FinalType_) { \
         ::NYT::NYTree::TYsonStructRegistry::Get()->OnFinalCtorCalled(); \
         if (!::NYT::NYTree::TYsonStructRegistry::Get()->InitializationInProgress()) { \
-            this->SetDefaults(); \
+            this->SetDefaults(/*dontSetLiteMembers*/ true); \
         } \
     } \
 

@@ -53,6 +53,8 @@ $suites = SELECT
     Suite,
     RunId,
     MAX_BY(JSON_VALUE(Info, "$.cluster.version"), Success) AS Version,
+    MAX_BY(JSON_VALUE(Info, "$.ci_version"), Success) AS CiVersion,
+    MAX_BY(JSON_VALUE(Info, "$.test_tools_version"), Success) AS TestToolsVersion,
     MAX_BY(JSON_VALUE(Info, "$.report_url"), Success) AS Report,
     SUM_IF(MeanDuration, Success > 0 AND Test not in {"_Verification", "Sum"} AND JSON_VALUE(Stats, '$.import_time') IS NULL) / 1000. AS YdbSumMeans,
     SUM_IF(MeanDuration * CAST(JSON_VALUE(Stats, '$.SuccessCount') AS int), Success > 0 AND Test not in {"_Verification", "Sum"} AND JSON_VALUE(Stats, '$.import_time') IS NULL) / 1000. AS QuasiGrossTime,
@@ -77,6 +79,8 @@ SELECT
     s.Suite AS Suite,
     CAST(s.RunId/1000 AS Timestamp) AS RunTs,
     s.Version AS Version,
+    s.CiVersion AS CiVersion,
+    s.TestToolsVersion AS TestToolsVersion,
     s.Report AS Report,
     s.YdbSumMeans AS YdbSumMeans,
     s.SumImportTime AS SumImportTime,
@@ -122,7 +126,9 @@ SELECT
         WHEN s.Db LIKE '%/row%' THEN 'row'
         ELSE 'other'
     END AS DbAlias,
-    SubString(CAST(s.Version AS String), 0U, FIND(CAST(s.Version AS String), '.')) As Branch
+    SubString(CAST(s.Version AS String), 0U, FIND(CAST(s.Version AS String), '.')) As Branch,
+    SubString(CAST(s.CiVersion AS String), 0U, FIND(CAST(s.CiVersion AS String), '.')) As CiBranch,
+    SubString(CAST(s.TestToolsVersion AS String), 0U, FIND(CAST(s.TestToolsVersion AS String), '.')) As TestToolsBranch
 FROM $suites AS s
 LEFT JOIN $diff_tests AS d ON s.RunId = d.RunId AND s.Db = d.Db AND s.Suite = d.Suite
 LEFT JOIN $fail_tests AS f ON s.RunId = f.RunId AND s.Db = f.Db AND s.Suite = f.Suite

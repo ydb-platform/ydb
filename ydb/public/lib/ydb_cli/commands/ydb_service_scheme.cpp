@@ -1235,6 +1235,7 @@ void TCommandPermissionGrant::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to grant permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to grant")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/grant")
         .RequiredArgument("NAME").AppendTo(&PermissionsToGrant);
 }
 
@@ -1280,6 +1281,7 @@ void TCommandPermissionRevoke::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to revoke permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to revoke")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/revoke")
         .RequiredArgument("NAME").AppendTo(&PermissionsToRevoke);
 }
 
@@ -1325,6 +1327,7 @@ void TCommandPermissionSet::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to set permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to set")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/grant")
         .RequiredArgument("NAME").AppendTo(&PermissionsToSet);
 }
 

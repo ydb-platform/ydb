@@ -17,6 +17,7 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -64,6 +65,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 
             if (name == "DqBlockHashJoin"sv) {
                 return WrapDqBlockHashJoin(callable, ctx);
+            }
+
+            if (name == "DqHashCombine"sv) {
+                return WrapDqHashCombine(callable, ctx);
             }
 
             return nullptr;

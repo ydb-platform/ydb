@@ -1385,7 +1385,7 @@ TMaybeNode<TCoFlatMapBase> GetFlatMapOverInputStream(TCoLambda opLambda, const T
                     continue;
             }
 
-            if (!TCoDependsOnBase::Match(parent)) {
+            if (!IsDependsOnUsage(*parent, parentsMap)) {
                 map = {};
                 break;
             }

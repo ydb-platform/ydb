@@ -475,7 +475,7 @@ bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TField
                 usedFields.emplace(parent->Tail().Content());
             else
                 usedFields.emplace(parent->Tail().Content(), parent->TailPtr());
-        } else if (allowDependsOn && TCoDependsOnBase::Match(parent)) {
+        } else if (allowDependsOn && IsDependsOnUsage(*parent, parentsMap)) {
             continue;
         } else {
             // unknown node
@@ -1752,8 +1752,24 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
     auto placeHolder = ctx.NewArgument(lambda->Pos(), "placeholder");
 
     auto status = OptimizeExpr(lambda, lambda, [&placeHolder, arg = &lambda->Head().Head()](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        if (TCoDependsOnBase::Match(node.Get()) && &node->Head() == arg) {
-            return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
+        if (TCoDependsOnBase::Match(node.Get())) {
+            if (node->Head().IsList()) {
+                auto dependsOnArgs = node->Head().ChildrenList();
+                bool changed = false;
+                for (size_t i = 0; i < dependsOnArgs.size(); i++) {
+                    if (dependsOnArgs[i].Get() == arg) {
+                        dependsOnArgs[i] = placeHolder;
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    return ctx.ChangeChildren(*node, std::move(dependsOnArgs));
+                }
+            } else {
+                if (&node->Head() == arg) {
+                    return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
+                }
+            }
         }
         return node;
     }, ctx, TOptimizeExprSettings{typeCtx});

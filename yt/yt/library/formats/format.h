@@ -44,6 +44,18 @@ DEFINE_REFCOUNTED_TYPE(ISchemalessFormatWriter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct IFormatAdapter
+    : public TRefCounted
+{
+    virtual std::unique_ptr<NYson::IFlushableYsonConsumer> CreateConsumer(IZeroCopyOutput* output) = 0;
+
+    virtual NYson::TYsonProducer CreateProducer(IInputStream* input) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IFormatAdapter)
+
+////////////////////////////////////////////////////////////////////////////////
+
 // This function historically creates format for reading dynamic tables.
 // It slightly differs from format for static tables. :(
 NTableClient::IUnversionedRowsetWriterPtr CreateSchemafulWriterForFormat(

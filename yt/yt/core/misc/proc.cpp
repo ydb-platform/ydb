@@ -584,8 +584,7 @@ std::optional<i64> GetCgroupAnonymousMemoryLimit(
 {
 #ifdef _linux_
     TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
-    auto content = Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
-    return FromString<i64>(content);
+    return FromString<i64>(Trim(TUnbufferedFileInput(path).ReadAll(), "\n"));
 #else
     Y_UNUSED(cgroupPath, cgroupMountPoint);
     return {};
@@ -635,7 +634,7 @@ TString GetProcessName(int pid)
 {
 #ifdef _linux_
     TString path = Format("/proc/%v/comm", pid);
-    return Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
+    return TString(Trim(TUnbufferedFileInput(path).ReadAll(), "\n"));
 #else
     Y_UNUSED(pid);
     return "";

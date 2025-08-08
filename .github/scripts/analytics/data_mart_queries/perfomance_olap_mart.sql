@@ -4,8 +4,8 @@ $all_suites = (
     SELECT 
         Suite, Test 
     FROM (
-        SELECT 
-            Suite, 
+        SELECT
+            Suite,
             ListSort(AGG_LIST_DISTINCT(Test)) AS Tests
         FROM `perfomance/olap/tests_results`
         WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
@@ -18,14 +18,18 @@ $launch_times = (
     SELECT 
         launch_times_raw.*,
         all_suites.*,
-        SubString(CAST(launch_times_raw.Version AS String), 0U, FIND(CAST(launch_times_raw.Version AS String), '.')) As Branch
+        SubString(CAST(launch_times_raw.Version AS String), 0U, FIND(CAST(launch_times_raw.Version AS String), '.')) As Branch,
+        SubString(CAST(launch_times_raw.CiVersion AS String), 0U, FIND(CAST(launch_times_raw.CiVersion AS String), '.')) As CiBranch,
+        SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, FIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')) As TestToolsBranch,
     FROM (
         SELECT
             Db,
             Version,
             LunchId,
             CAST(Min(RunId / 1000UL) AS Timestamp) AS Run_start_timestamp,
-            ROW_NUMBER() OVER (PARTITION BY Db, Version ORDER BY Min(RunId) ASC) AS Run_number_in_version
+            ROW_NUMBER() OVER (PARTITION BY Db, Version ORDER BY Min(RunId) ASC) AS Run_number_in_version,
+            JSON_VALUE(MAX_BY(Info, RunId), "$.ci_version") AS CiVersion,
+            JSON_VALUE(MAX_BY(Info, RunId), "$.test_tools_version") AS TestToolsVersion,
         FROM `perfomance/olap/tests_results`
         WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
         GROUP BY
@@ -41,6 +45,8 @@ $all_tests_raw =
         tests_results.*,
         JSON_VALUE(Info, "$.report_url") AS Report,
         JSON_VALUE(tests_results.Info, "$.cluster.version") AS Version_n,
+        JSON_VALUE(Info, "$.ci_version") AS CiVersion_n,
+        JSON_VALUE(Info, "$.test_tools_version") AS TestToolsVersion_n,
         JSON_VALUE(tests_results.Info, "$.ci_launch_id") AS LunchId_n,
         CAST(JSON_VALUE(Stats, '$.DiffsCount') AS INT) AS diff_response,
         IF(Success > 0, MeanDuration / 1000) AS YdbSumMeans,
@@ -74,7 +80,11 @@ SELECT
     YdbSumMeans,
     YdbSumMin,
     Version,
+    CiVersion,
+    TestToolsVersion,
     Branch,
+    CiBranch,
+    TestToolsBranch,
     diff_response,
     Timestamp,
     COALESCE(Success,0) AS Success,
@@ -124,6 +134,8 @@ FROM (
         COALESCE(real_data.MinDuration, null_template.MinDuration) AS MinDuration,
         COALESCE(real_data.Report, null_template.Report) AS Report,
         COALESCE(real_data.Branch, null_template.Branch) AS Branch,
+        COALESCE(real_data.CiBranch, null_template.CiBranch) AS CiBranch,
+        COALESCE(real_data.TestToolsBranch, null_template.TestToolsBranch) AS TestToolsBranch,
         COALESCE(real_data.RunId, null_template.RunId) AS RunId,
         COALESCE(real_data.RunTs, null_template.RunTs) AS RunTs,
         null_template.Run_number_in_version AS Run_number_in_version,  --only from null_template
@@ -133,6 +145,8 @@ FROM (
         null_template.Test AS Test,  --only from null_template
         COALESCE(real_data.Timestamp, null_template.Timestamp) AS Timestamp,
         COALESCE(real_data.Version, null_template.Version) AS Version,
+        COALESCE(real_data.CiVersion, null_template.CiVersion) AS CiVersion,
+        COALESCE(real_data.TestToolsVersion, null_template.TestToolsVersion) AS TestToolsVersion,
         COALESCE(real_data.YdbSumMax, null_template.YdbSumMax) AS YdbSumMax,
         COALESCE(real_data.YdbSumMeans, null_template.YdbSumMeans) AS YdbSumMeans,
         COALESCE(real_data.YdbSumMin, null_template.YdbSumMin) AS YdbSumMin,
@@ -164,6 +178,8 @@ FROM (
             real_data.MinDuration AS MinDuration,
             real_data.Report AS Report,
             real_data.Branch AS Branch,
+            real_data.CiBranch AS CiBranch,
+            real_data.TestToolsBranch AS TestToolsBranch,
             real_data.RunId AS RunId,
             real_data.RunTs AS RunTs,
             real_data.Run_number_in_version AS Run_number_in_version,
@@ -174,6 +190,8 @@ FROM (
             real_data.Test AS Test,
             real_data.Timestamp AS Timestamp,
             real_data.Version AS Version,
+            real_data.CiVersion AS CiVersion,
+            real_data.TestToolsVersion AS TestToolsVersion,
             real_data.YdbSumMax AS YdbSumMax,
             real_data.YdbSumMeans AS YdbSumMeans,
             real_data.YdbSumMin AS YdbSumMin,

@@ -201,6 +201,9 @@ struct TEvPQ {
         EvTransactionCompleted,
         EvListAllTopicsResponse,
         EvRunCompaction,
+        EvAcquireExclusiveLock,
+        EvExclusiveLockAcquired,
+        EvReleaseExclusiveLock,
         EvEnd
     };
 
@@ -1221,6 +1224,15 @@ struct TEvPQ {
 
         ui64 MaxBlobSize = 0;
         ui64 CumulativeSize = 0;
+    };
+
+    struct TEvAcquireExclusiveLock : public TEventLocal<TEvAcquireExclusiveLock, EvAcquireExclusiveLock> {
+    };
+
+    struct TEvExclusiveLockAcquired : public TEventLocal<TEvExclusiveLockAcquired, EvExclusiveLockAcquired> {
+    };
+
+    struct TEvReleaseExclusiveLock : public TEventLocal<TEvReleaseExclusiveLock, EvReleaseExclusiveLock> {
     };
 };
 

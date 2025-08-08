@@ -21,11 +21,14 @@ void TPartitionQuoterBase::HandleQuotaRequest(TEvPQ::TEvRequestQuota::TPtr& ev, 
     QuotaRequestedTimes.emplace(ev->Get()->Cookie, ctx.Now());
     TRequestContext context{ev->Release(), ev->Sender};
     HandleQuotaRequestImpl(context);
-    if (RequestsInflight >= MaxInflightRequests || !WaitingInflightRequests.empty()) {
+    if ((ExclusiveLockState != EExclusiveLockState::EReleased) || (RequestsInflight >= MaxInflightRequests) || !WaitingInflightRequests.empty()) {
         if (WaitingInflightRequests.empty())
             InflightIsFullStartTime = ctx.Now();
         WaitingInflightRequests.push_back(std::move(context));
     } else {
+        // ExclusiveLockState == EExclusiveLockState::EReleased
+        // RequestsInflight < MaxInflightRequests
+        // WaitingInflightRequests.empty()
         StartQuoting(std::move(context));
     }
 }
@@ -98,6 +101,11 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
                         " partition " << Partition <<
                         " readCookie " << ev->Get()->RequestCookie);
     }
+
+    if (!RequestsInflight && WaitingInflightRequests.empty() && (ExclusiveLockState == EExclusiveLockState::EAcquiring)) {
+        ExclusiveLockState = EExclusiveLockState::EAcquired;
+        ReplyExclusiveLockAcquired(ExclusiveLockRequester);
+    }
 }
 
 void TPartitionQuoterBase::ProcessInflightQueue() {
@@ -105,7 +113,7 @@ void TPartitionQuoterBase::ProcessInflightQueue() {
     while (!WaitingInflightRequests.empty() && RequestsInflight < MaxInflightRequests) {
         StartQuoting(std::move(WaitingInflightRequests.front()));
         WaitingInflightRequests.pop_front();
-        if (WaitingInflightRequests.size() == 0) {
+        if (WaitingInflightRequests.empty()) {
             InflightLimitSlidingWindow.Update((now - InflightIsFullStartTime).MicroSeconds(), now);
             UpdateCounters(ActorContext());
         }
@@ -138,6 +146,47 @@ void TPartitionQuoterBase::HandleWakeUp(TEvents::TEvWakeup::TPtr&, const TActorC
 
 void TPartitionQuoterBase::ScheduleWakeUp(const TActorContext& ctx) {
     ctx.Schedule(WAKE_UP_TIMEOUT, new TEvents::TEvWakeup());
+}
+
+void TPartitionQuoterBase::HandleAcquireExclusiveLock(TEvPQ::TEvAcquireExclusiveLock::TPtr& ev, const TActorContext& ctx)
+{
+    switch (ExclusiveLockState) {
+    case EExclusiveLockState::EReleased:
+        ExclusiveLockState = EExclusiveLockState::EAcquiring;
+        ExclusiveLockRequester = ev->Sender;
+
+        [[fallthrough]];
+
+    case EExclusiveLockState::EAcquiring:
+        if (RequestsInflight) {
+            return;
+        }
+
+        ExclusiveLockState = EExclusiveLockState::EAcquired;
+
+        [[fallthrough]];
+
+    case EExclusiveLockState::EAcquired:
+        ReplyExclusiveLockAcquired(ev->Sender);
+        return;
+    }
+
+    Y_UNUSED(ctx);
+}
+
+void TPartitionQuoterBase::HandleReleaseExclusiveLock(TEvPQ::TEvReleaseExclusiveLock::TPtr& ev, const TActorContext& ctx)
+{
+    ExclusiveLockState = EExclusiveLockState::EReleased;
+
+    ProcessInflightQueue();
+
+    Y_UNUSED(ev);
+    Y_UNUSED(ctx);
+}
+
+void TPartitionQuoterBase::ReplyExclusiveLockAcquired(const TActorId& receiver)
+{
+    Send(receiver, new TEvPQ::TEvExclusiveLockAcquired());
 }
 
 void TReadQuoter::HandleQuotaRequestImpl(TRequestContext& context) {

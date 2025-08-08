@@ -943,7 +943,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     WriteCycleStartTime = ctx.Now();
 
     ReadQuotaTrackerActor = Register(new TReadQuoter(
-        ctx,
+        AppData(ctx)->PQConfig,
         TopicConverter,
         Config,
         Partition,

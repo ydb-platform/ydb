@@ -77,8 +77,20 @@ struct Timestamp64Checker : public Checker<TInstant> {
     void Assert(const std::string& msg, const ::Ydb::Value& value) override {
         auto v = Get(value);
         if (Expected - Precision > v || Expected + Precision < v) {
-            UNIT_ASSERT_VALUES_EQUAL_C(Get(value), Expected, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(v, Expected, msg);
         }
+    }
+
+    TDuration Precision;
+};
+
+struct NullChecker : public IChecker {
+    bool Get(const ::Ydb::Value& value) {
+        return value.has_null_flag_value();
+    }
+
+    void Assert(const std::string& msg, const ::Ydb::Value& value) override {
+        UNIT_ASSERT_VALUES_EQUAL_C(Get(value), true, msg);
     }
 
     TDuration Precision;

@@ -15,6 +15,7 @@ using namespace NKikimr::NMiniKQL;
 constexpr const char* AttributesFieldName = "_attributes";
 constexpr const char* CreateTimestampFieldName = "_create_timestamp";
 constexpr const char* DataFieldName = "_data";
+constexpr const char* KeyFieldName = "_key";
 constexpr const char* MessageGroupIdFieldName = "_message_group_id";
 constexpr const char* OffsetFieldName = "_offset";
 constexpr const char* PartitionFieldName = "_partition";
@@ -22,7 +23,7 @@ constexpr const char* ProducerIdFieldName = "_producer_id";
 constexpr const char* SeqNoFieldName = "_seq_no";
 constexpr const char* WriteTimestampFieldName = "_write_timestamp";
 
-constexpr const size_t FieldCount = 9; // Change it when change fields
+constexpr const size_t FieldCount = 10; // Change it when change fields
 
 
 NYT::TNode CreateTypeNode(const TString& fieldType) {
@@ -36,6 +37,17 @@ void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldTy
         NYT::TNode::CreateList()
             .Add(fieldName)
             .Add(CreateTypeNode(fieldType))
+    );
+}
+
+void AddOptionalField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
+    node.Add(
+        NYT::TNode::CreateList()
+            .Add(fieldName)
+            .Add(NYT::TNode::CreateList()
+                .Add("OptionalType")
+                .Add(CreateTypeNode(fieldType))
+            )
     );
 }
 
@@ -58,6 +70,7 @@ NYT::TNode CreateMessageScheme() {
     AddAttributeField(structMembers);
     AddField(structMembers, CreateTimestampFieldName, "Timestamp");
     AddField(structMembers, DataFieldName, "String");
+    AddOptionalField(structMembers, KeyFieldName, "String");
     AddField(structMembers, MessageGroupIdFieldName, "String");
     AddField(structMembers, OffsetFieldName, "Uint64");
     AddField(structMembers, PartitionFieldName, "Uint32");
@@ -105,6 +118,21 @@ struct TMessageWrapper {
 
     NYql::NUdf::TUnboxedValuePod GetData() const {
         return NKikimr::NMiniKQL::MakeString(Message.Message.GetData());
+    }
+
+    NYql::NUdf::TUnboxedValuePod GetKey() const {
+        const auto& m = Message.Message.GetMessageMeta();
+        if (m) {
+            const auto* result = FindIf(m->Fields.begin(), m->Fields.end(), [](const auto& v) {
+                return v.first == "__key";
+            });
+
+            if (result != m->Fields.end()) {
+                return NKikimr::NMiniKQL::MakeString(result->second).MakeOptional();
+            }
+        }
+
+        return NYql::NUdf::TUnboxedValuePod();
     }
 
     NYql::NUdf::TUnboxedValuePod GetMessageGroupId() const {
@@ -155,12 +183,13 @@ public:
         items[0] = wrap.GetAttributes(holderFactory, typeEnv);
         items[1] = wrap.GetCreateTimestamp();
         items[2] = wrap.GetData();
-        items[3] = wrap.GetMessageGroupId();
-        items[4] = wrap.GetOffset();
-        items[5] = wrap.GetPartition();
-        items[6] = wrap.GetProducerId();
-        items[7] = wrap.GetSeqNo();
-        items[8] = wrap.GetWriteTimestamp();
+        items[3] = wrap.GetKey();
+        items[4] = wrap.GetMessageGroupId();
+        items[5] = wrap.GetOffset();
+        items[6] = wrap.GetPartition();
+        items[7] = wrap.GetProducerId();
+        items[8] = wrap.GetSeqNo();
+        items[9] = wrap.GetWriteTimestamp();
     }
 
     void ClearCache() {

@@ -63,6 +63,11 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
     }
 
 
+    Y_UNIT_TEST(MessageField_CreateTimestamp)
+    {
+        MessageField_CreateTimestamp(TableType);
+    }
+
     Y_UNIT_TEST(MessageField_Partition)
     {
         MessageField_Partition(TableType);
@@ -81,6 +86,11 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
     Y_UNIT_TEST(MessageField_MessageGroupId)
     {
         MessageField_ProducerId(TableType);
+    }
+
+    Y_UNIT_TEST(MessageField_WriteTimestamp)
+    {
+        MessageField_WriteTimestamp(TableType);
     }
 
 

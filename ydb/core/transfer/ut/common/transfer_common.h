@@ -19,10 +19,12 @@ void ColumnType_Date(const std::string& tableType);
 void ColumnType_Double(const std::string& tableType);
 void ColumnType_Utf8_LongValue(const std::string& tableType);
 
+void MessageField_CreateTimestamp(const std::string& tableType);
 void MessageField_MessageGroupId(const std::string& tableType);
 void MessageField_Partition(const std::string& tableType);
 void MessageField_ProducerId(const std::string& tableType);
 void MessageField_SeqNo(const std::string& tableType);
+void MessageField_WriteTimestamp(const std::string& tableType);
 
 void ProcessingJsonMessage(const std::string& tableType);
 void ProcessingCDCMessage(const std::string& tableType);

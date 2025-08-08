@@ -409,6 +409,72 @@ void MessageField_MessageGroupId(const std::string& tableType) {
     });
 }
 
+void MessageField_CreateTimestamp(const std::string& tableType) {
+    TInstant timestamp = TInstant::Now() - TDuration::Minutes(1);
+
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Offset Uint64 NOT NULL,
+                CreateTimestamp Timestamp64,
+                PRIMARY KEY (Offset)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Offset:CAST($x._offset AS Uint64),
+                        CreateTimestamp:$x._create_timestamp
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {_withCreateTimestamp(timestamp)},
+
+        .Expectations = {{
+            _T<Timestamp64Checker>("CreateTimestamp", std::move(timestamp), TDuration::MilliSeconds(1)),
+        }}
+    });
+}
+
+void MessageField_WriteTimestamp(const std::string& tableType) {
+    TInstant timestamp = TInstant::Now();
+
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Offset Uint64 NOT NULL,
+                WriteTimestamp Timestamp64,
+                PRIMARY KEY (Offset)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Offset:CAST($x._offset AS Uint64),
+                        WriteTimestamp:$x._write_timestamp
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {{ "Message-1" }},
+
+        .Expectations = {{
+            _T<Timestamp64Checker>("WriteTimestamp", std::move(timestamp), TDuration::Seconds(5)),
+        }}
+    });
+}
+
 void WriteNullToKeyColumn(const std::string& tableType) {
     MainTestCase testCase(std::nullopt, tableType);
 

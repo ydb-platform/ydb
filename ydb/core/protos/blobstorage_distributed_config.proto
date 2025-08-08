@@ -234,11 +234,13 @@ message TEvNodeConfigInvokeOnRoot {
 
     message TGetStateStorageConfig {
         optional bool Recommended = 1;
+        optional bool PileupReplicas = 2;
     }
 
     message TSelfHealStateStorage {
         optional uint32 WaitForConfigStep = 1;
         optional bool ForceHeal = 2;
+        optional bool PileupReplicas = 3;
     }
 
     message TSelfHealNodesStateUpdate {
@@ -249,6 +251,7 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool EnableSelfHealStateStorage = 1;
         optional uint32 WaitForConfigStep = 2;
         repeated TNodeState NodesState = 3;
+        optional bool PileupReplicas = 4;
     }
 
     message TAdvanceGeneration

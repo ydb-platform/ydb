@@ -132,7 +132,7 @@ private:
 
     static NTable::TSession GetSession(NTable::TTableClient& client);
 
-    static THolder<TLogBackend> MakeLogBackend(TClientCommand::TConfig::EVerbosityLevel level);
+    static THolder<TLogBackend> MakeLogBackend(ui32 level);
 
     void InitLog(TClientCommand::TConfig& config);
     void InitDriver(TClientCommand::TConfig& config);

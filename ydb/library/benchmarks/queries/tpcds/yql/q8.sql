@@ -99,15 +99,14 @@ select  store.s_store_name
  from {{store_sales}} as store_sales
      cross join {{date_dim}} as date_dim
      cross join {{store}} as store
-     cross join
+     inner join
      (select A2.ca_zip as ca_zip
      from (
      select ca_zip from $bla1 bla1 right semi join $bla2 bla2 using (ca_zip)
-      )A2) V1
+      )A2) V1 on (substring(cast(store.s_zip as string),0,2) = substring(V1.ca_zip,0,2))
  where ss_store_sk = s_store_sk
   and ss_sold_date_sk = d_date_sk
   and d_qoy = 2 and d_year = 1998
-  and (substring(cast(s_zip as string),0,2) = substring(V1.ca_zip,0,2))
  group by store.s_store_name
  order by store.s_store_name
  limit 100;

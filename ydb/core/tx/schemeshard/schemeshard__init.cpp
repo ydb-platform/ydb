@@ -2008,7 +2008,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Resorce Pool
+        // Resource Pool
         {
             auto rowset = db.Table<Schema::ResourcePool>().Range().Select();
             if (!rowset.IsReady()) {
@@ -2046,6 +2046,29 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& backupCollection = Self->BackupCollections[pathId] = new TBackupCollectionInfo();
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Read streaming queries
+        {
+            auto rowset = db.Table<Schema::StreamingQuery>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TOwnerId ownerPathId = rowset.GetValue<Schema::StreamingQuery::OwnerPathId>();
+                const TLocalPathId localPathId = rowset.GetValue<Schema::StreamingQuery::LocalPathId>();
+                const TPathId pathId(ownerPathId, localPathId);
+
+                auto& streamingQuery = Self->StreamingQueries[pathId] = new TStreamingQueryInfo();
+                streamingQuery->AlterVersion = rowset.GetValue<Schema::StreamingQuery::AlterVersion>();
+                Y_PROTOBUF_SUPPRESS_NODISCARD streamingQuery->Properties.ParseFromString(rowset.GetValue<Schema::StreamingQuery::Properties>());
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {

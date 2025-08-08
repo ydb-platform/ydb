@@ -144,6 +144,10 @@ void TMemoryChanges::GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id) {
     IncrementalBackups.emplace(id, nullptr);
 }
 
+void TMemoryChanges::GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TStreamingQueryInfo>(pathId, ss->StreamingQueries, StreamingQueries);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -319,6 +323,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->IncrementalBackups.erase(id);
         }
         IncrementalBackups.pop();
+    }
+
+    while (StreamingQueries) {
+        const auto& [id, elem] = StreamingQueries.top();
+        if (elem) {
+            ss->StreamingQueries[id] = elem;
+        } else {
+            ss->StreamingQueries.erase(id);
+        }
+        StreamingQueries.pop();
     }
 }
 

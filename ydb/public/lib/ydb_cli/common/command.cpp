@@ -72,7 +72,6 @@ ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriorityChatty(ui32 lv
         default:
             return ELogPriority::TLOG_DEBUG;
     }
-    return ELogPriority::TLOG_INFO;
 }
 
 size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {

@@ -48,7 +48,7 @@ AS SELECT ...
 CREATE TABLE my_table (
     PRIMARY KEY (key)
 ) AS SELECT 
-    1 AS key
+    1 AS key,
     "test" AS value;
 ```
 

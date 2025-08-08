@@ -13,6 +13,7 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -84,6 +85,8 @@ void TCms::OnActivateExecutor(const TActorContext &ctx)
 
     State->CmsTabletId = TabletID();
     State->CmsActorId = SelfId();
+
+    ctx.Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
     SubscribeForConfig(ctx);
 
@@ -2530,6 +2533,28 @@ void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     if (msg->ClientId == State->BSControllerPipe && msg->Status != NKikimrProto::OK)
         OnBSCPipeDestroyed(ctx);
+}
+
+void TCms::Handle(::NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx)
+{
+    const auto& record = *ev->Get();
+
+    if (!record.Config || !record.Config->HasClusterState()) {
+        return;
+    }
+
+    const auto& cs = record.Config->GetClusterState();
+    if (cs.GetSuspendedPiles().empty()) {
+        return;
+    }
+
+    for (ui32 pileIdx : cs.GetSuspendedPiles()) {
+        auto evInvoke = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto* req = evInvoke->Record.MutableNotifyBridgeSuspended();
+        req->SetGeneration(cs.GetGeneration());
+        req->SetPileId(pileIdx);
+        ctx.Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), evInvoke.release());
+    }
 }
 
 IActor *CreateCms(const TActorId &tablet, TTabletStorageInfo *info)

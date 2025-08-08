@@ -15,6 +15,7 @@ message TClusterState {
     uint32 PromotedPile = 3; // realm we are going to promote (must also be SYNCHRONIZED), or primary one
     uint64 Generation = 4; // cluster state generation (which must be increasing strictly by one)
     fixed64 Guid = 5; // guid of this state change
+    repeated uint32 SuspendedPiles = 6; // list of pile indices that are flagged as suspended (graceful takedown)
 }
 
 message TClusterStateDetails {

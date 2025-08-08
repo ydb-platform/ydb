@@ -279,6 +279,11 @@ message TEvNodeConfigInvokeOnRoot {
         NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3;
     }
 
+    message TNotifyBridgeSuspended {
+        uint64 Generation = 1; // generation matching ClusterState's one
+        uint32 PileId = 2; // pile to convert from SUSPENDED to DISCONNECTED
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -297,6 +302,7 @@ message TEvNodeConfigInvokeOnRoot {
         TSelfHealStateStorage SelfHealStateStorage = 15;
         TSelfHealNodesStateUpdate SelfHealNodesStateUpdate = 19;
         TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 20;
+        TNotifyBridgeSuspended NotifyBridgeSuspended = 21;
     }
 }
 

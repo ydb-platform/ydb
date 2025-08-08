@@ -229,4 +229,49 @@ namespace NKikimr::NStorage {
         StartProposition(&config);
     }
 
+    void TInvokeRequestHandlerActor::NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd) {
+        RunCommonChecks();
+
+        if (!Self->Cfg->BridgeConfig) {
+            throw TExError() << "Bridge mode is not enabled";
+        } else if (Self->Cfg->BridgeConfig->PilesSize() <= cmd.GetPileId()) {
+            throw TExError() << "BridgePileId out of bounds";
+        } else if (Self->StorageConfig->GetClusterState().GetGeneration() != cmd.GetGeneration()) {
+            throw TExError() << "Generation mismatch";
+        }
+
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        auto* clusterState = config.MutableClusterState();
+
+        const ui32 idx = cmd.GetPileId();
+        THashSet<ui32> suspended(clusterState->GetSuspendedPiles().begin(), clusterState->GetSuspendedPiles().end());
+        if (!suspended.contains(idx)) {
+            // pile is not suspended, nothing to do
+            return Finish(TResult::OK, std::nullopt);
+        }
+
+        if (idx < clusterState->PerPileStateSize()) {
+            clusterState->SetPerPileState(idx, NKikimrBridge::TClusterState::DISCONNECTED);
+        }
+        suspended.erase(idx);
+        clusterState->ClearSuspendedPiles();
+        for (ui32 s : suspended) {
+            clusterState->AddSuspendedPiles(s);
+        }
+
+        // bump generation and GUID, add unsynced history snapshot
+        {
+            auto* cs = config.MutableClusterState();
+            cs->SetGeneration(cs->GetGeneration() + 1);
+            UpdateClusterStateGuid(cs);
+            auto* details = config.MutableClusterStateDetails();
+            auto* entry = details->AddUnsyncedHistory();
+            entry->MutableClusterState()->CopyFrom(*cs);
+            for (size_t i = 0; i < cs->PerPileStateSize(); ++i) {
+                TBridgePileId::FromPileIndex(i).CopyToProto(entry, &std::decay_t<decltype(*entry)>::AddUnsyncedPiles);
+            }
+        }
+        StartProposition(&config, /*acceptLocalQuorum=*/ false, /*requireScepter=*/ false, /*mindPrev=*/ false);
+    }
+
 } // NKikimr::NStorage

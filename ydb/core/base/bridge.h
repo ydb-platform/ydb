@@ -16,6 +16,7 @@ namespace NKikimr {
             NKikimrBridge::TClusterState::EPileState State = {}; // state of this pile
             bool IsPrimary = false; // is this pile selected as primary
             bool IsBeingPromoted = false; // is this pile being promoted right now (and not the primary, but in sync with one)
+            bool IsSuspended = false; // is this pile being taken down gracefully
         };
 
         THashMap<ui32, const TPile*> StaticNodeIdToPile; // node to pile map for static nodes

@@ -703,13 +703,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
     }
 
     Y_UNIT_TEST_QUAD(AclTemporary, IsOlap, UseAdmin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = NKqp::TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false)
-            .SetEnableTempTables(true);
+        auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
         if (UseAdmin) {
             kikimr.GetTestClient().GrantConnect("user_write@builtin");

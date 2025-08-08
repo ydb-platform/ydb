@@ -1438,14 +1438,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
      Y_UNIT_TEST(OlapTemporary) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetEnableTempTables(true)
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetEnableTempTables(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();

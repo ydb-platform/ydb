@@ -7,8 +7,6 @@
 #include <util/stream/output.h>
 #include <util/string/join.h>
 
-#define LOG_T(stream) do { if (auto ctx = NActors::TlsActivationContext) LOG_TRACE_S(*ctx, NKikimrServices::DQ_TASK_RUNNER, static_cast<const TDerived *>(this)->LogPrefix() << stream); } while(0)
-
 namespace NYql::NDq {
 
 // remove LEGACY* support after upgrade S3/Generic Sources to use modern format
@@ -178,7 +176,6 @@ public:
         barrier.Batches ++;
         barrier.Bytes += space;
         barrier.Rows += rows;
-        LOG_T("AddBatch " << *this);
 
         return rows;
     }
@@ -189,7 +186,6 @@ public:
             if (barrier.Barrier >= PauseBarrier) {
                 break;
             }
-            LOG_T("Squash " << barrier.Barrier << " into " << PauseBarrier);
             BeforeBarrier.Batches += barrier.Batches;
             BeforeBarrier.Rows += barrier.Rows;
             BeforeBarrier.Bytes += barrier.Bytes;
@@ -198,32 +194,21 @@ public:
     }
 
     void PauseByWatermark(TInstant watermark) override {
-        LOG_T("PauseByWatermark " << PauseBarrier << "->" << watermark);
         Y_ENSURE(PauseBarrier <= watermark);
         PauseBarrier = watermark;
         if (IsPausedByCheckpoint()) {
             return;
         }
         SquashWatermarks();
-        LOG_T(*this);
         Y_ENSURE(!PendingBarriers.empty());
         Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
     }
 
-    friend IOutputStream& operator<<(IOutputStream& str, const TDqInputImpl& i) {
-        auto beforeBarrier = i.BeforeBarrier;
-        beforeBarrier.Barrier = i.PauseBarrier;
-        str << "BeforeBarrier: " << beforeBarrier<< "; PendingBarriers: " << JoinSeq(' ' , i.PendingBarriers);
-        return str;
-    }
-
     void PauseByCheckpoint() override {
-        LOG_T("PauseByCheckpoint " << *this);
         Y_ENSURE(!IsPausedByCheckpoint());
         if (PauseBarrier != TBarrier::NoBarrier) {
             Y_ENSURE(!PendingBarriers.empty());
             if (PendingBarriers.front().Barrier > PauseBarrier) {
-                LOG_T("Fake before");
                 // (1.BeforeBarrier) (3.Watermark > PauseBarrier) (4.Some data and watermarks) | (5.Here will be checkpoint)
                 // ->
                 // (1.BeforeBarrier) (3.Fake watermark == PauseBarrier with data from 3 & 4 behind) (Checkpoint with empty data behind) (Max watermark from 3 & 4 with empty data behind)
@@ -237,7 +222,6 @@ public:
                 PendingBarriers.emplace_back(); // CheckpointBarrier
                 PendingBarriers.emplace_back(TBarrier { .Barrier = lastWatermark });
             } else {
-                LOG_T("Keep before");
                 Y_ENSURE(PendingBarriers.front().Barrier == PauseBarrier);
                 // (1.BeforeBarrier) (3.Watermark == PauseBarrier) (4.Some data and watermarks) | (5.Here will be checkpoint)
                 // ->
@@ -252,10 +236,8 @@ public:
                 }
             }
         } else if (PendingBarriers.empty()) {
-            LOG_T("Alone");
             PendingBarriers.emplace_front(); // CheckpointBarrier
         } else {
-            LOG_T("Move behind");
             // (1.BeforeBarrier) (4.Some data and watermarks) | (5.Here will be checkpoint)
             // ->
             // (1.BeforeBarrier + all data from 4) (5.Checkpoint with empty data behind) (Max watermark from 4 if any with empty data behind)
@@ -267,20 +249,16 @@ public:
             PendingBarriers.emplace_back(); // CheckpointBarrier
             PendingBarriers.emplace_back(TBarrier { .Barrier = lastWatermark });
         }
-        LOG_T(*this);
     }
 
     void AddWatermark(TInstant watermark) override {
-        LOG_T("AddWatermark  " << watermark);
         if (!PendingBarriers.empty() && PendingBarriers.back().Batches == 0 && !PendingBarriers.back().IsCheckpoint()) {
-            LOG_T("Shifted " << PendingBarriers.back().Barrier);
             Y_ENSURE(PendingBarriers.back().Rows == 0);
             Y_ENSURE(PendingBarriers.back().Bytes == 0);
             PendingBarriers.back().Barrier = watermark;
         } else {
             PendingBarriers.emplace_back(TBarrier { .Barrier = watermark });
         }
-        LOG_T(*this);
     }
 
     bool IsPausedByWatermark() const override {
@@ -292,29 +270,24 @@ public:
     }
 
     void ResumeByWatermark(TInstant watermark) override {
-        LOG_T("ResumeByWatermark " << watermark);
         Y_ENSURE(Empty());
         Y_ENSURE(!PendingBarriers.empty());
         Y_ENSURE(PauseBarrier == watermark);
         Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
         if (PendingBarriers.front().Barrier == watermark) {
-            LOG_T("Drop");
             BeforeBarrier = PendingBarriers.front();
             PendingBarriers.pop_front();
         }
         Y_ENSURE(PendingBarriers.empty() || PendingBarriers.front().Barrier > watermark);
         PauseBarrier = TBarrier::NoBarrier;
-        LOG_T(*this);
     }
 
     void ResumeByCheckpoint() override {
-        LOG_T("ResumeByCheckpoint");
         Y_ENSURE(IsPausedByCheckpoint());
         Y_ENSURE(Empty());
         BeforeBarrier = PendingBarriers.front();
         PendingBarriers.pop_front();
         SquashWatermarks();
-        LOG_T(*this);
     }
 
     [[nodiscard]]
@@ -335,7 +308,6 @@ public:
         if (!PendingBarriers.empty() && !IsPaused()) {
             // There were watermarks, but channel is not paused
             // Process data anyway and move watermarks behinda
-            LOG_T("Squash behind");
             auto lastBarrier = PendingBarriers.back().Barrier;
             for (auto& barrier : PendingBarriers) {
                 Y_ENSURE(!barrier.IsCheckpoint());
@@ -346,7 +318,6 @@ public:
         }
 
         if (IsPaused()) {
-            LOG_T("Squeeze before");
             ui64 batchesCount = BeforeBarrier.Batches;
             Y_ABORT_UNLESS(batchesCount > 0);
             Y_ABORT_UNLESS(batchesCount <= Batches.size());
@@ -461,14 +432,6 @@ protected:
             Batches = 0;
             Bytes = 0;
             Rows = 0;
-        }
-        friend IOutputStream& operator<<(IOutputStream& str, const TBarrier& b) {
-            str << "{Batches:" << b.Batches << ", Rows:" << b.Rows << ", Bytes:" << b.Bytes;
-            if (b.Barrier == CheckpointBarrier) str << ", Checkpoint";
-            else if (b.Barrier == NoBarrier) str << ", NoBarrier";
-            else str << ", Barrier: " << b.Barrier;
-            str << "}";
-            return str;
         }
     };
     std::deque<TBarrier> PendingBarriers; // barrier and event count after barrier

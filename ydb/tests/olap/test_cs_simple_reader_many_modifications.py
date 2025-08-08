@@ -26,7 +26,13 @@ class TestCsSimpleReaderManyModifications(object):
     def _setup_ydb(cls):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
-        config = KikimrConfigGenerator(column_shard_config={"compaction_enabled": False})
+        config = KikimrConfigGenerator(
+            column_shard_config={
+                "compaction_enabled": False,
+                "deduplication_enabled": True,
+                "reader_class_name": "SIMPLE"
+            }
+        )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
         node = cls.cluster.nodes[1]

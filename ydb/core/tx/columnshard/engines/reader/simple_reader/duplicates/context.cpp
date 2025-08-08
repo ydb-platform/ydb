@@ -4,9 +4,8 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-TInternalFilterConstructor::TInternalFilterConstructor(const TEvRequestFilter::TPtr& request, TColumnDataSplitter&& splitter)
+TInternalFilterConstructor::TInternalFilterConstructor(const TEvRequestFilter::TPtr& request)
     : OriginalRequest(request)
-    , Intervals(std::move(splitter))
     , ProcessGuard(NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard({}))
     , ScopeGuard(ProcessGuard->BuildScopeGuard(1))
     , GroupGuard(ScopeGuard->BuildGroupGuard())

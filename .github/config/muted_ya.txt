@@ -205,7 +205,6 @@ ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHea
 ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHealParallelCall2.test
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealDCDisconnected.test_state_storage
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealNodeDisconnected.test_state_storage
-ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite[select_1]
 ydb/tests/functional/restarts test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok

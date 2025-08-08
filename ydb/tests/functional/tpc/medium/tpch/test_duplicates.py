@@ -16,6 +16,7 @@ class TestTpchDuplicates(tpch.TestTpch1, FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster()
+        cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls._get_path()}', 'init', '--store=column', '--datetime-types=dt64'] + cls.addition_init_params())
 
         for table in cls.get_tables():
             set_compaction_query = f"""
@@ -23,9 +24,8 @@ class TestTpchDuplicates(tpch.TestTpch1, FunctionalTestBase):
                     {{"levels" : [{{"class_name" : "Zero", "expected_blobs_size" : 2048000}},
                                     {{"class_name" : "Zero"}}]}}`);
             """
+            cls.run_cli(['table', 'query', 'execute', '-t', 'scheme', '-q', set_compaction_query])
 
-        cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls._get_path()}', 'init', '--store=column', '--datetime-types=dt64'] + cls.addition_init_params())
-        cls.run_cli(['table', 'query', 'execute', '-t', 'scheme', '-q', set_compaction_query])
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls._get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls._get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
         super().setup_class()

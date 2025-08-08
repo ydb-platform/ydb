@@ -16,10 +16,10 @@ Similar system views exist for what happens inside a specific database, they are
 
 Information about distributed storage operation is contained in several interconnected views, each responsible for describing its own entity:
 
-* PDisk
-* VSlot
-* Group
-* Storage Pool
+* [PDisk](../../concepts/glossary.md#pdisk)
+* [VSlot](../../concepts/glossary.md#slot)
+* [Group](../../concepts/glossary.md#storage-group)
+* [Storage Pool](../../concepts/glossary.md#storage-pool)
 
 Additionally, there is a separate view that shows statistics on the usage of group numbers in different storage pools and the growth capabilities of these pools.
 

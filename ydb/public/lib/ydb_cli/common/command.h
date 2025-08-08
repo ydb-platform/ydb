@@ -88,15 +88,8 @@ public:
             TArgSetting Max;
         };
 
-        enum EVerbosityLevel : ui32 {
-            NONE = 0,
-            WARN = 1,
-            INFO = 2,
-            DEBUG = 3,
-        };
-
-        static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);
-        static ELogPriority VerbosityLevelToELogPriorityChatty(EVerbosityLevel lvl);
+        static ELogPriority VerbosityLevelToELogPriority(ui32 lvl);
+        static ELogPriority VerbosityLevelToELogPriorityChatty(ui32 lvl);
 
         int ArgC;
         char** ArgV;
@@ -135,7 +128,7 @@ public:
         TString Oauth2KeyFile;
         TString Oauth2KeyParams;
 
-        EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
+        ui32 VerbosityLevel = 0;
         size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
 
         bool JsonUi64AsText = false;
@@ -207,7 +200,7 @@ public:
         static size_t ParseHelpCommandVerbosilty(int argc, char** argv);
 
         bool IsVerbose() const {
-            return VerbosityLevel != EVerbosityLevel::NONE;
+            return VerbosityLevel > 0;
         }
 
         void SetFreeArgsMin(size_t value) {

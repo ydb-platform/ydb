@@ -86,6 +86,8 @@ class TKqpDataExecuter : public TKqpExecuterBase<TKqpDataExecuter, EExecType::Da
         TReattachState ReattachState;
         ui32 RestartCount = 0;
         bool Restarting = false;
+
+        ui64 OverloadSeqNo = 0;
     };
 
 public:
@@ -477,6 +479,7 @@ private:
                 hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
+                hFunc(TEvDataShard::TEvOverloadReady, HandlePrepare);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandlePrepare); // from CA
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
@@ -652,10 +655,30 @@ private:
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 return;
             }
+            case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
+                if (res->Record.HasOverloadSubscribed()) {
+                    LOG_D("Shard " << shardId << " is overloaded. Waiting.");
+                    return;
+                }
+            }
             default:
             {
                 return ShardError(res->Record);
             }
+        }
+    }
+
+    void HandlePrepare(TEvDataShard::TEvOverloadReady::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletID();
+        const ui64 seqNo = record.GetSeqNo();
+
+        TShardState* shardState = ShardStates.FindPtr(shardId);
+        YQL_ENSURE(shardState, "Unexpected overload ready from unknown tabletId " << shardId);
+
+        if (seqNo == shardState->OverloadSeqNo) {
+            ExecuteEvWriteTransaction(shardId, *EvWriteTxs.at(shardId));
         }
     }
 
@@ -1725,9 +1748,10 @@ private:
         YQL_ENSURE(result.second);
     }
 
-    void ExecuteEvWriteTransaction(ui64 shardId, NKikimrDataEvents::TEvWrite& evWrite) {
+    void ExecuteEvWriteTransaction(ui64 shardId, const NKikimrDataEvents::TEvWrite& evWrite) {
         YQL_ENSURE(!TxManager);
-        TShardState shardState;
+        YQL_ENSURE(!ImmediateTx);
+        TShardState& shardState = ShardStates[shardId];
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
 
@@ -1738,6 +1762,8 @@ private:
 
         auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
         shardState.DatashardState->ShardReadLocks = locksCount > 0;
+
+        evWriteTransaction->Record.SetOverloadSubscribe(++shardState.OverloadSeqNo);
 
         LOG_D("State: " << CurrentStateFuncName()
             << ", Executing EvWrite (PREPARE) on shard: " << shardId
@@ -1775,9 +1801,6 @@ private:
         LOG_D("ExecuteEvWriteTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
 
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(evWriteTransaction.release(), shardId, true), 0, 0, std::move(traceId));
-
-        auto result = ShardStates.emplace(shardId, std::move(shardState));
-        YQL_ENSURE(result.second);
     }
 
     bool WaitRequired() const {
@@ -2670,7 +2693,7 @@ private:
             ExecuteDatashardTransaction(shardId, *shardTx, isOlap.value_or(false));
         }
 
-        for (auto& [shardId, shardTx] : EvWriteTxs) {
+        for (const auto& [shardId, shardTx] : EvWriteTxs) {
             ExecuteEvWriteTransaction(shardId, *shardTx);
         }
 

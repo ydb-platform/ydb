@@ -3117,6 +3117,31 @@ TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake) {
     return new TSelect(pos, std::move(source), skipTake);
 }
 
+class TAnyColumnSource final : public ISource {
+public:
+    TAnyColumnSource(TPosition pos) : ISource(pos) {}
+
+    bool DoInit(TContext&, ISource*) final {
+        return true;
+    }
+
+    TNodePtr Build(TContext&) final {
+        return nullptr;
+    }
+
+    TNodePtr DoClone() const final {
+        return MakeIntrusive<TAnyColumnSource>(Pos);
+    }
+
+    TMaybe<bool> AddColumn(TContext&, TColumnNode&) final {
+        return {true};
+    }
+};
+
+TSourcePtr BuildAnyColumnSource(TPosition pos) {
+    return new TAnyColumnSource(pos);
+}
+
 class TSelectResultNode final: public TAstListNode {
 public:
     TSelectResultNode(TPosition pos, TSourcePtr source, bool writeResult, bool inSubquery,

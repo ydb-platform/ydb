@@ -3119,6 +3119,9 @@ private:
                 if (isDynamic && attrs.AsMap().contains("enable_dynamic_store_read") && NYT::GetBool(attrs["enable_dynamic_store_read"])) {
                     metaInfo->Attrs["enable_dynamic_store_read"] = "true";
                 }
+                if (!attrs.AsMap().contains("schema") || !attrs["schema"].Attributes().AsMap().contains("strict") || !NYT::GetBool(attrs["schema"].Attributes()["strict"])) {
+                    metaInfo->Attrs["native_strict_schema"] = "false";
+                }
                 if (attrs.AsMap().contains(SecurityTagsName)) {
                     TVector<TString> securityTags;
                     for (const auto& tag : attrs[SecurityTagsName].AsList()) {

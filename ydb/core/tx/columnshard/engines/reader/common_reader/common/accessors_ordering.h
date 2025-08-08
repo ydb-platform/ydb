@@ -169,7 +169,7 @@ private:
         return Constructors.IsEmpty();
     }
 
-    virtual std::shared_ptr<IDataSource> DoTryExtractNextImpl(const std::shared_ptr<TSpecialReadContext>& context) = 0;
+    virtual std::shared_ptr<IDataSource> DoExtractNextImpl(const std::shared_ptr<TSpecialReadContext>& context) = 0;
 
     virtual std::shared_ptr<IDataSource> DoTryExtractNext(
         const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override final {
@@ -199,7 +199,7 @@ private:
                 "in_flight", inFlightCurrentLimit);
             return nullptr;
         }
-        return DoTryExtractNextImpl(context);
+        return DoExtractNextImpl(context);
     }
 
 public:

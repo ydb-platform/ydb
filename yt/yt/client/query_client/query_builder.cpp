@@ -1,5 +1,6 @@
 #include "query_builder.h"
 
+#include <library/cpp/iterator/zip.h>
 #include <yt/yt/core/misc/error.h>
 
 #include <util/string/join.h>
@@ -116,12 +117,16 @@ void TQueryBuilder::SetLimit(i64 limit)
     Limit_ = limit;
 }
 
-void TQueryBuilder::AddArrayJoinExpression(const std::vector<std::string>& expressions,  const std::vector<std::string>& aliases, ETableJoinType type) {
+void TQueryBuilder::AddArrayJoinExpression(
+    const std::vector<std::string>& expressions,
+    const std::vector<std::string>& aliases,
+    ETableJoinType type)
+{
     TJoinEntry entry;
     entry.Type = type;
     entry.ArrayJoinFields.reserve(expressions.size());
-    for (size_t ind = 0; ind < expressions.size(); ++ind) {
-        entry.ArrayJoinFields.push_back({expressions[ind], aliases[ind]});
+    for (const auto& [expression, alias] : Zip(expressions, aliases)) {
+        entry.ArrayJoinFields.emplace_back(expression, alias);
     }
     JoinEntries_.push_back(std::move(entry));
 }
@@ -141,13 +146,17 @@ void TQueryBuilder::AddJoinExpression(
     });
 }
 
-std::string TQueryBuilder::WrapTableName(const std::string& table) {
-    if (SyntaxVersion_ == 1) {
-        return "[" + table + "]";
-    } else if (SyntaxVersion_ == 2) {
-        return "`" + table + "`";
-    } else {
-        THROW_ERROR_EXCEPTION("Only syntax versions 1 and 2 are supported");
+std::string TQueryBuilder::WrapTableName(const std::string& table)
+{
+    switch (SyntaxVersion_) {
+        case 1:
+            return "[" + table + "]";
+
+        case 2:
+            return "`" + table + "`";
+
+        default:
+            THROW_ERROR_EXCEPTION("Only syntax versions 1 and 2 are supported");
     }
 }
 

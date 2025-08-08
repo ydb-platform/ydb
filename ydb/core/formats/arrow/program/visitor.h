@@ -5,12 +5,16 @@
 namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
 class TExecutionVisitor: public TCompiledGraph::IVisitor {
 private:
-    const TProcessorContext Context;
+    TProcessorContext Context;
     THashSet<ui32> SkipActivity;
     const TCompiledGraph::TNode* ExecutionNode = nullptr;
     bool Executed = false;
 
 public:
+    TProcessorContext& MutableContext() {
+        return Context;
+    }
+
     const TCompiledGraph::TNode* GetExecutionNode() const {
         return ExecutionNode;
     }
@@ -24,8 +28,8 @@ public:
         }
     }
 
-    TExecutionVisitor(const TProcessorContext& context)
-        : Context(context) {
+    TExecutionVisitor(TProcessorContext&& context)
+        : Context(std::move(context)) {
     }
 
     virtual TConclusion<IVisitor::EVisitStatus> DoOnExit(const TCompiledGraph::TNode& node) override;

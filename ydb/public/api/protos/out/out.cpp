@@ -1,3 +1,4 @@
+#include <ydb/public/api/protos/draft/ydb_backup.pb.h>
 #include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
@@ -50,4 +51,8 @@ Y_DECLARE_OUT_SPEC(, Ydb::Maintenance::ActionState::ActionStatus, stream, value)
 
 Y_DECLARE_OUT_SPEC(, Ydb::Maintenance::ActionState::ActionReason, stream, value) {
     stream << Ydb::Maintenance::ActionState::ActionReason_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, Ydb::Backup::BackupProgress::Progress, stream, value) {
+    stream << Ydb::Backup::BackupProgress::Progress_Name(value);
 }

@@ -95,12 +95,21 @@ NProto::TFmrTableRef FmrTableRefToProto(const TFmrTableRef& fmrTableRef) {
     NProto::TFmrTableRef protoFmrTableRef;
     auto protoFmrTableId = FmrTableIdToProto(fmrTableRef.FmrTableId);
     protoFmrTableRef.MutableFmrTableId()->Swap(&protoFmrTableId);
+    for (auto& column: fmrTableRef.Columns) {
+        protoFmrTableRef.AddColumns(column);
+    }
+    protoFmrTableRef.SetColumnGroups(fmrTableRef.SerializedColumnGroups);
     return protoFmrTableRef;
 }
 
 TFmrTableRef FmrTableRefFromProto(const NProto::TFmrTableRef protoFmrTableRef) {
-    auto tableId = FmrTableIdFromProto(protoFmrTableRef.GetFmrTableId());
-    return TFmrTableRef(tableId);
+    TFmrTableRef fmrTableRef;
+    fmrTableRef.FmrTableId = FmrTableIdFromProto(protoFmrTableRef.GetFmrTableId());
+    for (auto& column: protoFmrTableRef.GetColumns()) {
+        fmrTableRef.Columns.emplace_back(column);
+    }
+    fmrTableRef.SerializedColumnGroups =protoFmrTableRef.GetColumnGroups();
+    return fmrTableRef;
 }
 
 NProto::TTableRange TableRangeToProto(const TTableRange& tableRange) {
@@ -127,6 +136,10 @@ NProto::TFmrTableInputRef FmrTableInputRefToProto(const TFmrTableInputRef& fmrTa
         auto* curTableRange = protoFmrTableInputRef.AddTableRanges();
         curTableRange->Swap(&protoTableRange);
     }
+    for (auto& column: fmrTableInputRef.Columns) {
+        protoFmrTableInputRef.AddColumns(column);
+    }
+    protoFmrTableInputRef.SetColumnGroups(fmrTableInputRef.SerializedColumnGroups);
     return protoFmrTableInputRef;
 }
 
@@ -139,6 +152,10 @@ TFmrTableInputRef FmrTableInputRefFromProto(const NProto::TFmrTableInputRef& pro
         tableRanges.emplace_back(tableRange);
     }
     fmrTableInputRef.TableRanges = tableRanges;
+    for (auto& column: protoFmrTableInputRef.GetColumns()) {
+        fmrTableInputRef.Columns.emplace_back(column);
+    }
+    fmrTableInputRef.SerializedColumnGroups = protoFmrTableInputRef.GetColumnGroups();
     return fmrTableInputRef;
 }
 
@@ -146,14 +163,16 @@ NProto::TFmrTableOutputRef FmrTableOutputRefToProto(const TFmrTableOutputRef& fm
     NProto::TFmrTableOutputRef protoFmrTableOutputRef;
     protoFmrTableOutputRef.SetTableId(fmrTableOutputRef.TableId);
     protoFmrTableOutputRef.SetPartId(fmrTableOutputRef.PartId);
+    protoFmrTableOutputRef.SetColumnGroups(fmrTableOutputRef.SerializedColumnGroups);
     return protoFmrTableOutputRef;
 }
 
 TFmrTableOutputRef FmrTableOutputRefFromProto(const NProto::TFmrTableOutputRef& protoFmrTableOutputRef) {
-    return TFmrTableOutputRef{
-        .TableId = protoFmrTableOutputRef.GetTableId(),
-        .PartId = protoFmrTableOutputRef.GetPartId()
-    };
+    TFmrTableOutputRef fmrTableOutputRef;
+    fmrTableOutputRef.TableId = protoFmrTableOutputRef.GetTableId();
+    fmrTableOutputRef.PartId = protoFmrTableOutputRef.GetPartId();
+    fmrTableOutputRef.SerializedColumnGroups = protoFmrTableOutputRef.GetColumnGroups();
+    return fmrTableOutputRef;
 }
 
 NProto::TTableStats TableStatsToProto(const TTableStats& tableStats) {

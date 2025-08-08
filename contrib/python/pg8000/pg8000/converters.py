@@ -7,6 +7,7 @@ from datetime import (
 )
 from decimal import Decimal
 from enum import Enum
+from functools import singledispatch
 from ipaddress import (
     IPv4Address,
     IPv4Network,
@@ -468,62 +469,58 @@ def array_string_escape(v):
     return val
 
 
-def array_out(ar):
-    result = []
-    for v in ar:
-        if isinstance(v, list):
-            val = array_out(v)
+@singledispatch
+def array_out(val):
+    return make_param(PY_TYPES, val)
 
-        elif isinstance(v, tuple):
-            val = f'"{composite_out(v)}"'
 
-        elif v is None:
-            val = "NULL"
-
-        elif isinstance(v, dict):
-            val = array_string_escape(json_out(v))
-
-        elif isinstance(v, (bytes, bytearray)):
-            val = f'"\\{bytes_out(v)}"'
-
-        elif isinstance(v, str):
-            val = array_string_escape(v)
-
-        else:
-            val = make_param(PY_TYPES, v)
-
-        result.append(val)
-
+@array_out.register
+def _(val: list):
+    result = [array_out(v) for v in val]
     return f'{{{",".join(result)}}}'
 
 
-def composite_out(ar):
-    result = []
-    for v in ar:
-        if isinstance(v, list):
-            val = array_out(v)
+@array_out.register
+def _(val: tuple):
+    return f'"{composite_out(val)}"'
 
-        elif isinstance(v, tuple):
-            val = composite_out(v)
 
-        elif v is None:
-            val = ""
+@array_out.register
+def _(val: None):
+    return "NULL"
 
-        elif isinstance(v, dict):
-            val = array_string_escape(json_out(v))
 
-        elif isinstance(v, (bytes, bytearray)):
-            val = f'"\\{bytes_out(v)}"'
+@array_out.register
+def _(val: dict):
+    return array_string_escape(json_out(val))
 
-        elif isinstance(v, str):
-            val = array_string_escape(v)
 
-        else:
-            val = make_param(PY_TYPES, v)
+@array_out.register(bytes)
+@array_out.register(bytearray)
+def _(val):
+    return f'"\\{bytes_out(val)}"'
 
-        result.append(val)
+
+@array_out.register
+def _(val: str):
+    return array_string_escape(val)
+
+
+@singledispatch
+def composite_out(val):
+    return array_out(val)
+
+
+@composite_out.register
+def _(val: tuple):
+    result = [composite_out(v) for v in val]
 
     return f'({",".join(result)})'
+
+
+@composite_out.register
+def _(val: None):
+    return ""
 
 
 def record_in(data):
@@ -675,7 +672,6 @@ PG_TYPES = {
     TEXT_ARRAY: string_array_in,  # text[]
     TIME: time_in,  # time
     TIME_ARRAY: time_array_in,  # time[]
-    INTERVAL: interval_in,  # interval
     TIMESTAMP: timestamp_in,  # timestamp
     TIMESTAMP_ARRAY: timestamp_array_in,  # timestamp
     TIMESTAMPTZ: timestamptz_in,  # timestamptz
@@ -779,43 +775,62 @@ def identifier(sql):
     if len(sql) == 0:
         raise InterfaceError("identifier must be > 0 characters in length")
 
-    quote = not sql[0].isalpha()
+    if "\u0000" in sql:
+        raise InterfaceError("identifier cannot contain the code zero character")
 
-    for c in sql[1:]:
-        if not (c.isalpha() or c.isdecimal() or c in "_$"):
-            if c == "\u0000":
-                raise InterfaceError(
-                    "identifier cannot contain the code zero character"
-                )
-            quote = True
-            break
-
-    if quote:
-        sql = sql.replace('"', '""')
-        return f'"{sql}"'
-    else:
-        return sql
+    sql = sql.replace('"', '""')
+    return f'"{sql}"'
 
 
+@singledispatch
 def literal(value):
-    if value is None:
-        return "NULL"
-    elif isinstance(value, bool):
-        return "TRUE" if value else "FALSE"
-    elif isinstance(value, (int, float, Decimal)):
-        return str(value)
-    elif isinstance(value, (bytes, bytearray)):
-        return f"X'{value.hex()}'"
-    elif isinstance(value, Datetime):
-        return f"'{datetime_out(value)}'"
-    elif isinstance(value, Date):
-        return f"'{date_out(value)}'"
-    elif isinstance(value, Time):
-        return f"'{time_out(value)}'"
-    elif isinstance(value, Timedelta):
-        return f"'{interval_out(value)}'"
-    elif isinstance(value, list):
-        return f"'{array_out(value)}'"
-    else:
-        val = str(value).replace("'", "''")
-        return f"'{val}'"
+    val = str(value).replace("'", "''")
+    return f"'{val}'"
+
+
+@literal.register
+def _(value: None):
+    return "NULL"
+
+
+@literal.register
+def _(value: bool):
+    return "TRUE" if value else "FALSE"
+
+
+@literal.register(int)
+@literal.register(float)
+@literal.register(Decimal)
+def _(value):
+    return str(value)
+
+
+@literal.register(bytes)
+@literal.register(bytearray)
+def _(value):
+    return f"X'{value.hex()}'"
+
+
+@literal.register
+def _(value: Datetime):
+    return f"'{datetime_out(value)}'"
+
+
+@literal.register
+def _(value: Date):
+    return f"'{date_out(value)}'"
+
+
+@literal.register
+def _(value: Time):
+    return f"'{time_out(value)}'"
+
+
+@literal.register
+def _(value: Timedelta):
+    return f"'{interval_out(value)}'"
+
+
+@literal.register
+def _(value: list):
+    return f"'{array_out(value)}'"

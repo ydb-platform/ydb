@@ -1274,8 +1274,15 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxChangePathState:
         return CreateChangePathState(NextPartId(), txState);
 
+    // Incremental Restore Finalization
+    case TTxState::ETxType::TxIncrementalRestoreFinalize:
+        return CreateIncrementalRestoreFinalize(NextPartId(), txState);
+
     case TTxState::ETxType::TxCreateLongIncrementalRestoreOp:
         return CreateLongIncrementalRestoreOpControlPlane(NextPartId(), txState);
+
+    case TTxState::ETxType::TxCreateLongIncrementalBackupOp:
+        return CreateLongIncrementalBackupOp(NextPartId(), txState);
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
@@ -1578,6 +1585,8 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateBackupBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         return CreateBackupIncrementalBackupCollection(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return CreateRestoreBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
@@ -1592,6 +1601,10 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     // ChangePathState
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         return CreateChangePathState(op.NextPartId(), tx, context);
+
+    // Incremental Restore Finalization
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        return {CreateIncrementalRestoreFinalize(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

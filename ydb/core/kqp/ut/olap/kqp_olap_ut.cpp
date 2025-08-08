@@ -1653,6 +1653,55 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(PushdownFilterMultiConsumersRead) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64	NOT NULL,
+                b Int32,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        std::vector<TString> queries = {
+            R"(
+                $sub = (select distinct (b) from `/Root/t1` where b > 10);
+
+                select count(*) from `/Root/t1` as t1
+                where t1.b = $sub;
+            )",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Olap filter not pushed down. Query: " << query);
+
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
     Y_UNIT_TEST(ProjectionPushDown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -1847,7 +1896,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`dt32`, `id`) >= (CAST('1998-12-01' AS Date32), 3))",
             R"((`dtm`, `id`) >= (CAST('1998-12-01' AS DateTime), 3))",
             R"((`dtm64`, `id`) >= (CAST('1998-12-01' AS DateTime64), 3))",
-            R"((`ts64`, `id`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))"
+            R"((`ts64`, `id`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
+            R"(dt >= dt)",
         };
 
         std::vector<TString> testDataBlocks = {
@@ -1876,10 +1926,27 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(dtm64 >= dtm)",
             R"(dt >= ts)",
             R"(dt >= ts64)",
-            //R"(dt >= dt)", Failed in runtime
 
             // 2. Arithmetic
-            // R"(dt <= dt - inter64)", KqpOlapCompiler cannot deduce result type
+            R"(dt <= dt - inter64)",
+            R"(dt <= dt - Interval("P100D"))",
+            R"(dt32 <= dt32 - inter64)",
+            R"(dt32 <= dt32 - Interval("P100D"))",
+            R"(dtm <= dtm - inter64)",
+            R"(dtm <= dtm - Interval("P100D"))",
+            R"(dtm64 <= dtm64 - inter64)",
+            R"(dtm64 <= dtm64 - Interval("P100D"))",
+            R"(ts <= ts - inter64)",
+            R"(ts <= ts - Interval("P100D"))",
+            R"(ts64 <= ts64 - inter64)",
+            R"(ts64 <= ts64 - Interval("P100D"))",
+
+            R"(inter64 <= dt - Date('2001-01-01'))",
+            R"(inter64 <= dt32 - Date32('2001-01-01'))",
+            R"(inter64 <= dtm - DateTime('1998-12-01T15:30:00Z'))",
+            R"(inter64 <= dtm64 - DateTime64('1998-12-01T15:30:00Z'))",
+            R"(inter64 <= ts - Timestamp("1970-01-01T00:00:03.000001Z"))",
+            R"(inter64 <= ts64 - Timestamp64("1970-01-01T00:00:03.000001Z"))",
         };
 
         auto queryPrefix = R"(

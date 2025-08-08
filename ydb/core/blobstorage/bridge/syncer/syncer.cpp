@@ -79,8 +79,8 @@ namespace NKikimr::NBridge {
         SourcePileId = BridgeInfo->PrimaryPile->BridgePileId;
         const auto& groups = Info->GetBridgeGroupIds();
         Y_ABORT_UNLESS(groups.size() == std::size(BridgeInfo->Piles));
-        SourceGroupId = groups[SourcePileId.GetRawId()];
-        TargetGroupId = groups[TargetPileId.GetRawId()];
+        SourceGroupId = groups[SourcePileId.GetPileIndex()];
+        TargetGroupId = groups[TargetPileId.GetPileIndex()];
         LogId = TStringBuilder() << LogId << '{' << SourceGroupId << "->" << TargetGroupId << '}';
         STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS01, "initiating sync", (LogId, LogId));
         SourceState = &GroupAssimilateState[false];

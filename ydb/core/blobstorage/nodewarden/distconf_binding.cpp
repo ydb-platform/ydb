@@ -114,7 +114,7 @@ namespace NKikimr::NStorage {
         PrimaryPileBindQueue.Update(NodeIdsForPrimaryPileOutgoingBinding);
     }
 
-    std::optional<TBridgePileId> TDistributedConfigKeeper::ResolveNodePileId(const TNodeLocation& location) {
+    TBridgePileId TDistributedConfigKeeper::ResolveNodePileId(const TNodeLocation& location) {
         if (const auto& bridgePileName = location.GetBridgePileName()) {
             if (const auto it = BridgePileNameMap.find(*bridgePileName); it != BridgePileNameMap.end()) {
                 return it->second;
@@ -124,7 +124,7 @@ namespace NKikimr::NStorage {
         } else if (BridgePileNameMap) {
             Y_DEBUG_ABORT_S("missing bridge pile name for node Location# " << location.ToString());
         }
-        return std::nullopt;
+        return TBridgePileId();
     }
 
     void TDistributedConfigKeeper::IssueNextBindRequest() {

@@ -1,4 +1,5 @@
 #include "distconf.h"
+#include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr::NStorage {
 
@@ -213,12 +214,12 @@ namespace NKikimr::NStorage {
             bool clusterStateUpdated = false;
             for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
                 if (clusterState->GetPerPileState(i) == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 &&
-                        ConnectedUnsyncedPiles.contains(TBridgePileId::FromValue(i))) {
+                        ConnectedUnsyncedPiles.contains(TBridgePileId::FromPileIndex(i))) {
                     clusterState->SetPerPileState(i, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
                     clusterStateUpdated = true;
 
                     auto *state = details->AddPileSyncState();
-                    state->SetBridgePileId(i);
+                    TBridgePileId::FromPileIndex(i).CopyToProto(state, &std::decay_t<decltype(*state)>::SetBridgePileId);
                     state->SetUnsyncedBSC(true);
                     if (config->HasBlobStorageConfig()) {
                         if (const auto& bsConfig = config->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
@@ -234,36 +235,13 @@ namespace NKikimr::NStorage {
                 }
             }
             if (clusterStateUpdated) {
-                auto *item = history->Add();
                 clusterState->SetGeneration(clusterState->GetGeneration() + 1);
-                item->MutableClusterState()->CopyFrom(*clusterState);
-                item->SetOperationGuid(RandomNumber<ui64>());
-                for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
-                    item->AddUnsyncedPiles(i);
-                }
-            }
+                UpdateClusterStateGuid(clusterState);
 
-            // filter out unsynced piles from config (they become synced when they are the part of the quorum)
-            while (!history->empty()) {
-                auto *unsyncedPiles = history->Mutable(0)->MutableUnsyncedPiles();
-                for (int j = 0; j < unsyncedPiles->size(); ++j) {
-                    const ui32 index = unsyncedPiles->at(j);
-                    if (clusterState->PerPileStateSize() <= index) {
-                        Y_DEBUG_ABORT(); // incorrect per pile state
-                    } else if (NBridge::PileStateTraits(clusterState->GetPerPileState(index)).RequiresConfigQuorum) {
-                        // this pile is a part of quorum we expect to obtain, so it will be config-synced
-                        unsyncedPiles->SwapElements(j--, unsyncedPiles->size() - 1);
-                        unsyncedPiles->RemoveLast();
-                        changes = true;
-                    }
-                }
-                if (!unsyncedPiles->empty() || history->size() == 1) {
-                    // we still have some unsynced piles remaining OR this is the last one
-                    break;
-                } else {
-                    // drop fully synced entry (but keeping the last one)
-                    history->DeleteSubrange(0, 1);
-                    changes = true;
+                auto *item = history->Add();
+                item->MutableClusterState()->CopyFrom(*clusterState);
+                for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
+                    TBridgePileId::FromPileIndex(i).CopyToProto(item, &std::decay_t<decltype(*item)>::AddUnsyncedPiles);
                 }
             }
         }
@@ -285,12 +263,14 @@ namespace NKikimr::NStorage {
         for (size_t i = 0; i < cfg.BridgeConfig->PilesSize(); ++i) {
             piles->Add(NKikimrBridge::TClusterState::SYNCHRONIZED);
         }
+        TBridgePileId::FromPileIndex(0).CopyToProto(state, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        TBridgePileId::FromPileIndex(0).CopyToProto(state, &NKikimrBridge::TClusterState::SetPromotedPile);
 
         auto *details = config->MutableClusterStateDetails();
         auto *entry = details->AddUnsyncedHistory();
         entry->MutableClusterState()->CopyFrom(*state);
         for (int i = 0; i < piles->size(); ++i) {
-            entry->AddUnsyncedPiles(i);
+            TBridgePileId::FromPileIndex(i).CopyToProto(entry, &std::decay_t<decltype(*entry)>::AddUnsyncedPiles);
         }
     }
 
@@ -299,6 +279,13 @@ namespace NKikimr::NStorage {
         (void)peerConfig;
         (void)senderNodeId;
         return true;
+    }
+
+    void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState) {
+        TString buffer;
+        const bool success = clusterState->SerializeToString(&buffer);
+        Y_ABORT_UNLESS(success);
+        clusterState->SetGuid(XXH3_64bits(buffer.data(), buffer.size()));
     }
 
 } // NKikimr::NStorage

@@ -798,6 +798,10 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     for (const auto& groupId : group.GetBridgeGroupIds()) {
         res->BridgeGroupIds.push_back(TGroupId::FromValue(groupId));
     }
+    if (group.HasBridgeProxyGroupId()) {
+        res->BridgeProxyGroupId.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId));
+    }
+    res->BridgePileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
 
     // store original group protobuf it was parsed from
     res->Group.emplace(group);

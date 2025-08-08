@@ -30,7 +30,7 @@ struct TBridgePileInfo {
     }
 
     ui32 GetId() const {
-        return Id.GetRawId();
+        return Id.GetLocalDb();
     }
 };
 } // namespace NKikimr::NHive

@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
@@ -58,7 +59,7 @@ public:
     {
     }
 
-    ui64 GetConsumption() const {
+    virtual ui64 GetConsumption() const {
         return Consumption;
     }
 
@@ -71,6 +72,17 @@ public:
     const TActorId ActorId;
 private:
     std::atomic<ui64> Consumption = 0;
+};
+
+class TColumnTablesPortionsMetaDataCacheMemoryConsumer: public TMemoryConsumer {
+public:
+    TColumnTablesPortionsMetaDataCacheMemoryConsumer()
+        : TMemoryConsumer(EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache, {}) {
+    }
+
+    ui64 GetConsumption() const override {
+        return NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::GetNodePortionsConsumption();
+    }
 };
 
 struct TConsumerState {
@@ -121,7 +133,9 @@ public:
         , Config(config)
         , ResourceBrokerSelfConfig(resourceBrokerConfig)
         , Counters(counters)
-    {}
+    {
+        Consumers.emplace(EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache, MakeIntrusive<TColumnTablesPortionsMetaDataCacheMemoryConsumer>());
+    }
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWork);
@@ -357,6 +371,7 @@ private:
             case EMemoryConsumerKind::ColumnTablesBlobCache:
             case EMemoryConsumerKind::ColumnTablesDataAccessorCache:
             case EMemoryConsumerKind::ColumnTablesColumnDataCache:
+            case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
@@ -377,6 +392,9 @@ private:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
+                break;
+            case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
+                NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::SetPortionsCacheLimit(limitBytes);
                 break;
         }
     }
@@ -424,7 +442,7 @@ private:
         if (config == CurrentResourceBrokerConfig) {
             return;
         }
-        
+
         LOG_INFO_S(*TlsActivationContext, NKikimrServices::MEMORY_CONTROLLER, "Apply ResourceBroker config: " << config.ToString());
 
         TAutoPtr<TEvResourceBroker::TEvConfigure> configure = new TEvResourceBroker::TEvConfigure();
@@ -489,6 +507,7 @@ private:
                 stats.SetColumnTablesCompactionLimit(limitBytes);
                 break;
             }
+            case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
             case EMemoryConsumerKind::ColumnTablesDataAccessorCache:
             case EMemoryConsumerKind::ColumnTablesColumnDataCache:
             case EMemoryConsumerKind::ColumnTablesBlobCache: {
@@ -536,6 +555,10 @@ private:
             }
             case EMemoryConsumerKind::ColumnTablesColumnDataCache: {
                 result.MinBytes = result.MaxBytes = GetColumnTablesColumnDataCacheLimitBytes(Config, hardLimitBytes);
+                break;
+            }
+            case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache: {
+                result.MinBytes = result.MaxBytes = GetPortionsMetaDataCacheLimitBytes(Config, hardLimitBytes);
                 break;
             }
         }

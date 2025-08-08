@@ -225,19 +225,24 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     Y_UNIT_TEST(UseClusterResultion) {
         auto engine = MakeSqlCompletionEngineUT();
         {
+            TString query = R"sql(
+                DECLARE $cluster_name AS String;
+                USE yt:$cluster_name;
+                SELECT * FROM #
+            )sql";
+
+            TEnvironment env = {
+                .Parameters = {{"$cluster_name", "saurus"}},
+            };
+
             TVector<TCandidate> expected = {
+                {BindingName, "$cluster_name"},
                 {TableName, "`maxim`"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
-                {Keyword, "ANY"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(
-                CompleteTop(
-                    4,
-                    engine,
-                    "USE yt:$cluster_name; SELECT * FROM ",
-                    {.Parameters = {{"$cluster_name", "saurus"}}}),
-                expected);
+
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, query, env), expected);
         }
         {
             TVector<TCandidate> expected = {
@@ -1307,6 +1312,63 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {Keyword, "ALL"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(6, engine, query), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ColumnsFromNamedExpr) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TString> queries = {
+                R"sql(SELECT # FROM $)sql",
+                R"sql(SELECT # FROM $$)sql",
+                R"sql(SELECT # FROM $x)sql",
+            };
+
+            TVector<TCandidate> expected = {
+                {Keyword, "ALL"},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, queries[0]), expected);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, queries[1]), expected);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, queries[2]), expected);
+        }
+        {
+            TString declare = R"sql(DECLARE $x AS String;)sql";
+
+            TVector<TString> queries = {
+                declare + R"sql(SELECT # FROM example.$x)sql",
+                declare + R"sql(USE example; SELECT # FROM $x)sql",
+            };
+
+            TVector<TCandidate> expected = {
+                {BindingName, "$x"},
+                {ColumnName, "Age"},
+                {ColumnName, "Name"},
+            };
+
+            TEnvironment env = {
+                .Parameters = {{"$x", "/people"}},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, queries[0], env), expected);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, queries[1], env), expected);
+        }
+        {
+            TString query = R"sql(
+                USE example;
+                SELECT # FROM $x;
+            )sql";
+
+            TEnvironment env = {
+                .Parameters = {{"$x", "/people"}},
+            };
+
+            TVector<TCandidate> expected = {
+                {Keyword, "ALL"},
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query, {}), expected);
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query, env), expected);
         }
     }
 

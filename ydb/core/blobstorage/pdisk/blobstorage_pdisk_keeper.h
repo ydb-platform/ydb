@@ -85,12 +85,16 @@ public:
         return ChunkTracker.GetOwnerHardLimit(owner);
     }
 
-    i64 GetOwnerFree(TOwner owner) const {
-        return ChunkTracker.GetOwnerFree(owner);
+    i64 GetOwnerFree(TOwner owner, bool personal) const {
+        return ChunkTracker.GetOwnerFree(owner, personal);
     }
 
     i64 GetOwnerUsed(TOwner owner) const {
         return ChunkTracker.GetOwnerUsed(owner);
+    }
+
+    ui32 GetOwnerWeight(TOwner owner) {
+        return ChunkTracker.GetOwnerWeight(owner);
     }
 
     i64 GetLogChunkCount() const {

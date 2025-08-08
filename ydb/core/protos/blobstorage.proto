@@ -129,6 +129,8 @@ message TGroupInfo {
     optional NKikimrBlobStorage.TGroupDecommitStatus.E DecommitStatus = 16;
     repeated uint32 BridgeGroupIds = 17; // filled in for common group when operating in bridge mode
     optional uint32 GroupSizeInUnits = 18;
+    optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
+    optional uint32 BridgePileId = 20;
 }
 
 message TEvVPatchStart {
@@ -1305,7 +1307,7 @@ message TEvControllerSelectGroupsResult {
             optional double IOPS = 2; // operations per second
             optional uint64 ReadThroughput = 3; // bytes per second
             optional uint64 WriteThroughput = 4; // bytes per second
-            optional double Occupancy = 5; // part of full slot size of the worst VDisk of group
+            optional double Occupancy = 5; // the worst occupancy among all VDisks in group
         }
 
         // assured part of group metrics -- when the underlying PDisks have all possible VSlots created; these metrics

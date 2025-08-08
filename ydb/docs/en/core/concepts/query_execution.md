@@ -12,27 +12,27 @@ Queries for {{ ydb-short-name }} are written in YQL — an SQL dialect, designed
 
 Most interactions with {{ ydb-short-name }} are performed using YQL, making it the primary tool for querying and managing data in YDB. Because of this, understanding YQL’s features and capabilities is essential for effectively working with {{ ydb-short-name }}. Learning YQL enables you to take full advantage of the database’s advanced query functionality, express complex business logic, and utilize YDB’s distributed architecture efficiently.
 
-{{ YQL }} supports most common SQL constructs, including:
+YQL supports most common SQL constructs, including:
 
-* DML — SELECT, INSERT, REPLACE, UPDATE, DELETE, UPSERT.
-* DDL — CREATE, ALTER, DROP for tables, indexes, and other schema objects.
-* JOINs — all standard join types plus special joins such as LEFT/RIGHT SEMI and ANY joins.
-* Aggregations — GROUP BY and window functions.
+* DML — `SELECT`, `INSERT`, `REPLACE`, `UPDATE`, `DELETE`, `UPSERT`.
+* DDL — `CREATE`, `ALTER`, `DROP` for tables, indexes, and other schema objects.
+* JOINs — all standard join types plus special joins such as `LEFT/RIGHT SEMI` and `ANY` joins.
+* Aggregations — `GROUP BY` and window functions.
 * Named expressions for better query text organization.
 * Collection of built-in functions for processing various data types, empowering users to handle complex logic directly in queries.
 * Pragmas and hints to fine-tune execution plans.
 
 ## Transactions
 
-Every query in {{ ydb-short-name }} is executed within the context of a transaction, ensuring data consistency and reliability. Transactions can be managed with BeginTransaction/CommitTransaction calls, or by providing the appropriate flags when calling the ExecuteQuery method.
+Every query in {{ ydb-short-name }} is executed within the context of a transaction, ensuring data consistency and reliability. Transactions can be managed with `BeginTransaction`/`CommitTransaction` calls, or by providing the appropriate flags when calling the `ExecuteQuery` method.
 
 {{ ydb-short-name }} also supports interactive transactions, which give you the flexibility to execute multiple queries within the same transaction, while allowing your application to perform custom logic between those queries. This makes it possible to build complex workflows that require several related operations to be treated as a single atomic unit.
 
 Supported transaction modes:
 
-* SerializableReadWrite — fully isolated read-write transactions (default).
-* SnapshotReadOnly — read-only queries executed on a consistent snapshot of the data.
-* StaleReadOnly — read-only queries that may read from replicas and therefore return slightly stale data.
+* `SerializableReadWrite` — fully isolated read-write transactions (default).
+* `SnapshotReadOnly` — read-only queries executed on a consistent snapshot of the data.
+* `StaleReadOnly` — read-only queries that may read from replicas and therefore return slightly stale data.
 
 For more information about transactions in {{ ydb-short-name }}, see [Transactions](transactions.md) section.
 

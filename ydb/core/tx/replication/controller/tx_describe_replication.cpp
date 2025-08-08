@@ -198,6 +198,16 @@ public:
         }
 
         bool isTransfer = replication->GetConfig().HasTransferSpecific();
+        if (isTransfer) {
+            auto& specific = replication->GetConfig().GetTransferSpecific();
+
+            auto& transferSpecific = *Result->Record.MutableTransferSpecific();
+            transferSpecific.MutableTarget()->SetSrcPath(specific.GetTarget().GetSrcPath());
+            transferSpecific.MutableTarget()->SetDstPath(specific.GetTarget().GetDstPath());
+            transferSpecific.MutableTarget()->SetTransformLambda(specific.GetTarget().GetTransformLambda());
+            transferSpecific.MutableBatching()->CopyFrom(specific.GetBatching());
+        }
+
         for (ui64 tid = 0; tid < replication->GetNextTargetId(); ++tid) {
             auto* target = replication->FindTarget(tid);
             if (!target) {
@@ -209,11 +219,7 @@ public:
                 auto& specific = replication->GetConfig().GetTransferSpecific();
 
                 auto& transferSpecific = *Result->Record.MutableTransferSpecific();
-                transferSpecific.MutableTarget()->SetSrcPath(target->GetSrcPath());
-                transferSpecific.MutableTarget()->SetDstPath(target->GetDstPath());
                 transferSpecific.MutableTarget()->SetConsumerName(target->GetStreamConsumerName() ? target->GetStreamConsumerName() : specific.GetTarget().GetConsumerName());
-                transferSpecific.MutableTarget()->SetTransformLambda(specific.GetTarget().GetTransformLambda());
-                transferSpecific.MutableBatching()->CopyFrom(specific.GetBatching());
             }
 
             auto& item = *Result->Record.AddTargets();

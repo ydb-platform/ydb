@@ -87,6 +87,14 @@ struct TTransferStrategy : public IStrategy {
             return true;
         }
 
+        if (target.HasDirectoryPath()) {
+            auto directoryPath = TPath::Resolve(target.GetDirectoryPath(), context.SS);
+            if (!directoryPath.IsResolved() || directoryPath.IsUnderDeleting() || directoryPath->IsUnderMoving() || directoryPath.IsDeleted()) {
+                result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination directory path '" << target.GetDirectoryPath() << "' not found");
+                return true;
+            }
+        }
+
         if (!AppData()->TransferWriterFactory) {
             result.SetError(NKikimrScheme::StatusNotAvailable, "The transfer is only available in the Enterprise version");
             return true;
@@ -149,6 +157,7 @@ public:
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
+                ev->Record.SetDatabase(TPath::Init(context.SS->RootPathId(), context.SS).PathString());
 
                 LOG_D(DebugHint() << "Send TEvCreateReplication to controller"
                     << ": tabletId# " << tabletId
@@ -373,7 +382,7 @@ public:
             return result;
         }
 
-        auto path = parentPath.Child(name);
+        auto path = parentPath.Child(name, TPath::TSplitChildTag{});
         {
             const auto checks = path.Check();
             checks

@@ -1841,6 +1841,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "flush_interval",
             "batch_size_bytes",
             "consumer",
+            "directory",
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
@@ -1870,6 +1871,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "failover_mode",
             "flush_interval",
             "batch_size_bytes",
+            "directory"
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {

@@ -1566,6 +1566,7 @@ message TReplicationDescription {
         optional string TransformLambda = 1;
         optional uint64 FlushIntervalMilliSeconds = 2 [default = 60000];
         optional uint64 BatchSizeBytes = 3 [default = 8388608];
+        optional string DirectoryPath = 4;
     }
 
     optional TAlterTransfer AlterTransfer = 10;

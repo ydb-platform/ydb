@@ -1,9 +1,52 @@
-#include "transfer_common.h"
+#include <ydb/core/transfer/ut/common/transfer_common.h>
 
 using namespace NReplicationTest;
 
 Y_UNIT_TEST_SUITE(Transfer)
 {
+    void CheckTopicLocalOrRemote(bool local) {
+        MainTestCase testCase(std::nullopt, "ROW");
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:$x._offset,
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(local));
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(BaseScenario_Local) {
+        CheckTopicLocalOrRemote(true);
+    }
+
+    Y_UNIT_TEST(BaseScenario_Remote) {
+        CheckTopicLocalOrRemote(false);
+    }
+
     Y_UNIT_TEST(CreateTransfer_TargetNotFound)
     {
         MainTestCase testCase;
@@ -176,6 +219,87 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    Y_UNIT_TEST(LocalTopic_WithPermission)
+    {
+        auto id = RandomNumber<ui16>();
+        auto username = TStringBuilder() << "u" << id;
+
+        MainTestCase permissionSetup;
+        permissionSetup.CreateUser(username);
+        permissionSetup.Grant("", username, {"ydb.granular.create_table", "ydb.granular.create_queue"});
+
+        MainTestCase testCase(username);
+        permissionSetup.ExecuteDDL(Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", testCase.TableName.data()));
+        permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.write", "ydb.generic.read"});
+
+        testCase.CreateTopic(1);
+        permissionSetup.Grant(testCase.TopicName, username, {"ALL"});
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(true));
+        
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTopic();
+        testCase.DropTransfer();
+    }
+
+    Y_UNIT_TEST(LocalTopic_BigMessage)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:LENGTH($x._data)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(true));
+
+        TStringBuilder sb;
+        sb.reserve(10_MB);
+        for (size_t i = 0; i < sb.capacity(); ++i) {
+            sb << RandomNumber<char>();
+        }
+
+        testCase.Write({sb});
+
+        testCase.CheckResult({{
+            _C("Message", ui32(sb.size()))
+        }});
+
+        testCase.DropTopic();
+        testCase.DropTransfer();
+    }
+
     Y_UNIT_TEST(AlterLambda)
     {
         MainTestCase().Run({
@@ -266,7 +390,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
-    Y_UNIT_TEST(CheckCommittedOffset)
+    void CheckCommittedOffset(bool local)
     {
         MainTestCase testCase;
 
@@ -289,7 +413,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-        )");
+        )", MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 
         testCase.Write({"Message-1"});
 
@@ -302,6 +426,14 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTransfer();
         testCase.DropTable();
         testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(CheckCommittedOffset_Local) {
+        CheckCommittedOffset(true);
+    }
+
+    Y_UNIT_TEST(CheckCommittedOffset_Remote) {
+        CheckCommittedOffset(false);
     }
 
     Y_UNIT_TEST(DropTransfer)
@@ -643,7 +775,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
-    Y_UNIT_TEST(CreateTransferSourceNotExists)
+    void CreateTransferSourceNotExists(bool localTopic)
     {
         MainTestCase testCase;
         testCase.CreateTable(R"(
@@ -665,15 +797,23 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )");
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic));
 
-        testCase.CheckTransferStateError("Discovery error: local/Topic_");
+        testCase.CheckTransferStateError("Discovery error:");
 
         testCase.DropTransfer();
         testCase.DropTable();
     }
 
-    Y_UNIT_TEST(TransferSourceDropped)
+    Y_UNIT_TEST(CreateTransferSourceNotExists) {
+        CreateTransferSourceNotExists(false);
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceNotExists_LocalTopic) {
+        CreateTransferSourceNotExists(true);
+    }
+
+    void TransferSourceDropped(bool localTopic)
     {
         MainTestCase testCase;
         testCase.CreateTable(R"(
@@ -697,7 +837,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )");
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic));
 
         testCase.Write({"Message-1"});
 
@@ -705,15 +845,27 @@ Y_UNIT_TEST_SUITE(Transfer)
             _C("Message", TString("Message-1"))
         }});
 
+        testCase.CheckTransferState(TTransferDescription::EState::Running);
+
         testCase.DropTopic();
 
-        testCase.CheckTransferStateError("Discovery for all topics failed. The last error was: no path 'local/Topic_");
+        testCase.CheckTransferStateError("Discovery for all topics failed. The last error was: no path '");
 
         testCase.DropTransfer();
         testCase.DropTable();
     }
 
-    Y_UNIT_TEST(CreateTransferSourceIsNotTopic)
+    Y_UNIT_TEST(TransferSourceDropped)
+    {
+        TransferSourceDropped(false);
+    }
+
+    Y_UNIT_TEST(TransferSourceDropped_LocalTopic)
+    {
+        TransferSourceDropped(true);
+    }
+
+    void CreateTransferSourceIsNotTopic(bool localTopic)
     {
         MainTestCase testCase;
         testCase.CreateTable(R"(
@@ -742,12 +894,22 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )");
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic));
 
-        testCase.CheckTransferStateError("Discovery error: local/Topic_");
+        testCase.CheckTransferStateError("Discovery error:");
 
         testCase.DropTransfer();
         testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceIsNotTopic)
+    {
+        CreateTransferSourceIsNotTopic(false);
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceIsNotTopic_LocalTopic)
+    {
+        CreateTransferSourceIsNotTopic(true);
     }
 
     Y_UNIT_TEST(CreateTransferTargetIsNotTable)
@@ -814,7 +976,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(1), 1));
+            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(2), 1_MB));
 
         testCase.Write({"Message-1"});
 
@@ -822,14 +984,14 @@ Y_UNIT_TEST_SUITE(Transfer)
             _C("Message", TString("Message-1"))
         }});
 
-        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+        testCase.CheckTransferState(TTransferDescription::EState::Running);
 
         Cerr << "State: Paused" << Endl << Flush;
 
         testCase.PauseTransfer();
 
         Sleep(TDuration::Seconds(1));
-        testCase.CheckTransferState(TReplicationDescription::EState::Paused);
+        testCase.CheckTransferState(TTransferDescription::EState::Paused);
 
         testCase.Write({"Message-2"});
 
@@ -844,23 +1006,416 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.ResumeTransfer();
 
         // Transfer is resumed. New messages are added to the table.
-        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+        testCase.CheckTransferState(TTransferDescription::EState::Running);
         testCase.CheckResult({{
             _C("Message", TString("Message-1"))
         }, {
             _C("Message", TString("Message-2")),
         }});
 
+        testCase.Write({"Message-3"});
+        Sleep(TDuration::MilliSeconds(500));
+
         // More cycles for pause/resume
         testCase.PauseTransfer();
-        testCase.CheckTransferState(TReplicationDescription::EState::Paused);
+
+        testCase.Write({"Message-4"});
 
         testCase.ResumeTransfer();
-        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+        testCase.CheckTransferState(TTransferDescription::EState::Running);
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }, {
+            _C("Message", TString("Message-2")),
+        }, {
+            _C("Message", TString("Message-3")),
+        }, {
+            _C("Message", TString("Message-4")),
+        }});
 
         testCase.DropTransfer();
         testCase.DropTable();
         testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(TargetTableWithoutDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "other_table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError("it is not allowed to specify a table to write");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(TargetTableWriteOutsideDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateDirectory("/local/inner_directory");
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `inner_directory/%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+        testCase.ExecuteDDL(R"(
+                CREATE TABLE `outside_directorty_table` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+
+        testCase.CreateTopic();
+
+        testCase.ExecuteDDL(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "../outside_directorty_table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+
+                CREATE TRANSFER `%s`
+                FROM `%s` TO `inner_directory/%s` USING $l
+                WITH (
+                    DIRECTORY = "/local/inner_directory"
+                );
+            )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError("is outside target directory");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(TargetTableWriteInsideDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateDirectory("/local/inner_directory0");
+        testCase.CreateDirectory("/local/inner_directory0/inner_directory1");
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+        testCase.ExecuteDDL(R"(
+                CREATE TABLE `inner_directory0/inner_directory1/table` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "inner_directory1/table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithDirectory("/local/inner_directory0"));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckResult("/local/inner_directory0/inner_directory1/table",{{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(AlterTargetDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "%s",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TableName.data()));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError("it is not allowed to specify a table to write");
+
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithDirectory("/local"));
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(WriteToNotExists)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "not_exists_table",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithDirectory("/local"));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError(" unknown table");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(WriteToNotTable)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            __ydb_table: "%s",
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TopicName.data()),
+            MainTestCase::CreateTransferSettings::WithDirectory("/local"));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckTransferStateError(" unknown table");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(AlterLambdaOnWork)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TableName.data()));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithTransformLambda(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST("NEW LAMBDA " || $x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )"));
+
+        testCase.Write({"Message-2"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }, {
+            _C("Message", TString("NEW LAMBDA Message-2"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(CreateAndAlterTransferInDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateDirectory("/local/subdir");
+        testCase.CreateTransfer(TStringBuilder() << "subdir/" << testCase.TransferName, Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TableName.data()));
+
+        testCase.AlterTransfer(TStringBuilder() << "subdir/" << testCase.TransferName,
+            MainTestCase::AlterTransferSettings::WithBatching(TDuration::Seconds(1), 1));
+    }
+
+    Y_UNIT_TEST(Alter_WithSecret)
+    {
+        auto id = RandomNumber<ui16>();
+        auto username = TStringBuilder() << "u" << id;
+        auto secretName = TStringBuilder() << "s" << id;
+
+        MainTestCase permissionSetup;
+        permissionSetup.CreateUser(username);
+        permissionSetup.Grant("", username, {"ydb.granular.create_table", "ydb.granular.create_queue", "ydb.granular.alter_schema"});
+
+        MainTestCase testCase(username);
+        testCase.ExecuteDDL(Sprintf(R"(
+                CREATE OBJECT %s (TYPE SECRET) WITH value="%s@builtin"
+            )", secretName.data(), username.data()));
+
+        permissionSetup.ExecuteDDL(Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )", testCase.TableName.data()));
+        permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.write", "ydb.generic.read"});
+
+        testCase.CreateTopic(1);
+        permissionSetup.Grant(testCase.TopicName, username, {"ALL"});
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithSecretName(secretName));
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.PauseTransfer();
+        testCase.CheckTransferState(TTransferDescription::EState::Paused);
+        testCase.ResumeTransfer();
+
+        testCase.Write({"Message-2"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }, {
+            _C("Message", TString("Message-2"))
+        }});
+
+        testCase.DropTopic();
+        testCase.DropTransfer();
     }
 }
 

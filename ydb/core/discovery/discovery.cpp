@@ -306,7 +306,7 @@ namespace NDiscoveryPrivate {
                 NameserviceResponse.Reset(nodeInfo->Release().Release());
             }
 
-            if (!BridgeInfo) {
+            if (IsBridgeMode(ActorContext()) && !BridgeInfo) {
                 auto nodeWardenStorageConfig = co_await ActorWaitForEvent<TEvNodeWardenStorageConfig>(0);
                 BridgeInfo = nodeWardenStorageConfig->Get()->BridgeInfo;
             }

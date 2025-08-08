@@ -67,13 +67,13 @@ struct TEndpointInfo {
 
 struct TPileState {
     enum EState {
-        UNSPECIFIED = 0,
-        PRIMARY = 1,
-        PROMOTE = 2,
-        SYNCHRONIZED = 3,
-        NOT_SYNCHRONIZED = 4,
-        SUSPENDED = 5,
-        DISCONNECTED = 6,
+        UNSPECIFIED = 0 /* "unspecified" */,
+        PRIMARY = 1 /* "primary" */,
+        PROMOTE = 2 /* "promote" */,
+        SYNCHRONIZED = 3 /* "synchronized" */,
+        NOT_SYNCHRONIZED = 4 /* "not_synchronized" */,
+        SUSPENDED = 5 /* "suspended" */,
+        DISCONNECTED = 6 /* "disconnected" */
     };
 
     EState State;

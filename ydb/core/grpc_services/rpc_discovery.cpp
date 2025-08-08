@@ -143,7 +143,7 @@ public:
         } else {
             auto cachedMessageData = NDiscovery::CreateCachedMessage(
                 {}, std::move(LookupResponse->CachedMessageData->InfoEntries),
-                std::move(services), std::move(endpointId), NameserviceResponse, nullptr);
+                std::move(services), std::move(endpointId), NameserviceResponse, LookupResponse->CachedMessageData->BridgeInfo);
             cachedMessage = std::move(cachedMessageData.CachedMessage);
             cachedMessageSsl = std::move(cachedMessageData.CachedMessageSsl);
         }

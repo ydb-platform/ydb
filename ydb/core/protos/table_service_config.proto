@@ -412,5 +412,5 @@ message TTableServiceConfig {
 
     optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = false ];
 
-    optional bool EnableTempTables = 95 [default = false];
+    optional bool EnableTempTablesForUser = 95 [default = false];
 };

@@ -1316,7 +1316,7 @@ public:
                             return false;
                         });
 
-                    if (temporary.Value() == "true" && !SessionCtx->Config().EnableTempTables && !isCreateTableAs) {
+                    if (temporary.Value() == "true" && !SessionCtx->Config().EnableTempTablesForUser && !isCreateTableAs) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary table is not supported."));
                         return nullptr;
                     }

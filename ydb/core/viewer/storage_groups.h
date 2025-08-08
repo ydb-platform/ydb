@@ -864,6 +864,21 @@ public:
         if (NeedToRedirect()) {
             return;
         }
+        if (!Viewer->CheckAccessViewer(TBase::GetRequest())) {
+            FieldsRequired.reset(+EGroupFields::NodeId); // fields that are not available for database users
+            FieldsRequired.reset(+EGroupFields::PDiskId);
+            FieldsRequired.reset(+EGroupFields::PDisk);
+            FieldsRequired.reset(+EGroupFields::PileName);
+        }
+        FieldsRequested = FieldsRequired; // no dependent fields
+        for (auto field = +EGroupFields::GroupId; field != +EGroupFields::COUNT; ++field) {
+            if (FieldsRequired.test(field)) {
+                auto itDependentFields = DependentFields.find(field);
+                if (itDependentFields != DependentFields.end()) {
+                    FieldsRequired |= itDependentFields->second;
+                }
+            }
+        }
         if (Database) {
             if (!DatabaseNavigateResponse) {
                 DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(Database, 0);
@@ -2008,26 +2023,28 @@ public:
             }
         }
 
-        auto itPDisk = PDisks.find(vdisk.VSlotId);
-        if (itPDisk != PDisks.end()) {
-            const TPDisk& pdisk = itPDisk->second;
-            NKikimrViewer::TStoragePDisk& jsonPDisk = *jsonVDisk.MutablePDisk();
-            jsonPDisk.SetPDiskId(pdisk.GetPDiskId());
-            jsonPDisk.SetPath(pdisk.Path);
-            jsonPDisk.SetType(pdisk.Type);
-            jsonPDisk.SetGuid(::ToString(pdisk.Guid));
-            jsonPDisk.SetCategory(pdisk.Category);
-            jsonPDisk.SetTotalSize(pdisk.TotalSize);
-            jsonPDisk.SetAvailableSize(pdisk.AvailableSize);
-            jsonPDisk.SetStatus(pdisk.Status);
-            jsonPDisk.SetDecommitStatus(pdisk.DecommitStatus);
-            jsonPDisk.SetSlotSize(pdisk.GetSlotTotalSize());
-            if (pdisk.DiskSpace != NKikimrViewer::Grey) {
-                jsonPDisk.SetDiskSpace(pdisk.DiskSpace);
-            }
-            auto itPDiskByPDiskId = PDisksByPDiskId.find(vdisk.VSlotId);
-            if (itPDiskByPDiskId != PDisksByPDiskId.end()) {
-                jsonPDisk.MutableWhiteboard()->CopyFrom(*(itPDiskByPDiskId->second));
+        if (FieldsRequested.test(+EGroupFields::PDisk)) {
+            auto itPDisk = PDisks.find(vdisk.VSlotId);
+            if (itPDisk != PDisks.end()) {
+                const TPDisk& pdisk = itPDisk->second;
+                NKikimrViewer::TStoragePDisk& jsonPDisk = *jsonVDisk.MutablePDisk();
+                jsonPDisk.SetPDiskId(pdisk.GetPDiskId());
+                jsonPDisk.SetPath(pdisk.Path);
+                jsonPDisk.SetType(pdisk.Type);
+                jsonPDisk.SetGuid(::ToString(pdisk.Guid));
+                jsonPDisk.SetCategory(pdisk.Category);
+                jsonPDisk.SetTotalSize(pdisk.TotalSize);
+                jsonPDisk.SetAvailableSize(pdisk.AvailableSize);
+                jsonPDisk.SetStatus(pdisk.Status);
+                jsonPDisk.SetDecommitStatus(pdisk.DecommitStatus);
+                jsonPDisk.SetSlotSize(pdisk.GetSlotTotalSize());
+                if (pdisk.DiskSpace != NKikimrViewer::Grey) {
+                    jsonPDisk.SetDiskSpace(pdisk.DiskSpace);
+                }
+                auto itPDiskByPDiskId = PDisksByPDiskId.find(vdisk.VSlotId);
+                if (itPDiskByPDiskId != PDisksByPDiskId.end()) {
+                    jsonPDisk.MutableWhiteboard()->CopyFrom(*(itPDiskByPDiskId->second));
+                }
             }
         }
         if (!vdisk.Donors.empty()) {

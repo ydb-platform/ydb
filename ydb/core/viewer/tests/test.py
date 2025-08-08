@@ -39,6 +39,7 @@ cluster.wait_tenant_up(shared_db)
 cluster.create_serverless_database(serverless_db, shared_db)
 cluster.wait_tenant_up(serverless_db)
 databases = [domain_name, dedicated_db, shared_db, serverless_db]
+databases_and_no_database = ['no-database', domain_name, dedicated_db, shared_db, serverless_db]
 
 
 def call_viewer_api_get(url, headers=None):
@@ -84,6 +85,7 @@ def call_viewer_db(url, params=None):
     if params is None:
         params = {}
     result = {}
+    result["no-database"] = call_viewer(url, params)
     for name in databases:
         params["database"] = name
         result[name] = call_viewer(url, params)
@@ -438,6 +440,7 @@ def normalize_result_nodes(result):
                                           'Roles',
                                           'ConnectTime',
                                           'Connections',
+                                          'ResolveHost',
                                           ])
 
 
@@ -519,6 +522,12 @@ def get_viewer_db_normalized(url, params=None):
     return normalize_result(get_viewer_db(url, params))
 
 
+def test_viewer_nodelist():
+    result = get_viewer_db_normalized("/viewer/nodelist", {
+    })
+    return result
+
+
 def test_viewer_nodes():
     result = get_viewer_db_normalized("/viewer/nodes", {
     })
@@ -576,10 +585,10 @@ def test_viewer_tabletinfo():
         'group': 'Type',
         'enums': 'true',
     })
-    for name in databases:
+    for name in databases_and_no_database:
         result['totals'][name]['TabletStateInfo'].sort(key=lambda x: x['Type'])
     result['detailed'] = get_viewer_db_normalized("/viewer/tabletinfo")
-    for name in databases:
+    for name in databases_and_no_database:
         result['detailed'][name]['TabletStateInfo'].sort(key=lambda x: x['TabletId'])
     return result
 

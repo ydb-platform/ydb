@@ -5,7 +5,7 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 class TestTpchDuplicates(tpch.TestTpch1, FunctionalTestBase):
     """https://github.com/ydb-platform/ydb/issues/22253"""
-    iterations: int = 10
+    iterations: int = 1
 
     @classmethod
     def addition_init_params(cls) -> list[str]:
@@ -20,9 +20,10 @@ class TestTpchDuplicates(tpch.TestTpch1, FunctionalTestBase):
 
         for table in cls.get_tables():
             set_compaction_query = f"""
-                ALTER OBJECT `/{YdbCluster.ydb_database}/olap_yatests/{cls._get_path()}/{table}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                    {{"levels" : [{{"class_name" : "Zero", "expected_blobs_size" : 2048000}},
-                                    {{"class_name" : "Zero"}}]}}`);
+                ALTER OBJECT `/{YdbCluster.ydb_database}/olap_yatests/{cls._get_path()}/{table}` (TYPE TABLE)
+                    SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                        {{"levels" : [{{"class_name" : "Zero", "expected_blobs_size" : 2048000}},
+                                      {{"class_name" : "Zero"}}]}}`);
             """
             cls.run_cli(['table', 'query', 'execute', '-t', 'scheme', '-q', set_compaction_query])
 

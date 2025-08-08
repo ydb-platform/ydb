@@ -44,6 +44,12 @@ void TTopicOperationsScenario::EnsureWarmupSecIsValid() const
     }
 }
 
+void TTopicOperationsScenario::EnsureRatesIsValid() const
+{
+    Y_ENSURE_EX(MessagesPerSec >= 0, TMisuseException() << "--messages-per-sec should be non negative.");
+    Y_ENSURE_EX(BytesPerSec >= 0, TMisuseException() << "--bytes-per-sec should be non negative.");
+}
+
 TString TTopicOperationsScenario::GetReadOnlyTableName() const
 {
     return TableName + "-ro";
@@ -234,6 +240,8 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .UseTopicCommit = OnlyTopicInTx,
                 .UseTableSelect = UseTableSelect && !OnlyTopicInTx,
                 .UseTableUpsert = !OnlyTopicInTx,
+                .RestartInterval = RestartInterval,
+                .ReadWithoutCommit = ReadWithoutCommit,
                 .ReadWithoutConsumer = ReadWithoutConsumer,
                 .CommitPeriodMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion,
                 .CommitMessages = CommitMessages
@@ -286,7 +294,10 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .UseAutoPartitioning = useAutoPartitioning,
             .CommitIntervalMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion
             .CommitMessages = CommitMessages,
-            .UseCpuTimestamp = UseCpuTimestamp
+            .UseCpuTimestamp = UseCpuTimestamp,
+            .KeyPrefix = KeyPrefix,
+            .KeyCount = KeyCount,
+            .KeySeed = writerIdx,
         };
 
         threads.push_back(std::async([writerParams = std::move(writerParams)]() { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));

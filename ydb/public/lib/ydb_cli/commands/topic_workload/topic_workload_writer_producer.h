@@ -18,9 +18,9 @@ namespace NYdb::NConsoleClient {
                 const NUnifiedAgent::TClock& clock
                 );
         void Close();
-        
+
         void SetWriteSession(std::shared_ptr<NYdb::NTopic::IWriteSession> writeSession);
-        
+
         bool WaitForInitSeqNo();
 
         void WaitForContinuationToken(const TDuration& timeout);
@@ -41,6 +41,7 @@ namespace NYdb::NConsoleClient {
         void HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event);
     private:
         TString GetGeneratedMessage() const;
+        NTopic::TWriteMessage::TMessageMeta GenerateMessageMeta() const;
 
         std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession_;
         ui64 MessageId_ = 0;

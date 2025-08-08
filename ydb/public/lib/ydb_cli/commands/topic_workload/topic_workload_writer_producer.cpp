@@ -30,10 +30,12 @@ void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
 
     TString data = GetGeneratedMessage();
     InflightMessagesCreateTs_[MessageId_] = createTimestamp;
+    NTopic::TWriteMessage::TMessageMeta meta = GenerateMessageMeta();
 
     NTopic::TWriteMessage writeMessage(data);
     writeMessage.SeqNo(MessageId_);
     writeMessage.CreateTimestamp(createTimestamp);
+    writeMessage.MessageMeta(std::move(meta));
 
     if (transaction.has_value()) {
         writeMessage.Tx(transaction.value());
@@ -58,6 +60,26 @@ void TTopicWorkloadWriterProducer::Close() {
 
 TString TTopicWorkloadWriterProducer::GetGeneratedMessage() const {
     return Params_.GeneratedMessages[MessageId_ % TTopicWorkloadWriterWorker::GENERATED_MESSAGES_COUNT];
+}
+
+static TString GenerateMetaKeyValue(ui64 messageId, const TTopicWorkloadWriterParams& params) {
+    TString keyValue;
+    if (params.KeyPrefix.Defined()) {
+        TStringOutput so(keyValue);
+        so << *params.KeyPrefix;
+        if (params.KeyCount > 0) {
+            so << '.' << ((messageId + params.KeySeed) % params.KeyCount);
+        }
+    }
+    return keyValue;
+}
+
+NYdb::NTopic::TWriteMessage::TMessageMeta TTopicWorkloadWriterProducer::GenerateMessageMeta() const {
+    NYdb::NTopic::TWriteMessage::TMessageMeta meta;
+    if (Params_.KeyPrefix.Defined()) {
+        meta.emplace_back("__key", GenerateMetaKeyValue(MessageId_, Params_));
+    }
+    return meta;
 }
 
 bool TTopicWorkloadWriterProducer::WaitForInitSeqNo() {

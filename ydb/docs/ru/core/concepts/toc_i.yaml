@@ -1,6 +1,8 @@
 items:
 - name: Глоссарий
   href: glossary.md
+- name: Архитектура
+  href: architecture.md
 - name: Соединение с БД
   href: connect.md
 - name: Структура кластера

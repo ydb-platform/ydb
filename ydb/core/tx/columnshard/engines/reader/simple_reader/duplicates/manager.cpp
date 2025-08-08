@@ -117,7 +117,7 @@ private:
             { std::make_shared<TColumnDataAllocation>(Callback, Portions, Columns, ColumnDataManager, mem) }, std::nullopt);
     }
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        return Context->GetRequest()->Get()->GetAbortionFlag();
+        return Callback->GetContext()->GetRequest()->Get()->GetAbortionFlag();
     }
 
 public:

@@ -403,12 +403,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 auto readHeaderValueStr = TString(readHeaderValue.data(), readHeaderValue.size());
                 UNIT_ASSERT_VALUES_EQUAL(readHeaderValueStr, headerValue);
             }
-
+            
+            auto msg2 = client.Produce(topicName, 0, batch);
+            
             // read by logbroker protocol
             auto readMessages = Read(topicReader);
             UNIT_ASSERT_EQUAL(readMessages.size(), 1);
 
-            UNIT_ASSERT_EQUAL(readMessages[0].GetMessages().size(), 1);
+            UNIT_ASSERT_EQUAL(readMessages[0].GetMessages().size(), 2);
             auto& readMessage = readMessages[0].GetMessages()[0];
             readMessage.Commit();
 

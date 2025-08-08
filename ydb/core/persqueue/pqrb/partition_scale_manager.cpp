@@ -2,6 +2,8 @@
 #include "read_balancer_log.h"
 
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <fmt/format.h>
+#include <algorithm>
 
 namespace NKikimr {
 namespace NPQ {
@@ -20,13 +22,22 @@ TPartitionScaleManager::TPartitionScaleManager(
     , TopicPath(topicPath)
     , DatabasePath(databasePath)
     , BalancerConfig(pathId, version, config)
-    , PartitionGraph(partitionGraph) {
+    , PartitionGraph(partitionGraph)
+    , MirroredFromSomewhere(MirroringEnabled(config)) {
     }
 
-void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus, const TActorContext& ctx) {
+TString TPartitionScaleManager::LogPrefix() const {
+    return TStringBuilder() << "[TPartitionScaleManager: " << TopicName << "] ";
+}
+
+void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus, TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants, const TActorContext& ctx) {
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
         PQ_LOG_D("TPartitionScaleManager::HandleScaleStatusChange need to split partition " << partitionId);
-        PartitionsToSplit.insert(partitionId);
+        TPartitionScaleOperationInfo op{
+            .PartitionId = partitionId,
+            .PartitionScaleParticipants = std::move(participants),
+        };
+        PartitionsToSplit.insert_or_assign(partitionId, std::move(op));
         TrySendScaleRequest(ctx);
     } else {
         PartitionsToSplit.erase(partitionId);
@@ -66,40 +77,91 @@ const TString ToHex(const TString& value) {
     return TStringBuilder() << HexText(TBasicStringBuf(value));
 }
 
+struct TPartitionScaleManager::TBuildSplitScaleRequestResult {
+    TMaybe<TPartitionSplit> Split;
+    bool Remove = false;
+};
+
 std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartitionScaleManager::BuildScaleRequest(const TActorContext&) {
     std::vector<TPartitionSplit> splitsToApply;
     std::vector<TPartitionMerge> mergesToApply;
 
     size_t allowedSplitsCount = BalancerConfig.MaxActivePartitions > BalancerConfig.CurPartitions ? BalancerConfig.MaxActivePartitions - BalancerConfig.CurPartitions : 0;
-    auto partitionId = PartitionsToSplit.begin();
-    while (allowedSplitsCount > 0 && partitionId != PartitionsToSplit.end()) {
-        auto* node = PartitionGraph.GetPartition(*partitionId);
-        if (node->DirectChildren.empty()) {
-            auto from = node->From;
-            auto to = node->To;
-            auto mid = MiddleOf(from, to);
-            if (mid.empty()) {
-                partitionId = PartitionsToSplit.erase(partitionId);
-                PQ_LOG_ERROR("TPartitionScaleManager::BuildScaleRequest wrong partition key range. Can't get mid. Topic# " << TopicName << ", partition# " << *partitionId);
-                continue;
-            }
-            PQ_LOG_D("TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << ToHex(from)
-                    << "'. To# '" << ToHex(to) << "'. Mid# '" << ToHex(mid)
-                    << "'. Topic# " << TopicName << ". Partition# " << *partitionId);
-
-            TPartitionSplit split;
-            split.set_partition(*partitionId);
-            split.set_splitboundary(mid);
-            splitsToApply.push_back(split);
-
+    auto partitionIt = PartitionsToSplit.begin();
+    while (allowedSplitsCount > 0 && partitionIt != PartitionsToSplit.end()) {
+        const auto& [_, splitParameters] = *partitionIt;
+        TBuildSplitScaleRequestResult req = BuildSplitScaleRequest(splitParameters);
+        if (req.Split) {
+            splitsToApply.push_back(std::move(*req.Split));
             --allowedSplitsCount;
-            ++partitionId;
+        }
+        if (req.Remove) {
+            partitionIt = PartitionsToSplit.erase(partitionIt);
         } else {
-            partitionId = PartitionsToSplit.erase(partitionId);
+            ++partitionIt;
         }
     }
 
     return {splitsToApply, mergesToApply};
+}
+
+
+TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::BuildSplitScaleRequest(const TPartitionScaleOperationInfo& splitParameters) const {
+    const ui32 partitionId = splitParameters.PartitionId;
+    if (MirroredFromSomewhere)  {
+        if (!splitParameters.PartitionScaleParticipants.Defined()) {
+            PQ_LOG_NOTICE("TPartitionScaleManager::BuildScaleRequest split request for mirrored topic doesn't have prescribed partition ids. Topic# " << TopicName << ", partition# " << partitionId);
+            return {.Split = Nothing(), .Remove = true};
+        }
+    }
+    const auto* node = PartitionGraph.GetPartition(partitionId);
+    if (node == nullptr) {
+        if (splitParameters.PartitionScaleParticipants.Defined()) {
+            PQ_LOG_NOTICE("TPartitionScaleManager::BuildScaleRequest attempt to split partition that was not created yet. Topic# " << TopicName << ", partition# " << partitionId);
+            return {.Split = Nothing(), .Remove = false};
+        } else {
+            PQ_LOG_ERROR("TPartitionScaleManager::BuildScaleRequest partition not found. Topic# " << TopicName << ", partition# " << partitionId);
+            return {.Split = Nothing(), .Remove = true};
+        }
+    }
+    if (node->DirectChildren.empty()) {
+        auto from = node->From;
+        auto to = node->To;
+        auto mid = MiddleOf(from, to);
+        if (mid.empty()) {
+            PQ_LOG_ERROR("TPartitionScaleManager::BuildScaleRequest wrong partition key range. Can't get mid. Topic# " << TopicName << ", partition# " << partitionId);
+            return {.Split = Nothing(), .Remove = true};
+        }
+
+        if (splitParameters.PartitionScaleParticipants.Defined() && splitParameters.PartitionScaleParticipants->AdjacentPartitionIdsSize() != 0) {
+            PQ_LOG_ERROR("TPartitionScaleManager::BuildScaleRequest split request cannot have adjacent partitions. Topic# " << TopicName << ", partition# " << partitionId);
+            return {.Split = Nothing(), .Remove = true};
+        }
+
+        PQ_LOG_D("TPartitionScaleManager::BuildScaleRequest partition split ranges. From# '" << ToHex(from)
+                << "'. To# '" << ToHex(to) << "'. Mid# '" << ToHex(mid)
+                << "'. Topic# " << TopicName << ". Partition# " << partitionId);
+
+        TPartitionSplit split;
+        split.set_partition(partitionId);
+        split.set_splitboundary(mid);
+        if (splitParameters.PartitionScaleParticipants.Defined()) {
+            for (const auto& childPartitionId : splitParameters.PartitionScaleParticipants->GetChildPartitionIds()) {
+                split.add_childpartitionids(childPartitionId);
+            }
+        }
+        return {.Split = std::move(split), .Remove = false};
+    } else {
+        if (splitParameters.PartitionScaleParticipants.Defined()) {
+            const auto nodeChildrenIds = std::ranges::transform_view(node->DirectChildren, &TPartitionGraph::Node::Id);
+            const auto& prescribedChildrenIds = splitParameters.PartitionScaleParticipants->GetChildPartitionIds();
+            if (!std::ranges::is_permutation(nodeChildrenIds, prescribedChildrenIds)) {
+                const std::string mappingStr = fmt::format("([{}]->[{}])", fmt::join(nodeChildrenIds, ","), fmt::join(prescribedChildrenIds, ","));
+                PQ_LOG_ERROR("TPartitionScaleManager::BuildScaleRequest trying to split partition into different set of children partitions " << mappingStr << ". Topic# " << TopicName << ", partition# " << partitionId);
+            }
+        }
+        return {.Split = Nothing(), .Remove = true};
+    }
 }
 
 void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx) {
@@ -124,6 +186,7 @@ void TPartitionScaleManager::Die(const TActorContext& ctx) {
 
 void TPartitionScaleManager::UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config) {
     BalancerConfig = TBalancerConfig(pathId, version, config);
+    MirroredFromSomewhere = MirroringEnabled(config);
 }
 
 void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {

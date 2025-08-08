@@ -5,6 +5,8 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/sys_view/common/path.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>

@@ -658,7 +658,7 @@ NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadat
 ) {
     TNavigate::TEntry entry;
 
-    auto schema = SystemViewRewrittenResolver->GetSystemViewSchema(sysViewPath.ViewName, NSysView::ISystemViewResolver::ETarget::Domain);
+    auto schema = SystemViewRewrittenResolver->GetSystemViewSchema(sysViewPath.ViewName, NSysView::ISystemViewResolver::ESource::Domain);
     entry.Kind = TNavigate::KindTable;
     entry.Columns = std::move(schema->Columns);
     entry.TableId = TTableId(TSysTables::SysSchemeShard, 0, sysViewPath.ViewName);
@@ -967,7 +967,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 promise.SetValue(externalDataSourceMetadata);
                                 return;
                             }
-                          
+
                             auto loadDynamicMetadata = [promise, externalDataSourceMetadata, settings, table, database, externalPath] () mutable {
                                 NExternalSource::IExternalSource::TPtr externalSource;
                                 if (settings.ExternalSourceFactory) {
@@ -1007,7 +1007,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath) {
                                 auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
                                 THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
-                                    
+
                                 auto token = source.Token;
                                 auto secretName = source.DataSourceAuth.GetToken().GetTokenSecretName();
                                 auto structuredTokenJson = NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(secretName, token);

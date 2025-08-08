@@ -47,11 +47,18 @@ public:
     virtual void ResumeByCheckpoint() = 0;
     virtual bool IsPausedByCheckpoint() const = 0;
     // Watermarks
-    // Called after receiving watermark
+    // Called after receiving watermark (watermark position remembered,
+    // but does not pause channel); watermark may be pushed behind new data
+    // by reading or checkpoint
     virtual void AddWatermark(TInstant watermark) = 0;
-    // Called after watermarks received by all channels and ready for TaskRunner
+    // Called after watermark is ready for TaskRunner (got watermarks on all channels;
+    // implies channel must already contain greater-or-equal watermark);
+    // Same as with PauseByCheckpoint, any data added adter Pause is not received until Resume;
+    // If called after PauseByCheckpoint(), checkpoint takes priority
     virtual void PauseByWatermark(TInstant watermark) = 0;
-    // Called after watermark processed by TaskRunner
+    // Called after watermark processed by TaskRunner;
+    // If called before PauseByCheckpoint, all watermarks greater than this
+    // moved after checkpoint (with no data between checkpoint and watermark)
     virtual void ResumeByWatermark(TInstant watermark) = 0;
     virtual bool IsPausedByWatermark() const = 0;
 };

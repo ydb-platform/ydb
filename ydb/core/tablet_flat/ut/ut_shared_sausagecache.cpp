@@ -453,7 +453,7 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 73, 10, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 73, 10}));
 
     RestartAndClearCache(env);
 

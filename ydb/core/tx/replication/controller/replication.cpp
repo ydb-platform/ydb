@@ -41,7 +41,11 @@ class TReplication::TImpl: public TLagProvider {
             return;
         }
 
-        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName));
+        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie));
+    }
+
+    ui64 GetExpectedSecretResolverCookie() const {
+        return SecretResolverCookie;
     }
 
     template <typename... Args>
@@ -228,10 +232,11 @@ public:
     }
 
     void ResetCredentials(const TActorContext& ctx) {
-        if (SecretResolver) {
-            ctx.Send(SecretResolver, new TEvents::TEvPoison());
+        for (auto* x : TVector<TActorId*>{&SecretResolver, &YdbProxy}) {
+            if (auto actorId = std::exchange(*x, {})) {
+                ctx.Send(actorId, new TEvents::TEvPoison());
+            }
         }
-        SecretResolver = {};
     }
 
     void ErrorState(TString issue) {
@@ -262,6 +267,7 @@ private:
     THashSet<ui64> PendingAlterTargets;
     mutable TVector<TString> TargetTablePaths;
     TActorId SecretResolver;
+    ui64 SecretResolverCookie = 0;
     TActorId YdbProxy;
     TActorId TenantResolver;
     TActorId TargetDiscoverer;
@@ -394,6 +400,10 @@ void TReplication::UpdateSecret(const TString& secretValue) {
     default:
         Y_ABORT("unreachable");
     }
+}
+
+ui64 TReplication::GetExpectedSecretResolverCookie() const {
+    return Impl->GetExpectedSecretResolverCookie();
 }
 
 void TReplication::SetTenant(const TString& value) {

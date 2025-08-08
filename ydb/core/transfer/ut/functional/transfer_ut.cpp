@@ -1325,5 +1325,67 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
         testCase.DropTable();
     }
+
+    Y_UNIT_TEST(Alter_WithSecret)
+    {
+        auto id = RandomNumber<ui16>();
+        auto username = TStringBuilder() << "u" << id;
+        auto secretName = TStringBuilder() << "s" << id;
+
+        MainTestCase permissionSetup;
+        permissionSetup.CreateUser(username);
+        permissionSetup.Grant("", username, {"ydb.granular.create_table", "ydb.granular.create_queue", "ydb.granular.alter_schema"});
+
+        MainTestCase testCase(username);
+        testCase.ExecuteDDL(Sprintf(R"(
+                CREATE OBJECT %s (TYPE SECRET) WITH value="%s@builtin"
+            )", secretName.data(), username.data()));
+
+        permissionSetup.ExecuteDDL(Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )", testCase.TableName.data()));
+        permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.write", "ydb.generic.read"});
+
+        testCase.CreateTopic(1);
+        permissionSetup.Grant(testCase.TopicName, username, {"ALL"});
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithSecretName(secretName));
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.PauseTransfer();
+        testCase.CheckTransferState(TTransferDescription::EState::Paused);
+        testCase.ResumeTransfer();
+
+        testCase.Write({"Message-2"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }, {
+            _C("Message", TString("Message-2"))
+        }});
+
+        testCase.DropTopic();
+        testCase.DropTransfer();
+    }
 }
 

@@ -153,6 +153,7 @@ public:
     ui64 GetNextTargetId() const;
 
     void UpdateSecret(const TString& secretValue);
+    ui64 GetExpectedSecretResolverCookie() const;
 
     void SetTenant(const TString& value);
     const TString& GetTenant() const;

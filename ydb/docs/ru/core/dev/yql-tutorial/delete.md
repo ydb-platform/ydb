@@ -1,13 +1,5 @@
 # Удаление данных
 
-{% note warning %}
-
-{% include [OLAP_not_allow_text](../../_includes/not_allow_for_olap_text.md) %}
-
-Вместо `DELETE FROM` для удаления данных из колоночных таблиц можно воспользоваться механизмом удаления строк по времени — [TTL](../../concepts/ttl.md). TTL можно задать при [создании](../../yql/reference/syntax/create_table/index.md) строковой или колоночной таблицы (`CREATE TABLE`) или при их [изменении](../../yql/reference/syntax/alter_table/index.md) (`ALTER TABLE`).
-
-{% endnote %}
-
 Удалите данные из строковой таблицы с помощью оператора [DELETE](../../yql/reference/syntax/delete.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}

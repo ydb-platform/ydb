@@ -25,6 +25,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader
     ydb/core/tx/columnshard/engines/predicate
     ydb/core/tx/columnshard/engines/storage
+    ydb/core/tx/columnshard/engines/insert_table
     ydb/core/tx/columnshard/engines/changes
     ydb/core/tx/columnshard/engines/portions
     ydb/core/tx/columnshard/engines/protos

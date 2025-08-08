@@ -57,6 +57,11 @@ public:
         TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
     }
 
+    void OnWriteOverloadInsertTable(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadInsertTable(size);
+    }
+
     void OnWriteOverloadMetadata(const ui64 size) const {
         TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         CSCounters.OnWriteOverloadMetadata(size);

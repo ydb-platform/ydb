@@ -132,7 +132,7 @@ enum class EExpectedResult {
 
 static constexpr ui32 PORTION_ROWS = 80 * 1000;
 
-void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::TTypeId ttlColumnTypeId)
+void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, bool writePortionsOnInsert, NScheme::TTypeId ttlColumnTypeId)
 {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -162,6 +162,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
 
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.GetAppData().FeatureFlags.SetEnableWritePortionsOnInsert(writePortionsOnInsert);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
 
     TActorId sender = runtime.AllocateEdgeActor();
@@ -184,7 +185,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     const auto ttlAllDataStale = TDuration::Seconds(now - lastTs) - TDuration::Days(1);
 
 
-    auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(true);
+    auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(writePortionsOnInsert);
     spec.TtlColumn = ttlColumnName;
     spec.EvictAfter = ttlAllDataFresh;
     auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk, spec, "/Root/olapStore"), ++txId);
@@ -1151,7 +1152,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST_OCTO(TTL, Reboot, Internal, FirstPkColumn) {
         for (auto typeId : { NTypeIds::Timestamp, NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64 }) {
             Cerr << "Running TestTtl ttlColumnType=" << NKikimr::NScheme::TypeName(typeId) << Endl;
-            TestTtl(Reboot, Internal, FirstPkColumn, typeId);
+            TestTtl(Reboot, Internal, FirstPkColumn, false, typeId);
         }
     }
 

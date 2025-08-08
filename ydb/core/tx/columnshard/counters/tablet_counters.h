@@ -5,6 +5,7 @@
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/insert_table/rt_insertion.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -92,10 +93,22 @@ public:
         IncCounter(NColumnShard::COUNTER_READ_INDEX_BYTES, countersDelta.Bytes);
     }
 
+    void OnWriteCommitted(const NOlap::TInsertionSummary::TCounters& countersDelta) const {
+        IncCounter(COUNTER_BLOBS_COMMITTED, countersDelta.Rows);
+        IncCounter(COUNTER_BYTES_COMMITTED, countersDelta.Bytes);
+        IncCounter(COUNTER_RAW_BYTES_COMMITTED, countersDelta.RawBytes);
+    }
+
     void OnCompactionWriteIndexCompleted(bool success, const ui64 blobsWritten, const ui64 bytesWritten) const {
         IncCounter(success ? NColumnShard::COUNTER_SPLIT_COMPACTION_SUCCESS : NColumnShard::COUNTER_SPLIT_COMPACTION_FAIL);
         IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, blobsWritten);
         IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, bytesWritten);
+    }
+
+    void OnInsertionWriteIndexCompleted(const ui64 blobsWritten, const ui64 bytesWritten, const TDuration duration) const {
+        IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
+        IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
+        IncCounter(NColumnShard::COUNTER_INDEXING_TIME, duration.MilliSeconds());
     }
 
     void OnWritePutBlobsSuccess(const ui64 rowsWritten) const {

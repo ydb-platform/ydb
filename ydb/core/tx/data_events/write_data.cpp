@@ -8,11 +8,12 @@
 namespace NKikimr::NEvWrite {
 
 TWriteData::TWriteData(const std::shared_ptr<TWriteMeta>& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema,
-    const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction)
+    const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction, const bool writePortions)
     : WriteMeta(writeMeta)
     , Data(data)
     , PrimaryKeySchema(primaryKeySchema)
-    , BlobsAction(blobsAction) {
+    , BlobsAction(blobsAction)
+    , WritePortions(writePortions) {
     AFL_VERIFY(WriteMeta);
     Y_ABORT_UNLESS(Data);
     Y_ABORT_UNLESS(PrimaryKeySchema);

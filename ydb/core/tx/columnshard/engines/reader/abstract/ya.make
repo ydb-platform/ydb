@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/versions
+    ydb/core/tx/columnshard/engines/insert_table
     ydb/core/tx/program
     ydb/core/protos
     ydb/core/tx/columnshard/data_sharing/protos

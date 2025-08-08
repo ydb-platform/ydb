@@ -21,8 +21,9 @@ std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const N
 
 NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(
     const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+    auto& insertTable = self->InsertTable;
     auto& index = self->TablesManager.GetPrimaryIndex();
-    if (!index) {
+    if (!insertTable || !index) {
         return std::shared_ptr<TReadMetadataBase>();
     }
 
@@ -31,7 +32,7 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
                                                         << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
     }
 
-    TDataStorageAccessor dataAccessor(index);
+    TDataStorageAccessor dataAccessor(insertTable, index);
     AFL_VERIFY(read.PathId);
     auto readMetadata = std::make_shared<TReadMetadata>(index->CopyVersionedIndexPtr(), read);
 

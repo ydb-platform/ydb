@@ -49,7 +49,7 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
     }
 
     auto batchResult = Merger->BuildResultBatch();
-    if (!Context.GetNoTxWrite()) {
+    if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batchResult.GetContainer(), Context);
         NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);

@@ -216,4 +216,60 @@ bool TPortionDataSource::DoAddTxConflict() {
     return false;
 }
 
+bool TCommittedDataSource::DoStartFetchingColumns(
+    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& /*columns*/) {
+    if (ReadStarted) {
+        return false;
+    }
+    ReadStarted = true;
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
+
+    std::shared_ptr<IBlobsStorageOperator> storageOperator = GetContext()->GetCommonContext()->GetStoragesManager()->GetInsertOperator();
+    auto readAction = storageOperator->StartReadingAction(NBlobOperations::EConsumer::SCAN);
+
+    readAction->SetIsBackgroundProcess(false);
+    readAction->AddRange(CommittedBlob.GetBlobRange());
+
+    std::vector<std::shared_ptr<IBlobsReadingAction>> actions = { readAction };
+    auto constructor = std::make_shared<NCommon::TBlobsFetcherTask>(actions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
+    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
+    return true;
+}
+
+void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool /*sequential*/) {
+    TMemoryProfileGuard mGuard("SCAN_PROFILE::ASSEMBLER::COMMITTED", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
+    const ISnapshotSchema::TPtr batchSchema =
+        GetContext()->GetReadMetadata()->GetIndexVersions().GetSchemaVerified(GetCommitted().GetSchemaVersion());
+    const ISnapshotSchema::TPtr resultSchema = GetContext()->GetReadMetadata()->GetResultSchema();
+    if (!AssembledFlag) {
+        AssembledFlag = true;
+        AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
+        auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
+        auto schema = GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion());
+        auto rBatch = NArrow::DeserializeBatch(
+            bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema.begin(), schema.end())));
+        AFL_VERIFY(rBatch)("schema", schema.ToString());
+        auto batch = std::make_shared<NArrow::TGeneralContainer>(rBatch);
+        std::set<ui32> columnIdsToDelete = batchSchema->GetColumnIdsToDelete(resultSchema);
+        if (!columnIdsToDelete.empty()) {
+            batch->DeleteFieldsByIndex(batchSchema->ConvertColumnIdsToIndexes(columnIdsToDelete));
+        }
+        TSnapshot ss = TSnapshot::Zero();
+        if (CommittedBlob.IsCommitted()) {
+            ss = CommittedBlob.GetCommittedSnapshotVerified();
+        } else {
+            ss = GetContext()->GetReadMetadata()->IsMyUncommitted(CommittedBlob.GetInsertWriteId())
+                     ? GetContext()->GetReadMetadata()->GetRequestSnapshot()
+                     : TSnapshot::Zero();
+        }
+        GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(*batch, ss, (ui64)CommittedBlob.GetInsertWriteId());
+        GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(*batch, CommittedBlob.GetIsDelete());
+        MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
+        if (CommittedBlob.GetIsDelete()) {
+            MutableStageData().AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
+        }
+    }
+    MutableStageData().SyncTableColumns(columns->GetSchema()->fields(), *resultSchema, GetRecordsCount());
+}
+
 }   // namespace NKikimr::NOlap::NReader::NPlain

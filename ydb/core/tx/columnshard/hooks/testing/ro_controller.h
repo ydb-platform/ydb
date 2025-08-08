@@ -13,6 +13,8 @@ class TReadOnlyController: public ICSController {
 private:
     YDB_READONLY(TAtomicCounter, TTLFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, TTLStartedCounter, 0);
+    YDB_READONLY(TAtomicCounter, InsertFinishedCounter, 0);
+    YDB_READONLY(TAtomicCounter, InsertStartedCounter, 0);
     YDB_READONLY(TAtomicCounter, CompactionFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, CompactionStartedCounter, 0);
     YDB_READONLY(TAtomicCounter, CleaningFinishedCounter, 0);
@@ -95,6 +97,19 @@ public:
             Sleep(std::min(TDuration::Seconds(1), d));
         }
         return count > 0;
+    }
+
+    void WaitIndexation(const TDuration d) const {
+        TInstant start = TInstant::Now();
+        ui32 insertsStart = GetInsertStartedCounter().Val();
+        while (Now() - start < d) {
+            if (insertsStart != GetInsertStartedCounter().Val()) {
+                insertsStart = GetInsertStartedCounter().Val();
+                start = TInstant::Now();
+            }
+            Cerr << "WAIT_INDEXATION: " << GetInsertStartedCounter().Val() << Endl;
+            Sleep(TDuration::Seconds(1));
+        }
     }
 
     bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {

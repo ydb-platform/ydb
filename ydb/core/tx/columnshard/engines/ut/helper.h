@@ -1,7 +1,5 @@
 #pragma once
-#include <ydb/core/protos/tx_columnshard.pb.h>
-
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <ydb/core/tx/columnshard/engines/insert_table/meta.h>
 
 namespace NKikimr::NOlap::NEngines::NTest {
 
@@ -11,4 +9,4 @@ public:
     static std::shared_ptr<arrow::Schema> GetMetaSchema();
 };
 
-};   // namespace NKikimr::NOlap::NEngines::NTest
+};

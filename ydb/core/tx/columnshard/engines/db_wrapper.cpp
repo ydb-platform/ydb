@@ -9,6 +9,41 @@
 
 namespace NKikimr::NOlap {
 
+void TDbWrapper::Insert(const TInsertedData& data) {
+    NIceDb::TNiceDb db(Database);
+    NColumnShard::Schema::InsertTable_Insert(db, data);
+}
+
+void TDbWrapper::Commit(const TCommittedData& data) {
+    NIceDb::TNiceDb db(Database);
+    NColumnShard::Schema::InsertTable_Commit(db, data);
+}
+
+void TDbWrapper::Abort(const TInsertedData& data) {
+    NIceDb::TNiceDb db(Database);
+    NColumnShard::Schema::InsertTable_Abort(db, data);
+}
+
+void TDbWrapper::EraseInserted(const TInsertedData& data) {
+    NIceDb::TNiceDb db(Database);
+    NColumnShard::Schema::InsertTable_EraseInserted(db, data);
+}
+
+void TDbWrapper::EraseCommitted(const TCommittedData& data) {
+    NIceDb::TNiceDb db(Database);
+    NColumnShard::Schema::InsertTable_EraseCommitted(db, data);
+}
+
+void TDbWrapper::EraseAborted(const TInsertedData& data) {
+    NIceDb::TNiceDb db(Database);
+    NColumnShard::Schema::InsertTable_EraseAborted(db, data);
+}
+
+bool TDbWrapper::Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) {
+    NIceDb::TNiceDb db(Database);
+    return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, insertTable, loadTime);
+}
+
 void TDbWrapper::WriteColumn(
     const TPortionDataAccessor& acc, const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) {
     if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage() && !AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {

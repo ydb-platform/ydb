@@ -52,15 +52,19 @@ void TTxInit::SetDefaults() {
     Self->LastCompletedTx = NOlap::TSnapshot::Zero();
     Self->OwnerPathId = 0;
     Self->OwnerPath.clear();
+    Self->LongTxWrites.clear();
+    Self->LongTxWritesByUniqueId.clear();
 }
 
 std::shared_ptr<ITxReader> TTxInit::BuildReader() {
     auto result = std::make_shared<TTxCompositeReader>("composite_init");
     result->AddChildren(std::make_shared<NLoading::TSpecialValuesInitializer>("special_values", Self));
     result->AddChildren(std::make_shared<NLoading::TTablesManagerInitializer>("tables_manager", Self));
+    result->AddChildren(std::make_shared<NLoading::TInsertTableInitializer>("insert_table", Self));
     result->AddChildren(std::make_shared<NLoading::TTxControllerInitializer>("tx_controller", Self));
     result->AddChildren(std::make_shared<NLoading::TOperationsManagerInitializer>("operations_manager", Self));
     result->AddChildren(std::make_shared<NLoading::TStoragesManagerInitializer>("storages_manager", Self));
+    result->AddChildren(std::make_shared<NLoading::TLongTxInitializer>("long_tx", Self));
     result->AddChildren(std::make_shared<NLoading::TDBLocksInitializer>("db_locks", Self));
     result->AddChildren(std::make_shared<NLoading::TBackgroundSessionsInitializer>("bg_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TSharingSessionsInitializer>("sharing_sessions", Self));
@@ -83,6 +87,7 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
             return false;
         }
         StartReader = nullptr;
+        Self->UpdateInsertTableCounters();
         Self->UpdateIndexCounters();
         Self->UpdateResourceMetrics(ctx, {});
     } catch (const TNotReadyTabletException&) {

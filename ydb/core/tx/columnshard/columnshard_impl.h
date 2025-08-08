@@ -99,6 +99,7 @@ class TArrowData;
 class TEvWriteCommitPrimaryTransactionOperator;
 class TEvWriteCommitSecondaryTransactionOperator;
 class TTxFinishAsyncTransaction;
+class TTxInsertTableCleanup;
 class TTxRemoveSharedBlobs;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
@@ -108,9 +109,11 @@ class TWriteTasksQueue;
 class TWriteTask;
 
 namespace NLoading {
+class TInsertTableInitializer;
 class TTxControllerInitializer;
 class TOperationsManagerInitializer;
 class TStoragesManagerInitializer;
+class TLongTxInitializer;
 class TDBLocksInitializer;
 class TBackgroundSessionsInitializer;
 class TSharingSessionsInitializer;
@@ -159,6 +162,7 @@ using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
+    friend class TTxInsertTableCleanup;
     friend class TTxInit;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
@@ -218,14 +222,17 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TWriteOperation;
 
     friend class TSchemaTransactionOperator;
+    friend class TLongTxTransactionOperator;
     friend class TEvWriteTransactionOperator;
     friend class TBackupTransactionOperator;
     friend class IProposeTxOperator;
     friend class TSharingTransactionOperator;
 
+    friend class NLoading::TInsertTableInitializer;
     friend class NLoading::TTxControllerInitializer;
     friend class NLoading::TOperationsManagerInitializer;
     friend class NLoading::TStoragesManagerInitializer;
+    friend class NLoading::TLongTxInitializer;
     friend class NLoading::TDBLocksInitializer;
     friend class NLoading::TBackgroundSessionsInitializer;
     friend class NLoading::TSharingSessionsInitializer;
@@ -483,6 +490,14 @@ private:
     std::optional<TMonotonic> StartInstant;
     bool IsTxInitFinished = false;
 
+    struct TLongTxWriteInfo {
+        TInsertWriteId InsertWriteId;
+        ui32 WritePartId;
+        NLongTxService::TLongTxId LongTxId;
+        ui64 PreparedTxId = 0;
+        std::optional<ui32> GranuleShardingVersionId;
+    };
+
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
@@ -515,11 +530,16 @@ private:
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
+    std::unique_ptr<NOlap::TInsertTable> InsertTable;
+    NOlap::NResourceBroker::NSubscribe::TTaskContext InsertTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
 
     std::optional<ui64> ProgressTxInFlight;
     THashMap<ui64, TInstant> ScanTxInFlight;
+    THashMap<TInsertWriteId, TLongTxWriteInfo> LongTxWrites;
+    using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
+    THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
     TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
     TSettings Settings;
@@ -531,6 +551,7 @@ private:
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
+    void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TInsertWriteId>&& writesToAbort);
 
     bool WaitPlanStep(ui64 step);
     void SendWaitPlanStep(ui64 step);
@@ -542,6 +563,14 @@ private:
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
         return ProgressTxController->GetTxCompleteLag(mediatorTime);
     }
+
+    TInsertWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const;
+    TInsertWriteId GetLongTxWrite(
+        NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId);
+    void AddLongTxWrite(const TInsertWriteId writeId, ui64 txId);
+    void LoadLongTxWrite(const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId,
+        const std::optional<ui32> granuleShardingVersion);
+    bool RemoveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui64 txId);
 
     void EnqueueBackgroundActivities(const bool periodic = false);
     virtual void Enqueue(STFUNC_SIG) override;
@@ -563,6 +592,8 @@ private:
     void RunMoveTable(
         const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
+    void StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex);
+    void SetupIndexation();
     void SetupCompaction(const std::set<TInternalPathId>& pathIds);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
@@ -570,8 +601,10 @@ private:
     bool SetupTtl();
     void SetupCleanupPortions();
     void SetupCleanupTables();
+    void SetupCleanupInsertTable();
     void SetupGC();
 
+    void UpdateInsertTableCounters();
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
@@ -591,6 +624,9 @@ public:
         return TablesManager;
     }
 
+    bool HasLongTxWrites(const TInsertWriteId insertWriteId) const {
+        return LongTxWrites.contains(insertWriteId);
+    }
     void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
@@ -652,6 +688,11 @@ public:
     const std::shared_ptr<NOlap::NDataLocks::TManager>& GetDataLocksManager() const {
         AFL_VERIFY(DataLocksManager);
         return DataLocksManager;
+    }
+
+    const NOlap::TInsertTable& GetInsertTable() const {
+        AFL_VERIFY(!!InsertTable);
+        return *InsertTable;
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

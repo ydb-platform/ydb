@@ -283,6 +283,19 @@ void TColumnShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, cons
     EnqueueBackgroundActivities(true);
 }
 
+void TColumnShard::UpdateInsertTableCounters() {
+    auto& prepared = InsertTable->GetCountersPrepared();
+    auto& committed = InsertTable->GetCountersCommitted();
+
+    Counters.GetTabletCounters()->SetCounter(COUNTER_PREPARED_RECORDS, prepared.Rows);
+    Counters.GetTabletCounters()->SetCounter(COUNTER_PREPARED_BYTES, prepared.Bytes);
+    Counters.GetTabletCounters()->SetCounter(COUNTER_COMMITTED_RECORDS, committed.Rows);
+    Counters.GetTabletCounters()->SetCounter(COUNTER_COMMITTED_BYTES, committed.Bytes);
+
+    LOG_S_TRACE("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows << " records, committed: " << committed.Bytes << " in "
+                                          << committed.Rows << " records at tablet " << TabletID());
+}
+
 void TColumnShard::UpdateIndexCounters() {
     if (!TablesManager.HasPrimaryIndex()) {
         return;
@@ -339,7 +352,11 @@ void TColumnShard::UpdateIndexCounters() {
 
 ui64 TColumnShard::MemoryUsage() const {
     ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
-                  (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*));
+                  LongTxWrites.size() * (sizeof(TInsertWriteId) + sizeof(TLongTxWriteInfo)) +
+                  LongTxWritesByUniqueId.size() * (sizeof(TULID) + sizeof(void*)) +
+                  (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*)) +
+                  Counters.GetTabletCounters()->GetValue(COUNTER_PREPARED_RECORDS) * sizeof(NOlap::TInsertedData) +
+                  Counters.GetTabletCounters()->GetValue(COUNTER_COMMITTED_RECORDS) * sizeof(NOlap::TInsertedData);
     memory += TablesManager.GetMemoryUsage();
     return memory;
 }

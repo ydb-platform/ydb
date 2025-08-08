@@ -11,7 +11,21 @@ std::unique_ptr<TScanIteratorBase> TReadMetadata::StartScan(const std::shared_pt
 }
 
 TConclusionStatus TReadMetadata::DoInitCustom(
-    const NColumnShard::TColumnShard* /*owner*/, const TReadDescription& /*readDescription*/, const TDataStorageAccessor& /*dataAccessor*/) {
+    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) {
+    CommittedBlobs =
+        dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey(), LockId, GetRequestSnapshot());
+
+    if (LockId) {
+        for (auto&& i : CommittedBlobs) {
+            if (!i.IsCommitted()) {
+                if (owner->HasLongTxWrites(i.GetInsertWriteId())) {
+                } else {
+                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i.GetInsertWriteId());
+                    AddWriteIdToCheck(i.GetInsertWriteId(), op->GetLockId());
+                }
+            }
+        }
+    }
 
     return TConclusionStatus::Success();
 }

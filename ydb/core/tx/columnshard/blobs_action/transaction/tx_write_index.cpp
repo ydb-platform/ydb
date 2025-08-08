@@ -10,6 +10,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     auto changes = Ev->Get()->IndexChanges;
     TMemoryProfileGuard mpg("TTxWriteIndex::Execute::" + changes->TypeString());
     TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("external_task_id", changes->GetTaskIdentifier());
+    Y_ABORT_UNLESS(Self->InsertTable);
     Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
     txc.DB.NoMoreReadsForTx();
 

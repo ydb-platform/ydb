@@ -1,8 +1,8 @@
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "builder.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
@@ -77,20 +77,21 @@ private:
             portions.emplace_back(i.ExtractPortion());
         }
         NColumnShard::TInsertedPortions pack({ WriteResult }, std::move(portions));
-        auto result =
-            std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(putResult->GetPutStatus(), Action, std::move(pack));
+        auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
+            putResult->GetPutStatus(), Action, std::move(pack));
         ctx.Send(DstActor, result.release());
     }
     virtual void DoOnStartSending() override {
     }
 
 public:
-    TPortionWriteController(const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action,
-        const NColumnShard::TWriteResult& writeResult, std::vector<TInsertPortion>&& portions)
+    TPortionWriteController(const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, const NColumnShard::TWriteResult& writeResult,
+        std::vector<TInsertPortion>&& portions)
         : Action(action)
         , Portions(std::move(portions))
         , WriteResult(writeResult)
-        , DstActor(dstActor) {
+        , DstActor(dstActor)
+    {
         for (auto&& p : Portions) {
             for (auto&& b : p.MutablePortion().MutableBlobs()) {
                 auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), action));
@@ -101,9 +102,9 @@ public:
 };
 
 void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-    const NActors::TLogContextGuard g =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)("parent_id",
-            Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())("path_id", WriteData.GetWriteMeta().GetPathId());
+    const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletId)(
+        "parent_id", Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())(
+        "path_id", WriteData.GetWriteMeta().GetPathId());
     if (!Context.IsActive()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
         ReplyError("execution aborted", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);

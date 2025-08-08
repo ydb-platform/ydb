@@ -39,6 +39,7 @@ public:
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
         {
             auto type = IsOlap ? "COLUMN" : "ROW";
@@ -99,6 +100,8 @@ public:
         }
 
         DoExecute();
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+        csController->WaitIndexation(TDuration::Seconds(5));
     }
 
 };

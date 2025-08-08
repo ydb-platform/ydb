@@ -527,7 +527,9 @@ public:
             AuditCtx.AddAuditLogParts(result->UserToken);
             serializedToken = result->UserToken->GetSerializedToken();
         }
-        AuditCtx.LogOnExecute();
+        if (ActorMonPage->AutoAudit) {
+            AuditCtx.LogOnExecute();
+        }
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
     }
@@ -563,11 +565,17 @@ public:
         }
     }
 
+    void Handle(NHttp::TEvHttpProxy::TEvAuditExecute::TPtr& ev) {
+        AuditCtx.LogOnExecute(true);
+        Send(ev->Sender, new NHttp::TEvHttpProxy::TEvAuditExecuteConfirmed(), 0, ev->Cookie);
+    }
+
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(NMon::IEvHttpInfoRes, HandleResponse);
             hFunc(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvAuditExecute, Handle);
         }
     }
 };
@@ -1174,7 +1182,9 @@ public:
             AuditCtx.AddAuditLogParts(result->UserToken);
             Event->Get()->UserToken = result->UserToken->GetSerializedToken();
         }
-        AuditCtx.LogOnExecute();
+        if (Fields.AutoAudit) {
+            AuditCtx.LogOnExecute();
+        }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
 
@@ -1228,6 +1238,11 @@ public:
         CancelSubscriber = std::move(ev);
     }
 
+    void Handle(NHttp::TEvHttpProxy::TEvAuditExecute::TPtr& ev) {
+        AuditCtx.LogOnExecute(true);
+        Send(ev->Sender, new NHttp::TEvHttpProxy::TEvAuditExecuteConfirmed(), 0, ev->Cookie);
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -1235,6 +1250,7 @@ public:
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvSubscribeForCancel, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvAuditExecute, Handle);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
         }
     }
@@ -1499,7 +1515,9 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
         fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
-        fields.MonServiceName);
+        fields.MonServiceName,
+        fields.AutoAudit
+    );
     if (fields.Index) {
         fields.Index->Register(page);
         if (fields.SortPages) {

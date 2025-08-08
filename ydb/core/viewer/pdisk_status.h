@@ -27,6 +27,9 @@ public:
     {}
 
     void Bootstrap() override {
+        if (NeedToWriteAuditLog()) {
+            return;
+        }
         if (!PostData.IsDefined()) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
         }

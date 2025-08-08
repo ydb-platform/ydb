@@ -217,6 +217,9 @@ public:
         if (NeedToRedirect()) {
             return;
         }
+        if (PostData.IsDefined() && NeedToWriteAuditLog()) {
+            return;
+        }
         MergeRules = FromStringWithDefault<bool>(Params.Get("merge_rules"), MergeRules);
         if (Params.Has("dialect")) {
             static const std::unordered_map<TString, const TDialect*> dialects = {

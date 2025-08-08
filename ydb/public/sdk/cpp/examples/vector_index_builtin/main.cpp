@@ -39,10 +39,10 @@ void VectorExample(
             {.Id = "8", .Document = "document 8", .Embedding = {0.02, 0.98, 0.1}},
             {.Id = "9", .Document = "document 9", .Embedding = {0.0, 1.0, 0.05}},
         };
-        InsertItemsAsBytesList(client, tableName, items);
-        PrintResults(SearchItemsAsBytesList(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
+        InsertItemsAsBytes(client, tableName, items);
+        PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
         AddIndex(driver, client, database, tableName, indexName, "similarity=cosine", 3, 1, 3);
-        PrintResults(SearchItemsAsBytesList(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, indexName));
+        PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, indexName));
     } catch (const std::exception& e) {
         std::cerr << "Execution failed: " << e.what() << std::endl;
     }

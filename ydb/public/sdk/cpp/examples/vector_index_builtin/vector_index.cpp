@@ -38,7 +38,7 @@ void CreateVectorTable(NYdb::NQuery::TQueryClient& client, const std::string& ta
     std::cout << "Vector table created: " << tableName << std::endl;
 }
 
-void InsertItemsAsBytesList(
+void InsertItemsAsBytes(
     NYdb::NQuery::TQueryClient& client,
     const std::string& tableName,
     const std::vector<TItem>& items)
@@ -176,7 +176,7 @@ void AddIndex(
     std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
 }
 
-std::vector<TResultItem> SearchItemsAsBytesList(
+std::vector<TResultItem> SearchItemsAsBytes(
     NYdb::NQuery::TQueryClient& client,
     const std::string& tableName,
     const std::vector<float>& embedding,

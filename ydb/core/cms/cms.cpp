@@ -1537,7 +1537,7 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             TDuration duration = TDuration::MicroSeconds(action.GetDuration());
             duration += TDuration::MicroSeconds(copy->Request.GetDuration());
             // To get permissions ASAP and not in the priority order.
-            item->DeactivateScheduledLocks(0);
+            item->DeactivateScheduledLocks(Min<i32>());
             bool isLocked = item->IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration);
             item->ReactivateScheduledLocks();
             if (isLocked) {

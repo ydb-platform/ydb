@@ -5,6 +5,7 @@ package Ydb.Discovery;
 option java_package = "com.yandex.ydb.discovery";
 option java_outer_classname = "DiscoveryProtos";
 
+import "ydb/public/api/protos/ydb_bridge_common.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 
 message ListEndpointsRequest {
@@ -34,11 +35,20 @@ message EndpointInfo {
     // endpoint is using certificate chain valid for a balancer hostname, and
     // not this specific node hostname.
     string ssl_target_name_override = 10;
+
+    // EXPERIMENTAL
+    // Optional name of the bridge pile this endpoint belongs to.
+    optional string bridge_pile_name = 11;
 }
 
 message ListEndpointsResult {
     repeated EndpointInfo endpoints = 1;
     string self_location = 2;
+
+    // EXPERIMENTAL
+    // List of bridge pile states.
+    // This field is empty if cluster is not in bridge mode.
+    repeated Ydb.Bridge.PileState pile_states = 3;
 }
 
 message ListEndpointsResponse {

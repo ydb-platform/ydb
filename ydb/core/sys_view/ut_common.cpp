@@ -53,12 +53,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     NKikimrConfig::TAppConfig appConfig;
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
-<<<<<<< HEAD
-=======
-    appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-    appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(settings.AlterObjectEnabled);
     appConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
->>>>>>> fe092f204b6 (EnableTempTables flag (#22475))
     Settings->SetAppConfig(appConfig);
 
     for (ui32 i : xrange(settings.StoragePools)) {

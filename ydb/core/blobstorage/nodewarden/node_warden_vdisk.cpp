@@ -23,7 +23,10 @@ namespace NKikimr::NStorage {
         STLOG(PRI_INFO, BS_NODE, NW00, "PoisonLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
             (RuntimeData, vdisk.RuntimeData.has_value()));
 
+        bool vdiskRunning = false;
+
         if (vdisk.RuntimeData) {
+            vdiskRunning = true;
             vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.GetVDiskServiceId(), {}, nullptr, 0));
             vdisk.RuntimeData.reset();
@@ -47,7 +50,7 @@ namespace NKikimr::NStorage {
         vdisk.ScrubCookie = 0; // disable reception of Scrub messages from this disk
         vdisk.ScrubCookieForController = 0; // and from controller too
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
-        vdisk.ShutdownPending = true;
+        vdisk.ShutdownPending = vdiskRunning; // Shutdown pending only if VDisk was running before poison
         VDiskStatusChanged = true;
     }
 

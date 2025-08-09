@@ -21,6 +21,8 @@
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <yql/essentials/minikql/mkql_buffer.h>
 #endif
 
 using namespace NKikimrRun;
@@ -977,6 +979,11 @@ private:
 
 int main(int argc, const char* argv[]) {
     SetupSignalActions();
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    NMonitoring::TDynamicCounterPtr memoryProfilingCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    NKikimr::NMiniKQL::InitializeGlobalPagedBufferCounters(memoryProfilingCounters);
+#endif
 
     try {
         NKqpRun::TMain().Run(argc, argv);

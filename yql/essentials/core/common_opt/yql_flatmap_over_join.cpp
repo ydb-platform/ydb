@@ -1177,6 +1177,12 @@ bool IsExtractOrPredicatesOverEquiJoinEnabled(const TTypeAnnotationContext* type
     return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
 }
 
+bool IsNormalizeEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char flag[] = "NormalizeEqualityFilterOverJoin";
+    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+}
+
 struct TExtraInputPredicates {
     TExprNode::TPtr Row;
     TExprNodeList Preds;
@@ -1342,6 +1348,222 @@ TJoinEqRebuildResult RebuildJoinTreeForEquality(TVector<TMap<ui32, TEqColumn>>& 
     return result;
 }
 
+
+TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLabels& labels,
+    const THashMap<TString, TString>& backRenameMap, const TParentsMap& parentsMap, TExprContext& ctx)
+{
+    TCoEquiJoin equiJoin = node.Input().Cast<TCoEquiJoin>();
+    const TExprNode::TPtr joinTree = equiJoin.Arg(equiJoin.ArgCount() - 2).Ptr();
+    const TExprNode::TPtr rowPtr = node.Lambda().Args().Arg(0).Ptr();
+    const auto& row = *rowPtr;
+    const auto body = node.Lambda().Body().Cast<TCoConditionalValueBase>();
+
+    auto predicate = body.Predicate().Ptr();
+
+    TExprNodeList andComponents;
+    if (predicate->IsCallable("And")) {
+        andComponents = predicate->ChildrenList();
+    } else {
+        andComponents.push_back(predicate);
+    }
+
+    TExprNodeList rest;
+    TNodeOnNodeOwnedMap remaps;
+    TVector<TExprNodeList> nodesByInput(equiJoin.ArgCount() - 2);
+
+    for (auto pred : andComponents) {
+        TExprNodeList sides(2);
+        // TODO: handle case IsEquality() && !IsMemberEquality()
+        if (!IsEquality(pred, sides.front(), sides.back()) || HasDependsOn(pred, rowPtr) || !IsStrict(pred)) {
+            rest.push_back(pred);
+            continue;
+        }
+
+
+        TVector<ui32> indexes;
+        TSet<ui32> inputs;
+        TSet<TStringBuf> usedFields;
+
+        GatherJoinInputs(sides.front(), row, parentsMap, backRenameMap, labels, inputs, usedFields);
+        if (inputs.size() != 1) {
+            rest.push_back(pred);
+            continue;
+        }
+        indexes.push_back(*inputs.begin());
+        YQL_ENSURE(indexes.back() < nodesByInput.size());
+
+        inputs.clear();
+        GatherJoinInputs(sides.back(), row, parentsMap, backRenameMap, labels, inputs, usedFields);
+        if (inputs.size() != 1 || *inputs.begin() == indexes.front()) {
+            rest.push_back(pred);
+            continue;
+        }
+        indexes.push_back(*inputs.begin());
+        YQL_ENSURE(indexes.back() < nodesByInput.size());
+
+
+        size_t count = 0;
+        for (size_t i = 0; i < 2; ++i) {
+            TExprNode::TPtr side = sides[i];
+            if (!side->IsCallable("Member") || &side->Head() != &row) {
+                ++count;
+                if (!remaps.contains(side.Get())) {
+                    TExprNode::TPtr output;
+                    TOptimizeExprSettings settings(nullptr);
+                    auto ret = OptimizeExpr(side, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                        if (node->IsCallable("Member") && &node->Head() == &row) {
+                            const TString originalMemberName{node->Tail().Content()};
+                            TString memberName = originalMemberName;
+                            if (auto renamed = backRenameMap.FindPtr(memberName)) {
+                                memberName = *renamed;
+                            }
+                            const auto& label = labels.Inputs[indexes[i]];
+                            TString sourceMemberName = label.MemberName(label.TableName(memberName), label.ColumnName(memberName));
+                            if (sourceMemberName != originalMemberName) {
+                                return ctx.ChangeChild(*node, TCoMember::idx_Name, ctx.NewAtom(node->Pos(), sourceMemberName));
+                            }
+                        }
+                        return node;
+                    }, ctx, settings);
+                    YQL_ENSURE(ret != IGraphTransformer::TStatus::Error);
+                    remaps[side.Get()] = output;
+                }
+                nodesByInput[indexes[i]].push_back(side);
+            }
+        }
+
+        if (!count) {
+            rest.push_back(pred);
+        }
+    }
+
+    if (remaps.empty()) {
+        return node;
+    }
+
+    TExprNodeList newJoinArgs;
+    YQL_ENSURE(labels.Inputs.size() == nodesByInput.size());
+    TNodeOnNodeOwnedMap outputRemaps;
+    TSet<TString> outputMembers;
+    for (size_t i = 0; i < nodesByInput.size(); ++i) {
+        TCoEquiJoinInput ejInput = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+        if (nodesByInput[i].empty()) {
+            newJoinArgs.push_back(ejInput.Ptr());
+            continue;
+        }
+
+        const TStructExprType* itemType = ejInput.List().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        const TStructExprType* castedType = itemType;
+        if (!IsRequiredSide(joinTree, labels, i).first) {
+            TVector<const TItemExprType *> items;
+            for (auto item : itemType->GetItems()) {
+                auto type = item->GetItemType();
+                if (type->IsOptionalOrNull()) {
+                    items.push_back(item);
+                } else {
+                    items.push_back(ctx.MakeType<TItemExprType>(item->GetName(), ctx.MakeType<TOptionalExprType>(type)));
+                }
+            }
+            castedType = ctx.MakeType<TStructExprType>(items);
+        }
+        TString prefix;
+        bool isMultiTableInput = false;
+        if (labels.Inputs[i].Tables.size() > 1) {
+            prefix = TStringBuilder() << labels.Inputs[i].Tables[0] << ".";
+            isMultiTableInput = true;
+        }
+        prefix += YqlJoinKeyColumnName;
+        TVector<TString> remappedNames = GenNoClashColumns(*itemType, prefix, nodesByInput[i].size());
+        newJoinArgs.push_back(ctx.Builder(equiJoin.Arg(i).Pos())
+            .List()
+                .Callable(0, "OrderedMap")
+                    .Add(0, ejInput.List().Ptr())
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("FlattenMembers")
+                            .List(0)
+                                .Atom(0, "")
+                                .Arg(1, "row")
+                            .Seal()
+                            .List(1)
+                                .Atom(0, "")
+                                .Callable(1, "AsStruct")
+                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        for (size_t j = 0; j < nodesByInput[i].size(); ++j) {
+                                            auto calcLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, TExprNode::TPtr(remaps[nodesByInput[i][j].Get()]));
+                                            parent
+                                                .List(j)
+                                                    .Atom(0, remappedNames[j])
+                                                    .Apply(1, calcLambda)
+                                                        .With(0)
+                                                            .Callable("SafeCast")
+                                                                .Arg(0, "row")
+                                                                .Add(1, ExpandType(equiJoin.Arg(i).Pos(), *castedType, ctx))
+                                                            .Seal()
+                                                        .Done()
+                                                    .Seal()
+                                                .Seal();
+                                            TString outputMember = isMultiTableInput ? remappedNames[j] : labels.Inputs[i].FullName(remappedNames[j]);
+                                            outputRemaps[nodesByInput[i][j].Get()] = ctx.Builder(nodesByInput[i][j]->Pos())
+                                                .Callable("Member")
+                                                    .Add(0, rowPtr)
+                                                    .Atom(1, outputMember)
+                                                .Seal()
+                                                .Build();
+                                            YQL_ENSURE(outputMembers.insert(outputMember).second);
+                                        }
+                                        return parent;
+                                    })
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Add(1, ejInput.Scope().Ptr())
+            .Seal()
+            .Build());
+    }
+    newJoinArgs.push_back(equiJoin.Arg(equiJoin.ArgCount() - 2).Ptr());
+    newJoinArgs.push_back(equiJoin.Arg(equiJoin.ArgCount() - 1).Ptr());
+
+    auto newJoin = ctx.ChangeChildren(equiJoin.Ref(), std::move(newJoinArgs));
+    TExprNode::TPtr newPredicate;
+    auto status = RemapExpr(body.Predicate().Ptr(), newPredicate, outputRemaps, ctx, TOptimizeExprSettings{nullptr});
+    YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+
+    TExprNode::TPtr newPredicateLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, std::move(newPredicate));
+    TExprNode::TPtr valueLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, body.Value().Ptr());
+
+    return TExprBase(ctx.Builder(node.Pos())
+        .Callable(node.CallableName())
+            .Add(0, newJoin)
+            .Lambda(1)
+                .Param("row")
+                .Callable(body.CallableName())
+                    .Apply(0, newPredicateLambda)
+                        .With(0, "row")
+                    .Seal()
+                    .Apply(1, valueLambda)
+                        .With(0)
+                            .Callable("RemoveMembers")
+                                .Arg(0, "row")
+                                .List(1)
+                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        size_t i = 0;
+                                        for (auto name : outputMembers) {
+                                            parent.Atom(i++, name);
+                                        }
+                                        return parent;
+                                    })
+                                .Seal()
+                            .Seal()
+                        .Done()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build());
+}
 
 TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLabels& labels,
     const THashMap<TString, TString>& backRenameMap, TExprContext& ctx)
@@ -1668,6 +1890,14 @@ TExprBase FlatMapOverEquiJoin(
                 for (auto& y : x.second) {
                     backRenameMap[y] = x.first;
                 }
+            }
+        }
+
+        if (IsNormalizeEqualityFilterOverJoinEnabled(types)) {
+            auto newNode = NormalizeEqualityFilterOverJoin(node, labels, backRenameMap, parentsMap, ctx);
+            if (newNode.Raw() != node.Raw()) {
+                YQL_CLOG(DEBUG, Core) << "NormalizeEqualityFilterOverJoin";
+                return newNode;
             }
         }
 

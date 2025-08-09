@@ -12,8 +12,9 @@ using namespace ftxui;
 
 namespace NYdb::NTPCC {
 
-TRunnerTui::TRunnerTui(TLogBackendWithCapture& logBacked, std::shared_ptr<TRunDisplayData> data)
-    : LogBackend(logBacked)
+TRunnerTui::TRunnerTui(std::shared_ptr<TLog>& log, TLogBackendWithCapture& logBacked, std::shared_ptr<TRunDisplayData> data)
+    : Log(log)
+    , LogBackend(logBacked)
     , DataToDisplay(std::move(data))
     , Screen(ScreenInteractive::Fullscreen())
 {
@@ -227,11 +228,17 @@ Element TRunnerTui::BuildUpperPart() {
 }
 
 Component TRunnerTui::BuildComponent() {
-    // Main layout
-    return Container::Vertical({
-        Renderer([=]{ return BuildUpperPart(); }),
-        LogsScroller(LogBackend),
-    });
+    try {
+        // Main layout
+        return Container::Vertical({
+            Renderer([=]{ return BuildUpperPart(); }),
+            LogsScroller(LogBackend),
+        });
+    } catch (const std::exception& ex) {
+        LOG_E("Exception in TUI: " << ex.what());
+        RequestStop();
+        return Renderer([] { return filler(); });
+    }
 }
 
 } // namespace NYdb::NTPCC

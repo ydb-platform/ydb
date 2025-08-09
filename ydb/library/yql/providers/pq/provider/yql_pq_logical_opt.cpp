@@ -34,7 +34,7 @@ namespace {
                 // Operator features
                 EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
                 EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | DivisionExpressions | EFlag::CastExpression |
+                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | EFlag::DivisionExpressions | EFlag::CastExpression |
                 EFlag::ToBytesFromStringExpressions | EFlag::FlatMapOverOptionals |
 
                 // Split features
@@ -237,7 +237,7 @@ public:
             .Input(ctx.ReplaceNode(extractMembersInput.Ptr(), dqSourceWrap.Ref(), newDqSourceWrap))
             .Done();
     }
-        
+
     bool IsEmptyFilterPredicate(const TCoLambda& lambda) const {
         auto maybeBool = lambda.Body().Maybe<TCoBool>();
         if (!maybeBool) {
@@ -250,7 +250,7 @@ public:
         auto flatmap = node.Cast<TCoFlatMap>();
         auto maybeExtractMembers = flatmap.Input().Maybe<TCoExtractMembers>();
 
-        auto maybeDqSourceWrap = 
+        auto maybeDqSourceWrap =
             maybeExtractMembers
             ? maybeExtractMembers.Cast().Input().Maybe<TDqSourceWrap>()
             : flatmap.Input().Maybe<TDqSourceWrap>();
@@ -280,9 +280,9 @@ public:
             ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
             return node;
         }
-        
+
         TString serializedProto;
-        YQL_ENSURE(predicateProto.SerializeToString(&serializedProto));       
+        YQL_ENSURE(predicateProto.SerializeToString(&serializedProto));
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
 
         if (maybeExtractMembers) {

@@ -13,12 +13,14 @@ using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
 
 struct TMessage {
+    TInstant CreateTimestamp;
     TString Data;
     TString MessageGroupId;
     ui64 Offset = 0;
     ui32 Partition = 0;
     TString ProducerId;
     ui64 SeqNo = 0;
+    TInstant WriteTimestamp;
 };
 
 class TMessageInputSpec: public TInputSpecBase {

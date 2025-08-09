@@ -384,7 +384,7 @@ bool ExtractUsedFields(const TExprNode::TPtr& start, const TExprNode& arg, TSet<
 
         if (parent->IsCallable("Member")) {
             usedFields.emplace(parent->Tail().Content());
-        } else if (allowDependsOn && parent->IsCallable("DependsOn")) {
+        } else if (allowDependsOn && IsDependsOnUsage(*parent, parentsMap)) {
             continue;
         } else {
             // unknown node

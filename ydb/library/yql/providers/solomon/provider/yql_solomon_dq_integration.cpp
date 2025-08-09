@@ -104,9 +104,15 @@ public:
         return Nothing();
     }
 
-    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
         if (const auto& maybeSoReadObject = TMaybeNode<TSoReadObject>(read)) {
             const auto& soReadObject = maybeSoReadObject.Cast();
+
+            if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
+                ctx.AddError(TIssue(ctx.GetPosition(soReadObject.Pos()), "Cannot use watermarks in Solomon"));
+                return {};
+            }
+
             YQL_ENSURE(soReadObject.Ref().GetTypeAnn(), "No type annotation for node " << soReadObject.Ref().Content());
 
             const auto& clusterName = soReadObject.DataSource().Cluster().StringValue();
@@ -286,10 +292,10 @@ public:
         YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
 
         NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, settings.Project().StringValue());
-        
+
         source.SetFrom(TInstant::ParseIso8601(settings.From().StringValue()).Seconds());
         source.SetTo(TInstant::ParseIso8601(settings.To().StringValue()).Seconds());
-        
+
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
             std::map<TString, TString> selectorValues;
@@ -366,7 +372,7 @@ public:
 
             auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster));
             auto credentialsProvider = providerFactory->CreateProvider();
-            
+
             NDq::TDqSolomonReadParams readParams{ .Source = source };
 
             YQL_ENSURE(NActors::TlsActivationContext);

@@ -12,14 +12,16 @@ namespace {
 using namespace NYql::NUdf;
 using namespace NKikimr::NMiniKQL;
 
+constexpr const char* CreateTimestampFieldName = "_create_timestamp";
 constexpr const char* DataFieldName = "_data";
 constexpr const char* MessageGroupIdFieldName = "_message_group_id";
 constexpr const char* OffsetFieldName = "_offset";
 constexpr const char* PartitionFieldName = "_partition";
 constexpr const char* ProducerIdFieldName = "_producer_id";
 constexpr const char* SeqNoFieldName = "_seq_no";
+constexpr const char* WriteTimestampFieldName = "_write_timestamp";
 
-constexpr const size_t FieldCount = 6; // Change it when change fields
+constexpr const size_t FieldCount = 8; // Change it when change fields
 
 
 NYT::TNode CreateTypeNode(const TString& fieldType) {
@@ -39,12 +41,14 @@ void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldTy
 
 NYT::TNode CreateMessageScheme() {
     auto structMembers = NYT::TNode::CreateList();
+    AddField(structMembers, CreateTimestampFieldName, "Timestamp");
     AddField(structMembers, DataFieldName, "String");
     AddField(structMembers, MessageGroupIdFieldName, "String");
     AddField(structMembers, OffsetFieldName, "Uint64");
     AddField(structMembers, PartitionFieldName, "Uint32");
     AddField(structMembers, ProducerIdFieldName, "String");
     AddField(structMembers, SeqNoFieldName, "Uint64");
+    AddField(structMembers, WriteTimestampFieldName, "Timestamp");
 
     return NYT::TNode::CreateList()
         .Add("StructType")
@@ -55,6 +59,10 @@ static const TVector<NYT::TNode> InputSchema{ CreateMessageScheme() };
 
 struct TMessageWrapper {
     const TMessage& Message;
+
+    NYql::NUdf::TUnboxedValuePod GetCreateTimestamp() const {
+        return NYql::NUdf::TUnboxedValuePod(Message.CreateTimestamp.MilliSeconds());
+    }
 
     NYql::NUdf::TUnboxedValuePod GetData() const {
         return NKikimr::NMiniKQL::MakeString(Message.Data);
@@ -79,6 +87,10 @@ struct TMessageWrapper {
     NYql::NUdf::TUnboxedValuePod GetSeqNo() const {
         return NYql::NUdf::TUnboxedValuePod(Message.SeqNo);
     }
+
+    NYql::NUdf::TUnboxedValuePod GetWriteTimestamp() const {
+        return NYql::NUdf::TUnboxedValuePod(Message.WriteTimestamp.MilliSeconds());
+    }
 };
 
 class TInputConverter {
@@ -100,12 +112,14 @@ public:
 
         TMessageWrapper wrap {*message};
         // lex order by field name
-        items[0] = wrap.GetData();
-        items[1] = wrap.GetMessageGroupId();
-        items[2] = wrap.GetOffset();
-        items[3] = wrap.GetPartition();
-        items[4] = wrap.GetProducerId();
-        items[5] = wrap.GetSeqNo();
+        items[0] = wrap.GetCreateTimestamp();
+        items[1] = wrap.GetData();
+        items[2] = wrap.GetMessageGroupId();
+        items[3] = wrap.GetOffset();
+        items[4] = wrap.GetPartition();
+        items[5] = wrap.GetProducerId();
+        items[6] = wrap.GetSeqNo();
+        items[7] = wrap.GetWriteTimestamp();
     }
 
     void ClearCache() {

@@ -7,7 +7,7 @@
 (let $6 '('"SharedReading" '"1"))
 (let $7 '('('"Consumer" '"test_client") '('"Endpoint" '"<pq_pq_endpoint>") $6 '('"ReconnectPeriod" '"") '('"Format" '"json_each_row") '('"ReadGroup" '"fqrun") '('"UseSsl" '"1")))
 (let $8 (StructType '('_yql_sys_offset (DataType 'Uint64))))
-(let $9 (DqPqTopicSource world $5 '() $7 (SecureParam '"cluster:default_pq") '"" $8))
+(let $9 (DqPqTopicSource world $5 '() $7 (SecureParam '"cluster:default_pq") '"" $8 '""))
 (let $10 (DqStage '((DqSource $4 $9)) (lambda '($14) (block '(
   (let $15 '('('"format" '"json_each_row") '('"metadataColumns" '('_yql_sys_offset)) '('"formatSettings" '('('"data.datetime.formatname" '"POSIX") '('"data.timestamp.formatname" '"POSIX"))) '('"settings" '($6))))
   (let $16 (DqSourceWideWrap $14 $4 $8 $15))

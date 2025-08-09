@@ -826,7 +826,7 @@ public:
         : ConnectionConfig(connectionConfig)
         , Config(runConfig)
         , LogBackend(new TLogBackendWithCapture("cerr", runConfig.LogPriority, TUI_LOG_LINES))
-        , Log(std::make_unique<TLog>(THolder(static_cast<TLogBackend*>(LogBackend))))
+        , Log(std::make_shared<TLog>(THolder(static_cast<TLogBackend*>(LogBackend))))
         , PreviousDataSizeLoaded(0)
         , StartTime(Clock::now())
         , LoadState(GetGlobalInterruptSource().get_token())
@@ -859,7 +859,7 @@ public:
         if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
             LogBackend->StartCapture();
             TImportDisplayData dataToDisplay(LoadState);
-            Tui = std::make_unique<TImportTui>(Config, *LogBackend, dataToDisplay);
+            Tui = std::make_unique<TImportTui>(Log, Config, *LogBackend, dataToDisplay);
         }
 
         // TODO: calculate optimal number of drivers (but per thread looks good)
@@ -1142,7 +1142,7 @@ private:
 
     // XXX Log instance owns LogBackend (unfortunately, it accepts THolder with LogBackend)
     TLogBackendWithCapture* LogBackend;
-    std::unique_ptr<TLog> Log;
+    std::shared_ptr<TLog> Log;
 
     Clock::time_point LastDisplayUpdate;
     size_t PreviousDataSizeLoaded;
@@ -1157,8 +1157,13 @@ private:
 //-----------------------------------------------------------------------------
 
 void ImportSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
-    TPCCLoader loader(connectionConfig, runConfig);
-    loader.ImportSync();
+    try {
+        TPCCLoader loader(connectionConfig, runConfig);
+        loader.ImportSync();
+    } catch (const std::exception& ex) {
+        std::cerr << "Exception while execution: " << ex.what() << std::endl;
+        throw NConsoleClient::TNeedToExitWithCode(EXIT_FAILURE);
+    }
 }
 
 } // namespace NYdb::NTPCC

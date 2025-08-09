@@ -44,7 +44,7 @@ DEFINE_REFCOUNTED_TYPE(ISchemalessFormatWriter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IFormatAdapter
+struct IFormatFactory
     : public TRefCounted
 {
     virtual std::unique_ptr<NYson::IFlushableYsonConsumer> CreateConsumer(IZeroCopyOutput* output) = 0;
@@ -52,7 +52,7 @@ struct IFormatAdapter
     virtual NYson::TYsonProducer CreateProducer(IInputStream* input) = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(IFormatAdapter)
+DEFINE_REFCOUNTED_TYPE(IFormatFactory)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -93,6 +93,10 @@ NYson::TYsonProducer CreateProducerForFormat(
     const TFormat& format,
     EDataType dataType,
     IInputStream* input);
+
+IFormatFactoryPtr CreateFactoryForFormat(
+    const TFormat& format,
+    EDataType dataType);
 
 std::unique_ptr<IParser> CreateParserForFormat(
     const TFormat& format,

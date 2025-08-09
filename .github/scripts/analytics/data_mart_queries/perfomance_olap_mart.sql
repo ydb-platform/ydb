@@ -18,9 +18,9 @@ $launch_times = (
     SELECT 
         launch_times_raw.*,
         all_suites.*,
-        SubString(CAST(launch_times_raw.Version AS String), 0U, FIND(CAST(launch_times_raw.Version AS String), '.')) As Branch,
-        SubString(CAST(launch_times_raw.CiVersion AS String), 0U, FIND(CAST(launch_times_raw.CiVersion AS String), '.')) As CiBranch,
-        SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, FIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')) As TestToolsBranch,
+        COALESCE(SubString(CAST(launch_times_raw.Version AS String), 0U, FIND(CAST(launch_times_raw.Version AS String), '.')), 'unknown') As Branch,
+        COALESCE(SubString(CAST(launch_times_raw.CiVersion AS String), 0U, FIND(CAST(launch_times_raw.CiVersion AS String), '.')), 'unknown') As CiBranch,
+        COALESCE(SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, FIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch,
     FROM (
         SELECT
             Db,

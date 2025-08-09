@@ -88,6 +88,8 @@ public:
         }
 
         Replication->SetConfig(std::move(*record.MutableConfig()));
+        Replication->ResetCredentials(ctx);
+
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),

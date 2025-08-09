@@ -353,7 +353,11 @@ namespace NTabletFlatExecutor {
                         auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
                         sharedPage->Initialize(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
-                        cache->Fill(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList), sticky);
+                        if (sticky) {
+                            cache->AddStickyPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                        } else {
+                            cache->AddPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                        }
                     };
                     for (auto &page : pageCollection.StickyPages) {
                         addPage(page, true);

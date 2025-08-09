@@ -165,6 +165,7 @@ class KikimrConfigGenerator(object):
             enable_resource_pools=None,
             scan_grouped_memory_limiter_config=None,
             comp_grouped_memory_limiter_config=None,
+            deduplication_grouped_memory_limiter_config=None,
             query_service_config=None,
             domain_login_only=None,
             use_self_management=False,
@@ -408,6 +409,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config
         if comp_grouped_memory_limiter_config:
             self.yaml_config["comp_grouped_memory_limiter_config"] = comp_grouped_memory_limiter_config
+        if deduplication_grouped_memory_limiter_config:
+            self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
 
         self.__build()
 

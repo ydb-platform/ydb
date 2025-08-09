@@ -1,6 +1,8 @@
 #include "metadata.h"
 #include "schema.h"
 
+#include <ydb/core/sys_view/common/registry.h>
+
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NGranules {
 
 NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TSchemeShardLocalPathId& pathId, const ui64 tabletId) {

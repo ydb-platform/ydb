@@ -63,6 +63,10 @@ TInstant TTopicMessage::GetCreateTime() const {
     return CreateTime;
 }
 
+TInstant TTopicMessage::GetWriteTime() const {
+    return WriteTime;
+}
+
 TString TTopicMessage::GetMessageGroupId() const {
     return TString(MessageGroupId);
 }
@@ -78,6 +82,7 @@ void TTopicMessage::Out(IOutputStream& out) const {
         << " Offset: " << Offset
         << " SeqNo: " << SeqNo
         << " CreateTime: " << CreateTime
+        << " WriteTime: " << WriteTime
         << " MessageGroupId: " << MessageGroupId
         << " ProducerId: " << ProducerId
     << " }";

@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
     class TSparsedDataTest {
     private:
         const TKikimrSettings Settings =
-            TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+            TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
         TKikimrRunner Kikimr;
         NKikimr::NYDBTest::TControllers::TGuard<NKikimr::NYDBTest::NColumnShard::TController> CSController;
         const TString StoreName;

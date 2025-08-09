@@ -940,6 +940,19 @@ std::vector<TNodeId> TViewerPipeClient::GetNodesFromBoardReply(TEvStateStorage::
     return GetNodesFromBoardReply(*ev->Get());
 }
 
+std::vector<TNodeId> TViewerPipeClient::GetDatabaseNodes() {
+    if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) {
+        return GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef());
+    } else if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk()) {
+        return GetNodesFromBoardReply(ResourceBoardInfoResponse->GetRef());
+    }
+    return {0};
+}
+
+bool TViewerPipeClient::IsDatabaseRequest() {
+    return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
+}
+
 void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Followers = FromStringWithDefault(params.Get("followers"), Followers);
     Metrics = FromStringWithDefault(params.Get("metrics"), Metrics);

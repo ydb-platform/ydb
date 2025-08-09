@@ -32,7 +32,7 @@ public:
     struct KeyMeta {
         using Type = TKafkaBytes;
         using TypeDesc = NPrivate::TKafkaBytesDesc;
-            
+
         static constexpr const char* Name = "key";
         static constexpr const char* About = "";
         static const Type Default; // = {""};
@@ -48,7 +48,7 @@ public:
     struct ValueMeta {
         using Type = TKafkaBytes;
         using TypeDesc = NPrivate::TKafkaBytesDesc;
-            
+
         static constexpr const char* Name = "value";
         static constexpr const char* About = "";
         static constexpr NPrivate::ESizeFormat SizeFormat = NPrivate::ESizeFormat::Varint;
@@ -63,7 +63,7 @@ public:
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
-        
+
     bool operator==(const TKafkaHeader& other) const = default;
 };
 
@@ -82,11 +82,11 @@ public:
     struct LengthMeta {
         using Type = TKafkaInt32;
         using TypeDesc = NPrivate::TKafkaVarintDesc;
-        
+
         static constexpr const char* Name = "length";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -97,11 +97,11 @@ public:
     struct AttributesMeta {
         using Type = TKafkaInt8;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "attributes";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -112,11 +112,11 @@ public:
     struct TimestampDeltaMeta {
         using Type = TKafkaInt64;
         using TypeDesc = NPrivate::TKafkaVarintDesc;
-        
+
         static constexpr const char* Name = "timestampDelta";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -127,11 +127,11 @@ public:
     struct OffsetDeltaMeta {
         using Type = TKafkaInt64;
         using TypeDesc = NPrivate::TKafkaVarintDesc;
-        
+
         static constexpr const char* Name = "offsetDelta";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -142,12 +142,12 @@ public:
     struct KeyMeta {
         using Type = TKafkaBytes;
         using TypeDesc = NPrivate::TKafkaBytesDesc;
-            
+
         static constexpr const char* Name = "key";
         static constexpr const char* About = "";
         static const Type Default; // = {""};
         static constexpr NPrivate::ESizeFormat SizeFormat = NPrivate::ESizeFormat::Varint;
-            
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsAlways;
@@ -190,7 +190,7 @@ public:
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
-        
+
     bool operator==(const TKafkaRecord& other) const = default;
 
     NKikimrPQClient::TDataChunk DataChunk;
@@ -211,11 +211,11 @@ public:
     struct BaseOffsetMeta {
         using Type = TKafkaInt64;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "baseOffset";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -226,11 +226,11 @@ public:
     struct BatchLengthMeta {
         using Type = TKafkaInt32;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "batchLength";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -241,11 +241,11 @@ public:
     struct PartitionLeaderEpochMeta {
         using Type = TKafkaInt32;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "partitionLeaderEpoch";
         static constexpr const char* About = "";
-        static constexpr Type Default = 0;
-        
+        static constexpr Type Default = -1;
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -256,11 +256,11 @@ public:
     struct MagicMeta {
         using Type = TKafkaInt8;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "magic";
         static constexpr const char* About = "current magic value is 2";
         static constexpr Type Default = 2;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -271,11 +271,11 @@ public:
     struct CrcMeta {
         using Type = TKafkaInt32;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "crc";
         static constexpr const char* About = "The CRC covers the data from the attributes to the end of the batch (i.e. all the bytes that follow the CRC)";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -286,11 +286,11 @@ public:
     struct AttributesMeta {
         using Type = TKafkaInt16;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "attributes";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -301,11 +301,11 @@ public:
     struct LastOffsetDeltaMeta {
         using Type = TKafkaInt32;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "lastOffsetDelta";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -316,11 +316,11 @@ public:
     struct BaseTimestampMeta {
         using Type = TKafkaInt64;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "baseTimestamp";
         static constexpr const char* About = "";
-        static constexpr Type Default = 0;
-        
+        static constexpr Type Default = -1;
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -331,11 +331,11 @@ public:
     struct MaxTimestampMeta {
         using Type = TKafkaInt64;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "maxTimestamp";
         static constexpr const char* About = "";
-        static constexpr Type Default = 0;
-        
+        static constexpr Type Default = -1;
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -346,11 +346,11 @@ public:
     struct ProducerIdMeta {
         using Type = TKafkaInt64;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "producerId";
         static constexpr const char* About = "";
-        static constexpr Type Default = 0;
-        
+        static constexpr Type Default = -1;
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -361,11 +361,11 @@ public:
     struct ProducerEpochMeta {
         using Type = TKafkaInt16;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "producerEpoch";
         static constexpr const char* About = "";
-        static constexpr Type Default = 0;
-        
+        static constexpr Type Default = -1;
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -376,11 +376,11 @@ public:
     struct BaseSequenceMeta {
         using Type = TKafkaInt32;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "baseSequence";
         static constexpr const char* About = "";
-        static constexpr Type Default = 0;
-        
+        static constexpr Type Default = -1;
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -393,10 +393,10 @@ public:
         using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TKafkaRecord>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
-        
+
         static constexpr const char* Name = "records";
         static constexpr const char* About = "";
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -407,7 +407,7 @@ public:
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
-        
+
     bool operator==(const TKafkaRecordBatch& other) const = default;
 
     ECompressionType CompressionType();
@@ -431,11 +431,11 @@ public:
     struct MessageSizeMeta {
         using Type = TKafkaInt32;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "messageSize";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -446,11 +446,11 @@ public:
     struct CrcMeta {
         using Type = TKafkaInt32;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "CRC";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -461,11 +461,11 @@ public:
     struct MagicMeta {
         using Type = TKafkaInt8;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "magic";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -476,11 +476,11 @@ public:
     struct AttributesMeta {
         using Type = TKafkaInt8;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "attributes";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -491,11 +491,11 @@ public:
     struct TimestampMeta {
         using Type = TKafkaInt64;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "timestamp";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = TKafkaVersions(1, Max<TKafkaVersion>());
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -506,11 +506,11 @@ public:
     struct KeyMeta {
         using Type = TKafkaBytes;
         using TypeDesc = NPrivate::TKafkaBytesDesc;
-            
+
         static constexpr const char* Name = "key";
         static constexpr const char* About = "";
         static const Type Default; // = {""};
-            
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsAlways;
@@ -535,7 +535,7 @@ public:
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
-        
+
     bool operator==(const TKafkaRecordV0& other) const = default;
 };
 
@@ -552,11 +552,11 @@ public:
     struct OffsetMeta {
         using Type = TKafkaInt64;
         using TypeDesc = NPrivate::TKafkaIntDesc;
-        
+
         static constexpr const char* Name = "offset";
         static constexpr const char* About = "";
         static constexpr Type Default = 0;
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -567,10 +567,10 @@ public:
     struct RecordMeta {
         using Type = TKafkaRecordV0;
         using TypeDesc = NPrivate::TKafkaStructDesc;
-        
+
         static constexpr const char* Name = "records";
         static constexpr const char* About = "";
-        
+
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
         static constexpr TKafkaVersions NullableVersions = VersionsNever;
@@ -581,7 +581,7 @@ public:
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
-        
+
     bool operator==(const TKafkaRecordBatchV0& other) const = default;
 };
 

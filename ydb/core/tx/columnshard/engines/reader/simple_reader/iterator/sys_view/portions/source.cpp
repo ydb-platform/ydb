@@ -1,6 +1,7 @@
 #include "source.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <ydb/library/formats/arrow/switch/switch_type.h>

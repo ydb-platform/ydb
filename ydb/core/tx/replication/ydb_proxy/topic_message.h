@@ -21,6 +21,7 @@ public:
     ui64 GetOffset() const;
     ui64 GetSeqNo() const;
     TInstant GetCreateTime() const;
+    TInstant GetWriteTime() const;
     TString GetMessageGroupId() const;
     TString GetProducerId() const;
     void Out(IOutputStream& out) const;

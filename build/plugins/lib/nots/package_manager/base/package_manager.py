@@ -6,7 +6,7 @@ from abc import ABCMeta, abstractmethod
 from .constants import NPM_REGISTRY_URL
 from .package_json import PackageJson
 from .utils import build_nm_path, build_pj_path
-from .timeit import timeit
+from .timeit import timeit, is_timeit_enabled
 
 
 class PackageManagerError(RuntimeError):
@@ -136,6 +136,11 @@ class BasePackageManager(object, metaclass=ABCMeta):
         )
         p = subprocess.Popen(cmd, cwd=cwd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         stdout, stderr = p.communicate()
+
+        if is_timeit_enabled():
+            print(f'cd {cwd} && {" ".join(cmd)}', file=sys.stderr)
+            print(f'stdout: {stdout.decode("utf-8")}', file=sys.stderr)
+            print(f'stderr: {stderr.decode("utf-8")}', file=sys.stderr)
 
         if p.returncode != 0:
             self._dump_debug_log()

@@ -5,7 +5,7 @@
 namespace NKikimr::NKqp {
 Y_UNIT_TEST_SUITE(KqpOlapDelete) {
     Y_UNIT_TEST_TWIN(DeleteWithDiffrentTypesPKColumns, isStream) {
-        auto runnerSettings = TKikimrSettings().SetWithSampleTables(true).SetColumnShardReaderClassName("PLAIN");
+        auto runnerSettings = TKikimrSettings().SetWithSampleTables(true);
         runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TTestHelper testHelper(runnerSettings);

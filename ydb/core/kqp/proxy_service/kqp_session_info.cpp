@@ -1,6 +1,6 @@
 #include "kqp_proxy_service_impl.h"
 
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 
 namespace NKikimr::NKqp {
 

@@ -501,6 +501,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
+    if (buildInfo.IsBuildColumns()) {
+        for (const auto& colInfo : buildInfo.BuildColumns) {
+            auto col = indexBuild.AddColumnsToDrop();
+            colInfo.SerializeToProto(col);
+        }
+    }
+
     LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
         "CancelPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 

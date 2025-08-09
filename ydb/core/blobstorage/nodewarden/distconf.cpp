@@ -421,7 +421,6 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenUpdateCache, Handle);
             hFunc(TEvNodeWardenQueryCache, Handle);
             hFunc(TEvNodeWardenUnsubscribeFromCache, Handle);
-            hFunc(TEvNodeWardenManageSyncersResult, Handle);
             hFunc(TEvNodeWardenUpdateConfigFromPeer, [this](auto ev) { ApplyStorageConfig(ev->Get()->Config); });
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {

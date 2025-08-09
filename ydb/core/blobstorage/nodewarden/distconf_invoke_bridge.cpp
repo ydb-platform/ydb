@@ -89,7 +89,7 @@ namespace NKikimr::NStorage {
 
         auto *details = config.MutableClusterStateDetails();
         auto *entry = details->AddUnsyncedHistory();
-        entry->MutableClusterState()->CopyFrom(newClusterState);
+        entry->MutableClusterState()->CopyFrom(*clusterState);
         for (ui32 i = 0; i < Self->Cfg->BridgeConfig->PilesSize(); ++i) {
             TBridgePileId::FromPileIndex(i).CopyToProto(entry, &std::decay_t<decltype(*entry)>::AddUnsyncedPiles);
         }
@@ -174,30 +174,7 @@ namespace NKikimr::NStorage {
                     }
                     state->SetUnsyncedBSC(false);
                 }
-                if (cmd.HasGroupId()) {
-                    auto *groups = state->MutableUnsyncedGroupIds();
-                    for (int i = 0; i < groups->size(); ++i) {
-                        if (groups->at(i) == cmd.GetGroupId()) {
-                            if (i != groups->size() - 1) {
-                                groups->SwapElements(i, groups->size() - 1);
-                            }
-                            groups->RemoveLast();
-                            break;
-                        }
-                    }
-                }
-                if (cmd.UnsyncedGroupIdsToAddSize()) {
-                    const auto& v = cmd.GetUnsyncedGroupIdsToAdd();
-                    state->MutableUnsyncedGroupIds()->Add(v.begin(), v.end());
-                    CheckSyncersAfterCommit = true;
-                }
-                if (state->UnsyncedGroupIdsSize()) {
-                    auto *groups = state->MutableUnsyncedGroupIds();
-                    std::ranges::sort(*groups);
-                    const auto [first, last] = std::ranges::unique(*groups);
-                    groups->erase(first, last);
-                }
-                if (!state->GetUnsyncedBSC() && !state->UnsyncedGroupIdsSize()) {
+                if (!state->GetUnsyncedBSC()) {
                     // fully synced, can switch to SYNCHRONIZED
                     details->MutablePileSyncState()->DeleteSubrange(stateIndex, 1);
                     clusterState->SetPerPileState(bridgePileId.GetPileIndex(), NKikimrBridge::TClusterState::SYNCHRONIZED);

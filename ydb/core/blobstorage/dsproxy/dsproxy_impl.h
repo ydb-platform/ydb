@@ -38,8 +38,9 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     struct TBatchedQueue {
         TBatchedVec<TEventPtr> Queue;
         ui64 Bytes = 0;
-        ui64 RequestCount = 0;
     };
+
+    using TBatchedPutQueue = TBatchedQueue<TEvBlobStorage::TEvPut::TPtr>;
 
     struct TPutBatchedBucket {
         NKikimrBlobStorage::EPutHandleClass HandleClass;
@@ -95,7 +96,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     static constexpr ui64 PutTacticCount = TEvBlobStorage::TEvPut::TacticCount;
     static_assert(PutTacticCount <= 10);
 
-    TBatchedQueue<TEvBlobStorage::TEvPut::TPtr> BatchedPuts[PutHandleClassCount][PutTacticCount];
+    TBatchedPutQueue BatchedPuts[PutHandleClassCount][PutTacticCount];
     static constexpr ui64 PutBatchecBucketCount = PutHandleClassCount * PutTacticCount;
     TStackVec<TPutBatchedBucket, PutBatchecBucketCount> PutBatchedBucketQueue;
 
@@ -254,8 +255,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
         }
     }
 
-    void ProcessBatchedPutRequests(TBatchedQueue<TEvBlobStorage::TEvPut::TPtr> &batchedPuts,
-            NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic);
+    void ProcessBatchedPutRequests(TBatchedPutQueue &batchedPuts, NKikimrBlobStorage::EPutHandleClass handleClass,
+        TEvBlobStorage::TEvPut::ETactic tactic);
     void Handle(TEvStopBatchingPutRequests::TPtr& ev);
     void Handle(TEvStopBatchingGetRequests::TPtr& ev);
 

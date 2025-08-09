@@ -233,8 +233,10 @@ namespace NKikimr::NStorage {
                 for (auto& vdisk : group.VDisksOfGroup) {
                     UpdateGroupInfoForDisk(vdisk, info);
                 }
-                for (const auto& [targetBridgePileId, actorId] : group.WorkingSyncers) {
-                    Send(actorId, new TEvBlobStorage::TEvConfigureProxy(info, nullptr, nullptr));
+
+                for (auto it = WorkingSyncers.lower_bound(TWorkingSyncer{.BridgeProxyGroupId = info->GroupID});
+                        it != WorkingSyncers.end() && it->BridgeProxyGroupId == info->GroupID; ++it) {
+                    Send(it->ActorId, new TEvBlobStorage::TEvConfigureProxy(info, nullptr, nullptr));
                 }
             }
 
@@ -322,39 +324,30 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::HandleManageSyncers(TEvNodeWardenManageSyncers::TPtr ev) {
-        for (const auto& item : ev->Get()->RunSyncers) {
-            const ui32 groupId = item.GroupId.GetRawId();
+    void TNodeWarden::ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update) {
+        std::set<TWorkingSyncer> toStop = WorkingSyncers;
 
-            if (item.NodeId == LocalNodeId) {
-                auto& group = Groups[groupId];
-                if (TActorId& actorId = group.WorkingSyncers[item.TargetBridgePileId]; !actorId) {
-                    STLOG(PRI_DEBUG, BS_NODE, NW64, "starting syncer actor", (GroupId, item.GroupId),
-                        (TargetBridgePileId, item.TargetBridgePileId));
-                    actorId = Register(NBridge::CreateSyncerActor(NeedGroupInfo(groupId), item.TargetBridgePileId,
-                        item.GroupId));
-                }
-            } else if (const auto it = Groups.find(groupId); it != Groups.end()) {
-                TGroupRecord& group = it->second;
-                if (const auto jt = group.WorkingSyncers.find(item.TargetBridgePileId); jt != group.WorkingSyncers.end()) {
-                    STLOG(PRI_DEBUG, BS_NODE, NW65, "stopping syncer actor", (GroupId, item.GroupId),
-                        (TargetBridgePileId, item.TargetBridgePileId));
-                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, jt->second, SelfId(), nullptr, 0));
-                    group.WorkingSyncers.erase(jt);
-                }
+        for (const auto& item : update.GetSyncers()) {
+            using T = std::decay_t<decltype(item)>;
+            const auto [it, inserted] = WorkingSyncers.emplace(TWorkingSyncer{
+                .BridgeProxyGroupId = TGroupId::FromProto(&item, &T::GetBridgeProxyGroupId),
+                .SourceGroupId = TGroupId::FromProto(&item, &T::GetSourceGroupId),
+                .TargetGroupId = TGroupId::FromProto(&item, &T::GetTargetGroupId),
+            });
+            if (inserted) {
+                auto& group = Groups[item.GetBridgeProxyGroupId()];
+                Y_ABORT_UNLESS(group.Info); // we MUST have this group info in the very same messages as the syncer start cmd
+                auto& syncer = const_cast<TWorkingSyncer&>(*it);
+                syncer.ActorId = Register(NBridge::CreateSyncerActor(group.Info, it->SourceGroupId, it->TargetGroupId));
+            } else {
+                toStop.erase(*it);
             }
         }
 
-        std::vector<TEvNodeWardenManageSyncersResult::TSyncer> workingSyncers;
-        for (const auto& [groupId, group] : Groups) {
-            for (const auto& [targetBridgePileId, actorId] : group.WorkingSyncers) {
-                workingSyncers.push_back({
-                    .GroupId = TGroupId::FromValue(groupId),
-                    .TargetBridgePileId = targetBridgePileId,
-                });
-            }
+        for (const TWorkingSyncer& syncer : toStop) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
+            WorkingSyncers.erase(syncer);
         }
-        Send(ev->Sender, new TEvNodeWardenManageSyncersResult(std::move(workingSyncers)), 0, ev->Cookie);
     }
 
 } // NKikimr::NStorage

@@ -880,6 +880,7 @@ struct TEvBlobStorage {
         EvControllerFetchConfigResponse             = 0x1003162c,
         EvControllerDistconfRequest                 = 0x1003162d,
         EvControllerDistconfResponse                = 0x1003162e,
+        EvControllerUpdateSyncerState               = 0x1003162f,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -928,8 +929,6 @@ struct TEvBlobStorage {
         EvNodeWardenUnsubscribeFromCache,
         EvNodeWardenNotifyConfigMismatch,
         EvNodeWardenUpdateConfigFromPeer,
-        EvNodeWardenManageSyncers,
-        EvNodeWardenManageSyncersResult,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -979,6 +978,7 @@ struct TEvBlobStorage {
     struct TEvRequestCommon {
         ui32 RestartCounter = 0;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
+        std::optional<ui32> ForceGroupGeneration;
     };
 
     struct TEvPut
@@ -1212,6 +1212,7 @@ struct TEvBlobStorage {
 
         std::optional<TReaderTabletData> ReaderTabletData;
         std::optional<TForceBlockTabletData> ForceBlockTabletData;
+        std::optional<ui32> ForceGroupGeneration;
 
         TEvGet(TCloneEventPolicy, const TEvGet& origin)
             : QuerySize(origin.QuerySize)

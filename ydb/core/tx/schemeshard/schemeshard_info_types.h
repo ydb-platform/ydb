@@ -3285,7 +3285,7 @@ public:
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ "
+                << "{ " 
                 << "State = " << State
                 << ", Rows = " << Rows.size()
                 << ", MaxProbability = " << MaxProbability
@@ -3790,7 +3790,7 @@ struct TIncrementalRestoreState {
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 
         bool AllShardsComplete() const {
-            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() &&
+            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() && 
                     !ExpectedShards.empty();
         }
 
@@ -3815,7 +3815,7 @@ struct TIncrementalRestoreState {
     }
 
     bool IsCurrentIncrementalComplete() const {
-        return CurrentIncrementalIdx < IncrementalBackups.size() &&
+        return CurrentIncrementalIdx < IncrementalBackups.size() && 
                 IncrementalBackups[CurrentIncrementalIdx].Completed;
     }
 
@@ -3860,7 +3860,7 @@ struct TIncrementalRestoreState {
         IncrementalBackups.emplace_back(pathId, path, timestamp);
 
         // Sort by timestamp to ensure chronological order
-        std::sort(IncrementalBackups.begin(), IncrementalBackups.end(),
+        std::sort(IncrementalBackups.begin(), IncrementalBackups.end(), 
                     [](const TIncrementalBackup& a, const TIncrementalBackup& b) {
                         return a.Timestamp < b.Timestamp;
                     });

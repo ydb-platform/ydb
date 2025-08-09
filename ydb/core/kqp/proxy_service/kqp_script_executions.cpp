@@ -1166,9 +1166,15 @@ private:
 
 class TCheckLeaseStatusActorBase : public TActorBootstrapped<TCheckLeaseStatusActorBase> {
     using TBase = TActorBootstrapped<TCheckLeaseStatusActorBase>;
+    using TRetryPolicy = IRetryPolicy<bool>;
 
     inline static const TDuration CHECK_ALIVE_REQUEST_TIMEOUT = TDuration::Seconds(60);
-    inline static const ui64 MAX_CHECK_ALIVE_RETRIES = 100;
+    inline static const ui64 MAX_CHECK_ALIVE_RETRIES = 50;
+
+    enum class EWakeup {
+        RetryCheckAlive,
+        CheckAliveTimeout,
+    };
 
 public:
     TCheckLeaseStatusActorBase(const TActorId& ownerId, const TString& operationName, const TString& database, const TString& executionId,
@@ -1226,7 +1232,7 @@ public:
         KQP_PROXY_LOG_W("Script execution lease is expired, start lease checking, LeaseGeneration: " << leaseGeneration);
 
         SetupFinalizeRequest(EFinalizationStatus::FS_ROLLBACK, Ydb::StatusIds::UNAVAILABLE, Ydb::Query::EXEC_STATUS_ABORTED, NYql::TIssues{ NYql::TIssue("Lease expired") }, leaseGeneration);
-        Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup());
+        Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveTimeout)));
 
         CheckAliveFlags = IEventHandle::FlagTrackDelivery;
         if (runScriptActorId.NodeId() != SelfId().NodeId()) {
@@ -1315,23 +1321,32 @@ private:
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), ScriptFinalizeRequest.release());
     }
 
-    bool RetryCheckAlive() {
-        CheckAliveRetries++;
-
-        if (WaitFinishQuery || LeaseVerified) {
+    void RetryCheckAlive(bool longDelay) {
+        if (WaitFinishQuery || LeaseVerified || WaitRetryCheckAlive) {
             // Already finished checks
-            return false;
+            return;
         }
 
-        if (CheckAliveRetries >= MAX_CHECK_ALIVE_RETRIES) {
+        if (!CheckAliveRetryState) {
+            CheckAliveRetryState = TRetryPolicy::GetExponentialBackoffPolicy(
+                [](bool longDelay) {
+                    return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;
+                },
+                TDuration::MilliSeconds(100),
+                TDuration::MilliSeconds(300),
+                TDuration::Seconds(1),
+                MAX_CHECK_ALIVE_RETRIES
+            )->CreateRetryState();
+        }
+
+        if (const auto delay = CheckAliveRetryState->GetNextRetryDelay(longDelay)) {
+            KQP_PROXY_LOG_D("Schedule retry check alive in " << *delay);
+            Schedule(*delay, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RetryCheckAlive)));
+            WaitRetryCheckAlive = true;
+        } else {
             KQP_PROXY_LOG_E("Retry limit " << MAX_CHECK_ALIVE_RETRIES << " exceeded for TRunScriptActor check alive, start finalization");
             RunScriptFinalizeRequest();
-            return false;
         }
-
-        KQP_PROXY_LOG_D("Start check alive request #" << CheckAliveRetries);
-        Send(RunScriptActorId, new TEvCheckAliveRequest(), CheckAliveFlags);
-        return true;
     }
 
     void Handle(TEvCheckAliveResponse::TPtr& ev) {
@@ -1344,10 +1359,19 @@ private:
         }
     }
 
-    void Handle(TEvents::TEvWakeup::TPtr&) {
-        KQP_PROXY_LOG_W("Deliver TRunScriptActor check alive request timeout, retry check alive");
-        if (RetryCheckAlive()) {
-            Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup());
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        switch (static_cast<EWakeup>(ev->Get()->Tag)) {
+            case EWakeup::RetryCheckAlive:
+                WaitRetryCheckAlive = false;
+                CheckAliveRetries++;
+                KQP_PROXY_LOG_D("Start check alive request #" << CheckAliveRetries + 1);
+                Send(RunScriptActorId, new TEvCheckAliveRequest(), CheckAliveFlags);
+                Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveTimeout)));
+                break;
+            case EWakeup::CheckAliveTimeout:
+                KQP_PROXY_LOG_W("Deliver TRunScriptActor check alive request timeout, retry check alive");
+                RetryCheckAlive(/* longDelay */ false);
+                break;
         }
     }
 
@@ -1358,13 +1382,13 @@ private:
             RunScriptFinalizeRequest();
         } else {
             KQP_PROXY_LOG_W("Got delivery problem to " << ev->Sender << ", node with TRunScriptActor unavailable, reason: " << reason);
-            RetryCheckAlive();
+            RetryCheckAlive(/* longDelay */ true);
         }
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         KQP_PROXY_LOG_W("Node " << ev->Get()->NodeId << " with TRunScriptActor was disconnected, retry check alive");
-        RetryCheckAlive();
+        RetryCheckAlive(/* longDelay */ false);
     }
 
     void Handle(TEvScriptExecutionFinished::TPtr& ev) {
@@ -1397,9 +1421,11 @@ private:
 
     bool WaitFinishQuery = false;
     bool LeaseVerified = false;
+    bool WaitRetryCheckAlive = false;
     std::optional<ui32> SubscribedOnSession;
     ui64 CheckAliveFlags = 0;
     ui64 CheckAliveRetries = 0;
+    TRetryPolicy::IRetryState::TPtr CheckAliveRetryState;
     TActorId RunScriptActorId;
 
 protected:
@@ -1658,7 +1684,7 @@ private:
 
     void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
         Response = std::move(ev);
-        KQP_PROXY_LOG_D("Extracted script execution operation " << ev->Sender
+        KQP_PROXY_LOG_D("Extracted script execution operation " << Response->Sender
             << ", Status: " << Response->Get()->Status
             << ", Issues: " << Response->Get()->Issues.ToOneLineString()
             << ", LeaseExpired: " << Response->Get()->LeaseExpired

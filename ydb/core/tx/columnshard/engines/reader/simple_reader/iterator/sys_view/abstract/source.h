@@ -7,12 +7,58 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NAbstract {
 
+class TReplaceKeyAdapter {
+private:
+    bool Reverse = false;
+    NArrow::TSimpleRowContent Value;
+    const arrow::Schema* Schema;
+
+public:
+    NArrow::TSimpleRowView GetView() const {
+        return Value.GetView(*Schema);
+    }
+
+    NArrow::TSimpleRowContent GetValue() const {
+        return Value;
+    }
+
+    explicit TReplaceKeyAdapter(NArrow::TSimpleRowContent&& value, const bool reverse, const arrow::Schema& schema)
+        : Reverse(reverse)
+        , Value(std::move(value))
+        , Schema(&schema)
+    {
+    }
+
+    std::partial_ordering Compare(const TReplaceKeyAdapter& item) const {
+        AFL_VERIFY(Reverse == item.Reverse);
+        const std::partial_ordering result = Value.GetView(*Schema).CompareNotNull(item.Value.GetView(*Schema));
+        if (result == std::partial_ordering::equivalent) {
+            return std::partial_ordering::equivalent;
+        } else if (result == std::partial_ordering::less) {
+            return Reverse ? std::partial_ordering::greater : std::partial_ordering::less;
+        } else if (result == std::partial_ordering::greater) {
+            return Reverse ? std::partial_ordering::less : std::partial_ordering::greater;
+        } else {
+            AFL_VERIFY(false);
+            return std::partial_ordering::less;
+        }
+    }
+
+    bool operator<(const TReplaceKeyAdapter& item) const {
+        return Compare(item) == std::partial_ordering::less;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "reverse: " << Reverse << ";point:" << Value.GetView(*Schema).DebugString();
+    }
+};
+
 class TSourceData: public NReader::NSimple::IDataSource {
 private:
     using TBase = NReader::NSimple::IDataSource;
     YDB_READONLY(ui64, TabletId, 0);
-    const NCommon::TReplaceKeyAdapter Start;
-    const NCommon::TReplaceKeyAdapter Finish;
+    const TReplaceKeyAdapter Start;
+    const TReplaceKeyAdapter Finish;
 
     virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NReader::NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
@@ -62,19 +108,17 @@ private:
     }
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
-        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            return Finish.GetValue();
-        } else {
-            return Start.GetValue();
-        }
+        return GetMinPK();
     }
 
     virtual NArrow::TSimpleRow GetMinPK() const override {
-        return Start.GetValue();
+        return NArrow::TSimpleRow::BuildWithCopy(
+            Start.GetValue().GetData(), GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetPrimaryKey());
     }
 
     virtual NArrow::TSimpleRow GetMaxPK() const override {
-        return Finish.GetValue();
+        return NArrow::TSimpleRow::BuildWithCopy(
+            Finish.GetValue().GetData(), GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetPrimaryKey());
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
@@ -167,12 +211,14 @@ public:
     }
 
     TSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot,
-        const NOlap::TSnapshot& maxSnapshot, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
-        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
+        const NOlap::TSnapshot& maxSnapshot, NArrow::TSimpleRowContent&& start, NArrow::TSimpleRowContent&& finish,
+        const std::optional<ui32> recordsCount, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(EType::SimpleSysInfo, sourceId, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
         , TabletId(tabletId)
-        , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
-        , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted()) {
+        , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted(),
+              *GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetPrimaryKey())
+        , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted(),
+              *GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetPrimaryKey()) {
     }
 };
 
@@ -186,9 +232,9 @@ public:
         return NColumnShard::TInternalPathId::FromRawValue(0);
     }
 
-    TTabletSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish,
-        const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
-        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
+    TTabletSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, NArrow::TSimpleRowContent&& start,
+        NArrow::TSimpleRowContent&& finish, const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot,
+        const NOlap::TSnapshot& maxSnapshot, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context) {
     }
 };
@@ -204,8 +250,9 @@ public:
     }
 
     TPathSourceData(const ui32 sourceId, const ui32 sourceIdx, const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId,
-        NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount, const NOlap::TSnapshot& minSnapshot,
-        const NOlap::TSnapshot& maxSnapshot, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
+        NArrow::TSimpleRowContent&& start, NArrow::TSimpleRowContent&& finish, const std::optional<ui32> recordsCount,
+        const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(sourceId, sourceIdx, tabletId, minSnapshot, maxSnapshot, std::move(start), std::move(finish), recordsCount, context)
         , UnifiedPathId(pathId) {
     }

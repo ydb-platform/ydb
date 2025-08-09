@@ -47,7 +47,7 @@ void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon:
 TScanWithLimitCollection::TScanWithLimitCollection(
     const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
     : TBase(context, std::move(sourcesConstructor))
-    , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust()) {
+    , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitController().GetLimitRobust()) {
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

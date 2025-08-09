@@ -105,9 +105,11 @@ public:
         };
 
     private:
-        THashSet<ui32> Visited;
         THashSet<ui32> Executed;
+#ifndef NDEBUG
+        THashSet<ui32> Visited;
         THashSet<ui32> Current;
+#endif
 
         virtual TConclusion<EVisitStatus> DoOnExit(const TCompiledGraph::TNode& node) = 0;
         virtual TConclusionStatus DoOnEnter(const TCompiledGraph::TNode& node) = 0;
@@ -122,26 +124,32 @@ public:
         [[nodiscard]] TConclusion<EVisitStatus> OnExit(const TCompiledGraph::TNode& node);
         [[nodiscard]] TConclusionStatus OnEnter(const TCompiledGraph::TNode& node) {
             AFL_VERIFY(node.GetProcessor());
-            AFL_VERIFY(Visited.emplace(node.GetIdentifier()).second);
-            AFL_VERIFY(Current.emplace(node.GetIdentifier()).second);
+            AFL_VERIFY_DEBUG(Visited.emplace(node.GetIdentifier()).second);
+            AFL_VERIFY_DEBUG(Current.emplace(node.GetIdentifier()).second);
             return DoOnEnter(node);
         }
         [[nodiscard]] TConclusionStatus OnComeback(const TCompiledGraph::TNode& node, const std::vector<TColumnChainInfo>& readyInputs) {
             AFL_VERIFY(node.GetProcessor());
-            AFL_VERIFY(Current.contains(node.GetIdentifier()));
+            AFL_VERIFY_DEBUG(Current.contains(node.GetIdentifier()));
             return DoOnComeback(node, readyInputs);
         }
     };
 
 private:
+    const ui32 NodesCountReserve;
     THashMap<ui64, std::shared_ptr<TNode>> Nodes;
     THashSet<ui32> SourceColumns;
     THashSet<ui32> FilterColumns;
     YDB_READONLY_DEF(std::shared_ptr<TNode>, ResultRoot);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TNode>>, FilterRoot);
+    std::vector<std::shared_ptr<TNode>> RootNodes;
     bool IsFilterRoot(const ui32 identifier) const;
 
 public:
+    ui32 GetNodesCountReserve() const {
+        return NodesCountReserve;
+    }
+
     std::shared_ptr<IResourcesAggregator> GetResultsAggregationProcessor() const {
         if (ResultRoot->GetProcessor()->GetProcessorType() != EProcessorType::Projection) {
             return nullptr;
@@ -185,6 +193,7 @@ public:
     class TIterator {
     public:
         enum class ENodeStatus {
+            NotVisited,
             InProgress,
             Finished
         };
@@ -194,16 +203,16 @@ public:
         std::shared_ptr<TCompiledGraph::TNode> CurrentGraphNode;
         ui32 CurrentGraphNodeIdx = 0;
         std::vector<TCompiledGraph::TNode*> NodesStack;
-        THashMap<ui32, ENodeStatus> Statuses;
+        std::vector<ENodeStatus> Statuses;
         TCompiledGraph::TNode* CurrentNode = nullptr;
-        std::shared_ptr<IVisitor> Visitor;
+        std::unique_ptr<IVisitor> Visitor;
         [[nodiscard]] TConclusionStatus ProvideCurrentToExecute();
 
         [[nodiscard]] TConclusion<bool> GlobalInitialize();
 
     public:
-        TIterator(const std::shared_ptr<IVisitor>& visitor)
-            : Visitor(visitor) {
+        TIterator(std::unique_ptr<IVisitor>&& visitor)
+            : Visitor(std::move(visitor)) {
         }
 
         ui32 GetCurrentNodeId() const {
@@ -225,10 +234,19 @@ public:
             return *CurrentNode;
         }
 
-        [[nodiscard]] TConclusion<bool> Reset(std::vector<std::shared_ptr<TCompiledGraph::TNode>>&& graphNodes);
+        [[nodiscard]] TConclusion<bool> Reset(std::vector<std::shared_ptr<TCompiledGraph::TNode>>&& graphNodes, const ui32 nodesCount);
 
         bool IsValid() const {
             return !!CurrentNode;
+        }
+
+        IVisitor& MutableVisitor() const {
+            return *Visitor;
+        }
+
+        template <class T>
+        T* MutableVisitorAs() const {
+            return static_cast<T*>(Visitor.get());
         }
 
         const std::shared_ptr<IResourceProcessor>& GetProcessorVerified() const {
@@ -239,7 +257,7 @@ public:
         TConclusion<bool> Next();
     };
 
-    std::shared_ptr<TIterator> BuildIterator(const std::shared_ptr<IVisitor>& visitor) const;
+    std::unique_ptr<TIterator> BuildIterator(std::unique_ptr<IVisitor>&& visitor) const;
 
     TCompiledGraph(const NOptimization::TGraph& original, const IColumnResolver& resolver);
 

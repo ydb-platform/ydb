@@ -85,7 +85,7 @@ bool TPKRangesFilter::CheckPoint(const NArrow::TSimpleRow& point) const {
     return SortedRanges.empty();
 }
 
-TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const {
+TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimpleRowView& start, const NArrow::TSimpleRowView& end) const {
     if (SortedRanges.empty()) {
         return TPKRangeFilter::EUsageClass::FullUsage;
     }

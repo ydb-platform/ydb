@@ -46,11 +46,10 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
     NBlobOperations::NRead::TCompositeReadBlobs blobsData = ExtractBlobsData();
     blobsData.Merge(std::move(ProvidedBlobs));
     TReadActionsCollection readActions;
-    auto* signals = Source->GetExecutionContext().GetCurrentStepSignalsOptional();
-    if (signals) {
-        signals->AddBytes(blobsData.GetTotalBlobsSize());
-        Source->GetContext()->GetCommonContext()->GetCounters().AddRawBytes(blobsData.GetTotalBlobsSize());
-    }
+    const auto& signals = Source->GetExecutionContext().GetCursorStep().GetCurrentStep().GetSignals();
+    signals->AddBytes(blobsData.GetTotalBlobsSize());
+    Source->GetContext()->GetCommonContext()->GetCounters().AddRawBytes(blobsData.GetTotalBlobsSize());
+
     for (auto&& [_, i] : DataFetchers) {
         i->OnDataReceived(readActions, blobsData);
     }
@@ -69,9 +68,8 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
             std::move(readActions), DataFetchers, Source, std::move(Cursor), GetTaskCustomer(), GetExternalTaskId());
         NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(nextReadTask));
     }
-    if (signals) {
-        signals->AddExecutionDuration(TMonotonic::Now() - start);
-    }
+
+    signals->AddExecutionDuration(TMonotonic::Now() - start);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

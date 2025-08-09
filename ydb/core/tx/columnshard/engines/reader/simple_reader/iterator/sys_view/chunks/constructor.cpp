@@ -1,4 +1,5 @@
 #include "constructor.h"
+#include "schema.h"
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
@@ -28,7 +29,7 @@ std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNextImpl(const std:
 TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
     const std::optional<NOlap::TInternalPathId> internalPathId, const TSnapshot reqSnapshot,
     const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting)
-    : TBase(sorting) {
+    : TBase(sorting, TSchemaAdapter::GetPKSchema()) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     const TVersionedIndex& originalSchemaInfo = engineImpl->GetVersionedIndex();
     std::deque<TPortionDataConstructor> constructors;
@@ -45,7 +46,8 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
             }
             constructors.emplace_back(
                 pathIdTranslator.GetUnifiedByInternalVerified(p->GetPathId()), tabletId, p, p->GetSchema(originalSchemaInfo));
-            if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
+            if (!pkFilter->IsUsed(constructors.back().GetStart().GetView(*TSchemaAdapter::GetPKSchema()),
+                    constructors.back().GetFinish().GetView(*TSchemaAdapter::GetPKSchema()))) {
                 constructors.pop_back();
             }
         }

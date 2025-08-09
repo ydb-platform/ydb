@@ -20,7 +20,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TCalculationProcessor::DoExecu
     if (result.IsFail()) {
         return result;
     }
-    context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), std::move(*result));
+    context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), result.DetachResult());
     return IResourceProcessor::EExecutionResult::Success;
 }
 

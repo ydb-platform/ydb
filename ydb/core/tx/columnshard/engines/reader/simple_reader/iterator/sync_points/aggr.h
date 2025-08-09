@@ -47,9 +47,9 @@ private:
         return sb;
     }
 
-    std::shared_ptr<NCommon::IDataSource> Flush() {
+    const std::shared_ptr<NCommon::IDataSource>& Flush() {
         if (SourcesToAggregate.empty()) {
-            return nullptr;
+            return Default<std::shared_ptr<NCommon::IDataSource>>();
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "aggregation_batching")("count", SourcesToAggregate.size());
         ++InFlightControl;
@@ -57,12 +57,12 @@ private:
         result->InitPurposeSyncPointIndex(GetPointIndex());
         SourcesToAggregate.clear();
         MemoryToAggregate = 0;
-        SourcesSequentially.emplace_back(result);
         result->InitFetchingPlan(AggregationScript);
-        return result;
+        SourcesSequentially.emplace_back(std::move(result));
+        return SourcesSequentially.back();
     }
 
-    std::shared_ptr<NCommon::IDataSource> TryToFlush() {
+    const std::shared_ptr<NCommon::IDataSource>& TryToFlush() {
         if (!AggregationActivity || SourcesToAggregate.size() >= AggregationPackSize || MemoryToAggregate.Val() >= AggregationMemorySize ||
             (Collection->IsFinished() && Collection->GetSourcesInFlightCount() == SourcesCount.Val()) ||
             Collection->GetMaxInFlight() == SourcesCount.Val()) {
@@ -73,14 +73,14 @@ private:
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("to_aggr", SourcesToAggregate.size())("fin", Collection->IsFinished())(
             "fly", Collection->GetSourcesInFlightCount())("count", SourcesCount)("max", Collection->GetMaxInFlight());
-        return nullptr;
+        return Default<std::shared_ptr<NCommon::IDataSource>>();
     }
 
     virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
         return source->IsSyncSection() && source->HasStageResult();
     }
 
-    virtual std::shared_ptr<NCommon::IDataSource> DoOnSourceFinishedOnPreviouse() override {
+    virtual const std::shared_ptr<NCommon::IDataSource>& DoOnSourceFinishedOnPreviouse() override {
         return TryToFlush();
     }
 
@@ -88,7 +88,7 @@ private:
         return ISyncPoint::IsFinished() && SourcesToAggregate.empty();
     }
 
-    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
+    virtual const std::shared_ptr<NCommon::IDataSource>& OnAddSource(std::shared_ptr<NCommon::IDataSource>&& source) override {
         bool localAggregationActivity = true;
         if (SourcesToAggregate.empty()) {
             if (AggregationActivity) {
@@ -97,8 +97,8 @@ private:
                     originalCount = source->GetStageData().GetTable().GetFilter().GetFilteredCountVerified();
                 }
                 const ui32 aggrKeysCount = source->GetStageData().GetTable().GetRecordsCountActualVerified();
-                localAggregationActivity =
-                    aggrKeysCount < GuaranteeNeedAggregationSourceRecordsCount || aggrKeysCount * CriticalBadAggregationKffForSource < originalCount;
+                localAggregationActivity = aggrKeysCount < GuaranteeNeedAggregationSourceRecordsCount ||
+                                           aggrKeysCount * CriticalBadAggregationKffForSource < originalCount;
             } else {
                 localAggregationActivity = false;
             }
@@ -106,16 +106,16 @@ private:
         ++SourcesCount;
         if (localAggregationActivity) {
             MemoryToAggregate += source->GetReservedMemory();
-            SourcesToAggregate.emplace_back(source);
             if (InFlightControl.Val() == 0) {
                 source->MutableAs<IDataSource>()->ClearMemoryGuards();
             }
+            SourcesToAggregate.emplace_back(std::move(source));
             return TryToFlush();
         } else {
             ++InFlightControl;
-            SourcesSequentially.emplace_back(source);
             source->MutableAs<IDataSource>()->InitFetchingPlan(RestoreResultScript);
-            return source;
+            SourcesSequentially.emplace_back(std::move(source));
+            return SourcesSequentially.back();
         }
     }
 

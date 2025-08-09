@@ -22,7 +22,7 @@ public:
         static ui64 presetId = NAbstract::ISchemaAdapter::Counter.Inc();
         return Max<ui64>() - presetId;
     }
-    static NArrow::TSimpleRow GetPKSimpleRow(const NColumnShard::TSchemeShardLocalPathId& pathId, const ui64 tabletId);
+    static NArrow::TSimpleRowContent GetPKSimpleRow(const NColumnShard::TSchemeShardLocalPathId& pathId, const ui64 tabletId);
     static const std::shared_ptr<arrow::Schema>& GetPKSchema();
     virtual TIndexInfo GetIndexInfo(
         const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<TSchemaObjectsCache>& schemaObjectsCache) const override;

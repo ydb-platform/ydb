@@ -50,7 +50,7 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::BuildReadMe
     } else if (!*result) {
         return result.DetachResult();
     } else {
-        (*result)->SetRequestedLimit(ItemsLimit);
+        (*result)->MutableLimitController().SetRequestedLimit(ItemsLimit);
         (*result)->SetScanIdentifier(read.GetScanIdentifier());
         return result;
     }

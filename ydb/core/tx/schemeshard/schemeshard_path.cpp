@@ -1169,6 +1169,19 @@ const TPath::TChecker& TPath::TChecker::IsSysView(EStatus status) const {
     );
 }
 
+const TPath::TChecker& TPath::TChecker::IsStreamingQuery(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsStreamingQuery()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a streaming query"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
     return TStringBuilder()
         << "id: " << element->PathId << ", "

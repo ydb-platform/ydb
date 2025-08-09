@@ -91,7 +91,8 @@ TEST(TYPathServiceCombinerTest, Simple)
                     .EndAttributes().Entity()
                 .EndMap();
         }));
-    auto combinedService = New<TServiceCombiner>(std::vector<IYPathServicePtr>{service1, service2 });
+
+    auto combinedService = CreateServiceCombiner({service1, service2});
 
     EXPECT_TRUE(YPathExists(combinedService, ""));
     EXPECT_THROW(YPathExists(combinedService, "/"), std::exception);
@@ -120,7 +121,7 @@ TEST(TYPathServiceCombinerTest, DynamicAndStatic)
                 .EndMap();
         }));
 
-    auto combinedService = New<TServiceCombiner>(std::vector<IYPathServicePtr>{staticService, dynamicService }, TDuration::MilliSeconds(100));
+    auto combinedService = CreateServiceCombiner({staticService, dynamicService}, TDuration::MilliSeconds(100));
 
     EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
     EXPECT_FALSE(YPathExists(combinedService, "/dynamic_key1"));
@@ -177,7 +178,7 @@ TEST(TYPathServiceCombinerTest, UpdateKeysOnMissingKey)
                 .EndMap();
         }));
 
-    auto combinedService = New<TServiceCombiner>(std::vector<IYPathServicePtr>{staticService, dynamicService }, TDuration::Seconds(100), /*updateKeysOnMissingKey*/ true);
+    auto combinedService = CreateServiceCombiner({staticService, dynamicService}, TDuration::Seconds(100), /*updateKeysOnMissingKey*/ true);
 
     EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
     EXPECT_FALSE(YPathExists(combinedService, "/dynamic_key1"));

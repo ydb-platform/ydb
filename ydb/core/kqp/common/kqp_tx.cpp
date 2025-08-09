@@ -175,6 +175,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     bool hasStreamLookup = false;
     bool hasSinkWrite = false;
     bool hasSinkInsert = false;
+    bool hasVectorResolve = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
         switch (tx.GetType()) {
@@ -208,6 +209,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
             for (const auto &input : stage.GetInputs()) {
                 hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
+                hasVectorResolve |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve;
             }
 
             for (const auto &tableOp : stage.GetTableOps()) {
@@ -226,7 +228,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     YQL_ENSURE(!hasSinkWrite || hasEffects);
 
     // We need snapshot for stream lookup, besause it's used for dependent reads
-    if (hasStreamLookup) {
+    if (hasStreamLookup || hasVectorResolve) {
         return true;
     }
 
@@ -379,6 +381,7 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     break;
                 case NKqpProto::TKqpPhyConnection::kSequencer:
                     return true;
+                case NKqpProto::TKqpPhyConnection::kVectorResolve: // FIXME: Maybe, when prefix tables are enabled
                 case NKqpProto::TKqpPhyConnection::kUnionAll:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
                 case NKqpProto::TKqpPhyConnection::kMap:

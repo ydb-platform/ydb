@@ -18,6 +18,8 @@ const NYql::TKikimrTableDescription& GetTableData(const NYql::TKikimrTablesData&
 
 NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const TVector<TString>& columnNames,
     NYql::TExprContext& ctx);
+NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const TVector<TStringBuf>& columnNames,
+    NYql::TExprContext& ctx);
 NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const THashSet<TStringBuf>& columnNames,
     NYql::TExprContext& ctx);
 
@@ -31,7 +33,7 @@ TIntrusivePtr<NYql::TKikimrTableMetadata> GetIndexMetadata(const NYql::NNodes::T
 
 TVector<std::pair<NYql::TExprNode::TPtr, const NYql::TIndexDescription*>> BuildSecondaryIndexVector(
     const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
-    const THashSet<TStringBuf>* filter,
+    const THashSet<TStringBuf>* filter, bool withVectorIndexes,
     const std::function<NYql::NNodes::TExprBase (const NYql::TKikimrTableMetadata&,
         NYql::TPositionHandle, NYql::TExprContext&)>& tableBuilder);
 

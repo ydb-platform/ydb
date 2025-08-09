@@ -122,6 +122,10 @@ TExprBase ProjectColumns(const TExprBase& input, const TVector<TString>& columnN
     return ProjectColumnsInternal(input, columnNames, ctx);
 }
 
+TExprBase ProjectColumns(const TExprBase& input, const TVector<TStringBuf>& columnNames, TExprContext& ctx) {
+    return ProjectColumnsInternal(input, columnNames, ctx);
+}
+
 TExprBase ProjectColumns(const TExprBase& input, const THashSet<TStringBuf>& columnNames, TExprContext& ctx) {
     return ProjectColumnsInternal(input, columnNames, ctx);
 }

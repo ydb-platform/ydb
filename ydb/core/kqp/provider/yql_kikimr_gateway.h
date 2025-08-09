@@ -205,7 +205,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                return false;
+                return true;
         }
     }
 

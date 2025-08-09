@@ -1,3 +1,4 @@
+#include <ydb/core/base/table_vector_index.h>
 #include "kqp_opt_phy_effects_impl.h"
 
 namespace NKikimr::NKqp::NOpt {
@@ -79,6 +80,7 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryInde
     TPositionHandle pos,
     TExprContext& ctx,
     const THashSet<TStringBuf>* filter,
+    bool withVectorIndexes,
     const std::function<TExprBase (const TKikimrTableMetadata&, TPositionHandle, TExprContext&)>& tableBuilder)
 {
     TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> secondaryIndexes;
@@ -86,7 +88,8 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryInde
     YQL_ENSURE(table.Metadata->Indexes.size() == table.Metadata->ImplTables.size());
     for (size_t i = 0; i < table.Metadata->Indexes.size(); i++) {
         const auto& index = table.Metadata->Indexes[i];
-        if (!index.ItUsedForWrite()) {
+        if (!index.ItUsedForWrite() &&
+            (withVectorIndexes || index.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree)) {
             continue;
         }
 
@@ -111,22 +114,30 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryInde
 
         if (index.KeyColumns && addIndex) {
             auto& implTable = table.Metadata->ImplTables[i];
-            YQL_ENSURE(!implTable->Next);
-            auto indexTable = tableBuilder(*implTable, pos, ctx).Ptr();
-            secondaryIndexes.emplace_back(indexTable, &index);
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                YQL_ENSURE(implTable->Next && !implTable->Next->Next);
+                auto postingTable = implTable->Next;
+                YQL_ENSURE(postingTable->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable));
+                auto indexTable = tableBuilder(*postingTable, pos, ctx).Ptr();
+                secondaryIndexes.emplace_back(indexTable, &index);
+            } else {
+                YQL_ENSURE(!implTable->Next);
+                auto indexTable = tableBuilder(*implTable, pos, ctx).Ptr();
+                secondaryIndexes.emplace_back(indexTable, &index);
+            }
         }
     }
     return secondaryIndexes;
 }
 
 TSecondaryIndexes BuildSecondaryIndexVector(const TKikimrTableDescription& table, TPositionHandle pos,
-    TExprContext& ctx, const THashSet<TStringBuf>* filter)
+    TExprContext& ctx, const THashSet<TStringBuf>* filter, bool withVectorIndexes)
 {
     static auto cb = [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
         return BuildTableMeta(meta, pos, ctx);
     };
 
-    return BuildSecondaryIndexVector(table, pos, ctx, filter, cb);
+    return BuildSecondaryIndexVector(table, pos, ctx, filter, withVectorIndexes, cb);
 }
 
 TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& lookupKeys,

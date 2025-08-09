@@ -134,7 +134,8 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TDynamicJournalWriterConfig::Register(TRegistrar registrar) {
+void TDynamicJournalWriterConfig::Register(TRegistrar registrar)
+{
     registrar.Parameter("validate_erasure_coding", &TThis::ValidateErasureCoding)
         .Optional();
 }

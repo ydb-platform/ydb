@@ -2021,7 +2021,9 @@ protected:
     }
 
     void SaveScriptExternalEffect(std::unique_ptr<TEvSaveScriptExternalEffectRequest> scriptEffects) {
-        this->Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptEffects.release());
+        const auto runScriptActorId = GetUserRequestContext()->RunScriptActorId;
+        Y_ENSURE(runScriptActorId);
+        this->Send(runScriptActorId, scriptEffects.release());
     }
 
 protected:

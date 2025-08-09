@@ -39,8 +39,8 @@ constexpr ui64 MIN_SAVE_RESULT_BATCH_SIZE = 5_MB;
 constexpr i32 MIN_SAVE_RESULT_BATCH_ROWS = 5000;
 constexpr ui64 RUN_SCRIPT_ACTOR_BUFFER_SIZE = 40_MB;
 
-NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues, bool force = false) {
-    if (!issues && !force) {
+NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues, bool addEmptyRoot = false) {
+    if (!issues && !addEmptyRoot) {
         return {};
     }
 

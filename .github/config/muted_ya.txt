@@ -263,6 +263,9 @@ ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackup.test_database
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test_multi[many_tables]
+ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[1051200]
+ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[180]
+ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_uniform
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayScanBackend]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]

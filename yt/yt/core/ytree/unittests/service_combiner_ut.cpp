@@ -12,14 +12,16 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<TString> YPathList(
+std::vector<TString> YPathListSorted(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit = {})
 {
-    return AsyncYPathList(service, path, limit)
+    auto keys = AsyncYPathList(service, path, limit)
         .Get()
         .ValueOrThrow();
+    std::ranges::sort(keys);
+    return keys;
 }
 
 bool YPathExists(
@@ -67,7 +69,7 @@ void YPathRemove(
 
 TEST(TYPathServiceCombinerTest, Simple)
 {
-    IYPathServicePtr service1 = IYPathService::FromProducer(BIND([] (IYsonConsumer* consumer) {
+    auto service1 = IYPathService::FromProducer(BIND([] (IYsonConsumer* consumer) {
             BuildYsonFluently(consumer)
                 .BeginMap()
                     .Item("key1").Value(42)
@@ -80,7 +82,7 @@ TEST(TYPathServiceCombinerTest, Simple)
                     .EndMap()
                 .EndMap();
         }));
-    IYPathServicePtr service2 = IYPathService::FromProducer(BIND([] (IYsonConsumer* consumer) {
+    auto service2 = IYPathService::FromProducer(BIND([] (IYsonConsumer* consumer) {
             BuildYsonFluently(consumer)
                 .BeginMap()
                     .Item("key3").Value(-1)
@@ -89,18 +91,18 @@ TEST(TYPathServiceCombinerTest, Simple)
                     .EndAttributes().Entity()
                 .EndMap();
         }));
-    auto combinedService = New<TServiceCombiner>(std::vector<IYPathServicePtr> { service1, service2 });
+    auto combinedService = New<TServiceCombiner>(std::vector<IYPathServicePtr>{service1, service2 });
 
-    EXPECT_EQ(true, YPathExists(combinedService, ""));
+    EXPECT_TRUE(YPathExists(combinedService, ""));
     EXPECT_THROW(YPathExists(combinedService, "/"), std::exception);
-    EXPECT_EQ(false, YPathExists(combinedService, "/keyNonExistent"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/key1"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/key3"));
-    EXPECT_EQ(false, YPathExists(combinedService, "/key2/subkeyNonExistent"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/key2/subkey1"));
-    EXPECT_EQ((std::vector<TString> { "key1", "key2", "key3", "key4" }), YPathList(combinedService, ""));
-    EXPECT_EQ((std::vector<TString> { "subkey1", "subkey2" }), YPathList(combinedService, "/key2"));
-    EXPECT_THROW(YPathList(combinedService, "/keyNonExistent"), std::exception);
+    EXPECT_FALSE(YPathExists(combinedService, "/keyNonExistent"));
+    EXPECT_TRUE(YPathExists(combinedService, "/key1"));
+    EXPECT_TRUE(YPathExists(combinedService, "/key3"));
+    EXPECT_FALSE(YPathExists(combinedService, "/key2/subkeyNonExistent"));
+    EXPECT_TRUE(YPathExists(combinedService, "/key2/subkey1"));
+    EXPECT_EQ((std::vector<TString>{"key1", "key2", "key3", "key4"}), YPathListSorted(combinedService, ""));
+    EXPECT_EQ((std::vector<TString>{"subkey1", "subkey2"}), YPathListSorted(combinedService, "/key2"));
+    EXPECT_THROW(YPathListSorted(combinedService, "/keyNonExistent"), std::exception);
     EXPECT_EQ(ConvertToYsonString(-1, EYsonFormat::Binary), YPathGet(combinedService, "/key4/@attribute1"));
     EXPECT_EQ(ConvertToYsonString("abc", EYsonFormat::Binary), YPathGet(combinedService, "/key2/subkey1"));
     EXPECT_THROW(YPathGet(combinedService, "/"), std::exception);
@@ -108,8 +110,8 @@ TEST(TYPathServiceCombinerTest, Simple)
 
 TEST(TYPathServiceCombinerTest, DynamicAndStatic)
 {
-    IYPathServicePtr dynamicService = GetEphemeralNodeFactory()->CreateMap();
-    IYPathServicePtr staticService = IYPathService::FromProducer(BIND([] (IYsonConsumer* consumer) {
+    auto dynamicService = GetEphemeralNodeFactory()->CreateMap();
+    auto staticService = IYPathService::FromProducer(BIND([] (IYsonConsumer* consumer) {
             BuildYsonFluently(consumer)
                 .BeginMap()
                     .Item("static_key1").Value(-1)
@@ -118,12 +120,12 @@ TEST(TYPathServiceCombinerTest, DynamicAndStatic)
                 .EndMap();
         }));
 
-    auto combinedService = New<TServiceCombiner>(std::vector<IYPathServicePtr> { staticService, dynamicService }, TDuration::MilliSeconds(100));
+    auto combinedService = New<TServiceCombiner>(std::vector<IYPathServicePtr>{staticService, dynamicService }, TDuration::MilliSeconds(100));
 
-    EXPECT_EQ(true, YPathExists(combinedService, "/static_key1"));
-    EXPECT_EQ(false, YPathExists(combinedService, "/dynamic_key1"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/error_key"));
-    EXPECT_EQ((std::vector<TString> { "static_key1", "static_key2", "error_key" }), YPathList(combinedService, ""));
+    EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
+    EXPECT_FALSE(YPathExists(combinedService, "/dynamic_key1"));
+    EXPECT_TRUE(YPathExists(combinedService, "/error_key"));
+    EXPECT_EQ((std::vector<TString>{"error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
 
     YPathSet(dynamicService, "/dynamic_key1", ConvertToYsonString(3.1415926));
     YPathSet(dynamicService, "/dynamic_key2", TYsonString(TStringBuf("#")));
@@ -131,10 +133,10 @@ TEST(TYPathServiceCombinerTest, DynamicAndStatic)
     // Give service time to rebuild key mapping.
     Sleep(TDuration::MilliSeconds(200));
 
-    EXPECT_EQ(true, YPathExists(combinedService, "/static_key1"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/dynamic_key1"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/error_key"));
-    EXPECT_EQ((std::vector<TString> { "static_key1", "static_key2", "error_key", "dynamic_key1", "dynamic_key2" }), YPathList(combinedService, ""));
+    EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
+    EXPECT_TRUE(YPathExists(combinedService, "/dynamic_key1"));
+    EXPECT_TRUE(YPathExists(combinedService, "/error_key"));
+    EXPECT_EQ((std::vector<TString>{"dynamic_key1", "dynamic_key2", "error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
     EXPECT_EQ(TYsonString(TStringBuf("#")), YPathGet(combinedService, "/dynamic_key2"));
 
     YPathSet(dynamicService, "/error_key", ConvertToYsonString(42));
@@ -146,7 +148,7 @@ TEST(TYPathServiceCombinerTest, DynamicAndStatic)
     EXPECT_THROW(YPathExists(combinedService, "/dynamic_key1"), std::exception);
     EXPECT_THROW(YPathExists(combinedService, "/error_key"), std::exception);
     EXPECT_THROW(YPathGet(combinedService, ""), std::exception);
-    EXPECT_THROW(YPathList(combinedService, ""), std::exception);
+    EXPECT_THROW(YPathListSorted(combinedService, ""), std::exception);
     EXPECT_THROW(YPathGet(combinedService, "/static_key1"), std::exception);
 
     YPathRemove(dynamicService, "/error_key");
@@ -154,10 +156,10 @@ TEST(TYPathServiceCombinerTest, DynamicAndStatic)
     // Give service time to return to the normal state.
     Sleep(TDuration::MilliSeconds(200));
 
-    EXPECT_EQ(true, YPathExists(combinedService, "/static_key1"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/dynamic_key1"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/error_key"));
-    EXPECT_EQ((std::vector<TString> { "static_key1", "static_key2", "error_key", "dynamic_key1", "dynamic_key2" }), YPathList(combinedService, ""));
+    EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
+    EXPECT_TRUE(YPathExists(combinedService, "/dynamic_key1"));
+    EXPECT_TRUE(YPathExists(combinedService, "/error_key"));
+    EXPECT_EQ((std::vector<TString>{"dynamic_key1", "dynamic_key2", "error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
     EXPECT_EQ(TYsonString(TStringBuf(TStringBuf("#"))), YPathGet(combinedService, "/dynamic_key2"));
 }
 
@@ -165,8 +167,8 @@ TEST(TYPathServiceCombinerTest, DynamicAndStatic)
 
 TEST(TYPathServiceCombinerTest, UpdateKeysOnMissingKey)
 {
-    IYPathServicePtr dynamicService = GetEphemeralNodeFactory()->CreateMap();
-    IYPathServicePtr staticService = IYPathService::FromProducer(BIND([] (IYsonConsumer* consumer) {
+    auto dynamicService = GetEphemeralNodeFactory()->CreateMap();
+    auto staticService = IYPathService::FromProducer(BIND([] (IYsonConsumer* consumer) {
             BuildYsonFluently(consumer)
                 .BeginMap()
                     .Item("static_key1").Value(-1)
@@ -175,24 +177,25 @@ TEST(TYPathServiceCombinerTest, UpdateKeysOnMissingKey)
                 .EndMap();
         }));
 
-    auto combinedService = New<TServiceCombiner>(std::vector<IYPathServicePtr> { staticService, dynamicService }, TDuration::Seconds(100), /*updateKeysOnMissingKey*/ true);
+    auto combinedService = New<TServiceCombiner>(std::vector<IYPathServicePtr>{staticService, dynamicService }, TDuration::Seconds(100), /*updateKeysOnMissingKey*/ true);
 
-    EXPECT_EQ(true, YPathExists(combinedService, "/static_key1"));
-    EXPECT_EQ(false, YPathExists(combinedService, "/dynamic_key1"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/error_key"));
-    EXPECT_EQ((std::vector<TString> { "static_key1", "static_key2", "error_key" }), YPathList(combinedService, ""));
+    EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
+    EXPECT_FALSE(YPathExists(combinedService, "/dynamic_key1"));
+    EXPECT_TRUE(YPathExists(combinedService, "/error_key"));
+    EXPECT_EQ((std::vector<TString>{"error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
 
     YPathSet(dynamicService, "/dynamic_key1", ConvertToYsonString(3.1415926));
     YPathSet(dynamicService, "/dynamic_key2", TYsonString(TStringBuf("#")));
 
-    EXPECT_EQ(true, YPathExists(combinedService, "/static_key1"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/dynamic_key1"));
-    EXPECT_EQ(true, YPathExists(combinedService, "/error_key"));
-    EXPECT_EQ((std::vector<TString> { "static_key1", "static_key2", "error_key", "dynamic_key1", "dynamic_key2" }), YPathList(combinedService, ""));
+    EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
+    EXPECT_TRUE(YPathExists(combinedService, "/dynamic_key1"));
+    EXPECT_TRUE(YPathExists(combinedService, "/error_key"));
+    EXPECT_EQ((std::vector<TString>{"dynamic_key1", "dynamic_key2", "error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
     EXPECT_EQ(TYsonString(TStringBuf("#")), YPathGet(combinedService, "/dynamic_key2"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NYTree
 

@@ -139,7 +139,7 @@ message TSelect {
         // NOTE: this API intentionally makes it not possible to request 'SELECT *'.
         // YQ must provide all the column names explicitly.
         //
-        // Еmpty list means that YQ wants to get empty tuples in the response.
+        // Empty list means that YQ wants to get empty tuples in the response.
         // On the connector's side this request will be transformed into something like
         // SELECT 1 FROM $table (...)
         repeated TItem items = 1;
@@ -367,6 +367,22 @@ message TExpression {
     message TNull {
     }
 
+    message TUnwrap {
+        TExpression operand = 1;
+    }
+
+    message TMinOf {
+        repeated TExpression operands = 1;
+    }
+
+    message TMaxOf {
+        repeated TExpression operands = 1;
+    }
+
+    message TCurrentUtcTimestamp {
+        repeated TExpression operands = 1;
+    }
+
     oneof payload {
         // A scalar value
         Ydb.TypedValue typed_value = 1;
@@ -382,6 +398,14 @@ message TExpression {
         TIf if = 6;
 
         TCast cast = 7;
+
+        TUnwrap unwrap = 8;
+
+        TMinOf min_of = 9;
+
+        TMaxOf max_of = 10;
+
+        TCurrentUtcTimestamp current_utc_timestamp = 11;
     }
 }
 
@@ -440,7 +464,7 @@ message TPredicate {
         TExpression value = 1;
     }
 
-    // Expression wich has bool type
+    // Expression which has bool type
     // For example, bool column
     message TBoolExpression {
         TExpression value = 1;

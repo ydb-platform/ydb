@@ -1,6 +1,7 @@
 #include "yql_opt_utils.h"
 #include "yql_expr_optimize.h"
 #include "yql_expr_type_annotation.h"
+#include "yql_join.h"
 #include "yql_type_annotation.h"
 #include "yql_type_helpers.h"
 
@@ -2393,7 +2394,12 @@ template TPartOfConstraintBase::TSetType GetPathsToKeys<true>(const TExprNode& b
 template TPartOfConstraintBase::TSetType GetPathsToKeys<false>(const TExprNode& body, const TExprNode& arg);
 
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count) {
-    YQL_ENSURE(prefix.StartsWith("_yql"));
+    if (!prefix.StartsWith("_yql")) {
+        YQL_ENSURE(prefix.Contains('.'));
+        TStringBuf table, column;
+        SplitTableName(prefix, table, column);
+        YQL_ENSURE(column.StartsWith("_yql"));
+    }
     TSet<size_t> existing;
     for (auto& item : source.GetItems()) {
         TStringBuf column = item->GetName();

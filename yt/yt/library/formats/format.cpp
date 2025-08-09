@@ -499,6 +499,39 @@ TYsonProducer CreateProducerForFormat(const TFormat& format, EDataType dataType,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TConcreteFactory
+    : public IFormatFactory
+{
+public:
+    TConcreteFactory(const TFormat& format, EDataType dataType)
+        : Format_(format)
+        , DataType_(dataType)
+    { }
+
+    std::unique_ptr<NYson::IFlushableYsonConsumer> CreateConsumer(IZeroCopyOutput* output) override
+    {
+        return CreateConsumerForFormat(Format_, DataType_, output);
+    }
+
+    NYson::TYsonProducer CreateProducer(IInputStream* input) override
+    {
+        return CreateProducerForFormat(Format_, DataType_, input);
+    }
+
+private:
+    TFormat Format_;
+    EDataType DataType_;
+};
+
+IFormatFactoryPtr CreateFactoryForFormat(
+    const TFormat& format,
+    EDataType dataType)
+{
+    return New<TConcreteFactory>(format, dataType);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template<class TBase>
 struct TParserAdapter
     : public TBase

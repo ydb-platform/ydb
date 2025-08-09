@@ -41,7 +41,7 @@ public:
         }
 
         TString DebugString() const {
-            return TStringBuilder() << (IsLast ? "Last:" : "First:") << Key.GetData().DebugJson(0);
+            return TStringBuilder() << (IsLast ? "Last:" : "First:") << Key.GetSorting()->DebugJson(0);
         }
     };
 

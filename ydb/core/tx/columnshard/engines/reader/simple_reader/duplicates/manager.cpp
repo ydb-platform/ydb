@@ -35,7 +35,7 @@ private:
     }
 
     virtual bool DoIsAborted() const override {
-        return false;
+        return Context->GetRequest()->Get()->GetAbortionFlag() && Context->GetRequest()->Get()->GetAbortionFlag()->Val();
     }
 
 public:
@@ -69,7 +69,7 @@ private:
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         AFL_VERIFY(Callback);
-        Callback->OnError(errorMessage);
+        Callback->OnError(TStringBuilder() << "cannot allocate memory: " << errorMessage);
     }
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
@@ -109,7 +109,7 @@ private:
 
         ui64 mem = 0;
         for (const auto& accessor : result.ExtractPortionsVector()) {
-            mem += accessor->GetColumnRawBytes(Columns);
+            mem += accessor->GetColumnRawBytes(Columns, false);
         }
 
         NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(Callback->GetContext()->GetMemoryProcessId(),
@@ -117,7 +117,7 @@ private:
             { std::make_shared<TColumnDataAllocation>(Callback, Portions, Columns, ColumnDataManager, mem) }, std::nullopt);
     }
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        return Default<std::shared_ptr<const TAtomicCounter>>();
+        return Callback->GetContext()->GetRequest()->Get()->GetAbortionFlag();
     }
 
 public:
@@ -162,6 +162,33 @@ public:
     }
 };
 
+std::vector<TDuplicateManager::TPortionsSlice> TDuplicateManager::FindIntervalBorders(
+    const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion,
+    const std::shared_ptr<TInternalFilterConstructor>& context) const {
+    THashMap<ui64, NArrow::TFirstLastSpecialKeys> borders;
+    for (const auto& [portionId, _] : dataByPortion) {
+        const auto& portion = GetPortionVerified(portionId);
+        borders.emplace(
+            portionId, NArrow::TFirstLastSpecialKeys(portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->IndexKeyStart().GetSchema()));
+    }
+    const auto& mainSource = GetPortionVerified(context->GetRequest()->Get()->GetSourceId());
+    TColumnDataSplitter splitter(
+        borders, NArrow::TFirstLastSpecialKeys(mainSource->IndexKeyStart(), mainSource->IndexKeyEnd(), mainSource->IndexKeyStart().GetSchema()));
+
+    std::vector<TDuplicateManager::TPortionsSlice> slices;
+    for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
+        slices.emplace_back(TPortionsSlice(splitter.GetIntervalFinish(i)));
+    }
+    for (const auto& [id, data] : dataByPortion) {
+        auto intervals = splitter.SplitPortion(data);
+        AFL_VERIFY(intervals.size() == splitter.NumIntervals());
+        for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
+            slices[i].AddRange(id, intervals[i]);
+        }
+    }
+    return slices;
+}
+
 #define LOCAL_LOG_TRACE \
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
 
@@ -180,14 +207,11 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     std::vector<TPortionInfo::TConstPtr> sourcesToFetch;
-    THashMap<ui64, NArrow::TFirstLastSpecialKeys> borders;
     const std::shared_ptr<TPortionInfo>& source = GetPortionVerified(ev->Get()->GetSourceId());
     {
-        const auto collector = [&sourcesToFetch, &borders](
+        const auto collector = [&sourcesToFetch](
                                    const TPortionIntervalTree::TRange& /*interval*/, const std::shared_ptr<TPortionInfo>& portion) {
             sourcesToFetch.emplace_back(portion);
-            borders.emplace(portion->GetPortionId(),
-                NArrow::TFirstLastSpecialKeys(portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->IndexKeyStart().GetSchema()));
         };
         Intervals.EachIntersection(TPortionIntervalTree::TRange(source->IndexKeyStart(), true, source->IndexKeyEnd(), true), collector);
     }
@@ -202,9 +226,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         return;
     }
 
-    TColumnDataSplitter splitter(
-        borders, NArrow::TFirstLastSpecialKeys(source->IndexKeyStart(), source->IndexKeyEnd(), source->IndexKeyStart().GetSchema()));
-    auto constructor = std::make_shared<TInternalFilterConstructor>(ev, std::move(splitter));
+    auto constructor = std::make_shared<TInternalFilterConstructor>(ev);
 
     {
         THashSet<TPortionAddress> portionAddresses;
@@ -239,24 +261,12 @@ void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TP
     THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> dataByPortion =
         ev->Get()->ExtractResult().ExtractDataByPortion(GetFetchingColumns());
     const std::shared_ptr<TInternalFilterConstructor>& context = ev->Get()->GetContext();
-    const TColumnDataSplitter& splitter = context->GetIntervals();
     auto allocationGuard = ev->Get()->ExtractAllocationGuard();
 
-    std::vector<TPortionsSlice> slices;
-    for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
-        slices.emplace_back(TPortionsSlice(splitter.GetIntervalFinish(i)));
-    }
-    for (const auto& [id, data] : dataByPortion) {
-        auto intervals = splitter.SplitPortion(data);
-        AFL_VERIFY(intervals.size() == splitter.NumIntervals());
-        for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
-            slices[i].AddRange(id, intervals[i]);
-        }
-    }
-    LOCAL_LOG_TRACE("event", "construct_filters")("context", context->DebugString())("splitter", splitter.DebugString());
+    LOCAL_LOG_TRACE("event", "construct_filters")("context", context->DebugString());
 
-    for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
-        const auto& slice = slices[i];
+    auto slices = FindIntervalBorders(dataByPortion, context);
+    for (const auto& slice : slices) {
         BuildFilterForSlice(slice, context, allocationGuard, dataByPortion);
     }
 }

@@ -71,6 +71,10 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
                 DateFormat = readSettings->Child(i);
                 continue;
             }
+            if (readSettings->Child(i)->Head().IsAtom("watermark")) {
+                Watermark = readSettings->Child(i)->ChildPtr(1);
+                continue;
+            }
         }
     }
 

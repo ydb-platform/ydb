@@ -9,7 +9,7 @@
 (let $8 (PqTopic '"pq" '"local" '"test_topic_input" '('('"PartitionsCount" '"1")) '() $7))
 (let $9 '('"SharedReading" '"1"))
 (let $10 '('('"Consumer" '"test_client") '('"Endpoint" '"<pq_pq_endpoint>") $9 '('"ReconnectPeriod" '"") '('"Format" '"json_each_row") '('"ReadGroup" '"fqrun") '('"UseSsl" '"1")))
-(let $11 (DqPqTopicSource world $8 '('"color" '"value") $10 (SecureParam '"cluster:default_pq") '"" $7))
+(let $11 (DqPqTopicSource world $8 '('"color" '"value") $10 (SecureParam '"cluster:default_pq") '"" $7 '""))
 (let $12 (DqStage '((DqSource $5 $11)) (lambda '($15) (block '(
   (let $16 '('('"format" '"json_each_row") '('"formatSettings" '('('"data.datetime.formatname" '"POSIX") '('"data.timestamp.formatname" '"POSIX"))) '('"settings" '($9))))
   (let $17 (DqSourceWideWrap $15 $5 $7 $16))

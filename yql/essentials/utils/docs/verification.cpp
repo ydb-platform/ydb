@@ -78,7 +78,9 @@ namespace NYql::NDocs {
             !IsLikelyDocumentedAt(section->Body, name)) {
             report[EFame::BadLinked][std::move(name)] =
                 TStringBuilder()
-                << "Absent at section '" << target << "'";
+                << "Absent at section '" << target << "', "
+                << "section header is '" << section->Header.Content << "', "
+                << "section prefix is '" << TStringBuf(section->Body).SubString(0, 32) << "'";
             return;
         }
 

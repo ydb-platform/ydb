@@ -13,14 +13,23 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 def string_version_to_tuple(s):
     result = []
     s = s.replace('.', '-')
-    for idx, elem in enumerate(s.split("-")):
-        # skipping 'stable' in stable-25-1-1 version
-        if idx == 0 and elem == 'stable':
-            continue
+    version_components = s.split("-")
+    for idx, elem in enumerate(version_components):
+        if idx == 0:
+            # skipping 'stable' in stable-25-1-1 version
+            if elem == 'stable':
+                continue
+            elif elem == 'current':
+                result.append(float('+inf'))
+                continue
+        elif idx == len(version_components) - 1:
+            # skipping 'hotfix' in stable-24-4-4-hotfix version
+            if elem == 'hotfix':
+                continue
         try:
             result.append(int(elem))
         except ValueError:
-            result.append(float("NaN"))
+            result.append(float('NaN'))
     return tuple(result)
 
 
@@ -37,12 +46,12 @@ init_stable_binary_path = os.environ.get('YDB_INIT_BINARY_PATH', yatest.common.b
 inter_stable_version = None
 init_stable_version = None
 
-inter_stable_name = "intermediate"
+inter_stable_name = 'intermediate'
 if inter_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
     with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter-name")) as f:
         inter_stable_name = f.read().strip()
         inter_stable_version = string_version_to_tuple(inter_stable_name)
-init_stable_name = "initial"
+init_stable_name = 'initial'
 if init_stable_binary_path:  # in import_test yatest.common.binary_path returns None
     with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init-name")) as f:
         init_stable_name = f.read().strip()
@@ -55,13 +64,13 @@ path_to_version = {
 }
 
 all_binary_combinations_restart = [
-    [[inter_stable_binary_path], [current_binary_path]],
-    [[current_binary_path], [inter_stable_binary_path]],
-    [[current_binary_path], [current_binary_path]],
+    [inter_stable_binary_path, current_binary_path],
+    [current_binary_path, inter_stable_binary_path],
+    [current_binary_path, current_binary_path],
 
-    [[init_stable_binary_path], [inter_stable_binary_path]],
-    [[inter_stable_binary_path], [init_stable_binary_path]],
-    [[inter_stable_binary_path], [inter_stable_binary_path]],
+    [init_stable_binary_path, inter_stable_binary_path],
+    [inter_stable_binary_path, init_stable_binary_path],
+    [inter_stable_binary_path, inter_stable_binary_path],
 ]
 all_binary_combinations_ids_restart = [
     "restart_{}_to_{}".format(inter_stable_name, current_name),
@@ -79,7 +88,7 @@ class RestartToAnotherVersionFixture:
     def base_setup(self, request):
         self.current_binary_paths_index = 0
         self.all_binary_paths = request.param
-        self.versions = list([path_to_version[path] for path_list in self.all_binary_paths for path in path_list])
+        self.versions = [path_to_version[path] for path in self.all_binary_paths]
 
     def setup_cluster(self, **kwargs):
         extra_feature_flags = kwargs.pop("extra_feature_flags", {})
@@ -87,7 +96,7 @@ class RestartToAnotherVersionFixture:
         extra_feature_flags["suppress_compatibility_check"] = True
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
-            binary_paths=self.all_binary_paths[self.current_binary_paths_index],
+            binary_paths=[self.all_binary_paths[self.current_binary_paths_index]],
             use_in_memory_pdisks=False,
             extra_feature_flags=extra_feature_flags,
             **kwargs,
@@ -110,7 +119,7 @@ class RestartToAnotherVersionFixture:
     def change_cluster_version(self):
         self.current_binary_paths_index = (self.current_binary_paths_index + 1) % len(self.all_binary_paths)
         new_binary_paths = self.all_binary_paths[self.current_binary_paths_index]
-        self.config.set_binary_paths(new_binary_paths)
+        self.config.set_binary_paths([new_binary_paths])
         self.cluster.update_configurator_and_restart(self.config)
         self.driver = ydb.Driver(
             ydb.DriverConfig(

@@ -2254,7 +2254,7 @@ private:
 
     void Handle(TEvGetScriptExecutionOperationQueryResponse::TPtr& ev) {
         Response = std::move(ev);
-        KQP_PROXY_LOG_D("Extracted script execution operation " << ev->Sender
+        KQP_PROXY_LOG_D("Extracted script execution operation " << Response->Sender
             << ", Status: " << Response->Get()->Status
             << ", Issues: " << Response->Get()->Issues.ToOneLineString()
             << ", Ready: " << Response->Get()->Ready

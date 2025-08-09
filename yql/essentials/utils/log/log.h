@@ -3,6 +3,7 @@
 #include "log_component.h"
 #include "log_level.h"
 #include "context.h"
+#include "format.h"
 #include "profile.h"
 
 #include <library/cpp/logger/global/common.h>
@@ -92,6 +93,14 @@ namespace NProto {
 
 namespace NLog {
 
+namespace NImpl {
+
+TString GetThreadId();
+
+TString GetLocalTime();
+
+}
+
 using TComponentLevels =
         std::array<ELevel, EComponentHelpers::ToInt(EComponent::MaxValue)>;
 
@@ -125,9 +134,23 @@ public:
 
     TAutoPtr<TLogElement> CreateLogElement(EComponent component, ELevel level, TStringBuf file, int line) const;
 
-    void WriteLogPrefix(IOutputStream* out, EComponent component, ELevel level, TStringBuf file, int line) const;
+    void Contextify(TLogRecord& record, EComponent component, ELevel level, TStringBuf file, int line) const;
 
 private:
+    void Contextify(TLogElement& element, EComponent component, ELevel level, TStringBuf file, int line) const;
+
+    template <std::invocable<std::pair<TString, TString>> Action>
+    void Contextify(Action action, EComponent component, ELevel level, TStringBuf file, int line) const {
+        action(std::make_pair(TString(ToStringBuf(EContextKey::DateTime)), NImpl::GetLocalTime()));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::Level)), TString(ELevelHelpers::ToString(level))));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::ProcessName)), ProcName_));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::ProcessID)), ToString(ProcId_)));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::ThreadID)), NImpl::GetThreadId()));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::Component)), TString(EComponentHelpers::ToString(component))));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::FileName)), TString(file.RAfter(LOCSLASH_C))));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::Line)), ToString(line)));
+    }
+
     TString ProcName_;
     pid_t ProcId_;
     std::array<TAtomic, EComponentHelpers::ToInt(EComponent::MaxValue)> ComponentLevels_{0};
@@ -166,14 +189,14 @@ void InitLogger(const NProto::TLoggingConfig& loggingConfig, bool startAsDaemon 
  *
  * @param backend - logger backend
  */
-void InitLogger(TAutoPtr<TLogBackend> backend);
+void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter = LegacyFormat);
 
 /**
  * @brief Initialize logger with concrete output stream.
  *
  * @param out - output stream
  */
-void InitLogger(IOutputStream* out);
+void InitLogger(IOutputStream* out, TFormatter formatter = LegacyFormat);
 
 void CleanupLogger();
 
@@ -182,8 +205,8 @@ void ReopenLog();
 class YqlLoggerScope {
 public:
     YqlLoggerScope(const TString& log, bool startAsDaemon = false) { InitLogger(log, startAsDaemon); }
-    YqlLoggerScope(TAutoPtr<TLogBackend> backend) { InitLogger(backend); }
-    YqlLoggerScope(IOutputStream* out) { InitLogger(out); }
+    YqlLoggerScope(TAutoPtr<TLogBackend> backend, TFormatter formatter = LegacyFormat) { InitLogger(backend, std::move(formatter)); }
+    YqlLoggerScope(IOutputStream* out, TFormatter formatter = LegacyFormat) { InitLogger(out, std::move(formatter)); }
 
     ~YqlLoggerScope() { CleanupLogger(); }
 };

@@ -1,5 +1,8 @@
 #include "tls_backend.h"
+
 #include "log.h"
+#include "log_ut.h"
+
 #include <yql/essentials/utils/log/ut/log_parser.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -50,8 +53,8 @@ private:
 
 Y_UNIT_TEST_SUITE(TTlsLogBackendTest)
 {
-    Y_UNIT_TEST(CaptureOutputs) {
-        YqlLoggerScope logger(new TTlsLogBackend(new TNullLogBackend));
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(CaptureOutputs) {
+        YqlLoggerScope logger(new TTlsLogBackend(new TNullLogBackend), Format);
 
         YQL_LOG(INFO) << "this message will be missed";
 

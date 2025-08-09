@@ -186,8 +186,7 @@ namespace NSQLComplete {
             TStringBuf s = input.Text;
             size_t i = input.CursorPosition;
 
-            return (i < s.size() && IsWordBoundary(s[i]) || i == s.size()) &&
-                   (i > 0 /*  */ && IsWordBoundary(s[i - 1]));
+            return (i < s.size() && IsWordBoundary(s[i]) || i == s.size());
         }
 
         SQLv1::Sql_queryContext* Parse(TStringBuf input) {

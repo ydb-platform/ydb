@@ -932,6 +932,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             TVector<TCandidate> expected = {
                 {Keyword, "COLUMNS"},
                 {Keyword, "SCHEMA"},
+                {Keyword, "WATERMARK AS()", 1},
                 {HintName, "XLOCK"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "REDUCE my_table WITH "), expected);
@@ -940,6 +941,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             TVector<TCandidate> expected = {
                 {Keyword, "COLUMNS"},
                 {Keyword, "SCHEMA"},
+                {Keyword, "WATERMARK AS()", 1},
                 {HintName, "XLOCK"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT key FROM my_table WITH "), expected);
@@ -951,6 +953,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {Keyword, "COLUMNS"},
             {HintName, "EXPIRATION"},
             {Keyword, "SCHEMA"},
+            {Keyword, "WATERMARK AS()", 1},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
@@ -1393,6 +1396,10 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
+            TString query = "SELECT * FROM example.`/people` WHERE a#";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query).at(0).Content, "Age");
+        }
+        {
             TString query = "SELECT * FROM example.`/people` WHERE f(#)";
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
@@ -1401,12 +1408,20 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
+            TString query = "SELECT * FROM example.`/people` ORDER BY a#";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query).at(0).Content, "Age");
+        }
+        {
             TString query = "SELECT * FROM example.`/people` ORDER BY f(#)";
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
             TString query = "SELECT * FROM example.`/people` GROUP BY #";
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = "SELECT * FROM example.`/people` GROUP BY a#";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query).at(0).Content, "Age");
         }
         {
             TString query = R"(

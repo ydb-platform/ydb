@@ -1764,7 +1764,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
                     }
                 }
                 if (changed) {
-                    return ctx.ChangeChildren(*node, std::move(dependsOnArgs));
+                    return ctx.ChangeChild(*node, 0, ctx.NewList(node->Pos(), std::move(dependsOnArgs)));
                 }
             } else {
                 if (&node->Head() == arg) {

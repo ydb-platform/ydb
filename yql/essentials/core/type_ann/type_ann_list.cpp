@@ -6925,12 +6925,14 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr))
-        {
+        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (!lambdaTimeExtractor->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
+        }
+        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, true)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, true)) {
@@ -7077,8 +7079,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!UpdateLambdaAllArgumentsTypes(lambdaKeyExtractor, {itemType}, ctx.Expr))
-        {
+        if (!UpdateLambdaAllArgumentsTypes(lambdaKeyExtractor, {itemType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         auto keyType = lambdaKeyExtractor->GetTypeAnn();
@@ -7086,12 +7087,14 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr))
-        {
+        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (!lambdaTimeExtractor->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
+        }
+        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, true)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, true)) {

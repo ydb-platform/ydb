@@ -276,6 +276,7 @@ namespace NSQLTranslationV1 {
         TColumnsSets&& distinctSets
     );
     TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
+    TSourcePtr BuildAnyColumnSource(TPosition pos);
 
 
     enum class ReduceMode {

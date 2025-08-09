@@ -3,6 +3,7 @@
 #include <yt/yql/providers/yt/lib/init_yt_api/init.h>
 
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/format.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
@@ -110,19 +111,37 @@ public:
             }
         }
 
-        TStringStream stream;
-        NLog::YqlLogger().WriteLogPrefix(&stream, NLog::EComponent::ProviderYt, yqlLevel, sl.File, sl.Line);
-        NLog::OutputLogCtx(&stream, true);
-        Printf(stream, format, args);
-        stream << Endl;
+        TString message;
+        {
+            TStringStream out;
+            Printf(out, format, args);
+            message = std::move(out.Str());
+        }
+
+        TString path;
+        {
+            TStringStream out;
+            NLog::OutputLogCtx(&out, false);
+            path = std::move(out.Str());
+        }
+
+        TLogRecord record(NLog::ELevelHelpers::ToLogPriority(yqlLevel), message.data(), message.length());
+        NLog::YqlLogger().Contextify(record, NLog::EComponent::ProviderYt, yqlLevel, sl.File, sl.Line);
+        record.MetaFlags.emplace_back(NLog::ToStringBuf(NLog::EContextKey::Path), std::move(path));
 
         if (needLog) {
-            NLog::YqlLogger().Write(NLog::ELevelHelpers::ToLogPriority(yqlLevel), stream.Str().data(), stream.Str().length());
+            ELogPriority level = NLog::ELevelHelpers::ToLogPriority(yqlLevel);
+            NLog::YqlLogger().Write(level, record.Data, record.Len, record.MetaFlags);
         }
+
         with_lock(BufferLock_) {
             if (Buffer_) {
-                const char* ptr = stream.Str().data();
-                size_t remaining = stream.Str().length();
+                // Log format can be distinct from that is YqlLogger,
+                // but we do not care as it is a debug buffer.
+                TString out = NLog::LegacyFormat(record);
+
+                const char* ptr = out.data();
+                size_t remaining = out.length();
                 while (remaining) {
                     const size_t write = Min(remaining, BufferSize_ - BufferWritePos_);
                     MemCopy(Buffer_.Get() + BufferWritePos_, ptr, write);

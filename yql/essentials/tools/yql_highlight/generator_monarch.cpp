@@ -1,5 +1,7 @@
 #include "generator_monarch.h"
 
+#include "highlighting.h"
+
 #include <contrib/libs/re2/re2/re2.h>
 
 #include <library/cpp/json/json_writer.h>
@@ -7,26 +9,6 @@
 #include <util/string/builder.h>
 
 namespace NSQLHighlight {
-
-    bool IsCaseInsensitive(const THighlighting& highlighting) {
-        return AnyOf(highlighting.Units, [](const TUnit& unit) {
-            return AnyOf(unit.Patterns, [](const NSQLTranslationV1::TRegexPattern& p) {
-                return p.IsCaseInsensitive;
-            });
-        });
-    }
-
-    template <std::invocable<const TUnit&> Action>
-    void ForEachMultiLine(const THighlighting& highlighting, Action action) {
-        for (const TUnit& unit : highlighting.Units) {
-            TMaybe<TRangePattern> range = unit.RangePattern;
-            if (!range) {
-                continue;
-            }
-
-            action(unit);
-        }
-    }
 
     TString ToMonarchRegex(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern) {
         TStringBuilder regex;

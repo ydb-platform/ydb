@@ -24,7 +24,7 @@ enum class EDebugOutput {
 const ui32 PRETTY_FLAGS = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote |
                           NYql::TAstPrintFlags::AdaptArbitraryContent;
 
-inline TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::None) {
+inline TString Err2Str(const NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::None) {
     TStringStream s;
     res.Issues.PrintTo(s);
 

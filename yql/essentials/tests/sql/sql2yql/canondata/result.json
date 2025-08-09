@@ -4283,6 +4283,13 @@
             "uri": "https://{canondata_backend}/1777230/24f082d0aa1f2ba194e39825cf286fc93a91a2fa/resource.tar.gz#test_sql2yql.test_join-left_join_right_pushdown_onlykeys_/sql.yql"
         }
     ],
+    "test_sql2yql.test[join-left_join_right_pushdown_skipnulls]": [
+        {
+            "checksum": "edcc42a6da58662d913f408c90fab0d0",
+            "size": 2029,
+            "uri": "https://{canondata_backend}/1773845/49753b70b2dfcaa939d2a38c9ab5411f48c0f5b1/resource.tar.gz#test_sql2yql.test_join-left_join_right_pushdown_skipnulls_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[join-left_join_with_self_aggr]": [
         {
             "checksum": "5ae7a0cc9f3c5302ca5e6631df5b6650",
@@ -4309,6 +4316,13 @@
             "checksum": "238c8b175f8fc2f12799c91433faf584",
             "size": 10078,
             "uri": "https://{canondata_backend}/1599023/96e9363c53a78c2884ae76b39bd982d37627eefa/resource.tar.gz#test_sql2yql.test_join-pushdown_all_sides_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[join-pushdown_all_sides_optional]": [
+        {
+            "checksum": "aa7b2e11d6f0d0b34394225bd1eafb16",
+            "size": 10402,
+            "uri": "https://{canondata_backend}/1773845/3b2febd400f6a2906341f53c6ab5de0951a73668/resource.tar.gz#test_sql2yql.test_join-pushdown_all_sides_optional_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-skip_nulls_tuple]": [
@@ -11074,6 +11088,11 @@
             "uri": "file://test_sql_format.test_join-left_join_right_pushdown_onlykeys_/formatted.sql"
         }
     ],
+    "test_sql_format.test[join-left_join_right_pushdown_skipnulls]": [
+        {
+            "uri": "file://test_sql_format.test_join-left_join_right_pushdown_skipnulls_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[join-left_join_with_self_aggr]": [
         {
             "uri": "file://test_sql_format.test_join-left_join_with_self_aggr_/formatted.sql"
@@ -11092,6 +11111,11 @@
     "test_sql_format.test[join-pushdown_all_sides]": [
         {
             "uri": "file://test_sql_format.test_join-pushdown_all_sides_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-pushdown_all_sides_optional]": [
+        {
+            "uri": "file://test_sql_format.test_join-pushdown_all_sides_optional_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-skip_nulls_tuple]": [

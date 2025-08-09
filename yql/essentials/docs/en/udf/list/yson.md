@@ -284,6 +284,8 @@ It's passed in the last optional argument (omitted for brevity) to the methods `
 * **AutoConvert**: If the value passed to Yson doesn't match the result data type exactly, the value is converted where possible. For example, `Yson::ConvertToInt64` in this mode will convert even Double numbers to Int64.
 * **Strict**: By default, all functions from the Yson library return an error in case of issues during query execution (for example, an attempt to parse a string that is not Yson/Json, or an attempt to search by a key in a scalar type, or when a conversion to an incompatible data type has been requested, and so on). If you disable the strict mode, `NULL` is returned instead of an error in most cases. When converting to a dictionary or list (`ConvertTo<Type>Dict` or `ConvertTo<Type>List`), improper items are excluded from the resulting collection.
 
+Please note: if you explicitly pass the `Yson::Options` object, the default values of its fields may differ from the settings used when no options are provided at all. For example, the `Yson::Parse` method operates in strict mode by default, but if you create and pass an options object without specifying the value of the `Strict` field, it will be set to `false` and the method will work in non-strict mode.
+
 #### Example
 
 ```yql

@@ -44,6 +44,7 @@ class TLogElement;
 
 namespace NYql {
 namespace NLog {
+
 namespace NImpl {
 
 /**
@@ -100,7 +101,7 @@ public:
     }
 
 private:
-    // Additional memory before Names_ used in child class 
+    // Additional memory before Names_ used in child class
     size_t HeaderSize_;
 };
 
@@ -128,6 +129,20 @@ private:
 };
 
 } // namspace NImpl
+
+enum class EContextKey {
+    DateTime = 0,
+    Level,
+    ProcessName,
+    ProcessID,
+    ThreadID,
+    Component,
+    FileName,
+    Line,
+    Path,
+};
+
+TStringBuf ToStringBuf(EContextKey key);
 
 /**
  * @brief YQL logger context element. Each element can contains several names.

@@ -397,15 +397,21 @@ bool CompareValueImplDecimal(const NYdb::TDecimalValue& valResult, TStringBuf vE
     TStringBuf precesionStr;
     vExpected.Split("+-", vExpected, precesionStr);
     auto expectedInt = NYql::NDecimal::FromString(vExpected, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
-
-    if (precesionStr) {
+    auto relativePrecision = NYql::NDecimal::FromString("0.0001", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
+    if (precesionStr.ChopSuffix("%")) {
+        relativePrecision = NYql::NDecimal::FromString(precesionStr, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale) / 100;
+    } else if (precesionStr) {
         auto precInt = NYql::NDecimal::FromString(precesionStr, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
         return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
     }
-    const auto from = NYql::NDecimal::FromString("0.9999", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
-    const auto to = NYql::NDecimal::FromString("1.0001", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
     const auto devider = NYql::NDecimal::GetDivider(valResult.DecimalType_.Scale);
-    return resInt > NYql::NDecimal::MulAndDivNormalDivider(from, expectedInt, devider) && resInt < NYql::NDecimal::MulAndDivNormalDivider(to, expectedInt, devider);
+    NYql::NDecimal::TInt128 precInt;
+    if (expectedInt < 0) {
+        precInt = NYql::NDecimal::MulAndDivNormalDivider(relativePrecision, -expectedInt, devider);
+    } else  {
+        precInt = NYql::NDecimal::MulAndDivNormalDivider(relativePrecision, expectedInt, devider);
+    }
+    return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
 }
 
 bool CompareValueImplDatetime(IOutputStream& errStream, const TInstant& valResult, TStringBuf vExpected, TDuration unit) {

@@ -3,7 +3,9 @@ from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
-class TestUploadTpchS1(upload.TestUploadTpch1, FunctionalTestBase):
+class TestUploadTpchS0_1(upload.UploadTpchBase, FunctionalTestBase):
+    scale: float = 0.1
+
     @classmethod
     def setup_class(cls) -> None:
         YdbCluster._tables_path = ''

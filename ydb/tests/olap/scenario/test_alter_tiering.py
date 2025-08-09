@@ -243,10 +243,9 @@ class TestAlterTiering(TieringTestBase):
 
         for _ in loop:
             LOGGER.info('executing SELECT')
-            sth.execute_scan_query(
+            sth.execute_query(
                 f'SELECT MIN(writer) FROM `{sth.get_full_path(table)}`',
-                expected_status=expected_scan_status,
-                timeout=duration.seconds
+                expected_status=expected_scan_status
             )
 
     def _loop_set_ttl(

@@ -254,7 +254,9 @@ struct TUserTable : public TThrRefBase {
                     return ECacheMode::Regular;
                 case NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory:
                     return ECacheMode::TryKeepInMemory;
+                // keep no default
             }
+            Y_ENSURE(false, "unexpected");
         }
     };
 

@@ -1293,6 +1293,8 @@ private:
             return true;
         }
 
+        LOG_N("TTxBuildProgress: Performing cross shard unique index validation: " << BuildId << " " << buildInfo.State);
+
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 

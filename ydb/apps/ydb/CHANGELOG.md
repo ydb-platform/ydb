@@ -1,4 +1,4 @@
-* Fixed comapration of decimal types in `ydb workload * run` commands.
+* Fixed decimal type comparison in `ydb workload * run` commands.
 * Added a new paths approach in the `ydb export s3` and `ydb import s3` commands with the new `--include` option instead of the `--item` option. 
 * Added support for encryption features in the `ydb export s3` and `ydb import s3` commands.
 

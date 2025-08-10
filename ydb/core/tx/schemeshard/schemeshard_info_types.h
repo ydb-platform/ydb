@@ -3709,14 +3709,16 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
     NKikimrSchemeOp::TExternalTableReferences ExternalTableReferences;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
 
-    void FillProto(NKikimrSchemeOp::TExternalDataSourceDescription& proto) const {
+    void FillProto(NKikimrSchemeOp::TExternalDataSourceDescription& proto, bool withReferences = true) const {
         proto.SetVersion(AlterVersion);
         proto.SetSourceType(SourceType);
         proto.SetLocation(Location);
         proto.SetInstallation(Installation);
         proto.MutableAuth()->CopyFrom(Auth);
         proto.MutableProperties()->CopyFrom(Properties);
-        proto.MutableReferences()->CopyFrom(ExternalTableReferences);
+        if (withReferences) {
+            proto.MutableReferences()->CopyFrom(ExternalTableReferences);
+        }
     }
 };
 

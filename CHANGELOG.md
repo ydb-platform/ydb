@@ -12,6 +12,10 @@
 * 20633:Fix for Arrow arena when allocating zero-sized region. [#20633](https://github.com/ydb-platform/ydb/pull/20633) ([Ivan](https://github.com/abyss7))
 * 20997:Fix for GROUP BY emitting multiple NULL keys when block processing is enabled. [#20997](https://github.com/ydb-platform/ydb/pull/20997) ([Pavel Zuev](https://github.com/pzuev))
 * 21356:Added gettxtype in txwrite. [#21356](https://github.com/ydb-platform/ydb/pull/21356) ([r314-git](https://github.com/r314-git))
+* 22520:Fix default values for Kafka protocol [#22520](https://github.com/ydb-platform/ydb/pull/22520) ([qyryq](https://github.com/qyryq))
+* 22455:Fix issue where dedicated database deletion may leave database system tablets improperly cleaned. [#22455](https://github.com/ydb-platform/ydb/pull/22455) ([ijon](https://github.com/ijon))
+* 22203:ensure tablets are launched after nodes stop being overloaded, fixes https://github.com/ydb-platform/ydb/issues/22030 [#22203](https://github.com/ydb-platform/ydb/pull/22203) ([vporyadke](https://github.com/vporyadke))
+* 21106:Cherry-pick from main fix for KIKIMR-23489 [#21106](https://github.com/ydb-platform/ydb/pull/21106) ([Denis Khalikov](https://github.com/denis0x0D))
 
 ### YDB UI
 
@@ -21,15 +25,15 @@
 * 137:Fixed long errors on vdisk evict when no pdisks are available.
 * 138:Improved vdisk evict swagger and parameters handling.
 * 139:Fixed handling of metadata cache requests.
-* 140:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/16477) – list of nodes and databases in broken environment, closes 
+* 140:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/16477) – list of nodes and databases in broken environment, closes
 * 141:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/18735) – storage nodes, some other minor fixes.
 * 142:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19810) - minimized returned data to avoid large responses.
 * 143:Don't report fake limit as total node memory.
 * 144:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19676) – make nodes less critical (to make cluster less critical). [#20053](https://github.com/ydb-platform/ydb/pull/20053) ([Alexey Efimov](https://github.com/adameat))
-
 
 ### Performance
 
 * 19910:Enhanced pool scaling when using shared threads and available CPU resources. [#19910](https://github.com/ydb-platform/ydb/pull/19910) ([kruall](https://github.com/kruall))
 * 19926:Significantly improved performance for single-core, dual-core, and triple-core configurations [#19926](https://github.com/ydb-platform/ydb/pull/19926) ([kruall](https://github.com/kruall))
 * 20197:Added early termination optimization for `GraceJoin`: if one side is empty and the join kind guarantees an empty result, the other side is no longer read. [#20197](https://github.com/ydb-platform/ydb/pull/20197) ([Filitov Mikhail](https://github.com/lll-phill-lll))
+

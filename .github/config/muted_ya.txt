@@ -265,6 +265,9 @@ ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test_multi[many_t
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[1051200]
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[180]
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_uniform
+ydb/tests/olap/py3test.[0 10] chunk
+ydb/tests/olap/py3test.[1 10] chunk
+ydb/tests/olap/py3test.[2 10] chunk
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayScanBackend]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]

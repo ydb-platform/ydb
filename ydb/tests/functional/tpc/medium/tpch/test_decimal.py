@@ -1,5 +1,5 @@
-import test_s_float
+import test_s1
 
 
-class TestTpchS0_1Decimal_22_9(test_s_float.TestTpchS0_1):
+class TestTpchS1Decimal_22_9(test_s1.TestTpchS1):
     float_mode = 'decimal_ydb'

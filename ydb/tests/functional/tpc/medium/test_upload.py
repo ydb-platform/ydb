@@ -10,4 +10,4 @@ class TestUploadTpchS0_1(upload.UploadTpchBase, FunctionalTestBase):
     def setup_class(cls) -> None:
         YdbCluster._tables_path = ''
         cls.setup_cluster()
-        super().setup_class()
+        upload.TestUploadTpch1.setup_class()

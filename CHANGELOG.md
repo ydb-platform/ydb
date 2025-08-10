@@ -13,7 +13,7 @@
 * 19310:Added ability to enable followers (read replicas) for covered secondary indexes. [#19310](https://github.com/ydb-platform/ydb/pull/19310) ([azevaykin](https://github.com/azevaykin))
 * 19504:Implemented a [vector index](./dev/vector-indexes.md) for approximate vector search. [#19504](https://github.com/ydb-platform/ydb/pull/19504) ([kungurtsev](https://github.com/kunga))
 * 20705:YMQ: Do not send x-amz-crc32 HTTP header (AWS does not do it) [#20705](https://github.com/ydb-platform/ydb/pull/20705) ([qyryq](https://github.com/qyryq))
-  
+
 ### Bug fixes
 
 * 16797:Fixed an issue with topic auto-partitioning when the `max_active_partition` configuration parameter was set via the `ALTER TOPIC` statement. [#16797](https://github.com/ydb-platform/ydb/pull/16797) ([Nikolay Shestakov](https://github.com/nshestakov))
@@ -23,7 +23,6 @@
 * 18296:Fixed replication continuing to consume disk space when storage was low, which caused VDisks to become read-only. [#18296](https://github.com/ydb-platform/ydb/pull/18296) ([Sergey Belyakov](https://github.com/serbel324))
 * 18362:Table auto partitioning: Fixed crash when selecting split key from access samples containing a mix of full key and key prefix operations (e.g. exact/range reads). [#18362](https://github.com/ydb-platform/ydb/pull/18362) ([ijon](https://github.com/ijon))
 * 18301:Optimized memory usage in transactions with a large number of participants by changing the storage and resending mechanism for TEvReadSet messages. [#18302](https://github.com/ydb-platform/ydb/pull/18301) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* 18296:Fixed replication continuing to consume disk space when storage was low, which caused VDisks to become read-only. [#18296](https://github.com/ydb-platform/ydb/pull/18296) ([Sergey Belyakov](https://github.com/serbel324))
 * 18271:Fixed replication bug #10650 [#18271](https://github.com/ydb-platform/ydb/pull/18271) ([Alexander Rutkovsky](https://github.com/alexvru))
 * 18231:Fixed segfault that could happen while retrying Whiteboard requests. [#18231](https://github.com/ydb-platform/ydb/pull/18231) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 18647:[Fixed](https://github.com/ydb-platform/ydb/pull/18647) an [issue](https://github.com/ydb-platform/ydb/issues/17885) where the index type was incorrectly defaulting to GLOBAL SYNC when UNIQUE was explicitly specified in the query. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
@@ -44,6 +43,7 @@
 * 20355:Eliminated remove data cleanup freezes in case of counter discrepancies. [#20355](https://github.com/ydb-platform/ydb/pull/20355) ([Andrey Molotkov](https://github.com/molotkov-and))
 * 20759:Fixed the [KesusQuoterService freeze](https://github.com/ydb-platform/ydb/issues/20747) in case of several unsuccessful attempts to connect to the Kesus tablet. [#20759](https://github.com/ydb-platform/ydb/pull/20759) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 * 20707:[Fixed](https://github.com/ydb-platform/ydb/pull/20707) an [issue](https://github.com/ydb-platform/ydb/issues/20709) where distributed reads could occasionally be processed without a snapshot. Need to acquire snapshot for dependant reads even in RW transaction. ([Nikita Vasilev](https://github.com/nikvas0))
+* 22202:ensure tablets are launched after nodes stop being overloaded, fixes https://github.com/ydb-platform/ydb/issues/22030 [#22202](https://github.com/ydb-platform/ydb/pull/22202) ([vporyadke](https://github.com/vporyadke))
 
 ### YDB UI
 
@@ -70,3 +70,4 @@
 * 19916:When transaction duration exceeds the topic's message retention period, writing to the topic may result in inconsistent data in the partition. [#19916](https://github.com/ydb-platform/ydb/pull/19916) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20848:Significantly improved performance for single-core, dual-core, and triple-core configurations. [#20848](https://github.com/ydb-platform/ydb/pull/20848) ([kruall](https://github.com/kruall))
 * 20704:Enhanced pool scaling when using shared threads and available CPU resources. [#20704](https://github.com/ydb-platform/ydb/pull/20704) ([kruall](https://github.com/kruall))
+

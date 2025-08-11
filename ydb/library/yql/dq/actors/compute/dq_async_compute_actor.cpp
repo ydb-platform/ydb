@@ -307,8 +307,6 @@ private:
                 html << "DqInputBuffer.InputType: " << (buffer->GetInputType() ? buffer->GetInputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
                 html << "DqInputBuffer.InputWidth: " << (buffer->GetInputWidth() ? ToString(*buffer->GetInputWidth()) : TString{"unknown"})  << "<br />";
                 html << "DqInputBuffer.IsFinished: " << buffer->IsFinished() << "<br />";
-                html << "DqInputBuffer.IsPausedByCheckpoint: " << buffer->IsPausedByCheckpoint() << "<br />";
-                html << "DqInputBuffer.IsPausedByWatermark: " << buffer->IsPausedByWatermark() << "<br />";
                 html << "DqInputBuffer.IsPending: " << buffer->IsPending() << "<br />";
 
                 const auto& popStats = buffer->GetPopStats();

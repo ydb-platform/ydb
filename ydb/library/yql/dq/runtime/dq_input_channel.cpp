@@ -37,10 +37,187 @@ public:
         return TStringBuilder() << "SrcStageId: " << PushStats.SrcStageId << " ChannelId: " << PushStats.ChannelId << ". ";
     }
 
+    [[nodiscard]]
+    bool Empty() const override {
+        return Batches.empty() || IsPaused() && BeforeBarrier.Batches == 0;
+    }
+
+    void AddBatchCounts(ui64 space, ui64 rows) {
+        auto& barrier = PendingBarriers.empty() ? BeforeBarrier : PendingBarriers.back();
+        barrier.Batches ++;
+        barrier.Bytes += space;
+        barrier.Rows += rows;
+    }
+
+    std::tuple<ui64, ui64, ui64> PopReadyCounts() {
+        if (!PendingBarriers.empty() && !IsPaused()) {
+            // There were watermarks, but channel is not paused
+            // Process data anyway and move watermarks behind
+            auto lastBarrier = PendingBarriers.back().Barrier;
+            for (const auto& barrier : PendingBarriers) {
+                Y_ENSURE(!barrier.IsCheckpoint());
+                BeforeBarrier += barrier;
+            }
+            PendingBarriers.clear();
+            PendingBarriers.emplace_back(TBarrier { .Barrier = lastBarrier });
+        }
+        auto popBatches = BeforeBarrier.Batches;
+        auto popBytes = BeforeBarrier.Bytes;
+        auto popRows = BeforeBarrier.Rows;
+
+        BeforeBarrier.Clear();
+        return std::make_tuple(popBytes, popRows, popBatches);
+    }
+
+    bool IsPaused() const {
+        return IsPausedByWatermark() || IsPausedByCheckpoint();
+    }
+
+private:
+    void SkipWatermarksBeforeBarrier() {
+        // Drop watermarks before current barrier
+        while (!PendingBarriers.empty()) {
+            auto& barrier = PendingBarriers.front();
+            if (barrier.Barrier >= PauseBarrier) {
+                break;
+            }
+            BeforeBarrier.Batches += barrier.Batches;
+            BeforeBarrier.Rows += barrier.Rows;
+            BeforeBarrier.Bytes += barrier.Bytes;
+            PendingBarriers.pop_front();
+        }
+    }
+
+public:
+    void PauseByWatermark(TInstant watermark) override {
+        Y_ENSURE(PauseBarrier <= watermark);
+        PauseBarrier = watermark;
+        if (IsPausedByCheckpoint()) {
+            return;
+        }
+        SkipWatermarksBeforeBarrier();
+        Y_ENSURE(!PendingBarriers.empty());
+        Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
+    }
+
+    void PauseByCheckpoint() override {
+        Y_ENSURE(!IsPausedByCheckpoint());
+        if (PauseBarrier != TBarrier::NoBarrier) {
+            Y_ENSURE(!PendingBarriers.empty());
+            if (PendingBarriers.front().Barrier > PauseBarrier) {
+                // (1.BeforeBarrier) (3.Watermark > PauseBarrier) (4.Some data and watermarks) | (5.Here will be checkpoint)
+                // ->
+                // (1.BeforeBarrier) (3.Fake watermark == PauseBarrier with data from 3 & 4 behind) (Checkpoint with empty data behind) (Max watermark from 3 & 4 with empty data behind)
+                auto lastWatermark = PendingBarriers.back().Barrier;
+                TBarrier fakeWatermark(PauseBarrier);
+                for (auto& barrier: PendingBarriers) {
+                    fakeWatermark += barrier;
+                }
+                PendingBarriers.clear();
+                PendingBarriers.emplace_back(fakeWatermark);
+                PendingBarriers.emplace_back(); // CheckpointBarrier
+                PendingBarriers.emplace_back(TBarrier { .Barrier = lastWatermark });
+            } else {
+                Y_ENSURE(PendingBarriers.front().Barrier == PauseBarrier);
+                // (1.BeforeBarrier) (3.Watermark == PauseBarrier) (4.Some data and watermarks) | (5.Here will be checkpoint)
+                // ->
+                // (1.BeforeBarrier) (3.Watermark == PauseBarriers with all data from 3 & 4 behind) (Checkpoint with empty data behind) (Max watermark from 4 with empty data behind)
+                auto lastWatermark = PendingBarriers.size() > 1 ? PendingBarriers.back().Barrier : TBarrier::NoBarrier;
+                for (auto& firstWatermark = PendingBarriers.front(); PendingBarriers.size() > 1; PendingBarriers.pop_back()) {
+                    firstWatermark += PendingBarriers.back();
+                }
+                PendingBarriers.emplace_back(); // CheckpointBarrier
+                if (lastWatermark != TBarrier::NoBarrier) {
+                    PendingBarriers.emplace_back(TBarrier { .Barrier = lastWatermark });
+                }
+            }
+        } else if (PendingBarriers.empty()) {
+            PendingBarriers.emplace_front(); // CheckpointBarrier
+        } else {
+            // (1.BeforeBarrier) (4.Some data and watermarks) | (5.Here will be checkpoint)
+            // ->
+            // (1.BeforeBarrier + all data from 4) (5.Checkpoint with empty data behind) (Max watermark from 4 if any with empty data behind)
+            auto lastWatermark = PendingBarriers.back().Barrier;
+            for (auto& barrier: PendingBarriers) { // Move all collected data before checkpoint
+                BeforeBarrier += barrier;
+            }
+            PendingBarriers.clear();
+            PendingBarriers.emplace_back(); // CheckpointBarrier
+            PendingBarriers.emplace_back(TBarrier { .Barrier = lastWatermark });
+        }
+    }
+
+    void AddWatermark(TInstant watermark) override {
+        if (!PendingBarriers.empty() && PendingBarriers.back().Batches == 0 && !PendingBarriers.back().IsCheckpoint()) {
+            Y_ENSURE(PendingBarriers.back().Rows == 0);
+            Y_ENSURE(PendingBarriers.back().Bytes == 0);
+            PendingBarriers.back().Barrier = watermark;
+        } else {
+            PendingBarriers.emplace_back(TBarrier { .Barrier = watermark });
+        }
+    }
+
+    bool IsPausedByWatermark() const override {
+        return !IsPausedByCheckpoint() && PauseBarrier != TBarrier::NoBarrier;
+    }
+
+    bool IsPausedByCheckpoint() const override {
+        return !PendingBarriers.empty() && PendingBarriers.front().IsCheckpoint();
+    }
+
+    void ResumeByWatermark(TInstant watermark) override {
+        Y_ENSURE(Empty());
+        Y_ENSURE(!PendingBarriers.empty());
+        Y_ENSURE(PauseBarrier == watermark);
+        Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
+        if (PendingBarriers.front().Barrier == watermark) {
+            BeforeBarrier = PendingBarriers.front();
+            PendingBarriers.pop_front();
+        }
+        Y_ENSURE(PendingBarriers.empty() || PendingBarriers.front().Barrier > watermark);
+        PauseBarrier = TBarrier::NoBarrier;
+    }
+
+    void ResumeByCheckpoint() override {
+        Y_ENSURE(IsPausedByCheckpoint());
+        Y_ENSURE(Empty());
+        BeforeBarrier = PendingBarriers.front();
+        PendingBarriers.pop_front();
+        // There can be watermarks before current barrier exposed by checkpoint removal
+        SkipWatermarksBeforeBarrier();
+    }
+
 private:
     void Push(TDqSerializedBatch&&) override {
         Y_ABORT("Not implemented");
     }
+
+    struct TBarrier {
+        static constexpr TInstant NoBarrier = TInstant::Zero();
+        static constexpr TInstant CheckpointBarrier = TInstant::Max();
+        TInstant Barrier = CheckpointBarrier;
+        ui64 Batches = 0;
+        ui64 Bytes = 0;
+        ui64 Rows = 0;
+        // watermark (!= TInstant::Max()) or checkpoint (TInstant::Max())
+        bool IsCheckpoint() const {
+            return Barrier == CheckpointBarrier;
+        }
+        TBarrier& operator+= (const TBarrier& other) {
+            Batches += other.Batches;
+            Bytes += other.Bytes;
+            Rows += other.Rows;
+            return *this;
+        }
+        void Clear() {
+            Batches = 0;
+            Bytes = 0;
+            Rows = 0;
+        }
+    };
+    std::deque<TBarrier> PendingBarriers; // barrier and counts after barrier
+    TBarrier BeforeBarrier; // counts before barrier
+    TInstant PauseBarrier; // 
 };
 
 class TDqInputChannel : public IDqInputChannel {

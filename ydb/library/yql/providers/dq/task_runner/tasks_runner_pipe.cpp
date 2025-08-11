@@ -908,34 +908,6 @@ public:
         return InputType;
     }
 
-    void PauseByCheckpoint() override {
-        Y_ABORT("Checkpoints are not supported");
-    }
-
-    void ResumeByCheckpoint() override {
-        Y_ABORT("Checkpoints are not supported");
-    }
-
-    bool IsPausedByCheckpoint() const override {
-        return false;
-    }
-
-    void PauseByWatermark(TInstant) override {
-        Y_ABORT("Watermarks are not supported");
-    }
-
-    void AddWatermark(TInstant) override {
-        Y_ABORT("Watermarks are not supported");
-    }
-
-    void ResumeByWatermark(TInstant) override {
-        Y_ABORT("Watermarks are not supported");
-    }
-
-    bool IsPausedByWatermark() const override {
-        return false;
-    }
-
     template<typename T>
     void FromProto(const T& f)
     {

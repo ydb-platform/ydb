@@ -243,10 +243,10 @@ class TestAlterTiering(TieringTestBase):
 
         for _ in loop:
             LOGGER.info('executing SELECT')
-            sth.execute_scan_query(
+            sth.execute_query(
                 f'SELECT MIN(writer) FROM `{sth.get_full_path(table)}`',
                 expected_status=expected_scan_status,
-                timeout=duration.seconds
+                ignore_error={"Query invalidated on scheme/internal error during Scan execution"}  # https://github.com/ydb-platform/ydb/issues/12854
             )
 
     def _loop_set_ttl(

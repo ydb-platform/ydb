@@ -13,14 +13,23 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 def string_version_to_tuple(s):
     result = []
     s = s.replace('.', '-')
-    for idx, elem in enumerate(s.split("-")):
-        # skipping 'stable' in stable-25-1-1 version
-        if idx == 0 and elem == 'stable':
-            continue
+    version_components = s.split("-")
+    for idx, elem in enumerate(version_components):
+        if idx == 0:
+            # skipping 'stable' in stable-25-1-1 version
+            if elem == 'stable':
+                continue
+            elif elem == 'current':
+                result.append(float('+inf'))
+                continue
+        elif idx == len(version_components) - 1:
+            # skipping 'hotfix' in stable-24-4-4-hotfix version
+            if elem == 'hotfix':
+                continue
         try:
             result.append(int(elem))
         except ValueError:
-            result.append(float("NaN"))
+            result.append(float('NaN'))
     return tuple(result)
 
 
@@ -37,12 +46,12 @@ init_stable_binary_path = os.environ.get('YDB_INIT_BINARY_PATH', yatest.common.b
 inter_stable_version = None
 init_stable_version = None
 
-inter_stable_name = "intermediate"
+inter_stable_name = 'intermediate'
 if inter_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
     with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter-name")) as f:
         inter_stable_name = f.read().strip()
         inter_stable_version = string_version_to_tuple(inter_stable_name)
-init_stable_name = "initial"
+init_stable_name = 'initial'
 if init_stable_binary_path:  # in import_test yatest.common.binary_path returns None
     with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init-name")) as f:
         init_stable_name = f.read().strip()

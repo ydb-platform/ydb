@@ -408,6 +408,7 @@ struct MainTestCase {
         std::optional<ui64> BatchSizeBytes = 8_MB;
         std::optional<std::string> ExpectedError;
         std::optional<std::string> Username;
+        std::optional<std::string> UserSecretName;
         std::optional<std::string> Directory;
 
         CreateTransferSettings() {};
@@ -455,6 +456,12 @@ struct MainTestCase {
             result.Directory = directory;
             return result;
         }
+
+        static CreateTransferSettings WithSecretName(const TString& secret) {
+            CreateTransferSettings result;
+            result.UserSecretName = secret;
+            return result;
+        }
     };
 
     void CreateTransfer(const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
@@ -474,6 +481,9 @@ struct MainTestCase {
         }
         if (settings.BatchSizeBytes) {
             options.push_back(TStringBuilder() <<  "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes);
+        }
+        if (settings.UserSecretName) {
+            options.push_back(TStringBuilder() <<  "TOKEN_SECRET_NAME = '" << *settings.UserSecretName << "'");
         }
         if (settings.Username) {
             options.push_back(TStringBuilder() <<  "TOKEN = '" << *settings.Username << "@builtin'");
@@ -696,10 +706,16 @@ struct MainTestCase {
         return result;
     }
 
-    void CreateUser(const std::string& username) {
-        ExecuteDDL(Sprintf(R"(
-            CREATE USER %s
-        )", username.data()));
+    void CreateUser(const std::string& username, const std::optional<std::string> password = std::nullopt) {
+        if (password) {
+            ExecuteDDL(Sprintf(R"(
+                CREATE USER %s PASSWORD '%s'
+            )", username.data(), password.value().data()));
+        } else {
+            ExecuteDDL(Sprintf(R"(
+                CREATE USER %s
+            )", username.data()));
+        }
     }
 
     void Write(const TMessage& message) {

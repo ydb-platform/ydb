@@ -216,6 +216,12 @@ template <>
 TFuture<TOperationsList<NBackup::TIncrementalBackupResponse>> TOperationClient::List(ui64 pageSize, const std::string& pageToken) {
     return List<NBackup::TIncrementalBackupResponse>("incbackup", pageSize, pageToken);
 }
+
+template TFuture<NBackup::TIncrementalRestoreResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+TFuture<TOperationsList<NBackup::TIncrementalRestoreResponse>> TOperationClient::List(ui64 pageSize, const std::string& pageToken) {
+    return List<NBackup::TIncrementalRestoreResponse>("increstore", pageSize, pageToken);
+}
 #endif
 
 } // namespace NOperation

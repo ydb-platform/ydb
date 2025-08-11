@@ -31,6 +31,13 @@ struct TEvBackup {
         EvListIncrementalBackupsRequest,
         EvListIncrementalBackupsResponse,
 
+        EvGetIncrementalRestoreRequest,
+        EvGetIncrementalRestoreResponse,
+        EvForgetIncrementalRestoreRequest,
+        EvForgetIncrementalRestoreResponse,
+        EvListIncrementalRestoresRequest,
+        EvListIncrementalRestoresResponse,
+
         EvEnd
     };
 
@@ -97,6 +104,46 @@ struct TEvBackup {
         }
     };
     DECLARE_EVENT_CLASS(EvListIncrementalBackupsResponse) {};
+
+    DECLARE_EVENT_CLASS(EvGetIncrementalRestoreRequest) {
+        TEvGetIncrementalRestoreRequest() = default;
+
+        explicit TEvGetIncrementalRestoreRequest(const TString& dbName, ui64 incrementalRestoreId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetIncrementalRestoreId(incrementalRestoreId);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvGetIncrementalRestoreResponse) {};
+    DECLARE_EVENT_CLASS(EvForgetIncrementalRestoreRequest) {
+        TEvForgetIncrementalRestoreRequest() = default;
+
+        explicit TEvForgetIncrementalRestoreRequest(
+            const ui64 txId,
+            const TString& dbName,
+            ui64 incrementalRestoreId
+            ) {
+            Record.SetTxId(txId);
+            Record.SetDatabaseName(dbName);
+            Record.SetIncrementalRestoreId(incrementalRestoreId);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvForgetIncrementalRestoreResponse) {
+        TEvForgetIncrementalRestoreResponse() = default;
+
+        explicit TEvForgetIncrementalRestoreResponse(const ui64 txId) {
+            Record.SetTxId(txId);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvListIncrementalRestoresRequest) {
+        TEvListIncrementalRestoresRequest() = default;
+
+        explicit TEvListIncrementalRestoresRequest(const TString& dbName, ui64 pageSize, TString pageToken) {
+            Record.SetDatabaseName(dbName);
+            Record.SetPageSize(pageSize);
+            Record.SetPageToken(pageToken);
+        }
+    };
+    DECLARE_EVENT_CLASS(EvListIncrementalRestoresResponse) {};
 
 
 #undef DECLARE_EVENT_CLASS

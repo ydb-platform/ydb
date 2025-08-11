@@ -5212,6 +5212,10 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvBackup::TEvGetIncrementalBackupRequest, Handle);
         HFuncTraced(TEvBackup::TEvForgetIncrementalBackupRequest, Handle);
         HFuncTraced(TEvBackup::TEvListIncrementalBackupsRequest, Handle);
+
+        HFuncTraced(TEvBackup::TEvGetIncrementalRestoreRequest, Handle);
+        HFuncTraced(TEvBackup::TEvForgetIncrementalRestoreRequest, Handle);
+        HFuncTraced(TEvBackup::TEvListIncrementalRestoresRequest, Handle);
         // } // NBackup
 
 
@@ -5414,6 +5418,11 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     DecrementPathDbRefCount(pathId, "remove txstate target path");
     if (txState->SourcePathId) {
         DecrementPathDbRefCount(txState->SourcePathId, "remove txstate source path");
+    }
+
+    // Check if this operation is part of an incremental restore and notify completion
+    if (TxIdToIncrementalRestore.contains(opId.GetTxId())) {
+        NotifyIncrementalRestoreOperationCompleted(opId, ctx);
     }
 
     TxInFlight.erase(opId); // must be called last, erases txState invalidating txState ptr

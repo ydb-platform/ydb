@@ -2984,4 +2984,36 @@ namespace NSchemeShardUT_Private {
             UNIT_ASSERT_VALUES_EQUAL(value, it->second);
         }
     }
+
+    NKikimrBackup::TEvGetIncrementalRestoreResponse TestGetIncrementalRestore(TTestActorRuntime& runtime, ui64 id, const TString& dbName, Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvGetIncrementalRestoreRequest(dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvGetIncrementalRestoreResponse>(handle);
+        UNIT_ASSERT_EQUAL(ev->Record.GetIncrementalRestore().GetStatus(), expectedStatus);
+
+        return ev->Record;
+    }
+
+    NKikimrBackup::TEvForgetIncrementalRestoreResponse TestForgetIncrementalRestore(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 restoreId, Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvForgetIncrementalRestoreRequest(txId, dbName, restoreId));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvForgetIncrementalRestoreResponse>(handle);
+        Cerr << "FORGET DEBUG: Expected status=" << expectedStatus << ", Actual status=" << ev->Record.GetStatus() << Endl;
+        Cerr << "FORGET DEBUG: Full response: " << ev->Record.ShortDebugString() << Endl;
+        UNIT_ASSERT_EQUAL(ev->Record.GetStatus(), expectedStatus);
+
+        return ev->Record;
+    }
+
+    NKikimrBackup::TEvListIncrementalRestoresResponse TestListIncrementalRestores(TTestActorRuntime& runtime, const TString& dbName, ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvListIncrementalRestoresRequest(dbName, pageSize, pageToken));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvListIncrementalRestoresResponse>(handle);
+        UNIT_ASSERT_EQUAL(ev->Record.GetStatus(), expectedStatus);
+
+        return ev->Record;
+    }
 }

@@ -19,6 +19,18 @@ enum class EBackupProgress {
     Unknown = std::numeric_limits<int>::max(),
 };
 
+enum class ERestoreProgress {
+    Unspecified = 0,
+    Preparing = 1,
+    TransferData = 2,
+    Applying = 3,
+    Done = 4,
+    Cancellation = 5,
+    Cancelled = 6,
+
+    Unknown = std::numeric_limits<int>::max(),
+};
+
 class TIncrementalBackupResponse : public TOperation {
 public:
     struct TMetadata {
@@ -29,6 +41,23 @@ public:
 public:
     using TOperation::TOperation;
     TIncrementalBackupResponse(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    const TMetadata& Metadata() const;
+
+private:
+    TMetadata Metadata_;
+};
+
+class TIncrementalRestoreResponse : public TOperation {
+public:
+    struct TMetadata {
+        ERestoreProgress Progress;
+        int32_t ProgressPercent = 0; // [0; 100]
+    };
+
+public:
+    using TOperation::TOperation;
+    TIncrementalRestoreResponse(TStatus&& status, Ydb::Operations::Operation&& operation);
 
     const TMetadata& Metadata() const;
 

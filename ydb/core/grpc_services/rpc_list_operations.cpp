@@ -2,6 +2,7 @@
 
 #include "operation_helpers.h"
 #include "rpc_backup_base.h"
+#include "rpc_restore_base.h"
 #include "rpc_export_base.h"
 #include "rpc_import_base.h"
 #include "rpc_operation_request_base.h"
@@ -48,6 +49,8 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
             return "[SchemeShardTasks]";
         case TOperationId::INCREMENTAL_BACKUP:
             return "[ListIncrementalBackups]";
+        case TOperationId::INCREMENTAL_RESTORE:
+            return "[ListIncrementalRestores]";
         default:
             return "[Untagged]";
         }
@@ -67,6 +70,8 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
             return new TEvIndexBuilder::TEvListRequest(GetDatabaseName(), request.page_size(), request.page_token());
         case TOperationId::INCREMENTAL_BACKUP:
             return new TEvBackup::TEvListIncrementalBackupsRequest(GetDatabaseName(), request.page_size(), request.page_token());
+        case TOperationId::INCREMENTAL_RESTORE:
+            return new TEvBackup::TEvListIncrementalRestoresRequest(GetDatabaseName(), request.page_size(), request.page_token());
         default:
             Y_ABORT("unreachable");
         }
@@ -181,6 +186,24 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
         Reply(response);
     }
 
+    void Handle(TEvBackup::TEvListIncrementalRestoresResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvListIncrementalRestoresResponse"
+            << ": record# " << record.ShortDebugString());
+
+        TResponse response;
+        response.set_status(record.GetStatus());
+        if (record.GetIssues().size()) {
+            response.mutable_issues()->CopyFrom(record.GetIssues());
+        }
+        for (const auto& entry : record.GetEntries()) {
+            *response.add_operations() = TIncrementalRestoreConv::ToOperation(entry);
+        }
+        response.set_next_page_token(record.GetNextPageToken());
+        Reply(response);
+    }
+
 public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
@@ -193,6 +216,7 @@ public:
         case TOperationId::BUILD_INDEX:
         case TOperationId::SS_BG_TASKS:
         case TOperationId::INCREMENTAL_BACKUP:
+        case TOperationId::INCREMENTAL_RESTORE:
             break;
         case TOperationId::SCRIPT_EXECUTION:
             SendListScriptExecutions();
@@ -213,6 +237,7 @@ public:
             hFunc(TEvIndexBuilder::TEvListResponse, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperationsResponse, Handle);
             hFunc(TEvBackup::TEvListIncrementalBackupsResponse, Handle);
+            hFunc(TEvBackup::TEvListIncrementalRestoresResponse, Handle);
         default:
             return StateBase(ev);
         }

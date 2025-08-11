@@ -731,8 +731,9 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView, const THash
 
 void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info)
 {
-    PrivatePageCache->AddPageCollection(info);
+    auto sharedCacheTouches = PrivatePageCache->AddPageCollection(info);
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, info->GetCacheMode()));
+    SendSharedCacheTouches(std::move(sharedCacheTouches));
 
     StickyPagesMemory += info->GetStickySize();
     TryKeepInMemoryMemory += info->GetTryKeepInMemorySize();
@@ -781,8 +782,7 @@ void TExecutor::DropSingleCache(const TLogoBlobID &label)
     Counters->Simple()[TExecutorCounters::CACHE_TOTAL_TRY_KEEP_IN_MEMORY] = TryKeepInMemoryMemory;
 }
 
-void TExecutor::TranslateCacheTouchesToSharedCache() {
-    auto touches = PrivatePageCache->GetSharedCacheTouches();
+void TExecutor::SendSharedCacheTouches(THashMap<TLogoBlobID, THashSet<TPageId>>&& touches) {
     if (touches.empty())
         return;
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvTouch(std::move(touches)));
@@ -2058,8 +2058,7 @@ void TExecutor::ExecuteTransaction(TSeat* seat) {
 
     THPTimer cpuTimer;
 
-    PrivatePageCache->BeginTransaction(&seat->Pinned);
-    TPageCollectionTxEnv env(*Database, *PrivatePageCache);
+    TPageCollectionTxEnv env(*Database, *PrivatePageCache, *seat);
 
     TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId, seat->Self->TxSpan);
     txc.NotEnoughMemory(seat->NotEnoughMemoryCount);
@@ -2143,13 +2142,12 @@ void TExecutor::ExecuteTransaction(TSeat* seat) {
         CommitTransactionLog(RemoveTransaction(seat->UniqID), env, prod.Change, cpuTimer);
     } else {
         Y_ENSURE(!seat->CapturedMemory);
-        if (!PrivatePageCache->GetStats().ToLoadCount && !seat->RequestedMemory && !txc.IsRescheduled()) {
+        if (!env.GetStats().ToLoadPages && !seat->RequestedMemory && !txc.IsRescheduled()) {
             Y_TABLET_ERROR(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
                     << NFmt::Do(*seat->Self) << " postponed w/o demands");
         }
         PostponeTransaction(seat, env, prod.Change, cpuTimer);
     }
-    PrivatePageCache->EndTransaction();
 
     activeTransaction.Done();
     PlanTransactionActivation();
@@ -2159,7 +2157,6 @@ void TExecutor::UnpinTransactionPages(TSeat &seat) {
     Y_ENSURE(TransactionPagesMemory >= seat.MemoryTouched);
     TransactionPagesMemory -= seat.MemoryTouched;
 
-    PrivatePageCache->TranslatePinnedToSharedCacheTouches();
     seat.Pinned.clear();
     seat.MemoryTouched = 0;
 
@@ -2189,11 +2186,11 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
 {
     TTxType txType = seat->TxType;
 
-    seat->MemoryTouched += PrivatePageCache->GetStats().NewlyPinnedSize;
-    TransactionPagesMemory += PrivatePageCache->GetStats().NewlyPinnedSize;
+    seat->MemoryTouched += env.GetStats().NewlyPinnedBytes;
+    TransactionPagesMemory += env.GetStats().NewlyPinnedBytes;
 
-    seat->MemoryTouched += PrivatePageCache->GetStats().ToLoadSize;
-    TransactionPagesMemory += PrivatePageCache->GetStats().ToLoadSize;
+    seat->MemoryTouched += env.GetStats().ToLoadBytes;
+    TransactionPagesMemory += env.GetStats().ToLoadBytes;
 
     if (seat->AttachedMemory)
         Memory->AttachMemory(*seat);
@@ -2204,10 +2201,10 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
             << NFmt::Do(*this) << " " << NFmt::Do(*seat)
-            << " pin " << PrivatePageCache->GetStats().NewlyPinnedCount
-            << " (" << PrivatePageCache->GetStats().NewlyPinnedSize << " b)"
-            << " load " << PrivatePageCache->GetStats().ToLoadCount
-            << " (" << PrivatePageCache->GetStats().ToLoadSize << " b)";
+            << " pin " << env.GetStats().NewlyPinnedPages
+            << " (" << env.GetStats().NewlyPinnedBytes << " b)"
+            << " load " << env.GetStats().ToLoadPages
+            << " (" << env.GetStats().ToLoadBytes << " b)";
     }
 
     // Check if additional resources should be requested.
@@ -2260,7 +2257,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
 
     // If memory was allocated and there is nothing to load
     // then tx may be re-activated.
-    if (!PrivatePageCache->GetStats().ToLoadCount) {
+    if (!env.GetStats().ToLoadPages) {
         EnqueueActivation(seat, CanExecuteTransaction());
         return;
     }
@@ -2270,7 +2267,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     auto waitPad = MakeIntrusive<TTransactionWaitPad>(seat);
     TransactionWaitPads[waitPad.Get()] = waitPad;
 
-    auto toLoad = PrivatePageCache->GetToLoad();
+    auto toLoad = env.ObtainToLoad();
     for (auto &[pageCollectionId, pages] : toLoad) {
         Y_DEBUG_ABORT_UNLESS(pages);
 
@@ -2294,8 +2291,8 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
             << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " postponed"
-            << ", loading " << PrivatePageCache->GetStats().ToLoadCount << " pages, " << PrivatePageCache->GetStats().ToLoadSize << " bytes"
-            << ", newly pinned " << PrivatePageCache->GetStats().NewlyPinnedCount << " pages, " << PrivatePageCache->GetStats().NewlyPinnedSize << " bytes";
+            << ", loading " << env.GetStats().ToLoadPages << " pages, " << env.GetStats().ToLoadBytes << " bytes"
+            << ", newly pinned " << env.GetStats().NewlyPinnedPages << " pages, " << env.GetStats().NewlyPinnedBytes << " bytes";
     }
 
     seat->CPUBookkeepingTime += bookkeepingTimer.PassedReset();
@@ -2305,17 +2302,17 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
         AppTxCounters->TxCumulative(txType, COUNTER_TT_POSTPONED).Increment(1);
 
     // Note: previously counted non-unique cache hits for all retries
-    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(PrivatePageCache->GetStats().NewlyPinnedCount);
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(PrivatePageCache->GetStats().NewlyPinnedSize);
+    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(env.GetStats().NewlyPinnedPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(env.GetStats().NewlyPinnedBytes);
     if (seat->Retries == 1) {
         Counters->Cumulative()[TExecutorCounters::TX_RETRIED].Increment(1);
     }
 
-    Counters->Cumulative()[TExecutorCounters::TX_CACHE_MISSES].Increment(PrivatePageCache->GetStats().ToLoadCount);
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(PrivatePageCache->GetStats().ToLoadSize);
+    Counters->Cumulative()[TExecutorCounters::TX_CACHE_MISSES].Increment(env.GetStats().ToLoadPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(env.GetStats().ToLoadBytes);
     if (AppTxCounters && txType != UnknownTxType) {
-        AppTxCounters->TxCumulative(txType, COUNTER_TT_LOADED_BLOCKS).Increment(PrivatePageCache->GetStats().ToLoadCount);
-        AppTxCounters->TxCumulative(txType, COUNTER_TT_BYTES_READ).Increment(PrivatePageCache->GetStats().ToLoadSize);
+        AppTxCounters->TxCumulative(txType, COUNTER_TT_LOADED_BLOCKS).Increment(env.GetStats().ToLoadPages);
+        AppTxCounters->TxCumulative(txType, COUNTER_TT_BYTES_READ).Increment(env.GetStats().ToLoadBytes);
     }
 
     Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED] = TransactionPagesMemory;
@@ -2327,15 +2324,16 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
     const TTxType txType = seat->TxType;
 
     // Note: previously counted count (not size), but it requires an additional counter
-    size_t touchedBlocks = PrivatePageCache->GetStats().NewlyPinnedSize + seat->MemoryTouched;
+    size_t touchedBlocks = env.GetStats().NewlyPinnedBytes + seat->MemoryTouched;
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_TOUCHED_BLOCKS].IncrementFor(touchedBlocks);
     if (AppTxCounters && txType != UnknownTxType)
         AppTxCounters->TxCumulative(txType, COUNTER_TT_TOUCHED_BLOCKS).Increment(touchedBlocks);
 
     // Note: previously counted non-unique cache hits for all retries
-    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(PrivatePageCache->GetStats().NewlyPinnedCount);
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(PrivatePageCache->GetStats().NewlyPinnedSize);
+    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(env.GetStats().NewlyPinnedPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(env.GetStats().NewlyPinnedBytes);
 
+    SendSharedCacheTouches(env.ObtainSharedCacheTouches());
     UnpinTransactionPages(*seat);
 
     Memory->ReleaseMemory(*seat);
@@ -4365,8 +4363,6 @@ STFUNC(TExecutor::StateWork) {
     default:
         break;
     }
-
-    TranslateCacheTouchesToSharedCache();
 }
 
 STFUNC(TExecutor::StateFollower) {
@@ -4386,8 +4382,6 @@ STFUNC(TExecutor::StateFollower) {
     default:
         break;
     }
-
-    TranslateCacheTouchesToSharedCache();
 }
 
 STFUNC(TExecutor::StateFollowerBoot) {

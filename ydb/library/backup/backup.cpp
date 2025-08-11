@@ -483,11 +483,14 @@ void DropTable(TDriver driver, const TString& path) {
     VerifyStatus(status, TStringBuilder() << "Drop table " << path.Quote() << " failed");
 }
 
-TFsPath CreateDirectory(const TFsPath& folderPath, const TString& name) {
-    TFsPath childFolderPath = folderPath.Child(name);
-    LOG_D("Process " << childFolderPath.GetPath().Quote());
-    childFolderPath.MkDir();
-    return childFolderPath;
+TFsPath CreateDirectory(const TFsPath& fsParentPath, const TString& dbRelativePath) {
+    const TPathSplitUnix dbRelativePathSplit(dbRelativePath);
+    TPathSplit fsPathSplit(fsParentPath.PathSplit());
+    fsPathSplit.AppendMany(dbRelativePathSplit.begin(), dbRelativePathSplit.end());
+    TFsPath fsPath(fsPathSplit.Reconstruct());
+    LOG_D("Process " << fsPath.GetPath().Quote());
+    fsPath.MkDirs();
+    return fsPath;
 }
 
 void WriteProtoToFile(const google::protobuf::Message& proto, const TFsPath& folderPath, const NDump::NFiles::TFileInfo& fileInfo) {
@@ -689,17 +692,20 @@ void BackupDependentResources(TDriver driver, const std::string& coordinationNod
     NRateLimiter::TRateLimiterClient client(driver);
     const auto rateLimiters = ListRateLimiters(client, coordinationNodePath);
 
-    for (const auto& rateLimiterPath : rateLimiters) {
-        const auto desc = DescribeRateLimiter(client, coordinationNodePath, rateLimiterPath);
+    for (const auto& dbRateLimiterPath : rateLimiters) {
+        const auto desc = DescribeRateLimiter(client, coordinationNodePath, dbRateLimiterPath);
         Ydb::RateLimiter::CreateResourceRequest request;
         desc.GetHierarchicalDrrProps().SerializeTo(*request.mutable_resource()->mutable_hierarchical_drr());
         if (const auto& meteringConfig = desc.GetMeteringConfig()) {
             meteringConfig->SerializeTo(*request.mutable_resource()->mutable_metering_config());
         }
 
-        TFsPath childFolderPath = fsBackupFolder.Child(TString{rateLimiterPath});
-        childFolderPath.MkDirs();
-        WriteProtoToFile(request, childFolderPath, NDump::NFiles::CreateRateLimiter());
+        const TPathSplitUnix dbRateLimiterPathSplit(dbRateLimiterPath);
+        TPathSplit fsRateLimiterPathSplit = fsBackupFolder.PathSplit();
+        fsRateLimiterPathSplit.AppendMany(dbRateLimiterPathSplit.begin(), dbRateLimiterPathSplit.end());
+        TFsPath fsRateLimiterPath(fsRateLimiterPathSplit.Reconstruct());
+        fsRateLimiterPath.MkDirs();
+        WriteProtoToFile(request, fsRateLimiterPath, NDump::NFiles::CreateRateLimiter());
     }
 }
 

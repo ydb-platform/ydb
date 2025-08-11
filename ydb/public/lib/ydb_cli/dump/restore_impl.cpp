@@ -1526,7 +1526,10 @@ TRestoreResult TRestoreClient::RestoreDependentResources(const TFsPath& fsPath, 
 
         if (path.IsDirectory()) {
             if (IsFileExists(path.Child(NFiles::CreateRateLimiter().FileName))) {
-                const auto result = RestoreRateLimiter(path, dbPath, path.RelativeTo(fsPath).GetPath());
+                const auto& pathSplit = path.RelativeTo(fsPath).PathSplit();
+                TPathSplitUnix canonicalPathSplit;
+                canonicalPathSplit.AppendMany(pathSplit.begin(), pathSplit.end());
+                const auto result = RestoreRateLimiter(path, dbPath, canonicalPathSplit.Reconstruct());
                 if (!result.IsSuccess()) {
                     return result;
                 }

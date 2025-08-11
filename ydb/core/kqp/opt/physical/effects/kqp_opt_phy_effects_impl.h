@@ -103,4 +103,11 @@ NYql::NNodes::TKqpCnVectorResolve BuildVectorResolveOverPrecompute(const NYql::N
     const NYql::NNodes::TExprBase& originalInput, const NYql::NNodes::TKqpTable& kqpTableNode,
     const TString& kqpIndexName, const NYql::TPositionHandle& pos, NYql::TExprContext& ctx);
 
+NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDescription& table,
+    const NYql::NNodes::TKqpTable& tableNode,
+    const TString& indexName,
+    const TVector<TStringBuf>& indexTableColumns,
+    const NYql::NNodes::TExprBase& deleteIndexKeys,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
 } // NKikimr::NKqp::NOpt

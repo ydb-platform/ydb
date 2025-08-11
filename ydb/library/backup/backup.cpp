@@ -703,7 +703,7 @@ void BackupDependentResources(TDriver driver, const std::string& coordinationNod
         const TPathSplitUnix dbRateLimiterPathSplit(dbRateLimiterPath);
         TPathSplit fsRateLimiterPathSplit = fsBackupFolder.PathSplit();
         fsRateLimiterPathSplit.AppendMany(dbRateLimiterPathSplit.begin(), dbRateLimiterPathSplit.end());
-        TFsPath fsRateLimiterPath(fsRateLimiterPathSplit.Reconstruct());
+        const TFsPath fsRateLimiterPath(fsRateLimiterPathSplit.Reconstruct());
         fsRateLimiterPath.MkDirs();
         WriteProtoToFile(request, fsRateLimiterPath, NDump::NFiles::CreateRateLimiter());
     }

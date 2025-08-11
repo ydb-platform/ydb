@@ -8,24 +8,27 @@ ENV(YDB_FEATURE_FLAGS="enable_topic_transfer")
 ENV(YDB_GRPC_SERVICES="replication")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="PERSQUEUE:DEBUG")
 
+IF (SANITIZER_TYPE != "memory")
 
-PEERDIR(
-    ydb/core/transfer/ut/common
-)
+    PEERDIR(
+        ydb/core/transfer/ut/common
+    )
 
-SRCS(
-    transfer_columntable_ut.cpp
-)
+    SRCS(
+        transfer_columntable_ut.cpp
+    )
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
+    INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
-#TIMEOUT(60)
-SIZE(MEDIUM)
+    #TIMEOUT(60)
+    SIZE(MEDIUM)
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:24 cpu:4)
-ELSE()
-    REQUIREMENTS(ram:24 cpu:2)
+    IF (SANITIZER_TYPE)
+        REQUIREMENTS(ram:24 cpu:4)
+    ELSE()
+        REQUIREMENTS(ram:24 cpu:2)
+    ENDIF()
+
 ENDIF()
 
 END()

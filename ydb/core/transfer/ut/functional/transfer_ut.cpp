@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic(1);
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic(1);
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )", testCase.TableName.data()));
         permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.write", "ydb.generic.read"});
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )", testCase.TableName.data()));
         permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.read"});
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )",
 
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic(1);
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic(1);
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic();
@@ -493,7 +493,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -552,7 +552,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -614,7 +614,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -668,7 +668,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -717,7 +717,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -772,7 +772,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -819,7 +819,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -857,7 +857,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -909,7 +909,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -997,7 +997,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic(1);
@@ -1412,7 +1412,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )", testCase.TableName.data()));
         permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.write", "ydb.generic.read"});

@@ -1,4 +1,4 @@
-* Fixed a bug with progress bar display in `ydb workload clickbench import files` command.
+* Fixed a bug with the progress bar display in the `ydb workload clickbench import files` command — incorrect percentage value and excessive line breaks causing duplicated progress lines.
 * Fixed decimal type comparison in `ydb workload * run` commands.
 * Added a new paths approach in the `ydb export s3` and `ydb import s3` commands with the new `--include` option instead of the `--item` option. 
 * Added support for encryption features in the `ydb export s3` and `ydb import s3` commands.

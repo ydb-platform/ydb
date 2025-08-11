@@ -6,6 +6,7 @@ PY3_LIBRARY()
         data_generators.py
         table_helper.py
         drop_helper.py
+        skip_test.py
     )
 
     PEERDIR(

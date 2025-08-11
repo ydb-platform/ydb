@@ -6,6 +6,7 @@ from ydb.tests.olap.scenario.helpers import (
     CreateTableStore,
     DropTable,
     DropTableStore,
+    skip_test,
 )
 from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 from helpers.tiering_helper import (
@@ -299,6 +300,8 @@ class TestAlterTiering(TieringTestBase):
             sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), retries=2)
 
     def scenario_many_tables(self, ctx: TestContext):
+        skip_test.check_test_for_skipping(ctx)
+
         self._setup_tiering_test(ctx)
 
         self.test_duration = self._get_test_duration(get_external_param('test-class', 'SMALL'))

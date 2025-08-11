@@ -26,8 +26,10 @@ public:
     struct TInfo;
 
     struct TStats {
-        ui64 TotalCollections = 0;
-        ui64 TotalSharedBody = 0;
+        ui64 PageCollections = 0;
+        ui64 SharedBodyBytes = 0;
+        ui64 StickyBytes = 0;
+        ui64 TryKeepInMemoryBytes = 0;
     };
 
     struct TPage : TNonCopyable {
@@ -67,9 +69,8 @@ public:
             return StickyPages.contains(pageId);
         }
 
-        ui64 GetStickySize() const noexcept {
-            return StickyPagesSize;
-        }
+        // Mutable methods can be only called on a construction stage or from Private Cache
+        // Otherwise Stats counters would be out of sync
 
         bool AddPage(TPageId pageId, TSharedPageRef sharedBody) {
             return PageMap.emplace(pageId, MakeHolder<TPage>(
@@ -79,12 +80,10 @@ public:
                 this));
         }
 
-        void AddStickyPage(TPageId pageId, TSharedPageRef sharedBody) {
+        bool AddStickyPage(TPageId pageId, TSharedPageRef sharedBody) {
             Y_ENSURE(sharedBody.IsUsed());
-            if (StickyPages.emplace(pageId, sharedBody).second) {
-                StickyPagesSize += GetPageSize(pageId);
-            }
-            AddPage(pageId, std::move(sharedBody));
+            AddPage(pageId, sharedBody);
+            return StickyPages.emplace(pageId, std::move(sharedBody)).second;
         }
 
         bool DropPage(TPageId pageId) {
@@ -94,23 +93,14 @@ public:
         void Clear() {
             PageMap.clear();
             StickyPages.clear();
-            StickyPagesSize = 0;
         }
 
-        bool UpdateCacheMode(ECacheMode newCacheMode) {
-            if (CacheMode == newCacheMode) {
-                return false;
-            }
-            CacheMode = newCacheMode;
-            return true;
+        void SetCacheMode(ECacheMode cacheMode) {
+            CacheMode = cacheMode;
         }
 
         ECacheMode GetCacheMode() const noexcept {
             return CacheMode;
-        }
-
-        ui64 GetTryKeepInMemorySize() const noexcept {
-            return CacheMode == ECacheMode::TryKeepInMemory ? PageCollection->BackingSize() : 0;
         }
 
         const TLogoBlobID Id;
@@ -125,7 +115,6 @@ public:
 
         // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
         THashMap<TPageId, TSharedPageRef> StickyPages;
-        ui64 StickyPagesSize = 0;
         ECacheMode CacheMode = ECacheMode::Regular;
     };
 
@@ -141,6 +130,8 @@ public:
 
     void DropPage(TPageId pageId, TInfo *info);
     void AddPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info);
+    void AddStickyPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info);
+    bool UpdateCacheMode(ECacheMode newCacheMode, TInfo *info);
 
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
 

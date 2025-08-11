@@ -81,6 +81,8 @@ class UploadSuiteBase(LoadSuiteBase):
         cls.upload_result = result
 
     def test(self):
+        if self.upload_result is None:
+            raise RuntimeError("upload_result is None. Ensure do_setup_class() was called and completed successfully before running the test.")
         self.process_query_result(self.upload_result, self.query_name, True)
 
 

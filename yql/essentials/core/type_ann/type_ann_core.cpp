@@ -8473,9 +8473,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 2, 6, ctx.Expr)) {
+    IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->ChildrenSize() > 6) {
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 6);
+            if (status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
         }
 
         if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
@@ -8601,15 +8608,24 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             .Seal()
             .Build();
 
+        const bool needNamedApply = namedArgs || input->ChildrenSize() > 6;
         TExprNodeList applyArgs = { udf };
-        if (namedArgs) {
+        if (needNamedApply) {
             applyArgs.push_back(ctx.Expr.NewList(input->Pos(), std::move(positionalArgs)));
-            applyArgs.push_back(namedArgs);
+            if (namedArgs) {
+                applyArgs.push_back(namedArgs);
+            } else {
+                applyArgs.push_back(ctx.Expr.NewCallable(input->Pos(), "AsStruct", {}));
+            }
+
+            for (ui32 i = 6; i < input->ChildrenSize(); ++i) {
+                applyArgs.push_back(input->ChildPtr(i));
+            }
         } else {
             applyArgs.insert(applyArgs.end(), positionalArgs.begin(), positionalArgs.end());
         }
 
-        output = ctx.Expr.NewCallable(input->Pos(), namedArgs ? "NamedApply" : "Apply", std::move(applyArgs));
+        output = ctx.Expr.NewCallable(input->Pos(), needNamedApply ? "NamedApply" : "Apply", std::move(applyArgs));
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -10815,6 +10831,36 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus WithSideEffectsModeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto mode = input->Tail().Content();
+        if (mode == "None") {
+            input->SetSideEffects(ESideEffects::None);
+        } else if (mode == "SemilatticeRT") {
+            input->SetSideEffects(ESideEffects::SemilatticeRT);
+        } else if (mode == "General") {
+            input->SetSideEffects(ESideEffects::General);
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() << "Unknown side effects mode: " << mode));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     TMaybe<EDataSlot> ExtractDataType(const TExprNode& node, TExprContext& ctx) {
         if (node.IsAtom()) {
             auto dataType = node.Content();
@@ -12942,7 +12988,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Apply"] = &ApplyWrapper;
         ExtFunctions["NamedApply"] = &NamedApplyWrapper;
         Functions["PositionalArgs"] = &PositionalArgsWrapper;
-        Functions["SqlCall"] = &SqlCallWrapper;
+        ExtFunctions["SqlCall"] = &SqlCallWrapper;
         Functions["Callable"] = &CallableWrapper;
         Functions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>;
         Functions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
@@ -13067,6 +13113,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["InnerDependsOn"] = &InnerDependsOnWrapper;
         Functions["Seq"] = &SeqWrapper;
         Functions["Parameter"] = &ParameterWrapper;
+        Functions["WithSideEffectsMode"] = WithSideEffectsModeWrapper;
         ExtFunctions["WeakField"] = &WeakFieldWrapper;
         ExtFunctions["TryWeakMemberFromDict"] = &TryWeakMemberFromDictWrapper;
         Functions["ByteString"] = &ByteStringWrapper;

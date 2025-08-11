@@ -3768,9 +3768,10 @@ TRuntimeNode TProgramBuilder::ExpandMap(TRuntimeNode flow, const TExpandLambda& 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideMap(TRuntimeNode flow, const TWideLambda& handler) {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
-
+TRuntimeNode TProgramBuilder::WideMap(TRuntimeNode flowOrStream, const TWideLambda& handler) {
+    MKQL_ENSURE(flowOrStream.GetStaticType()->IsFlow() || flowOrStream.GetStaticType()->IsStream(), "Flow or stream type expected.");
+    const auto wideComponents = GetWideComponents(flowOrStream.GetStaticType());
+    bool shouldRewriteToFlow = RuntimeVersion < 67 && flowOrStream.GetStaticType()->IsStream();
     TRuntimeNode::TList itemArgs;
     itemArgs.reserve(wideComponents.size());
     auto i = 0U;
@@ -3782,11 +3783,25 @@ TRuntimeNode TProgramBuilder::WideMap(TRuntimeNode flow, const TWideLambda& hand
     tupleItems.reserve(newItems.size());
     std::transform(newItems.cbegin(), newItems.cend(), std::back_inserter(tupleItems), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
 
-    TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(NewMultiType(tupleItems)));
-    callableBuilder.Add(flow);
-    std::for_each(itemArgs.cbegin(), itemArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
-    std::for_each(newItems.cbegin(), newItems.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    auto fillCallableBuilder = [&] (TCallableBuilder& builder, TRuntimeNode input) {
+        builder.Add(input);
+        std::for_each(itemArgs.cbegin(), itemArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(builder), std::placeholders::_1));
+        std::for_each(newItems.cbegin(), newItems.cend(), std::bind(&TCallableBuilder::Add, std::ref(builder), std::placeholders::_1));
+        return TRuntimeNode(builder.Build(), false);
+    };
+
+    if (shouldRewriteToFlow) {
+        TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(NewMultiType(tupleItems)));
+        return FromFlow(fillCallableBuilder(callableBuilder, ToFlow(flowOrStream)));
+    } else if (flowOrStream.GetStaticType()->IsFlow()) {
+        TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(NewMultiType(tupleItems)));
+        return fillCallableBuilder(callableBuilder, flowOrStream);
+    } else if (flowOrStream.GetStaticType()->IsStream()) {
+        TCallableBuilder callableBuilder(Env_, __func__, NewStreamType(NewMultiType(tupleItems)));
+        return fillCallableBuilder(callableBuilder, flowOrStream);
+    } else {
+        Y_UNREACHABLE();
+    }
 }
 
 TRuntimeNode TProgramBuilder::WideChain1Map(TRuntimeNode flow, const TWideLambda& init, const TBinaryWideLambda& update) {

@@ -419,4 +419,19 @@ DEFINE_REFCOUNTED_TYPE(TYamlFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TArrowFormatConfig
+    : public NYTree::TYsonStruct
+{
+    //! Return the timezone as index.
+    bool EnableTzIndex;
+
+    REGISTER_YSON_STRUCT(TArrowFormatConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TArrowFormatConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NFormats

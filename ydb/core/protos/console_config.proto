@@ -147,12 +147,14 @@ message TConfigItem {
         HealthCheckConfigItem = 89;
         WorkloadManagerConfigItem = 90;
         CompGroupedMemoryLimiterConfig = 92;
+        BlockstoreConfigItem = 93;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
 
         CompositeConveyorConfigItem = 109;
         PortionsMetadataCacheItem = 110;
+        DeduGroupedMemoryLimiterConfig = 112;
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;

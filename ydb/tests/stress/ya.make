@@ -1,6 +1,7 @@
 RECURSE(
     cdc
     common
+    ctas
     kv
     log
     mixedpy

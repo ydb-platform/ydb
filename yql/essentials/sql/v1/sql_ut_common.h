@@ -8949,3 +8949,44 @@ Y_UNIT_TEST_SUITE(Aggregation) {
     }
 
 }
+
+Y_UNIT_TEST_SUITE(Watermarks) {
+    Y_UNIT_TEST(Insert) {
+        const auto stmt = R"sql(
+USE plato;
+
+INSERT INTO Output
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK AS (ts)
+);
+)sql";
+        const auto& res = SqlToYql(stmt);
+        Err2Str(res, EDebugOutput::ToCerr);
+        UNIT_ASSERT(res.IsOk());
+    }
+
+    Y_UNIT_TEST(Select) {
+        const auto stmt = R"sql(
+USE plato;
+
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK AS (ts)
+);
+)sql";
+        const auto& res = SqlToYql(stmt);
+        Err2Str(res, EDebugOutput::ToCerr);
+        UNIT_ASSERT(res.IsOk());
+    }
+}

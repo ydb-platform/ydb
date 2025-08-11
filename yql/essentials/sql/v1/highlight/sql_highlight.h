@@ -42,6 +42,8 @@ namespace NSQLHighlight {
     };
 
     struct THighlighting {
+        TString Name = "YQL";
+        TString Extension = "yql";
         TVector<TUnit> Units;
     };
 

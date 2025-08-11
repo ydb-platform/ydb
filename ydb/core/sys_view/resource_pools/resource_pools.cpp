@@ -2,8 +2,8 @@
 
 #include <ydb/core/sys_view/common/common.h>
 #include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/library/table_creator/table_creator.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>

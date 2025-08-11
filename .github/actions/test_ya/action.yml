@@ -64,6 +64,10 @@ inputs:
     description: "Custom branch name required when workflow branch != checkout branch"
     type: string
     required: false
+  add_vcs_info:
+    type: boolean
+    default: false
+    description: "add ya make vars with git info"
 
 outputs:
   success:
@@ -294,6 +298,14 @@ runs:
         else
           BRANCH_NAME="${{ inputs.custom_branch_name }}"
         fi
+
+        if [[ "${{inputs.add_vcs_info}}" == "true" ]]; then
+          params+=(
+            -DGIT_BRANCH=$BRANCH_NAME
+            -DGIT_COMMIT_SHA=$ORIGINAL_HEAD
+          )
+        fi
+
         echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
         echo "BRANCH_NAME is set to $BRANCH_NAME"
 

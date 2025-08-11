@@ -359,4 +359,90 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
         }
     }
 
+    Y_UNIT_TEST(EvaluationAssignment) {
+        IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+
+        TString query = R"sql(
+            DECLARE $t1 AS String;
+            DECLARE $t2 AS String;
+
+            $x1 = $t1;
+            $x2 = $t2;
+
+            $y1 = $x1;
+            $y2 = $x2;
+
+            $q1 = (SELECT * FROM $y1);
+            $q2 = (SELECT * FROM $y2);
+
+            SELECT # FROM $q1 JOIN $q2
+        )sql";
+
+        TEnvironment env = {
+            .Parameters = {
+                {"$t1", "table1"},
+                {"$t2", "table2"},
+            },
+        };
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), env);
+
+        TColumnContext expected = {
+            .Tables = {
+                TAliased<TTableId>("", {"", "table1"}),
+                TAliased<TTableId>("", {"", "table2"}),
+            },
+        };
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+
+    Y_UNIT_TEST(EvaluationRecursion) {
+        IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+
+        TVector<TString> queries = {
+            R"sql($x = $x; SELECT # FROM $x)sql",
+            R"sql($x = $y; $y = $x; SELECT # FROM $x)sql",
+        };
+
+        for (TString& query : queries) {
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+            Y_DO_NOT_OPTIMIZE_AWAY(ctx);
+        }
+    }
+
+    Y_UNIT_TEST(EvaluationSubquery) {
+        IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+
+        TString query = R"sql(
+            $x = (SELECT * FROM $y);
+            $y = (SELECT * FROM $x);
+            $z = $x || $y;
+            SELECT # FROM $z;
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+
+    Y_UNIT_TEST(EvaluationStringConcat) {
+        IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+
+        TString query = R"sql(
+            $cluster = 'ex' || 'am' || "ple";
+            $product = "yql";
+            $seq = "1";
+            $source = "/home/" || $product || "/" || $seq;
+            SELECT # FROM $cluster.$source;
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {
+            .Tables = {TAliased<TTableId>("", {"example", "/home/yql/1"})},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+
 } // Y_UNIT_TEST_SUITE(GlobalAnalysisTests)

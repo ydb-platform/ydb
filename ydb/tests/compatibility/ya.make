@@ -13,8 +13,10 @@ TEST_SRCS(
     test_compatibility.py
     test_stress.py
     test_statistics.py
+    test_system_views.py
     test_rolling.py
     test_data_type.py
+    test_ctas.py
     test_vector_index.py
     test_batch_operations.py
     test_topic.py

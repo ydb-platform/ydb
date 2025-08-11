@@ -222,9 +222,7 @@ public:
                                                    groups.GetValueOrDefault<T::Down>(),
                                                    groups.GetValueOrDefault<T::SeenOperational>(),
                                                    groups.GetValueOrDefault<T::GroupSizeInUnits>(),
-                                                   groups.HaveValue<T::BridgePileId>()
-                                                       ? std::make_optional(groups.GetValue<T::BridgePileId>())
-                                                       : std::nullopt,
+                                                   groups.GetValueOrDefault<T::BridgePileId>(),
                                                    storagePoolId,
                                                    std::get<0>(geom),
                                                    std::get<1>(geom),
@@ -531,7 +529,7 @@ public:
                 for (size_t i = 0; i < proxyGroup->BridgeGroupInfo->BridgeGroupIdsSize(); ++i) {
                     auto *group = Self->FindGroup(TGroupId::FromValue(proxyGroup->BridgeGroupInfo->GetBridgeGroupIds(i)));
                     Y_ABORT_UNLESS(group);
-                    Y_ABORT_UNLESS(group->BridgePileId == TBridgePileId::FromValue(i));
+                    Y_ABORT_UNLESS(group->BridgePileId == TBridgePileId::FromPileIndex(i));
                     Y_ABORT_UNLESS(!group->BridgeProxyGroupId);
                     group->BridgeProxyGroupId = proxyGroupId;
                 }

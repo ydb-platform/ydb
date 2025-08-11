@@ -11,7 +11,7 @@ class TLogBackendWithCapture;
 
 class TRunnerTui {
 public:
-    TRunnerTui(TLogBackendWithCapture& logBacked, std::shared_ptr<TRunDisplayData> data);
+    TRunnerTui(std::shared_ptr<TLog>& log, TLogBackendWithCapture& logBacked, std::shared_ptr<TRunDisplayData> data);
     ~TRunnerTui();
 
     void Update(std::shared_ptr<TRunDisplayData> data);
@@ -21,6 +21,7 @@ private:
     ftxui::Component BuildComponent();
 
 private:
+    std::shared_ptr<TLog> Log;
     TLogBackendWithCapture& LogBackend;
     std::shared_ptr<TRunDisplayData> DataToDisplay;
     ftxui::ScreenInteractive Screen;

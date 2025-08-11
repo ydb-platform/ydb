@@ -67,6 +67,10 @@ THashMap<TLogoBlobID, THashSet<TPageId>> TPrivatePageCache::AddPageCollection(TI
         sharedCacheTouches[page->Info->Id].insert(page->Id);
     }
 
+    if (info->GetCacheMode() == ECacheMode::TryKeepInMemory) {
+        Stats.TryKeepInMemoryBytes += info->PageCollection->BackingSize();
+    }
+
     return sharedCacheTouches;
 }
 
@@ -78,6 +82,10 @@ void TPrivatePageCache::DropPageCollection(TInfo *info) {
         if (info->IsStickyPage(pageId)) {
             Stats.StickyBytes -= page->Size;
         }
+    }
+
+    if (info->GetCacheMode() == ECacheMode::TryKeepInMemory) {
+        Stats.TryKeepInMemoryBytes -= info->PageCollection->BackingSize();
     }
 
     info->Clear();

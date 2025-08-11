@@ -715,11 +715,13 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView, const THash
             Stats->PacksMetaBytes += pack->Meta.Raw.size();
     }
 
-    for (size_t collectionsIndex : xrange( partStore->PageCollections.size())) {
-        auto& cache = partStore->PageCollections[collectionsIndex];
-        if (collectionsIndex < partView->GroupsCount) {
-            cache->SetCacheMode(GetCacheMode(partView->Scheme->Groups[collectionsIndex].Columns, cacheModes));
-        }
+    for (size_t groupIndex : xrange(partView->GroupsCount)) {
+        partStore->PageCollections[groupIndex]->SetCacheMode(
+            GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes)
+        );
+    }
+
+    for (auto &cache : partStore->PageCollections) {
         AddSingleCache(cache);
     }
 

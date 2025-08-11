@@ -69,8 +69,12 @@ public:
             return StickyPages.contains(pageId);
         }
 
-        // Mutable methods can be only called on a construction stage or from Private Cache
-        // Otherwise Stats counters would be out of sync
+        ECacheMode GetCacheMode() const noexcept {
+            return CacheMode;
+        }
+
+        // Mutable methods can be only called on a construction stage or from a Private Cache
+        // Otherwise stat counters would be out of sync
 
         bool AddPage(TPageId pageId, TSharedPageRef sharedBody) {
             return PageMap.emplace(pageId, MakeHolder<TPage>(
@@ -97,10 +101,6 @@ public:
 
         void SetCacheMode(ECacheMode cacheMode) {
             CacheMode = cacheMode;
-        }
-
-        ECacheMode GetCacheMode() const noexcept {
-            return CacheMode;
         }
 
         const TLogoBlobID Id;

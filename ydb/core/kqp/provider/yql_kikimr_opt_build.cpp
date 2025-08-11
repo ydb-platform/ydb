@@ -1,6 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_gateway.h"
 
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -185,11 +186,18 @@ struct TKiExploreTxResults {
                 continue;
             }
 
-            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
-            //YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
-            const auto indexTable = indexTables[0];
-
             ops[name] |= TPrimitiveYdbOperation::Read;
+
+            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
+            TString indexTable;
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                YQL_ENSURE(index.KeyColumns.size() == 1, "Prefixed vector index is not supported");
+                indexTable = indexTables[1];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::PostingTable));
+            } else {
+                YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
+                indexTable = indexTables[0];
+            }
             ops[indexTable] = TPrimitiveYdbOperation::Write;
         }
 
@@ -208,8 +216,15 @@ struct TKiExploreTxResults {
             }
 
             const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
-            YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
-            const auto indexTable = indexTables[0];
+            TString indexTable;
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                YQL_ENSURE(index.KeyColumns.size() == 1, "Prefixed vector index is not supported");
+                indexTable = indexTables[1];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::PostingTable));
+            } else {
+                YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
+                indexTable = indexTables[0];
+            }
 
             for (const auto& column : index.KeyColumns) {
                 if (updateColumns.contains(column)) {

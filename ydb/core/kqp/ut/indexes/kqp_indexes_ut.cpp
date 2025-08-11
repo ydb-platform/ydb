@@ -5699,7 +5699,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAccessToIndexImplTables(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-        TKikimrRunner kikimr(settings);        
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         kikimr.GetTestClient().GrantConnect("user@builtin");
         kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
@@ -5731,7 +5731,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 UPSERT INTO `%s` (Key, Fk, Value) VALUES
                     (9,    9,    "Payload9");
             )", tablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-        };        
+        };
         auto upsertImplTableQuery = [&]() {
             return userSession.ExecuteDataQuery(Sprintf(R"(
                 UPSERT INTO `%s` (Fk, Key) VALUES
@@ -5914,7 +5914,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 result.GetIssues().ToString()
             );
         }
-    }    
+    }
 }
 
 }

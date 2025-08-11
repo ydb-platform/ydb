@@ -128,6 +128,17 @@ For proper spilling operation in multi-node clusters, it is recommended to incre
 
 {% endnote %}
 
+To change the file descriptor limit, add the following lines to the `/etc/security/limits.conf` file:
+
+```bash
+ydb soft nofile 10000
+ydb hard nofile 10000
+```
+
+Where `ydb` is the username under which {{ ydb-short-name }} is running.
+
+After changing the file, you need to reboot the system or re-login to apply the new limits.
+
 ## Configuration Examples
 
 ### High-load System

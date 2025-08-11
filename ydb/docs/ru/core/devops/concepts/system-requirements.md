@@ -34,6 +34,8 @@
 
 {{ ydb-short-name }} сервер может быть запущен на серверах с операционной системой Linux с ядром версии 4.19 и выше и libc версии 2.30. Например, Ubuntu 20.04, Debian 11, Fedora 34 или более новые версии. {{ ydb-short-name }} использует аллокатор памяти [TCMalloc](https://google.github.io/tcmalloc), для его эффективной работы рекомендуется [включить](https://google.github.io/tcmalloc/tuning.html#system-level-optimizations) Transparent Huge Pages и Memory overcommitment.
 
+
+
 Если сервер имеет более 32 ядер CPU, для повышения производительности {{ ydb-short-name }} динноды следует запускать в раздельных taskset/cpuset, размером от 10 до 32 ядер. Например, в случае 128 ядер оптимально запустить 4 динноды: каждую в своём taskset, размером 32 ядра.
 
 Операционные системы macOS и Windows в данный момент не поддерживаются для запуска серверной части {{ ydb-short-name }}. Тем не менее, для целей разработки и функционального тестирования допустимо запускать {{ ydb-short-name }} на них в [Docker-контейнере](../../quickstart.md).

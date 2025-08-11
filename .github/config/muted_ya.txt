@@ -9,10 +9,10 @@ ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexO
 ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
 ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
+ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ClientErrorWithEmptyFilter
 ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ManyRawClients
 ydb/core/fq/libs/row_dispatcher/ut sole chunk chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ErroneousRequestGetRecords
-ydb/core/kafka_proxy/ut ProduceActor.OnProduceWithoutTransactionalId_shouldNotKillOldWriter
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
@@ -24,9 +24,12 @@ ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
 ydb/core/kqp/ut/olap KqpOlapAggregations.BlockGenericWithDistinct
 ydb/core/kqp/ut/olap KqpOlapJson.BloomCategoryIndexesVariants
+ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants
+ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants
 ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterReduceScopeVariants
 ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterReduceScopeWithPredicateVariants
+ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterReduceScopeWithPredicateVariantsWithSeparatedColumnAtFirst
 ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterVariants
 ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
 ydb/core/kqp/ut/olap KqpOlapJson.EmptyVariants
@@ -34,12 +37,15 @@ ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants
 ydb/core/kqp/ut/olap KqpOlapJson.FilterVariantsCount
 ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants
 ydb/core/kqp/ut/olap KqpOlapJson.RestoreFullJsonVariants
+ydb/core/kqp/ut/olap KqpOlapJson.RestoreJsonArrayVariants
 ydb/core/kqp/ut/olap KqpOlapJson.SimpleExistsVariants
 ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants
+ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
+ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltp
@@ -53,10 +59,15 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltpNoSink
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
+ydb/core/mind/hive/ut THiveTest.TestCheckSubHiveMigrationWithReboots
+ydb/core/mind/hive/ut THiveTest.TestCreateSubHiveCreateManyTabletsWithReboots
+ydb/core/mind/hive/ut [*/*] chunk chunk
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_PreferedPartition_BeforeAutoscaleAwareSDK
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut TSharedPageCache.ClockPro
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_FlatIndex
+ydb/core/tablet_flat/ut TSharedPageCache.ThreeLeveledLRU
 ydb/core/tx/conveyor_composite/ut CompositeConveyorTests.TestUniformDistribution
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
@@ -64,12 +75,17 @@ ydb/core/viewer/tests test.py.test_transfer_describe
 ydb/library/actors/http/ut sole chunk chunk
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
+ydb/library/yql/dq/actors/spilling/ut DqSpillingFileTests.ThreadPoolQueueOverflow
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query
+ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
+ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
+ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryService
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall
 ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
+ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
 ydb/tests/fq/mem_alloc test_alloc_default.py.TestAlloc.test_alloc_and_free[kikimr0]
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]

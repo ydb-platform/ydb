@@ -50,7 +50,7 @@ Where:
 **Important notes:**
 
 - At process startup, all existing spilling files in the specified directory are automatically deleted. Spilling files have a special name format that includes a session identifier, which is generated once when the ydbd process starts. When a new process starts, all files in the spilling directory that match the name format but have a different session identifier from the current one are deleted.
-- The directory must have sufficient write permissions
+- The directory must have sufficient write and read permissions for the user under which ydbd is running
 
 **Recommendations:**
 

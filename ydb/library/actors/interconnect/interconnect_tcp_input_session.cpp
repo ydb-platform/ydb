@@ -230,7 +230,7 @@ namespace NActors {
             TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket, TIntrusivePtr<TReceiveContext> context,
             TInterconnectProxyCommon::TPtr common, std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId,
             ui64 lastConfirmed, TDuration deadPeerTimeout, TSessionParams params,
-            std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp, NInterconnect::NRdma::ICq::TPtr cq)
+            std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp, NInterconnect::NRdma::ICq::TPtr cq)
         : SessionId(sessionId)
         , Socket(std::move(socket))
         , XdcSocket(std::move(xdcSocket))
@@ -238,7 +238,7 @@ namespace NActors {
         , Common(std::move(common))
         , NodeId(nodeId)
         , Params(std::move(params))
-        , RdmaQp(std::move(qp))
+        , RdmaQp(qp)
         , RdmaCq(std::move(cq))
         , ConfirmedByInput(lastConfirmed)
         , Metrics(std::move(metrics))

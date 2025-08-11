@@ -223,7 +223,7 @@ namespace NActors {
                          ui64 lastConfirmed,
                          TDuration deadPeerTimeout,
                          TSessionParams params,
-                         std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp,
+                         std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp,
                          NInterconnect::NRdma::ICq::TPtr cq);
 
     private:
@@ -265,7 +265,7 @@ namespace NActors {
         TInterconnectProxyCommon::TPtr Common;
         const ui32 NodeId;
         const TSessionParams Params;
-        std::unique_ptr<NInterconnect::NRdma::TQueuePair> RdmaQp;
+        std::shared_ptr<NInterconnect::NRdma::TQueuePair> RdmaQp;
         NInterconnect::NRdma::ICq::TPtr RdmaCq;
         XXH3_state_t XxhashState;
         XXH3_state_t XxhashXdcState;
@@ -625,7 +625,6 @@ namespace NActors {
 
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
-        std::unique_ptr<NInterconnect::NRdma::TQueuePair> Qp;
         TPollerToken::TPtr PollerToken;
         TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;
@@ -687,6 +686,7 @@ namespace NActors {
         NInterconnect::TInterconnectZcProcessor ZcProcessor;
 
         NInterconnect::NRdma::TRdmaCtx* RdmaCtx = nullptr;
+        std::shared_ptr<NInterconnect::NRdma::TQueuePair> Qp;
 
         void UpdateState(std::optional<EState> newState = std::nullopt) {
             if (!newState || *newState != State) {

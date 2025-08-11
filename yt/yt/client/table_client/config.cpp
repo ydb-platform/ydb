@@ -558,6 +558,16 @@ void TVersionedRowDigestConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TMinHashDigestConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("write_count", &TThis::WriteCount)
+        .Default(100);
+    registrar.Parameter("delete_tombstone_count", &TThis::DeleteTombstoneCount)
+        .Default(100);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TSchemalessBufferedDynamicTableWriterConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("max_batch_size", &TThis::MaxBatchSize)

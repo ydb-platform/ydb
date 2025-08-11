@@ -95,7 +95,13 @@ std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo="::1") {
     return rdma;
 }
 
-void ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueuePair& qp, void* dstAddr, ui32 dstRkey, int dstSize, TMemRegionPtr& src) {
+enum class EReadResult {
+    OK,
+    WRPOST_ERR,
+    READ_ERR
+};
+
+EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueuePair& qp, void* dstAddr, ui32 dstRkey, int dstSize, TMemRegionPtr& src, std::function<void()> hook = {}) {
     auto asptr = rdma->ActorSystem->GetActorSystem(0);
     NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();
     auto future = promise.GetFuture();
@@ -109,7 +115,22 @@ void ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueuePair& qp, voi
     ICq::IWr* wr = (allocResult.index() == 0) ? std::get<0>(allocResult) : nullptr;
 
     EXPECT_TRUE(wr);
-    qp.SendRdmaReadWr(wr->GetId(), src->GetAddr(), src->GetLKey(rdma->Ctx->GetDeviceIndex()), dstAddr, dstRkey, dstSize);
+
+    if (hook)
+        hook();
+
+    int err = qp.SendRdmaReadWr(wr->GetId(), src->GetAddr(), src->GetLKey(rdma->Ctx->GetDeviceIndex()), dstAddr, dstRkey, dstSize);
+    if (err) {
+        wr->Release();
+        Cerr << "Unable to post wr" << Endl;
+        return EReadResult::WRPOST_ERR;
+    }
+
+    if (!future.GetValueSync()) {
+        return EReadResult::READ_ERR;
+    } else {
+        return EReadResult::OK;
+    }
 }
 
 

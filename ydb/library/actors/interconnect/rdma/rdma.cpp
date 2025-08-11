@@ -349,6 +349,16 @@ int TQueuePair::Init(TRdmaCtx* ctx, ICq* icq, int maxWr) noexcept {
     }
 }
 
+int TQueuePair::ToResetState() noexcept {
+    struct ibv_qp_attr qpAttr;
+    memset(&qpAttr, 0, sizeof(qpAttr));
+
+    qpAttr.qp_state = IBV_QPS_RESET;
+    qpAttr.port_num = Ctx->GetPortNum();
+
+    return ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE);
+}
+
 int TQueuePair::ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept {
     // ibv_modify_qp() returns 0 on success, or the value of errno on
     //  failure (which indicates the failure reason).

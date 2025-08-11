@@ -51,7 +51,8 @@ Compute nodes contain specialized objects for monitoring memory usage. When data
 2. Data is serialized and divided into blocks (buckets)
 3. Part of the blocks is transferred to the Spilling Service for disk storage
 4. Metadata about data location is kept in memory
-5. When necessary, data is loaded back and processed
+5. The system continues processing data remaining in memory, which allows freeing additional space
+6. When necessary, data is loaded back and processed
 
 
 #### Channel Spilling

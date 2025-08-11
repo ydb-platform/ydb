@@ -898,6 +898,8 @@ public:
     }
 
     ui64 AddExternalLocks(const TNotificationInfo &notification, const TActorContext *ctx);
+    
+    TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
 
     void SetHostMarkers(const TString &hostName, const THashSet<NKikimrCms::EMarker> &markers);
     void ResetHostMarkers(const TString &hostName);
@@ -1012,8 +1014,6 @@ private:
         }
         return TPDiskID();
     }
-
-    TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
 
     TNodes Nodes;
     TTablets Tablets;

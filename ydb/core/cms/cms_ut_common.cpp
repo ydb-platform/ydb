@@ -901,6 +901,16 @@ TCmsTestEnv::CheckListRequests(const TString &user,
     return rec;
 }
 
+NKikimrCms::TManageRequestResponse
+TCmsTestEnv::CheckApproveRequest(const TString &user,
+                                 const TString &id,
+                                 bool dry,
+                                 NKikimrCms::TStatus::ECode code)
+{
+    auto req = MakeManageRequestRequest(user, TManageRequestRequest::APPROVE, id, dry);
+    return CheckManageRequestRequest(req, code);
+}
+
 NKikimrCms::TPermissionResponse
 TCmsTestEnv::CheckRequest(const TString &user,
                           TString id,

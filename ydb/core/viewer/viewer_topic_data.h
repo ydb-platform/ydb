@@ -34,6 +34,7 @@ class TTopicData : public TViewerPipeClient {
     using TThis = TTopicData;
     using TBase::ReplyAndPassAway;
     using TBase::GetHTTPBADREQUEST;
+    static constexpr bool RunOnDynnode = true;
 
 private:
     void HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
@@ -50,7 +51,7 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap() override;
+    void BootstrapEx() override;
     void ReplyAndPassAway() override;
 
 private:

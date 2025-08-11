@@ -21,7 +21,7 @@ public:
         , Event(ev)
     {}
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         const auto& params(Event->Get()->Request.GetParams());
         ui64 hiveId = FromStringWithDefault<ui64>(params.Get("hive_id"), 0);
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);

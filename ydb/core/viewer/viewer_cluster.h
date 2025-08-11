@@ -106,7 +106,7 @@ public:
         OffloadMergeAttempts = FromStringWithDefault<bool>(params.Get("offload_merge_attempts"), OffloadMergeAttempts);
     }
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         if (AppData()->BridgeModeEnabled) {
             NodeWardenStorageConfigResponse = MakeRequest<TEvNodeWardenStorageConfig>(MakeBlobStorageNodeWardenID(SelfId().NodeId()),

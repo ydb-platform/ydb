@@ -10,6 +10,7 @@ class TViewerMultipartCounter : public TViewerPipeClient {
 public:
     using TThis = TViewerMultipartCounter;
     using TBase = TViewerPipeClient;
+    static constexpr bool RunOnDynnode = true;
 
     TViewerMultipartCounter(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
@@ -26,10 +27,7 @@ public:
         return "MULTIPART_COUNTER ";
     }
 
-    void Bootstrap() override {
-        if (TBase::NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         NHttp::TUrlParameters params(HttpEvent->Get()->Request->GetParameters());
         MaxCounter = std::clamp<ui32>(FromStringWithDefault(params.Get("max_counter"), MaxCounter), 1, 100000);
         Period = std::clamp<ui32>(FromStringWithDefault(params.Get("period"), Period), 1, 100000);

@@ -10,6 +10,8 @@ using namespace NActors;
 class TJsonFeatureFlags : public TViewerPipeClient {
     using TThis = TJsonFeatureFlags;
     using TBase = TViewerPipeClient;
+    static constexpr bool RunOnDynnode = true;
+
     THashSet<TString> FilterFeatures;
     bool ChangedOnly = false;
 
@@ -18,10 +20,7 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         StringSplitter(Params.Get("features")).Split(',').SkipEmpty().Collect(&FilterFeatures);
         ChangedOnly = FromStringWithDefault<bool>(Params.Get("changed"), ChangedOnly);
         ReplyAndPassAway();

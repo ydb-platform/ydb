@@ -143,7 +143,7 @@ public:
     TActorMonPage(const TString &path, const TString &title, const TString &host, bool preTag,
                     TActorSystem *actorSystem, const TActorId &actorId, const TVector<TString> &sids,
                     TMon::TRequestAuthorizer authorizer, TString monServiceName = "utils",
-                    bool autoAudit = false)
+                    bool AutoAuditStart = false)
         : IMonPage(path, title)
         , Host(host)
         , PreTag(preTag)
@@ -152,7 +152,7 @@ public:
         , AllowedSIDs(sids)
         , Authorizer(std::move(authorizer))
         , MonServiceName(monServiceName)
-        , AutoAudit(autoAudit)
+        , AutoAuditStart(AutoAuditStart)
     {
     }
 
@@ -167,7 +167,7 @@ public:
     const TVector<TString> AllowedSIDs;
     TMon::TRequestAuthorizer Authorizer;
     TString MonServiceName;
-    bool AutoAudit;
+    bool AutoAuditStart;
 };
 
 inline TString GetPageFullPath(const NMonitoring::IMonPage* page) {

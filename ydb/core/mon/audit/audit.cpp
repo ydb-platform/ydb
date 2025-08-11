@@ -38,6 +38,40 @@ namespace {
         return NKikimr::AppData()->AuditConfig.EnableLogging(
             NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, subjectType);
     }
+
+    HTTP_METHOD ParseMethod(TStringBuf method) {
+        if (method == "GET") {
+            return HTTP_METHOD_GET;
+        }
+        if (method == "OPTIONS") {
+            return HTTP_METHOD_OPTIONS;
+        }
+        if (method == "POST") {
+            return HTTP_METHOD_POST;
+        }
+        if (method == "HEAD") {
+            return HTTP_METHOD_HEAD;
+        }
+        if (method == "PUT") {
+            return HTTP_METHOD_PUT;
+        }
+        if (method == "DELETE") {
+            return HTTP_METHOD_DELETE;
+        }
+        return HTTP_METHOD_UNDEFINED;
+    }
+
+    TString ToString(HTTP_METHOD method) {
+        switch (method) {
+            case HTTP_METHOD_GET: return "GET";
+            case HTTP_METHOD_OPTIONS: return "OPTIONS";
+            case HTTP_METHOD_POST: return "POST";
+            case HTTP_METHOD_HEAD: return "HEAD";
+            case HTTP_METHOD_PUT: return "PUT";
+            case HTTP_METHOD_DELETE: return "DELETE";
+            default: return "UNDEFINED";
+        }
+    }
 }
 
 TAuditCtx::ERequestStatus TAuditCtx::GetStatus(const NHttp::THttpOutgoingResponsePtr response) {
@@ -70,45 +104,100 @@ void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
 
-bool TAuditCtx::AuditableRequest(const TString& method, const TString& url, const TCgiParameters& cgiParams) {
+bool TAuditCtx::AuditableRequest(const HTTP_METHOD method, const TString& url, const TCgiParameters& cgiParams) {
     // only modifying methods are audited
-    static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
+    static const THashSet<HTTP_METHOD> MODIFYING_METHODS = {HTTP_METHOD_POST, HTTP_METHOD_PUT, HTTP_METHOD_DELETE};
     if (MODIFYING_METHODS.contains(method)) {
         return true;
     }
 
     // OPTIONS are not audited
-    if (method == "OPTIONS") {
+    if (method == HTTP_METHOD_OPTIONS) {
         return false;
     }
 
-    // force audit for specific URLs
-    static auto FORCE_AUDIT_MATCHER = CreateAuditableActionsMatcher();
-    if (FORCE_AUDIT_MATCHER.Match(url, cgiParams)) {
+    // auditable actions are defined with URL patterns
+    static auto AUDITABLE_ACTIONS_MATCHER = CreateAuditableActionsMatcher();
+    if (AUDITABLE_ACTIONS_MATCHER.Match(url, cgiParams)) {
         return true;
     }
 
     return false;
 }
 
-void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason) {
+    AUDIT_LOG(
+        for (const auto& [name, value] : Parts) {
+            AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
+        }
+
+        AUDIT_PART("status", ToString(status));
+        if (status != ERequestStatus::Success) {
+            AUDIT_PART("reason", (!reason.empty() ? reason : EMPTY_VALUE));
+        }
+    );
+}
+
+void TAuditCtx::Init(const NActors::NMon::TEvHttpInfo::TPtr& ev) {
     if (State != EState::Init) {
         return;
     }
     const auto& request = ev->Get()->Request;
-    const TString method(request->Method);
-    const TString url(request->URL.Before('?'));
-    const auto params = request->URL.After('?');
+    const auto method = request.GetMethod();
+    const TString url(request.GetUri().Before('?'));
+    const auto params = request.GetUri().After('?');
     const auto cgiParams = TCgiParameters(params);
-    Auditable = AuditableRequest(method, url, cgiParams);
 
-    NHttp::THeaders headers(request->Headers);
-    auto remoteAddress = ::ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    auto remoteAddress = ::ToString(request.GetHeader(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    if (!AuditableRequest(method, url, cgiParams)) {
+        State = EState::Completed;
+        return;
+    }
 
     AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
     AddAuditLogPart("remote_address", remoteAddress);
     AddAuditLogPart("operation", DEFAULT_OPERATION);
-    AddAuditLogPart("method", method);
+    AddAuditLogPart("method", NMonitoring::NAudit::ToString(method));
+    AddAuditLogPart("url", url);
+    if (!params.Empty()) {
+        AddAuditLogPart("params", ::ToString(params));
+    }
+    if (!request.GetPostContent().Empty()) {
+        TStringBuilder auditBody;
+        TStringBuf body = request.GetPostContent();
+        if (body.size() > MAX_AUDIT_BODY_SIZE) {
+            auditBody << body.SubString(0, MAX_AUDIT_BODY_SIZE) << TRUNCATED_SUFFIX;
+        } else {
+            auditBody << body;
+        }
+
+        AddAuditLogPart("body", auditBody);
+    }
+
+    State = EState::Executing;
+}
+
+void TAuditCtx::Init(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+    if (State != EState::Init) {
+        return;
+    }
+    const auto& request = ev->Get()->Request;
+    const auto method = ParseMethod(request->Method);
+    const TString url(request->URL.Before('?'));
+    const auto params = request->URL.After('?');
+    const auto cgiParams = TCgiParameters(params);
+
+    NHttp::THeaders headers(request->Headers);
+    auto remoteAddress = ::ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    if (!AuditableRequest(method, url, cgiParams)) {
+        State = EState::Completed;
+        return;
+    }
+
+    AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
+    AddAuditLogPart("remote_address", remoteAddress);
+    AddAuditLogPart("operation", DEFAULT_OPERATION);
+    AddAuditLogPart("method", NMonitoring::NAudit::ToString(method));
     AddAuditLogPart("url", url);
     if (!params.Empty()) {
         AddAuditLogPart("params", ::ToString(params));
@@ -124,46 +213,30 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
 
         AddAuditLogPart("body", auditBody);
     }
-    State = EState::PendingExecution;
-}
 
-void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
-    SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-    if (userToken) {
-        Subject = userToken->GetUserSID();
-        SanitizedToken = userToken->GetSanitizedToken();
-    }
-}
-
-void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason) {
-    AUDIT_LOG(
-        AddAuditLogPart("subject", (Subject ? Subject : EMPTY_VALUE));
-        AddAuditLogPart("sanitized_token", (SanitizedToken ? SanitizedToken : EMPTY_VALUE));
-
-        for (const auto& [name, value] : Parts) {
-            AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
-        }
-
-        AUDIT_PART("status", ToString(status));
-        if (status != ERequestStatus::Success) {
-            AUDIT_PART("reason", (!reason.empty() ? reason : EMPTY_VALUE));
-        }
-    );
-}
-
-void TAuditCtx::LogOnExecute(bool directed) {
-    if (State != EState::PendingExecution) {
-        return;
-    }
-
-    Auditable |= directed;
-    Auditable &= HttpAuditEnabled(SubjectType);
-    if (!Auditable) {
-        return;
-    }
-
-    LogAudit(ERequestStatus::Process, REASON_EXECUTE);
     State = EState::Executing;
+}
+
+void TAuditCtx::SetUserToken(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
+    AddAuditLogPart("subject", (userToken->GetUserSID() ? userToken->GetUserSID() : EMPTY_VALUE));
+    AddAuditLogPart("sanitized_token", (userToken->GetSanitizedToken() ? userToken->GetSanitizedToken() : EMPTY_VALUE));
+    SubjectType = userToken->GetSubjectType();
+}
+
+void TAuditCtx::SetUserToken(const NACLibProto::TUserToken& userToken) {
+    AddAuditLogPart("subject", (userToken.GetUserSID() ? userToken.GetUserSID() : EMPTY_VALUE));
+    AddAuditLogPart("sanitized_token", (userToken.GetSanitizedToken() ? userToken.GetSanitizedToken() : EMPTY_VALUE));
+    SubjectType = userToken.GetSubjectType();
+}
+
+void TAuditCtx::LogOnExecute() {
+    if (State != EState::Executing) {
+        return;
+    }
+    if (!HttpAuditEnabled(SubjectType)) {
+        return;
+    }
+    LogAudit(ERequestStatus::Process, REASON_EXECUTE);
 }
 
 void TAuditCtx::LogOnResult(const NHttp::THttpOutgoingResponsePtr& response) {
@@ -172,6 +245,10 @@ void TAuditCtx::LogOnResult(const NHttp::THttpOutgoingResponsePtr& response) {
     }
 
     auto status = GetStatus(response);
+    if (status == ERequestStatus::Process) {
+        return; // do not log in-process requests
+    }
+
     auto reason = GetReason(response);
     LogAudit(status, reason);
     State = EState::Completed;
@@ -182,12 +259,12 @@ bool HttpAuditEnabled(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
     return HttpAuditEnabled(subjectType);
 }
 
-bool HttpAuditEnabled(TString serializedToken) {
-    NACLibProto::TUserToken userToken;
-    if (userToken.ParseFromString(serializedToken)) {
-        return HttpAuditEnabled(userToken.GetSubjectType());
-    }
-    return false;
-}
+// bool HttpAuditEnabled(TString serializedToken) {
+//     NACLibProto::TUserToken userToken;
+//     if (userToken.ParseFromString(serializedToken)) {
+//         return HttpAuditEnabled(userToken.GetSubjectType());
+//     }
+//     return false;
+// }
 
 }

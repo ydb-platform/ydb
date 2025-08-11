@@ -118,6 +118,8 @@ public:
     using TThis = TStorageGroups;
     using TFieldsType = std::bitset<+EGroupFields::COUNT>;
 
+    static constexpr bool RunOnDynnode = true;
+
     // Common
     std::unordered_map<TPathId, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySetResult;
     ui64 NavigateKeySetInFlight = 0;
@@ -871,10 +873,7 @@ public:
     }
 
 public:
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         if (Database) {
             if (!DatabaseNavigateResponse) {
                 DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(Database, 0);

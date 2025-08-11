@@ -36,7 +36,7 @@ public:
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         const auto& params(Event->Get()->Request.GetParams());
         std::vector<TNodeId> nodeIds;
         SplitIds(params.Get("node_id"), ',', nodeIds);
@@ -87,7 +87,7 @@ public:
             }
         }
         TBase::RequestSettings.Format = params.Get("format");
-        TBase::Bootstrap();
+        TBase::BootstrapEx();
     }
 
     virtual void FilterResponse(TResponseType& response) {

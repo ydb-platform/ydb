@@ -15,6 +15,8 @@ class TJsonRender : public TViewerPipeClient {
     using TThis = TJsonRender;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
+    static constexpr bool RunOnDynnode = true;
+
     std::vector<TString> Metrics;
 
 public:
@@ -23,10 +25,7 @@ public:
     {
     }
 
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         NKikimrGraph::TEvGetMetrics getRequest;
         if (Params.Has("target")) {
             TString metric;

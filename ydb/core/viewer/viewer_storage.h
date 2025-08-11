@@ -122,7 +122,7 @@ public:
         }
     }
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         if (UsagePace == 0) {
             Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return PassAway();
@@ -132,7 +132,7 @@ public:
         if (hiveId != TDomainsInfo::BadTabletId) {
             RequestHiveStorageStats(hiveId);
         }
-        TBase::Bootstrap();
+        TBase::BootstrapEx();
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {

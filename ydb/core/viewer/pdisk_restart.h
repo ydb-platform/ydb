@@ -37,10 +37,7 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap() override {
-        if (NeedToWriteAuditLog()) {
-            return;
-        }
+    void BootstrapEx() override {
         ui32 nodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
         ui32 pDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());
         bool force = FromStringWithDefault<bool>(Params.Get("force"), false);

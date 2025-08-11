@@ -22,12 +22,12 @@ public:
         AllowedMethods = {HTTP_METHOD_GET};
     }
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         const auto& params(Event->Get()->Request.GetParams());
         if (params.Has("database_path")) {
             Database = params.Get("database_path");
         }
-        TBase::Bootstrap();
+        TBase::BootstrapEx();
     }
 
     static YAML::Node GetSwagger() {

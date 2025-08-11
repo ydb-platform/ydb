@@ -15,6 +15,8 @@ class TJsonDescribe : public TViewerPipeClient {
     using TThis = TJsonDescribe;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
+    static constexpr bool RunOnDynnode = true;
+
     TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult> SchemeShardResult;
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
     TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> DescribeResult;
@@ -44,10 +46,7 @@ public:
         record->MutableOptions()->SetReturnPartitioningInfo(FromStringWithDefault<bool>(params.Get("partitioning_info"), true));
     }
 
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         if (Params.Has("path_id") && !Params.Has("schemeshard_id")) {
             // path_id is not enough to describe path, we need schemeshard_id
             ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "schemeshard_id is required when path_id is specified"));

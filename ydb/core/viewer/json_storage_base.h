@@ -139,7 +139,7 @@ protected:
     }
 
 public:
-    void Bootstrap() override {
+    void BootstrapEx() override {
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
 
         if (FilterTenant.empty()) {

@@ -103,21 +103,21 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "viewer/capabilities",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .Title = "Monitoring",
@@ -125,21 +125,21 @@ public:
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "healthcheck",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
@@ -147,7 +147,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
@@ -155,7 +155,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = monitoringAllowedSIDs,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "operation",
@@ -163,7 +163,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "query",
@@ -171,7 +171,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "scheme",
@@ -179,7 +179,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
@@ -187,7 +187,7 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = true,
                 .AllowedSIDs = databaseAllowedSIDs,
-                .AutoAudit = false,
+                .AutoAuditStart = false,
             });
             if (!KikimrRunConfig.AppConfig.GetMonitoringConfig().GetHideHttpEndpoint()) {
                 auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
@@ -231,7 +231,7 @@ public:
                         .Handler = ctx.SelfID,
                         .UseAuth = true,
                         .AllowedSIDs = databaseAllowedSIDs,
-                        .AutoAudit = false,
+                        .AutoAuditStart = false,
                     });
                 }
             }

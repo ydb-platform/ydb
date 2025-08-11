@@ -21,7 +21,7 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         BLOG_TRACE("Graph received request for " << Event->Get()->Request.GetUri());
         const auto& params(Event->Get()->Request.GetParams());
         NKikimrGraph::TEvGetMetrics getRequest;

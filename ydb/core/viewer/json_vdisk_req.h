@@ -62,7 +62,7 @@ public:
         , Event(ev)
     {}
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         const auto& params(Event->Get()->Request.GetParams());
         NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
         PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());

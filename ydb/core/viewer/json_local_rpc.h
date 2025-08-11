@@ -22,6 +22,8 @@ class TJsonLocalRpc : public TViewerPipeClient {
     using TThis = TJsonLocalRpc<TProtoRequest, TProtoResponse, TProtoResult, TProtoService, TRpcEv>;
     using TBase = TViewerPipeClient;
 
+    static constexpr bool RunOnDynnode = true;
+
     struct TEvGrpcRequestResult : NActors::TEventLocal<TEvGrpcRequestResult, TEvLocalRpcPrivate::EvGrpcRequestResult> {
         TProtoResponse Response;
         //std::optional<NYdb::TStatus> Status;
@@ -147,20 +149,16 @@ public:
         });
     }
 
-    virtual void Bootstrap() {
+    void BootstrapPre() override {
         if (!AllowedMethods.empty() && std::find(AllowedMethods.begin(), AllowedMethods.end(), Event->Get()->Request.GetMethod()) == AllowedMethods.end()) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Method is not allowed"));
         }
         if (Database.empty()) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'database' is required"));
         }
-        if (TBase::NeedToRedirect()) {
-            return;
-        }
-        static const THashSet<HTTP_METHOD> MODIFYING_METHODS = {HTTP_METHOD_POST, HTTP_METHOD_PUT, HTTP_METHOD_DELETE, HTTP_METHOD_EXTENSION};
-        if (std::find(MODIFYING_METHODS.begin(), MODIFYING_METHODS.end(), Event->Get()->Request.GetMethod()) == MODIFYING_METHODS.end() && TBase::NeedToWriteAuditLog()) {
-            return;
-        }
+    }
+
+    void BootstrapEx() override {
         TRequestProtoType request;
         if (!Params2Proto(request)) {
             return;
@@ -181,7 +179,7 @@ public:
         }
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         if (Result) {
             auto& response = Result->Response;
             std::optional<NYdb::TStatus> status;

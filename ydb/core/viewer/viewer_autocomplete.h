@@ -16,6 +16,8 @@ class TJsonAutocomplete : public TViewerPipeClient {
     using TThis = TJsonAutocomplete;
     using TBase = TViewerPipeClient;
 
+    static constexpr bool RunOnDynnode = true;
+
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ConsoleResult;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> CacheResult;
 
@@ -107,10 +109,7 @@ public:
             new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
     }
 
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         ParseCgiParameters(Params);
         PrepareParameters();
         if (Database) {

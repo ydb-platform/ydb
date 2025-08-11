@@ -10,14 +10,13 @@ public:
     using TThis = TViewerCapabilities;
     using TBase = TViewerPipeClient;
 
+    static constexpr bool RunOnDynnode = true;
+
     TViewerCapabilities(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() override {
-        if (TBase::NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         ReplyAndPassAway();
     }
 

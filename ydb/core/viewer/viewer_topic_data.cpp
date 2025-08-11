@@ -239,10 +239,7 @@ void TTopicData::StateRequestedDescribe(TAutoPtr<::NActors::IEventHandle>& ev) {
     }
 }
 
-void TTopicData::Bootstrap() {
-    if (!Database.empty() && TBase::NeedToRedirect()) {
-        return;
-    }
+void TTopicData::BootstrapEx() {
     const auto& params(Event->Get()->Request.GetParams());
     Timeout = TDuration::Seconds(std::min((ui32)Timeout.Seconds(), 30u));
 

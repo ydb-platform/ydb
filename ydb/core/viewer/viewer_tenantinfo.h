@@ -19,6 +19,8 @@ class TJsonTenantInfo : public TViewerPipeClient {
     using TThis = TJsonTenantInfo;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
+    static constexpr bool RunOnDynnode = true;
+
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
     std::unordered_map<TString, TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse>> TenantStatusResponses;
     std::unordered_map<TString, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateKeySetResult;
@@ -110,10 +112,7 @@ public:
         return TBase::MakeRequestSchemeShardDescribe(schemeShardId, path, options);
     }
 
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);

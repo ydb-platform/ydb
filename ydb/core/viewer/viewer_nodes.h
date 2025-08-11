@@ -59,6 +59,7 @@ class TJsonNodes : public TViewerPipeClient {
     using TNodeId = ui32;
     using TPDiskId = std::pair<TNodeId, ui32>;
     using TFieldsType = std::bitset<+ENodeFields::COUNT>;
+    static constexpr bool RunOnDynnode = true;
 
     enum ENavigateRequest {
         ENavigateRequestDatabase,
@@ -1091,11 +1092,7 @@ public:
         }
     }
 
-    void Bootstrap() override {
-        if (TBase::NeedToRedirect()) {
-            return;
-        }
-
+    void BootstrapEx() override {
         NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         {
             auto request = std::make_unique<TEvWhiteboard::TEvNodeStateRequest>();

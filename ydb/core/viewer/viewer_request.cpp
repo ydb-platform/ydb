@@ -35,13 +35,13 @@ public:
     {
     }
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         TBase::RequestSettings.MergeFields = Event->Get()->Record.GetMergeFields();
         TBase::RequestSettings.Timeout = Event->Get()->Record.GetTimeout();
         for (TNodeId nodeId : Event->Get()->Record.GetLocation().GetNodeId()) {
             TBase::RequestSettings.FilterNodeIds.push_back(nodeId);
         }
-        TBase::Bootstrap();
+        TBase::BootstrapEx();
     }
 
     THolder<TRequestEventType> BuildRequest() override;

@@ -15,6 +15,7 @@ using namespace NActors;
 
 class TJsonWhoAmI : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
+    static constexpr bool RunOnDynnode = true;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
@@ -24,14 +25,11 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap() {
-        if (NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         ReplyAndPassAway();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NACLibProto::TUserToken userToken;
         Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(Event->Get()->UserToken);
         NJson::TJsonValue json(NJson::JSON_MAP);

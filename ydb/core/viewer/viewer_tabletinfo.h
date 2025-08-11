@@ -13,6 +13,7 @@ struct TWhiteboardInfo<NKikimrWhiteboard::TEvTabletStateResponse> {
     using TElementTypePacked5 = NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponsePacked5;
     using TElementKeyType = std::pair<ui64, ui32>;
 
+    static constexpr bool RunOnDynnode = true;
     static constexpr bool StaticNodesOnly = false;
 
     static ::google::protobuf::RepeatedPtrField<TElementType>& GetElementsField(TResponseType& response) {
@@ -85,10 +86,7 @@ public:
         LogPrefix = prefix;
     }
 
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         const auto& params(Event->Get()->Request.GetParams());
         TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
@@ -132,7 +130,7 @@ public:
             RequestTxProxyDescribe(params.Get("path"), options);
             Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
         } else {
-            TBase::Bootstrap();
+            TBase::BootstrapEx();
         }
     }
 
@@ -362,7 +360,7 @@ public:
             }
         }
         if (!Tablets.empty()) {
-            TBase::Bootstrap();
+            TBase::BootstrapEx();
             for (auto tablet : Tablets) {
                 Request->Record.AddFilterTabletId(tablet.first);
             }

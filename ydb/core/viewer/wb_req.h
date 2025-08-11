@@ -93,7 +93,7 @@ public:
         }
     }
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         std::replace(RequestSettings.FilterNodeIds.begin(),
                      RequestSettings.FilterNodeIds.end(),
                      (ui32)0,

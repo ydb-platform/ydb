@@ -10,6 +10,8 @@ class TJsonACL : public TViewerPipeClient {
     using TThis = TJsonACL;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
+    static constexpr bool RunOnDynnode = true;
+
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
     TRequestResponse<TEvTxUserProxy::TEvProposeTransactionStatus> ProposeStatus;
     TRequestResponse<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult> NotifyTxCompletionResult;
@@ -213,13 +215,7 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
-        if (PostData.IsDefined() && NeedToWriteAuditLog()) {
-            return;
-        }
+    void BootstrapEx() override {
         MergeRules = FromStringWithDefault<bool>(Params.Get("merge_rules"), MergeRules);
         if (Params.Has("dialect")) {
             static const std::unordered_map<TString, const TDialect*> dialects = {

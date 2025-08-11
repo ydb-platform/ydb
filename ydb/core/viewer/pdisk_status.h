@@ -26,10 +26,7 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap() override {
-        if (NeedToWriteAuditLog()) {
-            return;
-        }
+    void BootstrapEx() override {
         if (!PostData.IsDefined()) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
         }

@@ -40,7 +40,7 @@ public:
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         TString pDiskId = Params.Get("pdisk_id");
         if (pDiskId.Contains('-')) {
             PDiskId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), Max<ui32>());

@@ -13,6 +13,8 @@ class TCheckAccess : public TViewerPipeClient {
     using TThis = TCheckAccess;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
+    static constexpr bool RunOnDynnode = true;
+
     TAutoPtr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
     TVector<TString> Permissions;
 
@@ -21,10 +23,7 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         const auto& params(Event->Get()->Request.GetParams());
         ui32 timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         if (params.Has("permissions")) {

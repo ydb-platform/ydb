@@ -17,6 +17,8 @@ using namespace NActors;
 class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
     using TBase = TViewerPipeClient;
+    static constexpr bool RunOnDynnode = true;
+
     std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
     TString Action;
@@ -335,14 +337,7 @@ public:
         InitConfig(Params);
     }
 
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
-        if (NeedToWriteAuditLog()) {
-            return;
-        }
-
+    void BootstrapEx() override {
         if (Query.empty() && Action != "cancel-query" && Action != "fetch-long-query") {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }

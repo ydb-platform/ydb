@@ -7,6 +7,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/db_metadata_cache.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/mon/audit/audit.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -32,8 +33,11 @@ public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
+    static constexpr bool RunOnDynnode = false;
 
-    virtual void Bootstrap() = 0;
+    virtual void Bootstrap() final;
+    virtual void BootstrapPre() {};
+    virtual void BootstrapEx() = 0;
     virtual void ReplyAndPassAway() = 0;
 
 protected:
@@ -44,7 +48,7 @@ protected:
     TString SharedDatabase;
     bool Direct = false;
     bool NeedRedirect = true;
-    bool NeedAuditLog = true;
+    bool NeedAudit = true;
     i32 DataRequests = 0; // how many requests we wait to process data
     bool PassedAway = false;
     bool ReplySent = false;
@@ -390,13 +394,13 @@ protected:
     void HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     STATEFN(StateResolveDatabase);
     STATEFN(StateResolveResource);
-    STATEFN(StateAudit);
+    void HandleTimeout();
+    void PassAway() override;
+
+private:
     void RedirectToDatabase(const TString& database);
     bool NeedToRedirect();
-    bool NeedToWriteAuditLog();
-    void HandleTimeout();
-    virtual void Execute() {};
-    void PassAway() override;
+    void WriteAuditLog();
 };
 
 }

@@ -11,23 +11,23 @@ namespace NMonitoring::NAudit {
 using TAuditParts = TVector<std::pair<TString, TString>>;
 
 class TAuditCtx {
-    enum ERequestStatus {
+    enum class ERequestStatus {
         Success,
         Process,
         Error,
     };
 
-    enum EState : ui8 {
+    enum class EState : ui8 {
         Init = 0,
-        PendingExecution = 1,
-        Executing = 2,
-        Completed = 3
+        Executing,
+        Completed,
     };
 
 public:
-    void InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev);
-    void AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
-    void LogAudit(ERequestStatus status, const TString& reason);
+    void Init(const NActors::NMon::TEvHttpInfo::TPtr& ev);
+    void Init(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev);
+    void SetUserToken(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
+    void SetUserToken(const NACLibProto::TUserToken& userToken);
     void LogOnExecute();
     void LogOnResult(const NHttp::THttpOutgoingResponsePtr& response);
 
@@ -35,19 +35,16 @@ private:
     static ERequestStatus GetStatus(const NHttp::THttpOutgoingResponsePtr response);
     static TString ToString(const ERequestStatus value);
     static TString GetReason(const NHttp::THttpOutgoingResponsePtr& response);
+    void LogAudit(ERequestStatus status, const TString& reason);
     void AddAuditLogPart(TStringBuf name, const TString& value);
-    bool AuditableRequest(const TString& method, const TString& url, const TCgiParameters& cgiParams);
-
-    TAuditParts Parts;
-    bool Auditable = false;
-    EState State = EState::Init;
+    bool AuditableRequest(const HTTP_METHOD method, const TString& url, const TCgiParameters& cgiParams);
 
     NACLibProto::ESubjectType SubjectType = NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-    TString Subject;
-    TString SanitizedToken;
+    TAuditParts Parts;
+    EState State = EState::Init;
 };
 
 bool HttpAuditEnabled(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
-bool HttpAuditEnabled(TString serializedToken);
+// bool HttpAuditEnabled(TString serializedToken);
 
 }

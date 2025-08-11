@@ -63,7 +63,7 @@ public:
         TVector<TString> AllowedSIDs;
         bool SortPages = true;
         TString MonServiceName = "utils";
-        bool AutoAudit = true;
+        bool AutoAuditStart = true;
     };
 
     NMonitoring::IMonPage* RegisterActorPage(TRegisterActorPageFields fields);
@@ -77,7 +77,7 @@ public:
         TActorId Handler;
         bool UseAuth = true;
         TVector<TString> AllowedSIDs;
-        bool AutoAudit = true;
+        bool AutoAuditStart = true;
     };
 
     void RegisterActorHandler(const TRegisterHandlerFields& fields);

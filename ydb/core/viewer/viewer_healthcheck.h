@@ -19,6 +19,7 @@ enum HealthCheckResponseFormat {
 class TJsonHealthCheck : public TViewerPipeClient {
     using TThis = TJsonHealthCheck;
     using TBase = TViewerPipeClient;
+    static constexpr bool RunOnDynnode = true;
     static const bool WithRetry = false;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
@@ -63,10 +64,7 @@ public:
         SelfCheckResult = MakeRequest<NHealthCheck::TEvSelfCheckResult>(NHealthCheck::MakeHealthCheckID(), MakeSelfCheckRequest().Release());
     }
 
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
-        }
+    void BootstrapEx() override {
         const auto& params(Event->Get()->Request.GetParams());
         Format = HealthCheckResponseFormat::JSON;
         if (params.Has("format")) {

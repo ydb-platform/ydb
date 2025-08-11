@@ -39,7 +39,7 @@ public:
         record->MutableOptions()->SetReturnPartitionStats(true);
     }
 
-    void Bootstrap() override {
+    void BootstrapEx() override {
         const auto& params(Event->Get()->Request.GetParams());
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Limit = FromStringWithDefault<ui32>(params.Get("limit"), 10);

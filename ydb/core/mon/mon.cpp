@@ -381,7 +381,7 @@ public:
         if (Event->Get()->Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
         }
-        AuditCtx.InitAudit(Event);
+        AuditCtx.Init(Event);
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
             NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Event->Get()->Request.Get());
@@ -524,10 +524,10 @@ public:
         }
         TString serializedToken;
         if (result && result->UserToken) {
-            AuditCtx.AddAuditLogParts(result->UserToken);
+            AuditCtx.SetUserToken(result->UserToken);
             serializedToken = result->UserToken->GetSerializedToken();
         }
-        if (!ActorMonPage->AutoAudit) {
+        if (ActorMonPage->AutoAuditStart) {
             AuditCtx.LogOnExecute();
         }
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
@@ -564,18 +564,11 @@ public:
             return ReplyForbiddenAndPassAway("SID is not allowed");
         }
     }
-
-    void Handle(NHttp::TEvHttpProxy::TEvAuditExecute::TPtr& ev) {
-        AuditCtx.LogOnExecute(true);
-        Send(ev->Sender, new NHttp::TEvHttpProxy::TEvAuditExecuteConfirmed(), 0, ev->Cookie);
-    }
-
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(NMon::IEvHttpInfoRes, HandleResponse);
             hFunc(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult, Handle);
-            hFunc(NHttp::TEvHttpProxy::TEvAuditExecute, Handle);
         }
     }
 };
@@ -597,11 +590,11 @@ public:
     }
 
     void Bootstrap() {
-        AuditCtx.InitAudit(Event);
         ProcessRequest();
     }
 
     void ProcessRequest() {
+        AuditCtx.Init(Event);
         AuditCtx.LogOnExecute();
         Container.Page->Output(Container);
         NHttp::THttpOutgoingResponsePtr response = Event->Get()->Request->CreateResponseString(Container.Str());
@@ -1058,7 +1051,7 @@ public:
     }
 
     void Bootstrap() {
-        AuditCtx.InitAudit(Event);
+        AuditCtx.Init(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         if (Fields.UseAuth && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
@@ -1179,10 +1172,10 @@ public:
                 << " " << request->URL);
         }
         if (result && result->UserToken) {
-            AuditCtx.AddAuditLogParts(result->UserToken);
+            AuditCtx.SetUserToken(result->UserToken);
             Event->Get()->UserToken = result->UserToken->GetSerializedToken();
         }
-        if (!Fields.AutoAudit) {
+        if (!Fields.AutoAuditStart) {
             AuditCtx.LogOnExecute();
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
@@ -1238,11 +1231,6 @@ public:
         CancelSubscriber = std::move(ev);
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvAuditExecute::TPtr& ev) {
-        AuditCtx.LogOnExecute(true);
-        Send(ev->Sender, new NHttp::TEvHttpProxy::TEvAuditExecuteConfirmed(), 0, ev->Cookie);
-    }
-
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -1250,7 +1238,6 @@ public:
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvSubscribeForCancel, Handle);
-            hFunc(NHttp::TEvHttpProxy::TEvAuditExecute, Handle);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
         }
     }
@@ -1516,7 +1503,7 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
         fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
         fields.MonServiceName,
-        fields.AutoAudit
+        fields.AutoAuditStart
     );
     if (fields.Index) {
         fields.Index->Register(page);

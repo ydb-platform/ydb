@@ -41,10 +41,7 @@ public:
         return true;
     }
 
-    void Bootstrap() override {
-        if (NeedToWriteAuditLog()) {
-            return;
-        }
+    void BootstrapEx() override {
         ui32 groupId = 0;
         ui32 groupGeneration = 0;
         ui32 failRealmIdx = 0;

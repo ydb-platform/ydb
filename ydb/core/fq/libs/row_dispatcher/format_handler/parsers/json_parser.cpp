@@ -488,6 +488,22 @@ public:
     }
 
 protected:
+#define HANDLE_ERROR(status) \
+    do { \
+        if (Buffer.Recovery.IsActive()) { \
+            /* TODO */ \
+            /* if (DoRecovery) { */ \
+            /*     DoRecovery(); */ \
+            /*     Buffer.Clear(); */ \
+            /*     if (!Buffer.IsReady()) { return TStatus::Success(); } */ \
+            /* } else */ \
+            return status; \
+        } else { \
+            Buffer.StartRecovery(); \
+        } \
+        goto retry; \
+    } while(0)
+
     TStatus DoParsing() override {
 retry:
         Y_ENSURE(Buffer.IsReady(), "Nothing to parse");
@@ -511,20 +527,6 @@ retry:
         simdjson::ondemand::document_stream documents;
         CHECK_JSON_ERROR(Parser.iterate_many(values, size, size).get(documents)) {
             auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-#define HANDLE_ERROR(status) \
-            if (Config.ErrorTolerant) { \
-                if (Buffer.Recovery.IsActive()) { \
-                    /* TODO log error, feed to somewhere, etc */ \
-                    Buffer.Clear(); \
-                    if (!Buffer.IsReady()) { \
-                       return TStatus::Success(); \
-                    } \
-                } else { \
-                    Buffer.StartRecovery(); \
-                } \
-                goto retry; \
-            } \
-            return status
             HANDLE_ERROR(status);
         }
 
@@ -565,8 +567,11 @@ retry:
 
         for (auto& column : Columns) {
             column.ValidateNumberValues(rowId, GetOffsets());
-            if (Config.ErrorTolerant && column.GetStatus().IsFail()) {
-                HANDLE_ERROR(column.GetStatus());
+            if (column.GetStatus().IsFail()) {
+                if (!Buffer.Recovery.IsActive()) {
+                    Buffer.StartRecovery();
+                    goto retry;
+                }
             }
         }
 
@@ -651,7 +656,6 @@ TJsonParserConfig CreateJsonParserConfig(const NKikimrConfig::TSharedReadingConf
         result.BufferCellCount = bufferCellCount;
     }
     result.LatencyLimit = TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs());
-    result.ErrorTolerant = parserConfig.GetErrorTolerant();
     return result;
 }
 

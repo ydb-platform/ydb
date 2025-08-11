@@ -347,6 +347,8 @@ private:
 
         bool enableTempTablesForUser = TableServiceConfig.GetEnableTempTablesForUser();
 
+        bool enableSimpleProgramsSinglePartitionOptimization = TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimization();
+
         ui32 defaultLangVer = TableServiceConfig.GetDefaultLangVer();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
@@ -388,6 +390,7 @@ private:
             TableServiceConfig.GetEnableIndexStreamWrite() != enableIndexStreamWrite ||
             TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections ||
             TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser ||
+            TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimization() != enableSimpleProgramsSinglePartitionOptimization ||
             TableServiceConfig.GetDefaultLangVer() != defaultLangVer)
         {
 

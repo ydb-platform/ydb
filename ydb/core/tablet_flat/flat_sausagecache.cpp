@@ -81,7 +81,7 @@ void TPrivatePageCache::DropPageCollection(TInfo *info) {
     --Stats.TotalCollections;
 }
 
-TSharedPageRef TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
+TSharedPageRef TPrivatePageCache::TryGetPage(TPageId pageId, TInfo *info) {
     auto page = info->FindPage(pageId);
     if (!page) {
         return {};

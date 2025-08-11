@@ -91,7 +91,7 @@ namespace NTabletFlatExecutor {
                 return &pinnedPage->PinnedBody;
             }
 
-            auto sharedBody = Cache.Lookup(pageId, info);
+            auto sharedBody = Cache.TryGetPage(pageId, info);
 
             if (!sharedBody) {
                 ToLoadPage(pageId, info);

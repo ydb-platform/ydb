@@ -137,7 +137,7 @@ public:
 
     const TStats& GetStats() const { return Stats; }
 
-    TSharedPageRef Lookup(TPageId pageId, TInfo *info);
+    TSharedPageRef TryGetPage(TPageId pageId, TInfo *info);
 
     void DropPage(TPageId pageId, TInfo *info);
     void AddPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info);

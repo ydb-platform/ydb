@@ -1,5 +1,4 @@
 import codecs
-import os
 import pytest
 import re
 import cyson
@@ -11,7 +10,7 @@ from yql_utils import execute, get_supported_providers, get_tables, get_files, g
     get_pragmas, KSV_ATTR, is_xfail, get_param, YQLExecResult, yql_binary_path, do_custom_error_check
 from yqlrun import YQLRun
 
-from test_utils import get_parameters_json, replace_vars
+from test_utils import get_parameters_json, replace_vars, get_case_file
 
 
 def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False, allow_llvm=True, postprocess_func=None):
@@ -56,7 +55,7 @@ def check_provider(provider, config):
         pytest.skip('%s provider is not supported here' % provider)
 
 
-def get_sql_query(provider, suite, case, config, data_path=None, template='.sql'):
+def get_sql_query(provider, suite, case, config, data_path=None, template={'.sql', '.yql'}):
     pragmas = get_pragmas(config)
 
     if get_param('TARGET_PLATFORM'):
@@ -66,7 +65,7 @@ def get_sql_query(provider, suite, case, config, data_path=None, template='.sql'
     if get_param('TARGET_PLATFORM') and is_xfail(config):
         pytest.skip('xfail is not supported on non-default target platform')
 
-    program_sql = os.path.join(data_path, suite, '%s%s' % (case, template))
+    program_sql = get_case_file(data_path, suite, case, template)
 
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
@@ -91,7 +90,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                       run_sql=True, cfg_postprocess=None, langver=None, attr_postprocess=None):
     check_provider(provider, config)
 
-    sql_query = get_sql_query(provider, suite, case, config, data_path, template='.sql' if run_sql else '.yqls')
+    sql_query = get_sql_query(provider, suite, case, config, data_path, template={'.sql', '.yql'} if run_sql else '.yqls')
     sql_query = replace_vars(sql_query, "yqlrun_var")
 
     xfail = is_xfail(config)

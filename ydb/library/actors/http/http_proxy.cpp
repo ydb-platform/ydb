@@ -63,27 +63,12 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event) {
-        TStringBuf url = event->Get()->Request->URL.Before('?');
-        THashMap<TString, TActorId>::iterator it;
-        while (!url.empty()) {
-            it = Handlers.find(url);
-            if (it != Handlers.end()) {
-                Send(event->Forward(it->second));
-                return;
-            } else {
-                if (url.EndsWith('/')) {
-                    url.Chop(1);
-                } else {
-                    size_t pos = url.rfind('/');
-                    if (pos == TStringBuf::npos) {
-                        break;
-                    } else {
-                        url = url.substr(0, pos + 1);
-                    }
-                }
-            }
+        TActorId handler = Handlers.GetHandler(event->Get()->Request->GetURI());
+        if (handler) {
+            Send(event->Forward(handler));
+        } else {
+            Send(event->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Request->CreateResponseNotFound()));
         }
-        Send(event->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(event->Get()->Request->CreateResponseNotFound()));
     }
 
     void Handle(TEvHttpProxy::TEvHttpIncomingResponse::TPtr& event) {
@@ -156,7 +141,7 @@ protected:
 
     void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr& event) {
         ALOG_TRACE(HttpLog, "Register handler " << event->Get()->Path << " to " << event->Get()->Handler);
-        Handlers[event->Get()->Path] = event->Get()->Handler;
+        Handlers.RegisterHandler(event->Get()->Path, event->Get()->Handler);
     }
 
     void Handle(TEvHttpProxy::TEvResolveHostRequest::TPtr& event) {
@@ -290,7 +275,7 @@ protected:
     static constexpr TDuration HostsTimeToLive = TDuration::Seconds(60);
 
     THashMap<TString, THostEntry> Hosts;
-    THashMap<TString, TActorId> Handlers;
+    TUrlHandler Handlers;
     THashSet<TActorId> Connections; // outgoing
     std::unordered_multimap<TString, TActorId> AvailableConnections;
     std::weak_ptr<NMonitoring::IMetricFactory> Registry;
@@ -322,6 +307,33 @@ TEvHttpProxy::TEvReportSensors* BuildIncomingRequestSensors(const THttpIncomingR
 
 NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry) {
     return new THttpProxy(std::move(registry));
+}
+
+void TUrlHandler::RegisterHandler(const TString& url, const TActorId& handler) {
+    Handlers[url] = handler;
+}
+
+TActorId TUrlHandler::GetHandler(const TString& url) const {
+    THashMap<TString, TActorId>::const_iterator it;
+    TStringBuf currentUrl = url;
+    while (!currentUrl.empty()) {
+        it = Handlers.find(currentUrl);
+        if (it != Handlers.end()) {
+            return it->second;
+        } else {
+            if (currentUrl.EndsWith('/')) {
+                currentUrl.Chop(1);
+            } else {
+                size_t pos = currentUrl.rfind('/');
+                if (pos == TStringBuf::npos) {
+                    break;
+                } else {
+                    currentUrl = currentUrl.substr(0, pos + 1);
+                }
+            }
+        }
+    }
+    return {};
 }
 
 bool IsIPv6(const TString& host) {

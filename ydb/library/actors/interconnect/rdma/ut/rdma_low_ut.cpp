@@ -1,5 +1,7 @@
 #include "utils.h"
 
+#include <util/thread/pool.h>
+
 #include <string.h>
 
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
@@ -38,6 +40,101 @@ TEST(RdmaLow, ReadInOneProcessIpV4) {
 
 TEST(RdmaLow, ReadInOneProcessIpV6) {
     DoReadInOneProcess("::1");
+}
+
+/*
+ * This test cover the sutuation when sender going to reuse memory but has no
+ * information about remote reading in progress.
+ * In this case we change QP on the sender to the 'Reset' state and expect reader will fail with read error
+ */
+TEST(RdmaLow, ReadInOneProcessWithQpInterruption) {
+    TString addr = "127.0.0.1";
+
+    auto rdma = InitLocalRdmaStuff(addr);
+
+    THolder<IThreadPool> pool = CreateThreadPool(2, 2);
+    const int intialAttempts = 50000;
+
+    // Use attempt as timeout to delay to run mem corrupter 
+    int attempt = intialAttempts;
+
+    // bin search works unstable here due to small ammount of time to trigger race
+    while (attempt--) {
+        auto reg1 = AllocSourceRegion(rdma->MemPool);
+        auto reg2 = rdma->MemPool->Alloc(reg1->GetSize(), 0);
+        std::vector<char> expected(reg1->GetSize());
+        memcpy(expected.data(), (char*)reg1->GetAddr(), reg1->GetSize());
+
+        NThreading::TPromise<void> promise = NThreading::NewPromise<void>();
+        NThreading::TFuture<void> done = promise.GetFuture();
+
+        class TMemCorrupter : public IObjectInQueue {
+        public:
+            TMemCorrupter(char* mem, size_t sz, TQueuePair* qp, int attempt, NThreading::TPromise<void> promise)
+                : Mem(mem)
+                , Sz(sz)
+                , Qp(qp)
+                , Attempt(attempt)
+                , Promise(std::move(promise))
+            {} 
+            virtual void Process(void*) override {
+                // Delay to get a chanse to triger memset just during the RDMA read.
+                Sleep(TDuration::MicroSeconds(Attempt / 128));
+                Qp->ToResetState();
+                memset(Mem, 'Q', Sz);
+                Promise.SetValue();
+            }
+        private:
+            char* Mem;
+            size_t Sz;
+            TQueuePair* Qp;
+            const int Attempt;
+            NThreading::TPromise<void> Promise;
+        } corrupter((char*)reg1->GetAddr(), reg1->GetSize(), &rdma->Qp1, attempt, std::move(promise));
+
+        std::function<void()> srcInterruptHook = [&pool, &corrupter]() noexcept {
+            bool added = pool->Add(&corrupter);
+            Y_ABORT_UNLESS(added);
+        };
+
+        auto readResult = ReadOneMemRegion(rdma, rdma->Qp2, reg1->GetAddr(), reg1->GetRKey(rdma->Ctx->GetDeviceIndex()), MEM_REG_SZ, reg2, std::move(srcInterruptHook));
+
+        // Whait until corrupter finished
+        done.Wait();
+
+        switch (readResult) {
+            case EReadResult::OK: // corrupter fired too late, just check data is ok
+                ASSERT_TRUE(strncmp(expected.data(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
+                break;
+            case EReadResult::WRPOST_ERR: // currupter fired too early, increase timeout
+                attempt = std::min(intialAttempts, attempt *= 2);
+                break;
+            case EReadResult::READ_ERR:
+                Cerr << "passed at " << attempt << Endl;
+                return;
+        }
+        if (attempt == 0) {
+            Cerr << "race was not triggered, restart..." << Endl;
+            attempt = intialAttempts; 
+        }
+
+        {
+            rdma->Qp1.ToResetState(); 
+            rdma->Qp2.ToResetState(); 
+
+            auto qp1num = rdma->Qp1.GetQpNum();
+
+            {
+                int err = rdma->Qp2.ToRtsState(rdma->Ctx, qp1num, rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
+                EXPECT_TRUE(err == 0);
+            }
+
+            {
+                int err = rdma->Qp1.ToRtsState(rdma->Ctx, rdma->Qp2.GetQpNum(), rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
+                EXPECT_TRUE(err == 0);
+            }
+        }
+    }
 }
 
 TEST(RdmaLow, CqOverflow) {
@@ -121,7 +218,7 @@ TEST(RdmaLow, CqOverflow) {
 
             int err = qp2.SendRdmaReadWr(wr->GetId(), reg2->GetAddr(), reg2->GetLKey(ctx->GetDeviceIndex()), reg1->GetAddr(), reg1->GetRKey(ctx->GetDeviceIndex()), MEM_REG_SZ);
             if (err) {
-                Cerr << "get post err: " << err << Endl;
+                Cerr << "got post err: " << err << Endl;
                 wr->Release();
             } else {
                 completed.emplace_back(future);

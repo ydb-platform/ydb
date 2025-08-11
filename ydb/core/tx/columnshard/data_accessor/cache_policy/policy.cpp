@@ -22,7 +22,18 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 AFL_VERIFY(RequestedAddresses.erase(address));
                 objects.emplace(address, std::move(i));
             }
-            Callback->OnReceiveData(OwnerActorId, std::move(objects), std::move(RequestedAddresses), {});
+
+            THashMap<TAddress, TString> errorAddresses;
+            for (const auto& requestedAddress : RequestedAddresses) {
+                errorAddresses.emplace(requestedAddress, TStringBuilder{}
+                    << "portion { tablet: " << requestedAddress.GetTabletActorId()
+                    << ", portion_id: " << requestedAddress.GetPortionId()
+                    << ", path_id: " << requestedAddress.GetPathId()
+                    << ", internal_portion_address: " << requestedAddress.GetInternalPortionAddress().DebugString()
+                    << " } has already been removed");
+            }
+
+            Callback->OnReceiveData(OwnerActorId, std::move(objects), std::move(RequestedAddresses), std::move(errorAddresses));
         }
 
     public:

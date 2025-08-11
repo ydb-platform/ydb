@@ -1003,7 +1003,7 @@ private:
         NIceDb::TNiceDb db{txc.DB};
         for (const auto& idx : buildInfo.DoneShards) {
             auto& status = buildInfo.Shards.at(idx);
-            Self->PersistBuildIndexUploadReset(db, BuildId, idx, status);
+            Self->PersistBuildIndexShardStatusReset(db, BuildId, idx, status);
         }
         buildInfo.DoneShards.clear();
         Self->PersistBuildIndexProcessed(db, buildInfo);
@@ -1042,7 +1042,7 @@ private:
 
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
-            Self->PersistBuildIndexUploadReset(db, buildInfo);
+            Self->PersistBuildIndexShardStatusReset(db, buildInfo);
             ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
             Progress(BuildId);
             return false;
@@ -1066,7 +1066,7 @@ private:
 
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
-            Self->PersistBuildIndexUploadReset(db, buildInfo);
+            Self->PersistBuildIndexShardStatusReset(db, buildInfo);
             if (!needsAnotherLevel) {
                 LOG_D("FillPrefixedVectorIndex Done " << buildInfo.DebugString());
                 return true;
@@ -1207,7 +1207,7 @@ private:
             LOG_D("FillVectorIndex NextLevel " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
-            Self->PersistBuildIndexUploadReset(db, buildInfo);
+            Self->PersistBuildIndexShardStatusReset(db, buildInfo);
             ChangeState(BuildId, buildInfo.KMeans.Level > 2
                                     ? TIndexBuildInfo::EState::DropBuild
                                     : TIndexBuildInfo::EState::CreateBuild);
@@ -1404,7 +1404,7 @@ public:
                     buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
                     nextState = TIndexBuildInfo::EState::LockBuild;
                     NIceDb::TNiceDb db{txc.DB};
-                    Self->PersistBuildIndexUploadReset(db, buildInfo);
+                    Self->PersistBuildIndexShardStatusReset(db, buildInfo);
                     finalState = false;
                 } else if (buildInfo.IsValidatingUniqueIndex()) {
                     TString errorDesc;
@@ -1674,7 +1674,7 @@ public:
                 shardRange.From = std::move(bound);
             }
 
-            Self->PersistBuildIndexUploadInitiate(db, BuildId, x.ShardIdx, it->second);
+            Self->PersistBuildIndexShardStatusInitiate(db, BuildId, x.ShardIdx, it->second);
         }
 
         return true;
@@ -1894,7 +1894,7 @@ public:
         case NKikimrIndexBuilder::EBuildStatus::ACCEPTED: // TODO: do we need ACCEPTED?
         case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS: {
             HandleProgress(shardStatus, buildInfo);
-            Self->PersistBuildIndexUploadProgress(db, BuildId, shardIdx, shardStatus);
+            Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
             // no progress
             // no pipe close
             return true;
@@ -1904,7 +1904,7 @@ public:
             Y_ENSURE(erased);
             buildInfo.DoneShards.emplace_back(shardIdx);
             HandleDone(db, buildInfo);
-            Self->PersistBuildIndexUploadProgress(db, BuildId, shardIdx, shardStatus);
+            Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
             Self->IndexBuildPipes.Close(BuildId, shardId, ctx);
             Progress(BuildId);
             return true;
@@ -1914,7 +1914,7 @@ public:
             bool erased = buildInfo.InProgressShards.erase(shardIdx);
             Y_ENSURE(erased);
             buildInfo.ToUploadShards.emplace_front(shardIdx);
-            Self->PersistBuildIndexUploadProgress(db, BuildId, shardIdx, shardStatus);
+            Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
             Self->IndexBuildPipes.Close(BuildId, shardId, ctx);
             Progress(BuildId);
             return true;
@@ -1926,7 +1926,7 @@ public:
                 << " at Filling stage, process has to be canceled"
                 << ", shardId: " << shardId
                 << ", shardIdx: " << shardIdx);
-            Self->PersistBuildIndexUploadProgress(db, BuildId, shardIdx, shardStatus);
+            Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
             Self->IndexBuildPipes.Close(BuildId, shardId, ctx);
             ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
             Progress(BuildId);
@@ -2215,7 +2215,7 @@ public:
         } else {
             OnShardError(db, buildInfo, shardStatus, shardId, shardIdx);
         }
-        Self->PersistShardValidationResult(db, BuildId, shardIdx, shardStatus);
+        Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
         Progress(BuildId);
 
         return true;

@@ -12,7 +12,8 @@ namespace NKikimr {
     TPDiskParams::TPDiskParams(NPDisk::TOwner owner, ui64 ownerRound, ui32 OwnerWeight, ui32 slotSizeInUnits,
                                ui32 chunkSize, ui32 appendBlockSize,
                                ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize,
-                               ui64 writeBlockSize, ui64 bulkWriteBlockSize, NPDisk::EDeviceType trueMediaType)
+                               ui64 writeBlockSize, ui64 bulkWriteBlockSize, NPDisk::EDeviceType trueMediaType,
+                               bool isTinyDisk)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , OwnerWeight(OwnerWeight)
@@ -29,6 +30,7 @@ namespace NKikimr {
         , PrefetchSizeBytes(CalculatePrefetchSizeBytes(seekTimeUs, readSpeedBps))
         , GlueRequestDistanceBytes(CalculateGlueRequestDistanceBytes(seekTimeUs, readSpeedBps))
         , TrueMediaType(trueMediaType)
+        , IsTinyDisk(isTinyDisk)
     {
         Y_VERIFY_DEBUG(AppendBlockSize <= ChunkSize);
     }
@@ -74,6 +76,7 @@ namespace NKikimr {
         str << " BulkWriteBlockSize# " << BulkWriteBlockSize;
         str << " PrefetchSizeBytes# " << PrefetchSizeBytes;
         str << " GlueRequestDistanceBytes# " << GlueRequestDistanceBytes;
+        str << " IsTinyDisk# " << IsTinyDisk;
         str << "}";
         return str.Str();
     }
@@ -143,6 +146,10 @@ namespace NKikimr {
                     TABLER() {
                         TABLED() {str << "GlueRequestDistanceBytes";}
                         TABLED() {str << GlueRequestDistanceBytes;}
+                    }
+                    TABLER() {
+                        TABLED() {str << "IsTinyDisk";}
+                        TABLED() {str << IsTinyDisk;}
                     }
                 }
             }

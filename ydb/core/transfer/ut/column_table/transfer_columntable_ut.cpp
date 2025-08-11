@@ -83,6 +83,11 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
     }
 
 
+    Y_UNIT_TEST(MessageField_Attributes)
+    {
+        MessageField_Attributes(TableType);
+    }
+
     Y_UNIT_TEST(MessageField_CreateTimestamp)
     {
         MessageField_CreateTimestamp(TableType);

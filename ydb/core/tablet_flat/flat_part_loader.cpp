@@ -321,7 +321,7 @@ TLoader::TFetch TLoader::StagePreloadData()
     auto partStore = PartView.As<TPartStore>();
 
     // Note: preload works only for main group pages    
-    auto total = partStore->PageCollections[0]->Total();
+    auto total = partStore->PageCollections[0]->PageCollection->Total();
 
     TVector<TPageId> toLoad(::Reserve(total));
     for (TPageId pageId : xrange(total)) {

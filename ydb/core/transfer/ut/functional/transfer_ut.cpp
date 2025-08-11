@@ -570,6 +570,41 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    Y_UNIT_TEST(DescribeTransferWithErrorTopicNotFound)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(false));
+
+        testCase.CheckTransferStateError("Path not found");
+
+        auto d = testCase.DescribeTransfer();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetState(), TTransferDescription::EState::Error);
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetSrcPath(), TStringBuilder() << "local/" << testCase.TopicName);
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetDstPath(), TStringBuilder() << "/local/" << testCase.TableName);
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
     Y_UNIT_TEST(CustomConsumer)
     {
         MainTestCase testCase;
@@ -1416,6 +1451,68 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.DropTopic();
         testCase.DropTransfer();
+    }
+
+    Y_UNIT_TEST(MessageField_Key) {
+        MainTestCase(std::nullopt).Run({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:CAST($x._key AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withAttributes({ {"__key", "key_value"} })},
+
+            .Expectations = {{
+                _C("Value", TString("key_value")),
+            }}
+        });
+    }
+
+    Y_UNIT_TEST(MessageField_Key_Empty) {
+        MainTestCase(std::nullopt).Run({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:CAST($x._key AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withAttributes({ {"__not_key", "key_value"} })},
+
+            .Expectations = {{
+                _T<NullChecker>("Value"),
+            }}
+        });
     }
 }
 

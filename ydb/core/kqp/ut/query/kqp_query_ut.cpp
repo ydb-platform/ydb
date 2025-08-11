@@ -1433,6 +1433,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
      Y_UNIT_TEST(OlapTemporary) {
         auto settings = TKikimrSettings().SetEnableTempTables(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);

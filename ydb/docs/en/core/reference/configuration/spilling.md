@@ -233,8 +233,6 @@ table_service_config:
       enable: true
       root: ""
       max_total_size: 21474836480    # 20 GiB
-      max_file_size: 5368709120      # 5 GiB (deprecated)
-      max_file_part_size: 104857600  # 100 MB (deprecated)
       io_thread_pool:
         workers_count: 2
         queue_size: 1000

@@ -34,6 +34,19 @@ table_service_config:
 - `{TMP}` — system temporary directory, determined from the `TMPDIR` environment variable or standard system paths
 - `<username>` — username under which the {{ ydb-short-name }} process is running
 
+Spilling files have the following name format:
+
+`node_<node_id>_<session_id>`
+
+Where:
+- `node_id` — node identifier
+- `session_id` — unique session identifier that is created when initializing the [Spilling Service](../../contributor/spilling-service.md) once when the ydbd process starts
+
+**Example of a complete spilling file path:**
+```
+/tmp/spilling-tmp-user/node_1_32860791-037c-42b4-b201-82a0a337ac80
+```
+
 **Important notes:**
 
 - At process startup, all existing spilling files in the specified directory are automatically deleted. Spilling files have a special name format that includes a session identifier, which is generated once when the ydbd process starts. When a new process starts, all files in the spilling directory that match the name format but have a different session identifier from the current one are deleted.

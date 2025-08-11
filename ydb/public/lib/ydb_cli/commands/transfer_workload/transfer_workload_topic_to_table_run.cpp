@@ -123,6 +123,7 @@ void TCommandWorkloadTransferTopicToTableRun::Parse(TConfig& config)
 
     Scenario.EnsurePercentileIsValid();
     Scenario.EnsureWarmupSecIsValid();
+    Scenario.EnsureRatesIsValid();
 }
 
 int TCommandWorkloadTransferTopicToTableRun::Run(TConfig& config)

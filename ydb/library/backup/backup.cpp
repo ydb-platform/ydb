@@ -628,7 +628,7 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
     const auto viewDescription = DescribeView(driver, dbPath);
 
     const auto creationQuery = NDump::BuildCreateViewQuery(
-        TFsPath(dbPathRelativeToBackupRoot).GetName(),
+        TString(TPathSplitUnix(dbPathRelativeToBackupRoot).back()),
         dbPath,
         TString(viewDescription.GetQueryText()),
         dbBackupRoot,

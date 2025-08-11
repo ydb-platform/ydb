@@ -39,6 +39,10 @@ TTopicMessage::TTopicMessage(ui64 offset, const TString& data)
 {
 }
 
+NYdb::NTopic::TMessageMeta::TPtr TTopicMessage::GetMessageMeta() const {
+    return MessageMeta;
+}
+
 ECodec TTopicMessage::GetCodec() const {
     return Codec;
 }

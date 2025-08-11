@@ -643,15 +643,24 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> SetConstraint(const TString& cluster, const TVector<TSetConstraintSettings>& settings) override {
+    TFuture<TGenericResult> SetConstraint(const TString& cluster, TVector<TSetConstraintSettings>&& settings) override {
         try {
             if (cluster != SessionCtx->GetCluster()) {
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
             Y_UNUSED(settings);
-            // NKikimrSchemeOp::TSetConstraintRequest setConstraintRequestSettings;
-            return {};
+            NKikimrSchemeOpConstraint::TSetConstraintRequest setConstraintRequestSettings;
+
+            for (auto&& setting : settings) {
+                setConstraintRequestSettings.AddConstraintSettings()->CopyFrom(std::move(setting));
+            }
+
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            *modifyScheme.MutableSetConstraintRequest() = std::move(setConstraintRequestSettings);
+            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
+
+            return Gateway->ModifyScheme(std::move(modifyScheme));
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));

@@ -20,6 +20,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
+#include <ydb/core/protos/set_constraint.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
@@ -679,7 +680,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     }
 };
 
-using TSetConstraintSettings = NKikimrSchemeOp::TSetConstraintSettings;
+using TSetConstraintSettings = NKikimrSchemeOpConstraint::TSetConstraintSettings;
 
 struct TAlterDatabaseSettings {
     TString DatabasePath;
@@ -1171,7 +1172,7 @@ public:
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& cluster, const TVector<TSetConstraintSettings>& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& cluster, TVector<TSetConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 

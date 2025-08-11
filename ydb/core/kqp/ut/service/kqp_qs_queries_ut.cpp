@@ -5502,10 +5502,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableSetConstraint(true);
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableSetConstraint(true);
+        auto kikimr = TKikimrRunner(TKikimrSettings(config));
 
-        TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto client = kikimr.GetQueryClient();
@@ -5558,10 +5558,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableSetConstraint(true);
-
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSetConstraint(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
+
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto client = kikimr.GetQueryClient();

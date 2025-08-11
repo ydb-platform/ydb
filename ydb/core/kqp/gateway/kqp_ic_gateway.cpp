@@ -914,7 +914,7 @@ public:
         return tablePromise.GetFuture();
     }
 
-    TFuture<TGenericResult> SetConstraint(const TString&, const TVector<NYql::TSetConstraintSettings>&) override {
+    TFuture<TGenericResult> SetConstraint(const TString&, TVector<NKikimrSchemeOpConstraint::TSetConstraintSettings>&&) override {
         return NotImplemented<TGenericResult>();
     }
 

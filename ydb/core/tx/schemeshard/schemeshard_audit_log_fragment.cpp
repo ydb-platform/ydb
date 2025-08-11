@@ -290,13 +290,10 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP SYSTEM VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         return "CHANGE PATH STATE";
-<<<<<<< HEAD
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         return "RESTORE INCREMENTAL FINALIZE";
-=======
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint:
         return "SET CONSTRAINT";
->>>>>>> ff7929a13d2 (finish the skeleton of functions in kqp and schemeshard. Now ut can be compiled)
     }
     Y_ABORT("switch should cover all operation types");
 }

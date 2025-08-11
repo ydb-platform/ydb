@@ -1736,7 +1736,7 @@ public:
                                     TSetConstraintSettings value;
                                     value.SetTablePath(table.Metadata->Name);
                                     value.SetColumnName(TString(columnName));
-                                    value.SetConstraint(TSetConstraintSettings::NotNull);
+                                    value.SetConstraint(TSetConstraintSettings::NOT_NULL);
 
                                     constraintSetObjects.push_back(std::move(value));
                                 }
@@ -2212,7 +2212,7 @@ public:
             bool isSetConstraint = (!constraintSetObjects.empty());
 
             if (isSetConstraint) {
-                future = Gateway->SetConstraint(cluster, constraintSetObjects);
+                future = Gateway->SetConstraint(cluster, std::move(constraintSetObjects));
             } else if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {

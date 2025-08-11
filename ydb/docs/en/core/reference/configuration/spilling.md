@@ -31,6 +31,9 @@ table_service_config:
 **Default:** `""` (automatic detection)  
 **Description:** Directory for saving spilling files. When empty, the system automatically creates a directory in the format `{TMP}/spilling-tmp-<username>`.
 
+- `{TMP}` — system temporary directory, determined from the `TMPDIR` environment variable or standard system paths
+- `<username>` — username under which the {{ ydb-short-name }} process is running
+
 **Important features:**
 
 - At process startup, all existing spilling files in the specified directory are automatically deleted

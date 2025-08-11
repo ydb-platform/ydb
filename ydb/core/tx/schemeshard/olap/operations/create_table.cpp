@@ -1,3 +1,4 @@
+#include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -714,10 +715,40 @@ public:
             AddDefaultFamilyIfNotExists(createDescription);
             TOlapTableConstructor tableConstructor;
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
+            for (auto x : createDescription.GetSchema().GetColumns()) {
+                switch (x.GetTypeInfo().GetTypeName()) {
+                    case NScheme::NTypeIds::Date32:
+                    case NScheme::NTypeIds::Datetime64:
+                    case NScheme::NTypeIds::Timestamp64:
+                    case NScheme::NTypeIds::Interval64:
+                        if (!AppData()->FeatureFlags.GetEnableTableDatetime64()) {
+                            errStr = Sprintf("Type '%s' specified for column '%s', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)", col.GetType().data(), colName.data());
+                            return nullptr;
+                        }
+                        break;
+                };
+            }
+
         }
 
         if (!tableInfo) {
             return result;
+        }
+
+        const TOlapSchema* schemaToCheck = nullptr;
+        if (tableInfo->IsStandalone()) {
+            // For standalone tables, the schema is directly in the description
+            schemaToCheck = &tableInfo->col;
+        } else if (storeInfo) {
+            // For tables in a store, get the specific preset schema
+            schemaToCheck = storeInfo->GetPresetVerified(tableInfo->Description.GetSchemaPresetId()).get();
+        }
+
+        if (schemaToCheck) {
+            if (!NKikimr::NSchemeShard::NOlap::CheckTypes(*schemaToCheck, AppData(), errStr)) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+                return result;
+            }
         }
 
         dstPath.MaterializeLeaf(owner);

@@ -355,6 +355,38 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     }
     AFL_VERIFY(itIncoming == itIncomingEnd);
 
+    if (AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        const ui32 rowsCount = incomingBatch->num_rows();
+        for (const ui32 columnId : {(ui32) IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32) IIndexInfo::ESpecialColumn::TX_ID}) {
+            if (chunks.contains(columnId)) {
+                continue;
+            }
+
+            auto loader = GetIndexInfo().GetColumnLoaderVerified(columnId);
+            auto saver = GetIndexInfo().GetColumnSaver(columnId);
+            saver.AddSerializerWithBorder(100, NArrow::NSerialization::TNativeSerializer::GetUncompressed());
+            saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast());
+            const auto& columnFeatures = GetIndexInfo().GetColumnFeaturesVerified(columnId);
+
+            auto zeroScalar = std::make_shared<arrow::UInt64Scalar>(1);
+            AFL_VERIFY(zeroScalar)("error", "Cannot create zero scalar for type " + columnFeatures.GetArrowField()->type()->ToString());
+            auto array = NArrow::TThreadSimpleArraysCache::Get(columnFeatures.GetArrowField()->type(), zeroScalar, rowsCount);
+            auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
+            TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrToWrite =
+                loader->GetAccessorConstructor()->Construct(accessor, loader->BuildAccessorContext(accessor->GetRecordsCount()));
+
+            if (arrToWrite.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build accessor for special column")("reason", arrToWrite.GetErrorMessage());
+                return arrToWrite;
+            }
+
+            std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks = {std::make_shared<NChunks::TChunkPreparation>(
+                loader->GetAccessorConstructor()->SerializeToString(*arrToWrite, loader->BuildAccessorContext(rowsCount)),
+                *arrToWrite, TChunkAddress(columnId, 0), columnFeatures)};
+            AFL_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
+        }
+    }
+
     TGeneralSerializedSlice slice(chunks, schemaDetails, splitterCounters);
     std::vector<TSplittedBlob> blobs;
     if (!slice.GroupBlobs(blobs, NSplitter::TEntityGroups(NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(),

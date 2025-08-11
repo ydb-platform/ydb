@@ -389,6 +389,7 @@ public:
         , Config(config)
         , MaxNumberRows(CalculateMaxNumberRows())
         , LogPrefix("TJsonParser: ")
+        , Counters(counters.CountersSubgroup)
     {
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
@@ -491,6 +492,7 @@ protected:
 #define HANDLE_ERROR(status) \
     do { \
         if (Buffer.Recovery.IsActive()) { \
+            Counters->GetCounter("DocumentErrors")->Inc(); \
             /* TODO */ \
             /* if (DoRecovery) { */ \
             /*     DoRecovery(); */ \
@@ -500,6 +502,7 @@ protected:
             return status; \
         } else { \
             Buffer.StartRecovery(); \
+            Counters->GetCounter("ReparseOnError")->Inc(); \
         } \
         goto retry; \
     } while(0)
@@ -569,9 +572,11 @@ retry:
             column.ValidateNumberValues(rowId, GetOffsets());
             if (column.GetStatus().IsFail()) {
                 if (!Buffer.Recovery.IsActive()) {
+                    Counters->GetCounter("ReparseOnError")->Inc();
                     Buffer.StartRecovery();
                     goto retry;
                 }
+                Counters->GetCounter("ColumnErrors")->Inc();
             }
         }
 
@@ -634,6 +639,7 @@ private:
     simdjson::ondemand::parser Parser;
     TVector<NYql::NUdf::TUnboxedValue> ParsedValuesBuffer;
     TVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedValues;
+    NMonitoring::TDynamicCounterPtr Counters;
 };
 
 }  // anonymous namespace

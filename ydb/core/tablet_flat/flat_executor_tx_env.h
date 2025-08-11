@@ -24,11 +24,11 @@ namespace NTabletFlatExecutor {
         using TInfo = TPrivatePageCache::TInfo;
 
         struct TStats {
-            size_t NewlyPinnedCount = 0;
-            ui64 NewlyPinnedSize = 0;
+            size_t NewlyPinnedPages = 0;
+            ui64 NewlyPinnedBytes = 0;
     
-            size_t ToLoadCount = 0;
-            ui64 ToLoadSize = 0;
+            size_t ToLoadPages = 0;
+            ui64 ToLoadBytes = 0;
         };
 
         const TStats& GetStats() const { return Stats; }
@@ -76,9 +76,9 @@ namespace NTabletFlatExecutor {
     private:
         void ToLoadPage(TPageId pageId, TInfo *info) {
             if (ToLoad[info->Id].insert(pageId).second) {
-                Stats.ToLoadCount++;
+                Stats.ToLoadPages++;
                 Y_ASSERT(!info->IsStickyPage(pageId));
-                Stats.ToLoadSize += info->GetPageSize(pageId);
+                Stats.ToLoadBytes += info->GetPageSize(pageId);
             }
         }
 
@@ -102,9 +102,9 @@ namespace NTabletFlatExecutor {
             Y_ENSURE(emplaced.second);
             auto& pinnedBody = emplaced.first->second.PinnedBody;
 
-            Stats.NewlyPinnedCount++;
+            Stats.NewlyPinnedPages++;
             if (!info->IsStickyPage(pageId)) {
-                Stats.NewlyPinnedSize += pinnedBody.size();
+                Stats.NewlyPinnedBytes += pinnedBody.size();
             }
             
             return &pinnedBody;

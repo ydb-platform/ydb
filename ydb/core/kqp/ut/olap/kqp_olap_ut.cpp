@@ -4080,6 +4080,40 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(BuklUpsertIntoNotNullableColumn, AddNull) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TTestHelper testHelper(settings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("hash").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("length").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        const TString tableName = "/Root/ttt";
+        testTable.SetName(tableName).SetPrimaryKey({ "hash" }).SetSharding({ "hash" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        {
+            TTestHelper::TUpdatesBuilder rowsBuilder(testTable.GetArrowSchema(schema));
+            for (ui32 i = 0; i < 10; ++i) {
+                auto hash = TStringBuilder() << "SomeArtificalHash:" << TString(i, '0');
+                if (AddNull && (i == 5)) { //Add single incorrect row
+                    rowsBuilder.AddRow().Add(hash.c_str()).AddNull();
+                } else {
+                    rowsBuilder.AddRow().Add(hash.c_str()).Add(hash.size());
+                }
+            }
+            if (AddNull) {
+                testHelper.BulkUpsert(testTable, rowsBuilder, Ydb::StatusIds::BAD_REQUEST,
+                    "Cannot write data into shard(Incorrect request: cannot prepare incoming batch: empty field for non-default column: "
+                    "'length')");
+            } else {
+                testHelper.BulkUpsert(testTable, rowsBuilder);
+            }
+        }
+    }
+
     Y_UNIT_TEST(InsertEmptyString) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

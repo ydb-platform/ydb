@@ -700,14 +700,15 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             return BuildTableMeta(meta, pos, ctx);
         });
 
-    auto is_uniq = [](std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
-        return x.second->Type == TIndexDescription::EType::GlobalSyncUnique;
+    auto idxNeedsKqpEffect = [](std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
+        return x.second->Type == TIndexDescription::EType::GlobalSyncUnique ||
+            x.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree;
     };
 
-    const bool hasUniqIndex = std::find_if(indexes.begin(), indexes.end(), is_uniq) != indexes.end();
+    const bool needsKqpEffect = std::find_if(indexes.begin(), indexes.end(), idxNeedsKqpEffect) != indexes.end();
 
-    // For uniq index rewrite UPDATE in to UPDATE ON
-    if (hasUniqIndex) {
+    // For unique or vector index rewrite UPDATE to UPDATE ON
+    if (needsKqpEffect) {
         auto effect = Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))
             .Input<TKqpWriteConstraint>()

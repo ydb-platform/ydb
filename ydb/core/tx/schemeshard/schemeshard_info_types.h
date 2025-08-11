@@ -3053,6 +3053,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Rejected = 550
     };
 
+    enum class ESubState: ui32 {
+        // Common
+        Invalid = 0,
+
+        // Filling
+        UniqIndexValidation = 100,
+    };
+
     struct TColumnBuildInfo {
         TString ColumnName;
         Ydb::TypedValue DefaultFromLiteral;
@@ -3089,7 +3097,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildVectorIndex = 11,
         BuildPrefixedVectorIndex = 12,
         BuildColumns = 20,
-        ValidateUniqueIndex = 30, // This build kind is set after filling the index
     };
 
     TActorId CreateSender;
@@ -3180,6 +3187,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TKMeans KMeans;
 
     EState State = EState::Invalid;
+    ESubState SubState = ESubState::Invalid;
 private:
     TString Issue;
 public:
@@ -3427,6 +3435,8 @@ public:
 
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());
+        indexInfo->SubState = TIndexBuildInfo::ESubState(
+            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::Invalid)));
         indexInfo->Issue =
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
 
@@ -3643,10 +3653,6 @@ public:
         return BuildKind == EBuildKind::BuildColumns;
     }
 
-    bool IsValidateUniqueIndex() const {
-        return BuildKind == EBuildKind::ValidateUniqueIndex;
-    }
-
     bool IsDone() const {
         return State == EState::Done;
     }
@@ -3657,6 +3663,10 @@ public:
 
     bool IsFinished() const {
         return IsDone() || IsCancelled();
+    }
+
+    bool IsValidatingUniqueIndex() const {
+        return SubState == ESubState::UniqIndexValidation;
     }
 
     void AddNotifySubscriber(const TActorId& actorID) {
@@ -4009,6 +4019,7 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
     }
 
     o << ", State: " << info.State;
+    o << ", SubState: " << info.SubState;
     o << ", IsBroken: " << info.IsBroken;
     o << ", IsCancellationRequested: " << info.CancelRequested;
 

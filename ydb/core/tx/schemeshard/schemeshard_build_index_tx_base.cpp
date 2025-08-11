@@ -276,7 +276,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     TPath table = TPath::Init(info.TablePathId, Self);
     settings.set_source_path(table.PathString());
 
-    if (info.IsBuildIndex() || info.IsValidateUniqueIndex()) {
+    if (info.IsBuildIndex()) {
         Ydb::Table::TableIndex& index = *settings.mutable_index();
         index.set_name(info.IndexName);
 

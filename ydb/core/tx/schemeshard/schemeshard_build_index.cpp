@@ -135,6 +135,7 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
 void TSchemeShard::PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
         NIceDb::TUpdate<Schema::IndexBuild::State>(ui32(indexInfo.State)),
+        NIceDb::TUpdate<Schema::IndexBuild::SubState>(ui32(indexInfo.SubState)),
         NIceDb::TUpdate<Schema::IndexBuild::Issue>(indexInfo.GetIssue()),
         NIceDb::TUpdate<Schema::IndexBuild::StartTime>(indexInfo.StartTime.Seconds()),
         NIceDb::TUpdate<Schema::IndexBuild::EndTime>(indexInfo.EndTime.Seconds())
@@ -241,12 +242,6 @@ void TSchemeShard::PersistBuildIndexDropColumnsTxStatus(NIceDb::TNiceDb& db, con
 void TSchemeShard::PersistBuildIndexDropColumnsTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
         NIceDb::TUpdate<Schema::IndexBuild::DropColumnsTxDone>(indexInfo.DropColumnsTxDone));
-}
-
-void TSchemeShard::PersistBuildIndexBuildKind(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    Y_ENSURE(indexInfo.BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(indexInfo.BuildKind)));
 }
 
 void TSchemeShard::PersistBuildIndexProcessed(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {

@@ -448,7 +448,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
     auto& indexBuild = *modifyScheme.MutableApplyIndexBuild();
     indexBuild.SetTablePath(TPath::Init(buildInfo.TablePathId, ss).PathString());
 
-    if (buildInfo.IsBuildIndex() || buildInfo.IsValidateUniqueIndex()) {
+    if (buildInfo.IsBuildIndex()) {
         indexBuild.SetIndexName(buildInfo.IndexName);
     }
 
@@ -486,7 +486,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
 
     addUnlock(TPath::Init(buildInfo.TablePathId, ss));
 
-    if (buildInfo.IsValidateUniqueIndex()) {
+    if (buildInfo.IsValidatingUniqueIndex()) {
         // Unlock also indexImplTable
         addUnlock(GetBuildPath(ss, buildInfo, NTableIndex::ImplTable));
     }
@@ -960,28 +960,22 @@ private:
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
         }
-        auto done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildSecondaryIndexRequest(shardIdx, buildInfo); }) &&
-               buildInfo.DoneShards.size() == buildInfo.Shards.size();
+        const bool sendValidateRequest = buildInfo.IsValidatingUniqueIndex();
+        bool done = SendToShards(buildInfo,
+            [&](TShardIdx shardIdx) {
+                if (sendValidateRequest) {
+                    SendValidateUniqueIndexRequest(shardIdx, buildInfo);
+                } else {
+                    SendBuildSecondaryIndexRequest(shardIdx, buildInfo);
+                }
+            });
+
+        if (buildInfo.DoneShards.size() != buildInfo.Shards.size()) {
+            done = false;
+        }
 
         if (done) {
             LOG_D("FillSecondaryIndex Done");
-        }
-
-        return done;
-    }
-
-    bool FillUniqueIndexValidation(TIndexBuildInfo& buildInfo) {
-        LOG_D("FillUniqueIndexValidation Start");
-
-        if (NoShardsAdded(buildInfo)) {
-            AddAllShards(buildInfo);
-        }
-
-        auto done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendValidateUniqueIndexRequest(shardIdx, buildInfo); }) &&
-               buildInfo.DoneShards.size() == buildInfo.Shards.size();
-
-        if (done) {
-            LOG_D("FillUniqueIndexValidation Done");
         }
 
         return done;
@@ -1279,9 +1273,6 @@ private:
                 return FillVectorIndex(txc, buildInfo);
             case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:
                 return FillPrefixedVectorIndex(txc, buildInfo);
-            case TIndexBuildInfo::EBuildKind::ValidateUniqueIndex:
-                Y_ENSURE(buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalUnique);
-                return FillUniqueIndexValidation(buildInfo);
             default:
                 Y_ENSURE(false);
                 return true;
@@ -1431,19 +1422,18 @@ public:
                 bool finalState = true;
                 if (buildInfo.IsCancellationRequested()) {
                     nextState = buildInfo.IsBuildColumns() ? TIndexBuildInfo::EState::Cancellation_DroppingColumns : TIndexBuildInfo::EState::Cancellation_Applying;
-                } else if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalUnique && buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryIndex) {
+                } else if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalUnique && !buildInfo.IsValidatingUniqueIndex()) {
                     // After filling unique index we need to validate it.
                     // This includes:
                     // - Locking index shards
                     // - Validating each index shard for index keys uniqueness
                     // - Applying cross-shard validation
-                    buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::ValidateUniqueIndex;
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
                     nextState = TIndexBuildInfo::EState::LockBuild;
                     NIceDb::TNiceDb db{txc.DB};
-                    Self->PersistBuildIndexBuildKind(db, buildInfo);
                     Self->PersistBuildIndexUploadReset(db, buildInfo);
                     finalState = false;
-                } else if (buildInfo.IsValidateUniqueIndex()) {
+                } else if (buildInfo.IsValidatingUniqueIndex()) {
                     TString errorDesc;
                     if (!PerformCrossShardIndexValidation(buildInfo, errorDesc)) {
                         NIceDb::TNiceDb db(txc.DB);
@@ -1513,11 +1503,11 @@ public:
             }
             break;
         case TIndexBuildInfo::EState::LockBuild:
-            Y_ENSURE(buildInfo.IsBuildVectorIndex() || buildInfo.IsValidateUniqueIndex());
+            Y_ENSURE(buildInfo.IsBuildVectorIndex() || buildInfo.IsBuildSecondaryIndex() && buildInfo.IsValidatingUniqueIndex());
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
-                const TString tableName = buildInfo.IsValidateUniqueIndex() ? NTableIndex::ImplTable : buildInfo.KMeans.ReadFrom();
+                const TString tableName = buildInfo.IsValidatingUniqueIndex() ? NTableIndex::ImplTable : buildInfo.KMeans.ReadFrom();
                 Send(Self->SelfId(), LockPropose(Self, buildInfo, buildInfo.ApplyTxId, GetBuildPath(Self, buildInfo, tableName)), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
@@ -1704,7 +1694,7 @@ public:
 
         TTableInfo::TPtr table;
         bool initRange = true;
-        if (buildInfo.IsValidateUniqueIndex()) {
+        if (buildInfo.IsValidatingUniqueIndex()) {
             auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
             table = Self->Tables.at(path->PathId);
             initRange = false; // The real range will arrive after index validation for each shard: it will describe the first and the last index keys for further validation

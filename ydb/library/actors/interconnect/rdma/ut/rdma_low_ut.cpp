@@ -61,7 +61,7 @@ TEST(RdmaLow, ReadInOneProcessWithQpInterruption) {
     // bin search works unstable here due to small ammount of time to trigger race
     while (attempt--) {
         auto reg1 = AllocSourceRegion(rdma->MemPool);
-        auto reg2 = rdma->MemPool->Alloc(MEM_REG_SZ, 0);
+        auto reg2 = rdma->MemPool->Alloc(reg1->GetSize(), 0);
         std::vector<char> expected(reg1->GetSize());
         memcpy(expected.data(), (char*)reg1->GetAddr(), reg1->GetSize());
 

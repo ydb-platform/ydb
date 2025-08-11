@@ -1867,7 +1867,7 @@ message TCopySequence {
 
 message TSetConstraintSettings {
     enum EConstraint {
-        NotNull = 1;
+        NOT_NULL = 1;
     }
 
     optional string TablePath = 1;
@@ -1889,8 +1889,8 @@ message TSetConstraintCheck {
 
 message TSetConstraintFinalize {
     enum EStatus {
-        Success = 0;
-        ColumnConstraintViolation = 1;
+        SUCCESS = 0;
+        COLUMN_CONSTRAINT_VIOLATION = 1;
     }
 
     repeated TSetConstraintSettings ChangeConstraintSetting = 1;

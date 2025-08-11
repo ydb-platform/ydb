@@ -80,6 +80,12 @@ Where:
 
 ### Thread Pool Configuration (TIoThreadPoolConfig)
 
+{% note info %}
+
+I/O pool threads for spilling are created in addition to threads allocated for the [actor system](../../concepts/glossary.md#actor-system). When planning the number of threads, consider the overall system load.
+
+{% endnote %}
+
 #### WorkersCount
 
 **Type:** `uint32`  

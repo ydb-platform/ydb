@@ -1,5 +1,3 @@
-#include "kqp_host_impl.h"
-
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
@@ -12,8 +10,7 @@
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -2438,5 +2435,4 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckQueryTransformer() {
         });
 }
 
-} // namespace NKqp
 } // namespace NKikimr

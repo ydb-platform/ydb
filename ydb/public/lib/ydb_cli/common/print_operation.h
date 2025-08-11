@@ -38,5 +38,9 @@ void PrintOperationsList(const NOperation::TOperationsList<NYdb::NQuery::TScript
 void PrintOperation(const NYdb::NBackup::TIncrementalBackupResponse& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TIncrementalBackupResponse>& operations, EDataFormat format);
 
+// Incremental restore
+void PrintOperation(const NYdb::NBackup::TIncrementalRestoreResponse& operation, EDataFormat format);
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TIncrementalRestoreResponse>& operations, EDataFormat format);
+
 }
 }

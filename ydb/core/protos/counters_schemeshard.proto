@@ -673,4 +673,8 @@ enum ETxTypes {
     TXTYPE_LIST_INCREMENTAL_BACKUP = 104 [(TxTypeOpts) = {Name: "TxListIncrementalBackup"}];
     TXTYPE_FORGET_INCREMENTAL_BACKUP = 105 [(TxTypeOpts) = {Name: "TxForgetIncrementalBackup"}];
     TXTYPE_PROGRESS_INCREMENTAL_BACKUP = 106 [(TxTypeOpts) = {Name: "TxProgressIncrementalBackup"}];
+
+    TXTYPE_GET_INCREMENTAL_RESTORE = 107 [(TxTypeOpts) = {Name: "TxGetIncrementalRestore"}];
+    TXTYPE_LIST_INCREMENTAL_RESTORE = 108 [(TxTypeOpts) = {Name: "TxListIncrementalRestore"}];
+    TXTYPE_FORGET_INCREMENTAL_RESTORE = 109 [(TxTypeOpts) = {Name: "TxForgetIncrementalRestore"}];
 }

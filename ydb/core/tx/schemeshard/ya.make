@@ -225,6 +225,9 @@ SRCS(
     schemeshard_backup_incremental__get.cpp
     schemeshard_backup_incremental__list.cpp
     schemeshard_backup_incremental__progress.cpp
+    schemeshard_restore_incremental__forget.cpp
+    schemeshard_restore_incremental__get.cpp
+    schemeshard_restore_incremental__list.cpp
     schemeshard_bg_tasks__list.cpp
     schemeshard_billing_helpers.cpp
     schemeshard_build_index.cpp

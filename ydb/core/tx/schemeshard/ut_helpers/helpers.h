@@ -485,6 +485,14 @@ namespace NSchemeShardUT_Private {
     NKikimrBackup::TEvForgetIncrementalBackupResponse TestForgetIncrementalBackup(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 backupId,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
+    // Incremental restore API helpers
+    NKikimrBackup::TEvGetIncrementalRestoreResponse TestGetIncrementalRestore(TTestActorRuntime& runtime, ui64 id, const TString& dbName,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrBackup::TEvForgetIncrementalRestoreResponse TestForgetIncrementalRestore(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 restoreId,
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrBackup::TEvListIncrementalRestoresResponse TestListIncrementalRestores(TTestActorRuntime& runtime, const TString& dbName, ui64 pageSize = 100,
+            const TString& pageToken = TString(), Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+
     ////////// datashard
     ui64 GetDatashardState(TTestActorRuntime& runtime, ui64 tabletId);
     TString SetAllowLogBatching(TTestActorRuntime& runtime, ui64 tabletId, bool v);

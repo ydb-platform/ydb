@@ -4080,7 +4080,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(BuklUpsertIntoNotNullableColumn, AddNull) {
+    Y_UNIT_TEST_TWIN(BulkUpsertIntoNotNullableColumn, AddNull) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TTestHelper testHelper(settings);

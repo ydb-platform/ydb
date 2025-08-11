@@ -95,6 +95,9 @@ namespace NActors {
     void TInterconnectSessionTCP::Terminate(TDisconnectReason reason) {
         LOG_INFO_IC_SESSION("ICS01", "socket: %" PRIi64 " reason# %s", (Socket ? i64(*Socket) : -1), reason.ToString().data());
 
+        if (Qp) {
+            Qp->ToResetState();
+        }
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));
 
@@ -265,9 +268,14 @@ namespace NActors {
         Socket = std::move(ev->Get()->Socket);
         XdcSocket = std::move(ev->Get()->XdcSocket);
 
-        auto qp = std::move(ev->Get()->Qp);
         auto cq = std::move(ev->Get()->CqPtr);
-        RdmaCtx = qp ? qp->GetCtx() : nullptr;
+        {
+            auto qp = std::move(ev->Get()->Qp);
+            RdmaCtx = qp ? qp->GetCtx() : nullptr;
+            if (RdmaCtx) {
+                Qp.reset(qp.release());
+            }
+        }
 
         if (XdcSocket) {
             ZcProcessor.ApplySocketOption(*XdcSocket);
@@ -294,7 +302,7 @@ namespace NActors {
         // create input session actor
         ReceiveContext->UnlockLastPacketSerialToConfirm();
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params, std::move(qp), std::move(cq));
+            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params, Qp, std::move(cq));
         ReceiverId = RegisterWithSameMailbox(actor.Release());
 
         // register our socket in poller actor

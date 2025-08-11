@@ -513,3 +513,19 @@ IOutputStream& operator<<(IOutputStream& os, const std::unique_ptr<NInterconnect
     Out<std::unique_ptr<NInterconnect::NRdma::TQueuePair>>(os, qp);
     return os;
 }
+
+template<>
+void Out<std::shared_ptr<NInterconnect::NRdma::TQueuePair>>(IOutputStream& os, const std::shared_ptr<NInterconnect::NRdma::TQueuePair>& qp) {
+    if (qp) {
+        os << "[";
+        qp->Output(os);
+        os << "]";
+    } else {
+        os << "[none]"; 
+    }
+}
+
+IOutputStream& operator<<(IOutputStream& os, const std::shared_ptr<NInterconnect::NRdma::TQueuePair>& qp) {
+    Out<std::shared_ptr<NInterconnect::NRdma::TQueuePair>>(os, qp);
+    return os;
+}

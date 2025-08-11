@@ -240,14 +240,15 @@ public:
         for (const auto& registryRecord : SysViewsRegistry::RewrittenSysViews) {
             TSchema schema;
             registryRecord.FillSchemaFunc(schema);
-            SystemViews[registryRecord.Name] = std::move(schema);
+            SystemViews[registryRecord.Type] = std::move(schema);
+            SystemViewTypes[registryRecord.Name] = registryRecord.Type;
         }
     }
 
     bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const override final {
         if (MaybeSystemViewPath(path)) {
             auto maybeSystemViewName = path.back();
-            if (!SystemViews.contains(maybeSystemViewName)) {
+            if (!SystemViewTypes.contains(maybeSystemViewName)) {
                 return false;
             }
             TVector<TString> realPath(path.begin(), path.end() - 2);
@@ -259,14 +260,14 @@ public:
     }
 
     TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ESource sourceObjectType) const override final {
+        Y_UNUSED(viewName);
         Y_UNUSED(sourceObjectType);
-        const TSchema* view = SystemViews.FindPtr(viewName);
-        return view ? TMaybe<TSchema>(*view) : Nothing();
+        return Nothing();
     }
 
-    TMaybe<TSchema> GetSystemViewSchema(ESysViewType sysViewType) const override final {
-        Y_UNUSED(sysViewType);
-        return Nothing();
+    TMaybe<TSchema> GetSystemViewSchema(ESysViewType viewType) const override final {
+        const TSchema* view = SystemViews.FindPtr(viewType);
+        return view ? TMaybe<TSchema>(*view) : Nothing();
     }
 
     TVector<TString> GetSystemViewNames(ESource sourceObjectType) const override {
@@ -280,11 +281,11 @@ public:
     }
 
     bool IsSystemView(const TStringBuf viewName) const override final {
-        return SystemViews.contains(viewName);
+        return SystemViewTypes.contains(viewName);
     }
 
 private:
-    THashMap<TString, TSchema> SystemViews;
+    THashMap<ESysViewType, TSchema> SystemViews;
     THashMap<TString, ESysViewType> SystemViewTypes;
 };
 

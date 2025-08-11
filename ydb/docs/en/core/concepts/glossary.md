@@ -495,6 +495,19 @@ A **shared cache** is an [actor](#actor) that stores data pages recently accesse
 
 A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../reference/configuration/memory_controller_config.md).
 
+### Spilling {#spilling}
+
+**Spilling** is a memory management mechanism in {{ ydb-short-name }} that temporarily offloads data arising from intermediate computations and exceeding available RAM capacity to disk. Spilling enables execution of queries that require processing large data volumes exceeding available RAM.
+
+Spilling in {{ ydb-short-name }} is implemented through **Spilling Service** — an [actor service](#actor-service) that provides temporary storage for data blobs. The service operates as a key-value store where clients can save data by a unique identifier and retrieve it back by that identifier.
+
+Main types of spilling in {{ ydb-short-name }}:
+
+* **Compute node spilling** — offloading intermediate computation results (aggregations, sorting, join operations) to disk when memory limits are reached;
+* **Channel spilling** — offloading data in transfer channels between different query execution stages when buffers overflow.
+
+For more details on spilling, see the [dedicated article](spilling.md).
+
 ### Tablet types {#tablet-types}
 
 [Tablets](#tablet) can be considered a framework for building reliable components operating in a distributed system. {{ ydb-short-name }} has multiple components implemented using this framework, listed below.

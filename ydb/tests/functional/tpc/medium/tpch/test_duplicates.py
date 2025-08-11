@@ -27,7 +27,7 @@ class TestTpchDoubleImportBase(tpch.TestTpch1, FunctionalTestBase):
 
 
 class TestTpchDuplicatesZeroLevel(TestTpchDoubleImportBase):
-    """https://github.com/ydb-platform/ydb/issues/22252"""
+    """https://github.com/ydb-platform/ydb/issues/22253"""
 
     @classmethod
     def _alter_compaction(cls) -> str:
@@ -41,7 +41,7 @@ class TestTpchDuplicatesZeroLevel(TestTpchDoubleImportBase):
 
 
 class TestTpchDuplicatesNoCompaction(TestTpchDoubleImportBase):
-    """https://github.com/ydb-platform/ydb/issues/22253"""
+    """https://github.com/ydb-platform/ydb/issues/22252"""
 
     @classmethod
     def _alter_compaction(cls) -> str:

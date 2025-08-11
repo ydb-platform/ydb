@@ -62,16 +62,16 @@ sequenceDiagram
     participant FS as External storage
 
     Note over CN: Memory full
-    CN->>SS: Send data
+    CN->>SS: Send data (asynchronously)
+    Note over CN: Continues working with other data
     SS->>FS: Save data
-    SS->>CN: Confirmation
-    
-    Note over CN: Work with other data
+    SS-->>CN: Write confirmation (asynchronously)
     
     Note over CN: Need saved data
-    CN->>SS: Request data
+    CN->>SS: Request data (asynchronously)
+    Note over CN: Continues working with other data
     SS->>FS: Read data
-    SS->>CN: Return data
+    SS-->>CN: Return data (asynchronously)
 ```
 
 ## Configuration

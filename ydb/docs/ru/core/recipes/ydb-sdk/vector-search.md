@@ -130,7 +130,103 @@
     Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
 
     ```python
-    def insert_items(
+    def insert_items_vector_as_bytes(
+        pool: ydb.QuerySessionPool,
+        table_name: str,
+        items: list[dict],
+    ) -> None:
+        query = f"""
+        DECLARE $items AS List<Struct<
+            id: Utf8,
+            document: Utf8,
+            embedding: String
+        >>;
+
+        UPSERT INTO `{table_name}`
+        (
+        id,
+        document,
+        embedding
+        )
+        SELECT
+            id,
+            document,
+            embedding,
+        FROM AS_TABLE($items);
+        """
+
+        items_struct_type = ydb.StructType()
+        items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+        items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+        items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
+
+        for item in items:
+            item["embedding"] = convert_vector_to_bytes(item["embedding"])
+
+        pool.execute_with_retries(
+            query, {"$items": (items, ydb.ListType(items_struct_type))}
+        )
+
+        print(f"{len(items)} items inserted")
+    ```
+
+- C++
+
+    ```cpp
+    void InsertItemsAsBytes(
+        NYdb::NQuery::TQueryClient& client,
+        const std::string& tableName,
+        const std::vector<TItem>& items)
+    {
+        std::string query = std::format(R"(
+            DECLARE $items AS List<Struct<
+                id: Utf8,
+                document: Utf8,
+                embedding: String
+            >>;
+            UPSERT INTO `{0}`
+            (
+            id,
+            document,
+            embedding
+            )
+            SELECT
+                id,
+                document,
+                embedding,
+            FROM AS_TABLE($items);
+        )", tableName);
+
+        NYdb::TParamsBuilder paramsBuilder;
+        auto& valueBuilder = paramsBuilder.AddParam("$items");
+        valueBuilder.BeginList();
+        for (const auto& item : items) {
+            valueBuilder.AddListItem();
+            valueBuilder.BeginStruct();
+            valueBuilder.AddMember("id").Utf8(item.Id);
+            valueBuilder.AddMember("document").Utf8(item.Document);
+            valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
+            valueBuilder.EndStruct();
+        }
+        valueBuilder.EndList();
+        valueBuilder.Build();
+
+        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        }));
+
+        std::cout << items.size() << " items inserted" << std::endl;
+    }
+    ```
+
+- Python (alternative)
+
+    Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста.
+
+    Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
+
+    ```python
+    def insert_items_vector_as_float_list(
         pool: ydb.QuerySessionPool,
         table_name: str,
         items: list[dict],
@@ -167,10 +263,10 @@
         print(f"{len(items)} items inserted")
     ```
 
-- C++
+- C++ (alternative)
 
     ```cpp
-    void InsertItems(
+    void InsertItemsAsFloatList(
         NYdb::NQuery::TQueryClient& client,
         const std::string& tableName,
         const std::vector<TItem>& items)
@@ -364,7 +460,113 @@
 - Python
 
     ```python
-    def search_items(
+    def search_items_vector_as_bytes(
+        pool: ydb.QuerySessionPool,
+        table_name: str,
+        embedding: list[float],
+        strategy: str = "CosineSimilarity",
+        limit: int = 1,
+        index_name: str | None = None,
+    ) -> list[dict]:
+        view_index = f"VIEW {index_name}" if index_name else ""
+
+        sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+        query = f"""
+        DECLARE $embedding as String;
+
+        SELECT
+            id,
+            document,
+            Knn::{strategy}(embedding, $embedding) as score
+        FROM {table_name} {view_index}
+        ORDER BY score
+        {sort_order}
+        LIMIT {limit};
+        """
+
+        result = pool.execute_with_retries(
+            query,
+            {
+                "$embedding": (
+                    convert_vector_to_bytes(embedding),
+                    ydb.PrimitiveType.String,
+                ),
+            },
+        )
+
+        items = []
+
+        for result_set in result:
+            for row in result_set.rows:
+                items.append(
+                    {
+                        "id": row["id"],
+                        "document": row["document"],
+                        "score": row["score"],
+                    }
+                )
+
+        return items
+    ```
+
+- C++
+
+    ```cpp
+    std::vector<TResultItem> SearchItemsAsBytes(
+        NYdb::NQuery::TQueryClient& client,
+        const std::string& tableName,
+        const std::vector<float>& embedding,
+        const std::string& strategy,
+        std::uint64_t limit,
+        const std::optional<std::string>& indexName)
+    {
+        std::string viewIndex = indexName ? "VIEW " + *indexName : "";
+        std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
+
+        std::string query = std::format(R"(
+            DECLARE $embedding as String;
+            SELECT
+                id,
+                document,
+                Knn::{2}(embedding, $embedding) as score
+            FROM {0} {1}
+            ORDER BY score
+            {3}
+            LIMIT {4};
+        )", tableName, viewIndex, strategy, sortOrder, limit);
+
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$embedding")
+                .String(ConvertVectorToBytes(embedding))
+                .Build()
+            .Build();
+
+        std::vector<TResultItem> result;
+
+        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params, &query, &result](NYdb::NQuery::TSession session) {
+            auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+            if (execResult.IsSuccess()) {
+                auto parser = execResult.GetResultSetParser(0);
+                while (parser.TryNextRow()) {
+                    result.push_back({
+                        .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
+                        .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
+                        .Score = *parser.ColumnParser(2).GetOptionalFloat()
+                    });
+                }
+            }
+            return execResult;
+        }));
+
+        return result;
+    }
+    ```
+
+- Python (alternative)
+
+    ```python
+    def search_items_vector_as_float_list(
         pool: ydb.QuerySessionPool,
         table_name: str,
         embedding: list[float],
@@ -413,10 +615,10 @@
         return items
     ```
 
-- C++
+- C++ (alternative)
 
     ```cpp
-    std::vector<TResultItem> SearchItems(
+    std::vector<TResultItem> SearchItemsAsFloatList(
         NYdb::NQuery::TQueryClient& client,
         const std::string& tableName,
         const std::vector<float>& embedding,
@@ -535,9 +737,9 @@
             {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
         ]
 
-        insert_items(pool, table_name, items)
+        insert_items_vector_as_bytes(pool, table_name, items)
 
-        items = search_items(
+        items = search_items_vector_as_bytes(
             pool,
             table_name,
             embedding=[1, 0, 0],
@@ -552,12 +754,12 @@
             table_name,
             index_name=index_name,
             strategy="similarity=cosine",
-            dim=3,
+            dimension=3,
             levels=1,
             clusters=3,
         )
 
-        items = search_items(
+        items = search_items_vector_as_bytes(
             pool,
             table_name,
             embedding=[1, 0, 0],
@@ -639,10 +841,10 @@
                 {.Id = "8", .Document = "document 8", .Embedding = {0.02, 0.98, 0.1}},
                 {.Id = "9", .Document = "document 9", .Embedding = {0.0, 1.0, 0.05}},
             };
-            InsertItems(client, tableName, items);
-            PrintResults(SearchItems(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
+            InsertItemsAsBytes(client, tableName, items);
+            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
             AddIndex(driver, client, database, tableName, indexName, "similarity=cosine", 3, 1, 3);
-            PrintResults(SearchItems(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, indexName));
+            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, indexName));
         } catch (const std::exception& e) {
             std::cerr << "Execution failed: " << e.what() << std::endl;
         }

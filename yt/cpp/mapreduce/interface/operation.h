@@ -3214,7 +3214,7 @@ struct TJobTraceEvent
 
     ///
     /// @brief Index of the trace event.
-    i64 EventIndex;
+    i64 EventIndex = 0;
 
     ///
     /// @brief Raw evenr in json format.

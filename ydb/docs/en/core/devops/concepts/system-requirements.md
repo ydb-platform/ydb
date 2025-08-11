@@ -28,6 +28,8 @@ Prefer to use physical local disk drives for {{ ydb-short-name }} instead of vir
 
 Remember that {{ ydb-short-name }} uses some disk space for internal needs when planning disk capacity. For example, on a medium-sized cluster of 8 nodes, you can expect approximately 100 GB to be consumed for a static group on the whole cluster. On a large cluster with more than 1500 nodes, this will be about 200 GB. There are also 25.6 GB of logs on each Pdisk and a system area on each Pdisk. Its size depends on the size of the Pdisk, but is no less than 0.2 GB.
 
+The disk is also used for [spilling](../../concepts/spilling.md) — a memory management mechanism that allows temporarily saving intermediate query execution results to disk when running out of RAM. This is also important to consider when planning disk capacity. Detailed spilling configuration is described in the [Spilling Configuration](../../reference/configuration/spilling.md) section.
+
 ## Software Configuration {#software}
 
 A {{ ydb-short-name }} server can be run on servers with a Linux operating system, kernel 4.19 and higher, and libc 2.30. For example, Ubuntu 20.04, Debian 11, Fedora 34, or newer releases. {{ ydb-short-name }} uses the [TCMalloc](https://google.github.io/tcmalloc) memory allocator. To make it efficient, [enable](https://google.github.io/tcmalloc/tuning.html#system-level-optimizations) Transparent Huge Pages and Memory overcommitment.

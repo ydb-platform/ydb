@@ -12,6 +12,7 @@ class TpchSuiteBase(LoadSuiteBase):
     tables_size: dict[str, int] = {}
     skip_tests: list = []
     check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.ERROR
+    float_mode = 'decimal_ydb'
 
     @staticmethod
     def _get_tables_size(test_class) -> dict[str, int]:

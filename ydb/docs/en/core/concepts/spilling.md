@@ -27,77 +27,7 @@ When memory usage approaches the limit, the system:
 
 ## Spilling in {{ ydb-short-name }}
 
-### Spilling Architecture in {{ ydb-short-name }}
-
-The spilling mechanism in {{ ydb-short-name }} includes two main levels: the backend—a service for storing data in external storage, and the frontend—components that interact with this service and manage memory. Currently, a local disk is used as the external storage.
-
-#### Spilling Service
-
-This component is an [actor service](glossary.md#actor-service) that initializes at node startup. The service is designated as the **Spilling Service**.
-
-The service processes tasks (or events, in terms of the [actor system](glossary.md#actor-system)). Events can include the following types of jobs:
-
-* saving data blobs
-* loading data blobs
-* deleting data blobs
-
-The main function of the service is to implement storage that saves data blobs by a client-provided identifier and ensures blob retrieval by that identifier.
-
-Main service components:
-
-- **Task queue**: The service maintains an internal queue of read and write operations. All spilling requests are placed in this queue and processed asynchronously.
-- **Thread pool**: A pool of worker threads is used to perform I/O operations. The number of threads is [configurable](../reference/configuration/spilling.md#workerscount) and affects service performance.
-- **File management**: The service automatically creates, deletes, and manages files on disk.
-- **Resource monitoring**: The service monitors disk space usage, the number of active operations, and other performance metrics.
-
-#### Data Storage
-
-Data is saved in files on the local file system. The Spilling Service ensures:
-
-* distribution of records between files
-* file deletion
-* data lifecycle management
-
-In case of an unexpected restart, obsolete files are automatically deleted.
-
-#### Components Using Spilling
-
-System components are integrated with the Spilling Service and interact with it through actor system events:
-
-- **Memory state monitoring**: Compute nodes continuously monitor memory state through the allocator. The allocator informs nodes about decreasing free memory volume. However, the system does not wait for complete memory exhaustion, since the spilling process also requires additional memory resources for serialization and buffering.
-- **Event dispatch**: When spilling is required, the compute component (data transfer channel or compute core) performs the following actions:
-
-    1. Serializes data into a blob
-    2. Generates a unique identifier for the blob
-    3. Creates a spilling request with the blob and generated identifier
-    4. Sends the request to the Spilling Service
-    5. Releases resources and enters waiting mode, allowing other tasks to utilize computational resources
-
-- **Waiting for results**: After sending the request, the compute component releases resources for other tasks and enters waiting mode, allowing the system to optimally utilize cluster computing resources until the external storage write is complete.
-- **Response handling**: The Spilling Service processes the request and returns a write confirmation for the specified identifier or an error message. The compute component can continue only after receiving confirmation.
-
-##### Spilling Workflow Diagram
-
-```mermaid
-sequenceDiagram
-    participant CN as Compute node
-    participant SS as Spilling Service
-    participant FS as External storage
-
-    Note over CN: Memory full
-    CN->>SS: Send data
-    SS->>FS: Save data
-    SS->>CN: Confirmation
-    
-    Note over CN: Work with other data
-    
-    Note over CN: Need saved data
-    CN->>SS: Request data
-    SS->>FS: Read data
-    SS->>CN: Return data
-```
-
-- **Data reading**: When data recovery is needed, the component sends a read request with the blob identifier. The Spilling Service reads data from external storage and returns a response with the recovered data. During data loading, freed computational resources are utilized for processing other tasks.
+{{ ydb-short-name }} implements the spilling mechanism through **Spilling Service** — an [actor service](glossary.md#actor-service) that provides temporary storage for data blobs. Detailed technical information about Spilling Service is available in the [Spilling Service](../contributor/spilling-service.md) section.
 
 ### Types of Spilling in {{ ydb-short-name }}
 
@@ -140,6 +70,7 @@ Data transfer channels continuously monitor their state:
 
 ## See Also
 
+- [Spilling Service](../contributor/spilling-service.md)
 - [Spilling configuration](../reference/configuration/spilling.md)
 - [{{ ydb-short-name }} monitoring](../devops/observability/monitoring.md)
 - [Performance diagnostics](../troubleshooting/performance/index.md)

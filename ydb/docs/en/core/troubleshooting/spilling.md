@@ -48,7 +48,6 @@ Read more about spilling architecture in the section [Spilling Architecture in {
 
 - Increase `queue_size` in `io_thread_pool`
 - Increase `workers_count` for faster operation processing
-- Check disk performance
 
 ## See Also
 

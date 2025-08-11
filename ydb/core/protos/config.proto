@@ -1823,6 +1823,7 @@ message TAuditConfig {
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
     repeated TLogClassConfig LogClassConfig = 4;
+    optional bool LogRequestsOnReceiving = 5;
 };
 
 message THiveTabletLimit {

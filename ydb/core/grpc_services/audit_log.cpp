@@ -54,7 +54,7 @@ void AuditLog(std::optional<ui32> status, const TAuditLogParts& parts)
                 : ToString(*status)
             ))
         } else {
-            AUDIT_PART("status", TString("IN-PROGRESS"))
+            AUDIT_PART("status", TString("IN-PROCESS"))
         }
     );
 }

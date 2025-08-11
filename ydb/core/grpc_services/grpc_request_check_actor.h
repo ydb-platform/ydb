@@ -481,9 +481,8 @@ private:
 
         const TString sanitizedToken = TBase::GetSanitizedToken();
         if (auditEnabled) {
-            const bool logTwoEvents = true;
             AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
-            if (logTwoEvents) {
+            if (AppData()->AuditConfig.GetLogRequestsOnReceiving()) {
                 AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());
             }
 

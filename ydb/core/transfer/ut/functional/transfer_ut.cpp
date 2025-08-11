@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     return [
                         <|
                             Key:CAST($x._offset AS Uint64),
-                            Message:CAST($x._data || " new lambda" AS Utf8)
+                            Message:COALESCE(CAST($x._data || " new lambda" AS Utf8), "Message is empty")
                         |>
                     ];
                 };
@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         return [
                             <|
                                 Key:CAST($x._offset AS Uint64),
-                                Message:CAST($x._data || " 1 lambda" AS Utf8)
+                                Message:COALESCE(CAST($x._data || " 1 lambda" AS Utf8), "Message is empty")
                             |>
                         ];
                     };
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         return [
                             <|
                                 Key:CAST($x._offset AS Uint64),
-                                Message:CAST($x._data || " 2 lambda" AS Utf8)
+                                Message:COALESCE(CAST($x._data || " 2 lambda" AS Utf8), "Message is empty")
                             |>
                         ];
                     };
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     return [
                         <|
                             Key:CAST($x._offset AS Uint64),
-                            Message:CAST($x._data AS Utf8)
+                            Message:Unwrap(CAST($x._data AS Utf8), "data is empty")
                         |>
                     ];
                 };

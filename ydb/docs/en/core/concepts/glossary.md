@@ -499,13 +499,6 @@ A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} 
 
 **Spilling** is a memory management mechanism in {{ ydb-short-name }} that temporarily offloads intermediate data arising from computations and exceeding available node RAM capacity to external storage. In {{ ydb-short-name }}, disk storage is currently used for spilling. Spilling enables execution of queries that require processing large data volumes exceeding available node memory.
 
-Spilling in {{ ydb-short-name }} is implemented through **Spilling Service** — an [actor service](#actor-service) that provides temporary storage for data blobs. The service operates as a key-value store where clients can save data by a unique identifier and retrieve it back by that identifier.
-
-Main types of spilling in {{ ydb-short-name }}:
-
-* **Compute node spilling** — offloading intermediate computation results (aggregations, sorting, join operations) to disk when memory limits are reached;
-* **Channel spilling** — offloading data in transfer channels between different query execution stages when buffers overflow.
-
 For more details on spilling, see the [dedicated article](spilling.md).
 
 ### Tablet types {#tablet-types}

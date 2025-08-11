@@ -46,7 +46,7 @@ The main function of the service is to implement storage that saves data blobs b
 Main service components:
 
 - **Task queue**: The service maintains an internal queue of read and write operations. All spilling requests are placed in this queue and processed asynchronously.
-- **Thread pool**: A pool of worker threads is used to perform I/O operations. The number of threads is [configurable](../devops/configuration-management/configuration-v2/spilling-config.md#workerscount) and affects service performance.
+- **Thread pool**: A pool of worker threads is used to perform I/O operations. The number of threads is [configurable](../reference/configuration/spilling.md#workerscount) and affects service performance.
 - **File management**: The service automatically creates, deletes, and manages files on disk.
 - **Resource monitoring**: The service monitors disk space usage, the number of active operations, and other performance metrics.
 
@@ -140,6 +140,6 @@ Data transfer channels continuously monitor their state:
 
 ## See Also
 
-- [Spilling configuration](../devops/configuration-management/configuration-v2/spilling-config.md)
+- [Spilling configuration](../reference/configuration/spilling.md)
 - [{{ ydb-short-name }} monitoring](../devops/observability/monitoring.md)
 - [Performance diagnostics](../troubleshooting/performance/index.md)

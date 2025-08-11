@@ -2,7 +2,7 @@
 
 ## Overview
 
-[Spilling](../../../concepts/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that allows temporarily saving data to disk when running out of RAM. This section describes configuration parameters for setting up spilling in production environments.
+[Spilling](../../concepts/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that allows temporarily saving data to disk when running out of RAM. This section describes configuration parameters for setting up spilling in production environments.
 
 All spilling settings are located in the `table_service_config` section, which is at the same level as `host_configs`.
 
@@ -75,7 +75,7 @@ table_service_config:
 
 ### Relationship with memory_controller_config
 
-Spilling activation is closely related to memory controller settings. Detailed `memory_controller_config` configuration is described in a [separate article](../../../reference/configuration/index.md#memory-controller-config).
+Spilling activation is closely related to memory controller settings. Detailed `memory_controller_config` configuration is described in a [separate article](../../reference/configuration/index.html#memory-controller).
 
 The key parameter for spilling is **`activities_limit_percent`**, which determines the amount of memory allocated for query processing activities. This parameter affects the available memory for user queries and, accordingly, the frequency of spilling activation.
 
@@ -163,7 +163,7 @@ table_service_config:
 
 **Type:** `boolean`  
 **Default:** `true`  
-**Description:** Enables or disables the spilling service. When disabled (`false`), [spilling](../../../concepts/spilling.md) does not function, which may lead to errors when processing large data volumes.
+**Description:** Enables or disables the spilling service. When disabled (`false`), [spilling](../../concepts/spilling.md) does not function, which may lead to errors when processing large data volumes.
 
 ```yaml
 table_service_config:
@@ -218,7 +218,7 @@ table_service_config:
 
    - Enable spilling: `table_service_config.spilling_service_config.local_file_config.enable: true`
 
-   Read more about spilling architecture in the section [Spilling Architecture in {{ ydb-short-name }}](../../../concepts/spilling.md#spilling-architecture-in-ydb)
+   Read more about spilling architecture in the section [Spilling Architecture in {{ ydb-short-name }}](../../concepts/spilling.md#spilling-architecture-in-ydb)
 
 2. **Total size limit exceeded: X/YMb**
 
@@ -240,7 +240,7 @@ table_service_config:
 
 ## See Also
 
-- [Spilling Concept](../../../concepts/spilling.md)
-- [Memory Controller Configuration](../../../reference/configuration/index.md#memory-controller-config)
-- [{{ ydb-short-name }} Monitoring](../../observability/monitoring.md)
-- [Performance Diagnostics](../../../troubleshooting/performance/index.md)
+- [Spilling Concept](../../concepts/spilling.md)
+- [Memory Controller Configuration](../../reference/configuration/index.html#memory-controller)
+- [{{ ydb-short-name }} Monitoring](../../devops/observability/monitoring.md)
+- [Performance Diagnostics](../../troubleshooting/performance/index.md)

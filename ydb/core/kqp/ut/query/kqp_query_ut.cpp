@@ -74,6 +74,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(counters.RecompileRequestGet()->Val(), 1);
     }
 
+
+
     Y_UNIT_TEST(QueryCache) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -545,6 +547,42 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         NDataShard::gCancelTxFailPoint.Disable();
+    }
+
+    Y_UNIT_TEST(QuerySkipAndTakeUsingSameLimit) {
+        return; // https://github.com/ydb-platform/ydb/issues/22493
+
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Tmp` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync().IsSuccess());
+
+        auto explainResult = session.ExplainDataQuery(Q_(R"(
+            SELECT
+                1 as c1
+            FROM
+                `/Root/Tmp` t1
+            WHERE Key > 2
+            LIMIT 1, 1;
+        )")).ExtractValueSync();
+
+        Cerr << explainResult.GetAst() << Endl;
+
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            SELECT
+                1 as c1
+            FROM
+                `/Root/Tmp` t1
+            LIMIT 1, 1;
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(QueryResultsTruncated) {
@@ -2281,7 +2319,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto writeSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        
+
         kikimr.RunCall([&]{ CreateSampleTablesWithIndex(session, false /* no need in table data */); return true; });
 
         {
@@ -2501,7 +2539,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
-            
+
         {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2802,7 +2840,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                         `l_source`
                 );
 
-                CREATE VIEW `r` 
+                CREATE VIEW `r`
                 with (security_invoker = TRUE)
                 AS (
                     SELECT

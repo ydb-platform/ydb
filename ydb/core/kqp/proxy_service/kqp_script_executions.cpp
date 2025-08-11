@@ -1964,7 +1964,7 @@ private:
             KQP_PROXY_LOG_W("Reply " << status << ", issues: " << issues.ToOneLineString());
         }
 
-        Send(Request->Sender, new TEvForgetScriptExecutionOperationResponse(status, std::move(issues)));
+        Send(Request->Sender, new TEvForgetScriptExecutionOperationResponse(status, std::move(issues)), 0, Request->Cookie);
         PassAway();
     }
 

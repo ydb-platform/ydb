@@ -513,6 +513,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
         NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
+        NKikimrSchemeOp.TModifyScheme CreateStreamingQuery = 55;
+        NKikimrSchemeOp.TModifyScheme AlterStreamingQuery = 56;
+        NKikimrSchemeOp.TModifyScheme DropStreamingQuery = 57;
     }
 }
 

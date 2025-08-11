@@ -958,3 +958,21 @@ message TEvRefreshPoolState {
     optional string PoolId = 1;
     optional string Database = 2;
 }
+
+/// Streaming queries
+
+// stored in column "state" of .metadata/streaming/queries table
+message TStreamingQueryState {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_DELETING = 10;
+    };
+
+    optional EStatus Status = 1;
+    optional string CurrentExecutionId = 2;
+    repeated string PreviousExecutionIds = 3;
+
+    optional string OperationName = 4;
+    optional NActorsProto.TActorId OperationActorId = 5;
+    optional google.protobuf.Timestamp OperationStartedAt = 6;
+}

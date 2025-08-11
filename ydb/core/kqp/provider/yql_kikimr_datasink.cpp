@@ -1487,7 +1487,7 @@ public:
                             .Build()
                         .Done()
                         .Ptr();
-                } else if (mode == "alterObject") {
+                } else if (mode == "alterObject" || mode == "alterObjectIfExists") {
                     return Build<TKiAlterObject>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
@@ -1495,6 +1495,8 @@ public:
                         .TypeId().Build(key.GetObjectType())
                         .Features(settings.Features)
                         .ResetFeatures(settings.ResetFeatures)
+                        .MissingOk<TCoAtom>()
+                            .Value(mode == "alterObjectIfExists")
                         .Done()
                         .Ptr();
                 } else if (mode == "dropObject" || mode == "dropObjectIfExists") {

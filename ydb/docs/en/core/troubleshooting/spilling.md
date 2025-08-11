@@ -28,7 +28,17 @@ Read more about spilling architecture in the section [Spilling Architecture in {
 
 **Solution:**
 
-- Increase `max_total_size` in configuration
+1. **Increase spilling size limit:**
+   - If there is sufficient free disk space, increase the `max_total_size` parameter in the configuration
+   - It is recommended to increase the value by 20-50% from the current one
+
+2. **Expand disk space:**
+   - If there is insufficient free disk space, add additional disk space
+   - Ensure that the spilling directory is located on a disk with sufficient volume
+
+3. **Try repeating the query:**
+   - Wait for other resource-intensive queries to complete
+   - Repeat the query execution during less busy times
 
 ### 4. Can not run operation {#can-not-run-operation}
 

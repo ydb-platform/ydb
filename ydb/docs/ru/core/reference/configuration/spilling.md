@@ -178,6 +178,24 @@ table_service_config:
 
 Следующие параметры управляют включением и отключением различных типов спиллинга. Обычно их следует изменять только при наличии специфических требований к системе.
 
+#### Enable
+
+**Расположение:** `table_service_config.enable_spilling_nodes.local_file_config.enable`
+**Тип:** `boolean`  
+**По умолчанию:** `true`  
+**Описание:** Включает или отключает сервис спиллинга. При отключении (`false`) [спиллинг](../../concepts/spilling.md) не функционирует, что может привести к ошибкам при нехватке памяти.
+
+**Возможные ошибки:**
+
+- **Spilling Service not started** / **Service not started** — попытка использования спиллинга при выключенном Spilling Service. См. [Устранение неполадок спиллинга](../../troubleshooting/spilling.md#spilling-service-not-started)
+
+```yaml
+table_service_config:
+  spilling_service_config:
+    local_file_config:
+      enable: true
+```
+
 #### enable_query_service_spilling
 
 **Расположение:** `table_service_config.enable_query_service_spilling`  
@@ -203,23 +221,6 @@ table_service_config:
 ```yaml
 table_service_config:
   enable_spilling_nodes: "All"
-```
-
-#### Enable (в spilling_service_config)
-
-**Тип:** `boolean`  
-**По умолчанию:** `true`  
-**Описание:** Включает или отключает сервис спиллинга. При отключении (`false`) [спиллинг](../../concepts/spilling.md) не функционирует, что может привести к ошибкам при нехватке памяти.
-
-**Возможные ошибки:**
-
-- **Spilling Service not started** / **Service not started** — попытка использования спиллинга при выключенном Spilling Service. См. [Устранение неполадок спиллинга](../../troubleshooting/spilling.md#spilling-service-not-started)
-
-```yaml
-table_service_config:
-  spilling_service_config:
-    local_file_config:
-      enable: true
 ```
 
 #### Устаревшие параметры (deprecated)

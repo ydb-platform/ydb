@@ -177,35 +177,9 @@ table_service_config:
 
 The following parameters control the enabling and disabling of various spilling types. They should typically only be changed when there are specific system requirements.
 
-#### enable_query_service_spilling
+#### Enable
 
-**Location:** `table_service_config.enable_query_service_spilling`  
-**Type:** `boolean`  
-**Default:** `true`  
-**Description:** Global option that enables spilling in data transfer channels between tasks.
-
-```yaml
-table_service_config:
-  enable_query_service_spilling: true
-```
-
-**Important:** This setting works in conjunction with the local spilling service configuration. When disabled (`false`), channel spilling does not function even with enabled `spilling_service_config`.
-
-#### enable_spilling_nodes
-
-**Location:** `table_service_config.enable_spilling_nodes`  
-**Type:** `string`  
-**Possible values:** `"All"` | `"GraceJoin"` | `"Aggregate"` | `"None"`  
-**Default:** `"All"`  
-**Description:** Controls enabling spilling in compute nodes.
-
-```yaml
-table_service_config:
-  enable_spilling_nodes: "All"
-```
-
-#### Enable (in spilling_service_config)
-
+**Location:** `table_service_config.spilling_service_config.local_file_config.enable`
 **Type:** `boolean`  
 **Default:** `true`  
 **Description:** Enables or disables the spilling service. When disabled (`false`), [spilling](../../concepts/spilling.md) does not function, which may lead to errors when processing large data volumes.
@@ -220,6 +194,33 @@ table_service_config:
     local_file_config:
       enable: true
 ```
+
+#### enable_spilling_nodes
+
+**Location:** `table_service_config.enable_spilling_nodes`  
+**Type:** `string`  
+**Possible values:** `"All"` | `"GraceJoin"` | `"Aggregate"` | `"None"`  
+**Default:** `"All"`  
+**Description:** Controls enabling spilling in compute nodes.
+
+```yaml
+table_service_config:
+  enable_spilling_nodes: "All"
+```
+
+#### enable_query_service_spilling
+
+**Location:** `table_service_config.enable_query_service_spilling`  
+**Type:** `boolean`  
+**Default:** `true`  
+**Description:** Global option that enables spilling in data transfer channels between tasks.
+
+```yaml
+table_service_config:
+  enable_query_service_spilling: true
+```
+
+**Important:** This setting works in conjunction with the local spilling service configuration. When disabled (`false`), channel spilling does not function even with enabled `spilling_service_config`.
 
 #### Deprecated Parameters
 

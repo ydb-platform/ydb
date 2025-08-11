@@ -88,9 +88,7 @@ TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TK
         .Done();
 }
 
-} // namespace
-
-TKqpCnVectorResolve BuildVectorResolveOverPrecompute(const NYql::NNodes::TDqPhyPrecompute& rowsPrecompute,
+TExprBase BuildVectorResolveOverPrecompute(const NYql::NNodes::TDqPhyPrecompute& rowsPrecompute,
     const NYql::NNodes::TExprBase& originalInput, const TKqpTable& kqpTableNode,
     const TString& kqpIndexName, const TPositionHandle& pos, TExprContext& ctx)
 {
@@ -111,7 +109,7 @@ TKqpCnVectorResolve BuildVectorResolveOverPrecompute(const NYql::NNodes::TDqPhyP
     auto* columns = itemType->Cast<TStructExprType>();
     const TTypeAnnotationNode* resolveInputType = ctx.MakeType<TListExprType>(columns);
 
-    return Build<TKqpCnVectorResolve>(ctx, pos)
+    auto upsertIndexRows = Build<TKqpCnVectorResolve>(ctx, pos)
         .Output()
             .Stage<TDqStage>()
                 .Inputs()
@@ -131,6 +129,53 @@ TKqpCnVectorResolve BuildVectorResolveOverPrecompute(const NYql::NNodes::TDqPhyP
         .InputType(ExpandType(pos, *resolveInputType, ctx))
         .Index(ctx.NewAtom(pos, kqpIndexName))
         .Done();
+
+    // Wrap into a stage + union, TKqlUpsertRows doesn't work without it
+
+    auto upsertIndexStage = Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(upsertIndexRows)
+            .Build()
+        .Program()
+            .Args({"rows"})
+            .Body<TCoToStream>()
+                .Input("rows")
+                .Build()
+            .Build()
+        .Settings().Build()
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, pos)
+        .Output()
+            .Stage(upsertIndexStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
+} // namespace
+
+TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription& table,
+    const TIndexDescription* indexDesc) {
+    TVector<TStringBuf> indexTableColumns;
+    THashSet<TStringBuf> indexTableColumnSet;
+
+    indexTableColumns.emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
+    indexTableColumnSet.insert(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
+
+    for (const auto& column : table.Metadata->KeyColumnNames) {
+        if (indexTableColumnSet.insert(column).second) {
+            indexTableColumns.emplace_back(column);
+        }
+    }
+
+    for (const auto& column : indexDesc->DataColumns) {
+        if (indexTableColumnSet.insert(column).second) {
+            indexTableColumns.emplace_back(column);
+        }
+    }
+
+    return indexTableColumns;
 }
 
 TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
@@ -219,48 +264,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
         for (const auto& [tableNode, indexDesc] : indexes) {
             if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                TVector<TStringBuf> indexTableColumns;
-                THashSet<TStringBuf> indexTableColumnSet;
+                auto indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
 
-                indexTableColumns.emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
-                indexTableColumnSet.insert(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
-
-                for (const auto& column : table.Metadata->KeyColumnNames) {
-                    if (indexTableColumnSet.insert(column).second) {
-                        indexTableColumns.emplace_back(column);
-                    }
-                }
-
-                for (const auto& column : indexDesc->DataColumns) {
-                    YQL_ENSURE(inputColumnsSet.contains(column));
-                    if (indexTableColumnSet.insert(column).second) {
-                        indexTableColumns.emplace_back(column);
-                    }
-                }
-
-                auto upsertIndexRows = BuildVectorResolveOverPrecompute(insertRowsPrecompute, insert.Input(), insert.Table(), indexDesc->Name, insert.Pos(), ctx);
-
-                // Wrap into a stage + union, no idea why, but TKqlUpsertRows doesn't work without it
-
-                auto upsertIndexStage = Build<TDqStage>(ctx, insert.Pos())
-                    .Inputs()
-                        .Add(upsertIndexRows)
-                        .Build()
-                    .Program()
-                        .Args({"rows"})
-                        .Body<TCoToStream>()
-                            .Input("rows")
-                            .Build()
-                        .Build()
-                    .Settings().Build()
-                    .Done();
-
-                auto upsertUnion = Build<TDqCnUnionAll>(ctx, insert.Pos())
-                    .Output()
-                        .Stage(upsertIndexStage)
-                        .Index().Build("0")
-                        .Build()
-                    .Done();
+                auto upsertUnion = BuildVectorResolveOverPrecompute(insertRowsPrecompute, insert.Input(), insert.Table(), indexDesc->Name, insert.Pos(), ctx);
 
                 auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
                     .Table(tableNode)
@@ -272,7 +278,6 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
                 effects.emplace_back(upsertIndex);
 
-                //effects.emplace_back(KqpBuildVectorIndexInsert(indexDesc));
                 continue;
             }
 

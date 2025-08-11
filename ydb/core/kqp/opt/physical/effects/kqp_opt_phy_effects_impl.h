@@ -99,15 +99,14 @@ NYql::NNodes::TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const NYql::TKi
     NYql::NNodes::TExprBase input,
     const NYql::NNodes::TKqpTable& kqpTableNode, const NYql::TPositionHandle& pos, NYql::TExprContext& ctx, const TVector<TString>& extraColumnsToRead = {});
 
-NYql::NNodes::TKqpCnVectorResolve BuildVectorResolveOverPrecompute(const NYql::NNodes::TDqPhyPrecompute& rowsPrecompute,
-    const NYql::NNodes::TExprBase& originalInput, const NYql::NNodes::TKqpTable& kqpTableNode,
-    const TString& kqpIndexName, const NYql::TPositionHandle& pos, NYql::TExprContext& ctx);
-
 NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDescription& table,
     const NYql::NNodes::TKqpTable& tableNode,
     const TString& indexName,
     const TVector<TStringBuf>& indexTableColumns,
     const NYql::NNodes::TExprBase& deleteIndexKeys,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+TVector<TStringBuf> BuildVectorIndexPostingColumns(const NYql::TKikimrTableDescription& table,
+    const NYql::TIndexDescription* indexDesc);
 
 } // NKikimr::NKqp::NOpt

@@ -222,22 +222,6 @@ table_service_config:
 
 **Important:** This setting works in conjunction with the local spilling service configuration. When disabled (`false`), channel spilling does not function even with enabled `spilling_service_config`.
 
-#### Deprecated Parameters
-
-The following parameters are deprecated and will be removed in future versions. It is recommended not to use them in new configurations.
-
-##### MaxFileSize
-
-**Type:** `uint64`  
-**Default:** `5368709120` (5 GiB)  
-**Description:** Maximum size of a single spilling file.
-
-##### MaxFilePartSize
-
-**Type:** `uint64`  
-**Default:** `104857600` (100 MB)  
-**Description:** Maximum size of one file part. Spilling files can consist of multiple parts, each up to `MaxFilePartSize` in size. The total size of all parts must not exceed `MaxFileSize`.
-
 ### Complete Configuration Example
 
 ```yaml

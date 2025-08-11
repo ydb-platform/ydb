@@ -39,11 +39,13 @@ Spilling files have the following name format:
 `node_<node_id>_<session_id>`
 
 Where:
+
 - `node_id` — node identifier
 - `session_id` — unique session identifier that is created when initializing the [Spilling Service](../../contributor/spilling-service.md) once when the ydbd process starts
 
 **Example of a complete spilling file path:**
-```
+
+```bash
 /tmp/spilling-tmp-user/node_1_32860791-037c-42b4-b201-82a0a337ac80
 ```
 
@@ -58,6 +60,10 @@ Where:
 - Preferably use fast storage devices (SSD/NVMe)
 - Ensure sufficient free space is available
 
+**Possible errors:**
+
+- **Permission denied** — insufficient directory access permissions. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#permission-denied)
+
 #### MaxTotalSize
 
 **Type:** `uint64`  
@@ -67,6 +73,10 @@ Where:
 **Recommendations:**
 
 - Set the value based on available disk space
+
+**Possible errors:**
+
+- **Total size limit exceeded: X/YMb** — maximum total size of spilling files exceeded. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#total-size-limit-exceeded)
 
 ### Thread Pool Configuration (TIoThreadPoolConfig)
 
@@ -81,11 +91,19 @@ Where:
 - Increase for high-load systems
 - Consider the number of CPU cores on the server
 
+**Possible errors:**
+
+- **Can not run operation** — I/O thread pool operation queue overflow. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#can-not-run-operation)
+
 #### QueueSize
 
 **Type:** `uint32`  
 **Default:** `1000`  
 **Description:** Size of the spilling operations queue. Each task sends only one data block to spilling at a time, so large values are usually not required.
+
+**Possible errors:**
+
+- **Can not run operation** — I/O thread pool operation queue overflow. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#can-not-run-operation)
 
 ## Memory Management
 
@@ -181,6 +199,10 @@ table_service_config:
 **Default:** `true`  
 **Description:** Enables or disables the spilling service. When disabled (`false`), [spilling](../../concepts/spilling.md) does not function, which may lead to errors when processing large data volumes.
 
+**Possible errors:**
+
+- **Spilling Service not started** / **Service not started** — attempt to use spilling when Spilling Service is disabled. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#spilling-service-not-started)
+
 ```yaml
 table_service_config:
   spilling_service_config:
@@ -224,35 +246,7 @@ table_service_config:
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **Spilling Service not started** / **Service not started**
-
-   **Description:** Attempt to use spilling when Spilling Service is disabled.
-
-   **Solution:**
-
-   - Enable spilling: `table_service_config.spilling_service_config.local_file_config.enable: true`
-
-   Read more about spilling architecture in the section [Spilling Architecture in {{ ydb-short-name }}](../../concepts/spilling.md#spilling-architecture-in-ydb)
-
-2. **Total size limit exceeded: X/YMb**
-
-   **Description:** Maximum total size of spilling files exceeded (parameter `max_total_size`).
-
-   **Solution:**
-
-   - Increase `max_total_size` in configuration
-
-3. **Can not run operation**
-
-   **Description:** I/O thread pool operation queue overflow.
-
-   **Solution:**
-
-   - Increase `queue_size` in `io_thread_pool`
-   - Increase `workers_count` for faster operation processing
-   - Check disk performance
+Detailed information about diagnosing and resolving spilling issues is available in the [Spilling Troubleshooting](../../troubleshooting/spilling.md) section.
 
 ## See Also
 

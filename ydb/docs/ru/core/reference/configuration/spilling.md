@@ -39,11 +39,13 @@ table_service_config:
 `node_<node_id>_<session_id>`
 
 Где:
+
 - `node_id` — идентификатор узла
 - `session_id` — уникальный идентификатор сессии, который создается при инициализации [Spilling Service](../../contributor/spilling-service.md) один раз при старте процесса ydbd
 
 **Пример полного пути к файлу спиллинга:**
-```
+
+```bash
 /tmp/spilling-tmp-user/node_1_32860791-037c-42b4-b201-82a0a337ac80
 ```
 
@@ -59,6 +61,10 @@ table_service_config:
 - Предпочтительно использовать быстрые накопители (SSD/NVMe)
 - Убедитесь в наличии достаточного свободного места
 
+**Возможные ошибки:**
+
+- **Permission denied** — недостаточные права доступа к директории. См. [Устранение неполадок спиллинга](../../troubleshooting/spilling.md#permission-denied)
+
 #### MaxTotalSize
 
 **Тип:** `uint64`  
@@ -68,6 +74,10 @@ table_service_config:
 **Рекомендации:**
 
 - Устанавливайте значение исходя из доступного дискового пространства
+
+**Возможные ошибки:**
+
+- **Total size limit exceeded: X/YMb** — превышен максимальный суммарный размер файлов спиллинга. См. [Устранение неполадок спиллинга](../../troubleshooting/spilling.md#total-size-limit-exceeded)
 
 ### Конфигурация пула потоков (TIoThreadPoolConfig)
 
@@ -82,11 +92,19 @@ table_service_config:
 - Увеличивайте для высоконагруженных систем
 - Учитывайте количество CPU-ядер на сервере
 
+**Возможные ошибки:**
+
+- **Can not run operation** — переполнение очереди операций в пуле потоков I/O. См. [Устранение неполадок спиллинга](../../troubleshooting/spilling.md#can-not-run-operation)
+
 #### QueueSize
 
 **Тип:** `uint32`  
 **По умолчанию:** `1000`  
 **Описание:** Размер очереди операций спиллинга. Каждая задача отправляет только один блок данных на спиллинг одновременно, поэтому большие значения обычно не требуются.
+
+**Возможные ошибки:**
+
+- **Can not run operation** — переполнение очереди операций в пуле потоков I/O. См. [Устранение неполадок спиллинга](../../troubleshooting/spilling.md#can-not-run-operation)
 
 ## Управление памятью
 
@@ -182,6 +200,10 @@ table_service_config:
 **По умолчанию:** `true`  
 **Описание:** Включает или отключает сервис спиллинга. При отключении (`false`) [спиллинг](../../concepts/spilling.md) не функционирует, что может привести к ошибкам при нехватке памяти.
 
+**Возможные ошибки:**
+
+- **Spilling Service not started** / **Service not started** — попытка использования спиллинга при выключенном Spilling Service. См. [Устранение неполадок спиллинга](../../troubleshooting/spilling.md#spilling-service-not-started)
+
 ```yaml
 table_service_config:
   spilling_service_config:
@@ -225,32 +247,7 @@ table_service_config:
 
 ## Устранение неполадок
 
-### Частые проблемы
-
-1. **Spilling Service not started** / **Service not started**
-
-   **Описание:** Попытка использования спиллинга при выключенном Spilling Service.
-
-   **Решение:**
-   - Включите спиллинг: `table_service_config.spilling_service_config.local_file_config.enable: true`
-
-   Подробнее про архитектуру спиллинга читайте в разделе [Архитектура спиллинга в {{ ydb-short-name }}](../../concepts/spilling.md#архитектура-спиллинга-в-ydb)
-
-2. **Total size limit exceeded: X/YMb**
-
-   **Описание:** Превышен максимальный суммарный размер файлов спиллинга (параметр `max_total_size`).
-
-   **Решение:**
-   - Увеличьте `max_total_size` в конфигурации
-
-3. **Can not run operation**
-
-   **Описание:** Переполнение очереди операций в пуле потоков I/O.
-
-   **Решение:**
-   - Увеличьте `queue_size` в `io_thread_pool`
-   - Увеличьте `workers_count` для более быстрой обработки операций
-   - Проверьте производительность диска
+Подробная информация о диагностике и решении проблем со спиллингом доступна в разделе [Устранение неполадок спиллинга](../../troubleshooting/spilling.md).
 
 ## См. также
 

@@ -1,4 +1,6 @@
 items:
+- name: Проблемы со спиллингом
+  href: spilling.md
 - name: Проблемы с производительностью
   href: performance/index.md
   include:

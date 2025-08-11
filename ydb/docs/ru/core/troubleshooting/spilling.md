@@ -1,0 +1,49 @@
+# Устранение неполадок спиллинга
+
+## Частые проблемы
+
+### 1. Permission denied {#permission-denied}
+
+**Описание:** Недостаточные права доступа к директории спиллинга.
+
+**Решение:**
+
+- Убедитесь, что директория имеет права на запись и чтение для пользователя, под которым запущен ydbd
+- Проверьте права доступа: `ls -la /path/to/spilling/directory`
+- При необходимости измените права: `chmod 755 /path/to/spilling/directory`
+
+### 2. Spilling Service not started / Service not started {#spilling-service-not-started}
+
+**Описание:** Попытка использования спиллинга при выключенном Spilling Service.
+
+**Решение:**
+
+- Включите спиллинг: `table_service_config.spilling_service_config.local_file_config.enable: true`
+
+Подробнее про архитектуру спиллинга читайте в разделе [Архитектура спиллинга в {{ ydb-short-name }}](../concepts/spilling.md#архитектура-спиллинга-в-ydb)
+
+### 3. Total size limit exceeded: X/YMb {#total-size-limit-exceeded}
+
+**Описание:** Превышен максимальный суммарный размер файлов спиллинга (параметр `max_total_size`).
+
+**Решение:**
+
+- Увеличьте `max_total_size` в конфигурации
+
+### 4. Can not run operation {#can-not-run-operation}
+
+**Описание:** Переполнение очереди операций в пуле потоков I/O.
+
+**Решение:**
+
+- Увеличьте `queue_size` в `io_thread_pool`
+- Увеличьте `workers_count` для более быстрой обработки операций
+- Проверьте производительность диска
+
+## См. также
+
+- [Конфигурация спиллинга](../reference/configuration/spilling.md)
+- [Концепция спиллинга](../concepts/spilling.md)
+- [Конфигурация контроллера памяти](../reference/configuration/index.html#memory-controller)
+- [Мониторинг {{ ydb-short-name }}](../devops/observability/monitoring.md)
+- [Диагностика производительности](performance/index.md)

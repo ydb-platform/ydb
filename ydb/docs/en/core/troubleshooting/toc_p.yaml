@@ -1,4 +1,6 @@
 items:
+- name: Spilling issues
+  href: spilling.md
 - name: Performance issues
   href: performance/index.md
   include:

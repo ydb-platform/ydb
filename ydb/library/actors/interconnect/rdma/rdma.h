@@ -87,6 +87,7 @@ public:
     TQueuePair() = default;
     ~TQueuePair();
     int Init(TRdmaCtx* ctx, ICq* cq, int maxWr) noexcept;
+    int ToResetState() noexcept;
     int ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept;
     int SendRdmaReadWr(ui64 wrId, void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize) noexcept;
     ui32 GetQpNum() const noexcept;

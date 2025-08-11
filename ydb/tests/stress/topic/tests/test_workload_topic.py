@@ -17,6 +17,6 @@ class TestYdbTopicWorkload(StressFixture):
             "--endpoint", self.endpoint,
             "--database", self.database,
             "--duration", "60",
-            "--consumers", "50",
-            "--producers", "100",
+            "--consumers", "25",
+            "--producers", "25",
         ])

@@ -35,7 +35,7 @@ void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TS
     );
 }
 
-void AuditLog(ui32 status, const TAuditLogParts& parts)
+void AuditLog(std::optional<ui32> status, const TAuditLogParts& parts)
 {
     static const TString GrpcProxyComponentName = "grpc-proxy";
 
@@ -47,11 +47,15 @@ void AuditLog(ui32 status, const TAuditLogParts& parts)
             AUDIT_PART(name, (!value.empty() ? value : EmptyValue))
         }
 
-        AUDIT_PART("status", (status == Ydb::StatusIds::SUCCESS ? TString("SUCCESS") : TString("ERROR")))
-        AUDIT_PART("detailed_status", (Ydb::StatusIds::StatusCode_IsValid(status)
-            ? TString(Ydb::StatusIds::StatusCode_Name(status))
-            : ToString(status)
-        ))
+        if (status) {
+            AUDIT_PART("status", (*status == Ydb::StatusIds::SUCCESS ? TString("SUCCESS") : TString("ERROR")))
+            AUDIT_PART("detailed_status", (Ydb::StatusIds::StatusCode_IsValid(*status)
+                ? TString(Ydb::StatusIds::StatusCode_Name(*status))
+                : ToString(*status)
+            ))
+        } else {
+            AUDIT_PART("status", TString("IN-PROGRESS"))
+        }
     );
 }
 

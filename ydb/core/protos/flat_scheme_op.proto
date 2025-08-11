@@ -1840,7 +1840,7 @@ message TModifyScheme {
     optional TChangePathState ChangePathState = 82;
 
     optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
-    
+
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
     // Some entries are grouped by semantics, so are out of order
@@ -2295,9 +2295,4 @@ message TLongIncrementalRestoreOp {
 message TChangePathState {
     optional string Path = 1;
     optional EPathState TargetState = 2;
-}
-
-message TIndexValidationShardResult {
-    optional bytes FirstIndexKey = 1; // absent if no data in shard
-    optional bytes LastIndexKey = 2; // absent if no data in shard
 }

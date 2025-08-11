@@ -5,48 +5,58 @@
 
 namespace NKikimr::NColumnShard::NOverload {
 
-    enum class ERejectReason : ui32 {
-        YellowChannels = 0
-    };
+enum class ERejectReason : int {
+    YellowChannels                 = 0,
+    OverloadByShardWritesInFly     = 1,
+    OverloadByShardWritesSizeInFly = 2,
 
-    enum class ERejectReasons : ui32 {
-        None = 0,
-        YellowChannels = 1 << static_cast<ui32>(ERejectReason::YellowChannels),
-    };
+    RejectReasonCount
+};
 
-    // Note: must be synchronized with both enums above
-    static constexpr int RejectReasonCount = 8;
+enum class ERejectReasons : ui32 {
+    None                           = 0,
+    YellowChannels                 = 1 << static_cast<int>(ERejectReason::YellowChannels),
+    OverloadByShardWritesInFly     = 1 << static_cast<int>(ERejectReason::OverloadByShardWritesInFly),
+    OverloadByShardWritesSizeInFly = 1 << static_cast<int>(ERejectReason::OverloadByShardWritesSizeInFly),
+};
 
-    inline ERejectReasons operator|(ERejectReasons a, ERejectReasons b) { return ERejectReasons(ui32(a) | ui32(b)); }
-    inline ERejectReasons operator&(ERejectReasons a, ERejectReasons b) { return ERejectReasons(ui32(a) & ui32(b)); }
-    inline ERejectReasons operator-(ERejectReasons a, ERejectReasons b) { return ERejectReasons(ui32(a) & ~ui32(b)); }
-    inline ERejectReasons& operator|=(ERejectReasons& a, ERejectReasons b) { return a = (a | b); }
-    inline ERejectReasons& operator&=(ERejectReasons& a, ERejectReasons b) { return a = (a & b); }
-    inline ERejectReasons& operator-=(ERejectReasons& a, ERejectReasons b) { return a = (a - b); }
+static constexpr int RejectReasonCount = static_cast<int>(ERejectReason::RejectReasonCount);
 
-    inline int RejectReasonIndex(ERejectReason reason) {
-        return int(reason);
+inline ERejectReasons operator|(ERejectReasons a, ERejectReasons b) { return ERejectReasons(ui32(a) | ui32(b)); }
+inline ERejectReasons operator&(ERejectReasons a, ERejectReasons b) { return ERejectReasons(ui32(a) & ui32(b)); }
+inline ERejectReasons operator-(ERejectReasons a, ERejectReasons b) { return ERejectReasons(ui32(a) & ~ui32(b)); }
+inline ERejectReasons& operator|=(ERejectReasons& a, ERejectReasons b) { return a = (a | b); }
+inline ERejectReasons& operator&=(ERejectReasons& a, ERejectReasons b) { return a = (a & b); }
+inline ERejectReasons& operator-=(ERejectReasons& a, ERejectReasons b) { return a = (a - b); }
+
+inline int RejectReasonIndex(ERejectReason reason) {
+    return static_cast<int>(reason);
+}
+
+inline ERejectReasons MakeRejectReasons(ERejectReason reason) {
+    return ERejectReasons(1 << int(reason));
+}
+
+inline ERejectReasons MakeRejectReasons(EOverloadStatus status) {
+    switch (status) {
+        case EOverloadStatus::Disk:
+            return ERejectReasons::YellowChannels;
+        case EOverloadStatus::ShardWritesInFly:
+            return ERejectReasons::OverloadByShardWritesInFly;
+        case EOverloadStatus::ShardWritesSizeInFly:
+            return ERejectReasons::OverloadByShardWritesSizeInFly;
+        default:
+            return ERejectReasons::None;
     }
+}
 
-    inline ERejectReasons MakeRejectReasons(ERejectReason reason) {
-        return ERejectReasons(1 << int(reason));
-    }
-
-    inline ERejectReasons MakeRejectReasons(EOverloadStatus status) {
-        switch (status) {
-            case EOverloadStatus::Disk:
-                return ERejectReasons::YellowChannels;
-            default:
-                return ERejectReasons::None;
+template<class TCallback>
+inline void EnumerateRejectReasons(ERejectReasons reasons, TCallback&& callback) {
+    for (int i = 0; i < static_cast<int>(ERejectReason::RejectReasonCount); ++i) {
+        if ((reasons & ERejectReasons(1 << i)) != ERejectReasons::None) {
+            callback(ERejectReason(i));
         }
     }
+}
 
-    template<class TCallback>
-    inline void EnumerateRejectReasons(ERejectReasons reasons, TCallback&& callback) {
-        for (int i = 0; i < RejectReasonCount; ++i) {
-            if ((reasons & ERejectReasons(1 << i)) != ERejectReasons::None) {
-                callback(ERejectReason(i));
-            }
-        }
-    }
 } // namespace NKikimr::NDataShard

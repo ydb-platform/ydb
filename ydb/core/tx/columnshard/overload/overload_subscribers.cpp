@@ -131,7 +131,7 @@ void TOverloadSubscribers::NotifyAllOverloadSubscribers(const TActorId& sourceAc
                 pipeServer->InterconnectSession,
                 actorId,
                 sourceActorId,
-                new TEvDataShard::TEvOverloadReady(sourceTabletId, entry.SeqNo));
+                new TEvColumnShard::TEvOverloadReady(sourceTabletId, entry.SeqNo));
         }
         pipeServer->OverloadSubscribers.clear();
         clearedSubscribers = true;

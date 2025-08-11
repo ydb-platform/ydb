@@ -384,6 +384,9 @@ private:
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
     EOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
     EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
+    void UpdateOverloadsStatus();
+    ui64 GetShardWritesInFlyLimit() const;
+    ui64 GetShardWritesSizeInFlyLimit() const;
 
 protected:
     STFUNC(StateInit) {

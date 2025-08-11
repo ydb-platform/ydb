@@ -14,7 +14,7 @@ plugins {
 {%-     if with_kotlinc_plugin_allopen|length %}
     kotlin("plugin.allopen") version "{{ kotlin_version }}"
 {%-     endif -%}
-{%-     if not(disable_lombok_plugin) and (with_kotlinc_plugin_lombok|length) %}
+{%-     if with_kotlinc_plugin_lombok|length %}
     kotlin("plugin.lombok") version "{{ kotlin_version }}"
 {%-     endif -%}
 {%-     if with_kotlinc_plugin_noarg|length %}
@@ -32,8 +32,8 @@ plugins {
     id("net.ltgt.errorprone") version "4.1.0"
 {%- endif -%}
 
-{%- if not(disable_lombok_plugin) and (target.use_annotation_processor|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) %}
-    id("io.freefair.lombok") version "8.6"
+{%- if with_lombok_plugin %}
+    id("io.freefair.lombok") version "8.14"
 {%- endif %}
 }
 

@@ -225,7 +225,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     const size_t byteSize = request.ByteSizeLong();
     CPS_LOG_T("CreateQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
-    auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, queryType, TenantName);
+    auto mapResult = ev->Get()->TenantInfo->Assign(cloudId, scope, queryType, TenantName);
 
     if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_W("CreateQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
@@ -265,7 +265,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         );
     }
 
-    auto prepareParams = [=, as=TActivationContext::ActorSystem(), commonCounters=requestCounters.Common, quotas=event.Quotas](const std::vector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [=, this, as=TActivationContext::ActorSystem(), commonCounters=requestCounters.Common, quotas=event.Quotas](const std::vector<TResultSet>& resultSets) mutable {
         const size_t countSets = (idempotencyKey ? 1 : 0) + (request.execute_mode() != FederatedQuery::SAVE ? 2 : 0);
         if (resultSets.size() != countSets) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
@@ -308,7 +308,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         response->second.After.ConstructInPlace().CopyFrom(query);
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "CreateQuery(write)");
-        writeQueryBuilder.AddString("tenant", tenant);
+        writeQueryBuilder.AddString("tenant", mapResult.TenantName);
+        std::optional<std::string> nodes;
+        if (mapResult.NodeIds) {
+            nodes = *mapResult.NodeIds;
+        }
+        writeQueryBuilder.AddValue("node", NYdb::TValueBuilder().OptionalString(nodes).Build());
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddString("name", query.content().name());
@@ -343,9 +348,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             writeQueryBuilder.AddText(
                 "INSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
                 "(`" TENANT_COLUMN_NAME "`, `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,  `" QUERY_TYPE_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" ASSIGNED_UNTIL_COLUMN_NAME "`,\n"
-                "`" RETRY_RATE_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
+                "`" RETRY_RATE_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`, `" NODE_COLUMN_NAME "`)\n"
                 "VALUES\n"
-                "    ($tenant, $scope, $query_id, $query_type, $zero_timestamp, $zero_timestamp, 0, 0, $now, \"\", \"\");"
+                "    ($tenant, $scope, $query_id, $query_type, $zero_timestamp, $zero_timestamp, 0, 0, $now, \"\", \"\", $node);"
             );
         }
 
@@ -373,7 +378,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         NActors::TActivationContext::ActorSystem(),
         status,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -539,7 +544,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -685,7 +690,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -770,7 +775,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -822,7 +827,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         issues.AddIssue(MakeErrorIssue(TIssuesIds::UNSUPPORTED, "State load mode \"FROM_LAST_CHECKPOINT\" is not supported"));
     }
 
-    auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, request.content().type(), TenantName);
+    auto mapResult = ev->Get()->TenantInfo->Assign(cloudId, scope, request.content().type(), TenantName);
 
     if (issues) {
         CPS_LOG_W("ModifyQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
@@ -865,7 +870,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);"
     );
 
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [=, this, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         const size_t countSets = 1 + (request.execute_mode() != FederatedQuery::SAVE ? 2 : 0);
 
         if (resultSets.size() != countSets) {
@@ -1047,7 +1052,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         response->second.CloudId = internal.cloud_id();
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyQuery(write)");
-        writeQueryBuilder.AddString("tenant", tenant);
+        writeQueryBuilder.AddString("tenant", mapResult.TenantName);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddUint64("max_count_jobs", Config->Proto.GetMaxCountJobs());
@@ -1062,6 +1067,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         writeQueryBuilder.AddInt64("revision", common.revision());
         writeQueryBuilder.AddInt64("status", query.meta().status());
         writeQueryBuilder.AddString("result_id", resultId);
+        std::optional<std::string> nodes;
+        if (mapResult.NodeIds) {
+            nodes = *mapResult.NodeIds;
+        }
+        writeQueryBuilder.AddValue("node", NYdb::TValueBuilder().OptionalString(nodes).Build());
 
         writeQueryBuilder.AddText(
             "$to_delete = (\n"
@@ -1098,9 +1108,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             writeQueryBuilder.AddText(
                 "INSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
                 "   (`" TENANT_COLUMN_NAME "`, `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" ASSIGNED_UNTIL_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, \n"
-                "   `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
+                "   `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`, `" NODE_COLUMN_NAME "`)\n"
                 "VALUES\n"
-                "   ($tenant, $scope, $query_id, $zero_timestamp, $zero_timestamp, 0, $now, $query_type, \"\", \"\");\n"
+                "   ($tenant, $scope, $query_id, $zero_timestamp, $zero_timestamp, 0, $now, $query_type, \"\", \"\", $node);\n"
             );
         }
 
@@ -1177,7 +1187,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1294,7 +1304,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1355,7 +1365,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
     );
 
-    auto prepareParams = [=, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [=, this, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -1525,7 +1535,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1670,7 +1680,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1803,7 +1813,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -1901,7 +1911,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,

@@ -11,12 +11,12 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
     }
     std::vector<std::shared_ptr<IFetchLogic>> logic;
     for (auto&& [_, i] : DataAddresses) {
-        auto acc = context.GetResources()->GetAccessorOptional(i.GetColumnId());
+        auto acc = context.GetResources().GetAccessorOptional(i.GetColumnId());
         THashSet<TString> subColumnsToFetch;
         for (auto&& sc : i.GetSubColumnNames(true)) {
             if (!acc || !acc->HasSubColumnData(sc)) {
                 if (!sc && acc) {
-                    context.GetResources()->Remove(i.GetColumnId());
+                    context.MutableResources().Remove(i.GetColumnId());
                 }
                 subColumnsToFetch.emplace(sc);
             }
@@ -43,7 +43,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         }
     }
     for (auto&& [_, i] : HeaderContext) {
-        if (context.GetResources()->GetAccessorOptional(i.GetColumnId())) {
+        if (context.GetResources().GetAccessorOptional(i.GetColumnId())) {
             continue;
         }
         auto conclusion = source->StartFetchHeader(context, i);
@@ -68,7 +68,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
 
 TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    const auto acc = context.GetResources()->GetAccessorOptional(GetOutputColumnIdOnce());
+    const auto acc = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
     for (auto&& sc : DataAddress.GetSubColumnNames(true)) {
         if (!acc || !acc->HasSubColumnData(sc)) {
             auto source = context.GetDataSource().lock();

@@ -21,14 +21,15 @@ class table__c_v_t(DefaultTable.DefaultTable):
         self.values = values
 
     def compile(self, ttFont):
+        if not hasattr(self, "values"):
+            return b""
         values = self.values[:]
         if sys.byteorder != "big":
             values.byteswap()
         return values.tobytes()
 
     def toXML(self, writer, ttFont):
-        for i in range(len(self.values)):
-            value = self.values[i]
+        for i, value in enumerate(self.values):
             writer.simpletag("cv", value=value, index=i)
             writer.newline()
 

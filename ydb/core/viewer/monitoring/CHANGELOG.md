@@ -1,5 +1,399 @@
 # Changelog
 
+## [11.5.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.4.0...v11.5.0) (2025-08-01)
+
+
+### Features
+
+* add new tab to Node page with thread pool statistics ([#2599](https://github.com/ydb-platform/ydb-embedded-ui/issues/2599)) ([c945a78](https://github.com/ydb-platform/ydb-embedded-ui/commit/c945a78642c28b88c470f735b4e21e0b6fefb91b))
+* **api:** use custom axios defaults ([#2616](https://github.com/ydb-platform/ydb-embedded-ui/issues/2616)) ([7397f5f](https://github.com/ydb-platform/ydb-embedded-ui/commit/7397f5f7a0715ed1faed149da9d09c3441b482d0))
+* **Clusters:** rework versions progress bar ([#2642](https://github.com/ydb-platform/ydb-embedded-ui/issues/2642)) ([7be9d5f](https://github.com/ydb-platform/ydb-embedded-ui/commit/7be9d5f559745804cacf5e02b5c844648e191618))
+* implement reach/impact/effort priority methodology ([#2615](https://github.com/ydb-platform/ydb-embedded-ui/issues/2615)) ([6adb6d7](https://github.com/ydb-platform/ydb-embedded-ui/commit/6adb6d7b6f7c1cdd408684ae4729abc93d264460))
+* improve tenant diagnostics - CPU ([#2633](https://github.com/ydb-platform/ydb-embedded-ui/issues/2633)) ([84e75ea](https://github.com/ydb-platform/ydb-embedded-ui/commit/84e75eac53b7413e1087d027c9a70854dcff00e3))
+* keep plan representation tab selection between query executions ([#2625](https://github.com/ydb-platform/ydb-embedded-ui/issues/2625)) ([151d766](https://github.com/ydb-platform/ydb-embedded-ui/commit/151d7663e8d1416c35269c9f13fd09a994b60c89))
+* redesign CPU section ([#2597](https://github.com/ydb-platform/ydb-embedded-ui/issues/2597)) ([c170578](https://github.com/ydb-platform/ydb-embedded-ui/commit/c17057823931915356efc4c7a3ff9d48f1381206))
+* redesign Memory section ([#2627](https://github.com/ydb-platform/ydb-embedded-ui/issues/2627)) ([437a81c](https://github.com/ydb-platform/ydb-embedded-ui/commit/437a81ce3b95a3d320ce951e7a5328aac407c28e))
+* redesign Storage section ([#2608](https://github.com/ydb-platform/ydb-embedded-ui/issues/2608)) ([4222c14](https://github.com/ydb-platform/ydb-embedded-ui/commit/4222c1412f67a90a69d88c315c119fed0768b662))
+* **TenantOverview:** do not use tabs ([#2655](https://github.com/ydb-platform/ydb-embedded-ui/issues/2655)) ([4fb69ad](https://github.com/ydb-platform/ydb-embedded-ui/commit/4fb69adcc61a64ed7becd663ca8b5781f25e37e4))
+
+
+### Bug Fixes
+
+* add network section ([#2635](https://github.com/ydb-platform/ydb-embedded-ui/issues/2635)) ([b88c30e](https://github.com/ydb-platform/ydb-embedded-ui/commit/b88c30edb8e5a8175a39e6fbd5135e903e8469b7))
+* **api:** constructor types ([#2613](https://github.com/ydb-platform/ydb-embedded-ui/issues/2613)) ([d2bdf9f](https://github.com/ydb-platform/ydb-embedded-ui/commit/d2bdf9f2ddb134424e7bf5a18db48db76472bd5a))
+* **AsideNavigation:** hotkeys section position ([#2629](https://github.com/ydb-platform/ydb-embedded-ui/issues/2629)) ([87aca43](https://github.com/ydb-platform/ydb-embedded-ui/commit/87aca43ee8acd8e871886b7ebd6cd88abe1ad0f6))
+* **Clusters:** fix count single form ([#2636](https://github.com/ydb-platform/ydb-embedded-ui/issues/2636)) ([b789b1b](https://github.com/ydb-platform/ydb-embedded-ui/commit/b789b1bdcd4f25234de875be09c2b8a4e748dcdb))
+* code review workflows to checkout PR head commit ([#2652](https://github.com/ydb-platform/ydb-embedded-ui/issues/2652)) ([c6b9fe5](https://github.com/ydb-platform/ydb-embedded-ui/commit/c6b9fe581bbcc132ed5b9a81c771a8406488326a))
+* design refinements of query banner ([#2630](https://github.com/ydb-platform/ydb-embedded-ui/issues/2630)) ([30c6427](https://github.com/ydb-platform/ydb-embedded-ui/commit/30c6427924b408b76a7f1b19674ca1d26ebe963f))
+* incorrect storage group count ([#2653](https://github.com/ydb-platform/ydb-embedded-ui/issues/2653)) ([15a93fd](https://github.com/ydb-platform/ydb-embedded-ui/commit/15a93fd20ba0a06d2e7fb4ea23315bb0f164c739))
+* jumping content in database tabs ([#2606](https://github.com/ydb-platform/ydb-embedded-ui/issues/2606)) ([602ca15](https://github.com/ydb-platform/ydb-embedded-ui/commit/602ca151509eaa0bfafe29777c12d1aa917da07a))
+* **NetworkTable:** fix columns align ([#2640](https://github.com/ydb-platform/ydb-embedded-ui/issues/2640)) ([03d315a](https://github.com/ydb-platform/ydb-embedded-ui/commit/03d315a86cd9444fb7951dd936ab6038f42671a9))
+* remove keybindings for history traversing ([#2611](https://github.com/ydb-platform/ydb-embedded-ui/issues/2611)) ([18af440](https://github.com/ydb-platform/ydb-embedded-ui/commit/18af4401d10403f4bcf4061ba3ac7c8ebfd56379))
+* tenant navigation ([#2649](https://github.com/ydb-platform/ydb-embedded-ui/issues/2649)) ([5918555](https://github.com/ydb-platform/ydb-embedded-ui/commit/59185556918e0492fa42841ae99fcdd9c6981893))
+* **TenantNetwork:** use correct settings for tables ([#2639](https://github.com/ydb-platform/ydb-embedded-ui/issues/2639)) ([93e8c52](https://github.com/ydb-platform/ydb-embedded-ui/commit/93e8c52426d0e12e71b63f0f5d9b5dc06caa93e3))
+* **VersionsBar:** add debounce to mouse leave ([#2656](https://github.com/ydb-platform/ydb-embedded-ui/issues/2656)) ([812865a](https://github.com/ydb-platform/ydb-embedded-ui/commit/812865add708c1f9a6a4d7183d9199881bfa9d00))
+
+## [11.4.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.3.0...v11.4.0) (2025-07-23)
+
+
+### Features
+
+* add support for csrf ([#2604](https://github.com/ydb-platform/ydb-embedded-ui/issues/2604)) ([7a4505f](https://github.com/ydb-platform/ydb-embedded-ui/commit/7a4505f8b79d17e2791f98dd2b881dcf03b0243c))
+* **prepareErrorMessage:** treat error.data as object ([#2601](https://github.com/ydb-platform/ydb-embedded-ui/issues/2601)) ([4937cd3](https://github.com/ydb-platform/ydb-embedded-ui/commit/4937cd37170257351d5618525c14cb7fb52a3562))
+* update versions colors ([#2596](https://github.com/ydb-platform/ydb-embedded-ui/issues/2596)) ([17c8d29](https://github.com/ydb-platform/ydb-embedded-ui/commit/17c8d292a709d9ca9817f65bf0ab6e1dfded424e))
+
+
+### Bug Fixes
+
+* use svg instead of mask for doughnuts ([#2600](https://github.com/ydb-platform/ydb-embedded-ui/issues/2600)) ([dcbefa1](https://github.com/ydb-platform/ydb-embedded-ui/commit/dcbefa1fba1445323d265f7a3105f29416693fa8))
+
+## [11.3.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.2.0...v11.3.0) (2025-07-23)
+
+
+### Features
+
+* rework metric cards to tabs ([#2580](https://github.com/ydb-platform/ydb-embedded-ui/issues/2580)) ([016a515](https://github.com/ydb-platform/ydb-embedded-ui/commit/016a5158cec7cb32e69a4d76cf35c0a0e6f122a5))
+* use custom app title ([#2584](https://github.com/ydb-platform/ydb-embedded-ui/issues/2584)) ([c09d9be](https://github.com/ydb-platform/ydb-embedded-ui/commit/c09d9be6cabf835b3a20e6e47ff4909ce7502739))
+* **VDisk:** add replication progress, remaining time, donors info ([#2588](https://github.com/ydb-platform/ydb-embedded-ui/issues/2588)) ([f50686c](https://github.com/ydb-platform/ydb-embedded-ui/commit/f50686c9f906512406545d2df6ed3f545567e54c))
+
+
+### Bug Fixes
+
+* **SpeedMuliMeter:** add popup content padding ([#2585](https://github.com/ydb-platform/ydb-embedded-ui/issues/2585)) ([dd0108a](https://github.com/ydb-platform/ydb-embedded-ui/commit/dd0108a7db8b2aae6532ea0d7233d5537a7c9499))
+
+## [11.2.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.1.1...v11.2.0) (2025-07-18)
+
+
+### Features
+
+* **configureStore:** use custom backend ([#2583](https://github.com/ydb-platform/ydb-embedded-ui/issues/2583)) ([1a2aa24](https://github.com/ydb-platform/ydb-embedded-ui/commit/1a2aa242f312b7a39d7865f243df72518660d65e))
+* **query:** apply pragmas setting to Table Preview queries ([#2575](https://github.com/ydb-platform/ydb-embedded-ui/issues/2575)) ([ff85ffc](https://github.com/ydb-platform/ydb-embedded-ui/commit/ff85ffc907716dcde07725fb3d4781834fe012ef))
+* **tablet:** improve tablet page layout: swap places type and title ([#2581](https://github.com/ydb-platform/ydb-embedded-ui/issues/2581)) ([ac9bc21](https://github.com/ydb-platform/ydb-embedded-ui/commit/ac9bc21f08a8920f6f0b2102bff1043e5484de21))
+* **vdisk:** add tablet usage statistics to vdisk page ([#2577](https://github.com/ydb-platform/ydb-embedded-ui/issues/2577)) ([4ca86da](https://github.com/ydb-platform/ydb-embedded-ui/commit/4ca86da7f63027830471d4e9cc50b8274d81be12))
+
+## [11.1.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.1.0...v11.1.1) (2025-07-15)
+
+
+### Bug Fixes
+
+* query activities banner visibility ([#2572](https://github.com/ydb-platform/ydb-embedded-ui/issues/2572)) ([c021e65](https://github.com/ydb-platform/ydb-embedded-ui/commit/c021e651a4053b32fe24572919b28d06b5beac6d))
+* **StorageLocation:** pdisk id calculation ([#2570](https://github.com/ydb-platform/ydb-embedded-ui/issues/2570)) ([8c9b492](https://github.com/ydb-platform/ydb-embedded-ui/commit/8c9b492bfaef377d7b7545187b7bccae2a065db6))
+
+## [11.1.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.0.1...v11.1.0) (2025-07-15)
+
+
+### Features
+
+* add Queries activities banner ([#2549](https://github.com/ydb-platform/ydb-embedded-ui/issues/2549)) ([dcfca43](https://github.com/ydb-platform/ydb-embedded-ui/commit/dcfca43edffca6b5e8ee568e0ea7ff4bb8547654))
+* **query:** add multi-line Pragmas field to Query Settings Dialog ([#2563](https://github.com/ydb-platform/ydb-embedded-ui/issues/2563)) ([2010164](https://github.com/ydb-platform/ydb-embedded-ui/commit/2010164e2ee680bcfe31b7d83b35deae2bb09bb8))
+
+
+### Bug Fixes
+
+* cancel previous multipart request if the new one starts ([#2559](https://github.com/ydb-platform/ydb-embedded-ui/issues/2559)) ([a4792fd](https://github.com/ydb-platform/ydb-embedded-ui/commit/a4792fd90edfc8e84d1ff3f31b380c417e25175e))
+* disable streaming by default for some clusters ([#2566](https://github.com/ydb-platform/ydb-embedded-ui/issues/2566)) ([a9670eb](https://github.com/ydb-platform/ydb-embedded-ui/commit/a9670eb128ae69b2c61bf0794defd3d40de55eea))
+* **TopicData:** reset filters on partition change ([#2567](https://github.com/ydb-platform/ydb-embedded-ui/issues/2567)) ([848f754](https://github.com/ydb-platform/ydb-embedded-ui/commit/848f754f3d9964c9218ea670bd76276ddb37b82a))
+
+## [11.0.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.0.0...v11.0.1) (2025-07-09)
+
+
+### Bug Fixes
+
+* **TopicData:** decode data for message, show error for entire table ([#2554](https://github.com/ydb-platform/ydb-embedded-ui/issues/2554)) ([b56cd82](https://github.com/ydb-platform/ydb-embedded-ui/commit/b56cd827b91d2ce3c42d3cec3a8877267f1a7092))
+
+## [11.0.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v10.1.1...v11.0.0) (2025-07-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* update to uikit7 ([#2544](https://github.com/ydb-platform/ydb-embedded-ui/issues/2544))
+
+### Features
+
+* update to uikit7 ([#2544](https://github.com/ydb-platform/ydb-embedded-ui/issues/2544)) ([9716a69](https://github.com/ydb-platform/ydb-embedded-ui/commit/9716a695627eff4ad888e4641086fafcff5e3e6d))
+
+## [10.1.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v10.1.0...v10.1.1) (2025-07-08)
+
+
+### Bug Fixes
+
+* **capabilities:** show topic data from 1 handler version ([#2529](https://github.com/ydb-platform/ydb-embedded-ui/issues/2529)) ([de6b802](https://github.com/ydb-platform/ydb-embedded-ui/commit/de6b8024a28fc362fcdfc3faf98d0eef802e46b7))
+
+## [10.1.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v10.0.0...v10.1.0) (2025-07-07)
+
+
+### Features
+
+* update versions colors ([#2530](https://github.com/ydb-platform/ydb-embedded-ui/issues/2530)) ([a392546](https://github.com/ydb-platform/ydb-embedded-ui/commit/a39254666dff7b323e7d499ee301ceeddf46e8d0))
+
+
+### Bug Fixes
+
+* enable oidc streaming ([#2537](https://github.com/ydb-platform/ydb-embedded-ui/issues/2537)) ([fa98022](https://github.com/ydb-platform/ydb-embedded-ui/commit/fa98022bc25fc1a8636014b958552f9f0b36f0b2))
+* remove operations counter ([#2540](https://github.com/ydb-platform/ydb-embedded-ui/issues/2540)) ([4821f40](https://github.com/ydb-platform/ydb-embedded-ui/commit/4821f40da2e710d3b5345b269dd04aca5855e8ea))
+
+## [10.0.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.11.0...v10.0.0) (2025-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove ai assistant button ([#2535](https://github.com/ydb-platform/ydb-embedded-ui/issues/2535))
+
+### Features
+
+* remove ai assistant button ([#2535](https://github.com/ydb-platform/ydb-embedded-ui/issues/2535)) ([2511059](https://github.com/ydb-platform/ydb-embedded-ui/commit/2511059fc05ef035a4b44f71434f20f462b96c21))
+
+
+### Bug Fixes
+
+* make operations page_size to 20 ([#2498](https://github.com/ydb-platform/ydb-embedded-ui/issues/2498)) ([512cf15](https://github.com/ydb-platform/ydb-embedded-ui/commit/512cf159374b0fa416910540ed437ef4fa840946))
+* remove viewer from balancer ([#2523](https://github.com/ydb-platform/ydb-embedded-ui/issues/2523)) ([c37f2e3](https://github.com/ydb-platform/ydb-embedded-ui/commit/c37f2e3609d97ba35caa9010d8b8a8be1881a661))
+
+## [9.11.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.10.0...v9.11.0) (2025-06-30)
+
+
+### Features
+
+* **Clusters:** redesign table ([#2495](https://github.com/ydb-platform/ydb-embedded-ui/issues/2495)) ([7fa0358](https://github.com/ydb-platform/ydb-embedded-ui/commit/7fa0358d0be8572cb0bb46d6ac7b59de5f58e262))
+
+
+### Bug Fixes
+
+* **HealthcheckPreview:** enable autorefresh for all clusters ([#2512](https://github.com/ydb-platform/ydb-embedded-ui/issues/2512)) ([6ed077e](https://github.com/ydb-platform/ydb-embedded-ui/commit/6ed077ef1bb5a78774e43f875d3d37cee0f61f43))
+* unskip tests ([#2514](https://github.com/ydb-platform/ydb-embedded-ui/issues/2514)) ([0198726](https://github.com/ydb-platform/ydb-embedded-ui/commit/0198726db84917950799ae757479e50acd90948b))
+* **VDiskPage:** display params in 2 columns, change order ([#2479](https://github.com/ydb-platform/ydb-embedded-ui/issues/2479)) ([2e0f203](https://github.com/ydb-platform/ydb-embedded-ui/commit/2e0f2035c8bc61406f746fa15b697a1fde646fa7))
+
+## [9.10.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.9.1...v9.10.0) (2025-06-30)
+
+
+### Features
+
+* **Tenants:** add network column ([#2478](https://github.com/ydb-platform/ydb-embedded-ui/issues/2478)) ([f3b573a](https://github.com/ydb-platform/ydb-embedded-ui/commit/f3b573aad122b786e3c3baf655ebc626b3d3fe05))
+
+
+### Bug Fixes
+
+* aibutton placeholder header ([#2499](https://github.com/ydb-platform/ydb-embedded-ui/issues/2499)) ([f2c967b](https://github.com/ydb-platform/ydb-embedded-ui/commit/f2c967bb1efc74f2c961463dbf7e750236d32008))
+* interface blinks on reload with dark theme ([#2480](https://github.com/ydb-platform/ydb-embedded-ui/issues/2480)) ([d6f23a3](https://github.com/ydb-platform/ydb-embedded-ui/commit/d6f23a31380fea63368ce986f643e3c5880fd7d7))
+* **JsonViewer:** do not try to decode utf8 ([#2509](https://github.com/ydb-platform/ydb-embedded-ui/issues/2509)) ([141c7e0](https://github.com/ydb-platform/ydb-embedded-ui/commit/141c7e0b52882f51adff4d35c51a72d4ea8f8cbb))
+* **Network:** host in default and required columns ([#2511](https://github.com/ydb-platform/ydb-embedded-ui/issues/2511)) ([1affd72](https://github.com/ydb-platform/ydb-embedded-ui/commit/1affd723d2f9a6912869c92aa6caa7315a7f0514))
+* require ConnectStatus only for network table ([#2510](https://github.com/ydb-platform/ydb-embedded-ui/issues/2510)) ([d9a049f](https://github.com/ydb-platform/ydb-embedded-ui/commit/d9a049fbe9af38652e4a529550322e8bb60593d6))
+
+## [9.9.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.9.0...v9.9.1) (2025-06-26)
+
+
+### Bug Fixes
+
+* code assist ([#2491](https://github.com/ydb-platform/ydb-embedded-ui/issues/2491)) ([46e0c9e](https://github.com/ydb-platform/ydb-embedded-ui/commit/46e0c9ee5161b546f01c4ec4982cea9df3709f4f))
+* network error and incorrect backend response for operations ([#2489](https://github.com/ydb-platform/ydb-embedded-ui/issues/2489)) ([df6342b](https://github.com/ydb-platform/ydb-embedded-ui/commit/df6342bd3046193e51f89d195a9be1fc67a591bb))
+
+## [9.9.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.8.0...v9.9.0) (2025-06-26)
+
+
+### Features
+
+* ai assistant placeholders ([#2483](https://github.com/ydb-platform/ydb-embedded-ui/issues/2483)) ([7675e82](https://github.com/ydb-platform/ydb-embedded-ui/commit/7675e82d3a73724bf888aa7968a9cf164fae1a24))
+
+
+### Bug Fixes
+
+* access denied for operations ([#2485](https://github.com/ydb-platform/ydb-embedded-ui/issues/2485)) ([12a3bcf](https://github.com/ydb-platform/ydb-embedded-ui/commit/12a3bcf2189d18c6ab0b893601438bb34f3fc2b6))
+* do not show backups if no control_plane ([#2487](https://github.com/ydb-platform/ydb-embedded-ui/issues/2487)) ([d6f29a2](https://github.com/ydb-platform/ydb-embedded-ui/commit/d6f29a216fc696fa19acd6c32b602d7ab1d779c0))
+
+## [9.8.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.7.1...v9.8.0) (2025-06-25)
+
+
+### Features
+
+* add setting to select syntax in acl handlers ([#2474](https://github.com/ydb-platform/ydb-embedded-ui/issues/2474)) ([e5e6f3a](https://github.com/ydb-platform/ydb-embedded-ui/commit/e5e6f3ad87ac331ec99011571701b6a878d9f3d7))
+* **api:** add new possible tag ([#2476](https://github.com/ydb-platform/ydb-embedded-ui/issues/2476)) ([ec81875](https://github.com/ydb-platform/ydb-embedded-ui/commit/ec81875a9c1dcee7c5cfce34908da52f280f6a86))
+* **Cluster:** add Network tab ([#2424](https://github.com/ydb-platform/ydb-embedded-ui/issues/2424)) ([7af71c4](https://github.com/ydb-platform/ydb-embedded-ui/commit/7af71c478775ef70090e21fe60ac07ebc21534b6))
+
+
+### Bug Fixes
+
+* code-assistant requests 404 ([#2471](https://github.com/ydb-platform/ydb-embedded-ui/issues/2471)) ([1eb4e01](https://github.com/ydb-platform/ydb-embedded-ui/commit/1eb4e01b7a8eedf30bb3a2b47afa987788c368e7))
+* operations tab ([#2435](https://github.com/ydb-platform/ydb-embedded-ui/issues/2435)) ([937c561](https://github.com/ydb-platform/ydb-embedded-ui/commit/937c561c617bf4cf73c472631623ce6bf40db59f))
+* remove host fqdn and node id columns from node tablets table ([#2473](https://github.com/ydb-platform/ydb-embedded-ui/issues/2473)) ([6e598fd](https://github.com/ydb-platform/ydb-embedded-ui/commit/6e598fdb6d37ada84ef1e4cbb6c8c3d1045ed59c))
+
+## [9.7.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.7.0...v9.7.1) (2025-06-23)
+
+
+### Bug Fixes
+
+* **AccessRights:** no need in forms ([#2457](https://github.com/ydb-platform/ydb-embedded-ui/issues/2457)) ([03f238e](https://github.com/ydb-platform/ydb-embedded-ui/commit/03f238e5af4298bb23bebb9221c60b33b311b4a9))
+* **Clusters:** filter empty DC ([#2453](https://github.com/ydb-platform/ydb-embedded-ui/issues/2453)) ([a106b5e](https://github.com/ydb-platform/ydb-embedded-ui/commit/a106b5e5aeb066b8f84e30d87c9c9b9af7cfd2f0))
+* **Clusters:** size s for actions menu ([#2451](https://github.com/ydb-platform/ydb-embedded-ui/issues/2451)) ([d9a4c44](https://github.com/ydb-platform/ydb-embedded-ui/commit/d9a4c441dd3f4a62da1104d98f2c50ac3df094ac))
+* **Cluster:** use cluster name if title is empty string ([#2452](https://github.com/ydb-platform/ydb-embedded-ui/issues/2452)) ([1c8a6c0](https://github.com/ydb-platform/ydb-embedded-ui/commit/1c8a6c0eb52d93f7becaff718b4590d346804d9f))
+* disable oidc streaming ([#2462](https://github.com/ydb-platform/ydb-embedded-ui/issues/2462)) ([3bffcbd](https://github.com/ydb-platform/ydb-embedded-ui/commit/3bffcbd1f9ff61500fb6c05c2ac3c371a0bc53a5))
+* do not expose obsolet name param ([#2458](https://github.com/ydb-platform/ydb-embedded-ui/issues/2458)) ([736c5f0](https://github.com/ydb-platform/ydb-embedded-ui/commit/736c5f0478eca2f38b3dc513278aae6a358dcefe))
+
+## [9.7.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.6.3...v9.7.0) (2025-06-20)
+
+
+### Features
+
+* add backups page with custom render ([#2442](https://github.com/ydb-platform/ydb-embedded-ui/issues/2442)) ([b66e8d5](https://github.com/ydb-platform/ydb-embedded-ui/commit/b66e8d50bdf23044f103850310bdec55a400ee54))
+* manage schema object permissions ([#2398](https://github.com/ydb-platform/ydb-embedded-ui/issues/2398)) ([0c89baa](https://github.com/ydb-platform/ydb-embedded-ui/commit/0c89baa3d9f33ae8cc9b67a101815bdcbf5a890d))
+
+
+### Bug Fixes
+
+* **HealthcheckPreview:** use only one query ([#2427](https://github.com/ydb-platform/ydb-embedded-ui/issues/2427)) ([74ca103](https://github.com/ydb-platform/ydb-embedded-ui/commit/74ca10362e45a062fccdd8b4a7691abb7bcc8a4d))
+* **healthcheck:** show groups ids in separate rows ([#2423](https://github.com/ydb-platform/ydb-embedded-ui/issues/2423)) ([eaa789b](https://github.com/ydb-platform/ydb-embedded-ui/commit/eaa789bcdb320ebec137aace2c1e055ef999bd2c))
+* **Network:** require ConnectStatus for host column ([#2429](https://github.com/ydb-platform/ydb-embedded-ui/issues/2429)) ([eccba69](https://github.com/ydb-platform/ydb-embedded-ui/commit/eccba6912daecf540d435b3df2eb3e186ab815ff))
+* **Nodes:** request tablets only if required ([#2433](https://github.com/ydb-platform/ydb-embedded-ui/issues/2433)) ([e1499e9](https://github.com/ydb-platform/ydb-embedded-ui/commit/e1499e9912692e3714708e574f87c77c3d507940))
+* support name param for database ([#2426](https://github.com/ydb-platform/ydb-embedded-ui/issues/2426)) ([ce1fb66](https://github.com/ydb-platform/ydb-embedded-ui/commit/ce1fb6639030e608bab6628f4c45cfd10e9512a5))
+* tests ([#2439](https://github.com/ydb-platform/ydb-embedded-ui/issues/2439)) ([6001e22](https://github.com/ydb-platform/ydb-embedded-ui/commit/6001e22d0b24abf1ff07b8548f9208c494b0afe7))
+* unskip tests ([#2436](https://github.com/ydb-platform/ydb-embedded-ui/issues/2436)) ([76b37bb](https://github.com/ydb-platform/ydb-embedded-ui/commit/76b37bbe8ec36bb91481fbf636bd6d038c5eb726))
+
+## [9.6.3](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.6.2...v9.6.3) (2025-06-17)
+
+
+### Bug Fixes
+
+* check stats independently of plan ([#2413](https://github.com/ydb-platform/ydb-embedded-ui/issues/2413)) ([3b554c8](https://github.com/ydb-platform/ydb-embedded-ui/commit/3b554c867345dcd13909484785b71cbf1f215472))
+
+## [9.6.2](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.6.1...v9.6.2) (2025-06-17)
+
+
+### Bug Fixes
+
+* **healthcheck:** all fields may be undefined ([#2410](https://github.com/ydb-platform/ydb-embedded-ui/issues/2410)) ([6d2f450](https://github.com/ydb-platform/ydb-embedded-ui/commit/6d2f45002b8ca5be7d323a727fd01c7e59ada221))
+* **Healthcheck:** do not autorefresh ([#2409](https://github.com/ydb-platform/ydb-embedded-ui/issues/2409)) ([7876ecb](https://github.com/ydb-platform/ydb-embedded-ui/commit/7876ecb7c98a443874e3c564d16c9a27855daaf5))
+
+## [9.6.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.6.0...v9.6.1) (2025-06-16)
+
+
+### Bug Fixes
+
+* **uiFactory:** add generic support ([#2407](https://github.com/ydb-platform/ydb-embedded-ui/issues/2407)) ([0014557](https://github.com/ydb-platform/ydb-embedded-ui/commit/00145578ae6d548763d66af2fe8e78c1e37dac5c))
+
+## [9.6.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.5.1...v9.6.0) (2025-06-16)
+
+
+### Features
+
+* evict unhealthy VDisk ([#2399](https://github.com/ydb-platform/ydb-embedded-ui/issues/2399)) ([7594f70](https://github.com/ydb-platform/ydb-embedded-ui/commit/7594f70684da836d9bcb9dc71c14507b0d1fa947))
+
+
+### Bug Fixes
+
+* **Healthcheck:** types ([#2402](https://github.com/ydb-platform/ydb-embedded-ui/issues/2402)) ([e09cc13](https://github.com/ydb-platform/ydb-embedded-ui/commit/e09cc1319025076f93b4169ba2e77d5b4d920e0d))
+
+## [9.5.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.5.0...v9.5.1) (2025-06-11)
+
+
+### Bug Fixes
+
+* **Clusters:** increase menu items size ([#2396](https://github.com/ydb-platform/ydb-embedded-ui/issues/2396)) ([946efb3](https://github.com/ydb-platform/ydb-embedded-ui/commit/946efb3d60a8bc0da52dc8dbe7bf82641073dcf1))
+
+## [9.5.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.4.1...v9.5.0) (2025-06-11)
+
+
+### Features
+
+* allow defining a list of links for cluster and database overviews ([#2359](https://github.com/ydb-platform/ydb-embedded-ui/issues/2359)) ([3aef421](https://github.com/ydb-platform/ydb-embedded-ui/commit/3aef4212fff6a9cbf672b02757e6abc83b1bf079))
+
+
+### Bug Fixes
+
+* **Clusters:** fix scroll ([#2394](https://github.com/ydb-platform/ydb-embedded-ui/issues/2394)) ([9ba0f4a](https://github.com/ydb-platform/ydb-embedded-ui/commit/9ba0f4aee28d6446baa67065814cbc36192d6f92))
+* **Clusters:** make actions switcher secondary ([#2393](https://github.com/ydb-platform/ydb-embedded-ui/issues/2393)) ([cc3d8e3](https://github.com/ydb-platform/ydb-embedded-ui/commit/cc3d8e3ce72def0975a9f72c3238706c4676d861))
+
+## [9.4.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.4.0...v9.4.1) (2025-06-10)
+
+
+### Bug Fixes
+
+* **uiFactory:** make overrides partial ([#2384](https://github.com/ydb-platform/ydb-embedded-ui/issues/2384)) ([a54999e](https://github.com/ydb-platform/ydb-embedded-ui/commit/a54999ee3e52b73d7764e5d91faf412ed750be33))
+
+## [9.4.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.3.1...v9.4.0) (2025-06-09)
+
+
+### Features
+
+* **Clusters:** allow add, edit and delete cluster funcs ([#2369](https://github.com/ydb-platform/ydb-embedded-ui/issues/2369)) ([69b4b4e](https://github.com/ydb-platform/ydb-embedded-ui/commit/69b4b4e80453f1687154f5a7e0c68d6fb70bdfc9))
+* **createToast:** allow more props from uikit ([#2370](https://github.com/ydb-platform/ydb-embedded-ui/issues/2370)) ([0dda6ec](https://github.com/ydb-platform/ydb-embedded-ui/commit/0dda6ec77eb003ef2785f86e62cc69b8c6ec7644))
+* drawer table scroll ([#2364](https://github.com/ydb-platform/ydb-embedded-ui/issues/2364)) ([34ea140](https://github.com/ydb-platform/ydb-embedded-ui/commit/34ea140e58091f4065f2f7b23b07de12d9dd1f3c))
+* **Healthcheck:** redesign ([#2348](https://github.com/ydb-platform/ydb-embedded-ui/issues/2348)) ([eac76af](https://github.com/ydb-platform/ydb-embedded-ui/commit/eac76afd3a3dca4d80a73b56af4e859146603d27))
+
+
+### Bug Fixes
+
+* **TopicPreview:** dont show negative offsets ([#2381](https://github.com/ydb-platform/ydb-embedded-ui/issues/2381)) ([91deb63](https://github.com/ydb-platform/ydb-embedded-ui/commit/91deb634669fa48fa8ea9a670d015ae769aefceb))
+
+## [9.3.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.3.0...v9.3.1) (2025-06-03)
+
+
+### Bug Fixes
+
+* credentials for multipart for cross-origin ([#2361](https://github.com/ydb-platform/ydb-embedded-ui/issues/2361)) ([97dfc75](https://github.com/ydb-platform/ydb-embedded-ui/commit/97dfc750ef8a086303caba6452511e3d996215ab))
+* drawer is broken ([#2351](https://github.com/ydb-platform/ydb-embedded-ui/issues/2351)) ([ce13b7f](https://github.com/ydb-platform/ydb-embedded-ui/commit/ce13b7fca36d1e77f31221156ce09d1b6f35c418))
+* scrolling performance optimizations for table ([#2335](https://github.com/ydb-platform/ydb-embedded-ui/issues/2335)) ([6c72cce](https://github.com/ydb-platform/ydb-embedded-ui/commit/6c72ccedc206bc3b18f8d20f41d7be3a60f64829))
+* table is broken because of batching ([#2356](https://github.com/ydb-platform/ydb-embedded-ui/issues/2356)) ([7f3ea8c](https://github.com/ydb-platform/ydb-embedded-ui/commit/7f3ea8ca82581de6f2c10e473704cc30cf9697a7))
+* table is not scrolled to top on sorting ([#2347](https://github.com/ydb-platform/ydb-embedded-ui/issues/2347)) ([7bde143](https://github.com/ydb-platform/ydb-embedded-ui/commit/7bde143c44535cc78f87b366e72f3213d584e0a9))
+* **Tenants:** do not show actions for domain ([#2336](https://github.com/ydb-platform/ydb-embedded-ui/issues/2336)) ([828724d](https://github.com/ydb-platform/ydb-embedded-ui/commit/828724daf3ab8f0aa7ab6b6fd86c837e99be59d5))
+
+## [9.3.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.2.2...v9.3.0) (2025-05-27)
+
+
+### Features
+
+* **Tenants:** pass full db data to onDelete ([#2328](https://github.com/ydb-platform/ydb-embedded-ui/issues/2328)) ([b966aaa](https://github.com/ydb-platform/ydb-embedded-ui/commit/b966aaaa8abeb55cea2f579da0f99dd5f458ef0b))
+
+
+### Bug Fixes
+
+* **Versions:** properly include nodes with defined roles in other group ([#2327](https://github.com/ydb-platform/ydb-embedded-ui/issues/2327)) ([3f3a543](https://github.com/ydb-platform/ydb-embedded-ui/commit/3f3a543a688fe2370053d95aa0c051da625055c9))
+
+## [9.2.2](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.2.1...v9.2.2) (2025-05-26)
+
+
+### Bug Fixes
+
+* incorrect group numbers ([#2319](https://github.com/ydb-platform/ydb-embedded-ui/issues/2319)) ([a2e9cce](https://github.com/ydb-platform/ydb-embedded-ui/commit/a2e9cce5aed6840fc7e926dff0ffc8ac0a02d434))
+* initial params in useEffect ([#2321](https://github.com/ydb-platform/ydb-embedded-ui/issues/2321)) ([28a51ed](https://github.com/ydb-platform/ydb-embedded-ui/commit/28a51ed39ff4d15fba01376b89c2dec95f573e79))
+* update acl tests ([#2324](https://github.com/ydb-platform/ydb-embedded-ui/issues/2324)) ([84f0eee](https://github.com/ydb-platform/ydb-embedded-ui/commit/84f0eeeed3fb8490437cf9be8aa50476246afd33))
+
+## [9.2.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.2.0...v9.2.1) (2025-05-22)
+
+
+### Bug Fixes
+
+* paginated table in groups scrolled to top on refresh ([#2291](https://github.com/ydb-platform/ydb-embedded-ui/issues/2291)) ([f4971ee](https://github.com/ydb-platform/ydb-embedded-ui/commit/f4971eeb4846ba9468094fe039d4c4acb5ceb74d))
+* reset base offsets on selected partition change ([#2314](https://github.com/ydb-platform/ydb-embedded-ui/issues/2314)) ([6119f14](https://github.com/ydb-platform/ydb-embedded-ui/commit/6119f1490a0bb4c5f3e21ceb87dcf289a644d8b6))
+
+## [9.2.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.1.0...v9.2.0) (2025-05-22)
+
+
+### Features
+
+* **Preview:** add preview for topics ([#2292](https://github.com/ydb-platform/ydb-embedded-ui/issues/2292)) ([c4a4abf](https://github.com/ydb-platform/ydb-embedded-ui/commit/c4a4abf6119728abadad0a958afaaea4bba40309))
+* **Tenants:** add onEditDB to uiFactory, add edit button ([#2305](https://github.com/ydb-platform/ydb-embedded-ui/issues/2305)) ([21c7126](https://github.com/ydb-platform/ydb-embedded-ui/commit/21c7126f147631b9c75362efa72f749a51d91d8b))
+
+
+### Bug Fixes
+
+* **Cluster:** autorefresh cluster data ([#2307](https://github.com/ydb-platform/ydb-embedded-ui/issues/2307)) ([713315c](https://github.com/ydb-platform/ydb-embedded-ui/commit/713315c9029f108024503a9089b47dcc7b2d0608))
+* **Cluster:** side paddings ([#2301](https://github.com/ydb-platform/ydb-embedded-ui/issues/2301)) ([478c9e8](https://github.com/ydb-platform/ydb-embedded-ui/commit/478c9e8a5775ef1cc327dc46afe9402879721013))
+
+## [9.1.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.0.0...v9.1.0) (2025-05-21)
+
+
+### Features
+
+* **Diagnostics:** split CDC and its implementation ([#2281](https://github.com/ydb-platform/ydb-embedded-ui/issues/2281)) ([9308686](https://github.com/ydb-platform/ydb-embedded-ui/commit/93086860924006bdf117ab941c6e57a718e56d29))
+* **TopicData:** add topic message details in Drawer ([#2266](https://github.com/ydb-platform/ydb-embedded-ui/issues/2266)) ([025d5ff](https://github.com/ydb-platform/ydb-embedded-ui/commit/025d5ffcf1a3c7a11528a63ad22d9b923469af77))
+* **vDisk:** allow evict vDisk by id ([#2267](https://github.com/ydb-platform/ydb-embedded-ui/issues/2267)) ([410d4d4](https://github.com/ydb-platform/ydb-embedded-ui/commit/410d4d4d6f1168b9ae405de88e9753b9c7807626))
+
+
+### Bug Fixes
+
+* **ClusterInfo:** increase fonts ([#2299](https://github.com/ydb-platform/ydb-embedded-ui/issues/2299)) ([345cbfb](https://github.com/ydb-platform/ydb-embedded-ui/commit/345cbfb0186907c98698f109f2669d44f35017ec))
+* **QueryResultViewer:** change tabs order ([#2303](https://github.com/ydb-platform/ydb-embedded-ui/issues/2303)) ([1beef31](https://github.com/ydb-platform/ydb-embedded-ui/commit/1beef31bea69f0c2fd22ab6e8195638b3ee6bbbc))
+* **Tenants:** do not add empty search to query ([#2287](https://github.com/ydb-platform/ydb-embedded-ui/issues/2287)) ([2664ec7](https://github.com/ydb-platform/ydb-embedded-ui/commit/2664ec7d96bc0352a62b3ef201f8710a35c499e1))
+
 ## [9.0.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v8.26.2...v9.0.0) (2025-05-13)
 
 

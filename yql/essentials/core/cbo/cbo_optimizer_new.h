@@ -35,12 +35,6 @@ struct IBaseOptimizerNode {
     EOptimizerNodeKind Kind;
     TOptimizerStatistics Stats;
 
-    // for interesting orderings framework
-
-    NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
-
-    //
-
     IBaseOptimizerNode(EOptimizerNodeKind k) : Kind(k) {}
     IBaseOptimizerNode(EOptimizerNodeKind k, TOptimizerStatistics s) :
         Kind(k), Stats(std::move(s)) {}
@@ -181,6 +175,7 @@ struct TJoinOrderHints {
 };
 
 struct TOptimizerHints {
+    std::shared_ptr<TCardinalityHints> BytesHints = std::make_shared<TCardinalityHints>();
     std::shared_ptr<TCardinalityHints> CardinalityHints = std::make_shared<TCardinalityHints>();
     std::shared_ptr<TJoinAlgoHints> JoinAlgoHints = std::make_shared<TJoinAlgoHints>();
     std::shared_ptr<TJoinOrderHints> JoinOrderHints = std::make_shared<TJoinOrderHints>();
@@ -188,10 +183,11 @@ struct TOptimizerHints {
     TVector<TString> GetUnappliedString();
 
     /*
-     *   The function accepts string with three type of expressions: array of (JoinAlgo | Card | JoinOrder):
+     *   The function accepts string with four type of expressions: array of (JoinAlgo | Rows | Bytes | JoinOrder):
      *   1) JoinAlgo(t1 t2 ... tn Map | Grace | Lookup) to change join algo for join, where these labels take part
-     *   2) Card(t1 t2 ... tn (*|/|+|-) Number) to change cardinality for join, where these labels take part or labels only
-     *   3) JoinOrder( (t1 t2) (t3 (t4 ...)) ) - fixate this join subtree in the general join tree
+     *   2) Rows(t1 t2 ... tn (*|/|+|-|#) Number) to change cardinality for join, where these labels take part or labels only
+     *   3) Bytes(t1 t2 ... tn (*|/|+|-|#) Number) to change byte size for join, where these labels take part or labels only
+     *   4) JoinOrder( (t1 t2) (t3 (t4 ...)) ) - fixate this join subtree in the general join tree
      */
     static TOptimizerHints Parse(const TString&);
 };
@@ -232,6 +228,19 @@ struct IProviderContext {
         TCardinalityHints::TCardinalityHint* maybeHint,
         bool shuffleLeftSide,
         bool shuffleRightSide
+    ) const = 0;
+
+    virtual TOptimizerStatistics ComputeJoinStatsV2(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint,
+        bool shuffleLeftSide,
+        bool shuffleRightSide,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint
     ) const = 0;
 
     virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
@@ -287,6 +296,19 @@ struct TBaseProviderContext : public IProviderContext {
         TCardinalityHints::TCardinalityHint* maybeHint,
         bool shuffleLeftSide,
         bool shuffleRightSide
+    ) const override;
+
+    TOptimizerStatistics ComputeJoinStatsV2(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint,
+        bool shuffleLeftSide,
+        bool shuffleRightSide,
+        TCardinalityHints::TCardinalityHint* maybeBytesHint
     ) const override;
 
     static const TBaseProviderContext& Instance();

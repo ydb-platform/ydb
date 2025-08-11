@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.14.1)
+VERSION(2.15.0)
 
 LICENSE(Apache-2.0)
 
@@ -20,6 +20,7 @@ PY_SRCS(
     allure_pytest/helper.py
     allure_pytest/listener.py
     allure_pytest/plugin.py
+    allure_pytest/stash.py
     allure_pytest/utils.py
 )
 

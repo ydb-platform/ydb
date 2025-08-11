@@ -10,6 +10,7 @@
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
@@ -70,7 +71,7 @@ public:
     ~TFacadeRunOptions();
 
     EProgramType ProgramType = EProgramType::SExpr;
-    TLangVersion LangVer = UnknownLangVersion;
+    TLangVersion LangVer = MinLangVersion;
     TLangVersion MaxLangVer = GetMaxLangVersion();
     NYson::EYsonFormat ResultsFormat = NYson::EYsonFormat::Text;
     ERunMode Mode = ERunMode::Run;
@@ -90,6 +91,7 @@ public:
     bool AssumeYdbOnClusterWithSlash = false;
     bool TestSqlFormat = false;
     bool TestLexers = false;
+    bool TestComplete = false;
     THashMap<TString, NSQLTranslation::TTableBindingSettings> Bindings;
 
     bool PrintAst = false;
@@ -118,6 +120,7 @@ public:
 
     THashSet<TString> GatewayTypes;
     TString UdfResolverPath;
+    TString UdfResolverLog;
     bool UdfResolverFilterSyscalls = false;
     bool ScanUdfs = false;
     THolder<NYqlMountConfig::TMountConfig> MountConfig;
@@ -236,6 +239,7 @@ private:
     IPipelineConfigurator* OptPipelineConfigurator_ = nullptr;
     IPipelineConfigurator* PeepholePipelineConfigurator_ = nullptr;
     TFacadeRunOptions RunOptions_;
+    std::unique_ptr<NYql::NLog::YqlLoggerScope> YqlLogger_;
 };
 
 } // NYql

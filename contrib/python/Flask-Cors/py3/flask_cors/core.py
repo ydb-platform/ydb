@@ -69,14 +69,17 @@ def parse_resources(resources):
         # resource of '*', which is not actually a valid regexp.
         resources = [(re_fix(k), v) for k, v in resources.items()]
 
-        # Sort by regex length to provide consistency of matching and
-        # to provide a proxy for specificity of match. E.G. longer
-        # regular expressions are tried first.
-        def pattern_length(pair):
-            maybe_regex, _ = pair
-            return len(get_regexp_pattern(maybe_regex))
+        # Sort patterns with static (literal) paths first, then by regex specificity
+        def sort_key(pair):
+            pattern, _ = pair
+            if isinstance(pattern, RegexObject):
+                return (1, 0, -pattern.pattern.count("/"), -len(pattern.pattern))
+            elif probably_regex(pattern):
+                return (1, 1, -pattern.count("/"), -len(pattern))
+            else:
+                return (0, 0, -pattern.count("/"), -len(pattern))
 
-        return sorted(resources, key=pattern_length, reverse=True)
+        return sorted(resources, key=sort_key)
 
     elif isinstance(resources, str):
         return [(re_fix(resources), {})]
@@ -121,9 +124,10 @@ def get_cors_origins(options, request_origin):
         if wildcard and options.get("send_wildcard"):
             LOG.debug("Allowed origins are set to '*'. Sending wildcard CORS header.")
             return ["*"]
-        # If the value of the Origin header is a case-sensitive match
-        # for any of the values in list of origins
-        elif try_match_any(request_origin, origins):
+        # If the value of the Origin header is a case-insensitive match
+        # for any of the values in list of origins.
+        # NOTE: Per RFC 1035 and RFC 4343 schemes and hostnames are case insensitive.
+        elif try_match_any_pattern(request_origin, origins, caseSensitive=False):
             LOG.debug(
                 "The request's Origin header matches. Sending CORS headers.",
             )
@@ -164,7 +168,7 @@ def get_allow_headers(options, acl_request_headers):
         request_headers = [h.strip() for h in acl_request_headers.split(",")]
 
         # any header that matches in the allow_headers
-        matching_headers = filter(lambda h: try_match_any(h, options.get("allow_headers")), request_headers)
+        matching_headers = filter(lambda h: try_match_any_pattern(h, options.get("allow_headers"), caseSensitive=False), request_headers)
 
         return ", ".join(sorted(matching_headers))
 
@@ -277,22 +281,31 @@ def re_fix(reg):
     return r".*" if reg == r"*" else reg
 
 
-def try_match_any(inst, patterns):
-    return any(try_match(inst, pattern) for pattern in patterns)
+def try_match_any_pattern(inst, patterns, caseSensitive=True):
+    return any(try_match_pattern(inst, pattern, caseSensitive) for pattern in patterns)
 
-
-def try_match(request_origin, maybe_regex):
-    """Safely attempts to match a pattern or string to a request origin."""
-    if isinstance(maybe_regex, RegexObject):
-        return re.match(maybe_regex, request_origin)
-    elif probably_regex(maybe_regex):
-        return re.match(maybe_regex, request_origin, flags=re.IGNORECASE)
-    else:
+def try_match_pattern(value, pattern, caseSensitive=True):
+    """
+    Safely attempts to match a pattern or string to a value. This
+    function can be used to match request origins, headers, or paths.
+    The value of caseSensitive should be set in accordance to the
+    data being compared e.g. origins and headers are case insensitive
+    whereas paths are case-sensitive
+    """
+    if isinstance(pattern, RegexObject):
+        return re.match(pattern, value)
+    if probably_regex(pattern):
+        flags = 0 if caseSensitive else re.IGNORECASE
         try:
-            return request_origin.lower() == maybe_regex.lower()
-        except AttributeError:
-            return request_origin == maybe_regex
-
+            return re.match(pattern, value, flags=flags)
+        except re.error:
+            return False
+    try:
+        v = str(value)
+        p = str(pattern)
+        return v == p if caseSensitive else v.casefold() == p.casefold()
+    except Exception:
+        return value == pattern
 
 def get_cors_options(appInstance, *dicts):
     """

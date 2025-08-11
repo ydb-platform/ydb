@@ -9,15 +9,9 @@ TKqpTxHelper::TKqpTxHelper(TString database)
     : DataBase(database)
 {}
 
-void TKqpTxHelper::SendCreateSessionRequest(const TActorContext& ctx, const TMaybe<TActorId>& kqpActorId) {
+void TKqpTxHelper::SendCreateSessionRequest(const TActorContext& ctx) {
     auto ev = MakeCreateSessionRequest();
-    TActorId actorId;
-    if (!kqpActorId) {
-        actorId = MakeKqpProxyID(ctx.SelfID.NodeId());
-    } else {
-        actorId = *kqpActorId;
-    }
-    ctx.Send(actorId, ev.Release(), 0, 0);
+    ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0);
 }
 
 void TKqpTxHelper::BeginTransaction(ui64 cookie, const TActorContext& ctx) {
@@ -68,7 +62,7 @@ void TKqpTxHelper::SendRequest(THolder<TEvKqp::TEvQueryRequest> request, ui64 co
     ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), request.Release(), 0, cookie);
 }
 
-void TKqpTxHelper::SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const TActorContext& ctx, bool commit, const TMaybe<TActorId>& kqpActorId) {
+void TKqpTxHelper::SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const TActorContext& ctx, bool commit) {
     auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
 
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
@@ -87,13 +81,7 @@ void TKqpTxHelper::SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlPa
 
     ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(sqlParams)));
 
-    TActorId actorId;
-    if (!kqpActorId) {
-        actorId = MakeKqpProxyID(ctx.SelfID.NodeId());
-    } else {
-        actorId = *kqpActorId;
-    }
-    ctx.Send(actorId, ev.Release(), 0, cookie);
+    ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, cookie);
 }
 
 void TKqpTxHelper::CommitTx(ui64 cookie, const TActorContext& ctx) {

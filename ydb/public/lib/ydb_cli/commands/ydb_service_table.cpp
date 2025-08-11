@@ -28,11 +28,11 @@ TCommandTable::TCommandTable()
     : TClientCommandTree("table", {}, "Table service operations")
 {
     //AddCommand(std::make_unique<TCommandCreateTable>());
+    AddCommand(std::make_unique<TCommandAttribute>());
     AddCommand(std::make_unique<TCommandDropTable>());
+    AddCommand(std::make_unique<TCommandIndex>());
     AddCommand(std::make_unique<TCommandTableQuery>());
     AddCommand(std::make_unique<TCommandReadTable>());
-    AddCommand(std::make_unique<TCommandIndex>());
-    AddCommand(std::make_unique<TCommandAttribute>());
     AddCommand(std::make_unique<TCommandTtl>());
 }
 
@@ -187,9 +187,13 @@ void TCommandCreateTable::Config(TConfig& config) {
         .StoreTrue(&AllowPromotion);
 }
 
-void TCommandCreateTable::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandCreateTable::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
+}
+
+void TCommandCreateTable::Validate(TConfig& config) {
+    TClientCommand::Validate(config);
     if (!Columns.size()) {
         throw TMisuseException() << "At least one column should be provided";
     }
@@ -315,8 +319,8 @@ void TCommandDropTable::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "table to drop path");
 }
 
-void TCommandDropTable::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandDropTable::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -457,7 +461,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
 
     if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(driver, Query, paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             TParams params = paramBuilder->Build();
             auto operation = [this, &txSettings, &params, &settings, &asyncResult](NTable::TSession session) {
                 auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
@@ -723,7 +727,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
     SetInterruptHandlers();
     if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(driver, Query, paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             auto operation = [this, &paramBuilder, &settings, &asyncResult](TClient client) {
                 auto promise = NThreading::NewPromise<TPartIterator<TClient>>();
                 asyncResult = promise.GetFuture();
@@ -1125,6 +1129,10 @@ void TCommandReadTable::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseInputFormats();
     ParseOutputFormats();
+}
+
+void TCommandReadTable::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1267,6 +1275,10 @@ void TCommandIndexAddGlobal::Config(TConfig& config) {
 void TCommandIndexAddGlobal::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseOutputFormats();
+}
+
+void TCommandIndexAddGlobal::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1311,8 +1323,8 @@ void TCommandIndexDrop::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandIndexDrop::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandIndexDrop::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1349,8 +1361,8 @@ void TCommandIndexRename::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandIndexRename::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandIndexRename::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1384,8 +1396,8 @@ void TCommandAttributeAdd::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandAttributeAdd::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandAttributeAdd::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1417,8 +1429,8 @@ void TCommandAttributeDrop::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandAttributeDrop::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandAttributeDrop::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1481,8 +1493,8 @@ void TCommandTtlSet::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandTtlSet::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandTtlSet::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 
@@ -1522,8 +1534,8 @@ void TCommandTtlReset::Config(TConfig& config) {
     SetFreeArgTitle(0, "<table path>", "Path to a table");
 }
 
-void TCommandTtlReset::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+void TCommandTtlReset::ExtractParams(TConfig& config) {
+    TClientCommand::ExtractParams(config);
     ParsePath(config, 0);
 }
 

@@ -33,6 +33,7 @@
 * [fetch](cluster/fetch.md) - получение текущей конфигурации кластера.
 * [generate](cluster/generate.md) - генерация [конфигурации V2](../../../../devops/configuration-management/configuration-v2/index.md) из [V1](../../../../devops/configuration-management/configuration-v1/index.md) для [миграции между ними](../../../../devops/configuration-management/migration/migration-to-v2.md).
 * [replace](cluster/replace.md) - замена текущей конфигурации кластера.
+* version - отображение версии конфигурации на узлах (V1/V2).
 
 ### Конфигурация узла {#node}
 

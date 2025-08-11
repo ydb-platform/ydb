@@ -590,6 +590,7 @@ public:
         out << "<th>Storage</th>";
         out << "<th>Read</th>";
         out << "<th>Write</th>";
+        out << "<th>Usage impact</th>";
         out << "</tr>";
         out << "</thead>";
 
@@ -602,6 +603,7 @@ public:
             out << "<tr title='" << tablet.GetResourceValues().DebugString() << "'>";
             out << "<td data-text='" << index << "'><a href='../tablets?TabletID=" << id << "'>" << id << "</a></td>";
             out << GetResourceValuesHtml(tablet.GetResourceValues());
+            out << "<td>" << tablet.UsageImpact << "</td>";
             out << "</tr>";
         }
         out <<"</tbody>";
@@ -849,6 +851,7 @@ public:
         UpdateConfig(db, "TargetTrackingCPUMargin", configUpdates);
         UpdateConfig(db, "DryRunTargetTrackingCPU", configUpdates);
         UpdateConfig(db, "NodeRestartsForPenalty", configUpdates);
+        UpdateConfig(db, "BalanceCountersRefreshFrequency", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -913,6 +916,7 @@ public:
         if (ChangeRequest) {
             Self->BuildCurrentConfig();
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
+            Self->ProcessWaitQueue();
         }
         if (params.contains("allowedMetrics")) {
             auto& jsonAllowedMetrics = jsonOperation["AllowedMetricsUpdate"];
@@ -1203,6 +1207,7 @@ public:
         ShowConfig(out, "TargetTrackingCPUMargin");
         ShowConfig(out, "DryRunTargetTrackingCPU");
         ShowConfig(out, "NodeRestartsForPenalty");
+        ShowConfig(out, "BalanceCountersRefreshFrequency");
 
         out << "<div class='row' style='margin-top:40px'>";
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";
@@ -1397,6 +1402,7 @@ public:
         if (ChangeRequest) {
             Self->ObjectDistributions.RemoveNode(*Node);
             Self->ObjectDistributions.AddNode(*Node);
+            Self->ProcessWaitQueue();
             WriteOperation(db, jsonOperation);
         }
         return true;
@@ -3795,6 +3801,7 @@ public:
         result["ResourceMetricsAggregates"] = MakeFrom(tablet.ResourceMetricsAggregates);
         result["ActorsToNotify"] = MakeFrom(tablet.ActorsToNotify);
         result["ActorsToNotifyOnRestart"] = MakeFrom(tablet.ActorsToNotifyOnRestart);
+        result["UsageImpact"] = tablet.UsageImpact;
         return result;
     }
 

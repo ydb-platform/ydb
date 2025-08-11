@@ -51,19 +51,19 @@ namespace {
     public:
         TLinearHistogram(double step, double begin, double end)
             : TAdaptiveWardHistogram(1ULL << 24)
-            , Step(step)
-            , Begin(begin)
-            , End(end)
+            , Step_(step)
+            , Begin_(begin)
+            , End_(end)
         {
         }
 
         void Add(double value, double weight) override {
-            if (value < Begin) {
-                value = Begin;
-            } else if (value > End) {
-                value = End;
+            if (value < Begin_) {
+                value = Begin_;
+            } else if (value > End_) {
+                value = End_;
             } else {
-                value = std::floor(value / Step + 0.5) * Step;
+                value = std::floor(value / Step_ + 0.5) * Step_;
             }
             TAdaptiveWardHistogram::Add(value, weight);
         }
@@ -73,9 +73,9 @@ namespace {
         }
 
     protected:
-        double Step;
-        double Begin;
-        double End;
+        double Step_;
+        double Begin_;
+        double End_;
     };
 
     class TLogarithmicHistogram: public TLinearHistogram {
@@ -86,19 +86,19 @@ namespace {
         }
 
         void Add(double value, double weight) override {
-            double base = std::log(value) / std::log(Step);
-            double prev = std::pow(Step, std::floor(base));
-            double next = std::pow(Step, std::ceil(base));
+            double base = std::log(value) / std::log(Step_);
+            double prev = std::pow(Step_, std::floor(base));
+            double next = std::pow(Step_, std::ceil(base));
             if (std::abs(value - next) > std::abs(value - prev)) {
                 value = prev;
             } else {
                 value = next;
             }
 
-            if (value < Begin) {
-                value = Begin;
-            } else if (value > End) {
-                value = End;
+            if (value < Begin_) {
+                value = Begin_;
+            } else if (value > End_) {
+                value = End_;
             }
 
             if (!std::isnan(value)) {
@@ -136,7 +136,7 @@ namespace {
                 histogram->Get()->Add(args[0].Get<double>(), args[1].Get<double>());
                 return TUnboxedValuePod(histogram.Release());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -187,7 +187,7 @@ namespace {
                 resource->Get()->Add(args[1].Get<double>(), args[2].Get<double>());
                 return TUnboxedValuePod(args[0]);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -239,7 +239,7 @@ namespace {
                 Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&result);
                 return valueBuilder->NewString(result);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -292,7 +292,7 @@ namespace {
                 histogram->Get()->FromProto(proto);
                 return TUnboxedValuePod(histogram.Release());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -344,7 +344,7 @@ namespace {
                 static_cast<THistogramResource*>(args[1].AsBoxed().Get())->Get()->Merge(proto, 1.0);
                 return TUnboxedValuePod(args[1]);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -398,7 +398,7 @@ namespace {
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         THistogram_GetResult(const THistogramIndexes& histogramIndexes, TSourcePosition pos)
-            : HistogramIndexes(histogramIndexes)
+            : HistogramIndexes_(histogramIndexes)
             , Pos_(pos)
         {
         }
@@ -419,25 +419,25 @@ namespace {
 
             auto size = proto.FreqSize();
             TUnboxedValue* fields = nullptr;
-            auto result = valueBuilder->NewArray(HistogramIndexes.ResultFieldsCount, fields);
-            fields[HistogramIndexes.Kind] = valueBuilder->NewString(TStringBuf(ResourceName).Skip(10));
+            auto result = valueBuilder->NewArray(HistogramIndexes_.ResultFieldsCount, fields);
+            fields[HistogramIndexes_.Kind] = valueBuilder->NewString(TStringBuf(ResourceName).Skip(10));
             if (size) {
                 TUnboxedValue* items = nullptr;
-                fields[HistogramIndexes.Bins] = valueBuilder->NewArray(size, items);
-                fields[HistogramIndexes.Min] = TUnboxedValuePod(static_cast<double>(histogram->GetMinValue()));
-                fields[HistogramIndexes.Max] = TUnboxedValuePod(static_cast<double>(histogram->GetMaxValue()));
-                fields[HistogramIndexes.WeightsSum] = TUnboxedValuePod(static_cast<double>(histogram->GetSum()));
+                fields[HistogramIndexes_.Bins] = valueBuilder->NewArray(size, items);
+                fields[HistogramIndexes_.Min] = TUnboxedValuePod(static_cast<double>(histogram->GetMinValue()));
+                fields[HistogramIndexes_.Max] = TUnboxedValuePod(static_cast<double>(histogram->GetMaxValue()));
+                fields[HistogramIndexes_.WeightsSum] = TUnboxedValuePod(static_cast<double>(histogram->GetSum()));
                 for (ui64 i = 0; i < size; ++i) {
                     TUnboxedValue* binFields = nullptr;
-                    *items++ = valueBuilder->NewArray(HistogramIndexes.BinFieldsCount, binFields);
-                    binFields[HistogramIndexes.Frequency] = TUnboxedValuePod(static_cast<double>(proto.GetFreq(i)));
-                    binFields[HistogramIndexes.Position] = TUnboxedValuePod(static_cast<double>(proto.GetPosition(i)));
+                    *items++ = valueBuilder->NewArray(HistogramIndexes_.BinFieldsCount, binFields);
+                    binFields[HistogramIndexes_.Frequency] = TUnboxedValuePod(static_cast<double>(proto.GetFreq(i)));
+                    binFields[HistogramIndexes_.Position] = TUnboxedValuePod(static_cast<double>(proto.GetPosition(i)));
                 }
             } else {
-                fields[HistogramIndexes.Bins] = valueBuilder->NewEmptyList();
-                fields[HistogramIndexes.Min] = TUnboxedValuePod(0.0);
-                fields[HistogramIndexes.Max] = TUnboxedValuePod(0.0);
-                fields[HistogramIndexes.WeightsSum] = TUnboxedValuePod(0.0);
+                fields[HistogramIndexes_.Bins] = valueBuilder->NewEmptyList();
+                fields[HistogramIndexes_.Min] = TUnboxedValuePod(0.0);
+                fields[HistogramIndexes_.Max] = TUnboxedValuePod(0.0);
+                fields[HistogramIndexes_.WeightsSum] = TUnboxedValuePod(0.0);
             }
 
             return result;
@@ -467,7 +467,7 @@ namespace {
         }
 
     private:
-        const THistogramIndexes HistogramIndexes;
+        const THistogramIndexes HistogramIndexes_;
         TSourcePosition Pos_;
     };
 
@@ -483,7 +483,7 @@ namespace {
             histogram->Get()->Add(args[0].Get<double>(), 1.0);
             return TUnboxedValuePod(histogram.Release());
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -519,7 +519,7 @@ namespace {
             histogram->Get()->FromProto(proto);
             return TUnboxedValuePod(histogram.Release());
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -553,7 +553,7 @@ namespace {
             histogram->Get()->Add(args[0].Get<double>(), 1.0);
             return TUnboxedValuePod(histogram.Release());
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -589,7 +589,7 @@ namespace {
             histogram->Get()->FromProto(proto);
             return TUnboxedValuePod(histogram.Release());
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
     }
 
@@ -614,7 +614,7 @@ namespace {
     class THistogramPrint: public TBoxedValue {
     public:
         THistogramPrint(const THistogramIndexes& histogramIndexes)
-            : HistogramIndexes(histogramIndexes)
+            : HistogramIndexes_(histogramIndexes)
         {
         }
 
@@ -626,11 +626,11 @@ namespace {
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const override {
-            auto kind = args[0].GetElement(HistogramIndexes.Kind);
-            auto bins = args[0].GetElement(HistogramIndexes.Bins);
-            double min = args[0].GetElement(HistogramIndexes.Min).Get<double>();
-            double max = args[0].GetElement(HistogramIndexes.Max).Get<double>();
-            double weightsSum = args[0].GetElement(HistogramIndexes.WeightsSum).Get<double>();
+            auto kind = args[0].GetElement(HistogramIndexes_.Kind);
+            auto bins = args[0].GetElement(HistogramIndexes_.Bins);
+            double min = args[0].GetElement(HistogramIndexes_.Min).Get<double>();
+            double max = args[0].GetElement(HistogramIndexes_.Max).Get<double>();
+            double weightsSum = args[0].GetElement(HistogramIndexes_.WeightsSum).Get<double>();
             auto binsIterator = bins.GetListIterator();
 
             TStringBuilder result;
@@ -644,13 +644,13 @@ namespace {
 
             for (TUnboxedValue current; binsIterator.Next(current);) {
                 if (bars) {
-                    double frequency = current.GetElement(HistogramIndexes.Frequency).Get<double>();
+                    double frequency = current.GetElement(HistogramIndexes_.Frequency).Get<double>();
                     if (frequency > maxFrequency) {
                         maxFrequency = frequency;
                     }
                 }
-                size_t positionLength = Sprintf("%.3f", current.GetElement(HistogramIndexes.Position).Get<double>()).length();
-                size_t frequencyLength = Sprintf("%.3f", current.GetElement(HistogramIndexes.Frequency).Get<double>()).length();
+                size_t positionLength = Sprintf("%.3f", current.GetElement(HistogramIndexes_.Position).Get<double>()).length();
+                size_t frequencyLength = Sprintf("%.3f", current.GetElement(HistogramIndexes_.Frequency).Get<double>()).length();
 
                 if (positionLength > maxPositionLength) {
                     maxPositionLength = positionLength;
@@ -662,8 +662,8 @@ namespace {
 
             binsIterator = bins.GetListIterator();
             for (TUnboxedValue current; binsIterator.Next(current);) {
-                double position = current.GetElement(HistogramIndexes.Position).Get<double>();
-                double frequency = current.GetElement(HistogramIndexes.Frequency).Get<double>();
+                double position = current.GetElement(HistogramIndexes_.Position).Get<double>();
+                double frequency = current.GetElement(HistogramIndexes_.Frequency).Get<double>();
                 result << "\n";
                 if (bars && maxFrequency > 0) {
                     ui8 filledBars = static_cast<ui8>(bars * frequency / maxFrequency);
@@ -705,13 +705,13 @@ namespace {
         }
 
     private:
-        const THistogramIndexes HistogramIndexes;
+        const THistogramIndexes HistogramIndexes_;
     };
 
     class THistogramToCumulativeDistributionFunction: public TBoxedValue {
     public:
         THistogramToCumulativeDistributionFunction(const THistogramIndexes& histogramIndexes)
-            : HistogramIndexes(histogramIndexes)
+            : HistogramIndexes_(histogramIndexes)
         {
         }
 
@@ -724,10 +724,10 @@ namespace {
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const override {
             TUnboxedValue* fields = nullptr;
-            auto result = valueBuilder->NewArray(HistogramIndexes.ResultFieldsCount, fields);
-            auto bins = args[0].GetElement(HistogramIndexes.Bins);
-            double minValue = args[0].GetElement(HistogramIndexes.Min).Get<double>();
-            double maxValue = args[0].GetElement(HistogramIndexes.Max).Get<double>();
+            auto result = valueBuilder->NewArray(HistogramIndexes_.ResultFieldsCount, fields);
+            auto bins = args[0].GetElement(HistogramIndexes_.Bins);
+            double minValue = args[0].GetElement(HistogramIndexes_.Min).Get<double>();
+            double maxValue = args[0].GetElement(HistogramIndexes_.Max).Get<double>();
             double sum = 0.0;
             double weightsSum = 0.0;
             std::vector<TUnboxedValue> resultBins;
@@ -736,21 +736,21 @@ namespace {
             const auto binsIterator = bins.GetListIterator();
             for (TUnboxedValue current; binsIterator.Next(current);) {
                 TUnboxedValue* binFields = nullptr;
-                auto resultCurrent = valueBuilder->NewArray(HistogramIndexes.BinFieldsCount, binFields);
-                const auto frequency = current.GetElement(HistogramIndexes.Frequency).Get<double>();
+                auto resultCurrent = valueBuilder->NewArray(HistogramIndexes_.BinFieldsCount, binFields);
+                const auto frequency = current.GetElement(HistogramIndexes_.Frequency).Get<double>();
                 sum += frequency;
                 weightsSum += sum;
-                binFields[HistogramIndexes.Frequency] = TUnboxedValuePod(sum);
-                binFields[HistogramIndexes.Position] = current.GetElement(HistogramIndexes.Position);
+                binFields[HistogramIndexes_.Frequency] = TUnboxedValuePod(sum);
+                binFields[HistogramIndexes_.Position] = current.GetElement(HistogramIndexes_.Position);
                 resultBins.emplace_back(std::move(resultCurrent));
             }
 
-            auto kind = args[0].GetElement(HistogramIndexes.Kind);
-            fields[HistogramIndexes.Kind] = valueBuilder->AppendString(kind, "Cdf");
-            fields[HistogramIndexes.Bins] = valueBuilder->NewList(resultBins.data(), resultBins.size());
-            fields[HistogramIndexes.Max] = TUnboxedValuePod(maxValue);
-            fields[HistogramIndexes.Min] = TUnboxedValuePod(minValue);
-            fields[HistogramIndexes.WeightsSum] = TUnboxedValuePod(weightsSum);
+            auto kind = args[0].GetElement(HistogramIndexes_.Kind);
+            fields[HistogramIndexes_.Kind] = valueBuilder->AppendString(kind, "Cdf");
+            fields[HistogramIndexes_.Bins] = valueBuilder->NewList(resultBins.data(), resultBins.size());
+            fields[HistogramIndexes_.Max] = TUnboxedValuePod(maxValue);
+            fields[HistogramIndexes_.Min] = TUnboxedValuePod(minValue);
+            fields[HistogramIndexes_.WeightsSum] = TUnboxedValuePod(weightsSum);
             return result;
         }
 
@@ -776,13 +776,13 @@ namespace {
         }
 
     private:
-        const THistogramIndexes HistogramIndexes;
+        const THistogramIndexes HistogramIndexes_;
     };
 
     class THistogramNormalize: public TBoxedValue {
     public:
         THistogramNormalize(const THistogramIndexes& histogramIndexes)
-            : HistogramIndexes(histogramIndexes)
+            : HistogramIndexes_(histogramIndexes)
         {
         }
 
@@ -795,10 +795,10 @@ namespace {
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const override {
             TUnboxedValue* fields = nullptr;
-            auto result = valueBuilder->NewArray(HistogramIndexes.ResultFieldsCount, fields);
-            auto bins = args[0].GetElement(HistogramIndexes.Bins);
-            double minValue = args[0].GetElement(HistogramIndexes.Min).Get<double>();
-            double maxValue = args[0].GetElement(HistogramIndexes.Max).Get<double>();
+            auto result = valueBuilder->NewArray(HistogramIndexes_.ResultFieldsCount, fields);
+            auto bins = args[0].GetElement(HistogramIndexes_.Bins);
+            double minValue = args[0].GetElement(HistogramIndexes_.Min).Get<double>();
+            double maxValue = args[0].GetElement(HistogramIndexes_.Max).Get<double>();
             double area = args[1].GetOrDefault<double>(100.0);
             bool cdfNormalization = args[2].GetOrDefault<bool>(false);
             double sum = 0.0;
@@ -809,35 +809,35 @@ namespace {
                 resultBins.reserve(bins.GetListLength());
             auto binsIterator = bins.GetListIterator();
             for (TUnboxedValue current; binsIterator.Next(current);) {
-                sum += current.GetElement(HistogramIndexes.Frequency).Get<double>();
-                lastBinFrequency = current.GetElement(HistogramIndexes.Frequency).Get<double>();
+                sum += current.GetElement(HistogramIndexes_.Frequency).Get<double>();
+                lastBinFrequency = current.GetElement(HistogramIndexes_.Frequency).Get<double>();
             }
             binsIterator = bins.GetListIterator();
             for (TUnboxedValue current; binsIterator.Next(current);) {
                 TUnboxedValue* binFields = nullptr;
-                auto resultCurrent = valueBuilder->NewArray(HistogramIndexes.BinFieldsCount, binFields);
-                double frequency = current.GetElement(HistogramIndexes.Frequency).Get<double>();
+                auto resultCurrent = valueBuilder->NewArray(HistogramIndexes_.BinFieldsCount, binFields);
+                double frequency = current.GetElement(HistogramIndexes_.Frequency).Get<double>();
                 if (cdfNormalization) {
                     frequency = area * frequency / lastBinFrequency;
                 } else {
                     frequency = area * frequency / sum;
                 }
                 weightsSum += frequency;
-                binFields[HistogramIndexes.Frequency] = TUnboxedValuePod(frequency);
-                binFields[HistogramIndexes.Position] = current.GetElement(HistogramIndexes.Position);
+                binFields[HistogramIndexes_.Frequency] = TUnboxedValuePod(frequency);
+                binFields[HistogramIndexes_.Position] = current.GetElement(HistogramIndexes_.Position);
                 resultBins.emplace_back(std::move(resultCurrent));
             }
 
-            TUnboxedValue kind = args[0].GetElement(HistogramIndexes.Kind);
+            TUnboxedValue kind = args[0].GetElement(HistogramIndexes_.Kind);
             if (cdfNormalization) {
                 kind = valueBuilder->AppendString(kind, "Cdf");
             }
 
-            fields[HistogramIndexes.Kind] = kind;
-            fields[HistogramIndexes.Bins] = valueBuilder->NewList(resultBins.data(), resultBins.size());
-            fields[HistogramIndexes.Max] = TUnboxedValuePod(maxValue);
-            fields[HistogramIndexes.Min] = TUnboxedValuePod(minValue);
-            fields[HistogramIndexes.WeightsSum] = TUnboxedValuePod(weightsSum);
+            fields[HistogramIndexes_.Kind] = kind;
+            fields[HistogramIndexes_.Bins] = valueBuilder->NewList(resultBins.data(), resultBins.size());
+            fields[HistogramIndexes_.Max] = TUnboxedValuePod(maxValue);
+            fields[HistogramIndexes_.Min] = TUnboxedValuePod(minValue);
+            fields[HistogramIndexes_.WeightsSum] = TUnboxedValuePod(weightsSum);
             return result;
         }
 
@@ -865,14 +865,14 @@ namespace {
         }
 
     private:
-        const THistogramIndexes HistogramIndexes;
+        const THistogramIndexes HistogramIndexes_;
     };
 
     template <bool twoArgs>
     class THistogramMethodBase: public TBoxedValue {
     public:
         THistogramMethodBase(const THistogramIndexes& histogramIndexes, TSourcePosition pos)
-            : HistogramIndexes(histogramIndexes)
+            : HistogramIndexes_(histogramIndexes)
             , Pos_(pos)
         {
         }
@@ -885,9 +885,9 @@ namespace {
             const IValueBuilder*,
             const TUnboxedValuePod* args) const override {
             try {
-                auto bins = args[0].GetElement(HistogramIndexes.Bins);
-                double min = args[0].GetElement(HistogramIndexes.Min).template Get<double>();
-                double max = args[0].GetElement(HistogramIndexes.Max).template Get<double>();
+                auto bins = args[0].GetElement(HistogramIndexes_.Bins);
+                double min = args[0].GetElement(HistogramIndexes_.Min).template Get<double>();
+                double max = args[0].GetElement(HistogramIndexes_.Max).template Get<double>();
                 auto binsIterator = bins.GetListIterator();
 
                 THistogram histogram;
@@ -895,15 +895,15 @@ namespace {
                 histogram.SetMinValue(min);
                 histogram.SetMaxValue(max);
                 for (TUnboxedValue current; binsIterator.Next(current);) {
-                    double frequency = current.GetElement(HistogramIndexes.Frequency).template Get<double>();
-                    double position = current.GetElement(HistogramIndexes.Position).template Get<double>();
+                    double frequency = current.GetElement(HistogramIndexes_.Frequency).template Get<double>();
+                    double position = current.GetElement(HistogramIndexes_.Position).template Get<double>();
                     histogram.AddFreq(frequency);
                     histogram.AddPosition(position);
                 }
 
                 return GetResult(histogram, args);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -919,7 +919,7 @@ namespace {
         }
 
     protected:
-        const THistogramIndexes HistogramIndexes;
+        const THistogramIndexes HistogramIndexes_;
         TSourcePosition Pos_;
     };
 

@@ -37,7 +37,7 @@ struct TPDiskInfo {
     TVector<TSectorInfo> SectorInfo;
 };
 
-// Throws TFileError in case of errors
+// Throws yexception in case of errors
 void ObliterateDisk(TString path);
 
 void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,

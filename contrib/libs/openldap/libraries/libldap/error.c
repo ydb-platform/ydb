@@ -261,6 +261,25 @@ ldap_parse_result(
 	LDAP_MUTEX_LOCK( &ld->ld_res_mutex );
 	/* Find the result, last msg in chain... */
 	lm = r->lm_chain_tail;
+	if ( r->lm_msgid != lm->lm_msgid ) {
+		/*
+		 * ITS#10229: Returned with LDAP_MSG_ALL+LDAP_MSG_RECEIVED. People who
+		 * do that aren't expected to call ldap_parse_result not least because
+		 * they have no idea what the msgid of the result would be. Just do our
+		 * best.
+		 *
+		 * We could also return LDAP_NO_RESULTS_RETURNED if there isn't a
+		 * result for r's operation.
+		 */
+		lm = r;
+		for ( lm = r; lm; lm = lm->lm_chain ) {
+			if ( lm->lm_msgtype != LDAP_RES_SEARCH_ENTRY &&
+					lm->lm_msgtype != LDAP_RES_SEARCH_REFERENCE &&
+					lm->lm_msgtype != LDAP_RES_INTERMEDIATE )
+				break;
+		}
+	}
+
 	/* FIXME: either this is not possible (assert?)
 	 * or it should be handled */
 	if ( lm != NULL ) {

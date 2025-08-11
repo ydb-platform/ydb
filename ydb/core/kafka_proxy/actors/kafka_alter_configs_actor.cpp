@@ -7,6 +7,7 @@
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/core/persqueue/user_info.h>
 
 
 namespace NKafka {
@@ -39,7 +40,8 @@ public:
             TString topicPath,
             TString databaseName,
             std::optional<ui64> retentionMs,
-            std::optional<ui64> retentionBytes)
+            std::optional<ui64> retentionBytes,
+            std::optional<ECleanupPolicy> cleanupPolicy)
         : TAlterTopicActor<TAlterConfigsActor, TKafkaAlterConfigsRequest>(
             requester,
             userToken,
@@ -47,6 +49,7 @@ public:
             databaseName)
         , RetentionMs(retentionMs)
         , RetentionBytes(retentionBytes)
+        , CleanupPolicy(cleanupPolicy)
     {
         KAFKA_LOG_D("Alter configs actor. DatabaseName: " << databaseName << ". TopicPath: " << TopicPath);
     };
@@ -59,9 +62,9 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
             const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
-        Y_UNUSED(appData);
-        Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
+        const auto& pqConfig = appData->PQConfig;
+
 
         auto partitionConfig = groupConfig.MutablePQTabletConfig()->MutablePartitionConfig();
 
@@ -72,11 +75,33 @@ public:
         if (RetentionBytes.has_value()) {
             partitionConfig->SetStorageLimitBytes(RetentionBytes.value());
         }
+        if (CleanupPolicy.has_value()) {
+            groupConfig.MutablePQTabletConfig()->SetEnableCompactification(CleanupPolicy.value() == ECleanupPolicy::COMPACT);
+        }
+        if (pqGroupDescription.GetPQTabletConfig().GetEnableCompactification() && !groupConfig.GetPQTabletConfig().GetEnableCompactification()) {
+            NKikimr::NGRpcProxy::V1::RemoveReadRuleFromConfig(
+                groupConfig.MutablePQTabletConfig(),
+                pqGroupDescription.GetPQTabletConfig(),
+                NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER,
+                appData->PQConfig
+            );
+        } else if (!pqGroupDescription.GetPQTabletConfig().GetEnableCompactification() && groupConfig.GetPQTabletConfig().GetEnableCompactification()) {
+            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
+            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.set_starting_message_timestamp_ms(0);
+            NKikimr::NGRpcProxy::V1::AddReadRuleToConfig(
+                groupConfig.MutablePQTabletConfig(),
+                compConsumer,
+                NKikimr::NGRpcProxy::V1::GetSupportedClientServiceTypes(pqConfig),
+                pqConfig);
+        }
     }
 
 private:
     std::optional<ui64> RetentionMs;
     std::optional<ui64> RetentionBytes;
+    std::optional<ECleanupPolicy> CleanupPolicy;
 };
 
 NActors::IActor* CreateKafkaAlterConfigsActor(
@@ -116,6 +141,7 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         std::optional<TString> retentionMs;
         std::optional<TString> retentionBytes;
+        std::optional<ECleanupPolicy> cleanupPolicy;
 
         std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> unsupportedConfigResponse;
 
@@ -129,6 +155,8 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
                 retentionMs = config.Value;
             } else if (config.Name.value() == RETENTION_BYTES_CONFIG_NAME) {
                 retentionBytes = config.Value;
+            }  else if (config.Name.value() == CLEANUP_POLICY) {
+                unsupportedConfigResponse = ConvertCleanupPolicy(config.Value, cleanupPolicy);
             }
         }
 
@@ -150,7 +178,8 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
             resource.ResourceName.value(),
             Context->DatabasePath,
             convertedRetentions.Ms,
-            convertedRetentions.Bytes
+            convertedRetentions.Bytes,
+            cleanupPolicy
         ));
 
         InflyTopics++;

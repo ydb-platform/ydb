@@ -80,7 +80,7 @@ ROUTINE ======================== main in /home/prime/arc/yt/yt/library/ytprof/ex
          .          .     16:int main(int argc, char* argv[])
          .          .     17:{
          .          .     18:    NBacktrace::SetAbslStackUnwinder();
-         .          .     19:    tcmalloc::MallocExtension::SetProfileSamplingRate(2_MB);
+         .          .     19:    tcmalloc::MallocExtension::SetProfileSamplingInterval(2_MB);
          .          .     20:
          .          .     21:    try {
          .          .     22:        if (argc != 2 && argc != 3) {
@@ -170,7 +170,7 @@ YTProf поддерживает теги. Теги позволяют фильт
 
   int main() {
     NYT::NBacktrace::SetAbslStackUnwinder();
-    tcmalloc::MallocExtension::SetProfileSamplingRate(2_MB);
+    tcmalloc::MallocExtension::SetProfileSamplingInterval(2_MB);
 
     ...
   }
@@ -235,3 +235,4 @@ Entering interactive mode (type "help" for commands, "o" for options)
 # Показывает сырые семплы
 (pprof) traces
 ```
+

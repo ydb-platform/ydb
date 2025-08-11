@@ -4,7 +4,7 @@
 #include "mkql_mem_info.h"
 
 #include <yql/essentials/core/pg_settings/guc_settings.h>
-#include <yql/essentials/minikql/asan_utils.h>
+#include <yql/essentials/public/udf/sanitizer_utils.h>
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -119,7 +119,7 @@ struct TAllocState : public TAlignedPagePool
     explicit TAllocState(const TSourceLocation& location, const TAlignedPagePoolCounters& counters, bool supportsSizedAllocators);
     void KillAllBoxed();
     void InvalidateMemInfo();
-    Y_NO_SANITIZE("address") size_t GetDeallocatedInPages() const;
+    Y_NO_SANITIZE("address") Y_NO_SANITIZE("memory") size_t GetDeallocatedInPages() const;
     static void CleanupPAllocList(TListEntry* root);
     static void CleanupArrowList(TListEntry* root);
 
@@ -132,7 +132,7 @@ extern Y_POD_THREAD(TAllocState*) TlsAllocState;
 class TPAllocScope {
 public:
     TPAllocScope() {
-        PAllocList.InitLinks();
+        PAllocList_.InitLinks();
         Attach();
     }
 
@@ -142,27 +142,27 @@ public:
     }
 
     void Attach() {
-        Y_ABORT_UNLESS(!Prev);
-        Prev = TlsAllocState->CurrentPAllocList;
-        Y_ABORT_UNLESS(Prev);
-        TlsAllocState->CurrentPAllocList = &PAllocList;
+        Y_ABORT_UNLESS(!Prev_);
+        Prev_ = TlsAllocState->CurrentPAllocList;
+        Y_ABORT_UNLESS(Prev_);
+        TlsAllocState->CurrentPAllocList = &PAllocList_;
     }
 
     void Detach() {
-        if (Prev) {
-           Y_ABORT_UNLESS(TlsAllocState->CurrentPAllocList == &PAllocList);
-           TlsAllocState->CurrentPAllocList = Prev;
-           Prev = nullptr;
+        if (Prev_) {
+           Y_ABORT_UNLESS(TlsAllocState->CurrentPAllocList == &PAllocList_);
+           TlsAllocState->CurrentPAllocList = Prev_;
+           Prev_ = nullptr;
         }
     }
 
     void Cleanup() {
-        TAllocState::CleanupPAllocList(&PAllocList);
+        TAllocState::CleanupPAllocList(&PAllocList_);
     }
 
 private:
-    TAllocState::TListEntry PAllocList;
-    TAllocState::TListEntry* Prev = nullptr;
+    TAllocState::TListEntry PAllocList_;
+    TAllocState::TListEntry* Prev_ = nullptr;
 };
 
 // TListEntry and IBoxedValue use the same place
@@ -298,9 +298,9 @@ public:
     }
 
     void* Alloc(size_t sz, const EMemorySubPool pagePool = EMemorySubPool::Default) {
-        sz = GetSizeToAlloc(sz);
+        sz = NYql::NUdf::GetSizeToAlloc(sz);
         void* mem = AllocImpl(sz, pagePool);
-        return WrapPointerWithRedZones(mem, sz);
+        return NYql::NUdf::WrapPointerWithRedZones(mem, sz);
     }
 
     void Clear() noexcept;
@@ -393,9 +393,9 @@ inline void* MKQLAllocFastWithSizeImpl(size_t sz, TAllocState* state, const EMem
 }
 
 inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemorySubPool mPool, const TAllocLocation& location = TAllocLocation::current()) {
-    sz = GetSizeToAlloc(sz);
+    sz = NYql::NUdf::GetSizeToAlloc(sz);
     void* mem = MKQLAllocFastWithSizeImpl(sz, state, mPool, location);
-    return WrapPointerWithRedZones(mem, sz);
+    return NYql::NUdf::WrapPointerWithRedZones(mem, sz);
 }
 
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept;
@@ -463,8 +463,8 @@ inline void MKQLFreeFastWithSizeImpl(const void* mem, size_t sz, TAllocState* st
 }
 
 inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state, const EMemorySubPool mPool) noexcept {
-    mem = UnwrapPointerWithRedZones(mem, sz);
-    sz = GetSizeToAlloc(sz);
+    mem = NYql::NUdf::UnwrapPointerWithRedZones(mem, sz);
+    sz = NYql::NUdf::GetSizeToAlloc(sz);
     return MKQLFreeFastWithSizeImpl(mem, sz, state, mPool);
 }
 
@@ -491,7 +491,7 @@ inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
 void* MKQLArrowAllocate(ui64 size);
 void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
 void MKQLArrowFree(const void* mem, ui64 size);
-void MKQLArrowUntrack(const void* mem, ui64 size);
+void MKQLArrowUntrack(const void* mem);
 
 template <const EMemorySubPool MemoryPoolExt = EMemorySubPool::Default>
 struct TWithMiniKQLAlloc {
@@ -553,16 +553,16 @@ struct TMKQLAllocator
     ~TMKQLAllocator() noexcept = default;
 
     template<typename U> TMKQLAllocator(const TMKQLAllocator<U, MemoryPool>&) noexcept {}
-    template<typename U> struct rebind { typedef TMKQLAllocator<U, MemoryPool> other; };
+    template<typename U> struct rebind { typedef TMKQLAllocator<U, MemoryPool> other; }; // NOLINT(readability-identifier-naming)
     template<typename U> bool operator==(const TMKQLAllocator<U, MemoryPool>&) const { return true; }
     template<typename U> bool operator!=(const TMKQLAllocator<U, MemoryPool>&) const { return false; }
 
-    static pointer allocate(size_type n, const void* = nullptr)
+    static pointer allocate(size_type n, const void* = nullptr) // NOLINT(readability-identifier-naming)
     {
         return static_cast<pointer>(MKQLAllocWithSize(n * sizeof(value_type), MemoryPool));
     }
 
-    static void deallocate(const_pointer p, size_type n) noexcept
+    static void deallocate(const_pointer p, size_type n) noexcept // NOLINT(readability-identifier-naming)
     {
         MKQLFreeWithSize(p, n * sizeof(value_type), MemoryPool);
     }
@@ -586,34 +586,34 @@ struct TMKQLHugeAllocator
     ~TMKQLHugeAllocator() noexcept = default;
 
     template<typename U> TMKQLHugeAllocator(const TMKQLHugeAllocator<U>&) noexcept {}
-    template<typename U> struct rebind { typedef TMKQLHugeAllocator<U> other; };
+    template<typename U> struct Rebind { typedef TMKQLHugeAllocator<U> other; };
     template<typename U> bool operator==(const TMKQLHugeAllocator<U>&) const { return true; }
     template<typename U> bool operator!=(const TMKQLHugeAllocator<U>&) const { return false; }
 
-    static pointer allocateImpl(size_type n, const void* = nullptr)
+    static pointer AllocateImpl(size_type n, const void* = nullptr)
     {
         size_t size = Max(n * sizeof(value_type), TAllocState::POOL_PAGE_SIZE);
         return static_cast<pointer>(TlsAllocState->GetBlock(size));
     }
 
-    static pointer allocate(size_type n, const void* = nullptr)
+    static pointer allocate(size_type n, const void* = nullptr) // NOLINT(readability-identifier-naming)
     {
-        n = GetSizeToAlloc(n);
-        void* mem = allocateImpl(n);
-        return static_cast<pointer>(WrapPointerWithRedZones(mem, n));
+        n = NYql::NUdf::GetSizeToAlloc(n);
+        void* mem = AllocateImpl(n);
+        return static_cast<pointer>(NYql::NUdf::WrapPointerWithRedZones(mem, n));
     }
 
-    static void deallocateImpl(const_pointer p, size_type n) noexcept
+    static void DeallocateImpl(const_pointer p, size_type n) noexcept
     {
         size_t size = Max(n * sizeof(value_type), TAllocState::POOL_PAGE_SIZE);
         TlsAllocState->ReturnBlock(const_cast<pointer>(p), size);
     }
 
-    static void deallocate(const_pointer p, size_type n) noexcept
+    static void deallocate(const_pointer p, size_type n) noexcept // NOLINT(readability-identifier-naming)
     {
-        p = static_cast<const_pointer>(UnwrapPointerWithRedZones(p, n));
-        n = GetSizeToAlloc(n);
-        return deallocateImpl(p, n);
+        p = static_cast<const_pointer>(NYql::NUdf::UnwrapPointerWithRedZones(p, n));
+        n = NYql::NUdf::GetSizeToAlloc(n);
+        return DeallocateImpl(p, n);
     }
 };
 
@@ -628,8 +628,8 @@ public:
     class TConstIterator;
 
     TPagedList(TAlignedPagePool& pool)
-        : Pool(pool)
-        , IndexInLastPage(OBJECTS_PER_PAGE)
+        : Pool_(pool)
+        , IndexInLastPage_(OBJECTS_PER_PAGE)
     {}
 
     TPagedList(const TPagedList&) = delete;
@@ -640,48 +640,48 @@ public:
     }
 
     void Add(T&& value) {
-        if (IndexInLastPage < OBJECTS_PER_PAGE) {
-            auto ptr = ObjectAt(Pages.back(), IndexInLastPage);
+        if (IndexInLastPage_ < OBJECTS_PER_PAGE) {
+            auto ptr = ObjectAt(Pages_.back(), IndexInLastPage_);
             new(ptr) T(std::move(value));
-            ++IndexInLastPage;
+            ++IndexInLastPage_;
             return;
         }
 
-        auto ptr = SanitizerMarkValid(Pool.GetPage(), TAlignedPagePool::POOL_PAGE_SIZE);
-        IndexInLastPage = 1;
-        Pages.push_back(ptr);
+        auto ptr = NYql::NUdf::SanitizerMakeRegionAccessible(Pool_.GetPage(), TAlignedPagePool::POOL_PAGE_SIZE);
+        IndexInLastPage_ = 1;
+        Pages_.push_back(ptr);
         new(ptr) T(std::move(value));
     }
 
     void Clear() {
-        for (ui32 i = 0; i + 1 < Pages.size(); ++i) {
+        for (ui32 i = 0; i + 1 < Pages_.size(); ++i) {
             for (ui32 objIndex = 0; objIndex < OBJECTS_PER_PAGE; ++objIndex) {
-                ObjectAt(Pages[i], objIndex)->~T();
+                ObjectAt(Pages_[i], objIndex)->~T();
             }
 
-            Pool.ReturnPage(Pages[i]);
+            Pool_.ReturnPage(Pages_[i]);
         }
 
-        if (!Pages.empty()) {
-            for (ui32 objIndex = 0; objIndex < IndexInLastPage; ++objIndex) {
-                ObjectAt(Pages.back(), objIndex)->~T();
+        if (!Pages_.empty()) {
+            for (ui32 objIndex = 0; objIndex < IndexInLastPage_; ++objIndex) {
+                ObjectAt(Pages_.back(), objIndex)->~T();
             }
 
-            Pool.ReturnPage(Pages.back());
+            Pool_.ReturnPage(Pages_.back());
         }
 
-        TPages().swap(Pages);
-        IndexInLastPage = OBJECTS_PER_PAGE;
+        TPages().swap(Pages_);
+        IndexInLastPage_ = OBJECTS_PER_PAGE;
     }
 
     const T& operator[](size_t i) const {
         const auto table = i / OBJECTS_PER_PAGE;
         const auto index = i % OBJECTS_PER_PAGE;
-        return *ObjectAt(Pages[table], index);
+        return *ObjectAt(Pages_[table], index);
     }
 
     size_t Size() const {
-        return Pages.empty() ? 0 : ((Pages.size() - 1) * OBJECTS_PER_PAGE + IndexInLastPage);
+        return Pages_.empty() ? 0 : ((Pages_.size() - 1) * OBJECTS_PER_PAGE + IndexInLastPage_);
     }
 
     TConstIterator Begin() const {
@@ -693,11 +693,11 @@ public:
     }
 
     TConstIterator End() const {
-        if (IndexInLastPage == OBJECTS_PER_PAGE) {
-            return TConstIterator(this, Pages.size(), 0);
+        if (IndexInLastPage_ == OBJECTS_PER_PAGE) {
+            return TConstIterator(this, Pages_.size(), 0);
         }
 
-        return TConstIterator(this, Pages.size() - 1, IndexInLastPage);
+        return TConstIterator(this, Pages_.size() - 1, IndexInLastPage_);
     }
 
     TConstIterator end() const {
@@ -713,11 +713,11 @@ public:
     }
 
     TIterator End() {
-        if (IndexInLastPage == OBJECTS_PER_PAGE) {
-            return TIterator(this, Pages.size(), 0);
+        if (IndexInLastPage_ == OBJECTS_PER_PAGE) {
+            return TIterator(this, Pages_.size(), 0);
         }
 
-        return TIterator(this, Pages.size() - 1, IndexInLastPage);
+        return TIterator(this, Pages_.size() - 1, IndexInLastPage_);
     }
 
     TIterator end() {
@@ -730,38 +730,38 @@ public:
         using TOwner = TPagedList<T>;
 
         TIterator()
-            : Owner(nullptr)
-            , PageNo(0)
-            , PageIndex(0)
+            : Owner_(nullptr)
+            , PageNo_(0)
+            , PageIndex_(0)
         {}
 
         TIterator(const TIterator&) = default;
         TIterator& operator=(const TIterator&) = default;
 
         TIterator(TOwner* owner, size_t pageNo, size_t pageIndex)
-            : Owner(owner)
-            , PageNo(pageNo)
-            , PageIndex(pageIndex)
+            : Owner_(owner)
+            , PageNo_(pageNo)
+            , PageIndex_(pageIndex)
         {}
 
         T& operator*() {
-            Y_DEBUG_ABORT_UNLESS(PageIndex < OBJECTS_PER_PAGE);
-            Y_DEBUG_ABORT_UNLESS(PageNo < Owner->Pages.size());
-            Y_DEBUG_ABORT_UNLESS(PageNo + 1 < Owner->Pages.size() || PageIndex < Owner->IndexInLastPage);
-            return *Owner->ObjectAt(Owner->Pages[PageNo], PageIndex);
+            Y_DEBUG_ABORT_UNLESS(PageIndex_ < OBJECTS_PER_PAGE);
+            Y_DEBUG_ABORT_UNLESS(PageNo_ < Owner_->Pages_.size());
+            Y_DEBUG_ABORT_UNLESS(PageNo_ + 1 < Owner_->Pages_.size() || PageIndex_ < Owner_->IndexInLastPage_);
+            return *Owner_->ObjectAt(Owner_->Pages_[PageNo_], PageIndex_);
         }
 
         TIterator& operator++() {
-            if (++PageIndex == OBJECTS_PER_PAGE) {
-                ++PageNo;
-                PageIndex = 0;
+            if (++PageIndex_ == OBJECTS_PER_PAGE) {
+                ++PageNo_;
+                PageIndex_ = 0;
             }
 
             return *this;
         }
 
         bool operator==(const TIterator& other) const {
-            return PageNo == other.PageNo && PageIndex == other.PageIndex;
+            return PageNo_ == other.PageNo_ && PageIndex_ == other.PageIndex_;
         }
 
         bool operator!=(const TIterator& other) const {
@@ -769,9 +769,9 @@ public:
         }
 
     private:
-        TOwner* Owner;
-        size_t PageNo;
-        size_t PageIndex;
+        TOwner* Owner_;
+        size_t PageNo_;
+        size_t PageIndex_;
     };
 
     class TConstIterator
@@ -780,38 +780,38 @@ public:
         using TOwner = TPagedList<T>;
 
         TConstIterator()
-            : Owner(nullptr)
-            , PageNo(0)
-            , PageIndex(0)
+            : Owner_(nullptr)
+            , PageNo_(0)
+            , PageIndex_(0)
         {}
 
         TConstIterator(const TConstIterator&) = default;
         TConstIterator& operator=(const TConstIterator&) = default;
 
         TConstIterator(const TOwner* owner, size_t pageNo, size_t pageIndex)
-            : Owner(owner)
-            , PageNo(pageNo)
-            , PageIndex(pageIndex)
+            : Owner_(owner)
+            , PageNo_(pageNo)
+            , PageIndex_(pageIndex)
         {}
 
         const T& operator*() {
-            Y_DEBUG_ABORT_UNLESS(PageIndex < OBJECTS_PER_PAGE);
-            Y_DEBUG_ABORT_UNLESS(PageNo < Owner->Pages.size());
-            Y_DEBUG_ABORT_UNLESS(PageNo + 1 < Owner->Pages.size() || PageIndex < Owner->IndexInLastPage);
-            return *Owner->ObjectAt(Owner->Pages[PageNo], PageIndex);
+            Y_DEBUG_ABORT_UNLESS(PageIndex_ < OBJECTS_PER_PAGE);
+            Y_DEBUG_ABORT_UNLESS(PageNo_ < Owner_->Pages_.size());
+            Y_DEBUG_ABORT_UNLESS(PageNo_ + 1 < Owner_->Pages_.size() || PageIndex_ < Owner_->IndexInLastPage_);
+            return *Owner_->ObjectAt(Owner_->Pages_[PageNo_], PageIndex_);
         }
 
         TConstIterator& operator++() {
-            if (++PageIndex == OBJECTS_PER_PAGE) {
-                ++PageNo;
-                PageIndex = 0;
+            if (++PageIndex_ == OBJECTS_PER_PAGE) {
+                ++PageNo_;
+                PageIndex_ = 0;
             }
 
             return *this;
         }
 
         bool operator==(const TConstIterator& other) const {
-            return PageNo == other.PageNo && PageIndex == other.PageIndex;
+            return PageNo_ == other.PageNo_ && PageIndex_ == other.PageIndex_;
         }
 
         bool operator!=(const TConstIterator& other) const {
@@ -819,9 +819,9 @@ public:
         }
 
     private:
-        const TOwner* Owner;
-        size_t PageNo;
-        size_t PageIndex;
+        const TOwner* Owner_;
+        size_t PageNo_;
+        size_t PageIndex_;
     };
 
 private:
@@ -833,10 +833,10 @@ private:
         return reinterpret_cast<T*>(static_cast<char*>(page) + objectIndex * sizeof(T));
     }
 
-    TAlignedPagePool& Pool;
+    TAlignedPagePool& Pool_;
     using TPages = std::vector<void*, TMKQLAllocator<void*>>;
-    TPages Pages;
-    size_t IndexInLastPage;
+    TPages Pages_;
+    size_t IndexInLastPage_;
 };
 
 inline void TBoxedValueWithFree::operator delete(void *mem) noexcept {

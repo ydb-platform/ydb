@@ -92,7 +92,6 @@ void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxed
 
             case NUdf::EDataSlot::String:
             case NUdf::EDataSlot::Uuid:
-            case NUdf::EDataSlot::DyNumber:
                 writer.OnStringScalar(value.AsStringRef());
                 return;
 
@@ -124,7 +123,8 @@ void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxed
             case NUdf::EDataSlot::TzDate32:
             case NUdf::EDataSlot::TzDatetime64:
             case NUdf::EDataSlot::TzTimestamp64:
-            case NUdf::EDataSlot::JsonDocument: {
+            case NUdf::EDataSlot::JsonDocument:
+            case NUdf::EDataSlot::DyNumber: {
                 const NUdf::TUnboxedValue out(ValueToString(*dataType->GetDataSlot(), value));
                 writer.OnUtf8StringScalar(out.AsStringRef());
                 return;
@@ -485,7 +485,6 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
         case NUdf::EDataSlot::Json:
         case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::Yson:
-        case NUdf::EDataSlot::DyNumber:
             return ToString((TStringBuf)value.AsStringRef());
         case NUdf::EDataSlot::Decimal:
             {
@@ -526,7 +525,12 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
 
         case NUdf::EDataSlot::JsonDocument: {
             NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
-            return ToString(TStringBuf(value.AsStringRef()));
+            return ToString(TStringBuf(json.AsStringRef()));
+        }
+
+        case NUdf::EDataSlot::DyNumber: {
+            NUdf::TUnboxedValue res = ValueToString(EDataSlot::DyNumber, value);
+            return ToString(TStringBuf(res.AsStringRef()));
         }
     }
 
@@ -884,7 +888,6 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         case NUdf::TDataType<NUdf::TUtf8>::Id:
         case NUdf::TDataType<char*>::Id:
         case NUdf::TDataType<NUdf::TJson>::Id:
-        case NUdf::TDataType<NUdf::TDyNumber>::Id:
         case NUdf::TDataType<NUdf::TUuid>::Id: {
             return ReadYsonStringInResultFormat(cmd, buf);
         }
@@ -953,6 +956,11 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             const auto json = ReadYsonStringInResultFormat(cmd, buf);
             return ValueFromString(EDataSlot::JsonDocument, json.AsStringRef());
+        }
+
+        case NUdf::TDataType<NUdf::TDyNumber>::Id: {
+            const auto str = ReadYsonStringInResultFormat(cmd, buf);
+            return ValueFromString(EDataSlot::DyNumber, str.AsStringRef());
         }
 
         case NUdf::TDataType<NUdf::TTzDate32>::Id: {

@@ -191,6 +191,17 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         WaitEvent(ev->Sender, ev->Cookie);
     }
 
+    void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
+        auto [path, partitionId, consumerName, offset, settings]  = std::move(ev->Get()->GetArgs());
+
+        Y_UNUSED(path);
+        Y_UNUSED(partitionId);
+        Y_UNUSED(consumerName);
+        Y_UNUSED(settings);
+
+        PartitionEndWatcher.SetCommittedOffset(offset - 1, ev->Sender);
+    }
+
     void WaitEvent(const TActorId& sender, ui64 cookie) {
         auto request = MakeRequest(SelfId());
         auto cb = [request, sender, cookie](const NThreading::TFuture<void>&) {
@@ -209,7 +220,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         }
 
         if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-            PartitionEndWatcher.Clear();
+            PartitionEndWatcher.Clear(x->GetCommittedOffset());
             x->Confirm();
             Send(ev->Get()->Sender, new TEvYdbProxy::TEvStartTopicReadingSession(*x), 0, ev->Get()->Cookie);
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
@@ -263,6 +274,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
             hFunc(TEvPrivate::TEvTopicEventReady, Handle);
+            hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
 
         default:
             return StateBase(ev);
@@ -296,6 +308,9 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         }
         if (base.CredentialsProviderFactory_) {
             derived.CredentialsProviderFactory(*base.CredentialsProviderFactory_);
+        }
+        if (base.SslCredentials_) {
+            derived.SslCredentials_ = base.SslCredentials_;
         }
 
         return derived;
@@ -434,22 +449,24 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         Call<TEvYdbProxy::TEvCommitOffsetResponse>(ev, &TTopicClient::CommitOffset);
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl) {
+    static TCommonClientSettings BaseSettings(const TString& endpoint, const TString& database, bool ssl, const TString& caCert) {
         return TCommonClientSettings()
             .DiscoveryEndpoint(endpoint)
             .DiscoveryMode(EDiscoveryMode::Async)
             .Database(database)
-            .SslCredentials(ssl);
+            .SslCredentials(TSslCredentials(ssl, caCert));
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TString& token) {
-        return MakeSettings(endpoint, database, ssl)
-            .AuthToken(token);
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings) {
+        return settings;
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
-        return MakeSettings(endpoint, database, ssl)
-            .CredentialsProviderFactory(CreateLoginCredentialsProviderFactory({
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings, const TString& token) {
+        return settings.AuthToken(token);
+    }
+
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings, const TStaticCredentials& credentials) {
+        return settings.CredentialsProviderFactory(CreateLoginCredentialsProviderFactory({
                 .User = credentials.GetUser(),
                 .Password = credentials.GetPassword(),
             }));
@@ -457,9 +474,9 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
 
 public:
     template <typename... Args>
-    explicit TYdbProxy(Args&&... args)
+    explicit TYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, Args&&... args)
         : TBaseProxyActor(&TThis::StateWork)
-        , CommonSettings(MakeSettings(std::forward<Args>(args)...))
+        , CommonSettings(MakeSettings(BaseSettings(endpoint, database, ssl, caCert), std::forward<Args>(args)...))
     {
     }
 
@@ -501,16 +518,16 @@ private:
 
 }; // TYdbProxy
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl) {
-    return new TYdbProxy(endpoint, database, ssl);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert) {
+    return new TYdbProxy(endpoint, database, ssl, caCert);
 }
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token) {
-    return new TYdbProxy(endpoint, database, ssl, token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TString& token) {
+    return new TYdbProxy(endpoint, database, ssl, caCert, token);
 }
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
-    return new TYdbProxy(endpoint, database, ssl, credentials);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TStaticCredentials& credentials) {
+    return new TYdbProxy(endpoint, database, ssl, caCert, credentials);
 }
 
 }

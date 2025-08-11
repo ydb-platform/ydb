@@ -181,11 +181,13 @@ message TPDiskInfo {
     optional string StatusV2 = 12;
     optional uint64 StatusChangeTimestamp = 13;
     optional uint64 EnforcedDynamicSlotSize = 14;
-    optional uint32 ExpectedSlotCount = 15;
+    optional uint32 ExpectedSlotCount = 15; // either inferred or user-defined
     optional uint32 NumActiveSlots = 16;
     optional uint64 Category = 17;
     optional string DecommitStatus = 18;
     optional string State = 19;
+    optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
+    optional uint64 InferPDiskSlotCountFromUnitSize = 21;
     // metrics ?
     // physical location ?
     // config ?
@@ -278,6 +280,11 @@ message TGroupInfo {
     // down/persisted down ?
     // metrics ?
     optional bool LayoutCorrect = 16 [default = true];  // is the group layout correct?
+    optional string OperatingStatus = 17;
+    optional string ExpectedStatus = 18;
+    optional uint32 ProxyGroupId = 19;
+    optional uint32 BridgePileId = 20;
+    optional uint32 GroupSizeInUnits = 21;
 }
 
 message TGroupEntry {
@@ -316,6 +323,7 @@ message TStoragePoolInfo {
     optional string VDiskKindV2 = 12;
     optional string PDiskFilter = 13;
     optional bytes PDiskFilterData = 14;
+    optional uint32 DefaultGroupSizeInUnits = 15;
     // metrics ?
 }
 

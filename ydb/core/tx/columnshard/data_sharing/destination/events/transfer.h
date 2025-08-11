@@ -19,7 +19,7 @@ namespace NKikimr::NOlap::NDataSharing::NEvents {
 class TPathIdData {
 private:
     YDB_READONLY_DEF(TInternalPathId, PathId);
-    YDB_ACCESSOR_DEF(std::vector<TPortionDataAccessor>, Portions);
+    YDB_ACCESSOR_DEF(std::vector<std::shared_ptr<TPortionDataAccessor>>, Portions);
 
     TPathIdData() = default;
 
@@ -28,10 +28,10 @@ private:
         if (!proto.HasPathId()) {
             return TConclusionStatus::Fail("no path id in proto");
         }
-        PathId = TInternalPathId::FromRawValue(proto.GetPathId());
+        PathId = TInternalPathId::FromProto(proto);
         for (auto&& portionProto : proto.GetPortions()) {
             const auto schema = versionedIndex.GetSchemaVerified(portionProto.GetSchemaVersion());
-            TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, schema->GetIndexInfo(), groupSelector);
+            TConclusion<std::shared_ptr<TPortionDataAccessor>> portion = TPortionDataAccessor::BuildFromProto(portionProto, schema->GetIndexInfo(), groupSelector);
             if (!portion) {
                 return portion.GetError();
             }
@@ -41,23 +41,20 @@ private:
     }
 
 public:
-    TPathIdData(const TInternalPathId pathId, const std::vector<TPortionDataAccessor>& portions)
+    TPathIdData(const TInternalPathId pathId, const std::vector<std::shared_ptr<TPortionDataAccessor>>& portions)
         : PathId(pathId)
         , Portions(portions) {
     }
 
-    std::vector<TPortionDataAccessor> DetachPortions() {
-        return std::move(Portions);
-    }
     THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId,
         const TTransferContext& context, const TVersionedIndex& index);
 
     void InitPortionIds(ui64* lastPortionId, const std::optional<TInternalPathId> pathId = {}) {
         AFL_VERIFY(lastPortionId);
         for (auto&& i : Portions) {
-            i.MutablePortionInfo().SetPortionId(++*lastPortionId);
+            i->MutablePortionInfo().SetPortionId(++*lastPortionId);
             if (pathId) {
-                i.MutablePortionInfo().SetPathId(*pathId);
+                i->MutablePortionInfo().SetPathId(*pathId);
             }
         }
     }
@@ -65,7 +62,7 @@ public:
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPathIdData& proto) const {
         proto.SetPathId(PathId.GetRawValue());
         for (auto&& i : Portions) {
-            i.SerializeToProto(*proto.AddPortions());
+            i->SerializeToProto(*proto.AddPortions());
         }
     };
 

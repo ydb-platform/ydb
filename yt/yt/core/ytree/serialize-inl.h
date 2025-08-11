@@ -24,13 +24,13 @@ namespace NYT::NYTree {
 
 namespace NDetail {
 
-// all
-inline bool CanOmitValue(const void* /*parameter*/, const void* /*defaultValue*/)
+// All types. Return false_type to indicate at compile time that the result is always false.
+inline std::false_type CanOmitValue(const void* /*parameter*/, const void* /*defaultValue*/)
 {
-    return false;
+    return {};
 }
 
-// TIntrusivePtr
+// TIntrusivePtr.
 template <class T>
 bool CanOmitValue(const TIntrusivePtr<T>* parameter, const TIntrusivePtr<T>* defaultValue)
 {
@@ -43,7 +43,7 @@ bool CanOmitValue(const TIntrusivePtr<T>* parameter, const TIntrusivePtr<T>* def
     return false;
 }
 
-// std::optional
+// std::optional.
 template <class T>
 bool CanOmitValue(const std::optional<T>* parameter, const std::optional<T>* defaultValue)
 {
@@ -450,15 +450,8 @@ void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer)
 
 // TODO(eshcherbin): Add a concept for associative containers.
 // Any associative container (except TCompactFlatMap).
-template <template<typename...> class C, class... T, class K>
-void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer)
-{
-    NDetail::SerializeAssociative(value, consumer);
-}
-
-// TCompactFlatMap.
-template <class K, class V, size_t N>
-void Serialize(const TCompactFlatMap<K, V, N>& value, NYson::IYsonConsumer* consumer)
+template <NMpl::CAssociative TContainer>
+void Serialize(const TContainer& value, NYson::IYsonConsumer* consumer)
 {
     NDetail::SerializeAssociative(value, consumer);
 }
@@ -679,8 +672,8 @@ void Deserialize(std::tuple<T...>& value, INodePtr node)
 }
 
 // For any associative container.
-template <template<typename...> class C, class... T, class K>
-void Deserialize(C<T...>& value, INodePtr node)
+template <NMpl::CAssociative TContainer>
+void Deserialize(TContainer& value, INodePtr node)
 {
     NDetail::DeserializeAssociative(value, node);
 }

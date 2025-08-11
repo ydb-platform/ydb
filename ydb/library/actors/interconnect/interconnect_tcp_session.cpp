@@ -767,9 +767,10 @@ namespace NActors {
 #endif
             }
 
-            // Zero copy socket write has noticiable overhead for memory managment inside kernel.
+            // Note1: Zero copy socket write has noticiable overhead for memory managment inside kernel.
             // So now we try to use ZC only for XDC
-            const bool tryZc = XdcSocket ? (int)socket == (int)*XdcSocket : false;
+            // Note2: Current socket encryption implementation does not allow to pass flags
+            const bool tryZc = (XdcSocket && !Params.Encryption) ? (int)socket == (int)*XdcSocket : false;
 
             TStackVec<TConstIoVec, iovLimit> wbuffers;
             TStackVec<NInterconnect::TOutgoingStream::TBufController, iovLimit> zeroCtrl;
@@ -1098,6 +1099,7 @@ namespace NActors {
                 .Utilization = Utilized,
                 .ConnectTime = LastHandshakeDone.MilliSeconds(),
                 .BytesWrittenToSocket = BytesWrittenToSocket,
+                .PeerBridgePileName = Proxy->Common->BridgePileName.value_or(""),
             });
         }
 

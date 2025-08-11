@@ -27,6 +27,14 @@ void TIncrementalTopologicalOrdering<TVertexDescriptor>::AddEdge(const TVertexDe
 }
 
 template <typename TVertexDescriptor>
+void TIncrementalTopologicalOrdering<TVertexDescriptor>::AddVertex(const TVertexDescriptor& from)
+{
+    if (OutgoingEdges_.try_emplace(from).second) {
+        Rebuild();
+    }
+}
+
+template <typename TVertexDescriptor>
 void TIncrementalTopologicalOrdering<TVertexDescriptor>::Persist(const TStreamPersistenceContext& context)
 {
     using NYT::Persist;

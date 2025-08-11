@@ -1,8 +1,8 @@
-#include "schemeshard_xxport__tx_base.h"
+#include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"
-#include "schemeshard_export.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -72,13 +72,13 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
             }
 
             Self->Exports.erase(exportInfo->Id);
-            Self->PersistRemoveExport(db, exportInfo);
+            Self->PersistRemoveExport(db, *exportInfo);
         } else {
             LOG_D("TExport::TTxForget, dropping export tables"
                 << ", info: " << exportInfo->ToString()
             );
-            
-            PrepareDropping(Self, exportInfo, db);
+
+            PrepareDropping(Self, *exportInfo, db);
 
             Progress = true;
         }

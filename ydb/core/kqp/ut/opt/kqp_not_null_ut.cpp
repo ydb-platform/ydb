@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     Y_UNIT_TEST_TWIN(InsertNotNullPkPg, useSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
@@ -620,12 +620,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_TWIN(InsertNotNullPg, useSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableNotNullDataColumns(true)
-            .SetAppConfig(appConfig);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
@@ -1013,11 +1009,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(UpdateTable_UniqIndexPg) {
-        NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto tableClient = kikimr.GetTableClient();
@@ -1777,9 +1770,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_TWIN(JoinBothTablesWithNotNullPk, StreamLookup) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -1828,9 +1820,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_TWIN(JoinLeftTableWithNotNullPk, StreamLookup) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -1899,9 +1890,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_TWIN(JoinRightTableWithNotNullColumns, StreamLookup) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();

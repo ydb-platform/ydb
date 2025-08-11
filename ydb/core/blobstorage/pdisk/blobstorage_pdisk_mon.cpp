@@ -16,6 +16,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     , SchedulerGroup(Counters->GetSubgroup("subsystem", "scheduler"))
     , BandwidthGroup(Counters->GetSubgroup("subsystem", "bandwidth"))
     , PDiskGroup(Counters->GetSubgroup("subsystem", "pdisk"))
+    , CounterGroup(Counters->GetSubgroup("subsystem", "counter"))
 {
     using EVisibility = NMonitoring::TCountableBase::EVisibility;
 
@@ -155,7 +156,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     TRACKER_INIT_IF_EXTENDED(GetQueueHullLow, getQueueHullLow, Time in millisec);
     TRACKER_INIT_IF_EXTENDED(WriteQueueSyncLog, writeQueueSyncLog, Time in millisec);
     TRACKER_INIT_IF_EXTENDED(WriteQueueHullFresh, writeQueueHullFresh, Time in millisec);
-    TRACKER_INIT_IF_EXTENDED(WriteQueueHullHuge, writeQueueHullHuge, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(WriteQueueHullHugeAsync, writeQueueHullHugeAsync, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(WriteQueueHullHugeUser, writeQueueHullHugeUser, Time in millisec);
     TRACKER_INIT_IF_EXTENDED(WriteQueueHullComp, writeQueueHullComp, Time in millisec);
 
     TRACKER_INIT_IF_EXTENDED(SensitiveBurst, sensitiveBurst, Time in millisec);
@@ -175,7 +177,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
 
     TRACKER_INIT_IF_EXTENDED(WriteSyncLogSizeBytes, writeSyncLogSize, Size in bytes);
     TRACKER_INIT_IF_EXTENDED(WriteHullFreshSizeBytes, writeHullFreshSize, Size in bytes);
-    TRACKER_INIT_IF_EXTENDED(WriteHullHugeSizeBytes, writeHullHugeSize, Size in bytes);
+    TRACKER_INIT_IF_EXTENDED(WriteHullHugeAsyncSizeBytes, writeHullHugeAsyncSize, Size in bytes);
+    TRACKER_INIT_IF_EXTENDED(WriteHullHugeUserSizeBytes, writeHullHugeUserSize, Size in bytes);
     TRACKER_INIT_IF_EXTENDED(WriteHullCompSizeBytes, writeHullCompSize, Size in bytes);
 
     HISTOGRAM_INIT(LogResponseTime, logresponse);
@@ -189,7 +192,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
 
     HISTOGRAM_INIT(WriteResponseSyncLog, writeResponseSyncLog);
     HISTOGRAM_INIT(WriteResponseHullFresh, writeResponseHullFresh);
-    HISTOGRAM_INIT(WriteResponseHullHuge, writeResponseHullHuge);
+    HISTOGRAM_INIT(WriteResponseHullHugeAsync, writeResponseHullHugeAsync);
+    HISTOGRAM_INIT(WriteResponseHullHugeUser, writeResponseHullHugeUser);
     HISTOGRAM_INIT(WriteResponseHullComp, writeResponseHullComp);
 
     // bandwidth
@@ -226,6 +230,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, Harakiri, YardHarakiri);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardSlay, YardSlay);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardControl, YardControl);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardResize, YardResize);
 
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ShredPDisk, ShredPDisk);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, PreShredCompactVDisk, PreShredCompactVDisk);
@@ -234,7 +239,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
 
     IO_REQ_INIT(PDiskGroup, WriteSyncLog, WriteSyncLog);
     IO_REQ_INIT(PDiskGroup, WriteFresh, WriteFresh);
-    IO_REQ_INIT(PDiskGroup, WriteHuge, WriteHuge);
+    IO_REQ_INIT(PDiskGroup, WriteHugeAsync, WriteHugeAsync);
+    IO_REQ_INIT(PDiskGroup, WriteHugeUser, WriteHugeUser);
     IO_REQ_INIT(PDiskGroup, WriteComp, WriteComp);
     IO_REQ_INIT(PDiskGroup, Trim, WriteTrim);
     IO_REQ_INIT(PDiskGroup, ChunkShred, WriteShred);
@@ -257,6 +263,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(PDiskGroup, GetThreadCPU, true);
     COUNTER_INIT(PDiskGroup, TrimThreadCPU, true);
     COUNTER_INIT(PDiskGroup, CompletionThreadCPU, true);
+
+    COUNTER_INIT(CounterGroup, PDiskCount, false);
 }
 
 ::NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) {
@@ -291,8 +299,10 @@ void TPDiskMon::IncrementQueueTime(ui8 priorityClass, size_t timeMs) {
             WriteQueueHullFresh.Increment(timeMs);
         break;
         case NPriWrite::HullHugeAsyncBlob:
+            WriteQueueHullHugeAsync.Increment(timeMs);
+        break;
         case NPriWrite::HullHugeUserData:
-            WriteQueueHullHuge.Increment(timeMs);
+            WriteQueueHullHugeUser.Increment(timeMs);
         break;
         case NPriWrite::HullComp:
             WriteQueueHullComp.Increment(timeMs);
@@ -339,9 +349,12 @@ void TPDiskMon::IncrementResponseTime(ui8 priorityClass, double timeMs, size_t s
             WriteHullFreshSizeBytes.Increment(sizeBytes);
         break;
         case NPriWrite::HullHugeAsyncBlob:
+            WriteResponseHullHugeAsync.Increment(timeMs);
+            WriteHullHugeAsyncSizeBytes.Increment(sizeBytes);
+        break;
         case NPriWrite::HullHugeUserData:
-            WriteResponseHullHuge.Increment(timeMs);
-            WriteHullHugeSizeBytes.Increment(sizeBytes);
+            WriteResponseHullHugeUser.Increment(timeMs);
+            WriteHullHugeUserSizeBytes.Increment(sizeBytes);
         break;
         case NPriWrite::HullComp:
             WriteResponseHullComp.Increment(timeMs);
@@ -368,7 +381,8 @@ void TPDiskMon::UpdatePercentileTrackers() {
 
     WriteSyncLogSizeBytes.Update();
     WriteHullFreshSizeBytes.Update();
-    WriteHullHugeSizeBytes.Update();
+    WriteHullHugeAsyncSizeBytes.Update();
+    WriteHullHugeUserSizeBytes.Update();
     WriteHullCompSizeBytes.Update();
 
     LogQueueTime.Update();
@@ -382,7 +396,8 @@ void TPDiskMon::UpdatePercentileTrackers() {
 
     WriteQueueSyncLog.Update();
     WriteQueueHullFresh.Update();
-    WriteQueueHullHuge.Update();
+    WriteQueueHullHugeAsync.Update();
+    WriteQueueHullHugeUser.Update();
     WriteQueueHullComp.Update();
 
     SensitiveBurst.Update();
@@ -446,8 +461,8 @@ TPDiskMon::TIoCounters *TPDiskMon::GetWriteCounter(ui8 priority) {
     switch (priority) {
         case NPriWrite::SyncLog: return &WriteSyncLog;
         case NPriWrite::HullFresh: return &WriteFresh;
-        case NPriWrite::HullHugeAsyncBlob: return &WriteHuge;
-        case NPriWrite::HullHugeUserData: return &WriteHuge;
+        case NPriWrite::HullHugeAsyncBlob: return &WriteHugeAsync;
+        case NPriWrite::HullHugeUserData: return &WriteHugeUser;
         case NPriWrite::HullComp: return &WriteComp;
     }
     return &Unknown;

@@ -1,5 +1,6 @@
 #include <ydb/core/kafka_proxy/actors/kafka_transaction_actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/fwd.h>
@@ -14,7 +15,7 @@ namespace {
         public:
             TDummyKqpActor() : TActor<TDummyKqpActor>(&TDummyKqpActor::StateFunc) {}
 
-            void SetValidationResponse(const TString& transactionalId, ui64 producerId, ui64 producerEpoch, const std::unordered_map<TString, i32>& consumerGenerations = {}) {
+            void SetValidationResponse(const TString& transactionalId, i64 producerId, i32 producerEpoch, const TMaybe<std::unordered_map<TString, i32>>& consumerGenerations = Nothing()) {
                 TransactionalIdToReturn = transactionalId;
                 ProducerIdToReturn = producerId;
                 ProducerEpochToReturn = producerEpoch;
@@ -45,7 +46,10 @@ namespace {
                 THolder<NKqp::TEvKqp::TEvQueryResponse> response;
                 if (ev->Get()->Record.GetRequest().GetTxControl().commit_tx()) {
                     Cout << "Sending response on commit from dummy kqp" << Endl;
-                    response = MakeResponseOnCommit();
+                    response = MakeSimpleSuccessResponse();
+                } else if (ev->Get()->Record.GetRequest().HasKafkaApiOperations()) {
+                    Cout << "Sending response on add kafka operations from dummy kqp" << Endl;
+                    response = MakeSimpleSuccessResponse();
                 } else {
                     Cout << "Sending response on select from dummy kqp" << Endl;
                     response = MakeResponseOnSelectFromKqp();
@@ -59,7 +63,7 @@ namespace {
                 ));
             }
 
-            THolder<NKqp::TEvKqp::TEvQueryResponse> MakeResponseOnCommit() {
+            THolder<NKqp::TEvKqp::TEvQueryResponse> MakeSimpleSuccessResponse() {
                 auto response = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
                 NKikimrKqp::TEvQueryResponse record;
                 if (ReturnSuccessOnCommit) {
@@ -77,8 +81,10 @@ namespace {
                 record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
                 auto* producerState = record.MutableResponse()->AddYdbResults();
                 *producerState = CreateProducerStateResultsSet();
-                auto* consumersState = record.MutableResponse()->AddYdbResults();
-                *consumersState = CreateConsumersStatesResultSet();
+                if (ConsumerGenerationsToReturn.Defined()) {
+                    auto* consumersState = record.MutableResponse()->AddYdbResults();
+                    *consumersState = CreateConsumersStatesResultSet();
+                }
                 
                 response->Record = record;
                 return response;
@@ -136,7 +142,7 @@ namespace {
                     "  }\n"
                     "}\n";
 
-                for (auto& [consumerName, generation] : ConsumerGenerationsToReturn) {
+                for (auto& [consumerName, generation] : *ConsumerGenerationsToReturn) {
                     builder <<
                         "rows {\n"
                         "  items {\n"
@@ -153,9 +159,9 @@ namespace {
             }
 
             TString TransactionalIdToReturn = "";
-            ui64 ProducerIdToReturn = 0;
-            ui16 ProducerEpochToReturn = 0;
-            std::unordered_map<TString, i32> ConsumerGenerationsToReturn = {};
+            i64 ProducerIdToReturn = 0;
+            i32 ProducerEpochToReturn = 0;
+            TMaybe<std::unordered_map<TString, i32>> ConsumerGenerationsToReturn = Nothing();
             bool ReturnSuccessOnCommit = true;
         };
 
@@ -176,7 +182,6 @@ namespace {
             };
 
             struct TQueryRequestMatcher {
-                bool CommitTx;
                 TVector<TTopicPartitions> TopicPartitions;
                 TVector<TConsumerCommitMatcher> ConsumerCommitMatchers;
             };
@@ -197,8 +202,8 @@ namespace {
             TActorId KqpActorId;
             const TString Database = "/Root/PQ";
             const TString TransactionalId = "123"; // transactional id from kafka SDK
-            const ui64 ProducerId = 1;
-            const ui16 ProducerEpoch = 1;
+            const i64 ProducerId = 1;
+            const i32 ProducerEpoch = 1;
             ui32 QueryRequestsCounter = 0;
             
             void SetUp(NUnitTest::TTestContext&) override {
@@ -210,13 +215,13 @@ namespace {
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_DEBUG);
                 DummyKqpActor = new TDummyKqpActor();
                 KqpActorId = Ctx->Runtime->Register(DummyKqpActor);
+                Ctx->Runtime->RegisterService(MakeKqpProxyID(Ctx->Runtime->GetNodeId()), KqpActorId);
+                Ctx->Runtime->RegisterService(MakeTransactionsServiceID(Ctx->Runtime->GetNodeId()), Ctx->Edge);
                 ActorId = Ctx->Runtime->Register(new TTransactionActor(
                     TransactionalId,
-                    ProducerId,
-                    ProducerEpoch,
+                    {ProducerId, ProducerEpoch},
                     Database,
-                    KqpActorId,
-                    Ctx->Edge
+                    5000            
                 ));
                 DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch);
             }
@@ -291,7 +296,7 @@ namespace {
             // Arguments:
             // 1. callback - function, that will be called on recieving the response from KQP om commit request
             // 2. consumerGenerationsToReturnInValidationRequest - map of consumer name to its generation to ensure proper validation of consumer state by actor
-            void AddObserverForCommitRequestToKqp(std::function<void(const TEvKqp::TEvQueryRequest*)> callback, std::unordered_map<TString, i32> consumerGenerationsToReturnInValidationRequest = {}) {
+            void AddObserverForAddOperationsRequest(std::function<void(const TEvKqp::TEvQueryRequest*)> callback, TMaybe<std::unordered_map<TString, i32>> consumerGenerationsToReturnInValidationRequest = Nothing()) {
                 DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch, consumerGenerationsToReturnInValidationRequest);
 
                 auto observer = [callback = std::move(callback), this](TAutoPtr<IEventHandle>& input) {
@@ -314,8 +319,7 @@ namespace {
 
             void MatchQueryRequest(const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request, const TQueryRequestMatcher& matcher) {
                 UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetTxControl().begin_tx().has_serializable_read_write(), false);
-                UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetTxControl().commit_tx(), matcher.CommitTx);
-                UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetKafkaApiOperations().GetTransactionalId(), TransactionalId);
+                UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetAction(), NKikimrKqp::QUERY_ACTION_TOPIC);
                 UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetKafkaApiOperations().GetProducerId(), ProducerId);
                 UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetKafkaApiOperations().GetProducerEpoch(), ProducerEpoch);
                 
@@ -326,7 +330,7 @@ namespace {
         private:
             void MatchPartitionsInTxn(const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request, const TQueryRequestMatcher& matcher) {
                 auto& partitionsInRequest = request->Record.GetRequest().GetKafkaApiOperations().GetPartitionsInTxn();
-                std::unordered_set<TTransactionActor::TTopicPartition, TTransactionActor::TopicPartitionHashFn> paritionsInRequestSet;
+                std::unordered_set<TTopicPartition, TTopicPartitionHashFn> paritionsInRequestSet;
                 paritionsInRequestSet.reserve(partitionsInRequest.size());
                 for (auto& partition : partitionsInRequest) {
                     paritionsInRequestSet.emplace(partition.GetTopicPath(), partition.GetPartitionId());
@@ -364,7 +368,6 @@ namespace {
                             UNIT_ASSERT_VALUES_EQUAL(it->GetPartitionId(), partitionOffset.first);
                             UNIT_ASSERT_VALUES_EQUAL(it->GetOffset(), partitionOffset.second);
                             UNIT_ASSERT_VALUES_EQUAL(it->GetConsumerName(), consumerCommitMatcher.ConsumerName);
-                            UNIT_ASSERT_VALUES_EQUAL(it->GetConsumerGeneration(), consumerCommitMatcher.GenerationId);
                         }
                     }
                 }
@@ -379,8 +382,8 @@ namespace {
         Y_UNIT_TEST(OnAddPartitionsAndEndTxn_shouldSendTxnToKqpWithSpecifiedPartitions) {
             TVector<TTopicPartitions> topics = {{"topic1", {0, 1}}, {"topic2", {0}}};
             bool seenEvent = false;
-            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
-                MatchQueryRequest(request, {true, topics, {}});
+            AddObserverForAddOperationsRequest([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+                MatchQueryRequest(request, {topics, {}});
                 seenEvent = true;
             });
 
@@ -419,11 +422,11 @@ namespace {
             UNIT_ASSERT_EQUAL(message.Results[1].Results[0].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
         }
 
-        Y_UNIT_TEST(OnDoubleAddPartitionsWithSamePartitionsAndEndTxn_shouldSendTxnToKqpWithOnceSpecifiedPartitions) {
+        Y_UNIT_TEST(OnDoubleAddPartitionsWithSamePartitionsAndEndTxn_shouldSendTxnToKqpKafkaOperationsWithOnceSpecifiedPartitions) {
             TVector<TTopicPartitions> topics = {{"topic1", {0}}};
             bool seenEvent = false;
-            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
-                MatchQueryRequest(request, {true, topics, {}});
+            AddObserverForAddOperationsRequest([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+                MatchQueryRequest(request, {topics, {}});
                 seenEvent = true;
             });
 
@@ -439,12 +442,12 @@ namespace {
             UNIT_ASSERT(seenEvent);
         }
 
-        Y_UNIT_TEST(OnDoubleAddPartitionsWithDifferentPartitionsAndEndTxn_shouldSendTxnToKqpWithAllSpecifiedPartitions) {
+        Y_UNIT_TEST(OnDoubleAddPartitionsWithDifferentPartitionsAndEndTxn_shouldSendTxnToKqKafkaOperationspWithAllSpecifiedPartitions) {
             TVector<TTopicPartitions> topics1 = {{"topic1", {0}}};
             TVector<TTopicPartitions> topics2 = {{"topic2", {0}}};
             bool seenEvent = false;
-            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
-                MatchQueryRequest(request, {true, {{"topic1", {0}}, {"topic2", {0}}}, {}});
+            AddObserverForAddOperationsRequest([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+                MatchQueryRequest(request, {{{"topic1", {0}}, {"topic2", {0}}}, {}});
                 seenEvent = true;
             });
 
@@ -469,8 +472,8 @@ namespace {
             std::unordered_map<TString, i32> consumerGenerationByNameToReturnFromKqp;
             consumerGenerationByNameToReturnFromKqp[consumerName] = consumerGeneration;
             bool seenEvent = false;
-            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
-                MatchQueryRequest(request, {true, {}, {{consumerName, consumerGeneration, partitionOffsetsToCommitByTopic}}});
+            AddObserverForAddOperationsRequest([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+                MatchQueryRequest(request, {{}, {{consumerName, consumerGeneration, partitionOffsetsToCommitByTopic}}});
                 seenEvent = true;
             }, consumerGenerationByNameToReturnFromKqp);
 
@@ -493,8 +496,8 @@ namespace {
             std::unordered_map<TString, i32> consumerGenerationByNameToReturnFromKqp;
             consumerGenerationByNameToReturnFromKqp[consumerName] = consumerGenerationFromTable;
             bool seenEvent = false;
-            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
-                MatchQueryRequest(request, {true, {}, {{consumerName, consumerGenerationFromTable, partitionOffsetsToCommitByTopic}}});
+            AddObserverForAddOperationsRequest([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+                MatchQueryRequest(request, {{}, {{consumerName, consumerGenerationFromTable, partitionOffsetsToCommitByTopic}}});
                 seenEvent = true;
             }, consumerGenerationByNameToReturnFromKqp);
 
@@ -522,9 +525,9 @@ namespace {
             std::unordered_map<TString, i32> consumerGenerationByNameToReturnFromKqp;
             consumerGenerationByNameToReturnFromKqp[consumerName] = consumerGeneration;
             bool seenEvent = false;
-            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+            AddObserverForAddOperationsRequest([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
                 // we validate that to KQP are sent offsets from second request
-                MatchQueryRequest(request, {true, {}, {{consumerName, consumerGeneration, secondRequestOffsetsByTopic}}});
+                MatchQueryRequest(request, {{}, {{consumerName, consumerGeneration, secondRequestOffsetsByTopic}}});
                 seenEvent = true;
             }, consumerGenerationByNameToReturnFromKqp);
 
@@ -569,7 +572,7 @@ namespace {
             UNIT_ASSERT_EQUAL(message.Topics[1].Partitions[1].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
         }
 
-        Y_UNIT_TEST(OnAddOffsetsToTxnAndAddPartitionsAndEndTxn_shouldSendToKqpCorrectTxn) {
+        Y_UNIT_TEST(OnAddOffsetsToTxnAndAddPartitionsAndEndTxn_shouldSendToKqpCorrectAddKafkaOperationsRequest) {
             TVector<TTopicPartitions> topics = {{"topic3", {0}}};
             TString consumerName = "my-consumer";
             i32 consumerGeneration = 0;
@@ -579,8 +582,8 @@ namespace {
             std::unordered_map<TString, i32> consumerGenerationByNameToReturnFromKqp;
             consumerGenerationByNameToReturnFromKqp[consumerName] = consumerGeneration;
             bool seenEvent = false;
-            AddObserverForCommitRequestToKqp([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
-                MatchQueryRequest(request, {true, topics, {{consumerName, consumerGeneration, partitionOffsetsToCommitByTopic}}});
+            AddObserverForAddOperationsRequest([&](const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request) {
+                MatchQueryRequest(request, {topics, {{consumerName, consumerGeneration, partitionOffsetsToCommitByTopic}}});
                 seenEvent = true;
             }, consumerGenerationByNameToReturnFromKqp);
 
@@ -607,6 +610,11 @@ namespace {
             const auto& result = static_cast<const NKafka::TEndTxnResponseData&>(*response->Response);
             UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
             UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            auto txnActorDiedEvent = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvTransactionActorDied>();
+            UNIT_ASSERT(txnActorDiedEvent != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->TransactionalId, TransactionalId);
+            UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->ProducerState.Id, ProducerId);
+            UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->ProducerState.Epoch, ProducerEpoch);
         }
 
         Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnBROKER_NOT_AVAILABLE) {

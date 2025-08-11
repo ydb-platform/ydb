@@ -54,12 +54,12 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
                 const TUdfModuleRemappings& remappings,
                 ui32 abiVersion,
                 const TString& customUdfPrefix = {})
-            : ModulesMap(modulesMap)
-            , NewModules(newModules)
-            , LibraryPath(libraryPath)
-            , Remappings(remappings)
-            , AbiVersion(NUdf::AbiVersionToStr(abiVersion))
-            , CustomUdfPrefix(customUdfPrefix)
+            : ModulesMap_(modulesMap)
+            , NewModules_(newModules)
+            , LibraryPath_(libraryPath)
+            , Remappings_(remappings)
+            , AbiVersion_(NUdf::AbiVersionToStr(abiVersion))
+            , CustomUdfPrefix_(customUdfPrefix)
         {
         }
 
@@ -71,40 +71,40 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
 
             if (!HasError()) {
                 TUdfModule m;
-                m.LibraryPath = LibraryPath;
+                m.LibraryPath = LibraryPath_;
                 m.Impl.reset(module.Release());
 
-                auto it = Remappings.find(name);
-                const TString& newName = CustomUdfPrefix
-                        + ((it == Remappings.end())
+                auto it = Remappings_.find(name);
+                const TString& newName = CustomUdfPrefix_
+                        + ((it == Remappings_.end())
                         ? TString(name)
                         : it->second);
 
-                auto i = ModulesMap.insert({ newName, std::move(m) });
+                auto i = ModulesMap_.insert({ newName, std::move(m) });
                 if (!i.second) {
-                    TUdfModule* oldModule = ModulesMap.FindPtr(newName);
+                    TUdfModule* oldModule = ModulesMap_.FindPtr(newName);
                     Y_DEBUG_ABORT_UNLESS(oldModule != nullptr);
-                    Error = (TStringBuilder()
+                    Error_ = (TStringBuilder()
                              << "UDF module duplication: name " << TStringBuf(name)
                              << ", already loaded from " << oldModule->LibraryPath
-                             << ", trying to load from " << LibraryPath);
-                } else if (NewModules) {
-                    NewModules->insert(newName);
+                             << ", trying to load from " << LibraryPath_);
+                } else if (NewModules_) {
+                    NewModules_->insert(newName);
                 }
             }
         }
 
-        const TString& GetError() const { return Error; }
-        bool HasError() const { return !Error.empty(); }
+        const TString& GetError() const { return Error_; }
+        bool HasError() const { return !Error_.empty(); }
 
     private:
-        TUdfModulesMap& ModulesMap;
-        THashSet<TString>* NewModules;
-        const TString LibraryPath;
-        const TUdfModuleRemappings& Remappings;
-        const TString AbiVersion;
-        TString Error;
-        const TString CustomUdfPrefix;
+        TUdfModulesMap& ModulesMap_;
+        THashSet<TString>* NewModules_;
+        const TString LibraryPath_;
+        const TUdfModuleRemappings& Remappings_;
+        const TString AbiVersion_;
+        TString Error_;
+        const TString CustomUdfPrefix_;
     };
 
 public:
@@ -336,15 +336,15 @@ public:
             class TFuncDescriptor : public NUdf::IFunctionDescriptor {
             public:
                 TFuncDescriptor(TFunctionProperties& properties)
-                    : Properties(properties)
+                    : Properties_(properties)
                 {}
 
             private:
                 void SetTypeAwareness() final {
-                    Properties.IsTypeAwareness = true;
+                    Properties_.IsTypeAwareness = true;
                 }
 
-                TFunctionProperties& Properties;
+                TFunctionProperties& Properties_;
             };
 
             NUdf::IFunctionDescriptor::TPtr Add(const NUdf::TStringRef& name) final {

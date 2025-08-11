@@ -16,12 +16,12 @@ using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
 TComputationNodeFactory GetJobFactory(NYql::NCommon::TCodecContext& codecCtx, const TString& optLLVM,
-    const TMkqlIOSpecs* specs, NYT::IReaderImplBase* reader, TJobMkqlWriterImpl* writer)
+    const TMkqlIOSpecs* specs, NYT::IReaderImplBase* reader, TMkqlWriterImpl* writer, const TString& prefix)
 {
     TMaybe<ui32> exprContextObject;
-    return [&codecCtx, optLLVM, specs, reader, writer, exprContextObject](NMiniKQL::TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* {
+    return [&codecCtx, optLLVM, specs, reader, writer, exprContextObject, prefix](NMiniKQL::TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* {
         TStringBuf name = callable.GetType()->GetName();
-        if (name.SkipPrefix("Yt") && name.ChopSuffix("Job")) {
+        if (name.SkipPrefix(prefix) && name.ChopSuffix("Job")) {
             if (name == "TableContent") {
                 return WrapYtTableContent(codecCtx, ctx.Mutables, callable, optLLVM, {} /*empty pathPrefix inside job*/);
             }

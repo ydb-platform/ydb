@@ -11,7 +11,9 @@ namespace NYql {
     using namespace NConnector::NApi;
 
     TString FormatColumn(const TString& value);
-    TString FormatValue(const Ydb::TypedValue& value);
+    TString FormatType(const Ydb::Type& type);
+    TString FormatTypedValue(const Ydb::TypedValue& typedValue);
+    TString FormatValue(const Ydb::Value& value);
     TString FormatNull(const TExpression_TNull&);
     TString FormatExpression(const TExpression& expression);
     TString FormatArithmeticalExpression(const TExpression_TArithmeticalExpression& expression);
@@ -25,12 +27,32 @@ namespace NYql {
     TString FormatIn(const TPredicate_TIn& in);
     TString FormatCoalesce(const TExpression::TCoalesce& coalesce);
     TString FormatIfExpression(const TExpression::TIf& sqlIf);
+    TString FormatUnwrap(const TExpression::TUnwrap& unwrap);
+    TString FormatMinOf(const TExpression::TMinOf& minOf);
+    TString FormatMaxOf(const TExpression::TMaxOf& maxOf);
+    TString FormatCurrentUtcTimestamp(const TExpression::TCurrentUtcTimestamp& currentUtcTimestamp);
 
     namespace {
+        TString ToIso8601(TDuration duration) {
+            if (duration == TDuration::Zero()) {
+                return "PT0S";
+            }
+            TStringBuilder result;
+            result << "PT" << duration.Seconds();
+            auto fraction = duration.MicroSecondsOfSecond();
+            if (fraction != 0) {
+                result << ".";
+                result << Sprintf("%06d", fraction);
+            }
+            result << "S";
+            return result;
+        }
+
         struct TSerializationContext {
             const TCoArgument& Arg;
             TStringBuilder& Err;
             std::unordered_map<const TExprNode*, TExpression> LambdaArgs = {};
+            TExprContext& Ctx;
         };
 
         bool SerializeMember(const TCoMember& member, TExpression* proto, TSerializationContext& ctx) {
@@ -56,7 +78,7 @@ namespace NYql {
             return FromString<T>(from);
         }
 
-        // Special convertation from TStringBuf to TString
+        // Special conversion from TStringBuf to TString
         template <>
         TString Cast<TString>(const TStringBuf& from) {
             return TString(from);
@@ -113,6 +135,7 @@ namespace NYql {
             MATCH_TYPE(Utf8, UTF8);
             MATCH_TYPE(Json, JSON);
             MATCH_TYPE(Timestamp, TIMESTAMP);
+            MATCH_TYPE(Interval, INTERVAL);
 
             ctx.Err << "unknown data slot " << static_cast<ui64>(dataSlot) << " for safe cast";
             return false;
@@ -126,8 +149,8 @@ namespace NYql {
                 return false;
             }
 
-            const auto toBytexExpr = TExprBase(toBytes.Ref().Child(0));
-            auto typeAnnotation = toBytexExpr.Ref().GetTypeAnn();
+            const auto toBytesExpr = TExprBase(toBytes.Ref().Child(0));
+            auto typeAnnotation = toBytesExpr.Ref().GetTypeAnn();
             if (!typeAnnotation) {
                 ctx.Err << "expected non empty type annotation for ToBytes";
                 return false;
@@ -148,7 +171,40 @@ namespace NYql {
 
             auto* dstProto = proto->mutable_cast();
             dstProto->mutable_type()->set_type_id(Ydb::Type::STRING);
-            return SerializeExpression(toBytexExpr, dstProto->mutable_value(), ctx, depth + 1);
+            return SerializeExpression(toBytesExpr, dstProto->mutable_value(), ctx, depth + 1);
+        }
+
+        bool SerializeToStringExpression(const TExprBase& toString, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            if (toString.Ref().ChildrenSize() != 1) {
+                ctx.Err << "invalid ToString expression, expected 1 child but got " << toString.Ref().ChildrenSize();
+                return false;
+            }
+
+            const auto toStringExpr = TExprBase(toString.Ref().Child(0));
+            auto typeAnnotation = toStringExpr.Ref().GetTypeAnn();
+            if (!typeAnnotation) {
+                ctx.Err << "expected non empty type annotation for ToString";
+                return false;
+            }
+
+            if (typeAnnotation->GetKind() == ETypeAnnotationKind::Optional) {
+                typeAnnotation = typeAnnotation->Cast<TOptionalExprType>()->GetItemType();
+            }
+
+            if (typeAnnotation->GetKind() != ETypeAnnotationKind::Data) {
+                ctx.Err << "expected data type or optional from data type in ToString";
+                return false;
+            }
+
+            const auto dataSlot = typeAnnotation->Cast<TDataExprType>()->GetSlot();
+            if (!IsDataTypeString(dataSlot) && dataSlot != NUdf::EDataSlot::JsonDocument) {
+                ctx.Err << "expected only string like input type for ToString";
+                return false;
+            }
+
+            auto* dstProto = proto->mutable_cast();
+            dstProto->mutable_type()->set_type_id(Ydb::Type::STRING);
+            return SerializeExpression(toStringExpr, dstProto->mutable_value(), ctx, depth + 1);
         }
 
         bool SerializeFlatMap(const TCoFlatMap& flatMap, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
@@ -189,6 +245,29 @@ namespace NYql {
         return SerializeExpression(expr.Left(), exprProto->mutable_left_value(), ctx, depth + 1) && SerializeExpression(expr.Right(), exprProto->mutable_right_value(), ctx, depth + 1); \
     }
 
+#define MATCH_UNARY_OP(OpType, op_name)                                                             \
+    if (auto maybeExpr = expression.Maybe<Y_CAT(TCo, OpType)>()) {                                  \
+        auto expr = maybeExpr.Cast();                                                               \
+        auto* exprProto = proto->Y_CAT(mutable_, op_name)();                                        \
+        const auto child = expression.Ptr()->Child(0);                                              \
+        if (!SerializeExpression(TExprBase(child), exprProto->mutable_operand(), ctx, depth + 1)) { \
+            return false;                                                                           \
+        }                                                                                           \
+        return true;                                                                                \
+    }
+
+#define MATCH_VAR_ARG_OP(OpType, op_name)                                                            \
+    if (auto maybeExpr = expression.Maybe<Y_CAT(TCo, OpType)>()) {                                   \
+        auto expr = maybeExpr.Cast();                                                                \
+        auto* exprProto = proto->Y_CAT(mutable_, op_name)();                                         \
+        for (const auto& child : expr.Ref().Children()) {                                            \
+            if (!SerializeExpression(TExprBase(child), exprProto->add_operands(), ctx, depth + 1)) { \
+                return false;                                                                        \
+            }                                                                                        \
+        }                                                                                            \
+        return true;                                                                                 \
+    }
+
         bool SerializeSqlIfExpression(const TCoIf& sqlIf, TExpression* proto, TSerializationContext& ctx, ui64 depth);
 
         bool SerializeCoalesceExpression(const TCoCoalesce& coalesce, TExpression* proto, TSerializationContext& ctx, ui64 depth);
@@ -212,8 +291,14 @@ namespace NYql {
             if (expression.Ref().IsCallable("ToBytes")) {
                 return SerializeToBytesExpression(expression, proto, ctx, depth);
             }
+            if (expression.Ref().IsCallable("ToString")) {
+                return SerializeToStringExpression(expression, proto, ctx, depth);
+            }
             if (auto flatMap = expression.Maybe<TCoFlatMap>()) {
                 return SerializeFlatMap(flatMap.Cast(), proto, ctx, depth);
+            }
+            if (auto dependsOn = expression.Maybe<TCoDependsOn>()) {
+                return SerializeExpression(dependsOn.Cast().Input(), proto, ctx, depth + 1);
             }
 
             // data
@@ -231,11 +316,16 @@ namespace NYql {
             MATCH_ATOM(String, STRING, bytes, TString);
             MATCH_ATOM(Utf8, UTF8, text, TString);
             MATCH_ATOM(Timestamp, TIMESTAMP, int64, i64);
+            MATCH_ATOM(Interval, INTERVAL, int64, i64);
             MATCH_ARITHMETICAL(Sub, SUB);
             MATCH_ARITHMETICAL(Add, ADD);
             MATCH_ARITHMETICAL(Mul, MUL);
             MATCH_ARITHMETICAL(Div, DIV);
             MATCH_ARITHMETICAL(Mod, MOD);
+            MATCH_UNARY_OP(Unwrap, unwrap);
+            MATCH_VAR_ARG_OP(Min, min_of);
+            MATCH_VAR_ARG_OP(Max, max_of);
+            MATCH_VAR_ARG_OP(CurrentUtcTimestamp, current_utc_timestamp);
 
             if (auto maybeNull = expression.Maybe<TCoNull>()) {
                 proto->mutable_null();
@@ -253,6 +343,8 @@ namespace NYql {
 
 #undef MATCH_ATOM
 #undef MATCH_ARITHMETICAL
+#undef MATCH_UNARY_OP
+#undef MATCH_VAR_ARG_OP
 
 #define EXPR_NODE_TO_COMPARE_TYPE(TExprNodeType, COMPARE_TYPE)       \
     if (!opMatched && compare.Maybe<TExprNodeType>()) {              \
@@ -304,7 +396,7 @@ namespace NYql {
         template <typename TProto>
         void UnwrapNestedCoalesce(TProto* proto) {
             // We can unwrap nested COALESCE:
-            // COALESCE(..., COALESCE(Predicat_1, Predicat_2), ...) -> COALESCE(..., Predicat_1, Predicat_2, ...)
+            // COALESCE(..., COALESCE(Predicate_1, Predicate_2), ...) -> COALESCE(..., Predicate_1, Predicate_2, ...)
             if (proto->operands().rbegin()->has_coalesce()) {
                 auto coalesceOperands = std::move(*proto->mutable_operands()->rbegin()->mutable_coalesce()->mutable_operands());
                 proto->mutable_operands()->RemoveLast();
@@ -324,7 +416,7 @@ namespace NYql {
         }
 
         bool SerializeCoalescePredicate(const TCoCoalesce& coalesce, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
-            // Special case for top level COALESCE: COALESCE(Predicat, FALSE)
+            // Special case for top level COALESCE: COALESCE(Predicate, FALSE)
             // We can assume NULL as FALSE and skip COALESCE
             if (depth == 0) {
                 auto value = coalesce.Value().Maybe<TCoBool>();
@@ -508,28 +600,28 @@ namespace NYql {
         return NFq::EncloseAndEscapeString(value, '`');
     }
 
-    TString FormatValue(const Ydb::TypedValue& value) {
-        switch (value.value().value_case()) {
+    TString FormatValue(const Ydb::Value& value) {
+        switch (value.value_case()) {
             case  Ydb::Value::kBoolValue:
-                return value.value().bool_value() ? "TRUE" : "FALSE";
+                return value.bool_value() ? "TRUE" : "FALSE";
             case Ydb::Value::kInt32Value:
-                return ToString(value.value().int32_value());
+                return ToString(value.int32_value());
             case Ydb::Value::kUint32Value:
-                return ToString(value.value().uint32_value());
+                return ToString(value.uint32_value());
             case Ydb::Value::kInt64Value:
-                return ToString(value.value().int64_value());
+                return ToString(value.int64_value());
             case Ydb::Value::kUint64Value:
-                return ToString(value.value().uint64_value());
+                return ToString(value.uint64_value());
             case Ydb::Value::kFloatValue:
-                return ToString(value.value().float_value());
+                return ToString(value.float_value());
             case Ydb::Value::kDoubleValue:
-                return ToString(value.value().double_value());
+                return ToString(value.double_value());
             case Ydb::Value::kBytesValue:
-                return NFq::EncloseAndEscapeString(value.value().bytes_value(), '"');
+                return NFq::EncloseAndEscapeString(value.bytes_value(), '"');
             case Ydb::Value::kTextValue:
-                return NFq::EncloseAndEscapeString(value.value().text_value(), '"');
+                return NFq::EncloseAndEscapeString(value.text_value(), '"');
             default:
-                throw yexception() << "Failed to format ydb typed vlaue, value case " << static_cast<ui64>(value.value().value_case()) << " is not supported";
+                throw yexception() << "Failed to format ydb value, value case " << static_cast<ui64>(value.value_case()) << " is not supported";
         }
     }
 
@@ -557,6 +649,10 @@ namespace NYql {
                 return "Float";
             case Ydb::Type::DOUBLE:
                 return "Double";
+            case Ydb::Type::TIMESTAMP:
+                return "Timestamp";
+            case Ydb::Type::INTERVAL:
+                return "Interval";
             case Ydb::Type::STRING:
                 return "String";
             case Ydb::Type::UTF8:
@@ -579,6 +675,33 @@ namespace NYql {
         }
     }
 
+    TString FormatTypedValue(const Ydb::TypedValue& typedValue) {
+        const auto& type = typedValue.type();
+        switch (type.type_case()) {
+        case Ydb::Type::kTypeId: {
+            const auto& typeId = type.type_id();
+            switch (typeId) {
+            case Ydb::Type::INTERVAL: {
+                const auto& value = typedValue.value();
+                switch (value.value_case()) {
+                case Ydb::Value::kInt64Value: {
+                    const auto duration = TDuration::MicroSeconds(value.int64_value());
+                    return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << ToIso8601(duration) << "\")";
+                }
+                default:
+                    [[fallthrough]];
+                }
+            }
+            default:
+                [[fallthrough]];
+            }
+        }
+        default:
+            // return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << FormatValue(typedValue.value()) << "\")";
+            return FormatValue(typedValue.value());
+        }
+    }
+
     TString FormatNull(const TExpression_TNull&) {
         return "NULL";
     }
@@ -589,12 +712,69 @@ namespace NYql {
         return TStringBuilder() << "CAST(" << value << " AS " << type << ")";
     }
 
+    TString FormatUnwrap(const TExpression_TUnwrap& unwrap) {
+        return TStringBuilder() << "Unwrap(" << FormatExpression(unwrap.operand()) << ")";
+    }
+
+    TString FormatMinOf(const TExpression_TMinOf& minOf) {
+        TStringBuilder sb;
+        sb << "MIN_OF(";
+
+        bool isFirst = true;
+        for (const auto& operand : minOf.operands()) {
+            if (!isFirst) {
+                sb << ", ";
+            }
+            sb << FormatExpression(operand);
+            isFirst = false;
+        }
+        sb << ")";
+
+        return sb;
+    }
+
+    TString FormatMaxOf(const TExpression_TMaxOf& maxOf) {
+        TStringBuilder sb;
+        sb << "MAX_OF(";
+
+        bool isFirst = true;
+        for (const auto& operand : maxOf.operands()) {
+            if (!isFirst) {
+                sb << ", ";
+            }
+            sb << FormatExpression(operand);
+            isFirst = false;
+        }
+        sb << ")";
+
+        return sb;
+    }
+
+    TString FormatCurrentUtcTimestamp(const TExpression_TCurrentUtcTimestamp& currentUtcTimestamp) {
+        TStringBuilder sb;
+        sb << "CurrentUtcTimestamp(";
+
+        bool isFirst = true;
+        for (const auto& operand : currentUtcTimestamp.operands()) {
+            if (!isFirst) {
+                sb << ", ";
+            }
+            sb << FormatExpression(operand);
+            isFirst = false;
+        }
+        sb << ")";
+
+        return sb;
+    }
+
     TString FormatExpression(const TExpression& expression) {
         switch (expression.payload_case()) {
+            case TExpression::PAYLOAD_NOT_SET:
+                return {};
             case TExpression::kColumn:
                 return FormatColumn(expression.column());
             case TExpression::kTypedValue:
-                return FormatValue(expression.typed_value());
+                return FormatTypedValue(expression.typed_value());
             case TExpression::kArithmeticalExpression:
                 return FormatArithmeticalExpression(expression.arithmetical_expression());
             case TExpression::kNull:
@@ -605,6 +785,14 @@ namespace NYql {
                 return FormatIfExpression(expression.if_());
             case TExpression::kCast:
                 return FormatCast(expression.cast());
+            case TExpression::kUnwrap:
+                return FormatUnwrap(expression.unwrap());
+            case TExpression::kMinOf:
+                return FormatMinOf(expression.min_of());
+            case TExpression::kMaxOf:
+                return FormatMaxOf(expression.max_of());
+            case TExpression::kCurrentUtcTimestamp:
+                return FormatCurrentUtcTimestamp(expression.current_utc_timestamp());
             default:
                 throw yexception() << "Failed to format expression, unimplemented payload_case " << static_cast<ui64>(expression.payload_case());
         }
@@ -905,13 +1093,34 @@ namespace NYql {
         return TStringBuf(maybeBool.Cast().Literal()) == "true"sv;
     }
 
-    bool SerializeFilterPredicate(const TExprBase& predicateBody, const TCoArgument& predicateArgument, NConnector::NApi::TPredicate* proto, TStringBuilder& err) {
-        TSerializationContext ctx = {.Arg = predicateArgument, .Err = err};
-        return SerializePredicate(predicateBody, proto, ctx, 0);
+    bool SerializeFilterPredicate(
+        TExprContext& ctx,
+        const TExprBase& predicateBody,
+        const TCoArgument& predicateArgument,
+        NConnector::NApi::TPredicate* proto,
+        TStringBuilder& err
+    ) {
+        TSerializationContext serializationContext = {.Arg = predicateArgument, .Err = err, .Ctx = ctx};
+        return SerializePredicate(predicateBody, proto, serializationContext, 0);
     }
 
-    bool SerializeFilterPredicate(const TCoLambda& predicate, TPredicate* proto, TStringBuilder& err) {
-        return SerializeFilterPredicate(predicate.Body(), predicate.Args().Arg(0), proto, err);
+    bool SerializeFilterPredicate(
+        TExprContext& ctx,
+        const TCoLambda& predicate,
+        TPredicate* proto,
+        TStringBuilder& err
+    ) {
+        return SerializeFilterPredicate(ctx, predicate.Body(), predicate.Args().Arg(0), proto, err);
+    }
+
+    bool SerializeWatermarkExpr(
+        TExprContext& ctx,
+        const TCoLambda& predicate,
+        TExpression* proto,
+        TStringBuilder& err
+    ) {
+        TSerializationContext serializationContext = {.Arg = predicate.Args().Arg(0), .Err = err, .Ctx = ctx};
+        return SerializeExpression(predicate.Body(), proto, serializationContext, 0);
     }
 
     TString FormatWhere(const TPredicate& predicate) {

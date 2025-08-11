@@ -7,8 +7,6 @@
 
 #include <yql/essentials/utils/log/log.h>
 
-#include <ydb/core/kqp/common/batch/params.h>
-
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 namespace NYql {
@@ -42,171 +40,6 @@ bool HasUpdateIntersection(const NCommon::TWriteTableSettings& settings) {
     }
 
     return hasIntersection;
-}
-
-TCoParameter MakeTypeAnnotatedParameter(const TString& name, const TTypeAnnotationNode* colType, TPositionHandle pos,
-    TExprContext& ctx) {
-    return Build<TCoParameter>(ctx, pos)
-        .Name().Build(name)
-        .Type(ExpandType(pos, *colType, ctx))
-        .Done();
-}
-
-TCoParameter MakeCustomTypedParameter(const TString& name, const TString& typeName, TPositionHandle pos, TExprContext& ctx) {
-    return Build<TCoParameter>(ctx, pos)
-        .Name().Build(name)
-        .Type<TCoDataType>()
-            .Type().Value(typeName).Build()
-            .Build()
-        .Done();
-}
-
-TExprBase MakeBatchRange(const TVector<TExprBase>& params, const TVector<TExprBase>& members, const TString& sign,
-    TPositionHandle pos, TExprContext& ctx)
-{
-    auto paramsList = Build<TExprList>(ctx, pos).Add(params).Done();
-    auto membersList = Build<TExprList>(ctx, pos).Add(members).Done();
-
-    if (sign == ">") {
-        return Build<TCoCmpGreater>(ctx, pos)
-            .Left(paramsList)
-            .Right(membersList)
-            .Done();
-    } else if (sign == ">=") {
-        return Build<TCoCmpGreaterOrEqual>(ctx, pos)
-            .Left(paramsList)
-            .Right(membersList)
-            .Done();
-    } else if (sign == "<") {
-        return Build<TCoCmpLess>(ctx, pos)
-            .Left(paramsList)
-            .Right(membersList)
-            .Done();
-    } else if (sign == "<=") {
-        return Build<TCoCmpLessOrEqual>(ctx, pos)
-            .Left(paramsList)
-            .Right(membersList)
-            .Done();
-    } else {
-        YQL_ENSURE(false);
-        return TExprBase(nullptr);
-    }
-}
-
-TCoOr MakeBatchRangesWithPrefixSize(const TVector<TExprBase>& members, const TVector<const TTypeAnnotationNode*>& types, const TString& sign,
-    bool isBegin, TPositionHandle pos, TExprContext& ctx)
-{
-    auto paramName = (isBegin) ? NKqp::NBatchParams::Begin : NKqp::NBatchParams::End;
-    auto prefixParamName = (isBegin) ? NKqp::NBatchParams::BeginPrefixSize : NKqp::NBatchParams::EndPrefixSize;
-
-    TVector<TExprBase> cur_params;
-    TVector<TExprBase> cur_members;
-    TVector<TExprBase> ranges;
-
-    cur_params.reserve(types.size());
-    cur_members.reserve(types.size());
-    ranges.reserve(types.size() + 1);
-
-    ranges.push_back(Build<TCoCmpEqual>(ctx, pos)
-        .Left(MakeCustomTypedParameter(prefixParamName, "Uint32", pos, ctx))
-        .Right<TCoUint32>()
-            .Literal().Build("0")
-            .Build()
-        .Done());
-
-    for (size_t i = 0; i < types.size(); ++i) {
-        cur_params.push_back(MakeTypeAnnotatedParameter(paramName + ToString(i + 1), types[i], pos, ctx));
-        cur_members.push_back(members[i]);
-
-        ranges.push_back(Build<TCoAnd>(ctx, pos)
-            .Add<TCoCmpEqual>()
-                .Left(MakeCustomTypedParameter(prefixParamName, "Uint32", pos, ctx))
-                .Right<TCoUint32>()
-                    .Literal().Build(ToString(i + 1))
-                    .Build()
-                .Build()
-            .Add(MakeBatchRange(cur_params, cur_members, sign, pos, ctx))
-            .Done());
-    }
-
-    return Build<TCoOr>(ctx, pos)
-        .Add(ranges)
-        .Done();
-}
-
-TCoLambda RewriteBatchFilter(const TCoLambda& lambda, const TKikimrTableDescription& tableDesc, TExprContext& ctx) {
-    const TPositionHandle pos = lambda.Pos();
-
-    YQL_ENSURE(lambda.Args().Size() == 1);
-    TCoArgument row = lambda.Args().Arg(0);
-
-    TVector<TString> primaryColumns = tableDesc.Metadata->KeyColumnNames;
-    TVector<TExprBase> members;
-    TVector<const TTypeAnnotationNode*> types;
-
-    members.reserve(primaryColumns.size());
-    types.reserve(primaryColumns.size());
-
-    for (size_t i = 0; i < primaryColumns.size(); ++i) {
-        types.push_back(tableDesc.GetColumnType(primaryColumns[i]));
-        members.push_back(Build<TCoMember>(ctx, pos)
-            .Struct(row)
-            .Name().Build(primaryColumns[i])
-            .Done());
-    }
-
-    auto newFilter = Build<TCoAnd>(ctx, pos)
-        .Add<TCoOr>()
-            .Add<TCoAnd>()
-                .Add(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveLeft, "Bool", pos, ctx))
-                .Add(MakeBatchRangesWithPrefixSize(members, types, "<=", /* isBegin */ true, pos, ctx))
-                .Build()
-            .Add<TCoAnd>()
-                .Add<TCoNot>()
-                    .Value(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveLeft, "Bool", pos, ctx))
-                    .Build()
-                .Add(MakeBatchRangesWithPrefixSize(members, types, "<", /* isBegin */ true, pos, ctx))
-                .Build()
-            .Build()
-        .Add<TCoOr>()
-            .Add<TCoAnd>()
-                .Add(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveRight, "Bool", pos, ctx))
-                .Add(MakeBatchRangesWithPrefixSize(members, types, ">=", /* isBegin */ false, pos, ctx))
-                .Build()
-            .Add<TCoAnd>()
-                .Add<TCoNot>()
-                    .Value(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveRight, "Bool", pos, ctx))
-                    .Build()
-                .Add(MakeBatchRangesWithPrefixSize(members, types, ">", /* isBegin */ false, pos, ctx))
-                .Build()
-            .Build()
-        .Done();
-
-    if (lambda.Body().Maybe<TCoCoalesce>()) {
-        TCoCoalesce filter = lambda.Body().Cast<TCoCoalesce>();
-        return Build<TCoLambda>(ctx, pos)
-            .Args({row})
-            .Body<TCoCoalesce>()
-                .Predicate<TCoAnd>()
-                    .Add(newFilter)
-                    .Add(filter.Predicate())
-                    .Build()
-                .Value<TCoBool>()
-                    .Literal().Build("false")
-                    .Build()
-                .Build()
-            .Done();
-    }
-
-    return Build<TCoLambda>(ctx, pos)
-        .Args({row})
-        .Body<TCoCoalesce>()
-            .Predicate(newFilter)
-            .Value<TCoBool>()
-                .Literal().Build("false")
-                .Build()
-            .Build()
-        .Done();
 }
 
 } // namespace
@@ -1057,6 +890,11 @@ public:
             ? settings.Temporary.Cast()
             : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
 
+        if (temporary.Value() == "true") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary sequence data is not supported."));
+            return nullptr;
+        }
+
         auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");
 
         return Build<TKiCreateSequence>(ctx, node->Pos())
@@ -1336,16 +1174,6 @@ public:
                 } else if (mode == "update") {
                     if (settings.Filter) {
                         YQL_ENSURE(settings.Update);
-
-                        if (settings.IsBatch) {
-                            TKiDataSink dataSink(node->Child(1));
-                            auto tableDesc = SessionCtx->Tables().EnsureTableExists(
-                                TString(dataSink.Cluster()),
-                                key.GetTablePath(), node->Pos(), ctx);
-
-                            settings.Filter = RewriteBatchFilter(std::move(settings.Filter.Cast()), *tableDesc, ctx);
-                        }
-
                         return Build<TKiUpdateTable>(ctx, node->Pos())
                             .World(node->Child(0))
                             .DataSink(node->Child(1))
@@ -1378,15 +1206,6 @@ public:
                 } else if (mode == "delete") {
                     YQL_ENSURE(settings.Filter || settings.PgFilter);
                     if (settings.Filter) {
-                        if (settings.IsBatch) {
-                            TKiDataSink dataSink(node->Child(1));
-                            auto tableDesc = SessionCtx->Tables().EnsureTableExists(
-                                TString(dataSink.Cluster()),
-                                key.GetTablePath(), node->Pos(), ctx);
-
-                            settings.Filter = RewriteBatchFilter(std::move(settings.Filter.Cast()), *tableDesc, ctx);
-                        }
-
                         return Build<TKiDeleteTable>(ctx, node->Pos())
                             .World(node->Child(0))
                             .DataSink(node->Child(1))
@@ -1483,6 +1302,24 @@ public:
                     auto temporary = settings.Temporary.IsValid()
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
+                    
+                    const bool isCreateTableAs = std::any_of(
+                        settings.Other.Ptr()->Children().begin(),
+                        settings.Other.Ptr()->Children().end(),
+                        [&](const TExprNode::TPtr& child) {
+                            NYql::NNodes::TExprBase expr(child);
+                            if (auto maybeTuple = expr.Maybe<TCoNameValueTuple>()) {
+                                const auto tuple = maybeTuple.Cast();
+                                const auto name = tuple.Name().Value();
+                                return name == "ctas";
+                            }
+                            return false;
+                        });
+
+                    if (temporary.Value() == "true" && !SessionCtx->Config().EnableTempTablesForUser && !isCreateTableAs) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary table is not supported."));
+                        return nullptr;
+                    }
 
                     auto replaceIfExists = (settings.Mode.Cast().Value() == "create_or_replace");
                     auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");

@@ -155,6 +155,9 @@ void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& stre
 
     CdcStreams.emplace(streamPathId, TCdcStream(streamDesc));
     JsonCdcStreamCount += ui32(IsJsonCdcStream(streamDesc.GetFormat()));
+    if (streamDesc.GetSchemaChanges()) {
+        SchemaChangesCdcStreams.insert(streamPathId);
+    }
 
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
@@ -195,6 +198,7 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
     }
 
     JsonCdcStreamCount -= ui32(IsJsonCdcStream(it->second.Format));
+    SchemaChangesCdcStreams.erase(streamPathId);
     CdcStreams.erase(it);
 
     NKikimrSchemeOp::TTableDescription schema;
@@ -220,6 +224,10 @@ bool TUserTable::HasCdcStreams() const {
 
 bool TUserTable::NeedSchemaSnapshots() const {
     return JsonCdcStreamCount > 0;
+}
+
+const TSet<TPathId>& TUserTable::GetSchemaChangesCdcStreams() const {
+    return SchemaChangesCdcStreams;
 }
 
 bool TUserTable::IsReplicated() const {
@@ -327,8 +335,12 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     for (const auto& streamDesc : descr.GetCdcStreams()) {
         Y_ENSURE(streamDesc.HasPathId());
-        CdcStreams.emplace(TPathId::FromProto(streamDesc.GetPathId()), TCdcStream(streamDesc));
+        const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
+        CdcStreams.emplace(streamPathId, TCdcStream(streamDesc));
         JsonCdcStreamCount += ui32(IsJsonCdcStream(streamDesc.GetFormat()));
+        if (streamDesc.GetSchemaChanges()) {
+            SchemaChangesCdcStreams.insert(streamPathId);
+        }
     }
 }
 
@@ -437,7 +449,9 @@ void TUserTable::DoApplyCreate(
         const TUserFamily& family = fam.second;
 
         alter.AddFamily(tid, familyId, family.GetRoomId());
-        alter.SetFamily(tid, familyId, family.Cache, family.Codec);
+        alter.SetFamilyCompression(tid, familyId, family.Codec);
+        alter.SetFamilyCacheMode(tid, familyId, NTable::NPage::ECacheMode::Regular); // TODO: handle different cache modes
+        alter.SetFamilyCache(tid, familyId, family.Cache);
         alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
@@ -534,7 +548,9 @@ void TUserTable::ApplyAlter(
 
         for (ui32 tid : tids) {
             alter.AddFamily(tid, familyId, family.GetRoomId());
-            alter.SetFamily(tid, familyId, family.Cache, family.Codec);
+            alter.SetFamilyCompression(tid, familyId, family.Codec);
+            alter.SetFamilyCacheMode(tid, familyId, NTable::NPage::ECacheMode::Regular); // TODO: handle different cache modes
+            alter.SetFamilyCache(tid, familyId, family.Cache);
             alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
         }
 
@@ -685,7 +701,9 @@ void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db, ui32 tid) const
         const TUserFamily& family = fam.second;
 
         db.Alter().AddFamily(tid, familyId, family.GetRoomId());
-        db.Alter().SetFamily(tid, familyId, family.Cache, family.Codec);
+        db.Alter().SetFamilyCompression(tid, familyId, family.Codec);
+        db.Alter().SetFamilyCacheMode(tid, familyId, NTable::NPage::ECacheMode::Regular); // TODO: handle different cache modes
+        db.Alter().SetFamilyCache(tid, familyId, family.Cache);
         db.Alter().SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
     }
 }

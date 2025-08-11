@@ -13,6 +13,12 @@ using namespace NNodes;
 
 namespace {
 
+struct TLoadSolomonMetaRequest {
+    NSo::ISolomonAccessorClient::TPtr SolomonClient;
+    NThreading::TFuture<NSo::TGetLabelsResponse> LabelNamesRequest;
+    NThreading::TFuture<NSo::TListMetricsResponse> ListMetricsRequest;
+};
+
 TMaybe<TString> ExtractSetting(const TExprNode& settings, const TString& settingName) {
     for (size_t i = 0U; i < settings.ChildrenSize(); ++i) {
         if (settings.Child(i)->Head().IsAtom(settingName)) {
@@ -49,8 +55,8 @@ public:
             return false;
         });
 
-        std::vector<NThreading::TFuture<NSo::TGetLabelsResponse>> futures;
-        futures.reserve(nodes.size());
+        std::vector<NThreading::TFuture<void>> futures;
+        futures.reserve(nodes.size() * 2);
         for (const auto& n : nodes) {
             TSoReadObject soReadObject(n);
 
@@ -60,13 +66,25 @@ public:
 
             if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
                 NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, soReadObject.Object().Project().StringValue());
-                
-                auto selectors = NSo::ExtractSelectorValues(*maybeSelectors);
-                if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-                    selectors["cluster"] = source.GetCluster();
-                    selectors["service"] = soReadObject.Object().Project().StringValue();
+
+                TInstant from;
+                if (auto time = ExtractSetting(settings, "from")) {
+                    from = TInstant::ParseIso8601(*time);
                 } else {
-                    selectors["project"] = source.GetProject();
+                    from = TInstant::Now() - TDuration::Days(7);
+                }
+                
+                TInstant to;
+                if (auto time = ExtractSetting(settings, "to")) {
+                    to = TInstant::ParseIso8601(*time);
+                } else {
+                    to = TInstant::Now();
+                }
+                
+                std::map<TString, TString> selectors;
+                if (auto error = NSo::BuildSelectorValues(source, *maybeSelectors, selectors)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), *error));
+                    return TStatus::Error;
                 }
 
                 auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
@@ -76,11 +94,18 @@ public:
                 auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(clusterName));
                 auto credentialsProvider = providerFactory->CreateProvider();
 
-                SolomonClient_ = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
-                auto future = SolomonClient_->GetLabelNames(selectors);
+                auto solomonClient = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
+                auto labelNamesFuture = solomonClient->GetLabelNames(selectors, from, to);
+                auto listMetricsFuture = solomonClient->ListMetrics(selectors, from, to, 30, 0);
 
-                LabelNamesRequests_[soReadObject.Raw()] = future;
-                futures.push_back(future);
+                LabelNamesRequests_[soReadObject.Raw()] = {
+                    .SolomonClient = solomonClient,
+                    .LabelNamesRequest = labelNamesFuture,
+                    .ListMetricsRequest = listMetricsFuture
+                };
+
+                futures.push_back(labelNamesFuture.IgnoreResult());
+                futures.push_back(listMetricsFuture.IgnoreResult());
             }
         }
 
@@ -99,22 +124,28 @@ public:
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         AllFuture_.GetValue();
 
-        TNodeMap<NThreading::TFuture<NSo::TGetLabelsResponse>> labelNamesRequests;
+        TNodeMap<TLoadSolomonMetaRequest> labelNamesRequests;
         labelNamesRequests.swap(LabelNamesRequests_);
 
         TNodeOnNodeOwnedMap replaces;
         for (auto& [node, request] : labelNamesRequests) {
-            auto value = request.GetValue();
-
-            if (value.Status != NSo::EStatus::STATUS_OK) {
+            auto labelNamesValue = request.LabelNamesRequest.GetValue();
+            if (labelNamesValue.Status != NSo::EStatus::STATUS_OK) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
-                        TStringBuilder() << "Failed to get label names, details: " << value.Error));
+                        TStringBuilder() << "Failed to get label names, details: " << labelNamesValue.Error));
+                return TStatus::Error;
+            }
+
+            auto listMetricsValue = request.ListMetricsRequest.GetValue();
+            if (listMetricsValue.Status != NSo::EStatus::STATUS_OK) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+                        TStringBuilder() << "Failed to get total metrics count, details: " << listMetricsValue.Error));
                 return TStatus::Error;
             }
 
             TSoReadObject read(node);
             TVector<TCoAtom> labelNames;
-            for (const auto& label : value.Result.Labels) {
+            for (const auto& label : labelNamesValue.Result.Labels) {
                 labelNames.push_back(Build<TCoAtom>(ctx, read.Pos()).Value(label).Done());
             }
 
@@ -124,6 +155,7 @@ public:
                     .RequiredLabelNames()
                         .Add(labelNames)
                         .Build()
+                    .TotalMetricsCount<TCoAtom>().Build(ToString(listMetricsValue.Result.TotalCount))
                 .Done().Ptr());
         }
 
@@ -137,8 +169,7 @@ private:
     TSolomonState::TPtr State_;
     NThreading::TFuture<void> AllFuture_;
 
-    NSo::ISolomonAccessorClient::TPtr SolomonClient_;
-    TNodeMap<NThreading::TFuture<NSo::TGetLabelsResponse>> LabelNamesRequests_;
+    TNodeMap<TLoadSolomonMetaRequest> LabelNamesRequests_;
 };
 
 THolder<IGraphTransformer> CreateSolomonLoadTableMetadataTransformer(TSolomonState::TPtr state) {

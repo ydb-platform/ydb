@@ -21,7 +21,7 @@ using NProfiling::TWallTimer;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = TableClientLogger;
+constinit const auto Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -157,7 +157,7 @@ void PipeReaderToWriter(
     const IUnversionedRowsetWriterPtr& writer,
     const TPipeReaderToWriterOptions& options)
 {
-    TPeriodicYielder yielder(TDuration::Seconds(1));
+    auto yielder = CreatePeriodicYielder(TDuration::Seconds(1));
 
     TRowBatchReadOptions readOptions{
         .MaxRowsPerRead = options.BufferRowCount,
@@ -223,9 +223,9 @@ void PipeReaderToWriterByBatches(
     TDuration pipeDelay)
 {
     try {
-        TPeriodicYielder yielder(TDuration::Seconds(1));
+        auto yielder = CreatePeriodicYielder(TDuration::Seconds(1));
 
-        while (auto batch = reader->Read(options)) {
+        for (bool isFirstBatch = true; auto batch = reader->Read(options); isFirstBatch = false) {
             yielder.TryYield();
 
             if (batch->IsEmpty()) {
@@ -251,7 +251,7 @@ void PipeReaderToWriterByBatches(
                     .ThrowOnError();
             }
 
-            if (optionsUpdater) {
+            if (optionsUpdater && !isFirstBatch) {
                 options.MaxRowsPerRead = rowsRead;
                 optionsUpdater(&options, timer.GetElapsedTime());
             }
@@ -274,7 +274,7 @@ void PipeInputToOutput(
     struct TWriteBufferTag { };
     TBlob buffer(GetRefCountedTypeCookie<TWriteBufferTag>(), bufferBlockSize, /*initializeStorage*/ false);
 
-    TPeriodicYielder yielder(TDuration::Seconds(1));
+    auto yielder = CreatePeriodicYielder(TDuration::Seconds(1));
 
     while (true) {
         yielder.TryYield();

@@ -5,6 +5,8 @@ items:
   href: client_certificate_authorization.md
 - name: Hive
   href: hive.md
+- name: log_config
+  href: log_config.md
 - name: security_config
   href: security_config.md
 - name: Настройка TLS

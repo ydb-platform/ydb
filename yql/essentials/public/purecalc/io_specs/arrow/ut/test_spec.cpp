@@ -42,39 +42,39 @@ NYql::NPureCalc::TProgramFactoryOptions TestOptions(NYql::EBlockEngineMode mode)
 
 template <typename T>
 struct TVectorStream: public NYql::NPureCalc::IStream<T*> {
-    TVector<T> Data_;
-    size_t Index_ = 0;
+    TVector<T> Data;
+    size_t Index = 0;
 
 public:
     TVectorStream(TVector<T> items)
-        : Data_(std::move(items))
+        : Data(std::move(items))
     {
     }
 
     T* Fetch() override {
-        return Index_ < Data_.size() ? &Data_[Index_++] : nullptr;
+        return Index < Data.size() ? &Data[Index++] : nullptr;
     }
 };
 
 
 template<typename T>
 struct TVectorConsumer: public NYql::NPureCalc::IConsumer<T*> {
-    TVector<T>& Data_;
-    size_t Index_ = 0;
+    TVector<T>& Data;
+    size_t Index = 0;
 
 public:
     TVectorConsumer(TVector<T>& items)
-        : Data_(items)
+        : Data(items)
     {
     }
 
     void OnObject(T* t) override {
-        Index_++;
-        Data_.push_back(*t);
+        Index++;
+        Data.push_back(*t);
     }
 
     void OnFinish() override {
-        UNIT_ASSERT_GT(Index_, 0);
+        UNIT_ASSERT_GT(Index, 0);
     }
 };
 

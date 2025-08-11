@@ -1,7 +1,7 @@
 Init tables ...
 --!syntax_v1
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/customer_address` (
+CREATE TABLE `/Root/db/tpcds/s1/customer_address` (
     ca_address_sk Int64 NOT NULL,
     ca_address_id Utf8,
     ca_street_number Utf8,
@@ -23,7 +23,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/customer_demographics` (
+CREATE TABLE `/Root/db/tpcds/s1/customer_demographics` (
     cd_demo_sk Int64 NOT NULL,
     cd_gender Utf8,
     cd_marital_status Utf8,
@@ -41,7 +41,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/date_dim` (
+CREATE TABLE `/Root/db/tpcds/s1/date_dim` (
     d_date_sk Int64 NOT NULL,
     d_date_id Utf8,
     d_date Utf8,
@@ -78,7 +78,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/warehouse` (
+CREATE TABLE `/Root/db/tpcds/s1/warehouse` (
     w_warehouse_sk Int64 NOT NULL,
     w_warehouse_id Utf8,
     w_warehouse_name Utf8,
@@ -101,7 +101,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/ship_mode` (
+CREATE TABLE `/Root/db/tpcds/s1/ship_mode` (
     sm_ship_mode_sk Int64 NOT NULL,
     sm_ship_mode_id Utf8,
     sm_type Utf8,
@@ -116,7 +116,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/time_dim` (
+CREATE TABLE `/Root/db/tpcds/s1/time_dim` (
     t_time_sk Int64 NOT NULL,
     t_time_id Utf8,
     t_time Int64,
@@ -135,7 +135,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/reason` (
+CREATE TABLE `/Root/db/tpcds/s1/reason` (
     r_reason_sk Int64 NOT NULL,
     r_reason_id Utf8,
     r_reason_desc Utf8,
@@ -147,7 +147,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/income_band` (
+CREATE TABLE `/Root/db/tpcds/s1/income_band` (
     ib_income_band_sk Int64 NOT NULL,
     ib_lower_bound Int64,
     ib_upper_bound Int64,
@@ -159,7 +159,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/item` (
+CREATE TABLE `/Root/db/tpcds/s1/item` (
     i_item_sk Int64 NOT NULL,
     i_item_id Utf8,
     i_rec_start_date Date32,
@@ -190,7 +190,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/store` (
+CREATE TABLE `/Root/db/tpcds/s1/store` (
     s_store_sk Int64 NOT NULL,
     s_store_id Utf8,
     s_rec_start_date Date32,
@@ -228,7 +228,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/call_center` (
+CREATE TABLE `/Root/db/tpcds/s1/call_center` (
     cc_call_center_sk Int64 NOT NULL,
     cc_call_center_id Utf8,
     cc_rec_start_date Date32,
@@ -268,7 +268,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/customer` (
+CREATE TABLE `/Root/db/tpcds/s1/customer` (
     c_customer_sk Int64 NOT NULL,
     c_customer_id Utf8,
     c_current_cdemo_sk Int64,
@@ -295,7 +295,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_site` (
+CREATE TABLE `/Root/db/tpcds/s1/web_site` (
     web_site_sk Int64 NOT NULL,
     web_site_id Utf8,
     web_rec_start_date Date32,
@@ -330,7 +330,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/store_returns` (
+CREATE TABLE `/Root/db/tpcds/s1/store_returns` (
     sr_returned_date_sk Int64,
     sr_return_time_sk Int64,
     sr_item_sk Int64 NOT NULL,
@@ -359,7 +359,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/household_demographics` (
+CREATE TABLE `/Root/db/tpcds/s1/household_demographics` (
     hd_demo_sk Int64 NOT NULL,
     hd_income_band_sk Int64,
     hd_buy_potential Utf8,
@@ -373,7 +373,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_page` (
+CREATE TABLE `/Root/db/tpcds/s1/web_page` (
     wp_web_page_sk Int64 NOT NULL,
     wp_web_page_id Utf8,
     wp_rec_start_date Date32,
@@ -396,7 +396,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/promotion` (
+CREATE TABLE `/Root/db/tpcds/s1/promotion` (
     p_promo_sk Int64 NOT NULL,
     p_promo_id Utf8,
     p_start_date_sk Int64,
@@ -424,7 +424,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/catalog_page` (
+CREATE TABLE `/Root/db/tpcds/s1/catalog_page` (
     cp_catalog_page_sk Int64 NOT NULL,
     cp_catalog_page_id Utf8,
     cp_start_date_sk Int64,
@@ -442,7 +442,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/inventory` (
+CREATE TABLE `/Root/db/tpcds/s1/inventory` (
     inv_date_sk Int64 NOT NULL,
     inv_item_sk Int64 NOT NULL,
     inv_warehouse_sk Int64 NOT NULL,
@@ -455,7 +455,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/catalog_returns` (
+CREATE TABLE `/Root/db/tpcds/s1/catalog_returns` (
     cr_returned_date_sk Int64,
     cr_returned_time_sk Int64,
     cr_item_sk Int64 NOT NULL,
@@ -491,7 +491,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_returns` (
+CREATE TABLE `/Root/db/tpcds/s1/web_returns` (
     wr_returned_date_sk Int64,
     wr_returned_time_sk Int64,
     wr_item_sk Int64 NOT NULL,
@@ -524,7 +524,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_sales` (
+CREATE TABLE `/Root/db/tpcds/s1/web_sales` (
     ws_sold_date_sk Int64,
     ws_sold_time_sk Int64,
     ws_ship_date_sk Int64,
@@ -567,7 +567,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/catalog_sales` (
+CREATE TABLE `/Root/db/tpcds/s1/catalog_sales` (
     cs_sold_date_sk Int64,
     cs_sold_time_sk Int64,
     cs_ship_date_sk Int64,
@@ -610,7 +610,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpcds/s1/store_sales` (
+CREATE TABLE `/Root/db/tpcds/s1/store_sales` (
     ss_sold_date_sk Int64,
     ss_sold_time_sk Int64,
     ss_item_sk Int64 NOT NULL,

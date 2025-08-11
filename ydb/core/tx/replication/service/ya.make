@@ -6,13 +6,13 @@ PEERDIR(
     ydb/core/change_exchange
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/io_formats/cell_maker
-    ydb/core/persqueue/purecalc
     ydb/core/protos
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/tablet_flat
     ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
+    ydb/core/tx/replication/ydb_proxy/local_proxy
     ydb/core/wrappers
     ydb/library/actors/core
     ydb/library/services

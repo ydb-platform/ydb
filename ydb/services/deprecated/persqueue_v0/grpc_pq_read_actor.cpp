@@ -146,7 +146,7 @@ class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor> {
 public:
      TPartitionActor(const TActorId& parentId, const TString& clientId, const ui64 cookie, const TString& session, const ui32 generation,
                         const ui32 step, const NPersQueue::TTopicConverterPtr& topic, const TString& database, const ui32 partition, const ui64 tabletID,
-                        const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, std::set<NPQ::TPartitionGraph::Node*> parents);
+                        const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, const TTopicHolder::TPtr& topicHolder);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -212,6 +212,7 @@ private:
     void CommitDone(ui64 cookie, const TActorContext& ctx);
     void SendPartitionReady(const TActorContext& ctx);
 
+    const std::set<NPQ::TPartitionGraph::Node*>& GetParents() const;
 private:
     const TActorId ParentId;
     const TString InternalClientId;
@@ -267,7 +268,7 @@ private:
     bool ReadingFinishedSent;
 
     std::unordered_map<ui64, std::shared_ptr<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>> Kqps;
-    std::set<NPQ::TPartitionGraph::Node*> Parents;
+    const TTopicHolder::TPtr TopicHolder;
 };
 
 
@@ -347,8 +348,8 @@ void TReadSessionActor::Die(const TActorContext& ctx) {
     }
 
     for (auto& t : Topics) {
-        if (t.second.PipeClient)
-            NTabletPipe::CloseClient(ctx, t.second.PipeClient);
+        if (t.second->PipeClient)
+            NTabletPipe::CloseClient(ctx, t.second->PipeClient);
     }
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " is DEAD");
 
@@ -752,7 +753,6 @@ void TReadSessionActor::SendAuthRequest(const TActorContext& ctx) {
         CreateInitAndAuthActor(ctx);
         return;
     }
-    auto database = Database.empty() ? NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig) : Database;
     Y_ABORT_UNLESS(TopicsList.IsValid);
     TVector<TDiscoveryConverterPtr> topics;
     for(const auto& t : TopicsList.Topics) {
@@ -801,7 +801,6 @@ void TReadSessionActor::HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::
 }
 
 void TReadSessionActor::CreateInitAndAuthActor(const TActorContext& ctx) {
-    auto database = Database.empty() ? NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig) : Database;
     AuthInitActor = ctx.Register(new V1::TReadInitAndAuthActor(
             ctx, ctx.SelfID, InternalClientId, Cookie, Session, PqMetaCache, NewSchemeCache, Counters, Token,
             TopicsList, TopicsHandler.GetLocalCluster()
@@ -846,7 +845,7 @@ void TReadSessionActor::RegisterSessions(const TActorContext& ctx) {
 
     for (auto& t : Topics) {
         auto& topic = t.first;
-        RegisterSession(t.second.PipeClient, topic, ctx);
+        RegisterSession(t.second->PipeClient, topic, ctx);
         NumPartitionsFromTopic[topic] = 0;
     }
 }
@@ -980,14 +979,17 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
 
         for (auto& [name, t] : ev->Get()->TopicAndTablets) {
             auto& topicHolder = Topics[t.TopicNameConverter->GetInternalName()];
-            topicHolder.TabletID = t.TabletID;
-            topicHolder.CloudId = t.CloudId;
-            topicHolder.DbId = t.DbId;
-            topicHolder.DbPath = t.DbPath;
-            topicHolder.IsServerless = t.IsServerless;
-            topicHolder.FolderId = t.FolderId;
-            topicHolder.FullConverter = t.TopicNameConverter;
-            topicHolder.PartitionGraph = t.PartitionGraph;
+            if (!topicHolder) {
+                topicHolder = std::make_shared<TTopicHolder>();
+            }
+            topicHolder->TabletID = t.TabletID;
+            topicHolder->CloudId = t.CloudId;
+            topicHolder->DbId = t.DbId;
+            topicHolder->DbPath = t.DbPath;
+            topicHolder->IsServerless = t.IsServerless;
+            topicHolder->FolderId = t.FolderId;
+            topicHolder->FullConverter = t.TopicNameConverter;
+            topicHolder->PartitionGraph = t.PartitionGraph;
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
             const auto& second = t.TopicNameConverter->GetSecondaryPath();
             if (!second.empty()) {
@@ -1001,7 +1003,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
             clientConfig.CheckAliveness = false;
 
             clientConfig.RetryPolicy = RetryPolicyForPipes;
-            t.second.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second.TabletID, clientConfig));
+            t.second->PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second->TabletID, clientConfig));
         }
 
         RegisterSessions(ctx);
@@ -1016,7 +1018,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
                              NPersQueue::NErrorCode::BAD_REQUEST, ctx);
                 return;
             }
-            it->second.PartitionGraph = t.PartitionGraph;
+            it->second->PartitionGraph = t.PartitionGraph;
         }
     }
 
@@ -1056,7 +1058,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     Y_ABORT_UNLESS(!intName.empty());
     auto jt = Topics.find(intName);
 
-    if (jt == Topics.end() || pipe != jt->second.PipeClient) { //this is message from old version of pipe
+    if (jt == Topics.end() || pipe != jt->second->PipeClient) { //this is message from old version of pipe
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PQ_READ_PROXY,
                 PQ_LOG_PREFIX << " ignored ev lock for topic = " << converterIter->second->GetPrintableString()
@@ -1065,7 +1067,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
         return;
     }
 
-    auto* partitionNode = jt->second.PartitionGraph->GetPartition(record.GetPartition());
+    auto* partitionNode = jt->second->PartitionGraph->GetPartition(record.GetPartition());
     if (!partitionNode) {
         LOG_DEBUG_S(
             ctx, NKikimrServices::PQ_READ_PROXY,
@@ -1081,7 +1083,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     // ToDo[counters]
     if (NumPartitionsFromTopic[intName]++ == 0) {
         if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            SetupTopicCounters(converterIter->second, jt->second.CloudId, jt->second.DbId, jt->second.DbPath, jt->second.IsServerless, jt->second.FolderId);
+            SetupTopicCounters(converterIter->second, jt->second->CloudId, jt->second->DbId, jt->second->DbPath, jt->second->IsServerless, jt->second->FolderId);
         } else {
             SetupTopicCounters(converterIter->second);
         }
@@ -1090,10 +1092,11 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     auto it = TopicCounters.find(intName);
     Y_ABORT_UNLESS(it != TopicCounters.end());
 
+    auto database = jt->second->DbPath;
     IActor* partitionActor = new TPartitionActor(
             ctx.SelfID, InternalClientId, Cookie, Session, record.GetGeneration(),
-            record.GetStep(), jt->second.FullConverter, Database.empty() ? NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig) : Database, record.GetPartition(), record.GetTabletId(), it->second,
-            ClientDC, jt->second.PartitionGraph->GetPartition(record.GetPartition())->AllParents
+            record.GetStep(), jt->second->FullConverter, database, record.GetPartition(), record.GetTabletId(), it->second,
+            ClientDC, jt->second
     );
 
     TActorId actorId = ctx.Register(partitionActor);
@@ -1103,8 +1106,8 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     Y_ABORT_UNLESS(record.GetGeneration() > 0);
     //Partitions use clientside name !
     auto pp = Partitions.insert({
-        std::make_pair(jt->second.FullConverter->GetClientsideName(), record.GetPartition()),
-        TPartitionActorInfo{actorId, (((ui64)record.GetGeneration()) << 32) + record.GetStep(), jt->second.FullConverter}
+        std::make_pair(jt->second->FullConverter->GetClientsideName(), record.GetPartition()),
+        TPartitionActorInfo{actorId, (((ui64)record.GetGeneration()) << 32) + record.GetStep(), jt->second->FullConverter}
     });
     Y_ABORT_UNLESS(pp.second);
     if (SessionsActive) {
@@ -1122,14 +1125,22 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, 0, false, !ClientsideLocksAllowed));
 }
 
-void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const TActorContext&) {
+void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
     if (!ActualPartitionActor(ev->Sender))
         return;
 
     auto& evTopic = ev->Get()->Topic;
     auto it = Partitions.find(std::make_pair(evTopic->GetClientsideName(), ev->Get()->Partition));
     Y_ABORT_UNLESS(it != Partitions.end());
-    Y_ABORT_UNLESS(it->second.LockGeneration);
+    if (!it->second.LockGeneration) {
+        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY,
+            PQ_LOG_PREFIX << " the unlocked partition " << ev->Get()->Partition << " status has been requested");
+        CloseSession(
+                TStringBuilder() << "Internal server error, the unlocked partition " << ev->Get()->Partition << " status has been requested",
+                NPersQueue::NErrorCode::ERROR, ctx
+        );
+        return;
+    }
 
     if (it->second.Releasing) //lock request for already released partition - ignore
         return;
@@ -1143,7 +1154,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const T
         Y_ABORT_UNLESS(ClientsideLocksAllowed);
         TReadResponse result;
         auto lock = result.MutableLock();
-        lock->SetTopic(topicIter->second.FullConverter->GetClientsideName());
+        lock->SetTopic(topicIter->second->FullConverter->GetClientsideName());
         lock->SetPartition(ev->Get()->Partition);
         lock->SetReadOffset(ev->Get()->Offset);
         lock->SetEndOffset(ev->Get()->EndOffset);
@@ -1212,11 +1223,21 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
 
     TActorId pipe = ActorIdFromProto(record.GetPipeClient());
 
-    if (pipe != it->second.PipeClient) { //this is message from old version of pipe
+    if (pipe != it->second->PipeClient) { //this is message from old version of pipe
         return;
     }
 
-    Y_ABORT_UNLESS(!Partitions.empty());
+    auto onUnknownPartition = [&](auto& marker) {
+        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Releasing unknown partition: " << record.ShortDebugString() << " " << marker);
+        CloseSession(
+                TStringBuilder() << "Internal server error, releasing unknown partition: " << record.ShortDebugString() << " " << marker,
+                NPersQueue::NErrorCode::ERROR, ctx
+        );
+    };
+
+    if (Partitions.empty()) {
+        return onUnknownPartition("#PQv0.01");
+    }
 
     TActorId actorId = TActorId{};
     auto jt = Partitions.begin();
@@ -1230,7 +1251,9 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
             }
         }
     }
-    Y_ABORT_UNLESS(actorId);
+    if (!actorId) {
+        return onUnknownPartition("#PQv0.02");
+    }
 
     {
         auto it = TopicCounters.find(name);
@@ -1287,14 +1310,14 @@ void TReadSessionActor::InformBalancerAboutRelease(const THashMap<std::pair<TStr
     Y_ABORT_UNLESS(jt != Topics.end());
 
     req.SetSession(Session);
-    ActorIdToProto(jt->second.PipeClient, req.MutablePipeClient());
+    ActorIdToProto(jt->second->PipeClient, req.MutablePipeClient());
     req.SetClientId(InternalClientId);
     req.SetTopic(it->first.first);
     req.SetPartition(it->first.second);
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " released: " << it->first.first << ":" << it->first.second);
 
-    NTabletPipe::SendData(ctx, jt->second.PipeClient, request.Release());
+    NTabletPipe::SendData(ctx, jt->second->PipeClient, request.Release());
 }
 
 
@@ -1429,7 +1452,7 @@ bool TReadSessionActor::ProcessReleasePartition(const THashMap<std::pair<TString
 
 bool TReadSessionActor::ProcessBalancerDead(const ui64 tablet, const TActorContext& ctx) {
     for (auto& t : Topics) {
-        if (t.second.TabletID == tablet) {
+        if (t.second->TabletID == tablet) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " balancer for topic " << t.first << " is dead, restarting all from this topic");
 
             //Drop all partitions from this topic
@@ -1452,14 +1475,14 @@ bool TReadSessionActor::ProcessBalancerDead(const ui64 tablet, const TActorConte
             NTabletPipe::TClientConfig clientConfig;
             clientConfig.CheckAliveness = false;
             clientConfig.RetryPolicy = RetryPolicyForPipes;
-            t.second.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second.TabletID, clientConfig));
+            t.second->PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second->TabletID, clientConfig));
             if (InitDone) {
                 if (PipeReconnects) {
                     ++(*PipeReconnects);
                     ++(*Errors);
                 }
 
-                RegisterSession(t.second.PipeClient, t.first, ctx);
+                RegisterSession(t.second->PipeClient, t.first, ctx);
             }
         }
     }
@@ -1834,7 +1857,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TA
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionStartedRequest(InternalClientId, msg->PartitionId));
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionStartedRequest(InternalClientId, msg->PartitionId));
 }
 
 void TReadSessionActor::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
@@ -1846,7 +1869,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const T
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(InternalClientId, msg->PartitionId, false, msg->FirstMessage));
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(InternalClientId, msg->PartitionId, false, msg->FirstMessage));
 }
 
 
@@ -1855,7 +1878,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const T
 TPartitionActor::TPartitionActor(
         const TActorId& parentId, const TString& internalClientId, const ui64 cookie, const TString& session,
         const ui32 generation, const ui32 step, const NPersQueue::TTopicConverterPtr& topic, const TString& database, const ui32 partition,
-        const ui64 tabletID, const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, std::set<NPQ::TPartitionGraph::Node*> parents
+        const ui64 tabletID, const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, const TTopicHolder::TPtr& topicHolder
 )
     : ParentId(parentId)
     , InternalClientId(internalClientId)
@@ -1892,7 +1915,7 @@ TPartitionActor::TPartitionActor(
     , Counters(counters)
     , FirstRead(true)
     , ReadingFinishedSent(false)
-    , Parents(parents)
+    , TopicHolder(topicHolder)
 {
 }
 
@@ -1923,11 +1946,21 @@ void TPartitionActor::CheckRelease(const TActorContext& ctx) {
     }
 }
 
+const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents() const {
+    const auto* partition = TopicHolder->PartitionGraph->GetPartition(Partition);
+    if (partition) {
+        return partition->AllParents;
+    }
+
+    static std::set<NPQ::TPartitionGraph::Node*> empty;
+    return empty;
+}
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    if (!ClientHasAnyCommits && Parents.size() != 0) {
+    const auto& parents = GetParents();
+    if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;
-        for (auto& parent: Parents) {
+        for (auto& parent: parents) {
             NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
             commits.push_back(commit);
         }

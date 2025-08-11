@@ -1,5 +1,5 @@
-#include "schemeshard_impl.h"
 #include "schemeshard__stats_impl.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
@@ -424,10 +424,12 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();
     const TTableInfo* mainTableForIndex = Self->GetMainTableForIndex(pathId);
 
+    TString errStr;
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
     TString mergeReason;
     if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady)
+        && Self->CheckInFlightLimit(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions, errStr)
         && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, Self->ShardInfos[shardIdx].TabletID, shardsToMerge, mainTableForIndex, mergeReason)
     ) {
         TTxId txId = Self->GetCachedTxId(ctx);

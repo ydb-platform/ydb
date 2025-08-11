@@ -39,7 +39,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = QueueClientLogger;
+constinit const auto Logger = QueueClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -389,7 +389,7 @@ private:
     bool DecrementOffset_ = false;
 
     std::vector<TPartitionInfo> DoCollectPartitions(
-        const TString& selectQuery,
+        const std::string& selectQuery,
         bool withLastConsumeTime) const
     {
         std::vector<TPartitionInfo> result;
@@ -496,7 +496,7 @@ private:
         YT_VERIFY(versionedRowset->GetRows().size() == partitionIndices.size());
 
         for (const auto& [index, versionedRow] : Enumerate(versionedRowset->GetRows())) {
-            if (versionedRow.GetWriteTimestampCount() < 1) {
+            if (!versionedRow || versionedRow.GetWriteTimestampCount() < 1) {
                 THROW_ERROR_EXCEPTION("Partition set changed during collection");
             }
             auto timestamp = versionedRow.WriteTimestamps()[0];

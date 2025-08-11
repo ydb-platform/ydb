@@ -131,6 +131,7 @@ void TYdbControlPlaneStorageActor::CreatePendingSmallTable()
         .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(ASSIGNED_UNTIL_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(RETRY_RATE_COLUMN_NAME, EPrimitiveType::Double)
+        .AddNullableColumn(NODE_COLUMN_NAME, EPrimitiveType::String)
         .SetPrimaryKeyColumns({TENANT_COLUMN_NAME, SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
         .Build();
 
@@ -313,6 +314,7 @@ void TYdbControlPlaneStorageActor::CreateMappingsTable()
         .AddNullableColumn(SUBJECT_TYPE_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(SUBJECT_ID_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(VTENANT_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(NODE_COLUMN_NAME, EPrimitiveType::String)
         .SetPrimaryKeyColumns({SUBJECT_TYPE_COLUMN_NAME, SUBJECT_ID_COLUMN_NAME})
         .Build();
 
@@ -426,7 +428,7 @@ TAsyncStatus TDbRequester::Validate(
     const TValidationQuery& validatonItem = validators[item];
     CollectDebugInfo(validatonItem.Query, validatonItem.Params, session, debugInfo);
     auto result = session.ExecuteDataQuery(validatonItem.Query, item == 0 ? TTxControl::BeginTx(transactionMode) : TTxControl::Tx(**transaction), validatonItem.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-    return result.Apply([=, validator=validatonItem.Validator, query=validatonItem.Query] (const TFuture<TDataQueryResult>& future) {
+    return result.Apply([=, this, validator=validatonItem.Validator, query=validatonItem.Query] (const TFuture<TDataQueryResult>& future) {
         NYdb::NTable::TDataQueryResult result = future.GetValue();
         *transaction = result.GetTransaction();
         auto status = static_cast<TStatus>(result);
@@ -476,7 +478,7 @@ TAsyncStatus TDbRequester::Write(
         });
     };
 
-    auto handler = [=, requestCounters=requestCounters] (TSession session) mutable {
+    auto handler = [=, this, requestCounters=requestCounters] (TSession session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }
@@ -620,7 +622,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
         });
     };
 
-    auto handler = [=, requestCounters=requestCounters] (TSession session) mutable {
+    auto handler = [=, this, requestCounters=requestCounters] (TSession session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }

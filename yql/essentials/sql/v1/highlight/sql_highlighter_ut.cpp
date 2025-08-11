@@ -48,7 +48,7 @@ char ToChar(EUnitKind kind) {
             return 'I';
         case EUnitKind::QuotedIdentifier:
             return 'Q';
-        case EUnitKind::BindParamterIdentifier:
+        case EUnitKind::BindParameterIdentifier:
             return 'B';
         case EUnitKind::TypeIdentifier:
             return 'T';

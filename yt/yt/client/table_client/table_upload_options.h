@@ -70,7 +70,7 @@ struct TTableUploadOptions
     void Persist(const NPhoenix::TPersistenceContext& context);
 };
 
-const std::vector<TString>& GetTableUploadOptionsAttributeKeys();
+const std::vector<std::string>& GetTableUploadOptionsAttributeKeys();
 
 TTableUploadOptions GetTableUploadOptions(
     const NYPath::TRichYPath& path,

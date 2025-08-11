@@ -11,12 +11,14 @@ struct THeartbeatRequest {
     ui32 WorkerId;
     TString VolatileId;
     std::vector<TTaskState::TPtr> TaskStates;
+    ui64 AvailableSlots = 0;
 };
 // Worker sends requests in loop or long polling
 
 struct THeartbeatResponse {
     std::vector<TTask::TPtr> TasksToRun;
     std::unordered_set<TString> TaskToDeleteIds;
+    bool NeedToRestart = false;
 };
 
 struct TStartOperationRequest {
@@ -57,8 +59,12 @@ struct TGetFmrTableInfoRequest {
 };
 
 struct TGetFmrTableInfoResponse {
-    TTableStats TableStats; // for only one PartId
+    TTableStats TableStats;
     std::vector<TFmrError> ErrorMessages = {};
+};
+
+struct TClearSessionRequest {
+    TString SessionId;
 };
 
 class IFmrCoordinator: public TThrRefBase {
@@ -76,6 +82,8 @@ public:
     virtual NThreading::TFuture<THeartbeatResponse> SendHeartbeatResponse(const THeartbeatRequest& request) = 0;
 
     virtual NThreading::TFuture<TGetFmrTableInfoResponse> GetFmrTableInfo(const TGetFmrTableInfoRequest& request) = 0;
+
+    virtual NThreading::TFuture<void> ClearSession(const TClearSessionRequest& request) = 0;
 };
 
 } // namespace NYql::NFmr

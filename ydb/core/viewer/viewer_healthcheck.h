@@ -229,10 +229,10 @@ public:
                 TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
                 auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
                 Send(cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
-            } else {
-                SendHealthCheckRequest();
+                return;
             }
         }
+        SendHealthCheckRequest();
     }
 
     static YAML::Node GetSwagger() {
@@ -243,24 +243,10 @@ public:
             .Description = "Performs self-check and returns result",
         });
         yaml.AddParameter({
-            .Name = "enums",
-            .Description = "convert enums to strings",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "ui64",
-            .Description = "return ui64 as number",
-            .Type = "boolean",
-        });
-        yaml.AddParameter({
-            .Name = "timeout",
-            .Description = "timeout in ms",
-            .Type = "integer",
-        });
-        yaml.AddParameter({
             .Name = "database",
-            .Description = "database name",
+            .Description = "database name, use cluster domain name to get cluster storage status",
             .Type = "string",
+            .Required = true,
         });
         yaml.AddParameter({
             .Name = "cache",

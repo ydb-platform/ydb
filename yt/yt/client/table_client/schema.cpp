@@ -1077,6 +1077,24 @@ TTableSchemaPtr TTableSchema::ToWrite() const
         DeletedColumns());
 }
 
+TTableSchemaPtr TTableSchema::ToCreate() const
+{
+    std::vector<TColumnSchema> columns;
+    for (const auto& column : Columns()) {
+        if (column.StableName().Underlying() != TabletIndexColumnName &&
+            column.StableName().Underlying() != RowIndexColumnName)
+        {
+            columns.push_back(column);
+        }
+    }
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        DeletedColumns());
+}
+
 TTableSchemaPtr TTableSchema::WithTabletIndex() const
 {
     if (IsSorted()) {

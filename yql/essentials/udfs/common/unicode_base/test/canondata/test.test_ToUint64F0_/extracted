@@ -3,6 +3,6 @@
     <tmp_path>/program.sql:<main>:4:1: Error: Execution of node: YtMap!
     	SELECT
 	^
-        <tmp_path>/program.sql:<main>:4:1: Error: Input string is not a number
-        	SELECT
-	^
+        <tmp_path>/program.sql:<main>:8:14: Error: Input string is not a number
+        	    Unicode::ToUint64(value),
+	             ^

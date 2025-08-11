@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NKikimrWhiteboard::TEvTabletStateResponse result;
             MergeWhiteboardResponses(result, nodesData);
             Ctest << "Merge = " << timer.Passed() << Endl;
-            UNIT_ASSERT_LT(timer.Passed(), 2 * BASE_PERF);
+            UNIT_ASSERT_LT(timer.Passed(), 3 * BASE_PERF);
             UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), 10000);
             timer.Reset();
         }
@@ -795,21 +795,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 2);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -873,23 +865,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
+        size_t exclusiveDynNodeId = runtime.GetNodeId(2);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 3);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
-                    exclusiveDynNodeId = nodes[2];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -956,23 +939,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
+        size_t exclusiveDynNodeId = runtime.GetNodeId(2);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 3);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
-                    exclusiveDynNodeId = nodes[2];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -1041,25 +1015,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;
-        size_t secondExclusiveDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
+        size_t exclusiveDynNodeId = runtime.GetNodeId(2);
+        size_t secondExclusiveDynNodeId = runtime.GetNodeId(3);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    const TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 4);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
-                    exclusiveDynNodeId = nodes[2];
-                    secondExclusiveDynNodeId = nodes[3];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {

@@ -55,7 +55,7 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
 
-    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}, nullptr});
+    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, nullptr, {}, nullptr, {}, nullptr, nullptr, nullptr});
     return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
                                federatedQuerySetup, nullptr, nullptr, NKikimrConfig::TQueryServiceConfig(), {}, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem, nullptr);
 }
@@ -115,8 +115,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
 
         auto setting = NKikimrKqp::TKqpSetting();
 
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -170,9 +169,6 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         using namespace NYql::NNodes;
 
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        settings.SetAppConfig(appConfig);
-
         TKikimrRunner kikimr(settings);
 
         auto& server = kikimr.GetTestServer();
@@ -273,8 +269,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         using namespace NYql::NNodes;
 
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -389,8 +384,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(WriteWithParamsFieldOrder) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -449,8 +443,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(SelectConcurentTX) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -531,8 +524,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(SelectConcurentTX2) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -613,8 +605,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(UniqIndexComplexPkComplexFkOverlap) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -800,8 +791,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(UpsertMultipleUniqIndexes) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -921,12 +911,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
     }
 
     void DoUpsertWithoutIndexUpdate(bool uniq, bool useSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(appConfig);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({ setting });
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -1055,12 +1042,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(UpsertWithoutExtraNullDelete, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(appConfig);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -1297,8 +1281,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(UpsertWithNullKeysSimple) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({ setting });
+        auto serverSettings = TKikimrSettings().SetKqpSettings({ setting });
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -1394,8 +1377,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(UpsertWithNullKeysComplex) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -1533,8 +1515,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(SecondaryIndexUpsert1DeleteUpdate) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -1612,8 +1593,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                                      query,
                                      TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                               .ExtractValueSync();
-            // KIKIMR-7997
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
         {
@@ -1728,8 +1708,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(SecondaryIndexUpsert2Update) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -1820,8 +1799,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(SecondaryIndexUpdateOnUsingIndex) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -1888,8 +1866,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(SecondaryIndexSelectUsingScripting) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -1930,8 +1907,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(SecondaryIndexOrderBy) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -2230,8 +2206,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(ExplainCollectFullDiagnostics) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -2310,8 +2285,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     Y_UNIT_TEST(SecondaryIndexOrderBy2) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -2459,12 +2433,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(SecondaryIndexReplace, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(app);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -2543,8 +2514,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(SecondaryIndexInsert1) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting}).SetWithSampleTables(false);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -2589,12 +2559,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(MultipleSecondaryIndex, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(appConfig);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -2659,8 +2626,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(UniqAndNoUniqSecondaryIndex) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -2787,8 +2753,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         kqpSetting.SetName("_KqpYqlSyntaxVersion");
         kqpSetting.SetValue("1");
 
-        auto settings = TKikimrSettings()
-                .SetKqpSettings({kqpSetting});
+        auto settings = TKikimrSettings().SetKqpSettings({kqpSetting});
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2852,8 +2817,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(UniqAndNoUniqSecondaryIndexWithCover) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -2977,12 +2941,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
 
     Y_UNIT_TEST_TWIN(MultipleSecondaryIndexWithSameComulns, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(app);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -3319,12 +3280,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(SecondaryIndexWithPrimaryKeySameComulns, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(app);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -3597,12 +3555,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(SecondaryIndexUsingInJoin, UseStreamJoin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(UseStreamJoin);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(appConfig);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(UseStreamJoin);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -3837,12 +3792,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(SecondaryIndexUsingInJoin2, UseStreamJoin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(UseStreamJoin);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(appConfig);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(UseStreamJoin);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4005,8 +3957,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(ForbidViewModification) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4094,8 +4045,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(ForbidDirectIndexTableCreation) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4146,8 +4096,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(DuplicateUpsertInterleave) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4184,12 +4133,10 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(DuplicateUpsertInterleaveParams, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(appConfig);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({ setting });
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4277,8 +4224,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(MultipleModifications) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4329,8 +4275,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         kqpSetting.SetName("_KqpYqlSyntaxVersion");
         kqpSetting.SetValue("1");
 
-        auto settings = TKikimrSettings()
-                .SetKqpSettings({kqpSetting});
+        auto settings = TKikimrSettings().SetKqpSettings({kqpSetting});
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4411,8 +4356,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         kqpSetting.SetName("_KqpYqlSyntaxVersion");
         kqpSetting.SetValue("1");
 
-        auto settings = TKikimrSettings()
-                .SetKqpSettings({kqpSetting});
+        auto settings = TKikimrSettings().SetKqpSettings({kqpSetting});
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4467,18 +4411,14 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("1");
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
-
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
         // setting channel buffer size so small to make sure that we will be able to transfer at least
         // one row in stream lookup.
-        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
+        serverSettings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
         // setting string a bit larger than size of the channel buffer.
         const int payloadSize = 5000;
 
-        serverSettings.SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4555,8 +4495,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("1");
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4634,8 +4573,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("1");
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4826,8 +4764,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(DeleteByIndex) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4917,12 +4854,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(UpdateDeletePlan, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(appConfig);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4980,8 +4914,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(UpsertNoIndexColumns) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -5033,8 +4966,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(UpdateIndexSubsetPk) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -5571,12 +5503,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(JoinWithNonPKColumnsInPredicate, UseStreamJoin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(UseStreamJoin);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(appConfig);
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(UseStreamJoin);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -5765,6 +5694,227 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(DirectAccessToIndexImplTable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAccessToIndexImplTables(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);        
+        auto db = kikimr.GetTableClient();
+        kikimr.GetTestClient().GrantConnect("user@builtin");
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+
+        auto adminSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("root@builtin")).CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(adminSession);
+        const char *tablePath = "/Root/SecondaryKeys";
+        const char *implTablePath = "/Root/SecondaryKeys/Index/indexImplTable";
+
+        // a user which does not have any implicit permissions
+        auto userClient = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("user@builtin"));
+        auto userSession = userClient.CreateSession().GetValueSync().GetSession();
+
+        auto selectTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                SELECT * FROM `%s`;
+            )", tablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto selectImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                SELECT * FROM `%s`;
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto upsertTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                UPSERT INTO `%s` (Key, Fk, Value) VALUES
+                    (9,    9,    "Payload9");
+            )", tablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };        
+        auto upsertImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                UPSERT INTO `%s` (Fk, Key) VALUES
+                    (99, 99u);
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto updateImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                UPDATE `%s` ON (Fk, Key) VALUES (99, 99u);
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto deleteImplTableQuery = [&]() {
+            return userSession.ExecuteDataQuery(Sprintf(R"(
+                DELETE FROM `%s` WHERE Fk = 99;
+            )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        };
+        auto bulkUpsertImplTable = [&]() {
+            TValueBuilder builder;
+            builder.BeginList();
+            builder.AddListItem().BeginStruct()
+                .AddMember("Key").Int32(99)
+                .AddMember("Fk").Int32(99)
+            .EndStruct();
+            builder.EndList();
+            return userClient.BulkUpsert(implTablePath, builder.Build()).ExtractValueSync();
+        };
+
+        // try accessing tables without permissions
+        {
+            auto result = selectTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = selectImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = upsertTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = upsertImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = updateImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = deleteImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = bulkUpsertImplTable();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Access denied for user@builtin with access UpdateRow to table",
+                result.GetIssues().ToString()
+            );
+        }
+
+        // grant necessary permission
+        Grant(adminSession, "USE", tablePath, "user@builtin");
+
+        // try accessing tables with permissions
+        {
+            auto result = selectTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = selectImplTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = updateImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = deleteImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = bulkUpsertImplTable();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+
+        // become superuser
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user@builtin");
+        
+        // accessing tables as superuser
+        {
+            auto result = selectTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = selectImplTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = upsertImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = updateImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = deleteImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = bulkUpsertImplTable();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
+        }
+    }    
 }
 
 }

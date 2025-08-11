@@ -20,6 +20,8 @@ struct TFunctionInfo {
     bool IsStrict = false;
     bool SupportsBlocks = false;
     TVector<TString> Messages;
+    TLangVersion MinLangVer = UnknownLangVersion;
+    TLangVersion MaxLangVer = UnknownLangVersion;
 };
 
 // todo: specify whether path is frozen
@@ -140,8 +142,7 @@ private:
 };
 
 void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TString>& paths, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
-void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TMap<TString, TString>& pathsWithMd5, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
-void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
-void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TUserDataBlock& block, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
+void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TMap<TString, TString>& pathsWithMd5, const TMap<TString, TString>& aliasToPath, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
+void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TUserDataBlock& block, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info, const TStringBuf& alias = {}) ;
 
 }

@@ -29,19 +29,13 @@ void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& 
     }
 }
 
-TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs) {
+TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
     FirstAndLastPK = NArrow::TFirstLastSpecialKeys(meta.IndexKeyStart(), meta.IndexKeyEnd(), meta.IndexKeyStart().GetSchema());
     RecordSnapshotMin = meta.RecordSnapshotMin;
     RecordSnapshotMax = meta.RecordSnapshotMax;
     CompactionLevel = meta.GetCompactionLevel();
     DeletionsCount = meta.GetDeletionsCount();
     TierName = meta.GetTierNameOptional();
-    if (withBlobs) {
-        BlobIds = meta.BlobIds;
-    }
-    if (meta.Produced != NPortion::EProduced::UNSPECIFIED) {
-        Produced = meta.Produced;
-    }
 }
 
 TPortionMeta TPortionMetaConstructor::Build() {
@@ -60,12 +54,8 @@ TPortionMeta TPortionMetaConstructor::Build() {
     if (TierName) {
         result.TierName = *TierName;
     }
-    TBase::FullValidation();
-    result.BlobIds = BlobIds;
-    result.BlobIds.shrink_to_fit();
     result.CompactionLevel = *TValidator::CheckNotNull(CompactionLevel);
     result.DeletionsCount = *TValidator::CheckNotNull(DeletionsCount);
-    result.Produced = *TValidator::CheckNotNull(Produced);
 
     result.RecordsCount = *TValidator::CheckNotNull(RecordsCount);
     result.ColumnRawBytes = *TValidator::CheckNotNull(ColumnRawBytes);
@@ -79,8 +69,7 @@ TPortionMeta TPortionMetaConstructor::Build() {
 }
 
 bool TPortionMetaConstructor::LoadMetadata(
-    const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector) {
-    AFL_VERIFY(!Produced)("produced", Produced);
+    const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo, const IBlobGroupSelector& /*groupSelector*/) {
     if (portionMeta.GetTierName()) {
         TierName = portionMeta.GetTierName();
     }
@@ -89,30 +78,12 @@ bool TPortionMetaConstructor::LoadMetadata(
     } else {
         DeletionsCount = 0;
     }
-    for (auto&& i : portionMeta.GetBlobIds()) {
-        TLogoBlobID logo = TLogoBlobID::FromBinary(i);
-        BlobIds.emplace_back(TUnifiedBlobId(groupSelector.GetGroup(logo), logo));
-    }
     CompactionLevel = portionMeta.GetCompactionLevel();
     RecordsCount = TValidator::CheckNotNull(portionMeta.GetRecordsCount());
     ColumnRawBytes = TValidator::CheckNotNull(portionMeta.GetColumnRawBytes());
     ColumnBlobBytes = TValidator::CheckNotNull(portionMeta.GetColumnBlobBytes());
     IndexRawBytes = portionMeta.GetIndexRawBytes();
     IndexBlobBytes = portionMeta.GetIndexBlobBytes();
-    if (portionMeta.GetIsInserted()) {
-        Produced = TPortionMeta::EProduced::INSERTED;
-    } else if (portionMeta.GetIsCompacted()) {
-        Produced = TPortionMeta::EProduced::COMPACTED;
-    } else if (portionMeta.GetIsSplitCompacted()) {
-        Produced = TPortionMeta::EProduced::SPLIT_COMPACTED;
-    } else if (portionMeta.GetIsEvicted()) {
-        Produced = TPortionMeta::EProduced::EVICTED;
-    } else {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "incorrect portion meta")(
-            "meta", portionMeta.DebugString());
-        return false;
-    }
-    AFL_VERIFY(Produced != TPortionMeta::EProduced::UNSPECIFIED);
     if (portionMeta.HasPrimaryKeyBordersV1()) {
         FirstAndLastPK = NArrow::TFirstLastSpecialKeys(
             portionMeta.GetPrimaryKeyBordersV1().GetFirst(), portionMeta.GetPrimaryKeyBordersV1().GetLast(), indexInfo.GetReplaceKey());

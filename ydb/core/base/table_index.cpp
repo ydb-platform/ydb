@@ -1,6 +1,7 @@
 #include "table_index.h"
 
 #include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 namespace NKikimr::NTableIndex {
 namespace {
@@ -187,6 +188,67 @@ bool IsBuildImplTable(std::string_view tableName) {
     // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
     return tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix0)
         || tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix1);
+}
+
+static constexpr TClusterId PostingParentFlag = (1ull << 63ull);
+
+// Note: if cluster id is too big, something is wrong with cluster enumeration
+void EnsureNoPostingParentFlag(TClusterId parent) {
+    Y_ENSURE((parent & PostingParentFlag) == 0);
+}
+
+TClusterId SetPostingParentFlag(TClusterId parent) {
+    EnsureNoPostingParentFlag(parent);
+    return (parent | PostingParentFlag);
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // clusters are not human readable and can be large like 100Kb+
+    copy.ClearClusters();
+    result << copy.ShortDebugString();
+    result << " Clusters: " << record.ClustersSize();
+    return result;
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // clusters are not human readable and can be large like 100Kb+
+    copy.ClearClusters();
+    result << copy.ShortDebugString();
+    result << " Clusters: " << record.ClustersSize();
+    return result;
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansResponse& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // clusters are not human readable and can be large like 100Kb+
+    copy.ClearClusters();
+    copy.ClearClusterSizes();
+    result << copy.ShortDebugString();
+    result << " Clusters: " << record.ClustersSize();
+    return result;
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // rows are not human readable and can be large like 100Kb+
+    copy.ClearRows();
+    result << copy.ShortDebugString();
+    result << " Rows: " << record.RowsSize();
+    return result;
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexResponse& record) {
+    auto copy = record;
+    // keys are not human readable and contain user data
+    copy.ClearFirstIndexKey();
+    copy.ClearLastIndexKey();
+    return copy.ShortDebugString();
 }
 
 }

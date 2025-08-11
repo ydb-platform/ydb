@@ -93,6 +93,8 @@ private:
         const auto &request = ev->Get()->Record;
         const auto count = request.GetCount();
         auto scheduler = request.GetScheduler();
+        const auto& filters = request.GetWorkerFilterPerTask();
+        Y_ABORT_UNLESS((ui32)count == (ui32)filters.size(), "count %" PRIu32 ", filters size %" PRIu32, (ui32)count, (ui32)filters.size());
 
         auto response = MakeHolder<NDqs::TEvAllocateWorkersResponse>();
         if (count == 0) {
@@ -100,7 +102,7 @@ private:
             error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
             error.SetMessage("Incorrect request - 0 nodes requested");
         } else if (!scheduler) {
-            ScheduleUniformly(request, response);            
+            ScheduleUniformly(request, response);
         } else {
             try {
                 auto schedulerSettings = NSc::TValue::FromJsonThrow(scheduler);
@@ -126,6 +128,7 @@ private:
     void ScheduleUniformly(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
         const auto count = request.GetCount();
         auto resourceId = request.GetResourceId();
+        const auto& filtersPerTask = request.GetWorkerFilterPerTask();
         if (!resourceId) {
             resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
         }
@@ -142,6 +145,8 @@ private:
             if (totalMemoryLimit == 0) {
                 totalMemoryLimit = MkqlInitialMemoryLimit;
             }
+            const auto& nodeIdProto =  filtersPerTask.Get(i).GetNodeId();
+            TSet<ui64> nodeFilter{nodeIdProto.begin(), nodeIdProto.end()};
             TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
             bool selfPlacement = true;
             if (!Peers.empty()) {
@@ -155,8 +160,9 @@ private:
                     }
 
                     if ((!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
-                         && (nextNode.MemoryLimit == 0 // memory is NOT limited
+                        && (nextNode.MemoryLimit == 0 // memory is NOT limited
                              || nextNode.MemoryLimit >= nextNode.MemoryAllocated + totalMemoryLimit) // or enough
+                        && (nodeFilter.empty() || nodeFilter.contains(nextNode.NodeId))
                     ) {
                         // adjust allocated size to place next tasks correctly, will be reset after next health check
                         nextNode.MemoryAllocated += totalMemoryLimit;
@@ -203,6 +209,7 @@ private:
     void ScheduleOnSingleNode(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
         const auto count = request.GetCount();
         auto resourceId = request.GetResourceId();
+        const auto& filtersPerTask = request.GetWorkerFilterPerTask();
         if (!resourceId) {
             resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
         }
@@ -214,20 +221,31 @@ private:
             }
             std::shuffle(SingleNodeScheduler.NodeOrder.begin(), SingleNodeScheduler.NodeOrder.end(), std::default_random_engine(TInstant::Now().MicroSeconds()));
         }
-
-        TVector<TPeer> nodes;
-        for (ui32 i = 0; i < count; ++i) {
-            Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
-            nodes.push_back(Peers[SingleNodeScheduler.NodeOrder[NextPeer]]);
+        TSet<ui64> nodeFilter;
+        if (!filtersPerTask.empty()) {
+            const auto& nodeIdProto =  filtersPerTask.Get(0).GetNodeId();
+            nodeFilter.insert(nodeIdProto.begin(), nodeIdProto.end());
         }
-        if (++NextPeer >= Peers.size()) {
-            NextPeer = 0;
+        TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
+        
+        if (!Peers.empty()) {
+            for (ui32 i = 0; i < Peers.size(); ++i) {
+                auto nextNode = Peers[SingleNodeScheduler.NodeOrder[NextPeer]];
+                if (nodeFilter.empty() || nodeFilter.contains(nextNode.NodeId)) {
+                    Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
+                    node = nextNode;
+                    break;
+                }
+                if (++NextPeer >= Peers.size()) {
+                    NextPeer = 0;
+                }
+            }
         }
 
         response->Record.ClearError();
         auto& group = *response->Record.MutableNodes();
         group.SetResourceId(resourceId);
-        for (const auto& node : nodes) {
+        for (ui32 i = 0; i < count; ++i) {
             auto* worker = group.AddWorker();
             *worker->MutableGuid() = node.InstanceId;
             worker->SetNodeId(node.NodeId);

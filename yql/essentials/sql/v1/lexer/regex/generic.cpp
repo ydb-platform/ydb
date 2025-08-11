@@ -2,6 +2,8 @@
 
 #include <contrib/libs/re2/re2/re2.h>
 
+#include <util/string/builder.h>
+
 namespace NSQLTranslationV1 {
 
     namespace {
@@ -39,16 +41,27 @@ namespace NSQLTranslationV1 {
             }
 
             while (pos < text.size() && errors < maxErrors) {
-                TGenericToken matched = Match(TStringBuf(text, pos));
-                matched.Begin = pos;
+                TMaybe<TGenericToken> prev;
+                TGenericToken next = Match(TStringBuf(text, pos));
 
-                pos += matched.Content.size();
+                size_t skipped = next.Begin;
+                next.Begin = skipped + pos;
 
-                if (matched.Name == TGenericToken::Error) {
+                if (skipped != 0) {
+                    prev = Match(TStringBuf(text, pos, skipped));
+                    prev->Begin = pos;
+                }
+
+                pos += skipped + next.Content.size();
+
+                if (next.Name == TGenericToken::Error) {
                     errors += 1;
                 }
 
-                onNext(std::move(matched));
+                if (prev) {
+                    onNext(std::move(*prev));
+                }
+                onNext(std::move(next));
             }
 
             if (errors == maxErrors) {
@@ -84,12 +97,9 @@ namespace NSQLTranslationV1 {
         }
 
         void Match(TStringBuf prefix, auto onMatch) const {
-            for (const auto& token : Grammar_) {
-                if (auto content = token.Match(prefix)) {
-                    onMatch(TGenericToken{
-                        .Name = token.TokenName,
-                        .Content = *content,
-                    });
+            for (const auto& matcher : Grammar_) {
+                if (auto token = matcher(prefix)) {
+                    onMatch(std::move(*token));
                 }
             }
         }
@@ -97,18 +107,58 @@ namespace NSQLTranslationV1 {
         TGenericLexerGrammar Grammar_;
     };
 
-    TTokenMatcher Compile(const TRegexPattern& regex) {
+    TTokenMatcher Compile(TString name, const TRegexPattern& regex) {
         RE2::Options options;
         options.set_case_sensitive(!regex.IsCaseInsensitive);
 
-        return [bodyRe = MakeAtomicShared<RE2>(regex.Body, options),
-                afterRe = MakeAtomicShared<RE2>(regex.After, options)](TStringBuf prefix) -> TMaybe<TStringBuf> {
-            TMaybe<TStringBuf> body, after;
-            if ((body = Match(prefix, *bodyRe)) &&
-                (after = Match(prefix.Tail(body->size()), *afterRe))) {
-                return body;
+        return [beforeRe = MakeAtomicShared<RE2>(regex.Before, options),
+                bodyRe = MakeAtomicShared<RE2>(regex.Body, options),
+                afterRe = MakeAtomicShared<RE2>(regex.After, options),
+                name = std::move(name)](TStringBuf prefix) -> TMaybe<TGenericToken> {
+            TMaybe<TStringBuf> before, body, after;
+            if ((before = Match(prefix, *beforeRe)) &&
+                (body = Match(prefix.Tail(before->size()), *bodyRe)) &&
+                (after = Match(prefix.Tail(before->size() + body->size()), *afterRe))) {
+                return TGenericToken{
+                    .Name = name,
+                    .Content = *body,
+                    .Begin = before->size(),
+                };
             }
             return Nothing();
+        };
+    }
+
+    TRegexPattern Merged(TVector<TRegexPattern> patterns) {
+        Y_ENSURE(!patterns.empty());
+
+        const TRegexPattern& sample = patterns.back();
+        Y_ENSURE(AllOf(patterns, [&](const TRegexPattern& pattern) {
+            return std::tie(pattern.After, pattern.Before, pattern.IsCaseInsensitive) ==
+                   std::tie(sample.After, sample.Before, sample.IsCaseInsensitive);
+        }));
+
+        Sort(patterns, [](const TRegexPattern& lhs, const TRegexPattern& rhs) {
+            return lhs.Body.length() > rhs.Body.length();
+        });
+
+        TStringBuilder body;
+        for (const auto& pattern : patterns) {
+            TString regex = pattern.Body;
+            if (pattern.Body.Contains('|')) {
+                regex.prepend('(');
+                regex.append(')');
+            }
+            body << regex << "|";
+        }
+        Y_ENSURE(body.back() == '|');
+        body.pop_back();
+
+        return TRegexPattern{
+            .Body = std::move(body),
+            .After = sample.After,
+            .Before = sample.Before,
+            .IsCaseInsensitive = sample.IsCaseInsensitive,
         };
     }
 

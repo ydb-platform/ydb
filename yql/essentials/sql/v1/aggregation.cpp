@@ -48,62 +48,62 @@ class TAggregationFactory : public IAggregation {
 public:
     TAggregationFactory(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode,
         bool multi = false, bool validateArgs = true)
-        : IAggregation(pos, name, func, aggMode), Factory(!func.empty() ?
-            BuildBind(Pos, aggMode == EAggregateMode::OverWindow || aggMode == EAggregateMode::OverWindowDistinct ? "window_module" : "aggregate_module", func) : nullptr),
-        Multi(multi), ValidateArgs(validateArgs), DynamicFactory(!Factory)
+        : IAggregation(pos, name, func, aggMode), Factory_(!func.empty() ?
+            BuildBind(Pos_, aggMode == EAggregateMode::OverWindow || aggMode == EAggregateMode::OverWindowDistinct ? "window_module" : "aggregate_module", func) : nullptr),
+        Multi_(multi), ValidateArgs_(validateArgs), DynamicFactory_(!Factory_)
     {
         if (aggMode != EAggregateMode::OverWindow && aggMode != EAggregateMode::OverWindowDistinct && !func.empty() && AggApplyFuncs.contains(func)) {
-            AggApplyName = func.substr(0, func.size() - 15);
+            AggApplyName_ = func.substr(0, func.size() - 15);
         }
 
-        if (!Factory) {
-            FakeSource = BuildFakeSource(pos);
+        if (!Factory_) {
+            FakeSource_ = BuildFakeSource(pos);
         }
     }
 
 protected:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) override {
         if (!ShouldEmitAggApply(ctx)) {
-            AggApplyName = "";
+            AggApplyName_ = "";
         }
 
-        if (ValidateArgs || isFactory) {
-            ui32 expectedArgs = ValidateArgs && !Factory ? 2 : (isFactory ? 0 : 1);
-            if (!Factory && ValidateArgs) {
+        if (ValidateArgs_ || isFactory) {
+            ui32 expectedArgs = ValidateArgs_ && !Factory_ ? 2 : (isFactory ? 0 : 1);
+            if (!Factory_ && ValidateArgs_) {
                 YQL_ENSURE(!isFactory);
             }
 
             if (expectedArgs != exprs.size()) {
-                ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name
+                ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "") << Name_
                     << " requires exactly " << expectedArgs << " argument(s), given: " << exprs.size();
                 return false;
             }
         }
 
-        if (!ValidateArgs) {
-            Exprs = exprs;
+        if (!ValidateArgs_) {
+            Exprs_ = exprs;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
+        if (BlockWindowAggregationWithoutFrameSpec(Pos_, GetName(), src, ctx)) {
             return false;
         }
 
-        if (ValidateArgs) {
-            if (!Factory) {
-                Factory = exprs[1];
+        if (ValidateArgs_) {
+            if (!Factory_) {
+                Factory_ = exprs[1];
             }
         }
 
         if (!isFactory) {
-            if (ValidateArgs) {
-                Expr = exprs.front();
+            if (ValidateArgs_) {
+                Expr_ = exprs.front();
             }
 
-            Name = src->MakeLocalName(Name);
+            Name_ = src->MakeLocalName(Name_);
         }
 
-        if (Expr && Expr->IsAsterisk() && AggApplyName == "count") {
-            AggApplyName = "count_all";
+        if (Expr_ && Expr_->IsAsterisk() && AggApplyName_ == "count") {
+            AggApplyName_ = "count_all";
         }
 
         if (!Init(ctx, src)) {
@@ -111,9 +111,9 @@ protected:
         }
 
         if (!isFactory) {
-            node.Add("Member", "row", Q(Name));
+            node.Add("Member", "row", Q(Name_));
             if (IsOverWindow() || IsOverWindowDistinct()) {
-                src->AddTmpWindowColumn(Name);
+                src->AddTmpWindowColumn(Name_);
             }
         }
 
@@ -121,12 +121,12 @@ protected:
     }
 
     TNodePtr AggregationTraitsFactory() const override {
-        return Factory;
+        return Factory_;
     }
 
     TNodePtr GetExtractor(bool many, TContext& ctx) const override {
         Y_UNUSED(ctx);
-        return BuildLambda(Pos, Y("row"), Y("PersistableRepr", many ? Y("Unwrap", Expr) : Expr));
+        return BuildLambda(Pos_, Y("row"), Y("PersistableRepr", many ? Y("Unwrap", Expr_) : Expr_));
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const override {
@@ -135,29 +135,29 @@ protected:
             return nullptr;
         }
 
-        if (!Multi) {
-            if (!DynamicFactory && allowAggApply && !AggApplyName.empty()) {
-                return Y("AggApply", Q(AggApplyName), Y("ListItemType", type), extractor);
+        if (!Multi_) {
+            if (!DynamicFactory_ && allowAggApply && !AggApplyName_.empty()) {
+                return Y("AggApply", Q(AggApplyName_), Y("ListItemType", type), extractor);
             }
 
-            return Y("Apply", Factory, (DynamicFactory ? Y("ListItemType", type) : type),
+            return Y("Apply", Factory_, (DynamicFactory_ ? Y("ListItemType", type) : type),
               extractor);
         }
 
         return Y("MultiAggregate",
             Y("ListItemType", type),
             extractor,
-            Factory);
+            Factory_);
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (!ValidateArgs) {
-            for (auto x : Exprs) {
+        if (!ValidateArgs_) {
+            for (auto x : Exprs_) {
                 if (!x->Init(ctx, src)) {
                     return false;
                 }
                 if (x->IsAggregated() && !x->IsAggregationKey() && !IsOverWindow() && !IsOverWindowDistinct()) {
-                    ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
+                    ctx.Error(Pos_) << "Aggregation of aggregated values is forbidden";
                     return false;
                 }
             }
@@ -165,52 +165,52 @@ protected:
             return true;
         }
 
-        if (!Expr) {
+        if (!Expr_) {
             return true;
         }
 
-        if (!Expr->Init(ctx, src)) {
+        if (!Expr_->Init(ctx, src)) {
             return false;
         }
-        if (Expr->IsAggregated() && !Expr->IsAggregationKey() && !IsOverWindow() && !IsOverWindowDistinct()) {
-            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
+        if (Expr_->IsAggregated() && !Expr_->IsAggregationKey() && !IsOverWindow() && !IsOverWindowDistinct()) {
+            ctx.Error(Pos_) << "Aggregation of aggregated values is forbidden";
             return false;
         }
-        if (AggMode == EAggregateMode::Distinct || AggMode == EAggregateMode::OverWindowDistinct) {
-            const auto column = Expr->GetColumnName();
+        if (AggMode_ == EAggregateMode::Distinct || AggMode_ == EAggregateMode::OverWindowDistinct) {
+            const auto column = Expr_->GetColumnName();
             if (!column) {
                 // TODO: improve TBasicAggrFunc::CollectPreaggregateExprs()
-                ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
+                ctx.Error(Pos_) << "Aggregation of aggregated values is forbidden";
                 return false;
             }
-            DistinctKey = *column;
+            DistinctKey_ = *column;
             YQL_ENSURE(src);
-            if (!IsGeneratedKeyColumn && src->GetJoin()) {
-                const auto sourcePtr = Expr->GetSourceName();
+            if (!IsGeneratedKeyColumn_ && src->GetJoin()) {
+                const auto sourcePtr = Expr_->GetSourceName();
                 if (!sourcePtr || !*sourcePtr) {
-                    if (!src->IsGroupByColumn(DistinctKey)) {
-                        ctx.Error(Expr->GetPos()) << ErrorDistinctWithoutCorrelation(DistinctKey);
+                    if (!src->IsGroupByColumn(DistinctKey_)) {
+                        ctx.Error(Expr_->GetPos()) << ErrorDistinctWithoutCorrelation(DistinctKey_);
                         return false;
                     }
                 } else {
-                    DistinctKey = DotJoin(*sourcePtr, DistinctKey);
+                    DistinctKey_ = DotJoin(*sourcePtr, DistinctKey_);
                 }
             }
-            if (!ctx.DistinctOverKeys && src->IsGroupByColumn(DistinctKey)) {
-                ctx.Error(Expr->GetPos()) << ErrorDistinctByGroupKey(DistinctKey);
+            if (!ctx.DistinctOverKeys && src->IsGroupByColumn(DistinctKey_)) {
+                ctx.Error(Expr_->GetPos()) << ErrorDistinctByGroupKey(DistinctKey_);
                 return false;
             }
-            Expr = AstNode("row");
+            Expr_ = AstNode("row");
         }
 
-        if (FakeSource) {
-            if (!Factory->Init(ctx, FakeSource.Get())) {
+        if (FakeSource_) {
+            if (!Factory_->Init(ctx, FakeSource_.Get())) {
                 return false;
             }
 
-            if (AggMode == EAggregateMode::OverWindow) {
-                Factory = BuildLambda(Pos, Y("type", "extractor"), Y("block", Q(Y(
-                    Y("let", "x", Y("Apply", Factory, "type", "extractor")),
+            if (AggMode_ == EAggregateMode::OverWindow) {
+                Factory_ = BuildLambda(Pos_, Y("type", "extractor"), Y("block", Q(Y(
+                    Y("let", "x", Y("Apply", Factory_, "type", "extractor")),
                     Y("return", Y("ToWindowTraits", "x"))
                 ))));
             }
@@ -219,16 +219,16 @@ protected:
         return true;
     }
 
-    TNodePtr Factory;
-    TNodePtr Expr;
-    bool Multi;
-    bool ValidateArgs;
-    TString AggApplyName;
-    TVector<TNodePtr> Exprs;
+    TNodePtr Factory_;
+    TNodePtr Expr_;
+    bool Multi_;
+    bool ValidateArgs_;
+    TString AggApplyName_;
+    TVector<TNodePtr> Exprs_;
 
 private:
-    TSourcePtr FakeSource;
-    bool DynamicFactory;
+    TSourcePtr FakeSource_;
+    bool DynamicFactory_;
 };
 
 class TAggregationFactoryImpl final : public TAggregationFactory {
@@ -239,7 +239,7 @@ public:
 
 private:
     TNodePtr DoClone() const final {
-        return new TAggregationFactoryImpl(Pos, Name, Func, AggMode, Multi);
+        return new TAggregationFactoryImpl(Pos_, Name_, Func_, AggMode_, Multi_);
     }
 };
 
@@ -251,39 +251,39 @@ class TKeyPayloadAggregationFactory final : public TAggregationFactory {
 public:
     TKeyPayloadAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, factory, aggMode)
-        , FakeSource(BuildFakeSource(pos))
+        , FakeSource_(BuildFakeSource(pos))
     {}
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         ui32 adjustArgsCount = isFactory ? 0 : 2;
         if (exprs.size() < adjustArgsCount || exprs.size() > 1 + adjustArgsCount) {
-            ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires "
+            ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "") << Name_ << " requires "
                 << adjustArgsCount << " or " << (1 + adjustArgsCount) << " arguments, given: " << exprs.size();
             return false;
         }
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
+        if (BlockWindowAggregationWithoutFrameSpec(Pos_, GetName(), src, ctx)) {
             return false;
         }
 
         if (!isFactory) {
-            Payload = exprs.front();
-            Key = exprs[1];
+            Payload_ = exprs.front();
+            Key_ = exprs[1];
         }
 
         if (1 + adjustArgsCount == exprs.size()) {
-            Limit = exprs.back();
-            Func += "2";
+            Limit_ = exprs.back();
+            Func_ += "2";
         } else {
-            Func += "1";
+            Func_ += "1";
         }
 
-        if (Factory) {
-            Factory = BuildBind(Pos, AggMode == EAggregateMode::OverWindow ? "window_module" : "aggregate_module", Func);
+        if (Factory_) {
+            Factory_ = BuildBind(Pos_, AggMode_ == EAggregateMode::OverWindow ? "window_module" : "aggregate_module", Func_);
         }
 
         if (!isFactory) {
-            Name = src->MakeLocalName(Name);
+            Name_ = src->MakeLocalName(Name_);
         }
 
         if (!Init(ctx, src)) {
@@ -291,9 +291,9 @@ private:
         }
 
         if (!isFactory) {
-            node.Add("Member", "row", Q(Name));
+            node.Add("Member", "row", Q(Name_));
             if (IsOverWindow() || IsOverWindowDistinct()) {
-                src->AddTmpWindowColumn(Name);
+                src->AddTmpWindowColumn(Name_);
             }
         }
 
@@ -301,27 +301,27 @@ private:
     }
 
     TNodePtr DoClone() const final {
-        return new TKeyPayloadAggregationFactory(Pos, Name, Func, AggMode);
+        return new TKeyPayloadAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetExtractor(bool many, TContext& ctx) const final {
         Y_UNUSED(ctx);
-        return BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Payload) : Payload);
+        return BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Payload_) : Payload_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        auto apply = Y("Apply", Factory, type,
-            BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Key) : Key),
-            BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Payload) : Payload));
+        auto apply = Y("Apply", Factory_, type,
+            BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Key_) : Key_),
+            BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Payload_) : Payload_));
         AddFactoryArguments(apply);
         return apply;
     }
 
     void AddFactoryArguments(TNodePtr& apply) const final {
-        if (Limit) {
-            apply = L(apply, Limit);
+        if (Limit_) {
+            apply = L(apply, Limit_);
         }
     }
 
@@ -330,32 +330,32 @@ private:
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        if (Limit) {
-            if (!Limit->Init(ctx, FakeSource.Get())) {
+        if (Limit_) {
+            if (!Limit_->Init(ctx, FakeSource_.Get())) {
                 return false;
             }
         }
 
-        if (!Key) {
+        if (!Key_) {
             return true;
         }
 
-        if (!Key->Init(ctx, src)) {
+        if (!Key_->Init(ctx, src)) {
             return false;
         }
-        if (!Payload->Init(ctx, src)) {
+        if (!Payload_->Init(ctx, src)) {
             return false;
         }
 
-        if (Key->IsAggregated()) {
-            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
+        if (Key_->IsAggregated()) {
+            ctx.Error(Pos_) << "Aggregation of aggregated values is forbidden";
             return false;
         }
         return true;
     }
 
-    TSourcePtr FakeSource;
-    TNodePtr Key, Payload, Limit;
+    TSourcePtr FakeSource_;
+    TNodePtr Key_, Payload_, Limit_;
 };
 
 TAggregationPtr BuildKeyPayloadFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -372,19 +372,19 @@ private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         ui32 adjustArgsCount = isFactory ? 0 : 2;
         if (exprs.size() != adjustArgsCount) {
-            ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires " <<
+            ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "") << Name_ << " requires " <<
                 adjustArgsCount << " arguments, given: " << exprs.size();
             return false;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
+        if (BlockWindowAggregationWithoutFrameSpec(Pos_, GetName(), src, ctx)) {
             return false;
         }
 
         if (!isFactory) {
-            Payload = exprs.front();
-            Predicate = exprs.back();
-            Name = src->MakeLocalName(Name);
+            Payload_ = exprs.front();
+            Predicate_ = exprs.back();
+            Name_ = src->MakeLocalName(Name_);
         }
 
         if (!Init(ctx, src)) {
@@ -392,9 +392,9 @@ private:
         }
 
         if (!isFactory) {
-            node.Add("Member", "row", Q(Name));
+            node.Add("Member", "row", Q(Name_));
             if (IsOverWindow() || IsOverWindowDistinct()) {
-                src->AddTmpWindowColumn(Name);
+                src->AddTmpWindowColumn(Name_);
             }
         }
 
@@ -402,20 +402,20 @@ private:
     }
 
     TNodePtr DoClone() const final {
-        return new TPayloadPredicateAggregationFactory(Pos, Name, Func, AggMode);
+        return new TPayloadPredicateAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetExtractor(bool many, TContext& ctx) const final {
         Y_UNUSED(ctx);
-        return BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Payload) : Payload);
+        return BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Payload_) : Payload_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        return Y("Apply", Factory, type,
-            BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Payload) : Payload),
-            BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Predicate) : Predicate));
+        return Y("Apply", Factory_, type,
+            BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Payload_) : Payload_),
+            BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Predicate_) : Predicate_));
     }
 
     std::vector<ui32> GetFactoryColumnIndices() const final {
@@ -423,26 +423,26 @@ private:
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        if (!Predicate) {
+        if (!Predicate_) {
             return true;
         }
 
-        if (!Predicate->Init(ctx, src)) {
+        if (!Predicate_->Init(ctx, src)) {
             return false;
         }
-        if (!Payload->Init(ctx, src)) {
+        if (!Payload_->Init(ctx, src)) {
             return false;
         }
 
-        if (Payload->IsAggregated()) {
-            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
+        if (Payload_->IsAggregated()) {
+            ctx.Error(Pos_) << "Aggregation of aggregated values is forbidden";
             return false;
         }
 
         return true;
     }
 
-    TNodePtr Payload, Predicate;
+    TNodePtr Payload_, Predicate_;
 };
 
 TAggregationPtr BuildPayloadPredicateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -459,19 +459,19 @@ private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         ui32 adjustArgsCount = isFactory ? 0 : 2;
         if (exprs.size() != adjustArgsCount) {
-            ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires " <<
+            ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "") << Name_ << " requires " <<
                 adjustArgsCount << " arguments, given: " << exprs.size();
             return false;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
+        if (BlockWindowAggregationWithoutFrameSpec(Pos_, GetName(), src, ctx)) {
             return false;
         }
 
         if (!isFactory) {
-            One = exprs.front();
-            Two = exprs.back();
-            Name = src->MakeLocalName(Name);
+            One_ = exprs.front();
+            Two_ = exprs.back();
+            Name_ = src->MakeLocalName(Name_);
         }
 
         if (!Init(ctx, src)) {
@@ -479,9 +479,9 @@ private:
         }
 
         if (!isFactory) {
-            node.Add("Member", "row", Q(Name));
+            node.Add("Member", "row", Q(Name_));
             if (IsOverWindow() || IsOverWindowDistinct()) {
-                src->AddTmpWindowColumn(Name);
+                src->AddTmpWindowColumn(Name_);
             }
         }
 
@@ -489,41 +489,41 @@ private:
     }
 
     TNodePtr DoClone() const final {
-        return new TTwoArgsAggregationFactory(Pos, Name, Func, AggMode);
+        return new TTwoArgsAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetExtractor(bool many, TContext& ctx) const final {
         Y_UNUSED(ctx);
-        return BuildLambda(Pos, Y("row"), many ? Y("Unwrap", One) : One);
+        return BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", One_) : One_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        auto tuple = Q(Y(One, Two));
-        return Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", tuple) : tuple));
+        auto tuple = Q(Y(One_, Two_));
+        return Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", tuple) : tuple));
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        if (!One) {
+        if (!One_) {
             return true;
         }
 
-        if (!One->Init(ctx, src)) {
+        if (!One_->Init(ctx, src)) {
             return false;
         }
-        if (!Two->Init(ctx, src)) {
+        if (!Two_->Init(ctx, src)) {
             return false;
         }
 
-        if ((One->IsAggregated() || Two->IsAggregated()) && !IsOverWindow() && !IsOverWindowDistinct()) {
-            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
+        if ((One_->IsAggregated() || Two_->IsAggregated()) && !IsOverWindow() && !IsOverWindowDistinct()) {
+            ctx.Error(Pos_) << "Aggregation of aggregated values is forbidden";
             return false;
         }
         return true;
     }
 
-    TNodePtr One, Two;
+    TNodePtr One_, Two_;
 };
 
 TAggregationPtr BuildTwoArgsFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -534,21 +534,21 @@ class THistogramAggregationFactory final : public TAggregationFactory {
 public:
     THistogramAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, factory, aggMode)
-        , FakeSource(BuildFakeSource(pos))
-        , Weight(Y("Double", Q("1.0")))
-        , Intervals(Y("Uint32", Q("100")))
+        , FakeSource_(BuildFakeSource(pos))
+        , Weight_(Y("Double", Q("1.0")))
+        , Intervals_(Y("Uint32", Q("100")))
     {}
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         if (isFactory) {
             if (exprs.size() > 1) {
-                ctx.Error(Pos) << "Aggregation function factory " << Name << " requires 0 or 1 argument(s), given: " << exprs.size();
+                ctx.Error(Pos_) << "Aggregation function factory " << Name_ << " requires 0 or 1 argument(s), given: " << exprs.size();
                 return false;
             }
         } else {
             if (exprs.empty() || exprs.size() > 3) {
-                ctx.Error(Pos) << "Aggregation function " << Name << " requires one, two or three arguments, given: " << exprs.size();
+                ctx.Error(Pos_) << "Aggregation function " << Name_ << " requires one, two or three arguments, given: " << exprs.size();
                 return false;
             }
         }
@@ -559,29 +559,29 @@ private:
             switch (exprs.size()) {
             case 2U:
                 if (!integer) {
-                    Weight = exprs.back();
+                    Weight_ = exprs.back();
                 }
                 break;
             case 3U:
                 if (!integer) {
-                    ctx.Error(Pos) << "Aggregation function " << Name << " for case with 3 arguments should have third argument of integer type";
+                    ctx.Error(Pos_) << "Aggregation function " << Name_ << " for case with 3 arguments should have third argument of integer type";
                     return false;
                 }
-                Weight = exprs[1];
+                Weight_ = exprs[1];
                 break;
             }
             if (exprs.size() >= 2 && integer) {
-                Intervals = Y("Cast", exprs.back(), Q("Uint32"));
+                Intervals_ = Y("Cast", exprs.back(), Q("Uint32"));
             }
         } else {
             if (exprs.size() >= 1) {
                 const auto integer = exprs.back()->IsIntegerLiteral();
                 if (!integer) {
-                    ctx.Error(Pos) << "Aggregation function factory " << Name << " should have second interger argument";
+                    ctx.Error(Pos_) << "Aggregation function factory " << Name_ << " should have second interger argument";
                     return false;
                 }
 
-                Intervals = Y("Cast", exprs.back(), Q("Uint32"));
+                Intervals_ = Y("Cast", exprs.back(), Q("Uint32"));
             }
         }
 
@@ -589,21 +589,21 @@ private:
     }
 
     TNodePtr DoClone() const final {
-        return new THistogramAggregationFactory(Pos, Name, Func, AggMode);
+        return new THistogramAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        auto apply = Y("Apply", Factory, type,
-            BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr),
-            BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Weight) : Weight));
+        auto apply = Y("Apply", Factory_, type,
+            BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_),
+            BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Weight_) : Weight_));
         AddFactoryArguments(apply);
         return apply;
     }
 
     void AddFactoryArguments(TNodePtr& apply) const final {
-        apply = L(apply, Intervals);
+        apply = L(apply, Intervals_);
     }
 
     std::vector<ui32> GetFactoryColumnIndices() const final {
@@ -611,18 +611,18 @@ private:
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        if (!Weight->Init(ctx, src)) {
+        if (!Weight_->Init(ctx, src)) {
             return false;
         }
-        if (!Intervals->Init(ctx, FakeSource.Get())) {
+        if (!Intervals_->Init(ctx, FakeSource_.Get())) {
             return false;
         }
 
         return TAggregationFactory::DoInit(ctx, src);
     }
 
-    TSourcePtr FakeSource;
-    TNodePtr Weight, Intervals;
+    TSourcePtr FakeSource_;
+    TNodePtr Weight_, Intervals_;
 };
 
 TAggregationPtr BuildHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -633,73 +633,73 @@ class TLinearHistogramAggregationFactory final : public TAggregationFactory {
 public:
     TLinearHistogramAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, factory, aggMode)
-        , FakeSource(BuildFakeSource(pos))
-        , BinSize(Y("Double", Q("10.0")))
-        , Minimum(Y("Double", Q(ToString(-1.0 * Max<double>()))))
-        , Maximum(Y("Double", Q(ToString(Max<double>()))))
+        , FakeSource_(BuildFakeSource(pos))
+        , BinSize_(Y("Double", Q("10.0")))
+        , Minimum_(Y("Double", Q(ToString(-1.0 * Max<double>()))))
+        , Maximum_(Y("Double", Q(ToString(Max<double>()))))
     {}
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         if (isFactory) {
             if (exprs.size() > 3) {
-                ctx.Error(Pos) << "Aggregation function " << Name << " requires zero to three arguments, given: " << exprs.size();
+                ctx.Error(Pos_) << "Aggregation function " << Name_ << " requires zero to three arguments, given: " << exprs.size();
                 return false;
             }
         } else {
             if (exprs.empty() || exprs.size() > 4) {
-                ctx.Error(Pos) << "Aggregation function " << Name << " requires one to four arguments, given: " << exprs.size();
+                ctx.Error(Pos_) << "Aggregation function " << Name_ << " requires one to four arguments, given: " << exprs.size();
                 return false;
             }
         }
 
         if (exprs.size() > 1 - isFactory) {
-            BinSize = exprs[1 - isFactory];
+            BinSize_ = exprs[1 - isFactory];
         }
 
         if (exprs.size() > 2 - isFactory) {
-            Minimum = exprs[2 - isFactory];
+            Minimum_ = exprs[2 - isFactory];
         }
 
         if (exprs.size() > 3 - isFactory) {
-            Maximum = exprs[3 - isFactory];
+            Maximum_ = exprs[3 - isFactory];
         }
 
         return TAggregationFactory::InitAggr(ctx, isFactory, src, node, isFactory ? TVector<TNodePtr>() : TVector<TNodePtr>(1, exprs.front()));
     }
 
     TNodePtr DoClone() const final {
-        return new TLinearHistogramAggregationFactory(Pos, Name, Func, AggMode);
+        return new TLinearHistogramAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        return Y("Apply", Factory, type,
-            BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr),
-            BinSize, Minimum, Maximum);
+        return Y("Apply", Factory_, type,
+            BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_),
+            BinSize_, Minimum_, Maximum_);
     }
 
     void AddFactoryArguments(TNodePtr& apply) const final {
-        apply = L(apply, BinSize, Minimum, Maximum);
+        apply = L(apply, BinSize_, Minimum_, Maximum_);
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        if (!BinSize->Init(ctx, FakeSource.Get())) {
+        if (!BinSize_->Init(ctx, FakeSource_.Get())) {
             return false;
         }
-        if (!Minimum->Init(ctx, FakeSource.Get())) {
+        if (!Minimum_->Init(ctx, FakeSource_.Get())) {
             return false;
         }
-        if (!Maximum->Init(ctx, FakeSource.Get())) {
+        if (!Maximum_->Init(ctx, FakeSource_.Get())) {
             return false;
         }
 
         return TAggregationFactory::DoInit(ctx, src);
     }
 
-    TSourcePtr FakeSource;
-    TNodePtr BinSize, Minimum, Maximum;
+    TSourcePtr FakeSource_;
+    TNodePtr BinSize_, Minimum_, Maximum_;
 };
 
 TAggregationPtr BuildLinearHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -710,33 +710,50 @@ class TPercentileFactory final : public TAggregationFactory {
 public:
     TPercentileFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, factory, aggMode)
-        , FakeSource(BuildFakeSource(pos))
+        , FakeSource_(BuildFakeSource(pos))
     {}
 
 private:
-    const TString* GetGenericKey() const final {
-        return Column;
+    TMaybe<TString> GetGenericKey() const final {
+        if (!Column_) {
+            return Nothing();
+        }
+
+        TStringBuilder key;
+        if (Source_) {
+            key << *Source_ << ".";
+        }
+        return key << *Column_;
     }
 
     void Join(IAggregation* aggr) final {
         const auto percentile = dynamic_cast<TPercentileFactory*>(aggr);
         YQL_ENSURE(percentile);
-        YQL_ENSURE(Column && percentile->Column && *Column == *percentile->Column);
-        YQL_ENSURE(AggMode == percentile->AggMode);
-        Percentiles.insert(percentile->Percentiles.cbegin(), percentile->Percentiles.cend());
-        percentile->Percentiles.clear();
+        YQL_ENSURE(Column_ && percentile->Column_ && *Column_ == *percentile->Column_);
+        YQL_ENSURE(AggMode_ == percentile->AggMode_);
+        Percentiles_.insert(percentile->Percentiles_.cbegin(), percentile->Percentiles_.cend());
+        percentile->Percentiles_.clear();
     }
 
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         ui32 adjustArgsCount = isFactory ? 0 : 1;
         if (exprs.size() < 0 + adjustArgsCount  || exprs.size() > 1 + adjustArgsCount) {
-            ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires "
+            ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "") << Name_ << " requires "
                 << (0 + adjustArgsCount) << " or " << (1 + adjustArgsCount) << " arguments, given: " << exprs.size();
             return false;
         }
 
         if (!isFactory) {
-            Column = exprs.front()->GetColumnName();
+            Source_ = Nothing();
+            Column_ = Nothing();
+
+            const auto& expr = exprs.front();
+            if (const TString* source = expr->GetSourceName()) {
+                Source_ = *source;
+            }
+            if (const TString* column = expr->GetColumnName()) {
+                Column_ = *column;
+            }
         }
 
         if (!TAggregationFactory::InitAggr(ctx, isFactory, src, node, isFactory ? TVector<TNodePtr>() : TVector<TNodePtr>(1, exprs.front())))
@@ -745,7 +762,7 @@ private:
         TNodePtr x;
         if (1 + adjustArgsCount == exprs.size()) {
             x = exprs.back();
-            if (!x->Init(ctx, FakeSource.Get())) {
+            if (!x->Init(ctx, FakeSource_.Get())) {
                 return false;
             }
         } else {
@@ -753,53 +770,53 @@ private:
         }
 
         if (isFactory) {
-            FactoryPercentile = x;
+            FactoryPercentile_ = x;
         } else {
-            Percentiles.emplace(Name, x);
+            Percentiles_.emplace(Name_, x);
         }
 
         return true;
     }
 
     TNodePtr DoClone() const final {
-        return new TPercentileFactory(Pos, Name, Func, AggMode);
+        return new TPercentileFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        TNodePtr percentiles(Percentiles.cbegin()->second);
+        TNodePtr percentiles(Percentiles_.cbegin()->second);
 
-        if (Percentiles.size() > 1U) {
+        if (Percentiles_.size() > 1U) {
             percentiles = Y();
-            for (const auto& percentile : Percentiles) {
+            for (const auto& percentile : Percentiles_) {
                 percentiles = L(percentiles, percentile.second);
             }
             percentiles = Q(percentiles);
         }
 
-        return Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr), percentiles);
+        return Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_), percentiles);
     }
 
     void AddFactoryArguments(TNodePtr& apply) const final {
-        apply = L(apply, FactoryPercentile);
+        apply = L(apply, FactoryPercentile_);
     }
 
     std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, bool allowAggApply, TContext& ctx) const final {
-        if (Percentiles.empty())
+        if (Percentiles_.empty())
             return { TNodePtr(), true };
 
-        TNodePtr names(Q(Percentiles.cbegin()->first));
+        TNodePtr names(Q(Percentiles_.cbegin()->first));
 
-        if (Percentiles.size() > 1U) {
+        if (Percentiles_.size() > 1U) {
             names = Y();
-            for (const auto& percentile : Percentiles)
+            for (const auto& percentile : Percentiles_)
                 names = L(names, Q(percentile.first));
             names = Q(names);
         }
 
-        const bool distinct = AggMode == EAggregateMode::Distinct;
-        const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
+        const bool distinct = AggMode_ == EAggregateMode::Distinct;
+        const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos_, DistinctKey_))) : type;
         auto apply = GetApply(listType, many, allowAggApply, ctx);
         if (!apply) {
             return { TNodePtr(), false };
@@ -811,12 +828,12 @@ private:
         }
 
         return { distinct ?
-            Q(Y(names, wrapped, BuildQuotedAtom(Pos, DistinctKey))) :
+            Q(Y(names, wrapped, BuildQuotedAtom(Pos_, DistinctKey_))) :
             Q(Y(names, wrapped)), true };
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        for (const auto& p : Percentiles) {
+        for (const auto& p : Percentiles_) {
             if (!p.second->Init(ctx, src)) {
                 return false;
             }
@@ -825,10 +842,11 @@ private:
         return TAggregationFactory::DoInit(ctx, src);
     }
 
-    TSourcePtr FakeSource;
-    std::multimap<TString, TNodePtr> Percentiles;
-    TNodePtr FactoryPercentile;
-    const TString* Column = nullptr;
+    TSourcePtr FakeSource_;
+    std::multimap<TString, TNodePtr> Percentiles_;
+    TNodePtr FactoryPercentile_;
+    TMaybe<TString> Source_;
+    TMaybe<TString> Column_;
 };
 
 TAggregationPtr BuildPercentileFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -839,7 +857,7 @@ class TTopFreqFactory final : public TAggregationFactory {
 public:
     TTopFreqFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, factory, aggMode)
-        , FakeSource(BuildFakeSource(pos))
+        , FakeSource_(BuildFakeSource(pos))
     {}
 
 private:
@@ -853,7 +871,7 @@ private:
         const ui32 MinBuffer = 100;
 
         if (exprs.size() < adjustArgsCount || exprs.size() > 2 + adjustArgsCount) {
-            ctx.Error(Pos) << "Aggregation function " << (isFactory? "factory " : "") << Name <<
+            ctx.Error(Pos_) << "Aggregation function " << (isFactory? "factory " : "") << Name_ <<
                 " requires " << adjustArgsCount << " to " << (2 + adjustArgsCount)  << " arguments, given: " << exprs.size();
             return false;
         }
@@ -866,7 +884,7 @@ private:
 
         if (1 + adjustArgsCount <= exprs.size()) {
             n = exprs[adjustArgsCount];
-            if (!n->Init(ctx, FakeSource.Get())) {
+            if (!n->Init(ctx, FakeSource_.Get())) {
                 return false;
             }
             n = Y("SafeCast", n, Q("Uint32"));
@@ -875,7 +893,7 @@ private:
         n = Y("Coalesce", n, Y("Uint32", Q("1")));
         if (2 + adjustArgsCount == exprs.size()) {
             buffer = exprs[1 + adjustArgsCount];
-            if (!buffer->Init(ctx, FakeSource.Get())) {
+            if (!buffer->Init(ctx, FakeSource_.Get())) {
                 return false;
             }
 
@@ -888,54 +906,54 @@ private:
 
         auto x = TPair{ n, buffer };
         if (isFactory) {
-            TopFreqFactoryParams = x;
+            TopFreqFactoryParams_ = x;
         } else {
-            TopFreqs.emplace(Name, x);
+            TopFreqs_.emplace(Name_, x);
         }
 
         return true;
     }
 
     TNodePtr DoClone() const final {
-        return new TTopFreqFactory(Pos, Name, Func, AggMode);
+        return new TTopFreqFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        TPair topFreqs(TopFreqs.cbegin()->second);
+        TPair topFreqs(TopFreqs_.cbegin()->second);
 
-        if (TopFreqs.size() > 1U) {
+        if (TopFreqs_.size() > 1U) {
             topFreqs = { Y(), Y() };
-            for (const auto& topFreq : TopFreqs) {
+            for (const auto& topFreq : TopFreqs_) {
                 topFreqs = { L(topFreqs.first, topFreq.second.first), L(topFreqs.second, topFreq.second.second) };
             }
             topFreqs = { Q(topFreqs.first), Q(topFreqs.second) };
         }
 
-        auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr), topFreqs.first, topFreqs.second);
+        auto apply = Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_), topFreqs.first, topFreqs.second);
         return apply;
     }
 
     void AddFactoryArguments(TNodePtr& apply) const final {
-        apply = L(apply, TopFreqFactoryParams.first, TopFreqFactoryParams.second);
+        apply = L(apply, TopFreqFactoryParams_.first, TopFreqFactoryParams_.second);
     }
 
     std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, bool allowAggApply, TContext& ctx) const final {
-        if (TopFreqs.empty())
+        if (TopFreqs_.empty())
             return { TNodePtr(), true };
 
-        TNodePtr names(Q(TopFreqs.cbegin()->first));
+        TNodePtr names(Q(TopFreqs_.cbegin()->first));
 
-        if (TopFreqs.size() > 1U) {
+        if (TopFreqs_.size() > 1U) {
             names = Y();
-            for (const auto& topFreq : TopFreqs)
+            for (const auto& topFreq : TopFreqs_)
                 names = L(names, Q(topFreq.first));
             names = Q(names);
         }
 
-        const bool distinct = AggMode == EAggregateMode::Distinct;
-        const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
+        const bool distinct = AggMode_ == EAggregateMode::Distinct;
+        const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos_, DistinctKey_))) : type;
         auto apply = GetApply(listType, many, allowAggApply, ctx);
         if (!apply) {
             return { nullptr, false };
@@ -947,12 +965,12 @@ private:
         }
 
         return { distinct ?
-            Q(Y(names, wrapped, BuildQuotedAtom(Pos, DistinctKey))) :
+            Q(Y(names, wrapped, BuildQuotedAtom(Pos_, DistinctKey_))) :
             Q(Y(names, wrapped)), true };
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        for (const auto& topFreq : TopFreqs) {
+        for (const auto& topFreq : TopFreqs_) {
             if (!topFreq.second.first->Init(ctx, src)) {
                 return false;
             }
@@ -965,9 +983,9 @@ private:
         return TAggregationFactory::DoInit(ctx, src);
     }
 
-    std::multimap<TString, TPair> TopFreqs;
-    TPair TopFreqFactoryParams;
-    TSourcePtr FakeSource;
+    std::multimap<TString, TPair> TopFreqs_;
+    TPair TopFreqFactoryParams_;
+    TSourcePtr FakeSource_;
 };
 
 TAggregationPtr BuildTopFreqFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -979,33 +997,33 @@ class TTopAggregationFactory final : public TAggregationFactory {
 public:
     TTopAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, factory, aggMode)
-        , FakeSource(BuildFakeSource(pos))
+        , FakeSource_(BuildFakeSource(pos))
     {}
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         ui32 adjustArgsCount = isFactory ? 1 : (HasKey ? 3 : 2);
         if (exprs.size() != adjustArgsCount) {
-            ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires "
+            ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "") << Name_ << " requires "
                 << adjustArgsCount << " arguments, given: " << exprs.size();
             return false;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
+        if (BlockWindowAggregationWithoutFrameSpec(Pos_, GetName(), src, ctx)) {
             return false;
         }
 
         if (!isFactory) {
-            Payload = exprs[0];
+            Payload_ = exprs[0];
             if (HasKey) {
-                Key = exprs[1];
+                Key_ = exprs[1];
             }
         }
 
-        Count = exprs.back();
+        Count_ = exprs.back();
 
         if (!isFactory) {
-            Name = src->MakeLocalName(Name);
+            Name_ = src->MakeLocalName(Name_);
         }
 
         if (!Init(ctx, src)) {
@@ -1013,9 +1031,9 @@ private:
         }
 
         if (!isFactory) {
-            node.Add("Member", "row", Q(Name));
+            node.Add("Member", "row", Q(Name_));
             if (IsOverWindow() || IsOverWindowDistinct()) {
-                src->AddTmpWindowColumn(Name);
+                src->AddTmpWindowColumn(Name_);
             }
         }
 
@@ -1023,7 +1041,7 @@ private:
     }
 
     TNodePtr DoClone() const final {
-        return new TTopAggregationFactory(Pos, Name, Func, AggMode);
+        return new TTopAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
@@ -1031,18 +1049,18 @@ private:
         Y_UNUSED(allowAggApply);
         TNodePtr apply;
         if (HasKey) {
-            apply = Y("Apply", Factory, type,
-                BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Key) : Key),
-                BuildLambda(Pos, Y("row"), many ? Y("Payload", Payload) : Payload));
+            apply = Y("Apply", Factory_, type,
+                BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Key_) : Key_),
+                BuildLambda(Pos_, Y("row"), many ? Y("Payload", Payload_) : Payload_));
         } else {
-            apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Payload) : Payload));
+            apply = Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Payload_) : Payload_));
         }
         AddFactoryArguments(apply);
         return apply;
     }
 
     void AddFactoryArguments(TNodePtr& apply) const final {
-        apply = L(apply, Count);
+        apply = L(apply, Count_);
     }
 
     std::vector<ui32> GetFactoryColumnIndices() const final {
@@ -1054,33 +1072,33 @@ private:
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        if (!Count->Init(ctx, FakeSource.Get())) {
+        if (!Count_->Init(ctx, FakeSource_.Get())) {
             return false;
         }
 
-        if (!Payload) {
+        if (!Payload_) {
             return true;
         }
 
         if (HasKey) {
-            if (!Key->Init(ctx, src)) {
+            if (!Key_->Init(ctx, src)) {
                 return false;
             }
         }
 
-        if (!Payload->Init(ctx, src)) {
+        if (!Payload_->Init(ctx, src)) {
             return false;
         }
 
-        if ((HasKey && Key->IsAggregated()) || (!HasKey && Payload->IsAggregated())) {
-            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
+        if ((HasKey && Key_->IsAggregated()) || (!HasKey && Payload_->IsAggregated())) {
+            ctx.Error(Pos_) << "Aggregation of aggregated values is forbidden";
             return false;
         }
         return true;
     }
 
-    TSourcePtr FakeSource;
-    TNodePtr Key, Payload, Count;
+    TSourcePtr FakeSource_;
+    TNodePtr Key_, Payload_, Count_;
 };
 
 template <bool HasKey>
@@ -1101,27 +1119,27 @@ private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         ui32 adjustArgsCount = isFactory ? 0 : 1;
         if (exprs.size() < adjustArgsCount || exprs.size() > 1 + adjustArgsCount) {
-            ctx.Error(Pos) << Name << " aggregation function " << (isFactory ? "factory " : "") << " requires " <<
+            ctx.Error(Pos_) << Name_ << " aggregation function " << (isFactory ? "factory " : "") << " requires " <<
                 adjustArgsCount << " or " << (1 + adjustArgsCount) << " argument(s), given: " << exprs.size();
             return false;
         }
 
-        Precision = 14;
+        Precision_ = 14;
         if (1 + adjustArgsCount <= exprs.size()) {
             auto posSecondArg = exprs[adjustArgsCount]->GetPos();
-            if (!Parseui32(exprs[adjustArgsCount], Precision)) {
-                ctx.Error(posSecondArg) << Name << ": invalid argument, numeric literal is expected";
+            if (!Parseui32(exprs[adjustArgsCount], Precision_)) {
+                ctx.Error(posSecondArg) << Name_ << ": invalid argument, numeric literal is expected";
                 return false;
             }
         }
-        if (Precision > 18 || Precision < 4) {
-            ctx.Error(Pos) << Name << ": precision is expected to be between 4 and 18 (inclusive), got " << Precision;
+        if (Precision_ > 18 || Precision_ < 4) {
+            ctx.Error(Pos_) << Name_ << ": precision is expected to be between 4 and 18 (inclusive), got " << Precision_;
             return false;
         }
 
         if (!isFactory) {
-            Expr = exprs[0];
-            Name = src->MakeLocalName(Name);
+            Expr_ = exprs[0];
+            Name_ = src->MakeLocalName(Name_);
         }
 
         if (!Init(ctx, src)) {
@@ -1129,9 +1147,9 @@ private:
         }
 
         if (!isFactory) {
-            node.Add("Member", "row", Q(Name));
+            node.Add("Member", "row", Q(Name_));
             if (IsOverWindow() || IsOverWindowDistinct()) {
-                src->AddTmpWindowColumn(Name);
+                src->AddTmpWindowColumn(Name_);
             }
         }
 
@@ -1139,23 +1157,23 @@ private:
     }
 
     TNodePtr DoClone() const final {
-        return new TCountDistinctEstimateAggregationFactory(Pos, Name, Func, AggMode);
+        return new TCountDistinctEstimateAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr));
+        auto apply = Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_));
         AddFactoryArguments(apply);
         return apply;
     }
 
     void AddFactoryArguments(TNodePtr& apply) const final {
-        apply = L(apply, Y("Uint32", Q(ToString(Precision))));
+        apply = L(apply, Y("Uint32", Q(ToString(Precision_))));
     }
 
 private:
-    ui32 Precision = 0;
+    ui32 Precision_ = 0;
 };
 
 TAggregationPtr BuildCountDistinctEstimateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -1166,7 +1184,7 @@ class TListAggregationFactory final : public TAggregationFactory {
 public:
     TListAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, factory, aggMode)
-        , FakeSource(BuildFakeSource(pos))
+        , FakeSource_(BuildFakeSource(pos))
     {
     }
 
@@ -1176,27 +1194,27 @@ private:
         ui32 minArgs = (0 + adjustArgsCount);
         ui32 maxArgs = (1 + adjustArgsCount);
         if (exprs.size() < minArgs || exprs.size() > maxArgs) {
-            ctx.Error(Pos) << "List aggregation " << (isFactory ? "factory " : "") << "function require " << minArgs
+            ctx.Error(Pos_) << "List aggregation " << (isFactory ? "factory " : "") << "function require " << minArgs
                 << " or " << maxArgs << " arguments, given: " << exprs.size();
             return false;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
+        if (BlockWindowAggregationWithoutFrameSpec(Pos_, GetName(), src, ctx)) {
             return false;
         }
 
-        Limit = nullptr;
+        Limit_ = nullptr;
         if (adjustArgsCount + 1U <= exprs.size()) {
             auto posSecondArg = exprs[adjustArgsCount]->GetPos();
-            Limit = exprs[adjustArgsCount];
-            if (!Limit->Init(ctx, FakeSource.Get())) {
+            Limit_ = exprs[adjustArgsCount];
+            if (!Limit_->Init(ctx, FakeSource_.Get())) {
                 return false;
             }
         }
 
         if (!isFactory) {
-            Expr = exprs[0];
-            Name = src->MakeLocalName(Name);
+            Expr_ = exprs[0];
+            Name_ = src->MakeLocalName(Name_);
         }
 
         if (!Init(ctx, src)) {
@@ -1204,9 +1222,9 @@ private:
         }
 
         if (!isFactory) {
-            node.Add("Member", "row", Q(Name));
+            node.Add("Member", "row", Q(Name_));
             if (IsOverWindow() || IsOverWindowDistinct()) {
-                src->AddTmpWindowColumn(Name);
+                src->AddTmpWindowColumn(Name_);
             }
         }
 
@@ -1214,28 +1232,28 @@ private:
     }
 
     TNodePtr DoClone() const final {
-        return new TListAggregationFactory(Pos, Name, Func, AggMode);
+        return new TListAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr));
+        auto apply = Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_));
         AddFactoryArguments(apply);
         return apply;
     }
 
     void AddFactoryArguments(TNodePtr& apply) const final {
-        if (!Limit) {
+        if (!Limit_) {
             apply = L(apply, Y("Uint64", Q("0")));
         } else {
-            apply = L(apply, Limit);
+            apply = L(apply, Limit_);
         }
     }
 
 private:
-    TSourcePtr FakeSource;
-    TNodePtr Limit;
+    TSourcePtr FakeSource_;
+    TNodePtr Limit_;
 };
 
 TAggregationPtr BuildListFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -1252,58 +1270,58 @@ private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         ui32 adjustArgsCount = isFactory ? 0 : 1;
         if (exprs.size() < (3 + adjustArgsCount) || exprs.size() > (7 + adjustArgsCount)) {
-            ctx.Error(Pos) << "User defined aggregation function " << (isFactory ? "factory " : "") << " requires " <<
+            ctx.Error(Pos_) << "User defined aggregation function " << (isFactory ? "factory " : "") << " requires " <<
                 (3 + adjustArgsCount) << " to " << (7 + adjustArgsCount) << " arguments, given: " << exprs.size();
             return false;
         }
 
-        Lambdas[0] = BuildLambda(Pos, Y("value", "parent"), Y("NamedApply", exprs[adjustArgsCount], Q(Y("value")), Y("AsStruct"), Y("DependsOn", "parent")));
-        Lambdas[1] = BuildLambda(Pos, Y("value", "state", "parent"), Y("NamedApply", exprs[adjustArgsCount + 1], Q(Y("state", "value")), Y("AsStruct"), Y("DependsOn", "parent")));
-        Lambdas[2] = BuildLambda(Pos, Y("one", "two"), Y("IfType", exprs[adjustArgsCount + 2], Y("NullType"),
-            BuildLambda(Pos, Y(), Y("Void")),
-            BuildLambda(Pos, Y(), Y("Apply", exprs[adjustArgsCount + 2], "one", "two"))));
+        Lambdas_[0] = BuildLambda(Pos_, Y("value", "parent"), Y("NamedApply", exprs[adjustArgsCount], Q(Y("value")), Y("AsStruct"), Y("DependsOn", "parent")));
+        Lambdas_[1] = BuildLambda(Pos_, Y("value", "state", "parent"), Y("NamedApply", exprs[adjustArgsCount + 1], Q(Y("state", "value")), Y("AsStruct"), Y("DependsOn", "parent")));
+        Lambdas_[2] = BuildLambda(Pos_, Y("one", "two"), Y("IfType", exprs[adjustArgsCount + 2], Y("NullType"),
+            BuildLambda(Pos_, Y(), Y("Void")),
+            BuildLambda(Pos_, Y(), Y("Apply", exprs[adjustArgsCount + 2], "one", "two"))));
 
-        for (size_t i = 3U; i < Lambdas.size(); ++i) {
+        for (size_t i = 3U; i < Lambdas_.size(); ++i) {
             const auto j = adjustArgsCount + i;
-            Lambdas[i] = BuildLambda(Pos, Y("state"), j >= exprs.size() ? AstNode("state") : Y("Apply", exprs[j], "state"));
+            Lambdas_[i] = BuildLambda(Pos_, Y("state"), j >= exprs.size() ? AstNode("state") : Y("Apply", exprs[j], "state"));
         }
 
-        DefVal = (exprs.size() == (7 + adjustArgsCount)) ? exprs[adjustArgsCount + 6] : Y("Null");
+        DefVal_ = (exprs.size() == (7 + adjustArgsCount)) ? exprs[adjustArgsCount + 6] : Y("Null");
         return TAggregationFactory::InitAggr(ctx, isFactory, src, node, isFactory ? TVector<TNodePtr>() : TVector<TNodePtr>(1, exprs.front()));
     }
 
     TNodePtr DoClone() const final {
-        return new TUserDefinedAggregationFactory(Pos, Name, Func, AggMode);
+        return new TUserDefinedAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr));
+        auto apply = Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_));
         AddFactoryArguments(apply);
         return apply;
     }
 
     void AddFactoryArguments(TNodePtr& apply) const final {
-        apply = L(apply, Lambdas[0], Lambdas[1], Lambdas[2], Lambdas[3], Lambdas[4], Lambdas[5], DefVal);
+        apply = L(apply, Lambdas_[0], Lambdas_[1], Lambdas_[2], Lambdas_[3], Lambdas_[4], Lambdas_[5], DefVal_);
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        for (const auto& lambda : Lambdas) {
+        for (const auto& lambda : Lambdas_) {
             if (!lambda->Init(ctx, src)) {
                 return false;
             }
         }
 
-        if (!DefVal->Init(ctx, src)) {
+        if (!DefVal_->Init(ctx, src)) {
             return false;
         }
 
         return TAggregationFactory::DoInit(ctx, src);
     }
 
-    std::array<TNodePtr, 6> Lambdas;
-    TNodePtr DefVal;
+    std::array<TNodePtr, 6> Lambdas_;
+    TNodePtr DefVal_;
 };
 
 TAggregationPtr BuildUserDefinedFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
@@ -1318,21 +1336,21 @@ public:
 
 private:
     TNodePtr DoClone() const final {
-        return new TCountAggregation(Pos, Name, Func, AggMode);
+        return new TCountAggregation(Pos_, Name_, Func_, AggMode_);
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        if (!Expr) {
+        if (!Expr_) {
             return true;
         }
 
-        if (Expr->IsAsterisk()) {
-            Expr = Y("Void");
+        if (Expr_->IsAsterisk()) {
+            Expr_ = Y("Void");
         }
-        if (!Expr->Init(ctx, src)) {
+        if (!Expr_->Init(ctx, src)) {
             return false;
         }
-        Expr->SetCountHint(Expr->IsConstant());
+        Expr_->SetCountHint(Expr_->IsConstant());
         return TAggregationFactory::DoInit(ctx, src);
     }
 };
@@ -1345,17 +1363,17 @@ class TPGFactoryAggregation final : public TAggregationFactory {
 public:
     TPGFactoryAggregation(TPosition pos, const TString& name, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, "", aggMode, false, false)
-        , PgFunc(Name)
+        , PgFunc_(Name_)
     {}
 
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) override {
         auto ret = TAggregationFactory::InitAggr(ctx, isFactory, src, node, exprs);
         if (ret) {
             if (isFactory) {
-                Factory = BuildLambda(Pos, Y("type", "extractor"), Y(AggMode == EAggregateMode::OverWindow ? "PgWindowTraitsTuple" : "PgAggregationTraitsTuple",
-                    Q(PgFunc), Y("ListItemType", "type"), "extractor"));
+                Factory_ = BuildLambda(Pos_, Y("type", "extractor"), Y(AggMode_ == EAggregateMode::OverWindow ? "PgWindowTraitsTuple" : "PgAggregationTraitsTuple",
+                    Q(PgFunc_), Y("ListItemType", "type"), "extractor"));
             } else {
-                Lambda = BuildLambda(Pos, Y("row"), exprs);
+                Lambda_ = BuildLambda(Pos_, Y("row"), exprs);
             }
         }
 
@@ -1372,22 +1390,22 @@ public:
         Y_UNUSED(many);
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        if (ShouldEmitAggApply(ctx) && allowAggApply && AggMode != EAggregateMode::OverWindow) {
+        if (ShouldEmitAggApply(ctx) && allowAggApply && AggMode_ != EAggregateMode::OverWindow) {
             return Y("AggApply",
-                Q("pg_" + to_lower(PgFunc)), Y("ListItemType", type), Lambda);
+                Q("pg_" + to_lower(PgFunc_)), Y("ListItemType", type), Lambda_);
         }
 
-        return Y(AggMode == EAggregateMode::OverWindow ? "PgWindowTraits" : "PgAggregationTraits",
-            Q(PgFunc), Y("ListItemType", type), Lambda);
+        return Y(AggMode_ == EAggregateMode::OverWindow ? "PgWindowTraits" : "PgAggregationTraits",
+            Q(PgFunc_), Y("ListItemType", type), Lambda_);
     }
 
 private:
     TNodePtr DoClone() const final {
-        return new TPGFactoryAggregation(Pos, Name, AggMode);
+        return new TPGFactoryAggregation(Pos_, Name_, AggMode_);
     }
 
-    TString PgFunc;
-    TNodePtr Lambda;
+    TString PgFunc_;
+    TNodePtr Lambda_;
 };
 
 TAggregationPtr BuildPGFactoryAggregation(TPosition pos, const TString& name, EAggregateMode aggMode) {
@@ -1399,7 +1417,7 @@ public:
 public:
     TNthValueFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, factory, aggMode)
-        , FakeSource(BuildFakeSource(pos))
+        , FakeSource_(BuildFakeSource(pos))
     {
     }
 
@@ -1408,23 +1426,23 @@ private:
         ui32 adjustArgsCount = isFactory ? 0 : 1;
         ui32 expectedArgs = (1 + adjustArgsCount);
         if (exprs.size() != expectedArgs) {
-            ctx.Error(Pos) << "NthValue aggregation " << (isFactory ? "factory " : "") << "function require "
+            ctx.Error(Pos_) << "NthValue aggregation " << (isFactory ? "factory " : "") << "function require "
                 << expectedArgs << " arguments, given: " << exprs.size();
             return false;
         }
 
-        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
+        if (BlockWindowAggregationWithoutFrameSpec(Pos_, GetName(), src, ctx)) {
             return false;
         }
 
-        Index = exprs[adjustArgsCount];
-        if (!Index->Init(ctx, FakeSource.Get())) {
+        Index_ = exprs[adjustArgsCount];
+        if (!Index_->Init(ctx, FakeSource_.Get())) {
             return false;
         }
 
         if (!isFactory) {
-            Expr = exprs[0];
-            Name = src->MakeLocalName(Name);
+            Expr_ = exprs[0];
+            Name_ = src->MakeLocalName(Name_);
         }
 
         if (!Init(ctx, src)) {
@@ -1432,9 +1450,9 @@ private:
         }
 
         if (!isFactory) {
-            node.Add("Member", "row", Q(Name));
+            node.Add("Member", "row", Q(Name_));
             if (IsOverWindow()) {
-                src->AddTmpWindowColumn(Name);
+                src->AddTmpWindowColumn(Name_);
             }
         }
 
@@ -1442,24 +1460,24 @@ private:
     }
 
     TNodePtr DoClone() const final {
-        return new TNthValueFactoryAggregation(Pos, Name, Func, AggMode);
+        return new TNthValueFactoryAggregation(Pos_, Name_, Func_, AggMode_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
-        auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr));
+        auto apply = Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_));
         AddFactoryArguments(apply);
         return apply;
     }
 
     void AddFactoryArguments(TNodePtr& apply) const final {
-        apply = L(apply, Index);
+        apply = L(apply, Index_);
     }
 
 private:
-    TSourcePtr FakeSource;
-    TNodePtr Index;
+    TSourcePtr FakeSource_;
+    TNodePtr Index_;
 };
 
 TAggregationPtr BuildNthFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {

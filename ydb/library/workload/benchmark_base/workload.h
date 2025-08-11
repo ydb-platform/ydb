@@ -16,29 +16,34 @@ public:
     enum class EStoreType {
         Row     /* "row"    */,
         Column  /* "column" */,
-        ExternalS3      /* "external-s3"     */
+        ExternalS3      /* "external-s3" */
     };
     enum class EQuerySyntax {
         YQL /* "yql" */,
         PG /* "pg"*/
     };
+    enum class EDatetimeTypes {
+        DateTime32 /* "dt32" */,
+        DateTime64 /* "dt64" */
+    };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
+    void Validate(const ECommandType commandType, int workloadType) override;
     TString GetFullTableName(const char* table) const;
     static TString GetTablePathQuote(EQuerySyntax syntax);
     YDB_ACCESSOR_DEF(TString, Path);
-    YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
+    YDB_READONLY(EStoreType, StoreType, EStoreType::Column);
     YDB_READONLY_DEF(TString, S3Endpoint);
     YDB_READONLY_DEF(TString, S3Prefix);
     YDB_READONLY(TString, StringType, "Utf8");
-    YDB_READONLY(TString, DateType, "Date32");
-    YDB_READONLY(TString, DatetimeType, "Datetime64");
-    YDB_READONLY(TString, TimestampType, "Timestamp64");
+    YDB_READONLY(EDatetimeTypes, DatetimeTypes, EDatetimeTypes::DateTime32);
     YDB_READONLY(ui64, PartitionSizeMb, 2000);
+    YDB_READONLY_PROTECT(bool, CheckCanonical, false);
 };
 
 class TWorkloadGeneratorBase : public IWorkloadQueryGenerator {
 public:
     explicit TWorkloadGeneratorBase(const TWorkloadBaseParams& params);
+    void Init() override final {};
     std::string GetDDLQueries() const override final;
     TVector<std::string> GetCleanPaths() const override final;
 

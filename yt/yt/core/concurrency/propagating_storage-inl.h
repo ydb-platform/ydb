@@ -49,14 +49,14 @@ std::optional<T> TPropagatingStorage::Remove()
 template <class T>
 TPropagatingValueGuard<T>::TPropagatingValueGuard(T value)
 {
-    auto& storage = GetCurrentPropagatingStorage();
+    auto& storage = CurrentPropagatingStorage();
     OldValue_ = storage.Exchange<T>(std::move(value));
 }
 
 template <class T>
 TPropagatingValueGuard<T>::~TPropagatingValueGuard()
 {
-    auto& storage = GetCurrentPropagatingStorage();
+    auto& storage = CurrentPropagatingStorage();
     if (OldValue_) {
         storage.Exchange<T>(std::move(*OldValue_));
     } else {

@@ -1,6 +1,6 @@
 # Grafana dashboards for {{ ydb-short-name }}
 
-This page describes Grafana dashboards for {{ ydb-short-name }}. For information about how to install dashboards, see [{#T}](../../../devops/manual/monitoring.md#prometheus-grafana).
+This page describes Grafana dashboards for {{ ydb-short-name }}. For information about how to install dashboards, see [{#T}](../../../devops/observability/monitoring.md#prometheus-grafana).
 
 ## DB status {#dbstatus}
 
@@ -115,6 +115,7 @@ Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb
 [Hive](../../../contributor/hive.md) metrics for the selected database.
 
 The dashboard includes the following filters:
+
 * database – selects the database for which metrics are displayed;
 * ds – selects the Prometheus data source the dashboard will use;
 * Tx type – determines the transaction type for which "`{Tx type}` average time" panel is displayed.
@@ -130,4 +131,4 @@ The dashboard includes the following filters:
 | Versions | Versions of {{ ydb-short-name }} running on cluster nodes. |
 | Hive node | Node where the database Hive is running. |
 
-Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json) file with the **Database Hive** dashboard.
+Download the [database-hive-detailed.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json) file with the **Database Hive** dashboard.

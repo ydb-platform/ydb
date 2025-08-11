@@ -3,6 +3,8 @@
 
 #include "blobstorage_vdiskid.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/blobstorage/base/blobstorage_host_record.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
@@ -224,7 +226,7 @@ namespace NKikimr {
     {
         bool SelfHeal = false;
         bool GroupLayoutSanitizer = false;
-
+        std::optional<NBsController::THostRecordMap> EnforceHostRecords;
         TEvControllerConfigRequest() = default;
     };
 
@@ -580,12 +582,14 @@ namespace NKikimr {
     struct TEvNodeWardenStorageConfig
         : TEventLocal<TEvNodeWardenStorageConfig, TEvBlobStorage::EvNodeWardenStorageConfig>
     {
-        std::unique_ptr<NKikimrBlobStorage::TStorageConfig> Config;
-        std::unique_ptr<NKikimrBlobStorage::TStorageConfig> ProposedConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> Config;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> ProposedConfig;
         bool SelfManagementEnabled;
+        TBridgeInfo::TPtr BridgeInfo;
 
-        TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
-                const NKikimrBlobStorage::TStorageConfig *proposedConfig, bool selfManagementEnabled);
+        TEvNodeWardenStorageConfig(std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> config,
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> proposedConfig, bool selfManagementEnabled,
+            TBridgeInfo::TPtr bridgeInfo);
         ~TEvNodeWardenStorageConfig();
     };
 

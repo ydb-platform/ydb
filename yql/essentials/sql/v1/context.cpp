@@ -72,7 +72,8 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"DistinctOverKeys", &TContext::DistinctOverKeys},
     {"GroupByExprAfterWhere", &TContext::GroupByExprAfterWhere},
     {"FailOnGroupByExprOverride", &TContext::FailOnGroupByExprOverride},
-    {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike}
+    {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike},
+    {"DebugPositions", &TContext::DebugPositions},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -93,10 +94,10 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
                    const TString& query)
     : Lexers(lexers)
     , Parsers(parsers)
-    , ClusterMapping(settings.ClusterMapping)
-    , PathPrefix(settings.PathPrefix)
-    , ClusterPathPrefixes(settings.ClusterPathPrefixes)
-    , SQLHints(hints)
+    , ClusterMapping_(settings.ClusterMapping)
+    , PathPrefix_(settings.PathPrefix)
+    , ClusterPathPrefixes_(settings.ClusterPathPrefixes)
+    , SqlHints_(hints)
     , Settings(settings)
     , Query(query)
     , Pool(new TMemoryPool(4096))
@@ -110,6 +111,10 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
 {
     if (settings.LangVer >= MakeLangVersion(2025, 2)) {
         GroupByExprAfterWhere = true;
+    }
+
+    if (settings.LangVer >= MakeLangVersion(2025, 3)) {
+        PersistableFlattenAndAggrExprs = true;
     }
 
     for (auto lib : settings.Libraries) {
@@ -126,7 +131,7 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
         Scoped->CurrService = *provider;
     }
 
-    Position.File = settings.File;
+    Position_.File = settings.File;
 
     for (auto& flag: settings.Flags) {
         bool value = true;
@@ -155,7 +160,7 @@ TContext::~TContext()
 }
 
 const NYql::TPosition& TContext::Pos() const {
-    return Position;
+    return Position_;
 }
 
 TString TContext::MakeName(const TString& name) {
@@ -171,17 +176,17 @@ TString TContext::MakeName(const TString& name) {
 
 void TContext::PushCurrentBlocks(TBlocks* blocks) {
     YQL_ENSURE(blocks);
-    CurrentBlocks.push_back(blocks);
+    CurrentBlocks_.push_back(blocks);
 }
 
 void TContext::PopCurrentBlocks() {
-    YQL_ENSURE(!CurrentBlocks.empty());
-    CurrentBlocks.pop_back();
+    YQL_ENSURE(!CurrentBlocks_.empty());
+    CurrentBlocks_.pop_back();
 }
 
 TBlocks& TContext::GetCurrentBlocks() const {
-    YQL_ENSURE(!CurrentBlocks.empty());
-    return *CurrentBlocks.back();
+    YQL_ENSURE(!CurrentBlocks_.empty());
+    return *CurrentBlocks_.back();
 }
 
 IOutputStream& TContext::Error(NYql::TIssueCode code) {
@@ -214,19 +219,19 @@ void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction a
 
 TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(NYql::TPosition tokenPos) {
     TVector<NSQLTranslation::TSQLHint> result;
-    auto it = SQLHints.find(tokenPos);
-    if (it == SQLHints.end()) {
+    auto it = SqlHints_.find(tokenPos);
+    if (it == SqlHints_.end()) {
         return result;
     }
     result = std::move(it->second);
-    SQLHints.erase(it);
+    SqlHints_.erase(it);
     return result;
 }
 
 void TContext::WarnUnusedHints() {
-    if (!SQLHints.empty()) {
+    if (!SqlHints_.empty()) {
         // warn about first unused hint
-        auto firstUnused = SQLHints.begin();
+        auto firstUnused = SqlHints_.begin();
         YQL_ENSURE(!firstUnused->second.empty());
         const NSQLTranslation::TSQLHint& hint = firstUnused->second.front();
         Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Hint " << hint.Name << " will not be used";
@@ -265,8 +270,8 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
     auto& curIssue = Issues.back();
     curIssue.Severity = severity;
     curIssue.IssueCode = code;
-    IssueMsgHolder.Reset(new TStringOutput(*Issues.back().MutableMessage()));
-    return *IssueMsgHolder;
+    IssueMsgHolder_.Reset(new TStringOutput(*Issues.back().MutableMessage()));
+    return *IssueMsgHolder_;
 }
 
 bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
@@ -275,7 +280,7 @@ bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
         return false;
     }
     TString unused;
-    if (ClusterMapping.GetClusterProvider(*clusterPtr, unused)) {
+    if (ClusterMapping_.GetClusterProvider(*clusterPtr, unused)) {
         return false;
     }
     if (Settings.AssumeYdbOnClusterWithSlash && clusterPtr->StartsWith('/')) {
@@ -291,7 +296,7 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
             || *arg == RtmrProviderName
             )
         {
-            ProviderPathPrefixes[*arg] = value;
+            ProviderPathPrefixes_[*arg] = value;
             return true;
         }
 
@@ -302,9 +307,9 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
             return false;
         }
 
-        ClusterPathPrefixes[normalizedClusterName] = value;
+        ClusterPathPrefixes_[normalizedClusterName] = value;
     } else {
-        PathPrefix = value;
+        PathPrefix_ = value;
     }
 
     return true;
@@ -323,16 +328,16 @@ TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& 
         return {};
     }
     auto* clusterPrefix = cluster.GetLiteral()
-                            ? ClusterPathPrefixes.FindPtr(*cluster.GetLiteral())
+                            ? ClusterPathPrefixes_.FindPtr(*cluster.GetLiteral())
                             : nullptr;
     if (clusterPrefix && !clusterPrefix->empty()) {
         return *clusterPrefix;
     } else {
-        auto* providerPrefix = ProviderPathPrefixes.FindPtr(service);
+        auto* providerPrefix = ProviderPathPrefixes_.FindPtr(service);
         if (providerPrefix && !providerPrefix->empty()) {
             return *providerPrefix;
-        } else if (!PathPrefix.empty()) {
-            return PathPrefix;
+        } else if (!PathPrefix_.empty()) {
+            return PathPrefix_;
         }
         return {};
     }
@@ -569,26 +574,26 @@ TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString&
 }
 
 TTranslation::TTranslation(TContext& ctx)
-    : Ctx(ctx)
+    : Ctx_(ctx)
 {
 }
 
 TContext& TTranslation::Context() {
-    return Ctx;
+    return Ctx_;
 }
 
 IOutputStream& TTranslation::Error() {
-    return Ctx.Error();
+    return Ctx_.Error();
 }
 
 TNodePtr TTranslation::GetNamedNode(const TString& name) {
     if (name == "$_") {
-        Ctx.Error() << "Unable to reference anonymous name " << name;
+        Ctx_.Error() << "Unable to reference anonymous name " << name;
         return nullptr;
     }
-    auto res = Ctx.Scoped->LookupNode(name);
+    auto res = Ctx_.Scoped->LookupNode(name);
     if (!res) {
-        Ctx.Error() << "Unknown name: " << name;
+        Ctx_.Error() << "Unknown name: " << name;
     }
     return SafeClone(res);
 }
@@ -596,19 +601,19 @@ TNodePtr TTranslation::GetNamedNode(const TString& name) {
 TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, const TNodeBuilderByName& builder) {
     TString resultName = name;
     if (IsAnonymousName(name)) {
-        resultName = "$_yql_anonymous_name_" + ToString(Ctx.AnonymousNameIndex++);
-        YQL_ENSURE(Ctx.Scoped->NamedNodes.find(resultName) == Ctx.Scoped->NamedNodes.end());
+        resultName = "$_yql_anonymous_name_" + ToString(Ctx_.AnonymousNameIndex++);
+        YQL_ENSURE(Ctx_.Scoped->NamedNodes.find(resultName) == Ctx_.Scoped->NamedNodes.end());
     }
     auto node = builder(resultName);
     Y_DEBUG_ABORT_UNLESS(node);
-    auto mapIt = Ctx.Scoped->NamedNodes.find(resultName);
-    if (mapIt == Ctx.Scoped->NamedNodes.end()) {
-        auto result = Ctx.Scoped->NamedNodes.insert(std::make_pair(resultName, TDeque<TNodeWithUsageInfoPtr>()));
+    auto mapIt = Ctx_.Scoped->NamedNodes.find(resultName);
+    if (mapIt == Ctx_.Scoped->NamedNodes.end()) {
+        auto result = Ctx_.Scoped->NamedNodes.insert(std::make_pair(resultName, TDeque<TNodeWithUsageInfoPtr>()));
         Y_DEBUG_ABORT_UNLESS(result.second);
         mapIt = result.first;
     }
 
-    mapIt->second.push_front(MakeIntrusive<TNodeWithUsageInfo>(node, namePos, Ctx.ScopeLevel));
+    mapIt->second.push_front(MakeIntrusive<TNodeWithUsageInfo>(node, namePos, Ctx_.ScopeLevel));
     return resultName;
 }
 
@@ -624,31 +629,31 @@ TString TTranslation::PushNamedAtom(TPosition namePos, const TString& name) {
 }
 
 void TTranslation::PopNamedNode(const TString& name) {
-    auto mapIt = Ctx.Scoped->NamedNodes.find(name);
-    Y_DEBUG_ABORT_UNLESS(mapIt != Ctx.Scoped->NamedNodes.end());
+    auto mapIt = Ctx_.Scoped->NamedNodes.find(name);
+    Y_DEBUG_ABORT_UNLESS(mapIt != Ctx_.Scoped->NamedNodes.end());
     Y_DEBUG_ABORT_UNLESS(mapIt->second.size() > 0);
     auto& top = mapIt->second.front();
-    if (!top->IsUsed && !Ctx.HasPendingErrors && !name.StartsWith("$_")) {
-        Ctx.Warning(top->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used";
+    if (!top->IsUsed && !Ctx_.HasPendingErrors && !name.StartsWith("$_")) {
+        Ctx_.Warning(top->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used";
     }
     mapIt->second.pop_front();
     if (mapIt->second.empty()) {
-        Ctx.Scoped->NamedNodes.erase(mapIt);
+        Ctx_.Scoped->NamedNodes.erase(mapIt);
     }
 }
 
 void TTranslation::WarnUnusedNodes() const {
-    if (Ctx.HasPendingErrors) {
+    if (Ctx_.HasPendingErrors) {
         // result is not reliable in this case
         return;
     }
-    for (const auto& [name, items]: Ctx.Scoped->NamedNodes) {
+    for (const auto& [name, items]: Ctx_.Scoped->NamedNodes) {
         if (name.StartsWith("$_")) {
             continue;
         }
         for (const auto& item : items) {
-            if (!item->IsUsed && item->Level == Ctx.ScopeLevel) {
-                Ctx.Warning(item->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used";
+            if (!item->IsUsed && item->Level == Ctx_.ScopeLevel) {
+                Ctx_.Warning(item->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used";
             }
         }
     }

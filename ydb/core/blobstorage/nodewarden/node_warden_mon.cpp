@@ -107,7 +107,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
         DIV() {
             out << "<p>Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "</p>";
             out << "<pre>";
-            OutputPrettyMessage(out, StorageConfig);
+            OutputPrettyMessage(out, *StorageConfig);
             out << "</pre>";
         }
 

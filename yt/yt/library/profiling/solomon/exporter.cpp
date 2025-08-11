@@ -41,7 +41,7 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = SolomonLogger;
+constinit const auto Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -275,6 +275,10 @@ constexpr auto IndexPage = R"EOF(
 <a href="%vtags">tags top</a>
 <br/>
 <a href="%vstatus">status</a>
+<br/>
+<a href="%vall">metrics from all shards</a>
+<br/>
+<a href="%vshard/{shard_name}">metrics from `shard_name`</a>
 </body>
 </html>
 )EOF";
@@ -292,7 +296,7 @@ void TSolomonExporter::HandleIndex(const std::string& prefix, const IRequestPtr&
     rsp->GetHeaders()->Add("Content-Type", "text/html; charset=UTF-8");
 
     auto prefixWithSlash = !prefix.empty() ? prefix + "/" : prefix;
-    auto indexPageFormatted = Format(IndexPage, prefixWithSlash, prefixWithSlash, prefixWithSlash);
+    auto indexPageFormatted = Format(IndexPage, prefixWithSlash, prefixWithSlash, prefixWithSlash, prefixWithSlash, prefixWithSlash);
 
     WaitFor(rsp->WriteBody(TSharedRef::FromString(indexPageFormatted)))
         .ThrowOnError();

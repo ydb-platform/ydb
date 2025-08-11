@@ -22,7 +22,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = BusLogger;
+constinit const auto Logger = BusLogger;
 
 static constexpr auto PeriodicCheckPeriod = TDuration::MilliSeconds(100);
 static constexpr auto PerConnectionPeriodicCheckPeriod = TDuration::Seconds(10);
@@ -76,7 +76,7 @@ const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const std::stri
 IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
     IThreadPoolPollerPtr* pollerPtr,
     bool isXfer,
-    const TString& threadNamePrefix)
+    std::string threadNamePrefix)
 {
     {
         auto guard = ReaderGuard(PollersLock_);

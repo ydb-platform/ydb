@@ -106,7 +106,7 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite);
+    std::shared_ptr<NYql::TIssues> issues);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -140,6 +140,7 @@ private:
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<NScheme::TTypeInfo> ValueColumnTypes;
     NSchemeCache::TSchemeCacheNavigate::EKind TableKind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
+    bool IsIndexImplTable = false;
     THashSet<TTabletId> ShardRepliesLeft;
     THashMap<TTabletId, TShardUploadRetryState> ShardUploadRetryStates;
     TUploadStatus Status;
@@ -147,7 +148,6 @@ private:
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
     TUploadCounters::TGuard UploadCountersGuard;
-    bool ImmediateWrite = false;
 
 protected:
     enum class EUploadSource {
@@ -181,6 +181,7 @@ protected:
 
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
+    bool AllowWriteToIndexImplTable = false;
     bool DiskQuotaExceeded = false;
     bool UpsertIfExists = false;
 
@@ -188,6 +189,10 @@ protected:
     float RuCost = 0.0;
 
     NWilson::TSpan Span;
+
+    NSchemeCache::TSchemeCacheNavigate::EKind GetTableKind() const {
+        return TableKind;
+    }
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -207,7 +212,6 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx) {
         StartTime = TAppData::TimeProvider->Now();
-        ImmediateWrite = AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert();
         OnBeforeStart(ctx);
         ResolveTable(GetTable(), ctx);
     }
@@ -271,6 +275,10 @@ private:
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
     virtual void SendResult(const NActors::TActorContext& ctx, const ::Ydb::StatusIds::StatusCode& status) = 0;
     virtual void AuditContextStart() {}
+    virtual bool ValidateTable(TString& errorMessage) {
+        Y_UNUSED(errorMessage);
+        return true;
+    }
 
     virtual EUploadSource GetSourceType() const {
         return EUploadSource::ProtoValues;
@@ -396,14 +404,14 @@ private:
             if (!cp) {
                 return TConclusionStatus::Fail(Sprintf("Unknown column: %s", name.c_str()));
             }
-            i32 pgTypeMod = -1;            
+            i32 pgTypeMod = -1;
             const ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
-            
+
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
             if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
@@ -579,6 +587,30 @@ private:
             ctx);
     }
 
+    bool IsTimestampColumnsArePositive(const std::shared_ptr<arrow::RecordBatch>& batch, TString& error) {
+        if (!batch) {
+            return true;
+        }
+        for (int i = 0; i < batch->num_columns(); ++i) {
+            std::shared_ptr<arrow::Array> column = batch->column(i);
+            std::shared_ptr<arrow::DataType> type = column->type();
+            std::string columnName = batch->schema()->field(i)->name();
+            if (type->id() == arrow::Type::TIMESTAMP) {
+                auto timestampArray = std::static_pointer_cast<arrow::TimestampArray>(column);
+                for (int64_t j = 0; j < timestampArray->length(); ++j) {
+                    if (timestampArray->IsValid(j)) {
+                        int64_t timestampValue = timestampArray->Value(j);
+                        if (timestampValue < 0) {
+                            error = TStringBuilder{} << "Negative timestamp value found at column " << columnName << ", row " << j << ", value " << timestampValue;
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         Span && Span.Event("DataSerialization");
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
@@ -592,12 +624,18 @@ private:
 
         TableKind = entry.Kind;
         const bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
+        IsIndexImplTable = (entry.TableKind != NSchemeCache::ETableKind::KindRegularTable);
 
-        if (entry.TableId.IsSystemView()) {
+        if (entry.TableId.IsSystemView() || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);
         }
 
         // TODO: fast fail for all tables?
+        if (isColumnTable && HasAppData() && !AppDataVerified().ColumnShardConfig.GetProxyWritingEnabled()) {
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
+                                      "cannot perform writes: disabled by config"),
+                ctx);
+        }
         if (isColumnTable && DiskQuotaExceeded) {
             return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DISK_QUOTA_EXCEEDED,
                                       "cannot perform writes: database is out of disk space"),
@@ -605,6 +643,11 @@ private:
         }
 
         ResolveNamesResult.reset(ev->Get()->Request.Release());
+
+        TString errorMessage;
+        if (!ValidateTable(errorMessage)) {
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage, ctx);
+        }
 
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
         {
@@ -614,7 +657,6 @@ private:
             }
         }
 
-        TString errorMessage;
         switch (GetSourceType()) {
             case EUploadSource::ProtoValues:
             {
@@ -682,6 +724,11 @@ private:
             }
         }
 
+        TString error;
+        if (!IsTimestampColumnsArePositive(Batch, error)) {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, error, ctx);
+        }
+
         if (Batch) {
             UploadCounters.OnRequest(Batch->num_rows());
         }
@@ -701,6 +748,12 @@ private:
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
+        }
+        if (IsIndexImplTable && !AllowWriteToIndexImplTable) {
+            return ReplyWithError(
+                Ydb::StatusIds::BAD_REQUEST,
+                "Writing to index implementation tables is not allowed.",
+                ctx);
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "starting LongTx");
@@ -816,7 +869,7 @@ private:
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, ImmediateWrite);
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -842,10 +895,8 @@ private:
                 RaiseIssue(issue);
             }
             return ReplyWithResult(status, ctx);
-        } else if (ImmediateWrite) {
-            return ReplyWithResult(status, ctx);
         } else {
-            CommitLongTx(ctx);
+            return ReplyWithResult(status, ctx);
         }
     }
 
@@ -960,6 +1011,12 @@ private:
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
+        }
+        if (IsIndexImplTable && !AllowWriteToIndexImplTable) {
+            return ReplyWithError(
+                Ydb::StatusIds::BAD_REQUEST,
+                "Writing to index implementation tables is not allowed.",
+                ctx);
         }
 
         auto getShardsString = [] (const TVector<TKeyDesc::TPartitionInfo>& partitions) {
@@ -1225,7 +1282,6 @@ private:
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit
             // If it si still there it means we need to rollback
-            Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS || ImmediateWrite);
             RollbackLongTx(ctx);
         }
         Span.EndOk();

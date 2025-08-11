@@ -89,6 +89,7 @@
                                                                 "PlanNodeId": 3,
                                                                 "Plans": [
                                                                     {
+                                                                        "HashFunc": "HashV2",
                                                                         "KeyColumns": [
                                                                             "URL"
                                                                         ],
@@ -97,12 +98,22 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Filter-TableRangeScan",
+                                                                                "Node Type": "Aggregate-Filter-TableRangeScan",
                                                                                 "Operators": [
                                                                                     {
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Intermediate",
+                                                                                        "Pushdown": "True"
+                                                                                    },
+                                                                                    {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 2
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
@@ -114,16 +125,14 @@
                                                                                         "Name": "TableRangeScan",
                                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                                         "ReadColumns": [
+                                                                                            "CounterID [62, 62]",
+                                                                                            "EventDate [15887, 15917]",
                                                                                             "IsDownload",
                                                                                             "IsLink",
                                                                                             "IsRefresh",
                                                                                             "URL"
                                                                                         ],
-                                                                                        "ReadRanges": [
-                                                                                            "CounterID [62, 62]",
-                                                                                            "EventDate [15887, 15917]"
-                                                                                        ],
-                                                                                        "ReadRangesExpectedSize": 1,
+                                                                                        "ReadRangesExpectedSize": "1",
                                                                                         "ReadRangesKeys": [
                                                                                             "CounterID",
                                                                                             "EventDate"

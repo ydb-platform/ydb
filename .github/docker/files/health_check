@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 set -e
-set -x
+if [ "${DEBUG}" = "true" ]; then
+    set -x
+fi
 
-/ydb -e grpcs://localhost:${GRPC_TLS_PORT:-2135} --ca-file /ydb_certs/ca.pem -d /local scheme ls /local
-/ydb -e grpcs://localhost:${GRPC_TLS_PORT:-2135} --ca-file /ydb_certs/ca.pem -d /local table query execute -q 'create table `/local/.sys_health/test` (key int32, value utf8, primary key(key));' -t scheme
+/ydb -e grpcs://localhost:${GRPC_TLS_PORT:-2135} --ca-file /ydb_certs/ca.pem -d /local --no-discovery monitoring healthcheck | grep -q GOOD || exit 1
+

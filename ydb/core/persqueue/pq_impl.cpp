@@ -6,6 +6,7 @@
 #include "partition.h"
 #include "read.h"
 #include "utils.h"
+#include "ydb/core/protos/config.pb.h"
 
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/feature_flags.h>
@@ -394,7 +395,7 @@ public:
 
     bool HandleError(TEvPQ::TEvError *ev, const TActorContext& ctx)
     {
-        PQ_LOG_D("Answer error topic: '" << TopicName << "'" <<
+        PQ_LOG_ERROR("Answer error topic: '" << TopicName << "'" <<
                  " partition: " << Partition <<
                  " messageNo: " << MessageNo <<
                  " requestId: " << ReqId <<
@@ -922,7 +923,16 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
             NextSupportivePartitionId = Max(NextSupportivePartitionId, shadowPartitionId.InternalPartitionId + 1);
         }
 
-        SubscribeWriteId(writeId, ctx);
+        if (writeId.IsTopicApiTransaction()) {
+            SubscribeWriteId(writeId, ctx);
+        }
+
+        // this branch will be executed only if EnableKafkaTransactions feature flag is enabled, cause
+        // sending transactional requests through Kafka API is restricted by feature flag here: ydb/core/kafka_proxy/kafka_connection.cpp
+        if (txWrite.GetKafkaTransaction() && txWrite.HasCreatedAt()) {
+            writeInfo.KafkaTransaction = true;
+            writeInfo.CreatedAt = TInstant::MilliSeconds(txWrite.GetCreatedAt());
+        }
     }
 
     NewSupportivePartitions.clear();
@@ -1802,8 +1812,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
 {
     PQ_LOG_T("Handle TEvPersQueue::TEvStatus");
 
-    ReadBalancerActorId = ev->Sender;
-
     if (!ConfigInited || !AllOriginalPartitionsInited()) {
         PQ_LOG_D("Postpone the request." <<
                  " ConfigInited " << static_cast<int>(ConfigInited) <<
@@ -1978,7 +1986,8 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, NWilson
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SET_OFFSET);
         THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
             responseCookie, cmd.GetClientId(), cmd.GetOffset(), cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0, 0,
-            TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict()
+            TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict(),
+            cmd.HasCommittedMetadata() ? static_cast<std::optional<TString>>(cmd.GetCommittedMetadata()) : std::nullopt
         );
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }
@@ -2020,7 +2029,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
 
     TVector<TEvPQ::TEvWrite::TMsg> msgs;
 
-    bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
+    bool mirroredPartition = MirroringEnabled(Config);
 
     if (!req.GetIsDirectWrite()) {
         if (!req.HasMessageNo()) {
@@ -2154,7 +2163,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                     totalParts, totalSize, createTimestampMs, receiveTimestampMs,
                     disableDeduplication, writeTimestampMs, data, uncompressedSize,
                     cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation(),
-                    cmd.GetIgnoreQuotaDeadline(), heartbeatVersion
+                    cmd.GetIgnoreQuotaDeadline(), heartbeatVersion, cmd.GetEnableKafkaDeduplication(),
+                    (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing())
                 });
                 partNo++;
                 uncompressedSize = 0;
@@ -2187,7 +2197,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 static_cast<ui16>(cmd.HasPartNo() ? cmd.GetTotalParts() : 1), totalSize,
                 createTimestampMs, receiveTimestampMs, disableDeduplication, writeTimestampMs, data,
                 cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u, cmd.GetPartitionKey(), cmd.GetExplicitHash(),
-                cmd.GetExternalOperation(), cmd.GetIgnoreQuotaDeadline(), heartbeatVersion
+                cmd.GetExternalOperation(), cmd.GetIgnoreQuotaDeadline(), heartbeatVersion, cmd.GetEnableKafkaDeduplication(),
+                (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing())
             });
         }
         PQ_LOG_D("got client message topic: " << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") <<
@@ -2573,8 +2584,8 @@ const TPartitionInfo& TPersQueue::GetPartitionInfo(const NKikimrClient::TPersQue
     ui32 originalPartitionId = req.GetPartition();
 
     Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId),
-                   "PQ %" PRIu64 ", WriteId {%" PRIu64 ", %" PRIu64 "}, Partition %" PRIu32,
-                   TabletID(), writeId.NodeId, writeId.KeyId, originalPartitionId);
+                   "PQ %" PRIu64 ", WriteId %s, Partition %" PRIu32,
+                   TabletID(), writeId.ToString().data(), originalPartitionId);
 
     const TPartitionId& partitionId = TxWrites.at(writeId).Partitions.at(originalPartitionId);
     Y_ABORT_UNLESS(Partitions.contains(partitionId));
@@ -2663,7 +2674,13 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
     const TWriteId writeId = GetWriteId(req);
     ui32 originalPartitionId = req.GetPartition();
 
-    if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
+    if (writeId.KafkaApiTransaction && TxWrites.contains(writeId) && !TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
+        // This branch happens when previous Kafka transaction has committed and we recieve write for next one
+        // after PQ has deleted supportive partition and before it has deleted writeId from TxWrites (tx has not transaitioned to DELETED state) 
+        PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%01");
+        KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId] = event;
+        return;
+    } else if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
         //
         // - вспомогательная партиция уже существует
         // - если партиция инициализирована, то
@@ -2672,11 +2689,17 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         // -     добавить сообщение в очередь для партиции
         //
         const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
-        if (writeInfo.TxId.Defined()) {
+        if (writeInfo.TxId.Defined() && writeId.IsTopicApiTransaction()) {
             ReplyError(ctx,
                        responseCookie,
                        NPersQueue::NErrorCode::BAD_REQUEST,
                        "it is forbidden to write after a commit");
+            return;
+        } else if (writeInfo.TxId.Defined() && writeId.IsKafkaApiTransaction()) {
+            // This branch happens when previous Kafka transaction has committed and we recieve write for next one
+            // before PQ has deleted supportive partition for previous transaction
+            PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%02");
+            KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId] = event;
             return;
         }
 
@@ -2693,10 +2716,18 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         }
     } else {
         if (!req.GetNeedSupportivePartition()) {
+            // missing supportivce partition in kafka transaction means that we already committed and deleted transaction for current producerId + producerEpoch
+            NPersQueue::NErrorCode::EErrorCode errorCode = writeId.KafkaApiTransaction ?
+                NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION : 
+                NPersQueue::NErrorCode::PRECONDITION_FAILED;
+            TString error = writeId.KafkaApiTransaction ?
+                "Kafka transaction and there is no supportive partition for current producerId and producerEpoch. It means GetOwnership request was not called from TPartitionWriter" :
+                "lost messages";
+
             ReplyError(ctx,
                        responseCookie,
-                       NPersQueue::NErrorCode::PRECONDITION_FAILED,
-                       "lost messages");
+                       errorCode,
+                       error);
             return;
         }
 
@@ -2728,8 +2759,13 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
                                                std::shared_ptr<TEvPersQueue::TEvRequest>(event->Release().Release()),
                                                sender);
 
-        if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED) {
+        if (writeId.IsTopicApiTransaction() && writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED) {
             SubscribeWriteId(writeId, ctx);
+        }
+
+        if (writeId.KafkaApiTransaction) {
+            writeInfo.KafkaTransaction = true;
+            writeInfo.CreatedAt = TAppData::TimeProvider->Now();
         }
 
         TryWriteTxs(ctx);
@@ -3148,6 +3184,8 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
 
 void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
 {
+    ScheduleDeleteExpiredKafkaTransactions();
+
     if (!MediatorTimeCastEntry) {
         return;
     }
@@ -3161,6 +3199,32 @@ void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
     }
 
     TryWriteTxs(ctx);
+}
+
+void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
+    TDuration kafkaTxnTimeout = TDuration::MilliSeconds(
+        AppData()->KafkaProxyConfig.GetTransactionTimeoutMs() + KAFKA_TRANSACTION_DELETE_DELAY_MS);
+
+    auto txnExpired = [kafkaTxnTimeout](const TTxWriteInfo& txWriteInfo) {
+        return txWriteInfo.KafkaTransaction && txWriteInfo.CreatedAt + kafkaTxnTimeout < TAppData::TimeProvider->Now();
+    };
+
+    for (auto& pair : TxWrites) {
+        if (txnExpired(pair.second)) {
+            PQ_LOG_D("Transaction for Kafka producer " << pair.first.KafkaProducerInstanceId << " is expired");
+            BeginDeletePartitions(pair.second);
+        }
+    }
+}
+
+void TPersQueue::TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TActorContext& ctx) {
+    if (writeId.Defined() && writeId->IsKafkaApiTransaction()) {
+        auto it = KafkaNextTransactionRequests.find(writeId->KafkaProducerInstanceId);
+        if (it != KafkaNextTransactionRequests.end()) {
+            Handle(it->second, ctx);
+            KafkaNextTransactionRequests.erase(it);
+        }
+    }
 }
 
 void TPersQueue::SetTxCounters()
@@ -3242,11 +3306,30 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
                                        const TWriteId& writeId) const
 {
-    TPartitionId partitionId(operation.GetPartitionId(),
-                             writeId,
-                             operation.GetSupportivePartition());
+    TPartitionId partitionId;
+    if (operation.GetKafkaTransaction()) {
+        auto txWriteInfoIt = TxWrites.find(writeId);
+        if (txWriteInfoIt == TxWrites.end()) {
+            return false;
+        }
+        auto it = txWriteInfoIt->second.Partitions.find(operation.GetPartitionId());
+        if (it == txWriteInfoIt->second.Partitions.end()) {
+            return false;
+        } else {
+            partitionId = it->second;
+        }
+    } else {
+        partitionId = TPartitionId{operation.GetPartitionId(),
+                                 writeId,
+                                 operation.GetSupportivePartition()};
+    }
     PQ_LOG_D("PartitionId " << partitionId << " for WriteId " << writeId);
     return Partitions.contains(partitionId);
+}
+
+static bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation) {
+    bool isRead = operation.HasCommitOffsetsBegin() || (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd());
+    return !isRead;
 }
 
 bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const
@@ -3258,11 +3341,7 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
     const TWriteId writeId = GetWriteId(txBody);
 
     for (auto& operation : txBody.GetOperations()) {
-        auto isWrite = [](const NKikimrPQ::TPartitionOperation& o) {
-            return !o.HasCommitOffsetsBegin();
-        };
-
-        if (isWrite(operation)) {
+        if (IsWriteTxOperation(operation)) {
             if (!CheckTxWriteOperation(operation, writeId)) {
                 return false;
             }
@@ -3900,14 +3979,23 @@ void TPersQueue::SavePlanStep(NKikimrPQ::TTabletTxInfo& info)
 
 void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
 {
+    auto setKafkaTxnTimeout = [](const TTxWriteInfo& txWriteInfo, NKikimrPQ::TTabletTxInfo::TTxWriteInfo& infoToPersist) {
+        if (txWriteInfo.KafkaTransaction) {
+            infoToPersist.SetKafkaTransaction(true);
+            infoToPersist.SetCreatedAt(txWriteInfo.CreatedAt.MilliSeconds());
+        }
+    };
+
     for (auto& [writeId, write] : TxWrites) {
         if (write.Partitions.empty()) {
             auto* txWrite = info.MutableTxWrites()->Add();
             SetWriteId(*txWrite, writeId);
+            setKafkaTxnTimeout(write, *txWrite);
         } else {
             for (auto [partitionId, shadowPartitionId] : write.Partitions) {
                 auto* txWrite = info.MutableTxWrites()->Add();
                 SetWriteId(*txWrite, writeId);
+                setKafkaTxnTimeout(write, *txWrite);
                 txWrite->SetOriginalPartitionId(partitionId);
                 txWrite->SetInternalPartitionId(shadowPartitionId.InternalPartitionId);
             }
@@ -3997,7 +4085,7 @@ TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransacti
 {
     auto hasWriteOperation = [](const auto& txBody) {
         for (const auto& o : txBody.GetOperations()) {
-            if (!o.HasCommitOffsetsBegin()) {
+            if (IsWriteTxOperation(o)) {
                 return true;
             }
         }
@@ -4057,6 +4145,9 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                                 operation.HasKillReadSession() ? operation.GetKillReadSession() : false,
                                 operation.HasOnlyCheckCommitedToFinish() ? operation.GetOnlyCheckCommitedToFinish() : false,
                                 operation.HasReadSessionId() ? operation.GetReadSessionId() : "");
+        }
+        if (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd()) {
+            event->AddKafkaOffsetCommitOperation(operation.GetConsumer(), operation.GetCommitOffsetsEnd());
         }
     }
 
@@ -4546,7 +4637,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
     case NKikimrPQ::TTransaction::DELETING:
         // The PQ tablet has persisted its state. Now she can delete the transaction and take the next one.
-        DeleteWriteId(tx.WriteId);
+        TMaybe<TWriteId> writeId = tx.WriteId; // copy writeId to save for kafka transaction after erase
+        DeleteWriteId(writeId);
         PQ_LOG_D("delete TxId " << tx.TxId);
         Txs.erase(tx.TxId);
         SetTxInFlyCounter();
@@ -4554,6 +4646,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         // If this was the last transaction, then you need to send responses to messages about changes
         // in the status of the PQ tablet (if they came)
         TryReturnTabletStateAll(ctx);
+
+        TryContinueKafkaWrites(writeId, ctx);
         break;
     }
 }
@@ -5128,6 +5222,7 @@ void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorCo
     const TPartitionInfo& partition = p->second;
     ctx.Send(partition.Actor, new TEvents::TEvPoisonPill());
 
+    PQ_LOG_D("DeletePartition " << partitionId);
     Partitions.erase(partitionId);
 }
 
@@ -5152,13 +5247,17 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
 
     writeInfo.Partitions.erase(partitionId.OriginalPartitionId);
     if (writeInfo.Partitions.empty()) {
-        UnsubscribeWriteId(writeId, ctx);
+        if (!writeInfo.KafkaTransaction) {
+            UnsubscribeWriteId(writeId, ctx);
+        }
         if (writeInfo.TxId.Defined()) {
             if (auto tx = GetTransaction(ctx, *writeInfo.TxId); tx) {
                 if (tx->State == NKikimrPQ::TTransaction::WAIT_RS_ACKS) {
                     TryExecuteTxs(ctx, *tx);
                 }
             }
+        } else if (writeInfo.KafkaTransaction) { // case when kafka transaction haven't even started in KQP, but data for it was already written in partition
+            DeleteWriteId(writeId);
         }
     }
     TxWritesChanged = true;

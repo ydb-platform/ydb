@@ -59,6 +59,11 @@
         ]
     },
     {
+        "Name": "TDqPhyBlockHashJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyBlockHashJoin"}
+    },
+    {
         "Name": "TDqPhyMapJoin",
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"}
@@ -168,7 +173,9 @@
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnHashShuffle"},
         "Children": [
-            {"Index": 1, "Name": "KeyColumns", "Type": "TCoAtomList"}
+            {"Index": 1, "Name": "KeyColumns", "Type": "TCoAtomList"},
+            {"Index": 2, "Name": "UseSpilling", "Type": "TCoAtom", "Optional": true},
+            {"Index": 3, "Name": "HashFunc", "Type": "TCoAtom", "Optional": true}
         ]
     },
     {
@@ -180,6 +187,11 @@
         "Name": "TDqCnUnionAll",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnUnionAll"}
+    },
+    {
+        "Name": "TDqCnParallelUnionAll",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnParallelUnionAll"}
     },
     {
         "Name": "TDqCnMap",
@@ -200,7 +212,8 @@
             {"Index": 7, "Name": "RightJoinKeyNames", "Type": "TCoAtomList"},
             {"Index": 8, "Name": "TTL", "Type": "TCoAtom"},
             {"Index": 9, "Name": "MaxDelayedRows", "Type": "TCoAtom"},
-            {"Index": 10, "Name": "MaxCachedRows", "Type": "TCoAtom"}
+            {"Index": 10, "Name": "MaxCachedRows", "Type": "TCoAtom"},
+            {"Index": 11, "Name": "IsMultiget", "Type": "TCoAtom", "Optional": true}
         ]
     },
     {

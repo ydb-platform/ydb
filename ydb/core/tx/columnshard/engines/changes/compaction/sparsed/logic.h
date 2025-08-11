@@ -44,7 +44,7 @@ private:
         std::optional<ui32> GlobalResultOffset;
         const TSourceReverseRemap* RemapToGlobalResult = nullptr;
         ui32 ScanIndex = 0;
-        void MoveToSignificant(const std::optional<ui32> lowerBound = std::nullopt);
+        [[nodiscard]] bool MoveToSignificant(const std::optional<ui32> lowerBound = std::nullopt);
 
     public:
         ui32 GetCursorIdx() const {
@@ -79,8 +79,7 @@ private:
 
         bool Next() {
             ++ScanIndex;
-            MoveToSignificant();
-            return IsValid();
+            return MoveToSignificant();
         }
 
         bool AddIndexTo(TWriter& writer);

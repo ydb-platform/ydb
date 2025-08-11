@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
@@ -13,7 +14,6 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/library/actors/http/http_proxy.h>
-
 #include <yql/essentials/public/issue/yql_issue_utils.h>
 
 #include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
@@ -71,6 +71,16 @@ namespace NKikimr::NKqp {
         return NYql::IHTTPGateway::Make(&httpGatewayConfig, httpGatewayGroup);
     }
 
+    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const NYql::TPqGatewayConfig& pqGatewayConfig) {
+        NYql::TPqGatewayServices pqServices(
+            *driver,
+            nullptr,
+            nullptr,
+            std::make_shared<NYql::TPqGatewayConfig>(pqGatewayConfig),
+            nullptr);
+        return CreatePqNativeGateway(pqServices);
+    }
+
     NYql::THttpGatewayConfig DefaultHttpGatewayConfig() {
         NYql::THttpGatewayConfig config;
         config.SetMaxInFlightCount(2000);
@@ -118,6 +128,14 @@ namespace NKikimr::NKqp {
         YtGatewayConfig = queryServiceConfig.GetYt();
         YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
         DqTaskTransformFactory = NYql::CreateYtDqTaskTransformFactory(true);
+
+        ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+        NYdb::TDriverConfig cfg;
+        cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
+        Driver = std::make_shared<NYdb::TDriver>(cfg);
+
+        PqGatewayConfig = NYql::TPqGatewayConfig{};
+        PqGateway = MakePqGateway(Driver, NYql::TPqGatewayConfig{});
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -175,7 +193,11 @@ namespace NKikimr::NKqp {
             SolomonGateway,
             nullptr,
             S3ReadActorFactoryConfig,
-            DqTaskTransformFactory};
+            DqTaskTransformFactory,
+            PqGatewayConfig,
+            PqGateway,
+            ActorSystemPtr,
+            Driver};
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&
@@ -270,4 +292,39 @@ namespace NKikimr::NKqp {
         return issues;
     }
 
+    NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TString& endpoint,
+        const TString& database,
+        bool useTls,
+        const TString& structuredTokenJson,
+        const TString& path) {
+
+        if (!federatedQuerySetup || !federatedQuerySetup->Driver) {
+            return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing()); 
+        }
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
+        auto driver = federatedQuerySetup->Driver;
+
+        NYdb::TCommonClientSettings opts;
+        opts
+            .DiscoveryEndpoint(endpoint)
+            .Database(database)
+            .SslCredentials(NYdb::TSslCredentials(useTls))
+            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+            .CredentialsProviderFactory(credentialsProviderFactory);
+        auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
+
+        return schemeClient->DescribePath(path)
+            .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), p = path, sc = schemeClient, database, endpoint](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
+                auto describePathResult = result.GetValue();
+                if (!describePathResult.IsSuccess()) {
+                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed: " << describePathResult.GetIssues().ToString());
+                    return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing());
+                }
+                NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();
+                return NThreading::MakeFuture<TGetSchemeEntryResult>(entry.Type);
+            });
+    };
+    
 }  // namespace NKikimr::NKqp

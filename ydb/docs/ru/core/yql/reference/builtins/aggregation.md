@@ -12,7 +12,7 @@ COUNT(T?)->Uint64
 
 Подсчет количества строк в строковой или колоночной таблице (если в качестве аргумента указана `*` или константа) или непустых значений в столбце таблицы (если в качестве аргумента указано имя столбца).
 
-Как и другие агрегатные функции, может использоваться в сочетании с [GROUP BY](../syntax/group_by.md) для получения статистики по частям таблицы, соответствующим значениям в столбцах, по которым идет группировка. {% if select_statement != "SELECT STREAM" %}А модификатор [DISTINCT](../syntax/group_by.md#distinct) позволяет посчитать число уникальных значений.{% endif %}
+Как и другие агрегатные функции, может использоваться в сочетании с [GROUP BY](../syntax/select/group-by.md) для получения статистики по частям таблицы, соответствующим значениям в столбцах, по которым идет группировка. {% if select_statement != "SELECT STREAM" %}А модификатор [DISTINCT](../syntax/select/group-by.md#distinct) позволяет посчитать число уникальных значений.{% endif %}
 
 ### Примеры
 
@@ -113,13 +113,20 @@ COUNT_IF(Bool?)->Uint64?
 ```yql
 SELECT
   COUNT_IF(value % 2 == 1) AS odd_count
+FROM my_table;
 ```
 
 {% if select_statement != "SELECT STREAM" %}
 
 {% note info %}
 
-Если нужно посчитать число уникальных значений на строках, где выполняется условие, то в отличие от остальных агрегатных функций модификатор [DISTINCT](../syntax/group_by.md#distinct) тут не поможет, так как в аргументах нет никаких значений. Для получения данного результата, стоит воспользоваться в подзапросе встроенной функцией [IF](basic.md#if) с двумя аргументами (чтобы в else получился `NULL`), а снаружи сделать [COUNT(DISTINCT ...)](#count) по её результату.
+Если нужно посчитать число уникальных значений на строках, где выполняется условие, то в отличие от остальных агрегатных функций модификатор [DISTINCT](../syntax/select/group-by.md#distinct) тут не поможет, так как в аргументах нет никаких значений. Для получения данного результата можно использовать запрос следующего вида:
+
+```yql
+SELECT
+    COUNT(DISTINCT IF(value % 2 == 1, value))
+FROM my_table;
+```
 
 {% endnote %}
 
@@ -245,7 +252,7 @@ AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
 
 Чтобы получить список нескольких значений с одной строки, важно *НЕ* использовать функцию `AGGREGATE_LIST` несколько раз, а сложить все нужные значения в контейнер, например через [AsList](basic.md#aslist) или [AsTuple](basic.md#astuple) и передать этот контейнер в один вызов `AGGREGATE_LIST`.
 
-Например, можно использовать в сочетании с `DISTINCT` и функцией [String::JoinFromList](../udf/list/string.md) (аналог `','.join(list)` из Python) для распечатки в строку всех значений, которые встретились в столбце после применения [GROUP BY](../syntax/group_by.md).
+Например, можно использовать в сочетании с `DISTINCT` и функцией [String::JoinFromList](../udf/list/string.md) (аналог `','.join(list)` из Python) для распечатки в строку всех значений, которые встретились в столбце после применения [GROUP BY](../syntax/select/group-by.md).
 
 ### Примеры
 
@@ -621,7 +628,7 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 ### Если нужна точная гистограмма
 
 1. Можно воспользоваться описанными ниже агрегатными функциями с фиксированными сетками корзин: [LinearHistogram](#linearhistogram) или [LogarithmicHistogram](#linearhistogram).
-2. Можно самостоятельно вычислить номер корзины для каждой строки и сделать по нему [GROUP BY](../syntax/group_by.md).
+2. Можно самостоятельно вычислить номер корзины для каждой строки и сделать по нему [GROUP BY](../syntax/select/group-by.md).
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и веса.
 
@@ -782,10 +789,10 @@ FROM my_table;
 
   ## SessionStart {#session-start}
 
-Без аргументов. Допускается только при наличии [SessionWindow](../syntax/group_by.md#session-window) в
-[GROUP BY](../syntax/group_by.md) / [PARTITION BY](../syntax/window.md#partition).
+Без аргументов. Допускается только при наличии [SessionWindow](../syntax/select/group-by.md#session-window) в
+[GROUP BY](../syntax/select/group-by.md) / [PARTITION BY](../syntax/select/window.md#partition).
 Возвращает значение ключевой колонки `SessionWindow`. В случае `SessionWindow` с двумя аргументами – минимальное значение первого аргумента внутри группы/раздела.
-В случае раширенного варианта `SessionWindoow` – значение второго элемента кортежа, возвращаемого `<calculate_lambda>`, при котором первый элемент кортежа равен `True`.
+В случае расширенного варианта `SessionWindow` – значение второго элемента кортежа, возвращаемого `<calculate_lambda>`, при котором первый элемент кортежа равен `True`.
 
 
 {% endif %}

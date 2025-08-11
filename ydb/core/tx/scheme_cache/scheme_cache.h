@@ -147,6 +147,14 @@ private:
 
 }; // TDomainInfo
 
+enum class ETableKind {
+    KindUnknown = 0,
+    KindRegularTable = 1,
+    KindSyncIndexTable = 2,
+    KindAsyncIndexTable = 3,
+    KindVectorIndexTable = 4,
+};
+
 struct TSchemeCacheNavigate {
     enum class EStatus {
         Unknown = 0,
@@ -316,6 +324,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TBackupCollectionDescription Description;
     };
 
+    struct TSysViewInfo : public TAtomicRefCount<TSysViewInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TSysViewDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -350,6 +363,7 @@ struct TSchemeCacheNavigate {
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
+        ETableKind TableKind = ETableKind::KindUnknown;
 
         // other
         TIntrusiveConstPtr<TDomainDescription> DomainDescription;
@@ -370,6 +384,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TViewInfo> ViewInfo;
         TIntrusiveConstPtr<TResourcePoolInfo> ResourcePoolInfo;
         TIntrusiveConstPtr<TBackupCollectionInfo> BackupCollectionInfo;
+        TIntrusiveConstPtr<TSysViewInfo> SysViewInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
@@ -417,14 +432,6 @@ struct TSchemeCacheRequest {
         OpScheme = 1 << 3,
     };
 
-    enum EKind {
-        KindUnknown = 0,
-        KindRegularTable = 1,
-        KindSyncIndexTable = 2,
-        KindAsyncIndexTable = 3,
-        KindVectorIndexTable = 4,
-    };
-
     struct TEntry {
         // in
         THolder<TKeyDesc> KeyDescription;
@@ -434,7 +441,7 @@ struct TSchemeCacheRequest {
 
         // out
         EStatus Status = EStatus::Unknown;
-        EKind Kind = EKind::KindUnknown;
+        ETableKind Kind = ETableKind::KindUnknown;
         TIntrusivePtr<TDomainInfo> DomainInfo;
         ui64 GeneralVersion = 0;
 
@@ -461,40 +468,6 @@ struct TSchemeCacheRequest {
     TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
 
 }; // TSchemeCacheRequest
-
-struct TSchemeCacheRequestContext : TAtomicRefCount<TSchemeCacheRequestContext>, TNonCopyable {
-    TActorId Sender;
-    ui64 Cookie;
-    ui64 WaitCounter;
-    TAutoPtr<TSchemeCacheRequest> Request;
-    const TInstant CreatedAt;
-    TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
-
-    TSchemeCacheRequestContext(const TActorId& sender, ui64 cookie, TAutoPtr<TSchemeCacheRequest> request, const TInstant& now = TInstant::Now())
-        : Sender(sender)
-        , Cookie(cookie)
-        , WaitCounter(0)
-        , Request(request)
-        , CreatedAt(now)
-    {}
-};
-
-struct TSchemeCacheNavigateContext : TAtomicRefCount<TSchemeCacheNavigateContext>, TNonCopyable {
-    TActorId Sender;
-    ui64 Cookie;
-    ui64 WaitCounter;
-    TAutoPtr<TSchemeCacheNavigate> Request;
-    const TInstant CreatedAt;
-    TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
-
-    TSchemeCacheNavigateContext(const TActorId& sender, ui64 cookie, TAutoPtr<TSchemeCacheNavigate> request, const TInstant& now = TInstant::Now())
-        : Sender(sender)
-        , Cookie(cookie)
-        , WaitCounter(0)
-        , Request(request)
-        , CreatedAt(now)
-    {}
-};
 
 class TDescribeResult
     : public TAtomicRefCount<TDescribeResult>

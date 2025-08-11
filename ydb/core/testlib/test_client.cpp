@@ -127,8 +127,12 @@
 #include <ydb/services/ext_index/service/executor.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
@@ -440,7 +444,18 @@ namespace Tests {
             return;
         }
 
-        Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
+        const auto nodeCount = StaticNodes() + DynamicNodes();
+
+        if (Settings->AuditLogBackendLines) {
+            Runtime = MakeHolder<TTestBasicRuntime>(nodeCount,
+                                                    Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
+                                                    Settings->UseRealThreads,
+                                                    CreateTestAuditLogBackends(*Settings->AuditLogBackendLines));
+        } else {
+            Runtime = MakeHolder<TTestBasicRuntime>(nodeCount,
+                                                    Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
+                                                    Settings->UseRealThreads);
+        }
 
         if (init) {
             Initialize();
@@ -542,6 +557,10 @@ namespace Tests {
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
             appData.WorkloadManagerConfig.MergeFrom(Settings->AppConfig->GetWorkloadManagerConfig());
             appData.QueryServiceConfig.MergeFrom(Settings->AppConfig->GetQueryServiceConfig());
+            appData.BridgeConfig.MergeFrom(Settings->BridgeConfig);
+            if (appData.BridgeConfig.PilesSize() > 0) {
+                appData.BridgeModeEnabled = true;
+            }
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -550,7 +569,7 @@ namespace Tests {
             dnConfig->MaxDynamicNodeId = 1024 + 100;
         });
 
-        const bool mockDisk = (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode;
+        const bool mockDisk = ((StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode) || !Settings->EnableStorage;
         if (!Settings->AppConfig->HasSharedCacheConfig()) {
             Settings->AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(32_MB);
         }
@@ -584,8 +603,25 @@ namespace Tests {
             SetupProxies(nodeIdx);
         }
 
+        // Create Observer to catch an event of system views update finished.
+        // This doesn't apply in case when UseRealThreads flag is enabled
+        // because we can't catch events from other threads
+        if (GetSettings().FeatureFlags.GetEnableRealSystemViewPaths()) {
+            AddSysViewsRosterUpdateObserver();
+        }
+
         CreateBootstrapTablets();
-        SetupStorage();
+
+        // Wait until schemeshard completes creating system view paths,
+        // otherwise these transactions may destabilize invariants used in tests
+        // (e.g. PathIds values of paths created in tests, general database path count etc.).
+        if (GetSettings().FeatureFlags.GetEnableRealSystemViewPaths()) {
+            WaitForSysViewsRosterUpdate();
+        }
+
+        if (Settings->EnableStorage) {
+            SetupStorage();
+        }
     }
 
     void TServer::SetupActorSystemConfig() {
@@ -628,11 +664,7 @@ namespace Tests {
     }
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId, const std::optional<TString>& tenant) {
-        auto* grpcInfo = &RootGRpc;
-        if (tenant) {
-            grpcInfo = &TenantsGRpc[*tenant];
-        }
-
+        auto* grpcInfo = &TenantsGRpc[tenant ? *tenant : Settings->DomainName][grpcServiceNodeId];
         grpcInfo->GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = grpcInfo->GRpcServerRootCounters;
 
@@ -679,7 +711,7 @@ namespace Tests {
                 if (const auto& domain = appData.DomainsInfo->Domain) {
                     rootDomains.emplace_back("/" + domain->Name);
                 }
-                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());    
+                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
             } else {
                 desc->ServedDatabases.emplace_back(CanonizePath(*tenant));
             }
@@ -1157,29 +1189,29 @@ namespace Tests {
             Runtime->RegisterService(NCSIndex::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(NOlap::NGroupedMemoryManager::TConfig(), new ::NMonitoring::TDynamicCounters());
+            auto* actor = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(NOlap::NGroupedMemoryManager::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NPrioritiesQueue::TCompServiceOperator::CreateService(NPrioritiesQueue::TConfig(), new ::NMonitoring::TDynamicCounters());
+            auto* actor = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::CreateService(NOlap::NGroupedMemoryManager::TConfig(), appData.Counters);
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
+        {
+            auto* actor = NPrioritiesQueue::TCompServiceOperator::CreateService(NPrioritiesQueue::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NPrioritiesQueue::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
+            auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyor::TCompServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
+            auto* actor = NConveyorComposite::TServiceOperator::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConveyor::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
-        }
-        {
-            auto* actor = NConveyor::TInsertServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConveyor::TInsertServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+            Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
@@ -1284,6 +1316,7 @@ namespace Tests {
                         );
                     }
                 }
+                auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1298,8 +1331,11 @@ namespace Tests {
                     Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
                     Settings->ComputationFactory,
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
-                    Settings->DqTaskTransformFactory
-                );
+                    Settings->DqTaskTransformFactory,
+                    NYql::TPqGatewayConfig{},
+                    Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+                    std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr),
+                    driver);
             }
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
@@ -1312,7 +1348,10 @@ namespace Tests {
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
 
             IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(
-                Settings->AppConfig->GetQueryServiceConfig(), federatedQuerySetupFactory, Settings->S3ActorsFactory
+                Settings->AppConfig->GetQueryServiceConfig(),
+                federatedQuerySetupFactory,
+                Settings->S3ActorsFactory,
+                Settings->EnableScriptExecutionBackgroundChecks
             );
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
@@ -1450,9 +1489,9 @@ namespace Tests {
             IActor* discoveryCache = CreateDiscoveryCache(NGRpcService::KafkaEndpointId);
             TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
-            
+
             TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateTransactionsCoordinator(), nodeIdx, userPoolId);
-            Runtime->RegisterService(NKafka::MakeTransactionsServiceID(), kafkaTxnCoordinatorActorId, nodeIdx);
+            Runtime->RegisterService(NKafka::MakeTransactionsServiceID(Runtime->GetNodeId(nodeIdx)), kafkaTxnCoordinatorActorId, nodeIdx);
 
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();
@@ -1647,6 +1686,24 @@ namespace Tests {
         }
     }
 
+    void TServer::AddSysViewsRosterUpdateObserver() {
+        if (Runtime && !Runtime->IsRealThreads()) {
+            SysViewsRosterUpdateFinished = false;
+            SysViewsRosterUpdateObserver = Runtime->AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
+                SysViewsRosterUpdateFinished = true;
+            });
+        }
+    }
+
+    void TServer::WaitForSysViewsRosterUpdate() {
+        if (Runtime && !Runtime->IsRealThreads()) {
+            Runtime->WaitFor("SysViewsRoster update finished", [this] {
+                return SysViewsRosterUpdateFinished;
+            });
+            SysViewsRosterUpdateObserver.Remove();
+        }
+    }
+
     void TServer::StartDummyTablets() {
         if (!Runtime)
             ythrow TWithBackTrace<yexception>() << "Server is redirected";
@@ -1677,15 +1734,16 @@ namespace Tests {
     }
 
     const NYdbGrpc::TGRpcServer& TServer::GetGRpcServer() const {
-        Y_ABORT_UNLESS(RootGRpc.GRpcServer);
-        return *RootGRpc.GRpcServer;
+        return GetTenantGRpcServer(Settings->DomainName);
     }
 
     const NYdbGrpc::TGRpcServer& TServer::GetTenantGRpcServer(const TString& tenant) const {
-        const auto it = TenantsGRpc.find(tenant);
-        Y_ABORT_UNLESS(it != TenantsGRpc.end());
-        Y_ABORT_UNLESS(it->second.GRpcServer);
-        return *it->second.GRpcServer;
+        const auto tenantIt = TenantsGRpc.find(tenant);
+        Y_ABORT_UNLESS(tenantIt != TenantsGRpc.end());
+        const auto& nodesGRpc = tenantIt->second;
+        Y_ABORT_UNLESS(!nodesGRpc.empty());
+        Y_ABORT_UNLESS(nodesGRpc.begin()->second.GRpcServer);
+        return *nodesGRpc.begin()->second.GRpcServer;
     }
 
     void TServer::WaitFinalization() {
@@ -1705,6 +1763,7 @@ namespace Tests {
 
         if (Runtime) {
             WaitFinalization();
+            SysViewsRosterUpdateObserver.Remove();
             Runtime.Destroy();
         }
 
@@ -2713,9 +2772,10 @@ namespace Tests {
         return res;
     }
 
-    NKikimrScheme::TEvDescribeSchemeResult TClient::Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId) {
+    NKikimrScheme::TEvDescribeSchemeResult TClient::Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId, bool showPrivateTable) {
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
         request->Record.SetPath(path);
+        request->Record.MutableOptions()->SetShowPrivateTable(showPrivateTable);
         const ui64 schemeRoot = GetPatchedSchemeRoot(tabletId, Domain, SupportsRedirect);
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, schemeRoot, sender, request.Release(), 0);

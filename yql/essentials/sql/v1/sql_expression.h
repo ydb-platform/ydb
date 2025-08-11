@@ -25,11 +25,11 @@ public:
     TNodePtr Build(const TRule_lambda_or_parameter& node);
 
     void SetSmartParenthesisMode(ESmartParenthesis mode) {
-        SmartParenthesisMode = mode;
+        SmartParenthesisMode_ = mode;
     }
 
     void MarkAsNamed() {
-        MaybeUnnamedSmartParenOnTop = false;
+        MaybeUnnamedSmartParenOnTop_ = false;
     }
 
     TMaybe<TExprOrIdent> LiteralExpr(const TRule_literal_value& node);
@@ -77,7 +77,7 @@ private:
     bool SqlLambdaExprBody(TContext& ctx, const TRule_expr& node, TVector<TNodePtr>& exprSeq);
 
     TNodePtr KeyExpr(const TRule_key_expr& node) {
-        TSqlExpression expr(Ctx, Mode);
+        TSqlExpression expr(Ctx_, Mode_);
         return expr.Build(node.GetRule_expr2());
     }
 
@@ -124,15 +124,15 @@ private:
 
     void UnexpectedQuestionToken(const TTrailingQuestions& tail) {
         YQL_ENSURE(tail.Count > 0);
-        Ctx.Error(tail.Pos) << "Unexpected token '?' at the end of expression";
+        Ctx_.Error(tail.Pos) << "Unexpected token '?' at the end of expression";
     }
 
     TNodePtr SmartParenthesis(const TRule_smart_parenthesis& node);
 
-    ESmartParenthesis SmartParenthesisMode = ESmartParenthesis::Default;
-    bool MaybeUnnamedSmartParenOnTop = true;
+    ESmartParenthesis SmartParenthesisMode_ = ESmartParenthesis::Default;
+    bool MaybeUnnamedSmartParenOnTop_ = true;
 
-    THashMap<TString, TNodePtr> ExprShortcuts;
+    THashMap<TString, TNodePtr> ExprShortcuts_;
 };
 
 bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlExpression& ctx, TChangefeedSettings& settings, bool alter);

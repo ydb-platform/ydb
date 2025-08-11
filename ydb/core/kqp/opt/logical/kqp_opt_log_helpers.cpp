@@ -67,7 +67,8 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableBase read, TExprCon
         return {};
     }
 
-    if (!read.Table().SysView().Value().empty()) {
+    const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path().StringValue());
+    if (!read.Table().SysView().Value().empty() || mainTableDesc.Metadata->Kind == EKikimrTableKind::SysView) {
         // Can't lookup in system views
         return {};
     }
@@ -79,7 +80,6 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableBase read, TExprCon
         lookupTable = read.Table().Path().StringValue();
     }
     const auto& rightTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lookupTable);
-    const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path().StringValue());
 
     auto from = read.Range().From();
     auto to = read.Range().To();
@@ -149,7 +149,8 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableRangesBase read, TE
         return {};
     }
 
-    if (!read.Table().SysView().Value().empty()) {
+    const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path().StringValue());
+    if (!read.Table().SysView().Value().empty() || mainTableDesc.Metadata->Kind == EKikimrTableKind::SysView) {
         // Can't lookup in system views
         return {};
     }
@@ -176,7 +177,6 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableRangesBase read, TE
         prefixSize = prompt.PointPrefixLen;
 
         const auto& rightTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lookupTable);
-        const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path().StringValue());
 
         TMaybeNode<TExprBase> rowsExpr;
         TMaybeNode<TCoLambda> filter;
@@ -384,7 +384,7 @@ bool ExtractUsedFields(const TExprNode::TPtr& start, const TExprNode& arg, TSet<
 
         if (parent->IsCallable("Member")) {
             usedFields.emplace(parent->Tail().Content());
-        } else if (allowDependsOn && parent->IsCallable("DependsOn")) {
+        } else if (allowDependsOn && IsDependsOnUsage(*parent, parentsMap)) {
             continue;
         } else {
             // unknown node

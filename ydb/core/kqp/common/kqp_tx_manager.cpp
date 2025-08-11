@@ -51,6 +51,7 @@ public:
         if (action & EAction::WRITE) {
             ReadOnly = false;
         }
+        ++ActionsCount;
     }
 
     void AddTopic(ui64 topicId, const TString& path) override {
@@ -310,7 +311,8 @@ public:
     }
 
     bool NeedCommit() const override {
-        const bool dontNeedCommit = IsEmpty() || IsReadOnly() && (IsSingleShard() || HasSnapshot());
+        AFL_ENSURE(ActionsCount != 1 || IsSingleShard()); // ActionsCount == 1 then IsSingleShard()
+        const bool dontNeedCommit = IsEmpty() || (IsReadOnly() && ((ActionsCount == 1) || HasSnapshot()));
         return !dontNeedCommit;
     }
 
@@ -515,6 +517,7 @@ private:
     THashSet<ui64> ShardsIds;
     THashMap<ui64, TShardInfo> ShardsInfo;
     std::unordered_set<TString> TablePathes;
+    ui64 ActionsCount = 0;
 
     THashSet<ui32> ParticipantNodes;
 

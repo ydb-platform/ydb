@@ -146,9 +146,33 @@ public:
 
         virtual EBlobState GetBlobState(const TSubgroupPartLayout& parts, const TSubgroupVDisks& failedDisks) const = 0;
 
+        // check recoverability of the blob based only on presense of different parts without checking the layout
+        virtual EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+                const TSubgroupVDisks& failedDisks) const = 0;
+
         // check if we need to resurrect something; returns bit mask of parts needed for specified disk in group,
         // nth bit represents nth part; all returned parts are suitable for this particular disk
         virtual ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const = 0;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // BLOB PART DATA INTEGRITY CHECKER
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    struct IDataIntegrityChecker {
+        virtual ~IDataIntegrityChecker() = default;
+
+        using TPart = std::pair<ui32, TRope>;
+
+        struct TPartsData {
+            std::vector<std::vector<TPart>> Parts; // partId - 1 -> [ {diskIdx; data} ]
+        };
+
+        struct TPartsState {
+            bool IsOk = true;
+            TString DataInfo;
+        };
+
+        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -194,6 +218,8 @@ public:
         std::unique_ptr<IQuorumChecker> QuorumChecker;
         // map to quickly get (Short)VDisk id from its order number inside the group
         TVector<TVDiskIdShort> VDiskIdForOrderNumber;
+        // data integrity checker
+        std::unique_ptr<IDataIntegrityChecker> DataIntegrityChecker;
 
         TTopology(TBlobStorageGroupType gtype);
         TTopology(TBlobStorageGroupType gtype, ui32 numFailRealms, ui32 numFailDomainsPerFailRealm, ui32 numVDisksPerFailDomain,
@@ -232,6 +258,8 @@ public:
         ui32 GetNumFailDomainsPerFailRealm() const { return FailRealms[0].FailDomains.size(); }
         // get quorum checker
         const IQuorumChecker& GetQuorumChecker() const { return *QuorumChecker; }
+        // get data integrity checker
+        const IDataIntegrityChecker& GetDataIntegrityChecker() const { return *DataIntegrityChecker; }
 
         //////////////////////////////////////////////////////////////////////////////////////
         // IBlobToDiskMapper interface
@@ -273,6 +301,7 @@ public:
     private:
         static IBlobToDiskMapper *CreateMapper(TBlobStorageGroupType gtype, const TTopology *topology);
         static IQuorumChecker *CreateQuorumChecker(const TTopology *topology);
+        static IDataIntegrityChecker *CreateDataIntegrityChecker(const TTopology *topology);
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -306,18 +335,26 @@ public:
     const TCypherKey* GetCypherKey() const { return &Key; }
     std::shared_ptr<TTopology> PickTopology() const { return Topology; }
 
+    const std::vector<TGroupId>& GetBridgeGroupIds() const { return BridgeGroupIds; }
+    bool IsBridged() const { return !BridgeGroupIds.empty(); }
+    std::optional<TGroupId> GetBridgeProxyGroupId() const { return BridgeProxyGroupId; }
+    TBridgePileId GetBridgePileId() const { return BridgePileId; }
+
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
     explicit TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain = 1,
             ui32 numFailDomains = 0, ui32 numFailRealms = 1, const TVector<TActorId> *vdiskIds = nullptr,
             EEncryptionMode encryptionMode = EEM_ENC_V1, ELifeCyclePhase lifeCyclePhase = ELCP_IN_USE,
-            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8), TGroupId groupId = TGroupId::Zero());
+            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8), TGroupId groupId = TGroupId::Zero(),
+            ui32 groupSizeInUnits = 0u);
 
     TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& rti, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType);
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType,
+        ui32 groupSizeInUnits = 0u);
 
     TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& rti, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope = {}, NPDisk::EDeviceType deviceType = NPDisk::DEVICE_TYPE_UNKNOWN);
+        TMaybe<TKikimrScopeId> acceptedScope = {}, NPDisk::EDeviceType deviceType = NPDisk::DEVICE_TYPE_UNKNOWN,
+        ui32 groupSizeInUnits = 0u);
 
     TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TVDiskID& vdiskId, const TActorId& actorId);
 
@@ -420,6 +457,8 @@ public:
     const ui32 GroupGeneration;
     // erasure primarily
     const TBlobStorageGroupType Type;
+    // the size to match PDisk.SlotSizeInUnits
+    ui32 GroupSizeInUnits;
     // virtual group BlobDepot tablet id
     std::optional<ui64> BlobDepotId;
     // assimilating group id
@@ -443,6 +482,10 @@ private:
     TMaybe<TKikimrScopeId> AcceptedScope;
     TString StoragePoolName;
     NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
+    // bridge mode fields
+    std::vector<TGroupId> BridgeGroupIds;
+    std::optional<TGroupId> BridgeProxyGroupId;
+    TBridgePileId BridgePileId;
 };
 
 // physical fail domain description

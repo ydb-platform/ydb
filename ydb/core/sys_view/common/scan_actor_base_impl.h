@@ -1,11 +1,10 @@
 #pragma once
 
-#include "utils.h"
-
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
+#include <ydb/core/sys_view/common/utils.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/base/appdata.h>
 
@@ -18,6 +17,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
 namespace NKikimr {
@@ -28,11 +28,12 @@ class TScanActorBase : public TActorBootstrapped<TDerived> {
 public:
     using TBase = TActorBootstrapped<TDerived>;
 
-    TScanActorBase(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TScanActorBase(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : OwnerActorId(ownerId)
         , ScanId(scanId)
-        , TableId(tableId)
+        , SysViewInfo(sysViewInfo)
         , TableRange(tableRange)
         , Columns(columns.begin(), columns.end())
     {}
@@ -42,7 +43,7 @@ public:
             "Scan started, actor: " << TBase::SelfId()
                 << ", owner: " << OwnerActorId
                 << ", scan id: " << ScanId
-                << ", table id: " << TableId);
+                << ", sys view info: " << SysViewInfo.ShortDebugString());
 
         auto sysViewServiceId = MakeSysViewServiceID(TBase::SelfId().NodeId());
         TBase::Send(sysViewServiceId, new TEvSysView::TEvGetScanLimiter());
@@ -80,7 +81,7 @@ protected:
             "Got abort execution event, actor: " << TBase::SelfId()
                 << ", owner: " << OwnerActorId
                 << ", scan id: " << ScanId
-                << ", table id: " << TableId
+                << ", sys view info: " << SysViewInfo.ShortDebugString()
                 << ", code: " << NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())
                 << ", error: " << ev->Get()->GetIssues().ToOneLineString());
 
@@ -92,7 +93,7 @@ protected:
             "Scan error, actor: " << TBase::SelfId()
                 << ", owner: " << OwnerActorId
                 << ", scan id: " << ScanId
-                << ", table id: " << TableId
+                << ", sys view info: " << SysViewInfo.ShortDebugString()
                 << ", error: " << message);
 
         auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>();
@@ -117,7 +118,7 @@ protected:
             "Scan finished, actor: " << TBase::SelfId()
                 << ", owner: " << OwnerActorId
                 << ", scan id: " << ScanId
-                << ", table id: " << TableId);
+                << ", sys view info: " << SysViewInfo.ShortDebugString());
 
         if (AllowedByLimiter) {
             ScanLimiter->Dec();
@@ -259,7 +260,7 @@ private:
         request->ResultSet.push_back({});
         auto& entry = request->ResultSet.back();
 
-        entry.TableId = TTableId(TableId.PathId.OwnerId, TableId.PathId.LocalPathId); // domain or subdomain
+        entry.TableId = TPathId::FromProto(SysViewInfo.GetSourceObject());
         entry.Operation = TNavigate::EOp::OpPath;
         entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
 
@@ -366,7 +367,7 @@ protected:
 
     const NActors::TActorId OwnerActorId;
     const ui32 ScanId;
-    const TTableId TableId;
+    const NKikimrSysView::TSysViewDescription SysViewInfo;
     TSerializedTableRange TableRange;
     TSmallVec<NMiniKQL::TKqpComputeContextBase::TColumn> Columns;
 

@@ -4,7 +4,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 
 namespace NKikimr {
@@ -26,7 +26,7 @@ public:
     TPgTablesScanBase(
         const NActors::TActorId& ownerId,
         ui32 scanId,
-        const TTableId& tableId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TString& tablePath,
         const TTableRange& tableRange,
         const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
@@ -48,29 +48,35 @@ protected:
 
 class TPgTablesScan : public TPgTablesScanBase {
 public:
-    TPgTablesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TString& tablePath,
+    TPgTablesScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo, const TString& tablePath,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns);
 };
 class TInformationSchemaTablesScan : public TPgTablesScanBase {
 public:
-    TInformationSchemaTablesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TString& tablePath,
+    TInformationSchemaTablesScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo, const TString& tablePath,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns);
 };
 
 class TPgClassScan : public TPgTablesScanBase {
 public:
-    TPgClassScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TString& tablePath,
+    TPgClassScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo, const TString& tablePath,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns);
 private:
     THashMap<TString, ui32> namespaces;
     ui32 btreeAmOid;
 };
 
-THolder<NActors::IActor> CreatePgTablesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TString& tablePath,
+THolder<NActors::IActor> CreatePgTablesScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TString& tablePath,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns);
-THolder<NActors::IActor> CreateInformationSchemaTablesScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TString& tablePath,
+THolder<NActors::IActor> CreateInformationSchemaTablesScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TString& tablePath,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns);
-THolder<NActors::IActor> CreatePgClassScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TString& tablePath,
+THolder<NActors::IActor> CreatePgClassScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TString& tablePath,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns);
 
 

@@ -1979,9 +1979,20 @@
             ]
         },
         {
-            "Name": "TCoDependsOn",
+            "Name": "TCoDependsOnBase",
             "Base": "TCoInputBase",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"}
+        },
+        {
+            "Name": "TCoDependsOn",
+            "Base": "TCoDependsOnBase",
             "Match": {"Type": "Callable", "Name": "DependsOn"}
+        },
+        {
+            "Name": "TCoInnerDependsOn",
+            "Base": "TCoDependsOnBase",
+            "Match": {"Type": "Callable", "Name": "InnerDependsOn"}
         },
         {
             "Name": "TCoParameter",
@@ -2680,11 +2691,31 @@
             "ListBase": "TCoReplicationTarget"
         },
         {
-            "Name" : "TCoLikely",
+            "Name" : "TCoNoPushBase",
             "Base" : "TCallable",
-            "Match": {"Type": "Callable", "Name": "Likely"},
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
             "Children": [
                 {"Index": 0, "Name": "Predicate", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name" : "TCoNoPush",
+            "Base" : "TCoNoPushBase",
+            "Match": {"Type": "Callable", "Name": "NoPush"}
+        },
+        {
+            "Name" : "TCoLikely",
+            "Base" : "TCoNoPushBase",
+            "Match": {"Type": "Callable", "Name": "Likely"}
+        },
+        {
+            "Name" : "TCoUnessential",
+            "Base" : "TCallable",
+            "Match": {"Type": "Callable", "Name": "Unessential"},
+            "Children": [
+                {"Index": 0, "Name": "Predicate", "Type": "TExprBase"},
+                {"Index": 1, "Name": "AssumeAs", "Type": "TExprBase"}
             ]
         }
     ]

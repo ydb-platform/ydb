@@ -33,6 +33,7 @@ Available subcommands:
 * [fetch](cluster/fetch.md) - Fetches the current dynamic cluster configuration.
 * [generate](cluster/generate.md) - Generates dynamic configuration based on the static configuration on the cluster.
 * [replace](cluster/replace.md) - Replaces the dynamic configuration.
+* version - Show configuration version on nodes (V1/V2).
 
 ### Node Configuration {#node}
 

@@ -1,5 +1,5 @@
-/CHANGELOG.md @ydb-platform/changelog-reviewers
 /*.md @ydb-platform/docs
+/CHANGELOG.md @ydb-platform/changelog-reviewers
 
 /build @ydb-platform/ci
 /certs @ydb-platform/ci
@@ -34,10 +34,9 @@
 /ydb/library/yql/providers/solomon @ydb-platform/fq
 /ydb/library/yql/tests/sql/solomon @ydb-platform/fq
 /ydb/library/yql/tests/sql/suites/solomon @ydb-platform/fq
+/ydb/library/yql/tools/solomon_emulator @ydb-platform/fq
+/ydb/library/yql/tools/solomon_emulator_grpc @ydb-platform/fq
 /ydb/library/yql/udfs/common/clickhouse/client @ydb-platform/fq
-
-/ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
-
 /ydb/services/fq/ @ydb-platform/fq
 
 /ydb/core/kafka_proxy @ydb-platform/Topics
@@ -72,9 +71,21 @@
 /ydb/tests/functional/tenants/test_dynamic_tenants.py @ydb-platform/schemeshard
 /ydb/core/tx/tx_proxy/schemereq.cpp @ydb-platform/schemeshard
 
+/ydb/core/scheme @ydb-platform/datashard 
+/ydb/core/tablet_flat @ydb-platform/datashard
+/ydb/core/tx/datashard @ydb-platform/datashard
+/ydb/core/tx/coordinator @ydb-platform/datashard
+
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli
 /ydb/public/sdk/cpp @ydb-platform/cpp-sdk
+
+/ydb/core/security @ydb-platform/Security
+/ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
+/ydb/library/login @ydb-platform/Security
+/ydb/library/aclib @ydb-platform/Security
+/ydb/services/ydb/ydb_ldap_login_ut.cpp @ydb-platform/Security
+/ydb/services/ydb/ydb_register_node_ut.cpp @ydb-platform/Security

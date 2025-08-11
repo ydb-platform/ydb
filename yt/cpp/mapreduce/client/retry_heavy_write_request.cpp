@@ -67,7 +67,7 @@ void THeavyRequestRetrier::Retry(const std::function<void()> &function)
             function();
             return;
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("RSP %v - attempt %v failed",
+            YT_LOG_ERROR("RSP %v - %v failed",
                 Attempt_->RequestId,
                 RequestRetryPolicy_->GetAttemptDescription());
             Attempt_.reset();
@@ -89,6 +89,7 @@ void THeavyRequestRetrier::Retry(const std::function<void()> &function)
                 throw;
             }
             NDetail::TWaitProxy::Get()->Sleep(*backoffDuration);
+            RequestRetryPolicy_->NotifyNewAttempt();
         }
     }
 }

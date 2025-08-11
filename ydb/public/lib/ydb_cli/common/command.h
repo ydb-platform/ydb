@@ -3,6 +3,7 @@
 #include "common.h"
 #include "client_command_options.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
@@ -13,6 +14,7 @@
 #include <util/generic/vector.h>
 #include <util/charset/utf8.h>
 #include <util/string/type.h>
+#include <util/system/info.h>
 #include <string>
 
 namespace NYdb {
@@ -24,6 +26,8 @@ struct TCommandFlags {
 };
 
 class TClientCommand {
+protected:
+    TClientCommand() = default;
 public:
     static bool TIME_REQUESTS; // measure time of requests
     static bool PROGRESS_REQUESTS; // display progress of long requests
@@ -84,15 +88,8 @@ public:
             TArgSetting Max;
         };
 
-        enum EVerbosityLevel : ui32 {
-            NONE = 0,
-            WARN = 1,
-            INFO = 2,
-            DEBUG = 3,
-        };
-
-        static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);
-        static ELogPriority VerbosityLevelToELogPriorityChatty(EVerbosityLevel lvl);
+        static ELogPriority VerbosityLevelToELogPriority(ui32 lvl);
+        static ELogPriority VerbosityLevelToELogPriorityChatty(ui32 lvl);
 
         int ArgC;
         char** ArgV;
@@ -131,7 +128,7 @@ public:
         TString Oauth2KeyFile;
         TString Oauth2KeyParams;
 
-        EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
+        ui32 VerbosityLevel = 0;
         size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
 
         bool JsonUi64AsText = false;
@@ -171,8 +168,6 @@ public:
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
 
-        bool ThrowOnOptsParseError = false;
-
         TConfig(int argc, char** argv)
             : ArgC(argc)
             , ArgV(argv)
@@ -205,7 +200,7 @@ public:
         static size_t ParseHelpCommandVerbosilty(int argc, char** argv);
 
         bool IsVerbose() const {
-            return VerbosityLevel != EVerbosityLevel::NONE;
+            return VerbosityLevel > 0;
         }
 
         void SetFreeArgsMin(size_t value) {
@@ -268,7 +263,52 @@ public:
         void PrintHelpAndExit() {
             NLastGetopt::TOptsParser parser(&Opts->GetOpts(), ArgC, ArgV);
             parser.PrintUsage(Cerr);
-            throw TMisuseWithHelpException();
+            throw TNeedToExitWithCode(EXIT_FAILURE);
+        }
+
+        TDriverConfig CreateDriverConfig() {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(Address)
+                .SetDatabase(Database)
+                .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
+                .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
+        
+            if (EnableSsl) {
+                driverConfig.UseSecureConnection(CaCerts);
+            }
+        
+            if (IsNetworkIntensive) {
+                size_t networkThreadNum = GetNetworkThreadNum();
+                driverConfig.SetNetworkThreadsNum(networkThreadNum);
+            }
+        
+            if (SkipDiscovery) {
+                driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
+            }
+        
+            driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
+        
+            return driverConfig;
+        }
+
+        size_t GetNetworkThreadNum() {
+            if (IsNetworkIntensive) {
+                size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
+                if (cpuCount >= 64) {
+                    // doubtfully there is a reason to have more. Even this is too much.
+                    return 32;
+                } else if (cpuCount >= 32 && cpuCount < 64) {
+                    // leave the half of CPUs to the client's logic
+                    return cpuCount / 2;
+                } else if (cpuCount >= 16 && cpuCount < 32) {
+                    // Originally here we had a constant value 16.
+                    // To not break things this heuristic tries to use this constant as well.
+                    return 16;
+                } else {
+                    return std::min(size_t(2), cpuCount / 2);
+                }
+            }
+            return 1; // TODO: check default
         }
 
     private:
@@ -371,7 +411,8 @@ public:
         bool renderTree,
         const NColorizer::TColors& colors = NColorizer::TColors(false),
         RenderEntryType type = BEGIN,
-        TString prefix = {}
+        TString prefix = {},
+        bool shortForm = false
     );
 
     void Hide();
@@ -411,7 +452,8 @@ public:
         bool renderTree,
         const NColorizer::TColors& colors = NColorizer::TColors(false),
         RenderEntryType type = BEGIN,
-        TString prefix = {}
+        TString prefix = {},
+        bool shortForm = false
     ) override;
     virtual void SetFreeArgs(TConfig& config);
     bool HasSelectedCommand() const { return SelectedCommand; }

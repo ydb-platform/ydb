@@ -1,12 +1,12 @@
 Init tables ...
 --!syntax_v1
-CREATE EXTERNAL DATA SOURCE `/Root/db/Root/db/tpcds/s1_s3_external_source` WITH (
+CREATE EXTERNAL DATA SOURCE `/Root/db/tpcds/s1_s3_external_source` WITH (
     SOURCE_TYPE="ObjectStorage",
     LOCATION="https://storage.yandexcloud.net/tpc",
     AUTH_METHOD="NONE"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/customer_address` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/customer_address` (
     ca_address_sk Int64 NOT NULL,
     ca_address_id Utf8,
     ca_street_number Utf8,
@@ -22,10 +22,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/customer_address` (
     ca_location_type Utf8
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/customer_address/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/customer_address/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/customer_demographics` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/customer_demographics` (
     cd_demo_sk Int64 NOT NULL,
     cd_gender Utf8,
     cd_marital_status Utf8,
@@ -37,10 +37,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/customer_demographics` (
     cd_dep_college_count Int64
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/customer_demographics/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/customer_demographics/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/date_dim` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/date_dim` (
     d_date_sk Int64 NOT NULL,
     d_date_id Utf8,
     d_date Utf8,
@@ -71,10 +71,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/date_dim` (
     d_current_year Utf8
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/date_dim/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/date_dim/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/warehouse` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/warehouse` (
     w_warehouse_sk Int64 NOT NULL,
     w_warehouse_id Utf8,
     w_warehouse_name Utf8,
@@ -91,10 +91,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/warehouse` (
     w_gmt_offset Double
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/warehouse/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/warehouse/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/ship_mode` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/ship_mode` (
     sm_ship_mode_sk Int64 NOT NULL,
     sm_ship_mode_id Utf8,
     sm_type Utf8,
@@ -103,10 +103,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/ship_mode` (
     sm_contract Utf8
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/ship_mode/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/ship_mode/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/time_dim` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/time_dim` (
     t_time_sk Int64 NOT NULL,
     t_time_id Utf8,
     t_time Int64,
@@ -119,28 +119,28 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/time_dim` (
     t_meal_time Utf8
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/time_dim/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/time_dim/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/reason` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/reason` (
     r_reason_sk Int64 NOT NULL,
     r_reason_id Utf8,
     r_reason_desc Utf8
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/reason/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/reason/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/income_band` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/income_band` (
     ib_income_band_sk Int64 NOT NULL,
     ib_lower_bound Int64,
     ib_upper_bound Int64
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/income_band/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/income_band/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/item` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/item` (
     i_item_sk Int64 NOT NULL,
     i_item_id Utf8,
     i_rec_start_date Date32,
@@ -165,10 +165,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/item` (
     i_product_name Utf8
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/item/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/item/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/store` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/store` (
     s_store_sk Int64 NOT NULL,
     s_store_id Utf8,
     s_rec_start_date Date32,
@@ -200,10 +200,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/store` (
     s_tax_precentage Double
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/store/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/store/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/call_center` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/call_center` (
     cc_call_center_sk Int64 NOT NULL,
     cc_call_center_id Utf8,
     cc_rec_start_date Date32,
@@ -237,10 +237,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/call_center` (
     cc_tax_percentage Double
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/call_center/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/call_center/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/customer` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/customer` (
     c_customer_sk Int64 NOT NULL,
     c_customer_id Utf8,
     c_current_cdemo_sk Int64,
@@ -261,10 +261,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/customer` (
     c_last_review_date Utf8
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/customer/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/customer/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/web_site` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/web_site` (
     web_site_sk Int64 NOT NULL,
     web_site_id Utf8,
     web_rec_start_date Date32,
@@ -293,10 +293,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/web_site` (
     web_tax_percentage Double
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/web_site/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/web_site/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/store_returns` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/store_returns` (
     sr_returned_date_sk Int64,
     sr_return_time_sk Int64,
     sr_item_sk Int64 NOT NULL,
@@ -319,10 +319,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/store_returns` (
     sr_net_loss Double
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/store_returns/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/store_returns/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/household_demographics` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/household_demographics` (
     hd_demo_sk Int64 NOT NULL,
     hd_income_band_sk Int64,
     hd_buy_potential Utf8,
@@ -330,10 +330,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/household_demographics` (
     hd_vehicle_count Int64
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/household_demographics/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/household_demographics/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/web_page` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/web_page` (
     wp_web_page_sk Int64 NOT NULL,
     wp_web_page_id Utf8,
     wp_rec_start_date Date32,
@@ -350,10 +350,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/web_page` (
     wp_max_ad_count Int64
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/web_page/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/web_page/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/promotion` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/promotion` (
     p_promo_sk Int64 NOT NULL,
     p_promo_id Utf8,
     p_start_date_sk Int64,
@@ -375,10 +375,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/promotion` (
     p_discount_active Utf8
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/promotion/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/promotion/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/catalog_page` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/catalog_page` (
     cp_catalog_page_sk Int64 NOT NULL,
     cp_catalog_page_id Utf8,
     cp_start_date_sk Int64,
@@ -390,20 +390,20 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/catalog_page` (
     cp_type Utf8
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/catalog_page/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/catalog_page/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/inventory` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/inventory` (
     inv_date_sk Int64 NOT NULL,
     inv_item_sk Int64 NOT NULL,
     inv_warehouse_sk Int64 NOT NULL,
     inv_quantity_on_hand Int64
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/inventory/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/inventory/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/catalog_returns` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/catalog_returns` (
     cr_returned_date_sk Int64,
     cr_returned_time_sk Int64,
     cr_item_sk Int64 NOT NULL,
@@ -433,10 +433,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/catalog_returns` (
     cr_net_loss Double
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/catalog_returns/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/catalog_returns/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/web_returns` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/web_returns` (
     wr_returned_date_sk Int64,
     wr_returned_time_sk Int64,
     wr_item_sk Int64 NOT NULL,
@@ -463,10 +463,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/web_returns` (
     wr_net_loss Double
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/web_returns/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/web_returns/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/web_sales` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/web_sales` (
     ws_sold_date_sk Int64,
     ws_sold_time_sk Int64,
     ws_ship_date_sk Int64,
@@ -503,10 +503,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/web_sales` (
     ws_net_profit Double
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/web_sales/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/web_sales/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/catalog_sales` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/catalog_sales` (
     cs_sold_date_sk Int64,
     cs_sold_time_sk Int64,
     cs_ship_date_sk Int64,
@@ -543,10 +543,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/catalog_sales` (
     cs_net_profit Double
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/catalog_sales/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/catalog_sales/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/store_sales` (
+CREATE EXTERNAL TABLE `/Root/db/tpcds/s1/store_sales` (
     ss_sold_date_sk Int64,
     ss_sold_time_sk Int64,
     ss_item_sk Int64 NOT NULL,
@@ -572,7 +572,7 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpcds/s1/store_sales` (
     ss_net_profit Double
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/store_sales/"
+    DATA_SOURCE = "/Root/db/tpcds/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/store_sales/"
 );
 
 Init tables ...Ok

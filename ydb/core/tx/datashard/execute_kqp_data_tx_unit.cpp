@@ -70,7 +70,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
     if (op->IsImmediate()) {
         // Every time we execute immediate transaction we may choose a new mvcc version
-        op->MvccReadWriteVersion.reset();
+        op->CachedMvccVersion.reset();
     }
 
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
@@ -238,9 +238,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         auto execCtx = DefaultKqpExecutionContext();
         tasksRunner.Prepare(DefaultKqpDataReqMemoryLimits(), *execCtx);
 
-        auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
-        dataTx->SetReadVersion(readVersion);
-        dataTx->SetWriteVersion(writeVersion);
+        auto mvccVersion = DataShard.GetMvccVersion(tx);
+        dataTx->SetMvccVersion(mvccVersion);
 
         if (op->HasVolatilePrepareFlag()) {
             dataTx->SetVolatileTxId(txId);
@@ -250,7 +249,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         const bool isArbiter = op->HasVolatilePrepareFlag() && KqpLocksIsArbiter(tabletId, kqpLocks);
 
-        KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, tx->GetDataTx()->GetUserDb());
+        KqpCommitLocks(tabletId, kqpLocks, sysLocks, tx->GetDataTx()->GetUserDb());
 
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 
@@ -350,11 +349,11 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         // Note: any transaction (e.g. immediate or non-volatile) may decide to commit as volatile due to dependencies
         // Such transactions would have no participants and become immediately committed
         auto commitTxIds = dataTx->GetVolatileCommitTxIds();
-        if (commitTxIds) {
+        if (commitTxIds || isArbiter) {
             TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
             DataShard.GetVolatileTxManager().PersistAddVolatileTx(
                 txId,
-                writeVersion,
+                mvccVersion,
                 commitTxIds,
                 dataTx->GetVolatileDependencies(),
                 participants,
@@ -362,6 +361,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 dataTx->GetVolatileCommitOrdered(),
                 isArbiter,
                 txc);
+        } else {
+            awaitingDecisions.clear();
         }
 
         if (dataTx->GetPerformedUserReads()) {
@@ -385,7 +386,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         AddLocksToResult(op, ctx);
 
         if (!guardLocks.LockTxId) {
-            writeVersion.ToProto(op->Result()->Record.MutableCommitVersion());
+            mvccVersion.ToProto(op->Result()->Record.MutableCommitVersion());
         }
 
         if (auto changes = std::move(dataTx->GetCollectedChanges())) {

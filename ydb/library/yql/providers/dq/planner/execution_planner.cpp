@@ -459,6 +459,7 @@ namespace NYql::NDqs {
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
             taskDesc.SetEnableSpilling(Settings->GetEnabledSpillingNodes());
+            taskDesc.SetValuePackerVersion(Settings->GetValuePackerVersion());
 
             if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
                 auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
@@ -623,6 +624,9 @@ namespace NYql::NDqs {
         settings.SetCacheLimit(FromString<ui64>(streamLookup.MaxCachedRows().StringValue()));
         settings.SetCacheTtlSeconds(FromString<ui64>(streamLookup.TTL().StringValue()));
         settings.SetMaxDelayedRows(FromString<ui64>(streamLookup.MaxDelayedRows().StringValue()));
+        if (auto maybeMultiget = streamLookup.IsMultiget()) {
+            settings.SetIsMultiget(FromString<bool>(maybeMultiget.Cast().StringValue()));
+        }
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());

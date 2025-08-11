@@ -6,6 +6,7 @@ from ydb.tests.olap.scenario.helpers import (
     CreateTableStore,
     DropTable,
     DropTableStore,
+    skip_test,
 )
 from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 from helpers.tiering_helper import (
@@ -30,6 +31,7 @@ from moto.server import ThreadedMotoServer
 import boto3
 import datetime
 import random
+import os
 from typing import Iterable
 from string import ascii_lowercase
 
@@ -124,8 +126,8 @@ class TieringTestBase(BaseTestSet):
         LOGGER.info('Initializing test parameters')
         self.s3_endpoint = get_external_param('s3-endpoint', '')
         self.s3_buckets = list(get_external_param('s3-buckets', 'ydb-tiering-test-1,ydb-tiering-test-2').split(','))
-        self.s3_access_key = get_external_param('s3-access-key', 'access_key')
-        self.s3_secret_key = get_external_param('s3-secret-key', 'secret_key')
+        self.s3_access_key = os.getenv('S3_ACCESS_KEY', 'access_key')
+        self.s3_secret_key = os.getenv('S3_SECRET_KEY', 'secret_key')
 
         assert len(self.s3_buckets) == 2, len(self.s3_buckets)
 
@@ -242,9 +244,10 @@ class TestAlterTiering(TieringTestBase):
 
         for _ in loop:
             LOGGER.info('executing SELECT')
-            sth.execute_scan_query(
+            sth.execute_query(
                 f'SELECT MIN(writer) FROM `{sth.get_full_path(table)}`',
                 expected_status=expected_scan_status,
+                ignore_error={"Query invalidated on scheme/internal error during Scan execution"}  # https://github.com/ydb-platform/ydb/issues/12854
             )
 
     def _loop_set_ttl(
@@ -297,6 +300,8 @@ class TestAlterTiering(TieringTestBase):
             sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), retries=2)
 
     def scenario_many_tables(self, ctx: TestContext):
+        skip_test.check_test_for_skipping(ctx)
+
         self._setup_tiering_test(ctx)
 
         self.test_duration = self._get_test_duration(get_external_param('test-class', 'SMALL'))

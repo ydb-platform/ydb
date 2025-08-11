@@ -1,4 +1,5 @@
 #include "ydb_tools.h"
+#include "ydb_tools_infer.h"
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
@@ -26,6 +27,7 @@ TCommandTools::TCommandTools()
     AddCommand(std::make_unique<TCommandCopy>());
     AddCommand(std::make_unique<TCommandRename>());
     AddCommand(std::make_unique<TCommandPgConvert>());
+    AddCommand(std::make_unique<TCommandToolsInfer>());
 }
 
 TToolsCommand::TToolsCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
@@ -211,6 +213,15 @@ void TCommandRestore::Config(TConfig& config) {
             " with secondary indexes, make sure it's not already present in the scheme.")
         .StoreTrue(&UseImportData);
 
+    config.Opts->AddLongOption("replace", "Remove existing objects from the database that match those in the backup before restoration."
+        " Objects present in the backup but missing in the database are restored as usual; removal is skipped."
+        " If both --replace and --verify-existence are specified, restoration stops with an error when the first such object is found.")
+        .StoreTrue(&Replace);
+
+    config.Opts->AddLongOption("verify-existence", "Use with --replace to report an error if an object in the backup is missing from the database"
+        " instead of silently skipping its removal.")
+        .StoreTrue(&VerifyExistence);
+
     config.Opts->MutuallyExclusive("bandwidth", "rps");
     config.Opts->MutuallyExclusive("import-data", "bulk-upsert");
     config.Opts->MutuallyExclusive("import-data", "upload-batch-rows");
@@ -230,7 +241,9 @@ int TCommandRestore::Run(TConfig& config) {
         .RestoreACL(RestoreACL)
         .SkipDocumentTables(SkipDocumentTables)
         .SavePartialResult(SavePartialResult)
-        .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest));
+        .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))
+        .Replace(Replace)
+        .VerifyExistence(VerifyExistence);
 
     if (InFlight) {
         settings.MaxInFlight(InFlight);
@@ -266,6 +279,11 @@ int TCommandRestore::Run(TConfig& config) {
         settings.Mode(NDump::TRestoreSettings::EMode::ImportData);
     }
 
+    if (VerifyExistence && !Replace) {
+        throw TMisuseException()
+            << "The --verify-existence option must be used together with the --replace option.";
+    }
+
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
@@ -293,11 +311,7 @@ void TCommandCopy::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 }
 
@@ -355,11 +369,7 @@ void TCommandRename::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     AddCommandExamples(

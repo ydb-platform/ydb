@@ -25,8 +25,11 @@ END()
 RECURSE(
     balance_coverage
     columnshard
+    conveyor
+    conveyor_composite
     coordinator
     datashard
+    general_cache
     locks
     long_tx_service
     mediator

@@ -46,8 +46,22 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         CompareYson(R"([[["::1"];["/Root/KeyValue"];[2u]]])", StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST(Sessions) {
-        TKikimrRunner kikimr("root@builtin");
+    Y_UNIT_TEST_TWIN(Sessions, EnableRealSystemViewPaths) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRealSystemViewPaths(EnableRealSystemViewPaths);
+        TKikimrRunner kikimr(featureFlags, "root@builtin");
+
+        if (EnableRealSystemViewPaths) {
+            TPermissions permissions("root@builtin",
+                {"ydb.granular.describe_schema", "ydb.granular.select_row"}
+            );
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto result = schemeClient.ModifyPermissions("/Root/.sys",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
         auto client = kikimr.GetQueryClient();
         auto tableClient = kikimr.GetTableClient();
         const size_t sessionsCount = 50;
@@ -237,6 +251,10 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
 
+        const auto describeResult = kikimr.GetTestClient().Describe(
+            kikimr.GetTestServer().GetRuntime(), "/Root/TwoShard");
+        const auto startPathId = describeResult.GetPathId();
+
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT OwnerId, PartIdx, Path, PathId
             FROM `/Root/.sys/partition_stats`
@@ -245,73 +263,106 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-        CompareYson(R"([
-            [[72057594046644480u];[0u];["/Root/TwoShard"];[2u]];
-            [[72057594046644480u];[1u];["/Root/TwoShard"];[2u]];
-            [[72057594046644480u];[0u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[1u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[2u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[3u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[4u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[5u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[6u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[7u];["/Root/EightShard"];[3u]];
-            [[72057594046644480u];[0u];["/Root/Logs"];[4u]];
-            [[72057594046644480u];[1u];["/Root/Logs"];[4u]];
-            [[72057594046644480u];[2u];["/Root/Logs"];[4u]];
-            [[72057594046644480u];[0u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[1u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[2u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[3u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[4u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[5u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[6u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[7u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[8u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[9u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[0u];["/Root/KeyValue"];[6u]];
-            [[72057594046644480u];[0u];["/Root/KeyValue2"];[7u]];
-            [[72057594046644480u];[0u];["/Root/KeyValueLargePartition"];[8u]];
-            [[72057594046644480u];[0u];["/Root/Test"];[9u]];
-            [[72057594046644480u];[0u];["/Root/Join1"];[10u]];
-            [[72057594046644480u];[1u];["/Root/Join1"];[10u]];
-            [[72057594046644480u];[0u];["/Root/Join2"];[11u]];
-            [[72057594046644480u];[1u];["/Root/Join2"];[11u]];
-            [[72057594046644480u];[0u];["/Root/TuplePrimaryDescending"];[12u]];
-            [[72057594046644480u];[1u];["/Root/TuplePrimaryDescending"];[12u]];
-            [[72057594046644480u];[2u];["/Root/TuplePrimaryDescending"];[12u]]
-        ])", StreamResultToYson(it));
+        TStringBuilder expectedYson;
+        expectedYson << "[" << Endl;
+
+        for (size_t i = 0; i < 2; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/TwoShard"];[%luu]
+            ];)", i, startPathId)  << Endl;
+        }
+
+        for (size_t i = 0; i < 8; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/EightShard"];[%luu]
+            ];)", i, startPathId + 1)  << Endl;
+        }
+
+        for (size_t i = 0; i < 3; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/Logs"];[%luu]
+            ];)", i, startPathId + 2)  << Endl;
+        }
+
+        for (size_t i = 0; i < 10; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/BatchUpload"];[%luu]
+            ];)", i, startPathId + 3)  << Endl;
+        }
+
+        expectedYson << Sprintf(R"(
+            [[72057594046644480u];[0u];["/Root/KeyValue"];[%luu]];
+            [[72057594046644480u];[0u];["/Root/KeyValue2"];[%luu]];
+            [[72057594046644480u];[0u];["/Root/KeyValueLargePartition"];[%luu]];
+            [[72057594046644480u];[0u];["/Root/Test"];[%luu]];
+        )", startPathId + 4, startPathId + 5, startPathId + 6, startPathId + 7)  << Endl;
+
+        for (size_t i = 0; i < 2; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/Join1"];[%luu]
+            ];)", i, startPathId + 8)  << Endl;
+        }
+
+        for (size_t i = 0; i < 2; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/Join2"];[%luu]
+            ];)", i, startPathId + 9)  << Endl;
+        }
+
+        for (size_t i = 0; i < 3; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/ReorderKey"];[%luu]
+            ];)", i, startPathId + 10)  << Endl;
+        }
+      
+        for (size_t i = 0; i < 5; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/ReorderOptionalKey"];[%luu]
+            ];)", i, startPathId + 11)  << Endl;
+        }
+
+        expectedYson << "]";
+
+        CompareYson(expectedYson, StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(PartitionStatsRanges) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
+        const auto describeResult = kikimr.GetTestClient().Describe(
+            kikimr.GetTestServer().GetRuntime(), "Root/BatchUpload");
+        const auto tablePathId = describeResult.GetPathId();
 
-        auto it = client.StreamExecuteScanQuery(R"(
+        auto it = client.StreamExecuteScanQuery(Sprintf(R"(
             SELECT OwnerId, PartIdx, Path, PathId
             FROM `/Root/.sys/partition_stats`
             WHERE
             OwnerId = 72057594046644480ul
-            AND PathId = 5u
+            AND PathId = %luu
             AND (PartIdx BETWEEN 0 AND 2 OR PartIdx BETWEEN 6 AND 9)
             ORDER BY PathId, PartIdx;
-        )").GetValueSync();
+        )", tablePathId)).GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-        CompareYson(R"([
-            [[72057594046644480u];[0u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[1u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[2u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[6u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[7u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[8u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[9u];["/Root/BatchUpload"];[5u]];
-        ])", StreamResultToYson(it));
+        TStringBuilder expectedYson;
+        expectedYson << "[" << Endl;
+        for (size_t i : {0, 1, 2, 6, 7, 8, 9}) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/BatchUpload"];[%luu]
+            ];)", i, tablePathId)  << Endl;
+        }
+        expectedYson << "]";
+
+        CompareYson(expectedYson, StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(PartitionStatsParametricRanges) {
         TKikimrRunner kikimr;
+        const auto describeResult = kikimr.GetTestClient().Describe(
+            kikimr.GetTestServer().GetRuntime(), "Root/BatchUpload");
+        const auto tablePathId = describeResult.GetPathId();
+
         auto client = kikimr.GetTableClient();
 
         auto paramsBuilder = client.GetParamsBuilder();
@@ -321,7 +372,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             .AddParam("$l2").Int32(6).Build()
             .AddParam("$r2").Int32(9).Build().Build();
 
-        auto it = client.StreamExecuteScanQuery(R"(
+        auto it = client.StreamExecuteScanQuery(Sprintf(R"(
             DECLARE $l1 AS Int32;
             DECLARE $r1 AS Int32;
 
@@ -332,43 +383,49 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             FROM `/Root/.sys/partition_stats`
             WHERE
             OwnerId = 72057594046644480ul
-            AND PathId = 5u
+            AND PathId = %luu
             AND (PartIdx BETWEEN $l1 AND $r1 OR PartIdx BETWEEN $l2 AND $r2)
             ORDER BY PathId, PartIdx;
-        )", params).GetValueSync();
+        )", tablePathId), params).GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-        CompareYson(R"([
-            [[72057594046644480u];[0u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[1u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[2u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[6u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[7u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[8u];["/Root/BatchUpload"];[5u]];
-            [[72057594046644480u];[9u];["/Root/BatchUpload"];[5u]];
-        ])", StreamResultToYson(it));
+        TStringBuilder expectedYson;
+        expectedYson << "[" << Endl;
+        for (size_t i : {0, 1, 2, 6, 7, 8, 9}) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];["/Root/BatchUpload"];[%luu]
+            ];)", i, tablePathId)  << Endl;
+        }
+        expectedYson << "]";
+
+        CompareYson(expectedYson, StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(PartitionStatsRange1) {
         TKikimrRunner kikimr;
+        const auto describeResult = kikimr.GetTestClient().Describe(
+            kikimr.GetTestServer().GetRuntime(), "Root/BatchUpload");
+        const auto startPathId = describeResult.GetPathId();
+
         auto client = kikimr.GetTableClient();
 
-        TString query = R"(
+        TString query = Sprintf(R"(
             SELECT OwnerId, PathId, PartIdx, Path
             FROM `/Root/.sys/partition_stats`
-            WHERE OwnerId = 72057594046644480ul AND PathId > 5u AND PathId <= 10u
+            WHERE OwnerId = 72057594046644480ul AND PathId > %luu AND PathId <= %luu
             ORDER BY PathId, PartIdx;
-        )";
+        )", startPathId, startPathId + 5);
 
-        TString expectedYson = R"([
-            [[72057594046644480u];[6u];[0u];["/Root/KeyValue"]];
-            [[72057594046644480u];[7u];[0u];["/Root/KeyValue2"]];
-            [[72057594046644480u];[8u];[0u];["/Root/KeyValueLargePartition"]];
-            [[72057594046644480u];[9u];[0u];["/Root/Test"]];
-            [[72057594046644480u];[10u];[0u];["/Root/Join1"]];
-            [[72057594046644480u];[10u];[1u];["/Root/Join1"]]
-        ])";
+
+        TString expectedYson = Sprintf(R"([
+            [[72057594046644480u];[%luu];[0u];["/Root/KeyValue"]];
+            [[72057594046644480u];[%luu];[0u];["/Root/KeyValue2"]];
+            [[72057594046644480u];[%luu];[0u];["/Root/KeyValueLargePartition"]];
+            [[72057594046644480u];[%luu];[0u];["/Root/Test"]];
+            [[72057594046644480u];[%luu];[0u];["/Root/Join1"]];
+            [[72057594046644480u];[%luu];[1u];["/Root/Join1"]]
+        ])", startPathId + 1, startPathId + 2, startPathId + 3, startPathId + 4, startPathId + 5, startPathId + 5);
 
         auto it = client.StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -377,19 +434,23 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
     Y_UNIT_TEST(PartitionStatsRange2) {
         TKikimrRunner kikimr;
+        const auto describeResult = kikimr.GetTestClient().Describe(
+            kikimr.GetTestServer().GetRuntime(), "Root/KeyValue");
+        const auto startPathId = describeResult.GetPathId();
+
         auto client = kikimr.GetTableClient();
-        TString query = R"(
+        TString query = Sprintf(R"(
             SELECT OwnerId, PathId, PartIdx, Path
             FROM `/Root/.sys/partition_stats`
-            WHERE OwnerId = 72057594046644480ul AND PathId >= 6u AND PathId < 9u
+            WHERE OwnerId = 72057594046644480ul AND PathId >= %luu AND PathId < %luu
             ORDER BY PathId, PartIdx;
-        )";
+        )", startPathId, startPathId + 3);
 
-        TString expectedYson = R"([
-            [[72057594046644480u];[6u];[0u];["/Root/KeyValue"]];
-            [[72057594046644480u];[7u];[0u];["/Root/KeyValue2"]];
-            [[72057594046644480u];[8u];[0u];["/Root/KeyValueLargePartition"]]
-        ])";
+        TString expectedYson = Sprintf(R"([
+            [[72057594046644480u];[%luu];[0u];["/Root/KeyValue"]];
+            [[72057594046644480u];[%luu];[0u];["/Root/KeyValue2"]];
+            [[72057594046644480u];[%luu];[0u];["/Root/KeyValueLargePartition"]]
+        ])", startPathId, startPathId + 1,  startPathId + 2);
 
         auto it = client.StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -399,23 +460,29 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
     Y_UNIT_TEST(PartitionStatsRange3) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
+        const auto describeResult = kikimr.GetTestClient().Describe(
+            kikimr.GetTestServer().GetRuntime(), "Root/BatchUpload");
+        const auto tablePathId = describeResult.GetPathId();
 
-        auto it = client.StreamExecuteScanQuery(R"(
+        auto it = client.StreamExecuteScanQuery(Sprintf(R"(
             SELECT OwnerId, PathId, PartIdx, Path
             FROM `/Root/.sys/partition_stats`
-            WHERE OwnerId = 72057594046644480ul AND PathId = 5u AND PartIdx > 1u AND PartIdx < 7u
+            WHERE OwnerId = 72057594046644480ul AND PathId = %luu AND PartIdx > 1u AND PartIdx < 7u
             ORDER BY PathId, PartIdx;
-        )").GetValueSync();
+        )", tablePathId)).GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-        CompareYson(R"([
-            [[72057594046644480u];[5u];[2u];["/Root/BatchUpload"]];
-            [[72057594046644480u];[5u];[3u];["/Root/BatchUpload"]];
-            [[72057594046644480u];[5u];[4u];["/Root/BatchUpload"]];
-            [[72057594046644480u];[5u];[5u];["/Root/BatchUpload"]];
-            [[72057594046644480u];[5u];[6u];["/Root/BatchUpload"]];
-        ])", StreamResultToYson(it));
+        TStringBuilder expectedYson;
+        expectedYson << "[" << Endl;
+        for (size_t i = 2; i < 7; ++i) {
+            expectedYson << Sprintf(R"([
+                [72057594046644480u];[%luu];[%luu];["/Root/BatchUpload"]
+            ];)", tablePathId, i)  << Endl;
+        }
+        expectedYson << "]";
+
+        CompareYson(expectedYson, StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(NodesSimple) {
@@ -695,6 +762,9 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             );
         )").GetValueSync());
 
+        const auto describeResult = kikimr.GetTestClient().Describe(&runtime, "/Root/Followers");
+        const auto tablePathId = describeResult.GetPathId();
+
         Cerr << "... UPSERT" << Endl;
         AssertSuccessResult(session.ExecuteDataQuery(R"(
             --!syntax_v1
@@ -712,12 +782,17 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 SELECT * FROM Followers WHERE Key = 11;
             )", TTxControl::BeginTx().CommitTx()).GetValueSync();
             AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             CompareYson(R"([
                 [[11u];["Two"]]
             ])", actual);
         }
+
+        // from master - should read
+        CheckTableReads(session, "/Root/Followers", false, true);
+        // from followers - should NOT read yet
+        CheckTableReads(session, "/Root/Followers", true, false);
 
         Cerr << "... SELECT from follower" << Endl;
         {
@@ -726,7 +801,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 SELECT * FROM Followers WHERE Key >= 21;
             )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
             AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             CompareYson(R"([
                 [[21u];["Three"]];
@@ -734,11 +809,16 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             ])", actual);
         }
 
+        // from master - should read
+        CheckTableReads(session, "/Root/Followers", false, true);
+        // from followers - should read
+        CheckTableReads(session, "/Root/Followers", true, true);
+
         for (size_t attempt = 0; attempt < 30; ++attempt)
         {
             Cerr << "... SELECT from partition_stats, attempt " << attempt << Endl;
             auto result = session.ExecuteDataQuery(R"(
-                SELECT OwnerId, PartIdx, Path, PathId, TabletId, 
+                SELECT OwnerId, PartIdx, Path, PathId, TabletId,
                     RowCount, RowUpdates, RowReads, RangeReadRows,
                     IF(FollowerId = 0, 'L', 'F') AS LeaderFollower
                 FROM `/Root/.sys/partition_stats`
@@ -755,15 +835,15 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
             // Leader and follower have different row stats
             TString actual = FormatResultSetYson(rs);
-            CompareYson(R"([
-                [[72057594046644480u];[0u];["/Root/Followers"];[2u];[72075186224037888u];[4u];[0u];[0u];[2u];"F"];
-                [[72057594046644480u];[0u];["/Root/Followers"];[2u];[72075186224037888u];[4u];[4u];[1u];[0u];"L"]
-            ])", actual);
+            CompareYson(Sprintf(R"([
+                [[72057594046644480u];[0u];["/Root/Followers"];[%luu];[72075186224037888u];[4u];[0u];[0u];[2u];"F"];
+                [[72057594046644480u];[0u];["/Root/Followers"];[%luu];[72075186224037888u];[4u];[4u];[1u];[0u];"L"]
+            ])", tablePathId, tablePathId), actual);
             return;
         }
 
         Y_FAIL("Timeout waiting for from partition_stats");
-    }    
+    }
 }
 
 } // namspace NKqp

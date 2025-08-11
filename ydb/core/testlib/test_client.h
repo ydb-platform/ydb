@@ -121,12 +121,14 @@ namespace Tests {
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
         NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
+        NKikimrConfig::TBridgeConfig BridgeConfig;
         ui32 Domain = TestDomain;
         bool SupportsRedirect = true;
         TString TracePath;
         TString DomainName = TestDomainName;
         ui32 NodeCount = 1;
         ui32 DynamicNodeCount = 0;
+        std::optional<ui32> DataCenterCount;
         ui64 StorageGeneration = 0;
         bool FetchPoolsGeneration = false;
         NFake::TStorage CustomDiskParams;
@@ -135,6 +137,7 @@ namespace Tests {
         TIntrusivePtr<TFormatFactory> Formats;
         bool EnableMockOnSingleNode = true;
         TAutoPtr<TLogBackend> LogBackend;
+        std::shared_ptr<std::vector<std::string>> AuditLogBackendLines;
         TLoggerInitializer LoggerInitializer;
         TStoragePoolKinds StoragePoolTypes;
         TVector<NKikimrKqp::TKqpSetting> KqpSettings;
@@ -147,6 +150,7 @@ namespace Tests {
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
         bool EnableYqGrpc = false;
+        bool EnableScriptExecutionBackgroundChecks = true;
         TDuration KeepSnapshotTimeout = TDuration::Zero();
         ui64 ChangesQueueItemsLimit = 0;
         ui64 ChangesQueueBytesLimit = 0;
@@ -169,12 +173,14 @@ namespace Tests {
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
         NYql::ISolomonGateway::TPtr SolomonGateway;
+        NYql::IPqGateway::TPtr PqGateway;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
         bool Verbose = true;
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
+        bool EnableStorage = true;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -190,12 +196,14 @@ namespace Tests {
         TServerSettings& SetDomainName(const TString& value);
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
+        TServerSettings& SetDataCenterCount(ui32 value) { DataCenterCount = value; return *this; }
         TServerSettings& SetStorageGeneration(ui64 storageGeneration, bool fetchPoolsGeneration = false) { StorageGeneration = storageGeneration; FetchPoolsGeneration = fetchPoolsGeneration; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
         TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
         TServerSettings& SetEnableMockOnSingleNode(bool value) { EnableMockOnSingleNode = value; return *this; }
         TServerSettings& SetLogBackend(TAutoPtr<TLogBackend> value) { LogBackend = value; return *this; }
+        TServerSettings& SetAuditLogBackendLines(std::shared_ptr<std::vector<std::string>> value) { AuditLogBackendLines = value; return *this; }
         TServerSettings& SetLoggerInitializer(TLoggerInitializer value) { LoggerInitializer = std::move(value); return *this; }
         TServerSettings& AddStoragePoolType(const TString& poolKind, ui32 encryptionMode = 0);
         TServerSettings& AddStoragePool(const TString& poolKind, const TString& poolName = {}, ui32 numGroups = 1, ui32 encryptionMode = 0);
@@ -228,10 +236,20 @@ namespace Tests {
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
         TServerSettings& SetSolomonGateway(NYql::ISolomonGateway::TPtr solomonGateway) { SolomonGateway = std::move(solomonGateway); return *this; }
+        TServerSettings& SetPqGateway(NYql::IPqGateway::TPtr pqGateway) { PqGateway = std::move(pqGateway); return *this; }
         TServerSettings& SetDqTaskTransformFactory(NYql::TTaskTransformFactory value) { DqTaskTransformFactory = std::move(value); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
         TServerSettings& SetUseSectorMap(bool value) { UseSectorMap = value; return *this; }
+        TServerSettings& SetEnableScriptExecutionBackgroundChecks(bool value) { EnableScriptExecutionBackgroundChecks = value; return *this; }
+        TServerSettings& SetScanReaskToResolve(const ui32 count) {
+            AppConfig->MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetReaskShardRetriesCount(count);
+            return *this;
+        }
+        TServerSettings& SetColumnShardReaderClassName(const TString& className) {
+            AppConfig->MutableColumnShardConfig()->SetReaderClassName(className);
+            return *this;
+        }
         TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
             std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory
         ) {
@@ -271,6 +289,11 @@ namespace Tests {
             return *this;
         }
 
+        TServerSettings& SetEnableStorage(bool enable) {
+            EnableStorage = enable;
+            return *this;
+        }
+
         template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(
             const TString& name,
@@ -284,10 +307,11 @@ namespace Tests {
             return *this;
         }
 
-        explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {})
+        explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {}, const NKikimrConfig::TBridgeConfig& bridgeConfig = {})
             : Port(port)
             , AuthConfig(authConfig)
             , PQConfig(pqConfig)
+            , BridgeConfig(bridgeConfig)
         {
             AddStoragePool("test", "/" + DomainName + ":test");
             AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
@@ -328,6 +352,8 @@ namespace Tests {
         void SetupConfigurators(ui32 nodeIdx);
         void SetupProxies(ui32 nodeIdx);
         void SetupLogging();
+        void AddSysViewsRosterUpdateObserver();
+        void WaitForSysViewsRosterUpdate();
 
         void Initialize();
 
@@ -349,13 +375,17 @@ namespace Tests {
         void SetupDefaultProfiles();
 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
-            return RootGRpc.GRpcServerRootCounters;
+            const auto tenantIt = TenantsGRpc.find(Settings->DomainName);
+            Y_ABORT_UNLESS(tenantIt != TenantsGRpc.end());
+            Y_ABORT_UNLESS(!tenantIt->second.empty());
+            return tenantIt->second.begin()->second.GRpcServerRootCounters;
         }
 
         void ShutdownGRpc() {
-            RootGRpc.Shutdown();
             for (auto& [_, tenantGRpc] : TenantsGRpc) {
-                tenantGRpc.Shutdown();
+                for (auto& [_, nodeGRpc] : tenantGRpc) {
+                    nodeGRpc.Shutdown();
+                }
             }
         }
 
@@ -391,6 +421,9 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
         NFq::IYqSharedResources::TPtr YqSharedResources;
 
+        TTestActorRuntime::TEventObserverHolder SysViewsRosterUpdateObserver;
+        bool SysViewsRosterUpdateFinished;
+
         struct TGRpcInfo {
             std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
             TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
@@ -403,8 +436,7 @@ namespace Tests {
             }
         };
 
-        TGRpcInfo RootGRpc;
-        std::unordered_map<TString, TGRpcInfo> TenantsGRpc;
+        std::unordered_map<TString, std::unordered_map<ui32, TGRpcInfo>> TenantsGRpc;  // tenant -> nodeIdx -> GRpcInfo
     };
 
     class TClient {
@@ -567,7 +599,7 @@ namespace Tests {
         ui32 FlatQueryRaw(TTestActorRuntime* runtime, const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
 
         bool Compile(const TString &mkql, TString &compiled);
-        NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId = SchemeRoot);
+        NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId = SchemeRoot, bool showPrivateTable = false);
         TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1);
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);

@@ -32,21 +32,37 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         };
 
     {
-        AFL_VERIFY(guard.InitSortingPosition(posStart));
+        AFL_VERIFY(guard.InitSortingPosition(posStart))("start", posStart)("finish", posFinish);
         auto cmp = position.Compare(forFound);
         if (cond(cmp)) {
             return TFoundPosition(posStart, cmp);
         }
     }
     {
-        AFL_VERIFY(guard.InitSortingPosition(posFinish));
+        AFL_VERIFY(guard.InitSortingPosition(posFinish))("start", posStart)("finish", posFinish);
         auto cmp = position.Compare(forFound);
         if (!cond(cmp)) {
             return std::nullopt;
         }
     }
-    while (posFinish != posStart + 1) {
-        AFL_VERIFY(posFinish > posStart + 1)("finish", posFinish)("start", posStart);
+
+    const auto checkBoundIsFound = position.ReverseSort ?
+        [](const ui64 start, const ui64 finish) -> bool {
+            if (finish + 1 == start) {
+                return true;
+            }
+            AFL_VERIFY(finish + 1 < start)("finish", finish)("start", start);
+            return false;
+        } :
+        [](const ui64 start, const ui64 finish) -> bool {
+            if (start + 1 == finish) {
+                return true;
+            }
+            AFL_VERIFY(start + 1 < finish)("start", start)("finish", finish);
+            return false;
+        };
+
+    while (!checkBoundIsFound(posStart, posFinish)) {
         AFL_VERIFY(guard.InitSortingPosition(0.5 * (posStart + posFinish)));
         const auto comparision = position.Compare(forFound);
         if (cond(comparision)) {
@@ -55,7 +71,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             posStart = position.Position;
         }
     }
-    AFL_VERIFY(posFinish == posStart + 1)("finish", posFinish)("start", posStart);
+    AFL_VERIFY(checkBoundIsFound(posStart, posFinish))("finish", posFinish)("start", posStart)("reverse", position.ReverseSort);
     AFL_VERIFY(guard.InitSortingPosition(posFinish));
     const auto comparision = position.Compare(forFound);
     AFL_VERIFY(cond(comparision));
@@ -100,11 +116,11 @@ TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(con
     std::optional<TSortableBatchPosition::TFoundPosition> pos;
     std::optional<ui64> overrideFound;
     if (ReverseSort) {
-        pos = FindBound(*this, 0, posStart, forFound, true);
-        if (!pos) {
+        pos = FindBound(*this, posStart, 0, forFound, false);
+        if (pos) {
+            overrideFound = pos->GetPosition();
+        } else {
             overrideFound = posStart;
-        } else if (pos->GetPosition()) {
-            overrideFound = pos->GetPosition() - 1;
         }
     } else {
         pos = FindBound(*this, posStart, RecordsCount - 1, forFound, false);
@@ -264,6 +280,15 @@ std::partial_ordering TCursor::Compare(const TCursor& item) const {
     }
 
     return std::partial_ordering::equivalent;
+}
+
+void TCursor::ValidateSchema(const TSortableScanData& position) const {
+    AFL_VERIFY(position.GetFields().size() == PositionAddress.size());
+    for (ui64 i = 0; i < PositionAddress.size(); ++i) {
+        const auto& posType = position.GetFields()[i]->type();
+        const auto& cursorType = PositionAddress[i].GetArray()->type();
+        AFL_VERIFY(posType->Equals(cursorType))("pos", posType->ToString())("cursor", cursorType->ToString());
+    }
 }
 
 void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, ui64* recordSize) const {

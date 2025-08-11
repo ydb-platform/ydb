@@ -136,6 +136,16 @@ public:
                     return node;
                 }
 
+                const auto systemSettings = { EYtSettingType::Initial, EYtSettingType::MutationId };
+                for (auto setting : systemSettings) {
+                    if (auto sNode = NYql::GetSetting(*node->ChildPtr(4), setting)) {
+                        ctx.AddError(TIssue(
+                            ctx.GetPosition(sNode->Pos()),
+                            TStringBuilder() << "Write setting " << ToString(setting).Quote() << " is internal and not allowed in user queries"));
+                        return {};
+                    }
+                }
+
                 auto mode = NYql::GetSetting(*node->ChildPtr(4), EYtSettingType::Mode);
                 const bool flush = mode && FromString<EYtWriteMode>(mode->Child(1)->Content()) == EYtWriteMode::Flush;
 

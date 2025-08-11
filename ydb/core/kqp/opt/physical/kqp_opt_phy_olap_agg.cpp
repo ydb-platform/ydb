@@ -67,6 +67,11 @@ bool CanBePushedDown(const TExprBase& trait, TExprContext& ctx)
     }
     auto aggApply = trait.Cast<TCoAggApply>();
     auto aggName = aggApply.Name();
+    const auto& aggType = aggApply.Extractor().Ptr()->GetTypeAnn();
+    if (const auto& nakedType = RemoveOptionality(*aggType); nakedType.GetKind() == ETypeAnnotationKind::Data) {
+        if (GetDataTypeInfo(nakedType.Cast<TDataExprType>()->GetSlot()).Features & NUdf::EDataTypeFeatures::DecimalType)
+            return false;
+    }
     if (SupportedAggFuncs.find(aggName.StringValue()) != SupportedAggFuncs.end()) {
         return true;
     }
@@ -264,7 +269,7 @@ TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext& ctx, const TK
 
 TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->HasOptEnableOlapPushdownAggregate()) {
         return node;
     }
 

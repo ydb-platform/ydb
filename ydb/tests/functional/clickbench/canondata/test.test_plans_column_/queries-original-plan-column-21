@@ -60,6 +60,7 @@
                                                 "PlanNodeId": 3,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "SearchPhrase"
                                                         ],
@@ -68,12 +69,22 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Filter-TableFullScan",
+                                                                "Node Type": "Aggregate-Filter-TableFullScan",
                                                                 "Operators": [
                                                                     {
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate",
+                                                                        "Pushdown": "True"
+                                                                    },
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 2
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
@@ -85,15 +96,13 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                         "ReadColumns": [
-                                                                            "SearchPhrase",
-                                                                            "URL"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "CounterID (-\u221e, +\u221e)",
                                                                             "EventDate (-\u221e, +\u221e)",
                                                                             "UserID (-\u221e, +\u221e)",
                                                                             "EventTime (-\u221e, +\u221e)",
-                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                            "WatchID (-\u221e, +\u221e)",
+                                                                            "SearchPhrase",
+                                                                            "URL"
                                                                         ],
                                                                         "Scan": "Parallel",
                                                                         "SsaProgram": {

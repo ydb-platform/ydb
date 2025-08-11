@@ -84,8 +84,8 @@ protected:
     }
 
 private:
-    const std::optional<TString> User_;
-    const std::optional<TString> UserTag_;
+    const std::optional<std::string> User_;
+    const std::optional<std::string> UserTag_;
 };
 
 IChannelPtr CreateUserInjectingChannel(

@@ -17,6 +17,11 @@ public:
     arrow::Result<int64_t> Read(int64_t bytesToRead, void* outBuffer) override;
     arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override;
 
+    void Reset() {
+        BytesRead_ = 0;
+        EOSReached_ = false;
+    }
+
     arrow::Status Close() override {
         return arrow::Status::OK();
     }
@@ -32,7 +37,7 @@ public:
     bool EOSReached() const {
         return EOSReached_;
     }
-    
+
 private:
     TInputBuf& Buffer_;
     int64_t BytesRead_ = 0;

@@ -580,6 +580,35 @@ class StepTickTimeFactory:
 
 
 class _freeze_time:
+    """
+    A class to freeze time for testing purposes.
+
+    This class can be used as a context manager or a decorator to freeze time
+    during the execution of a block of code or a function. It provides various
+    options to customize the behavior of the frozen time.
+
+    Attributes:
+        time_to_freeze (datetime.datetime): The datetime to freeze time at.
+        tz_offset (datetime.timedelta): The timezone offset to apply to the frozen time.
+        ignore (List[str]): A list of module names to ignore when freezing time.
+        tick (bool): Whether to allow time to tick forward.
+        auto_tick_seconds (float): The number of seconds to auto-tick the frozen time.
+        undo_changes (List[Tuple[types.ModuleType, str, Any]]): A list of changes to undo when stopping the frozen time.
+        modules_at_start (Set[str]): A set of module names that were loaded at the start of freezing time.
+        as_arg (bool): Whether to pass the frozen time as an argument to the decorated function.
+        as_kwarg (str): The name of the keyword argument to pass the frozen time to the decorated function.
+        real_asyncio (Optional[bool]): Whether to allow asyncio event loops to see real monotonic time.
+
+    Methods:
+        __call__(func): Decorates a function or class to freeze time during its execution.
+        decorate_class(klass): Decorates a class to freeze time during its execution.
+        __enter__(): Starts freezing time and returns the time factory.
+        __exit__(*args): Stops freezing time.
+        start(): Starts freezing time and returns the time factory.
+        stop(): Stops freezing time and restores the original time functions.
+        decorate_coroutine(coroutine): Decorates a coroutine to freeze time during its execution.
+        decorate_callable(func): Decorates a callable to freeze time during its execution.
+    """
 
     def __init__(
         self,
@@ -603,8 +632,11 @@ class _freeze_time:
         self.as_kwarg = as_kwarg
         self.real_asyncio = real_asyncio
 
+    # mypy objects to this because Type is Callable, but Pytype needs it because
+    # (unlike mypy's) its inference does not assume class decorators always leave
+    # the type unchanged.
     @overload
-    def __call__(self, func: Type[T2]) -> Type[T2]:
+    def __call__(self, func: Type[T2]) -> Type[T2]:  # type: ignore[overload-overlap]
         ...
 
     @overload
@@ -620,6 +652,8 @@ class _freeze_time:
             return self.decorate_class(func)
         elif inspect.iscoroutinefunction(func):
             return self.decorate_coroutine(func)
+        elif inspect.isgeneratorfunction(func):
+            return self.decorate_generator_function(func) # type: ignore
         return self.decorate_callable(func)  # type: ignore
 
     def decorate_class(self, klass: Type[T2]) -> Type[T2]:
@@ -668,7 +702,6 @@ class _freeze_time:
             klass.tearDown = tearDown  # type: ignore[method-assign]
 
         else:
-
             seen = set()
 
             klasses = klass.mro()
@@ -682,7 +715,20 @@ class _freeze_time:
                         continue
 
                     try:
-                        setattr(klass, attr, self(attr_value))
+                        if attr_value.__dict__.get("_pytestfixturefunction") and hasattr(attr_value, "__pytest_wrapped__"):
+                            # PYTEST==8.2.x (and maybe others)
+                            # attr_value is a pytest fixture
+                            # In other words: attr_value == fixture(original_method)
+                            # We need to keep the fixture itself intact to ensure pytest still treats it as a fixture
+                            # We still want to freeze time inside the original_method though
+                            attr_value.__pytest_wrapped__.obj = self(attr_value.__pytest_wrapped__.obj)
+                        elif attr_value.__dict__.get("_fixture_function"):
+                            # PYTEST==8.4.x
+                            # Same
+                            attr_value._fixture_function = self(attr_value._fixture_function)
+                        else:
+                            # Wrap the entire method inside 'freeze_time'
+                            setattr(klass, attr, self(attr_value))
                     except (AttributeError, TypeError):
                         # Sometimes we can't set this for built-in types and custom callables
                         continue
@@ -870,26 +916,59 @@ class _freeze_time:
     def decorate_coroutine(self, coroutine: "Callable[P, Awaitable[T]]") -> "Callable[P, Awaitable[T]]":
         return wrap_coroutine(self, coroutine)
 
+    def _call_with_time_factory(self, time_factory: Union[StepTickTimeFactory, TickingDateTimeFactory, FrozenDateTimeFactory], func: "Callable[P, T]", *args: "P.args", **kwargs: "P.kwargs") -> T:
+        if self.as_arg and self.as_kwarg:
+            assert False, "You can't specify both as_arg and as_kwarg at the same time. Pick one."
+        if self.as_arg:
+            result = func(time_factory, *args, **kwargs)  # type: ignore
+        if self.as_kwarg:
+            kwargs[self.as_kwarg] = time_factory
+            result = func(*args, **kwargs)
+        else:
+            result = func(*args, **kwargs)
+        return result
+
+    def decorate_generator_function(self, func: "Callable[P, Iterator[T]]") -> "Callable[P, Iterator[T]]":
+
+        @functools.wraps(func)
+        def wrapper(*args: "P.args", **kwargs: "P.kwargs") -> Iterator[T]:
+            with self as time_factory:
+                yield from self._call_with_time_factory(time_factory, func, *args, **kwargs)
+
+        return wrapper
+
     def decorate_callable(self, func: "Callable[P, T]") -> "Callable[P, T]":
+
         @functools.wraps(func)
         def wrapper(*args: "P.args", **kwargs: "P.kwargs") -> T:
             with self as time_factory:
-                if self.as_arg and self.as_kwarg:
-                    assert False, "You can't specify both as_arg and as_kwarg at the same time. Pick one."
-                elif self.as_arg:
-                    result = func(time_factory, *args, **kwargs)  # type: ignore
-                elif self.as_kwarg:
-                    kwargs[self.as_kwarg] = time_factory
-                    result = func(*args, **kwargs)
-                else:
-                    result = func(*args, **kwargs)
-            return result
+                return self._call_with_time_factory(time_factory, func, *args, **kwargs)
 
         return wrapper
 
 
 def freeze_time(time_to_freeze: Optional[_Freezable]=None, tz_offset: Union[int, datetime.timedelta]=0, ignore: Optional[List[str]]=None, tick: bool=False, as_arg: bool=False, as_kwarg: str='',
                 auto_tick_seconds: float=0, real_asyncio: bool=False) -> _freeze_time:
+    """
+    Freezes time for testing purposes.
+
+    This function can be used as a decorator or a context manager to freeze time
+    during the execution of a block of code or a function. It provides various
+    options to customize the behavior of the frozen time.
+
+    Args:
+        time_to_freeze (Optional[_Freezable]): The datetime to freeze time at.
+        tz_offset (Union[int, datetime.timedelta]): The timezone offset to apply to the frozen time.
+        ignore (Optional[List[str]]): A list of module names to ignore when freezing time.
+        tick (bool): Whether to allow time to tick forward.
+        as_arg (bool): Whether to pass the frozen time as an argument to the decorated function.
+        as_kwarg (str): The name of the keyword argument to pass the frozen time to the decorated function.
+        auto_tick_seconds (float): The number of seconds to auto-tick the frozen time.
+        real_asyncio (bool): Whether to allow asyncio event loops to see real monotonic time.
+
+    Returns:
+        _freeze_time: An instance of the _freeze_time class.
+    """
     acceptable_times: Any = (type(None), str, datetime.date, datetime.timedelta,
              types.FunctionType, types.GeneratorType)
 

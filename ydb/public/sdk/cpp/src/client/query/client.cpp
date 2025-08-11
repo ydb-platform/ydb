@@ -752,9 +752,11 @@ public:
     }
 
     TAsyncStatus Precommit() const {
+        auto self = shared_from_this();
+
         TStatus status(EStatus::SUCCESS, {});
 
-        for (auto& callback : PrecommitCallbacks) {
+        for (auto& callback : self->PrecommitCallbacks) {
             if (!callback) {
                 continue;
             }
@@ -775,7 +777,9 @@ public:
     }
 
     NThreading::TFuture<void> ProcessFailure() const {
-        for (auto& callback : OnFailureCallbacks) {
+        auto self = shared_from_this();
+
+        for (auto& callback : self->OnFailureCallbacks) {
             if (!callback) {
                 continue;
             }
@@ -803,7 +807,7 @@ public:
             co_return TCommitTransactionResult(TStatus(precommitResult));
         }
 
-        PrecommitCallbacks.clear();
+        self->PrecommitCallbacks.clear();
 
         auto commitResult = co_await self->Session_.Client_->CommitTransaction(self->TxId_, settingsCopy, self->Session_);
 
@@ -830,6 +834,8 @@ public:
     }
 
     void AddPrecommitCallback(TPrecommitTransactionCallback cb) {
+        std::lock_guard lock(PrecommitCallbacksMutex);
+
         if (!ChangesAreAccepted) {
             ythrow TContractViolation("Changes are no longer accepted");
         }
@@ -838,6 +844,8 @@ public:
     }
 
     void AddOnFailureCallback(TOnFailureTransactionCallback cb) {
+        std::lock_guard lock(OnFailureCallbacksMutex);
+
         if (!ChangesAreAccepted) {
             ythrow TContractViolation("Changes are no longer accepted");
         }
@@ -850,8 +858,11 @@ public:
 
 private:
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
-    std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
-    std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
+    mutable std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
+    mutable std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
+
+    std::mutex PrecommitCallbacksMutex;
+    std::mutex OnFailureCallbacksMutex;
 };
 
 TTransaction::TTransaction(const TSession& session, const std::string& txId)

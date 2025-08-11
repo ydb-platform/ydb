@@ -16,15 +16,18 @@ TConclusionStatus TSelectCommand::DoExecute(TKikimrRunner& kikimr) {
     const i64 headerApproveStart = controller->GetHeadersApprovedOnSelect().Val();
     const i64 headerNoDataStart = controller->GetHeadersSkippedNoData().Val();
 
-    Cerr << "EXECUTE: " << Command << Endl;
+    const auto command = "PRAGMA OptimizeSimpleILIKE; PRAGMA AnsiLike;" + Command;
+    Cerr << "EXECUTE: " << command << Endl;
     auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-    auto it = kikimr.GetQueryClient().StreamExecuteQuery(Command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    auto it = kikimr.GetQueryClient().StreamExecuteQuery(command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), NYdb::EStatus::SUCCESS, it.GetIssues().ToString());
     TString output = StreamResultToYson(it);
     if (Compare) {
         Cerr << "COMPARE: " << Compare << Endl;
         Cerr << "OUTPUT: " << output << Endl;
         CompareYson(output, Compare);
+    } else {
+        Cerr << "OUTPUT: " << output << Endl;
     }
     const ui32 iSkip = controller->GetIndexesSkippingOnSelect().Val() - indexSkipStart;
     const ui32 iNoData = controller->GetIndexesSkippedNoData().Val() - indexNoDataStart;

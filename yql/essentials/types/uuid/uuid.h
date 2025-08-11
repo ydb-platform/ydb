@@ -101,24 +101,24 @@ bool ParseUuidToArray(const T& buf, ui16* dw, bool shortForm) {
 
 inline void UuidHalfsToBytes(char *dst, size_t dstSize, ui64 hi, ui64 low) {
     union {
-        char bytes[UUID_LEN];
-        ui64 half[2];
+        char Bytes[UUID_LEN];
+        ui64 Half[2];
     } buf;
     Y_ABORT_UNLESS(UUID_LEN == dstSize);
-    buf.half[0] = low;
-    buf.half[1] = hi;
-    memcpy(dst, buf.bytes, sizeof(buf));
+    buf.Half[0] = low;
+    buf.Half[1] = hi;
+    memcpy(dst, buf.Bytes, sizeof(buf));
 }
 
 inline void UuidBytesToHalfs(const char *str, size_t sz, ui64 &high, ui64 &low) {
     union {
-        char bytes[UUID_LEN];
-        ui64 half[2];
+        char Bytes[UUID_LEN];
+        ui64 Half[2];
     } buf;
     Y_ABORT_UNLESS(UUID_LEN == sz);
-    memcpy(buf.bytes, str, sizeof(buf));
-    low = buf.half[0];
-    high = buf.half[1];
+    memcpy(buf.Bytes, str, sizeof(buf));
+    low = buf.Half[0];
+    high = buf.Half[1];
 }
 
 }

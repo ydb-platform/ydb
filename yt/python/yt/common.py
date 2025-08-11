@@ -318,7 +318,7 @@ class YtError(Exception):
     def is_tablet_in_intermediate_state(self):
         """Tablet is in intermediate state."""
         # TODO(ifsmirnov) migrate to error code, YT-10993
-        return self._matches_regexp("Tablet .* is in state .*")
+        return self.contains_code(1744) or self._matches_regexp("Tablet .* is in state .*")
 
     def is_no_such_tablet(self):
         """No such tablet."""
@@ -373,10 +373,6 @@ class YtError(Exception):
     def is_prohibited_cross_cell_copy(self):
         """Cross-cell "copy"/"move" command is explicitly disabled."""
         return self.contains_code(1002)
-
-    def is_sequoia_retriable_error(self):
-        """Probably lock conflict in Sequoia tables."""
-        return self.contains_code(6002)
 
     def is_backup_checkpoint_rejected(self):
         """Backup checkpoint rejected."""

@@ -56,6 +56,8 @@ public:
 
     std::partial_ordering Compare(const TSortableScanData& item, const ui64 itemPosition) const;
     std::partial_ordering Compare(const TCursor& item) const;
+
+    void ValidateSchema(const TSortableScanData& position) const;
 };
 
 class TSortableScanData {
@@ -175,15 +177,15 @@ public:
         return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
     }
 
-    bool IsSameSchema(const std::shared_ptr<arrow::Schema>& schema) const {
-        if (Fields.size() != (size_t)schema->num_fields()) {
+    bool IsSameSchema(const arrow::Schema& schema) const {
+        if (Fields.size() != (size_t)schema.num_fields()) {
             return false;
         }
         for (ui32 i = 0; i < Fields.size(); ++i) {
-            if (!Fields[i]->type()->Equals(schema->field(i)->type())) {
+            if (!Fields[i]->type()->Equals(schema.field(i)->type())) {
                 return false;
             }
-            if (Fields[i]->name() != schema->field(i)->name()) {
+            if (Fields[i]->name() != schema.field(i)->name()) {
                 return false;
             }
         }
@@ -360,8 +362,15 @@ public:
 
     TRWSortableBatchPosition BuildRWPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const;
 
-    bool IsSameSortingSchema(const std::shared_ptr<arrow::Schema>& schema) const {
+    bool IsSameSortingSchema(const arrow::Schema& schema) const {
         return Sorting->IsSameSchema(schema);
+    }
+
+    bool IsSameDataSchema(const arrow::Schema& schema) const {
+        if (!Data) {
+            return schema.num_fields() == 0;
+        }
+        return Data->IsSameSchema(schema);
     }
 
     template <class TRecords>

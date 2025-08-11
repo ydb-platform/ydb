@@ -9,9 +9,9 @@ It can be used by type-checking tools like
 [Pyre](https://pyre-check.org/),
 PyCharm, etc. to check code that uses `protobuf`. This version of
 `types-protobuf` aims to provide accurate annotations for
-`protobuf~=5.29.1`.
+`protobuf~=6.30.2`.
 
-Partially generated using [mypy-protobuf==3.6.0](https://github.com/nipunn1313/mypy-protobuf/tree/v3.6.0) and libprotoc 28.1 on [protobuf v29.1](https://github.com/protocolbuffers/protobuf/releases/tag/v29.1) (python `protobuf==5.29.1`).
+Partially generated using [mypy-protobuf==3.6.0](https://github.com/nipunn1313/mypy-protobuf/tree/v3.6.0) and libprotoc 29.0 on [protobuf v30.2](https://github.com/protocolbuffers/protobuf/releases/tag/v30.2) (python `protobuf==6.30.2`).
 
 This stub package is marked as [partial](https://peps.python.org/pep-0561/#partial-stub-packages).
 If you find that annotations are missing, feel free to contribute and help complete them.
@@ -25,8 +25,8 @@ for more details. The source for this package can be found in the
 directory.
 
 This package was tested with
-mypy 1.15.0,
-pyright 1.1.389,
+mypy 1.16.1,
+pyright 1.1.400,
 and pytype 2024.10.11.
 It was generated from typeshed commit
-[`73ebb9dfd7dfce93c5becde4dcdd51d5626853b8`](https://github.com/python/typeshed/commit/73ebb9dfd7dfce93c5becde4dcdd51d5626853b8).
+[`dbd3ad356ef3bceae506fb71a29a48b6192213ba`](https://github.com/python/typeshed/commit/dbd3ad356ef3bceae506fb71a29a48b6192213ba).

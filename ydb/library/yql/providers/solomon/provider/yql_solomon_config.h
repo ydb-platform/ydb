@@ -9,13 +9,18 @@ namespace NYql {
 
 struct TSolomonSettings {
     using TConstPtr = std::shared_ptr<const TSolomonSettings>;
-
-    NCommon::TConfSetting<bool, false> _EnableReading;
-    NCommon::TConfSetting<ui64, false> MetricsQueuePageSize;
-    NCommon::TConfSetting<ui64, false> MetricsQueuePrefetchSize;
-    NCommon::TConfSetting<ui64, false> MetricsQueueBatchCountLimit;
-    NCommon::TConfSetting<TString, false> SolomonClientDefaultReplica;
-    NCommon::TConfSetting<ui64, false> ComputeActorBatchSize;
+private:
+    static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
+public:
+    NCommon::TConfSetting<bool, Static> _EnableReading;
+    NCommon::TConfSetting<bool, Static> _EnableRuntimeListing;
+    NCommon::TConfSetting<ui64, Static> _TruePointsFindRange;
+    NCommon::TConfSetting<ui64, Static> MetricsQueuePageSize;
+    NCommon::TConfSetting<ui64, Static> MetricsQueuePrefetchSize;
+    NCommon::TConfSetting<ui64, Static> MetricsQueueBatchCountLimit;
+    NCommon::TConfSetting<TString, Static> SolomonClientDefaultReplica;
+    NCommon::TConfSetting<ui64, Static> ComputeActorBatchSize;
+    NCommon::TConfSetting<ui64, Static> MaxApiInflight;
 };
 
 struct TSolomonConfiguration

@@ -164,14 +164,27 @@ private:
             TFqSetup::StopTraceOpt();
         };
 
+        auto printStats = [this, queryId, astPrinter = GetAstPrinter(queryId), planPrinter = GetPlanPrinter(queryId)](const TExecutionMeta& meta, bool allowEmpty = false) mutable {
+            if (astPrinter) {
+                astPrinter->Print(meta.Ast, allowEmpty);
+            }
+            if (planPrinter) {
+                planPrinter->Print(meta.Plan, allowEmpty);
+            }
+            PrintStatistics(queryId, meta.Statistics);
+        };
+
+        TString previousIssues;
         while (true) {
             TExecutionMeta meta;
             const TRequestResult status = FqSetup.DescribeQuery(QueryId, CurrentOptions, meta);
 
-            if (meta.TransientIssues.Size() != ExecutionMeta.TransientIssues.Size() && VerboseLevel >= EVerbose::Info) {
-                Cerr << CerrColors.Red() << "Query transient issues updated:" << CerrColors.Default() << Endl << meta.TransientIssues.ToString() << Endl;
+            if (const auto newIssues = meta.TransientIssues.ToString(); newIssues && previousIssues != newIssues && VerboseLevel >= EVerbose::Info) {
+                previousIssues = newIssues;
+                Cerr << CerrColors.Red() << "Query transient issues updated:" << CerrColors.Default() << Endl << newIssues << Endl;
             }
             ExecutionMeta = meta;
+            printStats(ExecutionMeta);
 
             if (IsFinalStatus(ExecutionMeta.Status)) {
                 break;
@@ -185,8 +198,7 @@ private:
             Sleep(Options.PingPeriod);
         }
 
-        PrintQueryAst(queryId, ExecutionMeta.Ast);
-        PrintQueryPlan(queryId, ExecutionMeta.Plan);
+        printStats(ExecutionMeta, true);
         if (VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Query finished. Duration: " << TInstant::Now() - StartTime << CoutColors.Default() << Endl;
         }
@@ -209,8 +221,13 @@ private:
         }
     }
 
-    void PrintQueryAst(size_t queryId, TString ast) const {
-        if (const auto output = GetValue<IOutputStream*>(queryId, Options.AstOutputs, nullptr)) {
+    std::optional<TCachedPrinter> GetAstPrinter(size_t queryId) const {
+        const auto& astOutput = GetValue<TString>(queryId, Options.AstOutputs, {});
+        if (!astOutput) {
+            return std::nullopt;
+        }
+
+        return TCachedPrinter(astOutput, [this](TString ast, IOutputStream& output) {
             if (VerboseLevel >= EVerbose::Info) {
                 Cout << CoutColors.Cyan() << "Writing query ast" << CoutColors.Default() << Endl;
             }
@@ -218,13 +235,17 @@ private:
                 ast = CanonizeEndpoints(ast, Options.FqSettings.AppConfig.GetFederatedQueryConfig().GetGateways());
                 ast = CanonizeAstLogicalId(ast);
             }
-            output->Write(ast);
-            output->Flush();
-        }
+            output.Write(ast);
+        });
     }
 
-    void PrintQueryPlan(size_t queryId, TString plan) const {
-        if (const auto output = GetValue<IOutputStream*>(queryId, Options.PlanOutputs, nullptr)) {
+    std::optional<TCachedPrinter> GetPlanPrinter(size_t queryId) const {
+        const auto& planOutput = GetValue<TString>(queryId, Options.PlanOutputs, {});
+        if (!planOutput) {
+            return std::nullopt;
+        }
+
+        return TCachedPrinter(planOutput, [this](TString plan, IOutputStream& output) {
             if (VerboseLevel >= EVerbose::Info) {
                 Cout << CoutColors.Cyan() << "Writing query plan" << CoutColors.Default() << Endl;
             }
@@ -232,16 +253,27 @@ private:
                 return;
             }
 
-            NJson::TJsonValue planJson;
-            NJson::ReadJsonTree(plan, &planJson, true);
             plan = NJson::PrettifyJson(plan, false);
-
             if (Options.CanonicalOutput) {
                 plan = CanonizeEndpoints(plan, Options.FqSettings.AppConfig.GetFederatedQueryConfig().GetGateways());
             }
 
-            output->Write(plan);
-            output->Flush();
+            output.Write(plan);
+            if (!Options.CanonicalOutput) {
+                output.Write('\n');
+            }
+        });
+    }
+
+    void PrintStatistics(size_t queryId, const TString& statistics) const {
+        if (!statistics) {
+            return;
+        }
+
+        if (const auto& statsFile = GetValue<TString>(queryId, Options.StatsOutputs, {})) {
+            TFileOutput output(statsFile);
+            output.Write(NJson::PrettifyJson(statistics, false));
+            output.Finish();
         }
     }
 

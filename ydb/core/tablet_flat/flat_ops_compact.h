@@ -48,6 +48,7 @@ namespace NTabletFlatExecutor {
         }
 
         bool Success = false;
+        std::exception_ptr Exception;
         ui32 Step = Max<ui32>();
         TResults Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
@@ -56,7 +57,7 @@ namespace NTabletFlatExecutor {
         TVector<ui32> YellowStopChannels;
     };
 
-    class TOpsCompact: private ::NActors::IActorCallback, public NTable::IVersionScan {
+    class TOpsCompact: private ::NActors::IActorCallback, public IActorExceptionHandler, public NTable::IVersionScan {
         using TEvPut = TEvBlobStorage::TEvPut;
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
         using TScheme = NTable::TRowScheme;
@@ -325,12 +326,15 @@ namespace NTabletFlatExecutor {
             TxStatus.emplace_back(new NTable::TTxStatusPartStore(dataId, Conf->Epoch, data));
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort abort) override
+        TAutoPtr<IDestructable> Finish(EStatus status) override
         {
-            const auto fail = Failed || !Finished || abort != EAbort::None;
+            const auto fail = Failed || !Finished || status != EStatus::Done;
 
             auto *prod = new TProdCompact(!fail, Mask.Step(), std::move(Conf->Params),
                     std::move(YellowMoveChannels), std::move(YellowStopChannels));
+            if (status == EStatus::Exception) {
+                prod->Exception = std::current_exception();
+            }
 
             if (fail) {
                 Results.clear(); /* shouldn't sent w/o fixation in bs */
@@ -349,7 +353,11 @@ namespace NTabletFlatExecutor {
                         auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
                         sharedPage->Initialize(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
-                        cache->Fill(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList), sticky);
+                        if (sticky) {
+                            cache->AddStickyPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                        } else {
+                            cache->AddPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                        }
                     };
                     for (auto &page : pageCollection.StickyPages) {
                         addPage(page, true);
@@ -373,9 +381,9 @@ namespace NTabletFlatExecutor {
 
                 if (Y_UNLIKELY(fetch)) {
                     TStringBuilder error;
-                    error << "Just compacted part needs to load pages";
-                    for (auto collection : fetch) {
-                        error << " " << collection->DebugString(true);
+                    error << "Just compacted part needs to load page collection " << fetch.PageCollection->Label() << " pages";
+                    for (auto page : fetch.Pages) {
+                        error << " " << page;
                     }
                     Y_TABLET_ERROR(error);
                 }
@@ -392,7 +400,7 @@ namespace NTabletFlatExecutor {
                 auto raito = WriteStats.Bytes ? (WriteStats.Coded + 0.) / WriteStats.Bytes : 0.;
 
                 logl
-                    << NFmt::Do(*this) << " end=" << ui32(abort)
+                    << NFmt::Do(*this) << " end=" << status
                     << ", " << Blobs << " blobs " << WriteStats.Rows << "r"
                     << " (max " << Conf->Layout.MaxRows << ")"
                     << ", put " << NFmt::If(Spent.Get());
@@ -435,6 +443,15 @@ namespace NTabletFlatExecutor {
             PassAway();
 
             return prod;
+        }
+
+        bool OnUnhandledException(const std::exception& exc) override
+        {
+            if (!Driver) {
+                return false;
+            }
+            Driver->Throw(exc);
+            return true;
         }
 
         EScan Flush(bool last)

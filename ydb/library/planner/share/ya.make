@@ -20,6 +20,5 @@ SRCS(
 END()
 
 RECURSE(
-    protos
     ut
 )

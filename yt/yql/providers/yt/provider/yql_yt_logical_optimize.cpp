@@ -421,7 +421,7 @@ protected:
                         return ctx.RenameNode(*input, TYtTablePath::CallableName());
                     }
                     return Build<TYtTablePath>(ctx, input->Pos())
-                        .DependsOn()
+                        .DependsOn<TCoDependsOn>()
                             .Input(arg)
                         .Build()
                         .Done().Ptr();
@@ -432,7 +432,7 @@ protected:
                         return ctx.RenameNode(*input, TYtTableRecord::CallableName());
                     }
                     return Build<TYtTableRecord>(ctx, input->Pos())
-                        .DependsOn()
+                        .DependsOn<TCoDependsOn>()
                             .Input(arg)
                         .Build()
                         .Done().Ptr();
@@ -523,7 +523,7 @@ protected:
                 if (TCoIsKeySwitch::Match(input.Get())) {
                     return
                         Build<TYtIsKeySwitch>(ctx, input->Pos())
-                            .DependsOn()
+                            .DependsOn<TCoDependsOn>()
                                 .Input(input->HeadPtr())
                             .Build()
                         .Done().Ptr();
@@ -1083,7 +1083,7 @@ protected:
         for (auto n: it->second) {
             if (TCoUnordered::Match(n)) {
                 nodesToOptimize.emplace(n, arg.Ptr());
-            } else if (!TCoDependsOn::Match(n)) {
+            } else if (!IsDependsOnUsage(*n, parentsMap)) {
                 return node;
             }
         }

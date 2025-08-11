@@ -30,7 +30,7 @@
 # =======================
 
 KEEP     Apache-2.0           0e8699c5f5ea602534a6558430df2b8d
-BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.make absl/numeric/ya.make absl/profiling/ya.make absl/random/ya.make absl/strings/ya.make absl/synchronization/ya.make absl/utility/ya.make ya.make
+BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -39,6 +39,8 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
         absl/base/internal/cycleclock_config.h [3:13]
+        absl/base/internal/iterator_traits.h [3:13]
+        absl/base/internal/iterator_traits_test_helper.h [3:13]
         absl/base/internal/poison.cc [3:13]
         absl/base/internal/poison.h [3:13]
         absl/base/internal/tracing.cc [3:13]
@@ -46,6 +48,8 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/base/internal/unscaledcycleclock_config.h [3:13]
         absl/base/prefetch.h [3:13]
         absl/container/hash_container_defaults.h [3:13]
+        absl/container/internal/hashtable_control_bytes.h [3:13]
+        absl/container/internal/raw_hash_set_resize_impl.h [3:13]
         absl/crc/crc32c.cc [3:13]
         absl/crc/crc32c.h [3:13]
         absl/crc/internal/cpu_detect.cc [3:13]
@@ -59,6 +63,7 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/crc/internal/crc_non_temporal_memcpy.cc [3:13]
         absl/crc/internal/non_temporal_arm_intrinsics.h [3:13]
         absl/crc/internal/non_temporal_memcpy.h [3:13]
+        absl/debugging/internal/addresses.h [3:13]
         absl/debugging/internal/bounded_utf8_length_sequence.h [3:13]
         absl/debugging/internal/decode_rust_punycode.cc [3:13]
         absl/debugging/internal/decode_rust_punycode.h [3:13]
@@ -69,6 +74,7 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/debugging/internal/utf8_for_code_point.h [3:13]
         absl/hash/internal/low_level_hash.cc [3:13]
         absl/hash/internal/low_level_hash.h [3:13]
+        absl/hash/internal/weakly_mixed_integer.h [3:13]
         absl/log/internal/append_truncated.h [3:13]
         absl/log/internal/fnmatch.cc [3:13]
         absl/log/internal/fnmatch.h [3:13]
@@ -88,7 +94,6 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/status/internal/status_matchers.h [3:13]
         absl/strings/cord_analysis.cc [3:13]
         absl/strings/cord_analysis.h [3:13]
-        absl/strings/cord_buffer.cc [3:13]
         absl/strings/cord_buffer.h [3:13]
         absl/strings/cordz_test_helpers.h [3:13]
         absl/strings/has_absl_stringify.h [3:13]
@@ -114,12 +119,9 @@ BELONGS absl/base/ya.make absl/debugging/ya.make absl/hash/ya.make absl/log/ya.m
         absl/strings/internal/stringify_sink.cc [3:13]
         absl/strings/internal/stringify_sink.h [3:13]
         absl/synchronization/internal/kernel_timeout.cc [3:13]
-        absl/utility/internal/if_constexpr.h [3:13]
-    Belongs difference:
-        - absl/container/ya.make absl/status/ya.make
 
 KEEP     Apache-2.0           0f66a26c8211d9f8c21369fcb6702370
-BELONGS absl/time/ya.make
+BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -160,10 +162,10 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [145:148]
+        README.md [143:146]
 
 KEEP     Public-Domain        3a682fe6def1cddc889298ee2a043f6f
-BELONGS absl/time/ya.make
+BELONGS ya.make
     License text:
         ** This file is in the public domain, so clarified as of
     Scancode info:
@@ -175,7 +177,7 @@ BELONGS absl/time/ya.make
         absl/time/internal/cctz/src/tzfile.h [8:8]
 
 KEEP     Apache-2.0           3ea5060c4f08f5769674fbf0c0fb3992
-BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/debugging/ya.make absl/flags/ya.make absl/functional/ya.make absl/hash/ya.make absl/log/ya.make absl/memory/ya.make absl/meta/ya.make absl/numeric/ya.make absl/profiling/ya.make absl/random/ya.make absl/status/ya.make absl/strings/ya.make absl/synchronization/ya.make absl/time/ya.make absl/types/ya.make absl/utility/ya.make ya.make
+BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -191,6 +193,7 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/base/config.h [4:14]
         absl/base/const_init.h [3:13]
         absl/base/dynamic_annotations.h [3:13]
+        absl/base/fast_type_id.h [3:13]
         absl/base/internal/atomic_hook.h [3:13]
         absl/base/internal/atomic_hook_test_helper.h [3:13]
         absl/base/internal/cycleclock.cc [3:13]
@@ -201,16 +204,12 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/base/internal/errno_saver.h [3:13]
         absl/base/internal/exception_safety_testing.h [3:13]
         absl/base/internal/exception_testing.h [3:13]
-        absl/base/internal/fast_type_id.h [4:14]
         absl/base/internal/hide_ptr.h [3:13]
         absl/base/internal/identity.h [3:13]
-        absl/base/internal/inline_variable.h [3:13]
-        absl/base/internal/inline_variable_testing.h [3:13]
-        absl/base/internal/invoke.h [3:13]
         absl/base/internal/low_level_alloc.cc [3:13]
         absl/base/internal/low_level_alloc.h [3:13]
         absl/base/internal/low_level_scheduling.h [3:13]
-        absl/base/internal/nullability_impl.h [3:13]
+        absl/base/internal/nullability_deprecated.h [3:13]
         absl/base/internal/per_thread_tls.h [3:13]
         absl/base/internal/pretty_function.h [3:13]
         absl/base/internal/raw_logging.cc [3:13]
@@ -411,7 +410,6 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/log/internal/test_matchers.h [3:13]
         absl/log/internal/voidify.h [3:13]
         absl/log/log.h [3:13]
-        absl/log/log_entry.cc [4:14]
         absl/log/log_entry.h [3:13]
         absl/log/log_sink.h [3:13]
         absl/log/log_sink_registry.h [3:13]
@@ -441,6 +439,8 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/random/internal/distribution_caller.h [4:14]
         absl/random/internal/distribution_test_util.cc [3:13]
         absl/random/internal/distribution_test_util.h [3:13]
+        absl/random/internal/entropy_pool.cc [3:13]
+        absl/random/internal/entropy_pool.h [3:13]
         absl/random/internal/explicit_seed_seq.h [3:13]
         absl/random/internal/fast_uniform_bits.h [3:13]
         absl/random/internal/fastmath.h [3:13]
@@ -451,8 +451,6 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/random/internal/nonsecure_base.h [3:13]
         absl/random/internal/pcg_engine.h [3:13]
         absl/random/internal/platform.h [3:13]
-        absl/random/internal/pool_urbg.cc [3:13]
-        absl/random/internal/pool_urbg.h [3:13]
         absl/random/internal/randen.cc [3:13]
         absl/random/internal/randen.h [3:13]
         absl/random/internal/randen_detect.cc [3:13]
@@ -602,23 +600,28 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/time/time.cc [3:13]
         absl/time/time.h [3:13]
         absl/types/any.h [4:14]
-        absl/types/bad_any_cast.cc [3:13]
-        absl/types/bad_any_cast.h [3:13]
-        absl/types/bad_optional_access.cc [3:13]
-        absl/types/bad_optional_access.h [3:13]
-        absl/types/bad_variant_access.cc [3:13]
-        absl/types/bad_variant_access.h [3:13]
         absl/types/compare.h [3:13]
-        absl/types/internal/optional.h [3:13]
         absl/types/internal/span.h [4:14]
-        absl/types/internal/variant.h [3:13]
         absl/types/optional.h [3:13]
         absl/types/span.h [4:14]
         absl/types/variant.h [3:13]
         absl/utility/utility.h [3:13]
 
+KEEP     Apache-2.0           504cec32e5f5e837a345cb36cdffbdeb
+BELONGS ya.make
+    License text:
+        The Abseil C++ library is licensed under the terms of the Apache
+        license. See [LICENSE](LICENSE) for more information.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [145:146]
+
 SKIP     LicenseRef-scancode-warranty-disclaimer 5ba761db85e57267704f71a6bcf20c2a
-BELONGS absl/container/ya.make absl/profiling/ya.make
+BELONGS ya.make
     License text:
         // This utility is internal-only. Use at your own risk.
     Scancode info:
@@ -652,10 +655,10 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        README.md [148:148]
+        README.md [146:146]
 
 SKIP     LicenseRef-scancode-generic-exception 99cf00730bf3973359b67cfa5b7ac051
-BELONGS absl/synchronization/ya.make
+BELONGS ya.make
     License text:
           // logging; as a special exception, the function may acquire other mutexes
     Scancode info:
@@ -678,7 +681,7 @@ BELONGS ya.make
         LICENSE [2:202]
 
 KEEP     Apache-2.0           d4afbfe97ca1f27103271d24e8af5b32
-BELONGS absl/debugging/ya.make absl/synchronization/ya.make
+BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -704,7 +707,7 @@ BELONGS ya.make
         CONTRIBUTING.md [11:12]
 
 SKIP     BSD-2-Clause AND GPL-2.0-only e12cf8844c9d92dd647ddf4320b73d06
-BELONGS absl/strings/ya.make
+BELONGS ya.make
 # not a license
     License text:
         // input unless explicitly stated otherwise. All functions returning a CordRep*

@@ -1,4 +1,7 @@
 #include "kqp_pure_compute_actor.h"
+
+#include "kqp_compute_actor_impl.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 
@@ -10,15 +13,16 @@ bool TKqpComputeActor::IsDebugLogEnabled(const TActorSystem* actorSystem) {
     return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_TASKS_RUNNER);
 }
 
-TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
-    IDqAsyncIoFactory::TPtr asyncIoFactory,
+TKqpComputeActor::TKqpComputeActor(
+    const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    TComputeActorSchedulingOptions schedulingOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
+    NScheduler::TSchedulableActorOptions schedulableOptions,
+    NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database)
-    : TBase(std::move(schedulingOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena), GUCSettings)
+    : TBase(std::move(schedulableOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena), GUCSettings)
     , ComputeCtx(settings.StatsMode)
     , FederatedQuerySetup(federatedQuerySetup)
     , BlockTrackingMode(mode)
@@ -32,7 +36,7 @@ TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqPro
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(Meta.Get()), "Invalid task meta: " << GetTask().GetMeta().DebugString());
         YQL_ENSURE(Meta->GetReads().size() == 1);
         YQL_ENSURE(!Meta->GetReads()[0].GetKeyRanges().empty());
-        YQL_ENSURE(!Meta->GetTable().GetSysViewInfo().empty());
+        YQL_ENSURE(!Meta->GetTable().GetSysViewInfo().empty() || Meta->GetTable().HasSysViewInfo());
     }
 }
 
@@ -119,9 +123,14 @@ void TKqpComputeActor::DoBootstrap() {
 
     if (ScanData) {
         ScanData->TaskId = GetTask().GetId();
-        ScanData->TableReader = CreateKqpTableReader(*ScanData);
+        ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, *ComputeCtx.InputConsumed);
 
-        auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, ranges, columns, UserToken, Database, reverse);
+        TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
+        if (Meta->GetTable().HasSysViewDescription()) {
+            SysViewInfo = Meta->GetTable().GetSysViewDescription();
+        }
+        auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, SysViewInfo,
+                                                        ranges, columns, UserToken, Database, reverse);
 
         if (!scanActor) {
             ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
@@ -136,7 +145,7 @@ void TKqpComputeActor::DoBootstrap() {
     ContinueExecute();
     Become(&TKqpComputeActor::StateFunc);
 
-    TBase::DoBoostrap();
+    TBase::DoBootstrap();
 }
 
 STFUNC(TKqpComputeActor::StateFunc) {
@@ -233,14 +242,14 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
             case NKikimrDataEvents::FORMAT_UNSPECIFIED:
             case NKikimrDataEvents::FORMAT_CELLVEC: {
                 if (!msg.Rows.empty()) {
-                    bytes = ScanData->AddData(msg.Rows, {}, TaskRunner->GetHolderFactory());
+                    bytes = ScanData->AddData(msg.Rows, {}, TaskRunner->GetHolderFactory(), 0, msg.Finished);
                     rowsCount = msg.Rows.size();
                 }
                 break;
             }
             case NKikimrDataEvents::FORMAT_ARROW: {
                 if(msg.ArrowBatch != nullptr) {
-                    bytes = ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.ArrowBatch, BlockTrackingMode), {}, TaskRunner->GetHolderFactory());
+                    bytes = ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.ArrowBatch, BlockTrackingMode), {}, TaskRunner->GetHolderFactory(), 0, msg.Finished);
                     rowsCount = msg.ArrowBatch->num_rows();
                 }
                 break;
@@ -295,13 +304,14 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-    const TGUCSettings::TPtr& GUCSettings, TComputeActorSchedulingOptions cpuOptions,
+    const TGUCSettings::TPtr& GUCSettings,
+    NScheduler::TSchedulableActorOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database)
 {
     return new TKqpComputeActor(executerId, txId, task, std::move(asyncIoFactory),
-        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings, std::move(cpuOptions), mode, std::move(userToken), database);
+        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings, std::move(schedulableOptions), mode, std::move(userToken), database);
 }
 
 } // namespace NKqp

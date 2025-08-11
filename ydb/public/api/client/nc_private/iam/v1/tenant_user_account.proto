@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package nebius.iam.v1;
+
+//import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+import "ydb/public/api/client/nc_private/common/v1/metadata.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "TenantUserAccountProto";
+option java_package = "ai.nebius.iam.identity.v1";
+
+// this proto describes projections of global user accounts to specific tenants
+// every global user account gets a specific id like 'tenantuseraccount-someuniquesuffix'
+// inside those tenants where access to their resources is granted to them
+//
+// global user accounts are described separately in user_account*.proto
+
+message TenantUserAccount {
+  option (resource_behavior) = UNNAMED;
+  // option (resource) = "tenantuseraccount"; // This option conflicts with other options by its number
+
+  common.v1.ResourceMetadata metadata = 1; // [(buf.validate.field).required = true];
+  TenantUserAccountSpec spec = 2; // [(buf.validate.field).required = true];
+  TenantUserAccountStatus status = 3 [(field_behavior) = OUTPUT_ONLY];
+}
+
+message TenantUserAccountWithAttributes {
+  TenantUserAccount tenant_user_account = 1;
+  oneof attributesOptional {
+    UserAttributes attributes = 2;
+    //in a case of issues of getting attributes from pds service, we can still return some data from cpl
+    Error error = 3;
+  }
+}
+
+message UserAttributes {
+  optional string sub = 20 [(sensitive) = true];
+  optional string name = 1 [(sensitive) = true];
+  optional string given_name = 2 [(sensitive) = true];
+  optional string family_name = 3 [(sensitive) = true];
+  optional string preferred_username = 4 [(sensitive) = true];
+  optional string picture = 5 [(sensitive) = true];
+  optional string email = 6 [
+  //   (buf.validate.field) = {
+  //     cel: {
+  //       id: "string.email",
+  //       message: "value must be a valid email address",
+  //       expression: "this == \'\' || this.isEmail()"
+  //     }
+  //   },
+  //   (buf.validate.field).required = false,
+    (sensitive) = true
+  ];
+  optional bool email_verified = 7 [deprecated = true];
+  optional string zoneinfo = 8 [(sensitive) = true, deprecated = true];
+  optional string locale = 9 [(sensitive) = true];
+  optional string phone_number = 10 [
+    (sensitive) = true
+  ];
+  optional bool phone_number_verified = 11 [deprecated = true];
+}
+
+message Error {
+  string message = 1;
+}
+
+message TenantUserAccountSpec {
+  // when a global user account is projected to a specific tenant
+  // they can give consent for that tenant's owner to view specific personal data
+  // by listing explicitly visible PDS attributes
+  // complete list of PDS attributes is described in ../../pds/inner/v1alpha1/iam_identifier.proto
+  message VisibleAttributes {
+    repeated string attribute = 1 [(sensitive) = true];
+  }
+  VisibleAttributes visible_attributes = 1;
+}
+
+message TenantUserAccountStatus {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    ACTIVE = 1;
+    INACTIVE = 2;
+    BLOCKED = 3;
+  }
+
+  State state = 1;
+
+  // if a tenant user account is created during invitation it gets a reference to the invitation resource
+  // once invitation is accepted it looses this reference (and internally gets a reference to their global federated user account)
+  string invitation_id = 2;
+  // currently can only accept the values: custom, unknown, google, github.
+  string federation_id = 3;
+}

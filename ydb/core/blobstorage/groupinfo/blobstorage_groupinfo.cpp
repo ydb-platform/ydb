@@ -3,6 +3,7 @@
 #include "blobstorage_groupinfo_iter.h"
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
+#include "blobstorage_groupinfo_data_check.h"
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -87,6 +88,27 @@ public:
         }
     }
 
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        if (!CheckFailModelForSubgroup(failedDisks)) {
+            return TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+        }
+
+        const TBlobStorageGroupType type = Top->GType;
+        ui32 effectiveReplicas = parts.CountEffectiveReplicas(type);
+        auto state = Top->BlobState(effectiveReplicas, failedDisks.GetNumSetItems());
+        if (state == TBlobStorageGroupInfo::EBS_FULL) {
+            return state;
+        }
+
+        ui32 distinctParts = parts.CountDistinctParts(type);
+        if (distinctParts < type.MinimalRestorablePartCount()) {
+            return TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
+        }
+
+        return TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY;
+    }
+
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
         const TBlobStorageGroupType type = Top->GType;
         const ui32 effectiveReplicas = parts.CountEffectiveReplicas(Top->GType);
@@ -160,6 +182,11 @@ public:
         } else {
             return TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
         }
+    }
+
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        return GetBlobState(parts, failedDisks);
     }
 
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
@@ -275,6 +302,11 @@ quitIter:   ;
         }
     }
 
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        return GetBlobState(parts, failedDisks);
+    }
+
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
         const TBlobStorageGroupInfo::TSubgroupVDisks& disksWithReplica = parts.GetInvolvedDisks(Top);
         const ui32 myRing = idxInSubgroup % 3;
@@ -355,6 +387,8 @@ void TBlobStorageGroupInfo::TTopology::FinalizeConstruction() {
     BlobMapper.reset(CreateMapper(GType, this));
     // create quorum checker
     QuorumChecker.reset(CreateQuorumChecker(this));
+    // create data integrity checker
+    DataIntegrityChecker.reset(CreateDataIntegrityChecker(this));
 }
 
 bool TBlobStorageGroupInfo::TTopology::IsValidId(const TVDiskID& vdisk) const {
@@ -521,6 +555,42 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
     Y_ABORT();
 }
 
+TBlobStorageGroupInfo::IDataIntegrityChecker*
+TBlobStorageGroupInfo::TTopology::CreateDataIntegrityChecker(const TTopology* topology) {
+    switch (topology->GType.GetErasure()) {
+        case TBlobStorageGroupType::ErasureNone:
+        case TBlobStorageGroupType::ErasureMirror3:
+        case TBlobStorageGroupType::Erasure3Plus1Block:
+        case TBlobStorageGroupType::Erasure3Plus1Stripe:
+        case TBlobStorageGroupType::Erasure3Plus2Block:
+        case TBlobStorageGroupType::Erasure4Plus2Stripe:
+        case TBlobStorageGroupType::Erasure3Plus2Stripe:
+        case TBlobStorageGroupType::ErasureMirror3Plus2:
+        case TBlobStorageGroupType::Erasure4Plus3Block:
+        case TBlobStorageGroupType::Erasure4Plus3Stripe:
+        case TBlobStorageGroupType::Erasure3Plus3Block:
+        case TBlobStorageGroupType::Erasure3Plus3Stripe:
+        case TBlobStorageGroupType::Erasure2Plus3Block:
+        case TBlobStorageGroupType::Erasure2Plus3Stripe:
+        case TBlobStorageGroupType::Erasure2Plus2Block:
+        case TBlobStorageGroupType::Erasure2Plus2Stripe:
+            return new TDataIntegrityCheckerTrivial(topology);
+
+        case TBlobStorageGroupType::Erasure4Plus2Block:
+            return new TDataIntegrityCheckerBlock42(topology);
+
+        case TBlobStorageGroupType::ErasureMirror3dc:
+            return new TDataIntegrityCheckerMirror3dc(topology);
+
+        case TBlobStorageGroupType::ErasureMirror3of4:
+            return new TDataIntegrityCheckerMirror3of4(topology);
+
+        default:
+            Y_ABORT("unexpected erasure type 0x%08" PRIx32,
+                   static_cast<ui32>(topology->GType.GetErasure()));
+    }
+}
+
 TString TBlobStorageGroupInfo::TTopology::ToString() const {
     TStringStream str;
     str << "{GType# " << GType.ToString();
@@ -563,10 +633,11 @@ TBlobStorageGroupInfo::TDynamicInfo::TDynamicInfo(TGroupId groupId, ui32 groupGe
 ////////////////////////////////////////////////////////////////////////////
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain,
         ui32 numFailDomains, ui32 numFailRealms, const TVector<TActorId> *vdiskIds, EEncryptionMode encryptionMode,
-        ELifeCyclePhase lifeCyclePhase, TCypherKey key, TGroupId groupId)
+        ELifeCyclePhase lifeCyclePhase, TCypherKey key, TGroupId groupId, ui32 groupSizeInUnits)
     : GroupID(groupId)
     , GroupGeneration(1)
     , Type(gtype)
+    , GroupSizeInUnits(groupSizeInUnits)
     , Dynamic(GroupID, GroupGeneration)
     , EncryptionMode(encryptionMode)
     , LifeCyclePhase(lifeCyclePhase)
@@ -593,10 +664,11 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 n
 }
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& dyn, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType)
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType, ui32 groupSizeInUnits)
     : GroupID(dyn.GroupId)
     , GroupGeneration(dyn.GroupGeneration)
     , Type(topology->GType)
+    , GroupSizeInUnits(groupSizeInUnits)
     , Topology(std::move(topology))
     , Dynamic(std::move(dyn))
     , AcceptedScope(acceptedScope)
@@ -605,9 +677,9 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology
 {}
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& dyn, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType)
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType, ui32 groupSizeInUnits)
     : TBlobStorageGroupInfo(std::make_shared<TTopology>(std::move(topology)), std::move(dyn), std::move(storagePoolName),
-            std::move(acceptedScope), deviceType)
+            std::move(acceptedScope), deviceType, groupSizeInUnits)
 {
     Topology->FinalizeConstruction();
 }
@@ -617,6 +689,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
     : GroupID(vdiskId.GroupID)
     , GroupGeneration(vdiskId.GroupGeneration)
     , Type(info->Type)
+    , GroupSizeInUnits(info->GroupSizeInUnits)
     , Topology(info->Topology)
     , Dynamic(GroupID, GroupGeneration)
     , EncryptionMode(info->EncryptionMode)
@@ -638,7 +711,8 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     auto erasure = (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies();
     TBlobStorageGroupType type(erasure);
     TBlobStorageGroupInfo::TTopology topology(type);
-    TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), group.GetGroupGeneration());
+    TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
+        group.GetGroupGeneration());
     topology.FailRealms.resize(group.RingsSize());
     for (ui32 ringIdx = 0; ringIdx < group.RingsSize(); ++ringIdx) {
         const auto& realm = group.GetRings(ringIdx);
@@ -672,6 +746,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     if (group.HasDecommitStatus()) {
         res->DecommitStatus = group.GetDecommitStatus();
     }
+    res->GroupSizeInUnits = group.GetGroupSizeInUnits();
 
     // process encryption parameters
     res->EncryptionMode = static_cast<EEncryptionMode>(group.GetEncryptionMode());
@@ -719,6 +794,15 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
         }
     }
 
+    // parse bridge mode fields
+    for (const auto& groupId : group.GetBridgeGroupIds()) {
+        res->BridgeGroupIds.push_back(TGroupId::FromValue(groupId));
+    }
+    if (group.HasBridgeProxyGroupId()) {
+        res->BridgeProxyGroupId.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId));
+    }
+    res->BridgePileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+
     // store original group protobuf it was parsed from
     res->Group.emplace(group);
     return res;
@@ -759,6 +843,7 @@ bool TBlobStorageGroupInfo::DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMo
 }
 
 const TBlobStorageGroupInfo::IQuorumChecker& TBlobStorageGroupInfo::GetQuorumChecker() const {
+    Y_ABORT_UNLESS(!IsBridged());
     return Topology->GetQuorumChecker();
 }
 
@@ -888,6 +973,7 @@ TString TBlobStorageGroupInfo::ToString() const {
     str << "{GroupID# " << GroupID;
     str << " GroupGeneration# " << GroupGeneration;
     str << " Type# " << Type.ToString();
+    str << " SizeInUnits# " << GroupSizeInUnits;
     str << " FailRealms# {";
     for (ui32 realmIdx = 0; realmIdx < Topology->FailRealms.size(); ++realmIdx) {
         const TFailRealm& realm = Topology->FailRealms[realmIdx];

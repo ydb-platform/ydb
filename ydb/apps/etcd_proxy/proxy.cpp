@@ -11,6 +11,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
+#include <ydb/apps/etcd_proxy/service/etcd_gate.h>
+#include <ydb/apps/etcd_proxy/service/etcd_lease.h>
 #include <ydb/apps/etcd_proxy/service/etcd_watch.h>
 #include <ydb/apps/etcd_proxy/service/etcd_grpc.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -53,6 +55,7 @@ int TProxy::Discovery() {
 
         const auto driver = NYdb::TDriver(config);
         Stuff->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
+        Stuff->TopicClient = std::make_unique<NYdb::NTopic::TTopicClient>(driver);
         return 0;
     } else {
         std::cout << res.GetIssues().ToString() << std::endl;
@@ -61,25 +64,6 @@ int TProxy::Discovery() {
 }
 
 int TProxy::StartServer() {
-    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(Stuff->TablePrefix), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
-        if (auto result = res.GetResultSetParser(0); result.TryNextRow()) {
-            Stuff->Revision.store(NYdb::TValueParser(result.GetValue(0)).GetInt64());
-        } else {
-            std::cout << "Unexpected result of get last revision." << std::endl;
-            return 1;
-        }
-        if (auto result = res.GetResultSetParser(1); result.TryNextRow()) {
-            Stuff->Lease.store(NYdb::TValueParser(result.GetValue(0)).GetInt64());
-        } else {
-            std::cout << "Unexpected result of get last lease." << std::endl;
-            return 1;
-        }
-        std::cout << "The last revision is " << Stuff->Revision.load() << ", the last lease is " << Stuff->Lease.load() << '.' << std::endl;
-    } else {
-        std::cout << res.GetIssues().ToString() << std::endl;
-        return 1;
-    }
-
     NYdbGrpc::TServerOptions opts;
     opts.SetPort(ListeningPort);
 
@@ -94,11 +78,13 @@ int TProxy::StartServer() {
     }
 
     const auto watchtower = ActorSystem->Register(NEtcd::BuildWatchtower(Counters, Stuff));
+    const auto holderhouse = ActorSystem->Register(NEtcd::BuildHolderHouse(Counters, Stuff));
+    ActorSystem->Register(NEtcd::BuildMainGate(Counters, Stuff));
 
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
-    GRpcServer->AddService(new NEtcd::TEtcdKVService(ActorSystem.get(), Counters, watchtower, Stuff));
+    GRpcServer->AddService(new NEtcd::TEtcdKVService(ActorSystem.get(), Counters, {}, Stuff));
     GRpcServer->AddService(new NEtcd::TEtcdWatchService(ActorSystem.get(), Counters, watchtower, Stuff));
-    GRpcServer->AddService(new NEtcd::TEtcdLeaseService(ActorSystem.get(), Counters, watchtower, Stuff));
+    GRpcServer->AddService(new NEtcd::TEtcdLeaseService(ActorSystem.get(), Counters, holderhouse, Stuff));
     GRpcServer->Start();
     std::cout << "Etcd service over " << Database << " on " << Endpoint << " was started." << std::endl;
     return 0;
@@ -108,17 +94,23 @@ int TProxy::Run() {
     if (const auto res = Init()) {
         return res;
     }
-    if (Initialize_) {
-        if (const auto res = InitDatabase()) {
+    if (!ExportTo_.empty()) {
+        if (const auto res = ExportDatabase()) {
             return res;
         }
-    }
-    if (!ImportPrefix_.empty()) {
-        if (const auto res = ImportDatabase()) {
-            return res;
+    } else {
+        if (Initialize_) {
+            if (const auto res = InitDatabase()) {
+                return res;
+            }
+        }
+        if (!ImportPrefix_.empty()) {
+            if (const auto res = ImportDatabase()) {
+                return res;
+            }
         }
     }
-    if (!Initialize_ && ImportPrefix_.empty()) {
+    if (!Initialize_ && ImportPrefix_.empty() && ExportTo_.empty()) {
         if (const auto res = StartServer()) {
             return res;
         }
@@ -129,13 +121,18 @@ int TProxy::Run() {
 }
 
 int TProxy::InitDatabase() {
-    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(Stuff->TablePrefix), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
-        std::cout << "Database " << Database << " on " << Endpoint << " was initialized." << std::endl;
-        return 0;
-    } else {
+    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(Stuff->TablePrefix), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
+    if (ImportPrefix_.empty()) {
+        if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetInitializeTablesSQL(Stuff->TablePrefix), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); !res.IsSuccess()) {
+            std::cout << res.GetIssues().ToString() << std::endl;
+            return 1;
+        }
+    }
+    std::cout << "Database " << Database << " on " << Endpoint << " was initialized." << std::endl;
+    return 0;
 }
 
 int TProxy::ImportDatabase() {
@@ -210,18 +207,102 @@ int TProxy::ImportDatabase() {
     const auto driver = NYdb::TDriver(config);
     auto client = NYdb::NTable::TTableClient(driver);
 
+    if (const auto res = Stuff->Client->ExecuteQuery(Stuff->TablePrefix + "ALTER TABLE `current` DROP INDEX `lease`;", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); !res.IsSuccess()) {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
     if (const auto res = client.BulkUpsert(Database + Folder + "/current", std::move(value)).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
 
+    if (const auto res = Stuff->Client->ExecuteQuery(Stuff->TablePrefix + "ALTER TABLE `current` ADD INDEX `lease` GLOBAL ON (`lease`);", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); !res.IsSuccess()) {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
     const auto& param = NYdb::TParamsBuilder().AddParam("$Prefix").String(ImportPrefix_).Build().Build();
-    if (const auto res = Stuff->Client->ExecuteQuery("insert into `history` select * from `current` where startswith(`key`,$Prefix);", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
+    if (const auto res = Stuff->Client->ExecuteQuery(Stuff->TablePrefix + R"(
+insert into `history` select * from `current` where startswith(`key`,$Prefix);
+insert into `revision` (`stub`,`revision`,`timestamp`) values (true,0L,CurrentUtcTimestamp());
+insert into `revision` select false as `stub`, nvl(max(`modified`), 0L) as `revision`, CurrentUtcTimestamp(max(`modified`)) as `timestamp` from `history`;
+insert into `commited` select `revision`, `timestamp` from `revision` where not `stub`;
+    )", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
 
     std::cout << count << " of " << rangeResponse.count() << " keys imported successfully." << std::endl;
+    return 0;
+}
+
+int TProxy::ExportDatabase() {
+    auto credentials = grpc::InsecureChannelCredentials();
+    if (!Root.empty() || !Cert.empty() || !Key.empty()) {
+        const grpc::SslCredentialsOptions opts {
+            .pem_root_certs = TFileInput(Root).ReadAll(),
+            .pem_private_key = TFileInput(Key).ReadAll(),
+            .pem_cert_chain = TFileInput(Cert).ReadAll()
+        };
+        credentials = grpc::SslCredentials(opts);
+    }
+
+    const auto channel = grpc::CreateChannel(TString(ExportTo_), credentials);
+    const std::unique_ptr<etcdserverpb::KV::Stub> kv = etcdserverpb::KV::NewStub(channel);
+
+    NYdb::TDriverConfig config;
+    config.SetEndpoint(Endpoint);
+    config.SetDatabase(Database);
+    if (!Token.empty())
+        config.SetAuthToken(Token);
+    if (!CA.empty())
+        config.UseSecureConnection(TFileInput(CA).ReadAll());
+
+    const auto driver = NYdb::TDriver(config);
+    auto client = NYdb::NTable::TTableClient(driver);
+    auto count = 0ULL;
+    if (const auto res = client.CreateSession().ExtractValueSync(); res.IsSuccess()) {
+        NYdb::NTable::TReadTableSettings settings;
+        settings.BatchLimitRows(97ULL).AppendColumns("key").AppendColumns("value").AppendColumns("lease");
+        if (auto it = res.GetSession().ReadTable(Database + Folder + "/current", settings).ExtractValueSync(); it.IsSuccess()) {
+            for (;;) {
+                auto streamPart = it.ReadNext().ExtractValueSync();
+                if (streamPart.EOS())
+                    break;
+
+                if (!streamPart.IsSuccess()) {
+                    std::cout << streamPart.GetIssues().ToString() << std::endl;
+                    return 1;
+                }
+
+                etcdserverpb::TxnRequest txnRequest;
+                for (auto parser = NYdb::TResultSetParser(streamPart.ExtractPart()); parser.TryNextRow();) {
+                    if (const auto lease = NYdb::TValueParser(parser.GetValue("lease")).GetOptionalInt64(); lease && !*lease) {
+                        ++count;
+                        const auto put = txnRequest.add_success()->mutable_request_put();
+                        put->set_key(*NYdb::TValueParser(parser.GetValue("key")).GetOptionalString());
+                        put->set_value(*NYdb::TValueParser(parser.GetValue("value")).GetOptionalString());
+                    }
+                }
+
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnResponse txnResponse;
+                if (const auto& status = kv->Txn(&txnCtx, txnRequest, &txnResponse); !status.ok()) {
+                    std::cout << status.error_message() << std::endl;
+                    return 1;
+                }
+            }
+        } else {
+            std::cout << it.GetIssues().ToString() << std::endl;
+            return 1;
+        }
+    } else {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
+    std::cout << count << " keys exported successfully." << std::endl;
     return 0;
 }
 
@@ -252,6 +333,7 @@ TProxy::TProxy(int argc, char** argv)
 
     opts.AddLongOption("import-from", "Import existing data from etcd base").RequiredArgument("ENDPOINT").DefaultValue("localhost:2379").StoreResult(&ImportFrom_);
     opts.AddLongOption("import-prefix", "Prefix of data to import").RequiredArgument("PREFIX").StoreResult(&ImportPrefix_);
+    opts.AddLongOption("export-to", "Export existing data to etcd from ydb").RequiredArgument("ENDPOINT").StoreResult(&ExportTo_);
 
     opts.AddLongOption("ca", "SSL CA certificate file").Optional().RequiredArgument("CA").StoreResult(&Root);
     opts.AddLongOption("cert", "SSL certificate file").Optional().RequiredArgument("CERT").StoreResult(&Cert);
@@ -264,6 +346,7 @@ TProxy::TProxy(int argc, char** argv)
     }
 
     if (!Folder.empty()) {
+        Stuff->Folder = Folder;
         std::ostringstream prefix;
         prefix << "pragma TablePathPrefix = '" << Database << Folder << "';" << std::endl;
         Stuff->TablePrefix = prefix.str();

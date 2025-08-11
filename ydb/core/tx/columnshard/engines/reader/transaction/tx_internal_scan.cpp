@@ -1,11 +1,8 @@
 #include "tx_internal_scan.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -46,11 +43,20 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     {
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.SetScanIdentifier(request.TaskIdentifier);
-        read.PathId = request.GetPathId();
+        {
+            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor("internal_request", request.GetPathId().GetInternalPathId());
+            if (accConclusion.IsFail()) {
+                return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
+                    AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
+            } else {
+                read.TableMetadataAccessor = accConclusion.DetachResult();
+            }
+        }
         read.LockId = LockId;
-        read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
+        read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
+        read.SetScanCursor(nullptr);
         if (request.RangesFilter) {
             read.PKRangesFilter = request.RangesFilter;
         }
@@ -84,9 +90,8 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        Self->DataAccessorsManager.GetObjectPtrVerified(),
-        TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
-        NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}));
+        Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie,
+        Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}));
 
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

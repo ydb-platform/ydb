@@ -15,7 +15,6 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 
 ## Limitations {#restrictions}
 
-* The number of topic partitions is fixed as of changefeed creation and remains unchanged (unlike tables, topics are not elastic).
 * Changefeeds support records of the following types of operations:
 
   * Updates
@@ -34,7 +33,19 @@ Using these timestamps, you can arrange records from different partitions of the
 
 {% note info %}
 
-By default, virtual timestamps are not uploaded to the changefeed. To enable them, use the [appropriate parameter](../yql/reference/syntax/alter_table/changefeed.md) when creating a changefeed.
+By default, virtual timestamps are not emitted to the changefeed. To enable them, use the [appropriate parameter](../yql/reference/syntax/alter_table/changefeed.md) when creating a changefeed.
+
+{% endnote %}
+
+## Barriers {#barriers}
+
+Barriers are service records without data about modification or deletion with [virtual timestamps](#virtual-timestamps) that appear in each partition of a topic at a specified interval. A barrier guarantees that any change with a virtual timestamp earlier than the barrier's has been written to this topic partition.
+
+Barriers can be used to ensure strict ordering and global data consistency by buffering data between them.
+
+{% note info %}
+
+By default, barriers are not emitted to the changefeed. To set the frequency at which barriers are emitted, use the [appropriate parameter](../yql/reference/syntax/alter_table/changefeed.md) when creating a changefeed.
 
 {% endnote %}
 
@@ -60,7 +71,7 @@ During the scanning process, depending on the table update frequency, you might 
 
 {% note warning %}
 
-[Automatic partitioning](datamodel/table.md#partitioning) processes are suspended in the table during the initial scan.
+[Automatic partitioning](datamodel/table.md#partitioning) processes are suspended in the table and [barriers](#barriers) are not emitted to the changefeed during the initial scan.
 
 {% endnote %}
 
@@ -83,7 +94,7 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 }
 ```
 
-* `key`: An array of primary key component values. Always present.
+* `key`: An array of primary key component values. Always present. The order of elements matches the order of the columns listed in the primary key of the table.
 * `update`: Update flag. Present if a record matches the update operation. In `UPDATES` mode, it also contains the names and values of updated columns.
 * `erase`: Erase flag. Present if a record matches the erase operation.
 * `newImage`: Row snapshot that results from its being changed. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
@@ -140,6 +151,14 @@ Record with virtual timestamps:
        "customer": "Name123"
    },
    "ts": [1670792400890, 562949953607163]
+}
+```
+
+A barrier record contains a single field `resolved` with a virtual timestamp:
+
+```json
+{
+    "resolved": [1670792500000, 0]
 }
 ```
 
@@ -235,7 +254,7 @@ To set up the record retention period, specify the [RETENTION_PERIOD](../yql/ref
 
 ## Topic Partitions {#topic-partitions}
 
-By default, the number of [topic partitions](topic.md#partitioning) is equal to the number of table partitions. The number of topic partitions can be redefined by specifying the [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed.
+By default, the initial number of [topic partitions](topic.md#partitioning) is equal to the number of table partitions. You can redefine the initial number of topic partitions by specifying the [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating a changefeed. To create a changefeed with a dynamically changing number of partitions, set the [TOPIC_AUTO_PARTITIONING](../yql/reference/syntax/alter_table/changefeed.md) parameter when creating the changefeed.
 
 {% note info %}
 

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -27,7 +28,13 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
-    std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, const TString& query, bool covered = false) {
+    NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString& query) {
+        const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+        return session.ExecuteDataQuery(query, txSettings,
+            TExecDataQuerySettings().KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
+    }
+
+    std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, TTxSettings txSettings, const TString& query, bool covered = false) {
         {
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(),
@@ -44,7 +51,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
         {
             auto result = session.ExecuteDataQuery(query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+                TTxControl::BeginTx(txSettings).CommitTx()
             ).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(),
                 "Failed to execute: `" << query << "` with " << result.GetIssues().ToString());
@@ -63,7 +70,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    void DoPositiveQueriesVectorIndex(TSession& session, const TString& mainQuery, const TString& indexQuery, bool covered = false) {
+    void DoPositiveQueriesVectorIndex(TSession& session, TTxSettings txSettings, const TString& mainQuery, const TString& indexQuery, bool covered = false) {
         auto toStr = [](const auto& rs) -> TString {
             TStringBuilder b;
             for (const auto& r : rs) {
@@ -71,12 +78,12 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             }
             return b;
         };
-        auto mainResults = DoPositiveQueryVectorIndex(session, mainQuery);
+        auto mainResults = DoPositiveQueryVectorIndex(session, txSettings, mainQuery);
         absl::c_sort(mainResults);
         UNIT_ASSERT_EQUAL_C(mainResults.size(), 3, toStr(mainResults));
         UNIT_ASSERT_C(std::unique(mainResults.begin(), mainResults.end()) == mainResults.end(), toStr(mainResults));
 
-        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery, covered);
+        auto indexResults = DoPositiveQueryVectorIndex(session, txSettings, indexQuery, covered);
         absl::c_sort(indexResults);
         UNIT_ASSERT_EQUAL_C(indexResults.size(), 3, toStr(indexResults));
         UNIT_ASSERT_C(std::unique(indexResults.begin(), indexResults.end()) == indexResults.end(), toStr(indexResults));
@@ -86,11 +93,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void DoPositiveQueriesVectorIndexOrderBy(
         TSession& session,
+        TTxSettings txSettings,
         std::string_view function,
         std::string_view direction,
         std::string_view left,
         std::string_view right,
-        bool covered = false) {
+        bool covered = false
+    ) {
         constexpr std::string_view target = "$target = \"\x67\x71\x03\";";
         std::string metric = std::format("Knn::{}({}, {})", function, left, right);
         // no metric in result
@@ -107,7 +116,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 ORDER BY {} {}
                 LIMIT 3;
             )", target, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery, covered);
+            DoPositiveQueriesVectorIndex(session, txSettings, plainQuery, indexQuery, covered);
         }
         // metric in result
         {
@@ -122,7 +131,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 ORDER BY {} {}
                 LIMIT 3;
             )", target, metric, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery, covered);
+            DoPositiveQueriesVectorIndex(session, txSettings, plainQuery, indexQuery, covered);
         }
         // metric as result
         {
@@ -138,28 +147,32 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 ORDER BY m {}
                 LIMIT 3;
             )", target, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery, covered);
+            DoPositiveQueriesVectorIndex(session, txSettings, plainQuery, indexQuery, covered);
         }
     }
 
     void DoPositiveQueriesVectorIndexOrderBy(
         TSession& session,
+        TTxSettings txSettings,
         std::string_view function,
         std::string_view direction,
         bool covered = false) {
         // target is left, member is right
-        DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "$target", "emb", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "$target", "emb", covered);
         // target is right, member is left
-        DoPositiveQueriesVectorIndexOrderBy(session, function, direction, "emb", "$target", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "emb", "$target", covered);
     }
 
-    void DoPositiveQueriesVectorIndexOrderByCosine(TSession& session, bool covered = false) {
+    void DoPositiveQueriesVectorIndexOrderByCosine(
+        TSession& session,
+        TTxSettings txSettings = TTxSettings::SerializableRW(),
+        bool covered = false) {
         // distance, default direction
-        DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "", covered);
         // distance, asc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, "CosineDistance", "ASC", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "ASC", covered);
         // similarity, desc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, "CosineSimilarity", "DESC", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineSimilarity", "DESC", covered);
     }
 
     TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable) {
@@ -356,12 +369,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST(BuildIndexTimesAndUser) {
-        NKikimrConfig::TAppConfig appConfig;
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
@@ -446,6 +457,23 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT(result.IsSuccess());
         }
 
+        // BulkUpsert to the table with index should fail
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("pk").Int64(11)
+                .AddMember("emb").String("\x77\x77\x03")
+                .AddMember("data").String("43")
+                .EndStruct();
+            rows.EndList();
+            auto result = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+            auto issues = result.GetIssues().ToString();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SCHEME_ERROR, result.GetStatus());
+            UNIT_ASSERT_C(issues.contains("Only async-indexed tables are supported by BulkUpsert"), issues);
+        }
+
         const TString postingTable1 = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
         
         // First index is not updated
@@ -517,7 +545,137 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_EQUAL(settings.Levels, 2);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
-        DoPositiveQueriesVectorIndexOrderByCosine(session, true /*covered*/);
+        DoPositiveQueriesVectorIndexOrderByCosine(session, TTxSettings::SerializableRW(), true /*covered*/);
+    }
+
+    Y_UNIT_TEST_TWIN(CoveredVectorIndexWithFollowers, StaleRO) {
+        std::vector<TString> tableNames = {
+            "/Root/TestTable/index/indexImplLevelTable",
+            "/Root/TestTable/index/indexImplPostingTable"
+        };
+
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        featureFlags.SetEnableAccessToIndexImplTables(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetEnableForceFollowers(true)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb) COVER (emb, data)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto setFollowers = [&session](const TString& tableName) {
+            const TString alterTable(Q_(Sprintf(R"(
+                ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:3");
+            )", tableName.c_str())));
+
+            auto result = session.ExecuteSchemeQuery(alterTable).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        auto checkFollowerDescription = [&session](const TString& tableName) {
+            auto result = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto& table = result.GetTableDescription();
+            UNIT_ASSERT(table.GetReadReplicasSettings()->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::PerAz);
+            UNIT_ASSERT_VALUES_EQUAL(table.GetReadReplicasSettings()->GetReadReplicasCount(), 3);
+        };
+
+        for (const TString& tableName: tableNames) {
+                setFollowers(tableName);
+                checkFollowerDescription(tableName);
+            }
+
+        DoPositiveQueriesVectorIndexOrderByCosine(session, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW(), true /*covered*/);
+
+        for (const TString& tableName: tableNames) {
+            if (StaleRO) {
+                // from master - should NOT read
+                CheckTableReads(session, tableName, false, false);
+                // from followers - should read
+                CheckTableReads(session, tableName, true, true);
+            } else {
+                // https://github.com/ydb-platform/ydb/issues/18680
+                // from master - should read
+                // CheckTableReads(session, tableName, false, true);
+                // from followers - should NOT read
+                // CheckTableReads(session, tableName, true, false);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OrderByReject) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, false);
+
+        for (const auto & check: TVector<TVector<const char*>>({
+            {"distance=cosine", "Knn::CosineDistance(emb, 'abc') DESC", "Knn::CosineSimilarity(emb, ...) DESC or Knn::CosineDistance(emb, ...) ASC"},
+            {"distance=cosine", "Knn::CosineSimilarity(emb, 'abc') ASC", "Knn::CosineSimilarity(emb, ...) DESC or Knn::CosineDistance(emb, ...) ASC"},
+            {"similarity=cosine", "Knn::CosineDistance(emb, 'abc') DESC", "Knn::CosineSimilarity(emb, ...) DESC or Knn::CosineDistance(emb, ...) ASC"},
+            {"similarity=cosine", "Knn::CosineSimilarity(emb, 'abc') ASC", "Knn::CosineSimilarity(emb, ...) DESC or Knn::CosineDistance(emb, ...) ASC"},
+            {"similarity=inner_product", "Knn::InnerProductSimilarity(emb, 'abc') ASC", "Knn::InnerProductSimilarity(emb, ...) DESC"},
+            {"distance=manhattan", "Knn::ManhattanDistance(emb, 'abc') DESC", "Knn::ManhattanDistance(emb, ...) ASC"},
+            {"distance=euclidean", "Knn::EuclideanDistance(emb, 'abc') DESC", "Knn::EuclideanDistance(emb, ...) ASC"},
+        }))
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (%s, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
+            )", check[0])));
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const TString selectQuery(Q1_(Sprintf(R"(
+                SELECT * FROM `/Root/TestTable`
+                VIEW index ORDER BY %s
+            )", check[1])));
+            result = ExecuteDataQuery(session, selectQuery);
+            UNIT_ASSERT_C(HasIssue(NYdb::NAdapters::ToYqlIssues(result.GetIssues()), NYql::TIssuesIds::KIKIMR_WRONG_INDEX_USAGE,
+                [&](const NYql::TIssue& issue) {
+                    return issue.GetMessage().Contains("sorting must contain distance: " + TString(check[2]));
+                }), result.GetIssues().ToString());
+            UNIT_ASSERT(!result.IsSuccess());
+
+            session = db.CreateSession().GetValueSync().GetSession();
+            const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
+            result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
     }
 
 }

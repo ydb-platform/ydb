@@ -991,6 +991,47 @@ public:
         ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
     }
 
+    void HandleTimeout() {
+        TString error = "Timeout";
+        if (ListTenantsResponse) {
+            ListTenantsResponse->Error(error);
+        }
+        for (auto& [_, request] : TenantStatusResponses) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : NavigateKeySetResult) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : DescribeSchemeResult) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : HiveDomainStats) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : HiveStorageStats) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : SystemStateResponse) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : TabletStateResponse) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : OffloadedSystemStateResponse) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : OffloadedTabletStateResponse) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : SelfCheckResults) {
+            request.Error(error);
+        }
+        for (auto& [_, request] : MetadataCacheEndpointsLookup) {
+            request.Error(error);
+        }
+        ReplyAndPassAway();
+    }
+
     static YAML::Node GetSwagger() {
         TSimpleYamlBuilder yaml({
             .Method = "get",

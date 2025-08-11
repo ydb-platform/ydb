@@ -8,7 +8,7 @@
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
 
 #Row Tables Development Team @azevaykin TEAM:@ydb-platform/datashard
-/ydb/core/scheme @ydb-platform/datashard 
+/ydb/core/scheme @ydb-platform/datashard
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/mon_alloc @ydb-platform/datashard
@@ -58,7 +58,9 @@
 /ydb/tests/postgres_integrations @ydb-platform/postgres-compatibility
 
 #YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
-ydb/tests/functional/tpc @ydb-platform/engineering
+/ydb/tests/functional/tpc @ydb-platform/engineering
+/ydb/tests/compatibility @ydb-platform/engineering
+/ydb/tests/stress @ydb-platform/engineering
 
 #Orphan components @spuchin @maximyurchuk @kirrysin @ydb-platform/duty
 /ydb/services/ydb @ydb-platform/duty
@@ -66,21 +68,23 @@ ydb/tests/functional/tpc @ydb-platform/engineering
 /ydb/core/client @ydb-platform/duty
 /ydb/core/engine @ydb-platform/duty
 
-#Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/storage
-/ydb/core/blobstorage @ydb-platform/storage
-/ydb/core/mind/bscontroller @ydb-platform/storage
-/ydb/library/actors @ydb-platform/storage
-/ydb/core/actorlib_impl @ydb-platform/storage
-/ydb/core/keyvalue @ydb-platform/storage
-/ydb/core/test_tablet @ydb-platform/storage
-/ydb/core/blob_depot @ydb-platform/storage
-/ydb/core/erasure @ydb-platform/storage
+#Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/blobstorage
+/ydb/core/blobstorage @ydb-platform/blobstorage
+/ydb/core/mind/bscontroller @ydb-platform/blobstorage
+/ydb/library/actors @ydb-platform/blobstorage
+/ydb/core/actorlib_impl @ydb-platform/blobstorage
+/ydb/core/keyvalue @ydb-platform/blobstorage
+/ydb/core/test_tablet @ydb-platform/blobstorage
+/ydb/core/blob_depot @ydb-platform/blobstorage
+/ydb/core/erasure @ydb-platform/blobstorage
+/ydb/tests/functional/config @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core
 /ydb/core/cms @ydb-platform/core
 /ydb/tests/functional/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
+/ydb/library/yaml_config/ut_transform @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/tests/functional/sqs @ydb-platform/Topics
@@ -92,6 +96,7 @@ ydb/tests/functional/tpc @ydb-platform/engineering
 /ydb/core/ymq @ydb-platform/Topics
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
+/ydb/core/transfer @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 

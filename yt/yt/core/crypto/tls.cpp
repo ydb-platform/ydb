@@ -1,4 +1,5 @@
 #include "tls.h"
+#include "config.h"
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/finally.h>
@@ -12,15 +13,20 @@
 
 #include <yt/yt/core/logging/log.h>
 
+#include <yt/yt/core/rpc/public.h>  // For EErrorCode::SslError
+
 #include <library/cpp/yt/memory/ref.h>
 
 #include <library/cpp/openssl/io/stream.h>
+
+#include <util/string/hex.h>
 
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#include <openssl/x509v3.h>
 
 namespace NYT::NCrypto {
 
@@ -36,31 +42,75 @@ static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Tls");
 
 namespace {
 
-TErrorAttribute GetSslErrors()
-{
-    TString errorStr;
-    ERR_print_errors_cb([] (const char* str, size_t len, void* ctx) {
-        auto& out = *reinterpret_cast<TString*>(ctx);
-        if (!out.empty()) {
-            out += ", ";
-        }
-        out.append(str, len);
-        return 1;
-    }, &errorStr);
-    return TErrorAttribute("ssl_error", errorStr);
-}
-
 constexpr auto TlsBufferSize = 1_MB;
 
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Get all saved SSL errors for current thread.
+TError GetLastSslError(TString message)
+{
+    auto lastSslError = ERR_peek_last_error();
+    TStringBuilder errorStr;
+    ERR_print_errors_cb([] (const char* str, size_t len, void* ctx) {
+        auto& out = *reinterpret_cast<TStringBuilder*>(ctx);
+        if (!out.GetLength()) {
+            out.AppendString(", ");
+        }
+        out.AppendString(TStringBuf(str, len));
+        return 1;
+    }, &errorStr);
+    return TError(NRpc::EErrorCode::SslError, std::move(message), TError::DisableFormat)
+        << TErrorAttribute("ssl_last_error_code", lastSslError)
+        << TErrorAttribute("ssl_error", errorStr.Flush());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TSslDeleter::operator()(BIO* bio) const noexcept
+{
+    BIO_free(bio);
+}
+
+void TSslDeleter::operator()(X509* x509) const noexcept
+{
+    X509_free(x509);
+}
+
+void TSslDeleter::operator()(EVP_PKEY* key) const noexcept
+{
+    EVP_PKEY_free(key);
+}
+
+void TSslDeleter::operator()(SSL_CTX* ctx) const noexcept
+{
+    SSL_CTX_free(ctx);
+}
+
+void TSslDeleter::operator()(SSL* ssl) const noexcept
+{
+    SSL_free(ssl);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString GetFingerprintSHA256(const TX509Ptr& certificate)
+{
+    auto mdType = EVP_sha256();
+    unsigned char md[EVP_MAX_MD_SIZE];
+    unsigned int mdLen = 0;
+    if (!X509_digest(certificate.get(), mdType, md, &mdLen)) {
+        THROW_ERROR GetLastSslError("X509_digest() failed");
+    }
+    return HexEncode(md, mdLen);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TSslContextImpl
     : public TRefCounted
 {
-    SSL_CTX* Context = nullptr;
-
     TSslContextImpl()
     {
         Reset();
@@ -68,55 +118,43 @@ struct TSslContextImpl
 
     ~TSslContextImpl()
     {
-        if (Context) {
-            SSL_CTX_free(Context);
-        }
-        if (ActiveContext_) {
-            SSL_CTX_free(ActiveContext_);
-        }
+    }
+
+    SSL_CTX* GetContext() const
+    {
+        return Context_.get();
     }
 
     void Reset()
     {
-        if (Context) {
-            SSL_CTX_free(Context);
-        }
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
-        Context = SSL_CTX_new(TLS_method());
-        if (!Context) {
-            THROW_ERROR_EXCEPTION("SSL_CTX_new(TLS_method()) failed")
-                << GetSslErrors();
+        Context_.reset(SSL_CTX_new(TLS_method()));
+        if (!Context_) {
+            THROW_ERROR GetLastSslError("SSL_CTX_new(TLS_method()) failed");
         }
-        if (SSL_CTX_set_min_proto_version(Context, TLS1_2_VERSION) == 0) {
-            THROW_ERROR_EXCEPTION("SSL_CTX_set_min_proto_version failed")
-                << GetSslErrors();
+        if (SSL_CTX_set_min_proto_version(GetContext(), TLS1_2_VERSION) == 0) {
+            THROW_ERROR GetLastSslError("SSL_CTX_set_min_proto_version failed");
         }
-        if (SSL_CTX_set_max_proto_version(Context, TLS1_2_VERSION) == 0) {
-            THROW_ERROR_EXCEPTION("SSL_CTX_set_max_proto_version failed")
-                << GetSslErrors();
+        if (SSL_CTX_set_max_proto_version(GetContext(), TLS1_3_VERSION) == 0) {
+            THROW_ERROR GetLastSslError("SSL_CTX_set_max_proto_version failed");
         }
 #else
-        Ctx = SSL_CTX_new(TLSv1_2_method());
+        Context.reset(SSL_CTX_new(TLSv1_2_method()));
         if (!Context) {
-            THROW_ERROR_EXCEPTION("SSL_CTX_new(TLSv1_2_method()) failed")
-                << GetSslErrors();
+             THROW_ERROR GetLastSslError("SSL_CTX_new(TLSv1_2_method()) failed");
         }
 #endif
     }
 
     void Commit(TInstant time)
     {
-        SSL_CTX* oldContext;
-        YT_ASSERT(Context);
+        TSslCtxPtr oldContext;
+        YT_ASSERT(Context_);
         {
             auto guard = WriterGuard(Lock_);
-            oldContext = ActiveContext_;
-            ActiveContext_ = Context;
-            Context = nullptr;
+            oldContext.swap(ActiveContext_);
+            ActiveContext_.swap(Context_);
             CommitTime_ = time;
-        }
-        if (oldContext) {
-            SSL_CTX_free(oldContext);
         }
     }
 
@@ -126,22 +164,32 @@ struct TSslContextImpl
         return CommitTime_;
     }
 
-    SSL* NewSsl()
+    TSslPtr NewSsl()
     {
-        auto guard = ReaderGuard(Lock_);
-        YT_ASSERT(ActiveContext_);
-        return SSL_new(ActiveContext_);
+        SSL* ssl;
+        {
+            auto guard = ReaderGuard(Lock_);
+            YT_ASSERT(ActiveContext_);
+            ssl = SSL_new(ActiveContext_.get());
+        }
+        if (!ssl) {
+            THROW_ERROR GetLastSslError("SSL_new failed");
+        }
+        return TSslPtr(ssl);
     }
 
     bool IsActive(const SSL* ssl)
     {
         auto guard = ReaderGuard(Lock_);
-        return SSL_get_SSL_CTX(ssl) == ActiveContext_;
+        return SSL_get_SSL_CTX(ssl) == ActiveContext_.get();
     }
+
+    DEFINE_BYVAL_RW_BOOLEAN_PROPERTY(InsecureSkipVerify, DefaultInsecureSkipVerify);
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
-    SSL_CTX* ActiveContext_ = nullptr;
+    TSslCtxPtr Context_;
+    TSslCtxPtr ActiveContext_;
     TInstant CommitTime_;
 };
 
@@ -165,10 +213,6 @@ public:
         , Underlying_(std::move(connection))
     {
         Ssl_ = Context_->NewSsl();
-        if (!Ssl_) {
-            THROW_ERROR_EXCEPTION("SSL_new failed")
-                << GetSslErrors();
-        }
 
         InputBIO_ = BIO_new(BIO_s_mem());
         YT_VERIFY(InputBIO_);
@@ -178,7 +222,7 @@ public:
         OutputBIO_ = BIO_new(BIO_s_mem());
         YT_VERIFY(OutputBIO_);
 
-        SSL_set_bio(Ssl_, InputBIO_, OutputBIO_);
+        SSL_set_bio(Ssl_.get(), InputBIO_, OutputBIO_);
 
         InputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
         OutputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
@@ -186,19 +230,28 @@ public:
 
     void SetHost(const TString& host)
     {
-        SSL_set_tlsext_host_name(Ssl_, host.c_str());
+        // Verify hostname in server certificate.
+        SSL_set_hostflags(Ssl_.get(), X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+        SSL_set1_host(Ssl_.get(), host.c_str());
+
+        SSL_set_tlsext_host_name(Ssl_.get(), host.c_str());
     }
 
     ~TTlsConnection()
     {
-        SSL_free(Ssl_);
     }
 
-    void StartClient()
+    void StartClient(bool insecureSkipVerify)
     {
-        SSL_set_connect_state(Ssl_);
-        auto sslResult = SSL_do_handshake(Ssl_);
-        sslResult = SSL_get_error(Ssl_, sslResult);
+        YT_LOG_WARNING_IF(insecureSkipVerify, "Started insecure TLS client connection");
+        if (!insecureSkipVerify) {
+            // Require and verify server certificate.
+            SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nullptr);
+        }
+
+        SSL_set_connect_state(Ssl_.get());
+        auto sslResult = SSL_do_handshake(Ssl_.get());
+        sslResult = SSL_get_error(Ssl_.get(), sslResult);
         YT_VERIFY(sslResult == SSL_ERROR_WANT_READ);
 
         Invoker_->Invoke(BIND(&TTlsConnection::DoRun, MakeWeak(this)));
@@ -206,7 +259,7 @@ public:
 
     void StartServer()
     {
-        SSL_set_accept_state(Ssl_);
+        SSL_set_accept_state(Ssl_.get());
 
         Invoker_->Invoke(BIND(&TTlsConnection::DoRun, MakeWeak(this)));
     }
@@ -372,7 +425,7 @@ private:
     const IInvokerPtr Invoker_;
     const IConnectionPtr Underlying_;
 
-    SSL* Ssl_ = nullptr;
+    TSslPtr Ssl_;
     BIO* InputBIO_ = nullptr;
     BIO* OutputBIO_ = nullptr;
 
@@ -493,23 +546,22 @@ private:
         CheckError();
 
         if (CloseRequested_ && !HandshakeInProgress_) {
-            SSL_shutdown(Ssl_);
+            SSL_shutdown(Ssl_.get());
             MaybeStartUnderlyingIO(false);
         }
 
         // NB: We should check for an error here, because Underylying_ might have failed already, and then
         // we will loop on SSL_ERROR_WANT_READ forever.
         if (HandshakeInProgress_ && Error_.IsOK()) {
-            int sslResult = SSL_do_handshake(Ssl_);
+            int sslResult = SSL_do_handshake(Ssl_.get());
             if (sslResult == 1) {
                 HandshakeInProgress_ = false;
             } else {
-                int sslError = SSL_get_error(Ssl_, sslResult);
+                int sslError = SSL_get_error(Ssl_.get(), sslResult);
                 if (sslError == SSL_ERROR_WANT_READ) {
                     MaybeStartUnderlyingIO(true);
                 } else {
-                    Error_ = TError("SSL_do_handshake failed")
-                        << GetSslErrors();
+                    Error_ = GetLastSslError("SSL_do_handshake failed");
                     YT_LOG_DEBUG(Error_, "TLS handshake failed");
                     CheckError();
                     return;
@@ -524,11 +576,10 @@ private:
         // Second condition acts as a poor-man backpressure.
         if (WriteActive_ && !UnderlyingWriteActive_) {
             for (const auto& ref : WriteBuffer_) {
-                int count = SSL_write(Ssl_, ref.Begin(), ref.Size());
+                int count = SSL_write(Ssl_.get(), ref.Begin(), ref.Size());
 
                 if (count < 0) {
-                    Error_ = TError("SSL_write failed")
-                        << GetSslErrors();
+                    Error_ = GetLastSslError("SSL_write failed");
                     YT_LOG_DEBUG(Error_, "TLS write failed");
                     CheckError();
                     return;
@@ -547,7 +598,7 @@ private:
         }
 
         if (ReadActive_) {
-            int count = SSL_read(Ssl_, ReadBuffer_.Begin(), ReadBuffer_.Size());
+            int count = SSL_read(Ssl_.get(), ReadBuffer_.Begin(), ReadBuffer_.Size());
             if (count >= 0) {
                 ReadActive_ = false;
                 ReadBuffer_.Reset();
@@ -555,12 +606,11 @@ private:
                 ReadPromise_.Set(count);
                 ReadPromise_.Reset();
             } else {
-                int sslError = SSL_get_error(Ssl_, count);
+                int sslError = SSL_get_error(Ssl_.get(), count);
                 if (sslError == SSL_ERROR_WANT_READ) {
                     MaybeStartUnderlyingIO(true);
                 } else {
-                    Error_ = TError("SSL_read failed")
-                        << GetSslErrors();
+                    Error_ = GetLastSslError("SSL_read failed");
                     YT_LOG_DEBUG(Error_, "TLS read failed");
                     CheckError();
                     return;
@@ -589,15 +639,20 @@ public:
 
     TFuture<IConnectionPtr> Dial(const TNetworkAddress& remoteAddress, TDialerContextPtr context) override
     {
-        return Underlying_->Dial(remoteAddress)
-            .Apply(BIND([ctx = Context_, poller = Poller_, context = std::move(context)] (const IConnectionPtr& underlying) -> IConnectionPtr {
+        return Underlying_->Dial(remoteAddress).Apply(BIND(
+            [
+                ctx = Context_,
+                poller = Poller_,
+                context = std::move(context),
+                insecureSkipVerify = Context_->IsInsecureSkipVerify()
+            ] (const IConnectionPtr& underlying) -> IConnectionPtr {
                 auto connection = New<TTlsConnection>(ctx, poller, underlying);
                 if (context && context->Host) {
                     connection->SetHost(*context->Host);
                 }
-                connection->StartClient();
+                connection->StartClient(insecureSkipVerify);
                 return connection;
-        }));
+            }));
     }
 
 private:
@@ -668,72 +723,110 @@ TInstant TSslContext::GetCommitTime() const
     return Impl_->GetCommitTime();
 }
 
+void TSslContext::ApplyConfig(const TSslContextConfigPtr& config, TCertificatePathResolver pathResolver)
+{
+    if (!config) {
+        return;
+    }
+
+    const auto& commands = config->SslConfigurationCommands;
+    if (!commands.empty()) {
+        std::unique_ptr<SSL_CONF_CTX, decltype(&SSL_CONF_CTX_free)> configContext(SSL_CONF_CTX_new(), SSL_CONF_CTX_free);
+        if (!configContext) {
+            THROW_ERROR GetLastSslError("SSL_CONF_CTX_new failed");
+        }
+
+        SSL_CONF_CTX_set_flags(configContext.get(),
+            SSL_CONF_FLAG_FILE |
+            SSL_CONF_FLAG_CLIENT |
+            SSL_CONF_FLAG_SERVER |
+            SSL_CONF_FLAG_CERTIFICATE |
+            SSL_CONF_FLAG_SHOW_ERRORS);
+
+        SSL_CONF_CTX_set_ssl_ctx(configContext.get(), Impl_->GetContext());
+
+        for (const auto& command: commands) {
+            if (SSL_CONF_cmd(configContext.get(), command->Name.c_str(), command->Value.c_str()) <= 0) {
+                THROW_ERROR GetLastSslError("SSL_CONF_cmd failed")
+                    << TErrorAttribute("ssl_config_command_name", command->Name);
+            }
+        }
+
+        if (SSL_CONF_CTX_finish(configContext.get()) != 1) {
+            THROW_ERROR GetLastSslError("SSL_CONF_CTX_finish failed");
+        }
+    }
+
+    AddCertificateAuthority(config->CertificateAuthority, pathResolver);
+    AddCertificateChain(config->CertificateChain, pathResolver);
+    AddPrivateKey(config->PrivateKey, pathResolver);
+    Impl_->SetInsecureSkipVerify(config->InsecureSkipVerify);
+}
+
 void TSslContext::UseBuiltinOpenSslX509Store()
 {
-    SSL_CTX_set_cert_store(Impl_->Context, GetBuiltinOpenSslX509Store().Release());
+    SSL_CTX_set_cert_store(Impl_->GetContext(), GetBuiltinOpenSslX509Store().Release());
 }
 
 void TSslContext::SetCipherList(const TString& list)
 {
-    if (SSL_CTX_set_cipher_list(Impl_->Context, list.data()) == 0) {
-        THROW_ERROR_EXCEPTION("SSL_CTX_set_cipher_list failed")
-            << TErrorAttribute("cipher_list", list)
-            << GetSslErrors();
+    if (SSL_CTX_set_cipher_list(Impl_->GetContext(), list.data()) == 0) {
+        THROW_ERROR GetLastSslError("SSL_CTX_set_cipher_list failed")
+            << TErrorAttribute("cipher_list", list);
+    }
+}
+
+void TSslContext::AddCertificateAuthorityFromFile(const TString& path)
+{
+    if (SSL_CTX_load_verify_locations(Impl_->GetContext(), path.c_str(), nullptr) != 1) {
+        THROW_ERROR GetLastSslError("SSL_CTX_load_verify_locations failed")
+            << TErrorAttribute("path", path);
     }
 }
 
 void TSslContext::AddCertificateFromFile(const TString& path)
 {
-    if (SSL_CTX_use_certificate_file(Impl_->Context, path.c_str(), SSL_FILETYPE_PEM) != 1) {
-        THROW_ERROR_EXCEPTION("SSL_CTX_use_certificate_file failed")
-            << TErrorAttribute("path", path)
-            << GetSslErrors();
+    if (SSL_CTX_use_certificate_file(Impl_->GetContext(), path.c_str(), SSL_FILETYPE_PEM) != 1) {
+        THROW_ERROR GetLastSslError("SSL_CTX_use_certificate_file failed")
+            << TErrorAttribute("path", path);
     }
 }
 
 void TSslContext::AddCertificateChainFromFile(const TString& path)
 {
-    if (SSL_CTX_use_certificate_chain_file(Impl_->Context, path.c_str()) != 1) {
-        THROW_ERROR_EXCEPTION("SSL_CTX_use_certificate_chain_file failed")
-            << TErrorAttribute("path", path)
-            << GetSslErrors();
+    if (SSL_CTX_use_certificate_chain_file(Impl_->GetContext(), path.c_str()) != 1) {
+        THROW_ERROR GetLastSslError("SSL_CTX_use_certificate_chain_file failed")
+            << TErrorAttribute("path", path);
     }
 }
 
 void TSslContext::AddPrivateKeyFromFile(const TString& path)
 {
-    if (SSL_CTX_use_PrivateKey_file(Impl_->Context, path.c_str(), SSL_FILETYPE_PEM) != 1) {
-        THROW_ERROR_EXCEPTION("SSL_CTX_use_PrivateKey_file failed")
-            << TErrorAttribute("path", path)
-            << GetSslErrors();
+    if (SSL_CTX_use_PrivateKey_file(Impl_->GetContext(), path.c_str(), SSL_FILETYPE_PEM) != 1) {
+        THROW_ERROR GetLastSslError("SSL_CTX_use_PrivateKey_file failed")
+            << TErrorAttribute("path", path);
     }
 }
 
 void TSslContext::AddCertificateChain(const TString& certificateChain)
 {
-    auto bio = BIO_new_mem_buf(certificateChain.c_str(), certificateChain.size());
-    YT_VERIFY(bio);
-    auto freeBio = Finally([&] {
-        BIO_free(bio);
-    });
+    TBioPtr bio(BIO_new_mem_buf(certificateChain.c_str(), certificateChain.size()));
+    if (!bio) {
+        THROW_ERROR GetLastSslError("Failed to allocate memory buffer for certificate chain");
+    }
 
-    auto certificateObject = PEM_read_bio_X509_AUX(bio, nullptr, nullptr, nullptr);
+    TX509Ptr certificateObject(PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
     if (!certificateObject) {
-        THROW_ERROR_EXCEPTION("PEM_read_bio_X509_AUX failed")
-            << GetSslErrors();
-    }
-    auto freeCertificate = Finally([&] {
-        X509_free(certificateObject);
-    });
-
-    if (SSL_CTX_use_certificate(Impl_->Context, certificateObject) != 1) {
-        THROW_ERROR_EXCEPTION("SSL_CTX_use_certificate failed")
-            << GetSslErrors();
+        THROW_ERROR GetLastSslError("PEM_read_bio_X509_AUX failed");
     }
 
-    SSL_CTX_clear_chain_certs(Impl_->Context);
+    if (SSL_CTX_use_certificate(Impl_->GetContext(), certificateObject.get()) != 1) {
+        THROW_ERROR GetLastSslError("SSL_CTX_use_certificate failed");
+    }
+
+    SSL_CTX_clear_chain_certs(Impl_->GetContext());
     while (true) {
-        auto chainCertificateObject = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
+        TX509Ptr chainCertificateObject(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
         if (!chainCertificateObject) {
             int err = ERR_peek_last_error();
             if (ERR_GET_LIB(err) == ERR_LIB_PEM && ERR_GET_REASON(err) == PEM_R_NO_START_LINE) {
@@ -741,63 +834,101 @@ void TSslContext::AddCertificateChain(const TString& certificateChain)
                 break;
             }
 
-            THROW_ERROR_EXCEPTION("PEM_read_bio_X509")
-                << GetSslErrors();
+            THROW_ERROR GetLastSslError("PEM_read_bio_X509");
         }
 
-        int result = SSL_CTX_add0_chain_cert(Impl_->Context, chainCertificateObject);
-        if (!result) {
-            X509_free(chainCertificateObject);
-            THROW_ERROR_EXCEPTION("SSL_CTX_add0_chain_cert")
-                << GetSslErrors();
+        if (SSL_CTX_add0_chain_cert(Impl_->GetContext(), chainCertificateObject.get()) != 1) {
+            THROW_ERROR GetLastSslError("SSL_CTX_add0_chain_cert");
+        }
+
+        // Do not X509_free() if certificate was added by SSL_CTX_add0_chain_cert().
+        Y_UNUSED(chainCertificateObject.release());
+    }
+}
+
+void TSslContext::AddCertificateAuthority(const TString& ca)
+{
+    TBioPtr bio(BIO_new_mem_buf(ca.data(), ca.size()));
+    if (!bio) {
+        THROW_ERROR GetLastSslError("Failed to allocate memory buffer for CA certificate");
+    }
+
+    auto store = SSL_CTX_get_cert_store(Impl_->GetContext());
+
+    // Load certificate chain.
+    TX509Ptr cert;
+    while (cert.reset(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr)), cert) {
+        if (X509_STORE_add_cert(store, cert.get()) != 1) {
+             THROW_ERROR GetLastSslError("Failed to add cert to store");
         }
     }
 }
 
 void TSslContext::AddCertificate(const TString& certificate)
 {
-    auto bio = BIO_new_mem_buf(certificate.c_str(), certificate.size());
-    YT_VERIFY(bio);
-    auto freeBio = Finally([&] {
-        BIO_free(bio);
-    });
-
-    auto certificateObject = PEM_read_bio_X509_AUX(bio, nullptr, nullptr, nullptr);
-    if (!certificateObject) {
-        THROW_ERROR_EXCEPTION("PEM_read_bio_X509_AUX")
-            << GetSslErrors();
+    TBioPtr bio(BIO_new_mem_buf(certificate.c_str(), certificate.size()));
+    if (!bio) {
+        THROW_ERROR GetLastSslError("Failed to allocate memory buffer for certificate");
     }
-    auto freeCertificate = Finally([&] {
-        X509_free(certificateObject);
-    });
 
-    if (SSL_CTX_use_certificate(Impl_->Context, certificateObject) != 1) {
-        THROW_ERROR_EXCEPTION("SSL_CTX_use_certificate failed")
-            << GetSslErrors();
+    TX509Ptr certificateObject(PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
+    if (!certificateObject) {
+        THROW_ERROR GetLastSslError("PEM_read_bio_X509_AUX");
+    }
+
+    if (SSL_CTX_use_certificate(Impl_->GetContext(), certificateObject.get()) != 1) {
+        THROW_ERROR GetLastSslError("SSL_CTX_use_certificate failed");
     }
 }
 
 void TSslContext::AddPrivateKey(const TString& privateKey)
 {
-    auto bio = BIO_new_mem_buf(privateKey.c_str(), privateKey.size());
-    YT_VERIFY(bio);
-    auto freeBio = Finally([&] {
-        BIO_free(bio);
-    });
+    TBioPtr bio(BIO_new_mem_buf(privateKey.c_str(), privateKey.size()));
+    if (!bio) {
+        THROW_ERROR GetLastSslError("Failed to allocate memory buffer for private key");
+    }
 
-    auto privateKeyObject = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr);
+    TEvpPKeyPtr privateKeyObject(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
     if (!privateKeyObject) {
-        THROW_ERROR_EXCEPTION("PEM_read_bio_PrivateKey failed")
-            << GetSslErrors();
+        THROW_ERROR GetLastSslError("PEM_read_bio_PrivateKey failed");
     }
-    auto freePrivateKey = Finally([&] {
-        EVP_PKEY_free(privateKeyObject);
-    });
 
-    if (SSL_CTX_use_PrivateKey(Impl_->Context, privateKeyObject) != 1) {
-        THROW_ERROR_EXCEPTION("SSL_CTX_use_PrivateKey failed")
-            << GetSslErrors();
+    if (SSL_CTX_use_PrivateKey(Impl_->GetContext(), privateKeyObject.get()) != 1) {
+        THROW_ERROR GetLastSslError("SSL_CTX_use_PrivateKey failed");
     }
+}
+
+void TSslContext::AddCertificateAuthority(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
+{
+    if (pem) {
+        AddCertificateAuthority(pem->LoadBlob(resolver));
+    }
+}
+
+void TSslContext::AddCertificate(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
+{
+    if (pem) {
+        AddCertificate(pem->LoadBlob(resolver));
+    }
+}
+
+void TSslContext::AddCertificateChain(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
+{
+    if (pem) {
+        AddCertificateChain(pem->LoadBlob(resolver));
+    }
+}
+
+void TSslContext::AddPrivateKey(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
+{
+    if (pem) {
+        AddPrivateKey(pem->LoadBlob(resolver));
+    }
+}
+
+TSslPtr TSslContext::NewSsl()
+{
+    return Impl_->NewSsl();
 }
 
 IDialerPtr TSslContext::CreateDialer(

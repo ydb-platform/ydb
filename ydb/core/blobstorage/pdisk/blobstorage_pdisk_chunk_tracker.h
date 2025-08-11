@@ -48,10 +48,16 @@ public:
     // Increasing expected owner count is fundamentally unfair and may cause instant jumps right into 0 free,
     // overusers will keep their unfair share as a result.
     void SetExpectedOwnerCount(size_t newOwnerCount) {
-        if (newOwnerCount != ExpectedOwnerCount) {
-            ExpectedOwnerCount = newOwnerCount;
-            RedistributeQuotas();
+        ExpectedOwnerCount = newOwnerCount;
+        RedistributeQuotas();
+    }
+
+    size_t GetNumActiveSlots() {
+        size_t sum = 0;
+        for (TOwner id: ActiveOwnerIds) {
+            sum += QuotaForOwner[id].GetWeight();
         }
+        return sum;
     }
 
     i64 ForceHardLimit(TOwner ownerId, i64 limit) {
@@ -60,28 +66,41 @@ public:
     }
 
     void RedistributeQuotas() {
-        size_t parts = Max(ExpectedOwnerCount, ActiveOwnerIds.size());
+        size_t parts = Max(ExpectedOwnerCount, GetNumActiveSlots());
         if (parts) {
             i64 limit = Total / parts;
 
             // Divide into equal parts and that's it.
             for (TOwner id : ActiveOwnerIds) {
-                ForceHardLimit(id, limit);
+                auto weight = QuotaForOwner[id].GetWeight();
+                ForceHardLimit(id, limit * weight);
             }
         }
     }
 
-    void AddOwner(TOwner id, TVDiskID vdiskId) {
+    void AddOwner(TOwner id, TVDiskID vdiskId, ui32 weight) {
         TQuotaRecord &record = QuotaForOwner[id];
         Y_VERIFY(record.GetHardLimit() == 0);
         Y_VERIFY(record.GetFree() == 0);
         record.SetName(TStringBuilder() << "Owner# " << id);
         record.SetVDiskId(vdiskId);
+        record.SetWeight(weight);
 
         ActiveOwnerIds.push_back(id);
-        if (ActiveOwnerIds.size() <= ExpectedOwnerCount || ExpectedOwnerCount == 0) {
-            RedistributeQuotas();
-        }
+        RedistributeQuotas();
+    }
+
+    void SetOwnerWeight(TOwner id, ui32 weight) {
+        auto it = std::find(ActiveOwnerIds.begin(), ActiveOwnerIds.end(), id);
+        Y_VERIFY(it != ActiveOwnerIds.end());
+
+        TQuotaRecord &record = QuotaForOwner[id];
+        record.SetWeight(weight);
+        RedistributeQuotas();
+    }
+
+    ui32 GetOwnerWeight(TOwner id) {
+        return QuotaForOwner[id].GetWeight();
     }
 
     void RemoveOwner(TOwner id) {
@@ -96,6 +115,7 @@ public:
         }
         Y_VERIFY(isFound);
         ForceHardLimit(id, 0);
+        RedistributeQuotas();
     }
 
     i64 AddSystemOwner(TOwner id, i64 quota, TString name) {
@@ -149,6 +169,7 @@ public:
         str << "<td>" << q.GetHardLimit() << "</td>";
         str << "<td>" << q.GetFree() << "</td>";
         str << "<td>" << q.GetUsed() << "</td>";
+        str << "<td>" << q.GetWeight() << "</td>";
         double occupancy;
         str << "<td>" << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(q.EstimateSpaceColor(0, &occupancy)) << "</td>";
         str << "<td>" << occupancy << "</td>";
@@ -170,6 +191,7 @@ public:
         str << "\nTotal# " << Total;
         str << "\nExpectedOwnerCount# " << ExpectedOwnerCount;
         str << "\nActiveOwners# " << ActiveOwnerIds.size();
+        str << "\nNumActiveSlots# " << GetNumActiveSlots();
         if (colorBorder) {
             str << "\nColorBorder# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(*colorBorder);
         }
@@ -185,6 +207,7 @@ public:
                 <th>HardLimit</th>
                 <th>Free</th>
                 <th>Used</th>
+                <th>Weight</th>
                 <th>Color</th>
                 <th>Occupancy</th>
 
@@ -199,12 +222,14 @@ public:
             </tr>
         )_";
         if (sharedQuota) {
+            str << "\n    ";
             PrintQuotaRow(str, *sharedQuota);
         }
         for (TOwner id : ActiveOwnerIds) {
+            str << "\n    ";
             PrintQuotaRow(str, QuotaForOwner[id]);
         }
-        str << "</table>";
+        str << "\n</table>";
     }
 
     ui32 ColorFlagLimit(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
@@ -314,7 +339,7 @@ public:
 
         for (auto& [ownerId, ownerInfo] : params.OwnersInfo) {
             i64 chunks = ownerInfo.ChunksOwned;
-            AddOwner(ownerId, ownerInfo.VDiskId);
+            AddOwner(ownerId, ownerInfo.VDiskId, ownerInfo.Weight);
             if (chunks) {
                 OwnerQuota->InitialAllocate(ownerId, chunks);
                 bool isOk = SharedQuota->InitialAllocate(chunks);
@@ -344,14 +369,28 @@ public:
         return true;
     }
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId) {
+    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight = 1) {
         Y_VERIFY(IsOwnerUser(owner));
-        OwnerQuota->AddOwner(owner, vdiskId);
+        OwnerQuota->AddOwner(owner, vdiskId, weight);
+    }
+
+    void SetOwnerWeight(TOwner owner, ui32 weight) {
+        Y_VERIFY(IsOwnerUser(owner));
+        OwnerQuota->SetOwnerWeight(owner, weight);
     }
 
     void RemoveOwner(TOwner owner) {
         Y_VERIFY(IsOwnerUser(owner));
         OwnerQuota->RemoveOwner(owner);
+    }
+
+    ui32 GetOwnerWeight(TOwner owner) {
+        Y_VERIFY(IsOwnerUser(owner));
+        return OwnerQuota->GetOwnerWeight(owner);
+    }
+
+    ui32 GetNumActiveSlots() const {
+        return OwnerQuota->GetNumActiveSlots();
     }
 
     i64 GetOwnerHardLimit(TOwner owner) const {
@@ -399,10 +438,10 @@ public:
     }
     /////////////////////////////////////////////////////
 
-    i64 GetOwnerFree(TOwner owner) const {
+    i64 GetOwnerFree(TOwner owner, bool personal) const {
         if (IsOwnerUser(owner)) {
-            // fix for CLOUDINC-1822: remove OwnerQuota->GetFree(owner) since it broke group balancing in Hive
-            return SharedQuota->GetFree();
+            // See CLOUDINC-1822: OwnerQuota->GetFree(owner) broke group balancing in Hive and was replaced by SharedQuota
+            return personal ? OwnerQuota->GetFree(owner) : SharedQuota->GetFree();
         } else {
             switch (owner) {
                 case OwnerCommonStaticLog:

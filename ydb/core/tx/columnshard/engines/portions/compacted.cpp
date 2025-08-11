@@ -6,8 +6,11 @@
 
 namespace NKikimr::NOlap {
 
-void TCompactedPortionInfo::DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const {
-    auto metaProto = GetMeta().SerializeToProto();
+void TCompactedPortionInfo::DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const {
+    auto metaProto = GetMeta().SerializeToProto(blobIds, NPortion::EProduced::SPLIT_COMPACTED);
+    AFL_VERIFY(AppearanceSnapshot.Valid());
+    auto* compactedProto = metaProto.MutableCompactedPortion();
+    AppearanceSnapshot.SerializeToProto(*compactedProto->MutableAppearanceSnapshot());
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     const auto removeSnapshot = GetRemoveSnapshotOptional();
     db.Table<IndexPortions>()
@@ -30,8 +33,8 @@ const TSnapshot& TCompactedPortionInfo::RecordSnapshotMax(const std::optional<TS
     return GetMeta().RecordSnapshotMax;
 }
 
-std::unique_ptr<TPortionInfoConstructor> TCompactedPortionInfo::BuildConstructor(const bool withMetadata, const bool withMetadataBlobs) const {
-    return std::make_unique<TCompactedPortionInfoConstructor>(*this, withMetadata, withMetadataBlobs);
+std::unique_ptr<TPortionInfoConstructor> TCompactedPortionInfo::BuildConstructor(const bool withMetadata) const {
+    return std::make_unique<TCompactedPortionInfoConstructor>(*this, withMetadata);
 }
 
 NSplitter::TEntityGroups TCompactedPortionInfo::GetEntityGroupsByStorageId(

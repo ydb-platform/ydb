@@ -1,6 +1,6 @@
 #include "http.h"
 
-#include <contrib/restricted/http-parser/http_parser.h>
+#include <contrib/deprecated/http-parser/http_parser.h>
 
 namespace NYT::NHttp {
 
@@ -79,7 +79,10 @@ void THeaders::Add(std::string header, std::string value)
 
 void THeaders::Remove(TStringBuf header)
 {
-    NameToEntry_.erase(header);
+    // TODO(babenko): replace with just |NameToEntry_.erase(header)| after C++23.
+    if (auto it = NameToEntry_.find(header); it != NameToEntry_.end()) {
+        NameToEntry_.erase(it);
+    }
 }
 
 void THeaders::Set(std::string header, std::string value)

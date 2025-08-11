@@ -112,6 +112,7 @@ private:
         checker(Scopes.size(), "query scopes");
         checker(runnerOptions.AstOutputs.size(), "ast output files");
         checker(runnerOptions.PlanOutputs.size(), "plan output files");
+        checker(runnerOptions.StatsOutputs.size(), "statistics output files");
     }
 
     ui64 GetNumberOfQueries() const {
@@ -399,15 +400,15 @@ protected:
 
         options.AddLongOption("ast-file", "File with query ast (use '-' to write in stdout)")
             .RequiredArgument("file")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                RunnerOptions.AstOutputs.emplace_back(GetDefaultOutput(TString(option->CurValOrDef())));
-            });
+            .EmplaceTo(&RunnerOptions.AstOutputs);
 
         options.AddLongOption("plan-file", "File with query plan (use '-' to write in stdout)")
             .RequiredArgument("file")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                RunnerOptions.PlanOutputs.emplace_back(GetDefaultOutput(TString(option->CurValOrDef())));
-            });
+            .EmplaceTo(&RunnerOptions.PlanOutputs);
+
+        options.AddLongOption("stats-file", "File with query statistics")
+            .RequiredArgument("file")
+            .EmplaceTo(&RunnerOptions.StatsOutputs);
 
         options.AddLongOption("canonical-output", "Make ast and plan output suitable for canonization (replace volatile data such as endpoints with stable one)")
             .NoArgument()
@@ -466,7 +467,6 @@ protected:
         });
         options.AddLongOption('A', "action", "Query execute action")
             .RequiredArgument("action")
-            .DefaultValue("run")
             .Choices(queryAction.GetChoices())
             .Handler1([this, queryAction](const NLastGetopt::TOptsParser* option) {
                 TString choice(option->CurValOrDef());

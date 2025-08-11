@@ -2,7 +2,7 @@
 
 #include <ydb/core/sys_view/common/common.h>
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/base/tablet_pipecache.h>
 
@@ -114,7 +114,7 @@ private:
                 tables.OverloadedByTli[pathId].swap(overloadedByTli);
             } else {
                 tables.OverloadedByTli.erase(pathId);
-            }            
+            }
 
             oldPartitions.swap(newPartitions);
             table.ShardIndices.swap(ev->Get()->ShardIndices);
@@ -184,7 +184,7 @@ private:
                     tables.OverloadedByTli.erase(pathId);
                 }
             }
-        }        
+        }
 
         if (followerStats.HasTtlStats()) {
             newStats.MutableTtlStats()->Swap(followerStats.MutableTtlStats());
@@ -430,7 +430,7 @@ private:
             ui32 FollowerId;
             ui64 LocksBroken;
         };
-        std::vector<TPartitionByTli> sortedByTli;        
+        std::vector<TPartitionByTli> sortedByTli;
 
         for (const auto& [pathId, overloadedFollowers] : domainTables.OverloadedByCpu) {
             for (const TFollowerStats& overloadedFollower : overloadedFollowers) {
@@ -445,7 +445,7 @@ private:
                 const auto& partition = table.Partitions.at(overloadedFollower.ShardIdx).FollowerStats.at(overloadedFollower.FollowerId);
                 sortedByTli.emplace_back(TPartitionByTli{pathId, overloadedFollower.ShardIdx, overloadedFollower.FollowerId, partition.GetLocksBroken()});
             }
-        }        
+        }
 
         std::sort(sortedByCpu.begin(), sortedByCpu.end(),
             [] (const auto& l, const auto& r) { return l.CPUCores > r.CPUCores; });
@@ -500,7 +500,7 @@ private:
             if (++count == TOP_PARTITIONS_COUNT) {
                 break;
             }
-        }        
+        }
 
         sendEvent->Record.SetTimeUs(nowUs);
 
@@ -595,9 +595,10 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TPartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TPartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
     {
         auto extractKey = [] (NKikimrSysView::TPartitionStatsKey& key, const TConstArrayRef<TCell>& cells) {
             if (cells.size() > 0 && !cells[0].IsNull()) {
@@ -860,10 +861,11 @@ private:
     bool IncludePathColumn = false;
 };
 
-THolder<NActors::IActor> CreatePartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreatePartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TPartitionStatsScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TPartitionStatsScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
 }
 
 } // NSysView

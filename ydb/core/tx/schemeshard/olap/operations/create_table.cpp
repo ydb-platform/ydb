@@ -495,7 +495,7 @@ public:
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
             TPathId pathId = txState->TargetPathId;
-            auto hiveToRequest = context.SS->ResolveHive(pathId, context.Ctx);
+            auto hiveToRequest = context.SS->ResolveHive(pathId);
             context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, pathId, event.release());
         }
 
@@ -665,7 +665,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .ShardsLimit(storeInfo ? 0 : shardsCount)

@@ -35,7 +35,7 @@ using NCrypto::TMD5Hash;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = TableClientLogger;
+constinit const auto Logger = TableClientLogger;
 
 struct TWireProtocolWriterTag
 { };
@@ -871,7 +871,9 @@ private:
             limit = Options_.MaxCompositeValueLength;
         }
         if (length > limit) {
-            THROW_ERROR_EXCEPTION("Value of type %Qlv is too long: length %v, limit %v",
+            THROW_ERROR_EXCEPTION(
+                NTableClient::EErrorCode::StringLikeValueLengthLimitExceeded,
+                "Value of type %Qlv is too long: length %v, limit %v",
                 type,
                 length,
                 limit);

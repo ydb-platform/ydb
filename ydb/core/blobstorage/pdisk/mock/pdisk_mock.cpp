@@ -30,11 +30,13 @@ struct TPDiskMockState::TImpl {
         ui64 LogDataSize = 0;
         bool Slain = false;
         ui64 LastLsn = 0;
+        ui32 Weight = 0;
+        ui32 GroupSizeInUnits = 0;
     };
 
     const ui32 NodeId;
     const ui32 PDiskId;
-    const ui64 PDiskGuid;
+    ui64 PDiskGuid;
     const ui64 Size;
     const ui32 ChunkSize;
     const ui32 TotalChunks;
@@ -77,7 +79,7 @@ struct TPDiskMockState::TImpl {
                 ChunkSharedQuota->ForceHardLimit(TotalChunks, NPDisk::TColorLimits::MakeChunkLimits(130));
                 break;
             }
-            case ESpaceColorPolicy::None: 
+            case ESpaceColorPolicy::None:
             default:
                 break;
         }
@@ -111,7 +113,7 @@ struct TPDiskMockState::TImpl {
                 SetStatusFlags(SpaceColorToStatusFlag(newColor));
                 break;
             }
-            case ESpaceColorPolicy::None: 
+            case ESpaceColorPolicy::None:
             default:
                 break;
         }
@@ -386,6 +388,14 @@ TString& TPDiskMockState::GetStateErrorReason() {
     return Impl->StateErrorReason;
 }
 
+ui32 TPDiskMockState::GetNumActiveSlots() const {
+    size_t sum = 0;
+    for (auto& [ownerId, owner] : Impl->Owners) {
+        sum += owner.Weight;
+    }
+    return sum;
+}
+
 TPDiskMockState::TPtr TPDiskMockState::Snapshot() {
     auto res = MakeIntrusive<TPDiskMockState>(std::make_unique<TImpl>(*Impl));
     res->Impl->AdjustRefs();
@@ -464,6 +474,8 @@ public:
             owner->OwnerRound = ev->Get()->OwnerRound;
             owner->CutLogId = ev->Get()->CutLogID;
             owner->Slain = false;
+            owner->GroupSizeInUnits = ev->Get()->GroupSizeInUnits;
+            owner->Weight = TPDiskConfig::GetOwnerWeight(owner->GroupSizeInUnits, 0u);
 
             // drop data from any reserved chunks and return them to free pool
             Impl.ResetOwnerReservedChunks(*owner);
@@ -479,13 +491,25 @@ public:
             const ui64 bulkWriteBlockSize = 65536;
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::OK, seekTimeUs, readSpeedBps, writeSpeedBps,
                 readBlockSize, writeBlockSize, bulkWriteBlockSize, Impl.ChunkSize, Impl.AppendBlockSize, ownerId,
-                owner->OwnerRound, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, TString());
+                owner->OwnerRound, owner->Weight, 0u, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, false, TString());
             res->StartingPoints = owner->StartingPoints;
         } else {
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::INVALID_ROUND, "invalid owner round");
         }
 
         PDISK_MOCK_LOG(INFO, PDM02, "sending TEvYardInitResult", (Msg, res->ToString()), (Created, created));
+        Send(ev->Sender, res.release());
+    }
+
+    void Handle(NPDisk::TEvYardResize::TPtr ev) {
+        auto *msg = ev->Get();
+        PDISK_MOCK_LOG(NOTICE, PDM03, "received TEvYardResize", (Msg, msg->ToString()));
+
+        auto res = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(), TString());
+        if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
+            owner->GroupSizeInUnits = msg->GroupSizeInUnits;
+            owner->Weight = TPDiskConfig::GetOwnerWeight(owner->GroupSizeInUnits, 0u);
+        }
         Send(ev->Sender, res.release());
     }
 
@@ -502,7 +526,7 @@ public:
             Send(ev->Sender, res.release());
             return;
         }
-        
+
         bool found = false;
         for (auto& [ownerId, owner] : Impl.Owners) {
             if (!owner.VDiskId.SameExceptGeneration(msg->VDiskId)) {
@@ -896,7 +920,7 @@ public:
         auto *msg = ev->Get();
         auto res = std::make_unique<NPDisk::TEvCheckSpaceResult>(NKikimrProto::OK, GetStatusFlags(),
             Impl.GetNumFreeChunks(), Impl.TotalChunks, Impl.TotalChunks - Impl.GetNumFreeChunks(),
-            Impl.Owners.size(), TString());
+            Impl.Owners.size(), 0u, TString());
         res->Occupancy = GetOccupancy();
         Impl.FindOwner(msg, res); // to ensure correct owner/round
         Send(ev->Sender, res.release());
@@ -906,6 +930,8 @@ public:
         bool restartAllowed = ev->Get()->RestartAllowed;
 
         if (restartAllowed) {
+            Become(&TThis::StateNormal);
+            Impl.StateErrorReason = "";
             Impl.IsDiskReadOnly = ev->Get()->Config->ReadOnly;
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(Impl.PDiskId));
         }
@@ -946,8 +972,12 @@ public:
         Send(ev->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, State->GetStateErrorReason()));
     }
 
+    void ErrorHandle(NPDisk::TEvYardResize::TPtr &ev) {
+        Send(ev->Sender, new NPDisk::TEvYardResizeResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+    }
+
     void ErrorHandle(NPDisk::TEvCheckSpace::TPtr &ev) {
-        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, State->GetStateErrorReason()));
+        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, 0u, State->GetStateErrorReason()));
     }
 
     void ErrorHandle(NPDisk::TEvLog::TPtr &ev) {
@@ -1035,6 +1065,13 @@ public:
         Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::OK, Impl.PDiskGuid), 0, ev->Cookie);
     }
 
+    void Handle(TEvMoveDrive::TPtr& ev) {
+        State = ev->Get()->State;
+        Impl.Blocks = State->Impl->Blocks;
+        Impl.Owners = State->Impl->Owners;
+        Impl.PDiskGuid = State->Impl->PDiskGuid;
+    }
+
     void HandleMoveToErrorState() {
         Impl.StateErrorReason = "Some error reason";
         Become(&TThis::StateError);
@@ -1049,6 +1086,7 @@ public:
 
     STRICT_STFUNC(StateNormal,
         hFunc(NPDisk::TEvYardInit, Handle);
+        hFunc(NPDisk::TEvYardResize, Handle);
         hFunc(NPDisk::TEvLog, Handle);
         hFunc(NPDisk::TEvChunkForget, Handle);
         hFunc(NPDisk::TEvMultiLog, Handle);
@@ -1066,6 +1104,7 @@ public:
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
         hFunc(NPDisk::TEvReadMetadata, Handle);
         hFunc(NPDisk::TEvWriteMetadata, Handle);
+        hFunc(TEvMoveDrive, Handle);
 
         cFunc(EvBecomeError, HandleMoveToErrorState);
 
@@ -1074,6 +1113,7 @@ public:
 
     STRICT_STFUNC(StateError,
         hFunc(NPDisk::TEvYardInit, ErrorHandle);
+        hFunc(NPDisk::TEvYardResize, ErrorHandle);
         hFunc(NPDisk::TEvCheckSpace, ErrorHandle);
         hFunc(NPDisk::TEvLog, ErrorHandle);
         hFunc(NPDisk::TEvMultiLog, ErrorHandle);
@@ -1087,6 +1127,8 @@ public:
         hFunc(NPDisk::TEvReadMetadata, ErrorHandle);
         hFunc(NPDisk::TEvWriteMetadata, ErrorHandle);
         hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
+        hFunc(NPDisk::TEvYardControl, Handle);
+        hFunc(TEvMoveDrive, Handle);
 
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
         cFunc(EvBecomeNormal, HandleMoveToNormalState);

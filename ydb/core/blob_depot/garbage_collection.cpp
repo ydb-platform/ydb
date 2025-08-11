@@ -127,7 +127,7 @@ namespace NKikimr::NBlobDepot {
 
             const ui64 tabletId = record.GetTabletId();
             const ui32 generation = record.GetGeneration();
-            if (!Self->BlocksManager->CheckBlock(tabletId, generation)) {
+            if (!record.GetIgnoreBlock() && !Self->BlocksManager->CheckBlock(tabletId, generation)) {
                 Finish("block race detected", NKikimrProto::BLOCKED);
                 return false;
             }

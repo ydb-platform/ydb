@@ -40,6 +40,7 @@ DEFINE_ENUM(EAddressType,
     ((Https)              (4))
     ((TvmOnlyHttp)        (5))
     ((TvmOnlyHttps)       (6))
+    ((PublicRpc)          (7))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

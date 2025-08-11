@@ -129,6 +129,9 @@ bool EnsureWideFlowType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureWideStreamType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureWideFlowOrStreamType(const TExprNode& node, TExprContext& ctx);
+bool IsWideFlowOrStreamType(const TTypeAnnotationNode& type);
+const TMultiExprType* GetWideFlowOrStreamComponents(const TTypeAnnotationNode& type);
 bool IsWideBlockType(const TTypeAnnotationNode& type);
 bool IsWideSequenceBlockType(const TTypeAnnotationNode& type);
 bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types, bool reportUnspported = false);
@@ -189,8 +192,11 @@ template <bool WithOptional, bool WithList = true, bool WithStream = true>
 bool EnsureNewSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, const TTypeAnnotationNode** itemType = nullptr);
 bool EnsureAnySeqType(const TExprNode& node, TExprContext& ctx);
 bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx);
-bool EnsureDependsOnTail(const TExprNode& node, TExprContext& ctx, unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0);
+bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx, bool inner = false);
+IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types,
+    unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0
+);
 
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx);
 bool EnsureTypeHandleResourceType(const TExprNode& node, TExprContext& ctx);
@@ -244,9 +250,9 @@ using TConvertFlags = TEnumBitSet<EFlags, DisableTruncation, Last>;
 using NConvertFlags::TConvertFlags;
 
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {});
+    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {}, bool useTypeDiff = false);
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
-    TExprContext& ctx, TConvertFlags flags = {});
+    TExprContext& ctx, TConvertFlags flags = {}, bool useTypeDiff = false);
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType, TExprContext& ctx,
     TConvertFlags flags = {});
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
@@ -257,7 +263,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNo
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
     TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx,
     const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
-IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx);
+IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
+    bool useTypeDiff = false);
 
 bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node);
 
@@ -333,6 +340,7 @@ bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode
 bool EnsureScalarType(const TExprNode& node, TExprContext& ctx);
 bool EnsureScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, bool& isScalar);
+const TTypeAnnotationNode* UnpackOptionalBlockItemType(const TTypeAnnotationNode& type, TExprContext& ctx, bool convertToScalar);
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx);
 bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx);

@@ -593,7 +593,7 @@ private:
         DomainInfo = res.DomainInfo;
         Y_ABORT_UNLESS(DomainInfo, "Missing DomainInfo in TEvNavigateKeySetResult");
 
-        if (TableId.IsSystemView() ||
+        if ((TableId.IsSystemView() || res.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) ||
             TSysTables::IsSystemTable(TableId))
         {
             TString error = TStringBuilder()

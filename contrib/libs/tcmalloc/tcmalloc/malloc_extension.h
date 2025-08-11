@@ -477,9 +477,11 @@ class MallocExtension final {
 
   // The old names to get and set profile sampling intervals used "rate" to
   // refer to intervals. Use of the below is deprecated to avoid confusion.
+  ABSL_DEPRECATE_AND_INLINE()
   static int64_t GetProfileSamplingRate() {
     return GetProfileSamplingInterval();
   }
+  ABSL_DEPRECATE_AND_INLINE()
   static void SetProfileSamplingRate(int64_t rate) {
     SetProfileSamplingInterval(rate);
   }
@@ -487,6 +489,7 @@ class MallocExtension final {
   static int64_t GetGuardedSamplingRate() {
     return GetGuardedSamplingInterval();
   }
+  ABSL_DEPRECATE_AND_INLINE()
   static void SetGuardedSamplingRate(int64_t rate) {
     SetGuardedSamplingInterval(rate);
   }
@@ -672,8 +675,16 @@ class MallocExtension final {
   using CreateSampleUserDataCallback = void*();
   using CopySampleUserDataCallback = void*(void*);
   using DestroySampleUserDataCallback = void(void*);
+  using ComputeSampleUserDataHashCallback = size_t(void*);
 
   // Sets callbacks for lifetime control of custom user data attached to allocation samples
+  static void SetSampleUserDataCallbacks(
+    CreateSampleUserDataCallback create,
+    CopySampleUserDataCallback copy,
+    DestroySampleUserDataCallback destroy,
+    ComputeSampleUserDataHashCallback compute_hash);
+
+  // Temporary compat shim. Use 4-argument overload instead.
   static void SetSampleUserDataCallbacks(
     CreateSampleUserDataCallback create,
     CopySampleUserDataCallback copy,

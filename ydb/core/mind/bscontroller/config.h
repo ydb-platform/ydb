@@ -12,6 +12,7 @@ namespace NKikimr {
         struct TConfigFitAction {
             std::set<TBoxId> Boxes;
             std::multiset<std::tuple<TBoxStoragePoolId, std::optional<TGroupId>>> PoolsAndGroups; // nullopt goes first and means 'cover all groups in the pool'
+            bool OnlyToLessOccupiedPDisk = false;
 
             operator bool() const {
                 return !Boxes.empty() || !PoolsAndGroups.empty();
@@ -91,7 +92,22 @@ namespace NKikimr {
             THashSet<TPDiskId> PDisksToRemove;
 
             // outgoing messages
-            std::deque<std::tuple<TNodeId, std::unique_ptr<IEventBase>, ui64>> Outbox;
+            struct TOutgoingMessage {
+                TNodeId NodeId;
+                std::unique_ptr<IEventBase> Event;
+                ui64 Cookie;
+                bool ToLocalWarden;
+
+                TOutgoingMessage(TNodeId nodeId, std::unique_ptr<IEventBase>&& event,
+                        ui64 cookie, bool toLocalWarden = false)
+                    : NodeId(nodeId)
+                    , Event(std::forward<std::unique_ptr<IEventBase>>(event))
+                    , Cookie(cookie)
+                    , ToLocalWarden(toLocalWarden)
+                {}
+            };
+
+            std::deque<TOutgoingMessage> Outbox;
             std::deque<std::unique_ptr<IEventBase>> StatProcessorOutbox;
             std::deque<std::unique_ptr<IEventBase>> NodeWhiteboardOutbox;
             THolder<TEvControllerUpdateSelfHealInfo> UpdateSelfHealInfoMsg;
@@ -112,6 +128,7 @@ namespace NKikimr {
             // static pdisk/vdisk states
             std::map<TVSlotId, TStaticVSlotInfo>& StaticVSlots;
             std::map<TPDiskId, TStaticPDiskInfo>& StaticPDisks;
+            std::map<TGroupId, TStaticGroupInfo>& StaticGroups;
 
             TCowHolder<Schema::State::SerialManagementStage::Type> SerialManagementStage;
 
@@ -123,6 +140,8 @@ namespace NKikimr {
             THashSet<TGroupId> GroupFailureModelChanged;
 
             bool PushStaticGroupsToSelfHeal = false;
+
+            TBridgeInfo::TPtr BridgeInfo;
 
         public:
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp,
@@ -149,8 +168,10 @@ namespace NKikimr {
                 , DefaultMaxSlots(controller.DefaultMaxSlots)
                 , StaticVSlots(controller.StaticVSlots)
                 , StaticPDisks(controller.StaticPDisks)
+                , StaticGroups(controller.StaticGroups)
                 , SerialManagementStage(&controller.SerialManagementStage)
                 , StoragePoolStat(*controller.StoragePoolStat)
+                , BridgeInfo(controller.BridgeInfo)
             {
                 Y_ABORT_UNLESS(HostRecords);
             }
@@ -301,6 +322,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveGroups& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TChangeGroupSizeInUnits& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReadSettings& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDropDonorDisk& cmd, TStatus& status);
@@ -318,6 +340,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TSetPDiskReadOnly& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TStopPDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TMovePDisk& cmd, TStatus& status);
         };
 
     } // NBsController

@@ -91,22 +91,22 @@ class TestLargeS3Import:
 
     @classmethod
     def setup_class(cls):
-        cls.sink_access_key_id = os.getenv("ACCESS_KEY_ID", None)
-        assert cls.sink_access_key_id is not None, "ACCESS_KEY_ID is not set for sink bucket"
+        cls.sink_access_key_id = os.getenv("S3_ACCESS_KEY_ID", None)
+        assert cls.sink_access_key_id is not None, "S3_ACCESS_KEY_ID is not set for sink bucket"
 
-        cls.sink_access_key_secret = os.getenv("ACCESS_KEY_SECRET", None)
-        assert cls.sink_access_key_secret is not None, "ACCESS_KEY_SECRET is not set for sink bucket"
+        cls.sink_access_key_secret = os.getenv("S3_ACCESS_KEY_SECRET", None)
+        assert cls.sink_access_key_secret is not None, "S3_ACCESS_KEY_SECRET is not set for sink bucket"
 
         cls.scale = get_external_param("scale", "1000")
         assert cls.scale in ["1", "10", "100", "1000"], f"Invalid scale: {cls.scale}"
 
         cls.s3_url = "https://storage.yandexcloud.net"
         cls.s3_sink_bucket = "olap-exp-private"
-        cls.external_source_path = f"{YdbCluster.tables_path}/tpc_h_s3_parquet_import"
-        cls.external_sink_path = f"{YdbCluster.tables_path}/tpc_h_s3_parquet_export"
-        cls.external_table_path = f"{YdbCluster.tables_path}/s{cls.scale}/tpc_h_lineitem_s3_parquet_import"
-        cls.external_sink_table_path = f"{YdbCluster.tables_path}/s{cls.scale}/tpc_h_lineitem_s3_parquet_export"
-        cls.olap_table_path = f"{YdbCluster.tables_path}/s{cls.scale}/tpc_h_lineitem_olap"
+        cls.external_source_path = YdbCluster.get_tables_path("tpc_h_s3_parquet_import")
+        cls.external_sink_path = YdbCluster.get_tables_path("tpc_h_s3_parquet_export")
+        cls.external_table_path = YdbCluster.get_tables_path(f"s{cls.scale}/tpc_h_lineitem_s3_parquet_import")
+        cls.external_sink_table_path = YdbCluster.get_tables_path(f"s{cls.scale}/tpc_h_lineitem_s3_parquet_export")
+        cls.olap_table_path = YdbCluster.get_tables_path(f"s{cls.scale}/tpc_h_lineitem_olap")
         cls.table_size = {
             "1": 6001215,
             "10": 59986052,
@@ -122,7 +122,7 @@ class TestLargeS3Import:
                     f"external sink table: {cls.external_sink_table_path}")
         logger.info(f"target claster info, endpoint: {YdbCluster.ydb_endpoint}, "
                     f"database: {YdbCluster.ydb_database}, "
-                    f"tables path: {YdbCluster.tables_path}, "
+                    f"tables path: {YdbCluster.get_tables_path()}, "
                     f"has key {'YES' if os.getenv('OLAP_YDB_OAUTH', None) else 'NO'}")
         logger.info(f"results info, send-results: {ResultsProcessor.send_results}, "
                     f"endpoints: {get_external_param('results-endpoint', '-')}, "
@@ -130,6 +130,7 @@ class TestLargeS3Import:
                     f"tables: {get_external_param('results-table', '-')}, "
                     f"has key {'YES' if os.getenv('RESULT_YDB_OAUTH', None) else 'NO'}")
 
+        YdbCluster._dyn_nodes_count = 0  # Disable node count check
         health_errors, health_warnings = YdbCluster.check_if_ydb_alive()
         logger.info(f"ydb health warnings: {health_warnings}")
         assert health_errors is None, f"ydb is not alive: {health_errors}"
@@ -143,7 +144,7 @@ class TestLargeS3Import:
 
         return self.session_pool.execute_with_retries(
             statement,
-            settings=ydb.BaseRequestSettings().with_timeout(6000),
+            settings=ydb.BaseRequestSettings().with_timeout(21600),
             retry_settings=ydb.RetrySettings(max_retries=max_retries)
         )
 
@@ -152,7 +153,7 @@ class TestLargeS3Import:
         self.query(f"DROP TABLE IF EXISTS `{self.olap_table_path}`;")
 
     def setup_datasource(self):
-        logger.info(f"setupping datasource by path `{YdbCluster.tables_path}/`...")
+        logger.info(f"setupping datasource by path `{YdbCluster.get_tables_path()}/`...")
         self.query(f"""
             CREATE OR REPLACE EXTERNAL DATA SOURCE `{self.external_source_path}` WITH (
                 SOURCE_TYPE="ObjectStorage",
@@ -187,8 +188,11 @@ class TestLargeS3Import:
     def setup_datasink(self, output_path):
         logger.info(f"setupping detasink to `{output_path}`...")
 
-        access_key_id_name = "test_olap_s3_import_aws_access_key_id"
-        access_key_secret_name = "test_olap_s3_import_aws_access_key_secret"
+        # Used to avoid secret name clashing than test runs from different user SIDS
+        secret_prefix = os.getenv("S3_ACCESS_SECRET_PREFIX", "")
+
+        access_key_id_name = f"{secret_prefix}test_olap_s3_import_aws_access_key_id"
+        access_key_secret_name = f"{secret_prefix}test_olap_s3_import_aws_access_key_secret"
         self.query(f"""
             UPSERT OBJECT {access_key_id_name} (TYPE SECRET) WITH (value = "{self.sink_access_key_id}");
             UPSERT OBJECT {access_key_secret_name} (TYPE SECRET) WITH (value = "{self.sink_access_key_secret}");

@@ -15,7 +15,8 @@ void TClickbenchWorkloadDataInitializerGenerator::ConfigureOpts(NLastGetopt::TOp
     opts.AddLongOption('i', "input",
         "File or Directory with clickbench dataset. If directory is set, all its available files will be used."
         "Now supported zipped and unzipped csv and tsv files, that may be downloaded here:  https://datasets.clickhouse.com/hits_compatible/hits.csv.gz, "
-        "https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz. "
+        "https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz and parquet one: https://datasets.clickhouse.com/hits_compatible/hits.csv.gz, "
+        "https://datasets.clickhouse.com/hits_compatible/hits.parquet. "
         "For better perfomanse you may split it to some parts for parrallel upload."
         ).StoreResult(&DataFiles);
 }

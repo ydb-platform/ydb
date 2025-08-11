@@ -183,6 +183,12 @@ struct TEvYdbProxy {
             }
         }
 
+        TReadTopicResult(ui64 partitionId, TVector<TTopicMessage>&& messages)
+            : PartitionId(partitionId)
+            , Messages(std::move(messages))
+        {
+        }
+
         void Out(IOutputStream& out) const;
 
         ui64 PartitionId;
@@ -194,6 +200,13 @@ struct TEvYdbProxy {
             : PartitionId(event.GetPartitionSession()->GetPartitionId())
             , AdjacentPartitionsIds(event.GetAdjacentPartitionIds().begin(), event.GetAdjacentPartitionIds().end())
             , ChildPartitionsIds(event.GetChildPartitionIds().begin(), event.GetChildPartitionIds().end())
+        {
+        }
+
+        TEndTopicPartitionResult(ui64 partitionId, TVector<ui64>&& adjacentPartitionIds, TVector<ui64>&& childPartitionIds)
+            : PartitionId(partitionId)
+            , AdjacentPartitionsIds(std::move(adjacentPartitionIds))
+            , ChildPartitionsIds(std::move(childPartitionIds))
         {
         }
 
@@ -211,6 +224,11 @@ struct TEvYdbProxy {
     struct TStartTopicReadingSessionResult {
         explicit TStartTopicReadingSessionResult(const NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event)
             : ReadSessionId(event.GetPartitionSession()->GetReadSessionId())
+        {
+        }
+
+        explicit TStartTopicReadingSessionResult(const TString& readSessionId)
+            : ReadSessionId(readSessionId)
         {
         }
 
@@ -270,9 +288,11 @@ struct TEvYdbProxy {
 
 #pragma pop_macro("RemoveDirectory")
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl,
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl = false, const TString& caCert = {});
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TString& token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert,
     const NKikimrReplication::TStaticCredentials& credentials);
+
+IActor* CreateLocalYdbProxy(const TString& database);
 
 }

@@ -6,12 +6,15 @@ import pytest
 
 import yatest
 
-from ydb.tests.library.compatibility.fixtures import RollingUpdateFixture
+from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture
 
 
-class TestRolling(RollingUpdateFixture):
+class TestRolling(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True)
     def setup(self):
+        if min(self.versions) < (25, 1):
+            pytest.skip("Only available since 25-1, because of enable_column_store flag")
+
         output_path = yatest.common.test_output_path()
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
         yield from self.setup_cluster(

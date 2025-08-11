@@ -215,7 +215,7 @@ public:
             }
 
             if (result.HasKeep() || result.HasDoNotKeep()) {
-                auto& [a, b] = BlobFlags[blobId];
+                auto& [a, b] = BlobFlags[blobId.FullID()];
                 a |= result.GetKeep();
                 b |= result.GetDoNotKeep();
             }

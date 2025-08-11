@@ -1,8 +1,10 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
+#include "node_warden_events.h"
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/dsproxy/bridge/bridge.h>
 #include <ydb/core/blob_depot/agent/agent.h>
 
 using namespace NKikimr;
@@ -66,6 +68,8 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_UNREACHABLE();
             }
+        } else if (info->IsBridged()) {
+            proxy.reset(CreateBridgeProxyActor(info));
         } else {
             // create proxy with configuration
             proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),
@@ -95,6 +99,9 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             }
         }));
     }
+
+    // subscribe for group information changes through distconf cache
+    Send(SelfId(), new TEvNodeWardenQueryCache(Sprintf("G%08" PRIx32, groupId), true));
 
     group.ProxyId = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
@@ -194,6 +201,23 @@ void TNodeWarden::Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::
     const ui32 groupId = record.GetGroupID();
     if (const auto it = Groups.find(groupId); it != Groups.end() && it->second.ProxyId) {
         TActivationContext::Send(ev->Forward(WhiteboardId));
+    }
+}
+
+void TNodeWarden::Handle(TEvNodeWardenQueryCacheResult::TPtr ev) {
+    auto& msg = *ev->Get();
+    ui32 groupId;
+    if (msg.Key.StartsWith("G") && TryIntFromString<16>(msg.Key.substr(1), groupId) && msg.GenerationValue) {
+        auto& [generation, value] = *msg.GenerationValue;
+        NKikimrBlobStorage::TGroupInfo groupInfo;
+        const bool success = groupInfo.ParseFromString(value);
+        Y_DEBUG_ABORT_UNLESS(success);
+        if (success) {
+            Y_DEBUG_ABORT_UNLESS(groupInfo.GetGroupGeneration() == generation);
+            ApplyGroupInfo(groupId, generation, &groupInfo, false, false);
+        } else {
+            Y_DEBUG_ABORT("failed to parse group configuration");
+        }
     }
 }
 

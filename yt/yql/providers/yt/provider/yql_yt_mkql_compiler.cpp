@@ -383,7 +383,7 @@ TRuntimeNode BuildDqYtInputCall(
             tablesNode.Add(refName);
             // TODO() Enable range indexes
             auto skiffNode = SingleTableSpecToInputSkiff(specNode, structColumns, !enableBlockReader, !enableBlockReader, false);
-            const auto tmpFolder = GetTablesTmpFolder(*state->Configuration);
+            const auto tmpFolder = GetTablesTmpFolder(*state->Configuration, clusterName);
             auto tableName = pathInfo.Table->Name;
             if (pathInfo.Table->IsAnonymous && !TYtTableInfo::HasSubstAnonymousLabel(pathInfo.Table->FromNode.Cast())) {
                 tableName = state->AnonymousLabels.Value(std::make_pair(clusterName, tableName), TString());

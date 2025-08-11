@@ -7,7 +7,7 @@
 In data processing systems, including {{ ydb-short-name }}, spilling is essential for:
 
 - processing queries with large data volumes when intermediate results don't fit in RAM;
-- executing complex analytical operations (aggregations, sorting, table joins) over large datasets;
+- executing complex analytical operations (aggregations, table joins) over large datasets;
 - optimizing query performance through intermediate materialization of part of the data in external memory, which in certain scenarios can accelerate overall execution time.
 
 
@@ -40,7 +40,7 @@ When memory usage approaches the limit, the system:
 Main usage scenarios:
 
 * **Aggregations** — when grouping large data volumes, the system offloads intermediate hash tables to disk  
-* **Sorting** — when sorting results exceed available memory, external sorting is applied using temporary files  
+  
 * **Join operations** — when joining large tables, the Grace Hash Join algorithm is used with data partitioning and offloading to disk  
 
 ##### Operation mechanism

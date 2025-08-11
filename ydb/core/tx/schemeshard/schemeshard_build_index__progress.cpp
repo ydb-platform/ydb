@@ -1431,7 +1431,7 @@ public:
                     buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
                     nextState = TIndexBuildInfo::EState::LockBuild;
                     NIceDb::TNiceDb db{txc.DB};
-                    Self->PersistBuildIndexUploadReset(db, buildInfo);
+                    Self->PersistBuildIndexShardStatusReset(db, buildInfo);
                     finalState = false;
                 } else if (buildInfo.IsValidatingUniqueIndex()) {
                     TString errorDesc;
@@ -2296,7 +2296,7 @@ public:
         } else {
             OnShardError(db, buildInfo, shardStatus, shardId, shardIdx);
         }
-        Self->PersistShardValidationResult(db, BuildId, shardIdx, shardStatus);
+        Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
         Progress(BuildId);
 
         return true;

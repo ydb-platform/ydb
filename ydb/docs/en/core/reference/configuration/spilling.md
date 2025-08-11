@@ -34,9 +34,9 @@ table_service_config:
 - `{TMP}` — system temporary directory, determined from the `TMPDIR` environment variable or standard system paths
 - `<username>` — username under which the {{ ydb-short-name }} process is running
 
-**Important features:**
+**Important notes:**
 
-- At process startup, all existing spilling files in the specified directory are automatically deleted
+- At process startup, all existing spilling files in the specified directory are automatically deleted. Spilling files have a special name format that includes a session identifier, which is generated once when the ydbd process starts. When a new process starts, all files in the spilling directory that match the name format but have a different session identifier from the current one are deleted.
 - The directory must have sufficient write permissions
 
 **Recommendations:**

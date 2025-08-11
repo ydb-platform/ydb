@@ -1524,7 +1524,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>,
                         <|
                             Offset:CAST($x._offset AS Uint64),
-                            Value:Unwrap(CAST($x._data AS Utf8))
+                            Value:Unwrap(CAST($x._key AS Utf8))
                         |>
                     ];
                 };
@@ -1533,6 +1533,68 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.Write({"Message-1"});
 
         testCase.CheckTransferStateError("unwrap error");
+    }
+
+    Y_UNIT_TEST(MessageField_Key) {
+        MainTestCase(std::nullopt).Run({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:CAST($x._key AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withAttributes({ {"__key", "key_value"} })},
+
+            .Expectations = {{
+                _C("Value", TString("key_value")),
+            }}
+        });
+    }
+
+    Y_UNIT_TEST(MessageField_Key_Empty) {
+        MainTestCase(std::nullopt).Run({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:CAST($x._key AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withAttributes({ {"__not_key", "key_value"} })},
+
+            .Expectations = {{
+                _T<NullChecker>("Value"),
+            }}
+        });
     }
 }
 

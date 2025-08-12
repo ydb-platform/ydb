@@ -85,11 +85,12 @@ namespace NKqp {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
+    void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates,
+        const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/, const TString& expectedIssuePrefix /*= ""*/) {
         Y_UNUSED(opStatus);
         NKikimr::Tests::NCS::THelper helper(GetKikimr().GetTestServer());
         auto batch = updates.BuildArrow();
-        helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
+        helper.SendDataViaActorSystem(table.GetName(), batch, opStatus, expectedIssuePrefix);
     }
 
     void TTestHelper::BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {

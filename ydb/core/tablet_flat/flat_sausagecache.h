@@ -23,19 +23,11 @@ public:
         {}
     };
 
-    using TPinned = THashMap<TLogoBlobID, THashMap<TPageId, TPinnedPage>>;
-
     struct TInfo;
 
     struct TStats {
         ui64 TotalCollections = 0;
         ui64 TotalSharedBody = 0;
-
-        size_t NewlyPinnedCount = 0;
-        ui64 NewlyPinnedSize = 0;
-
-        size_t ToLoadCount = 0;
-        ui64 ToLoadSize = 0;
     };
 
     struct TPage : TNonCopyable {
@@ -140,38 +132,22 @@ public:
 public:
     TInfo* FindPageCollection(const TLogoBlobID &id) const;
     TInfo* GetPageCollection(const TLogoBlobID &id) const;
-    void AddPageCollection(TIntrusivePtr<TInfo> info);
+    THashMap<TLogoBlobID, THashSet<TPageId>> AddPageCollection(TIntrusivePtr<TInfo> info);
     void DropPageCollection(TInfo *info);
 
     const TStats& GetStats() const { return Stats; }
 
-    const TSharedData* Lookup(TPageId pageId, TInfo *info);
-
-    // TODO: move this methods somewhere else (probably to TPageCollectionTxEnv)
-    // and keep page states and counters there
-    void BeginTransaction(TPinned* pinned);
-    void EndTransaction();
+    TSharedPageRef TryGetPage(TPageId pageId, TInfo *info);
 
     void DropPage(TPageId pageId, TInfo *info);
     void AddPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info);
 
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
 
-    THashMap<TLogoBlobID, TVector<TPageId>> GetToLoad();
-    void TranslatePinnedToSharedCacheTouches();
-    THashMap<TLogoBlobID, THashSet<TPageId>> GetSharedCacheTouches();
-
-private:
-    void ToLoadPage(TPageId pageId, TInfo *info);
-
 private:
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> PageCollections;
-    THashMap<TLogoBlobID, THashSet<TPageId>> SharedCacheTouches;
 
     TStats Stats;
-
-    TPinned* Pinned;
-    THashMap<TLogoBlobID, THashSet<TPageId>> ToLoad;
 };
 
 }}

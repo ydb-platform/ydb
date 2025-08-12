@@ -9,7 +9,14 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
     Y_UNIT_TEST_TWIN(DqHashCombineTest, UseDqHashCombine) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        // Enable manual override of _KqpYqlCombinerMemoryLimit
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(0);
+        NKikimrKqp::TKqpSetting combinerMemLimit;
+        combinerMemLimit.SetName("_KqpYqlCombinerMemoryLimit");
+        combinerMemLimit.SetValue("1000000");
+        settings.KqpSettings.emplace_back(combinerMemLimit);
         TKikimrRunner kikimr(settings);
 
         auto queryClient = kikimr.GetQueryClient();
@@ -43,9 +50,9 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
 
         {
             TString hints = R"(
-                PRAGMA TablePathPrefix='/Root';
+                PRAGMA TablePathPrefix = "/Root";
             )";
-            TString blocks = UseDqHashCombine ? "PRAGMA ydb.UseDqHashCombine = \"true\";\n\n" : "";
+            TString dqHashPragma = UseDqHashCombine ? "PRAGMA ydb.UseDqHashCombine = \"true\";\n\n" : "";
             TString select = R"(
                 PRAGMA ydb.OptUseFinalizeByKey = "true";
                 PRAGMA ydb.OptEnableOlapPushdown = "false"; -- need this to force intermediate/final combiner pair over the sample table
@@ -55,7 +62,7 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
                 GROUP BY group_key
             )";
 
-            TString groupQuery = TStringBuilder() << hints << blocks << select;
+            TString groupQuery = TStringBuilder() << hints << dqHashPragma << select;
 
             auto status = queryClient.ExecuteQuery(groupQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 

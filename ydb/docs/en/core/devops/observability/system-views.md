@@ -8,13 +8,13 @@ In the descriptions of available fields below, the **Key** column contains the p
 
 {% note info %}
 
-Similar system views exist for what happens inside a specific database, they are described in a [separate article for DBAs](../../dev/system-views.md).
+Similar system views exist for what happens inside a specific database; they are described in a [separate article for developers](../../dev/system-views.md).
 
 {% endnote %}
 
 ## Distributed Storage
 
-Information about distributed storage operation is contained in several interconnected views, each responsible for describing its own entity:
+Information about the distributed storage operation is contained in several interconnected views, each responsible for describing its own entity:
 
 * [PDisk](../../concepts/glossary.md#pdisk)
 * [VSlot](../../concepts/glossary.md#slot)
@@ -29,7 +29,7 @@ Additionally, there is a separate view that shows statistics on the usage of gro
 |-----------------------|-----------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | NodeId                | Uint32    | 0       | Identifier of the node on which PDisk is running                                                                                                                 |
 | PDiskId               | Uint32    | 1       | PDisk identifier (unique within the node)                                                                                                                        |
-| Type                  | String    |         | Media type (ROT, SSD, NVME)                                                                                                                                      |
+| Type                  | String    |         | Media type (`ROT`, `SSD`, `NVME`)                                                                                                                                      |
 | Kind                  | Uint64    |         | User-defined numeric identifier needed to group disks with the same media type into different subgroups                                                          |
 | Path                  | String    |         | Path to the block device inside the machine                                                                                                                       |
 | Guid                  | Uint64    |         | Unique identifier randomly generated when adding a disk to the system, designed to prevent data loss in case disks are swapped                                   |
@@ -38,15 +38,16 @@ Additionally, there is a separate view that shows statistics on the usage of gro
 | ReadCentric           | Bool      |         | Presence of the "ReadCentric" label, set manually when creating PDisk. Can be used for filtering disks when creating new groups.                                 |
 | AvailableSize         | Uint64    |         | Number of bytes available for allocation on PDisk                                                                                                                |
 | TotalSize             | Uint64    |         | Total number of bytes on PDisk                                                                                                                                   |
-| Status                | String    |         | PDisk operating mode that affects its participation in group allocation (ACTIVE, INACTIVE, BROKEN, FAULTY, TO_BE_REMOVED)                                       |
-| StatusChangeTimestamp | Timestamp |         | Time when Status last changed; if NULL, Status has not changed since PDisk creation                                                                              |
-| ExpectedSlotCount     | Uint32    |         | Maximum number of VSlots that can be created on this PDisk. Either user-defined or inferred from InferPDiskSlotCountFromUnitSize.                                |
+| Status                | String    |         | PDisk operating mode that affects its participation in group allocation (`ACTIVE`, `INACTIVE`, `BROKEN`, `FAULTY`, `TO_BE_REMOVED`)                                       |
+| StatusChangeTimestamp | Timestamp |         | Time when `Status` last changed; if `NULL`, `Status` has not changed since PDisk creation                                                                              |
+| ExpectedSlotCount     | Uint32    |         | Maximum number of VSlots that can be created on this PDisk. Either user-defined or inferred from `InferPDiskSlotCountFromUnitSize`.                                |
 | NumActiveSlots        | Uint32    |         | Number of currently occupied VSlots with respect to GroupSizeInUnits of VDisks                                                                                   |
-| SlotSizeInUnits       | Uint32    |         | Size of VSlot in abstract units. Either user-defined or inferred from InferPDiskSlotCountFromUnitSize.                                                           |
-| DecommitStatus        | String    |         | Status of PDisk [decommissioning](../deployment-options/manual/decommissioning.md) (DECOMMIT_NONE, DECOMMIT_PENDING, DECOMMIT_IMMINENT, DECOMMIT_REJECTED)       |
-| InferPDiskSlotCountFromUnitSize  | Uint64    |         | Size of VSlot in bytes from which ExpectedSlotCount and SlotSizeInUnits values are inferred unless user-defined. |
+| SlotSizeInUnits       | Uint32    |         | Size of VSlot in abstract units. Either user-defined or inferred from `InferPDiskSlotCountFromUnitSize`.                                                           |
+| DecommitStatus        | String    |         | Status of PDisk [decommissioning](../deployment-options/manual/decommissioning.md) (`DECOMMIT_NONE`, `DECOMMIT_PENDING`, `DECOMMIT_IMMINENT`, `DECOMMIT_REJECTED`)       |
+| InferPDiskSlotCountFromUnitSize  | Uint64    |         | Size of VSlot in bytes from which `ExpectedSlotCount` and `SlotSizeInUnits` values are inferred unless user-defined. |
 
-The inferred values of ExpectedSlotCount and SlotSizeInUnits are defined by the formula `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, where `SlotSizeInUnits = 2^N` is chosen to meet `ExpectedSlotCount <= 16`.
+The inferred values of `ExpectedSlotCount` and `SlotSizeInUnits` are defined by the formula $\text{ExpectedSlotCount} \times \text{SlotSizeInUnits} = \frac{\text{TotalSize}}{\text{InferPDiskSlotCountFromUnitSize}}
+$, where $\text{SlotSizeInUnits} = 2^N$ is chosen to meet $\text{ExpectedSlotCount} \leq 16$.
 
 ### ds_vslots
 
@@ -62,8 +63,8 @@ The inferred values of ExpectedSlotCount and SlotSizeInUnits are defined by the 
 | VDisk           | Uint32   |         | Relative VSlot number within the fail domain                                                   |
 | AllocatedSize   | Uint64   |         | Number of bytes that VSlot occupies on PDisk                                                   |
 | AvailableSize   | Uint64   |         | Number of bytes available for allocation to this VSlot                                         |
-| Status          | String   |         | State of the running VDisk in this VSlot (INIT_PENDING, REPLICATING, READY, ERROR)             |
-| Kind            | String   |         | Preset VDisk operating mode setting (Default, Log, ...)                                        |
+| Status          | String   |         | State of the running VDisk in this VSlot (`INIT_PENDING`, `REPLICATING`, `READY`, `ERROR`)             |
+| Kind            | String   |         | Preset VDisk operating mode setting (`Default`, `Log`, ...)                                        |
 
 Note that the tuple (NodeId, PDiskId) forms a foreign key to the `ds_pdisks` view, and (GroupId) to the `ds_groups` view.
 
@@ -73,7 +74,7 @@ Note that the tuple (NodeId, PDiskId) forms a foreign key to the `ds_pdisks` vie
 |---------------------|----------|---------|-----------------------------------------------------------------------------------------------------------|
 | GroupId             | Uint32   | 0       | Storage group number in the cluster                                                                       |
 | Generation          | Uint32   |         | Storage group configuration generation                                                                     |
-| ErasureSpecies      | String   |         | Redundancy encoding mode for the group (block-4-2, mirror-3-dc, mirror-3of4, ...)                        |
+| ErasureSpecies      | String   |         | Redundancy encoding mode for the group (`block-4-2`, `mirror-3-dc`, `mirror-3of4`, ...)                        |
 | BoxId               | Uint64   |         | Identifier of the Box in which this group was created                                                     |
 | StoragePoolId       | Uint64   |         | Storage pool identifier within the Box where this group operates                                          |
 | EncryptionMode      | Uint32   |         | Presence of data encryption in the group and encryption algorithm if enabled                              |
@@ -81,16 +82,16 @@ Note that the tuple (NodeId, PDiskId) forms a foreign key to the `ds_pdisks` vie
 | AllocatedSize       | Uint64   |         | Amount of allocated data bytes in the group (converted to user bytes, i.e., before redundancy)           |
 | AvailableSize       | Uint64   |         | Amount of user data bytes available for allocation (also before redundancy)                               |
 | SeenOperational     | Bool     |         | Boolean flag showing whether the group was in operational state after its creation                        |
-| PutTabletLogLatency | Interval |         | 90th percentile of PutTabletLog request execution time                                                    |
-| PutUserDataLatency  | Interval |         | 90th percentile of PutUserData request execution time                                                     |
-| GetFastLatency      | Interval |         | 90th percentile of GetFast request execution time                                                         |
-| OperatingStatus     | String   |         | Group status based on latest VDisk reports only (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED)         |
-| ExpectedStatus      | String   |         | Status based not only on operational report, but on PDisk status and plans too (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED) |
-| GroupSizeInUnits    | Uint32   |         | Size of the group in abstract units. In proportion to it VDisks receive storage quota. |
+| PutTabletLogLatency | Interval |         | 90th percentile of `PutTabletLog` request execution time                                                    |
+| PutUserDataLatency  | Interval |         | 90th percentile of `PutUserData` request execution time                                                     |
+| GetFastLatency      | Interval |         | 90th percentile of `GetFast` request execution time                                                         |
+| OperatingStatus     | String   |         | Group status based on latest VDisk reports only (`UNKNOWN`, `FULL`, `PARTIAL`, `DEGRADED`, `DISINTEGRATED`)         |
+| ExpectedStatus      | String   |         | Status based not only on operational report, but on PDisk status and plans too (`UNKNOWN`, `FULL`, `PARTIAL`, `DEGRADED`, `DISINTEGRATED`) |
+| GroupSizeInUnits    | Uint32   |         | Size of the group in abstract units. In proportion to it, VDisks receive a storage quota. |
 
-The number of VSlots occupied by VDisk is defined as `ceil(VDisk.GroupSizeInUnits / PDisk.SlotSizeInUnits)`.
+The number of VSlots occupied by VDisk is defined as $\left\lceil \frac{\text{VDisk.GroupSizeInUnits}}{\text{PDisk.SlotSizeInUnits}} \right\rceil$.
 
-In this view, the tuple (BoxId, StoragePoolId) forms a foreign key to the `ds_storage_pools` view.
+In this view, the tuple `(BoxId, StoragePoolId)` forms a foreign key to the `ds_storage_pools` view.
 
 ### ds_storage_pools
 
@@ -104,10 +105,10 @@ In this view, the tuple (BoxId, StoragePoolId) forms a foreign key to the `ds_st
 | VDiskKind      | String   |         | Preset operating mode setting for all VDisks in this storage pool                                           |
 | Kind           | String   |         | User-defined string description of pool purpose, can also be used for filtering                             |
 | NumGroups      | Uint32   |         | Number of groups within this storage pool                                                                   |
-| EncryptionMode | Uint32   |         | Data encryption setting for all groups (similar to ds_groups.EncryptionMode)                               |
-| SchemeshardId  | Uint64   |         | SchemeShard identifier of the schema object to which this storage pool belongs (currently always NULL)      |
+| EncryptionMode | Uint32   |         | Data encryption setting for all groups (similar to `ds_groups.EncryptionMode`)                               |
+| SchemeshardId  | Uint64   |         | [SchemeShard](../../concepts/glossary.md#scheme-shard) identifier of the schema object to which this storage pool belongs (currently always `NULL`)      |
 | PathId         | Uint64   |         | Schema object node identifier within the specified SchemeShard to which this storage pool belongs          |
-| DefaultGroupSizeInUnits | Uint32   |         | The value of GroupSizeInUnits inherited by groups when new groups are added to the pool                                |
+| DefaultGroupSizeInUnits | Uint32   |         | The value of `GroupSizeInUnits` inherited by groups when new groups are added to the pool                                |
 
 ### ds_storage_stats
 
@@ -119,12 +120,12 @@ Unlike other views showing physical entities, `ds_storage_stats` shows aggregate
 | PDiskFilter             | String   | 1       | String description of filters selecting PDisk for group creation (e.g., by media type)         |
 | ErasureSpecies          | String   | 2       | Redundancy encoding mode for which statistics are collected                                     |
 | CurrentGroupsCreated    | Uint32   |         | Number of created groups with specified characteristics                                         |
-| CurrentAllocatedSize    | Uint64   |         | Total occupied space across all groups included in CurrentGroupsCreated                        |
-| CurrentAvailableSize    | Uint64   |         | Total space available for allocation across all groups included in CurrentGroupsCreated        |
+| CurrentAllocatedSize    | Uint64   |         | Total occupied space across all groups included in `CurrentGroupsCreated`                        |
+| CurrentAvailableSize    | Uint64   |         | Total space available for allocation across all groups included in `CurrentGroupsCreated`        |
 | AvailableGroupsToCreate | Uint32   |         | Number of groups with specified characteristics that can be created considering reserve needs   |
-| AvailableSizeToCreate   | Uint64   |         | Number of available bytes that would result from creating all groups from AvailableGroupsToCreate |
+| AvailableSizeToCreate   | Uint64   |         | Number of available bytes that would result from creating all groups from `AvailableGroupsToCreate` |
 
-Note that AvailableGroupsToCreate shows the maximum number of groups that can be created if no other types of groups are created. Thus, when expanding one storage pool, the AvailableGroupsToCreate numbers in several statistics rows may change.
+Note that `AvailableGroupsToCreate` shows the maximum number of groups that can be created if no other types of groups are created. Thus, when expanding one storage pool, the `AvailableGroupsToCreate` numbers in several statistics rows may change.
 
 {% note info %}
 

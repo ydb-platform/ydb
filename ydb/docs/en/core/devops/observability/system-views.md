@@ -94,7 +94,7 @@ Note that the tuple (NodeId, PDiskId) forms a foreign key to the `ds_pdisks` vie
 | ExpectedStatus      | String   |         | Status based not only on operational report, but on PDisk status and plans too (`UNKNOWN`, `FULL`, `PARTIAL`, `DEGRADED`, `DISINTEGRATED`) |
 | GroupSizeInUnits    | Uint32   |         | Size of the group in abstract units. In proportion to it, VDisks receive a storage quota. |
 
-The number of VSlots occupied by VDisk is defined as $\left\lceil \frac{\text{VDisk.GroupSizeInUnits}}{\text{PDisk.SlotSizeInUnits}} \right\rceil$.
+The number of VSlots occupied by VDisk is defined as $ceil(\frac{\text{VDisk.GroupSizeInUnits}}{\text{PDisk.SlotSizeInUnits}})$.
 
 In this view, the tuple `(BoxId, StoragePoolId)` forms a foreign key to the `ds_storage_pools` view.
 

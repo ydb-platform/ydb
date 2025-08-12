@@ -70,7 +70,7 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
             res << "ydb://incbackup";
             break;
         case Ydb::TOperationId::INCREMENTAL_RESTORE:
-            res << "ydb://bcrestore";
+            res << "ydb://restore";
             break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");

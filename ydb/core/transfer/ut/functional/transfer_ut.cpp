@@ -1514,5 +1514,38 @@ Y_UNIT_TEST_SUITE(Transfer)
             }}
         });
     }
+
+    Y_UNIT_TEST(ErrorInMultiLine) {
+        MainTestCase testCase(std::nullopt, "ROW");
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8 NOT NULL,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:Unwrap(Nothing(Utf8?), "unwrap error")
+                        |>,
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:Unwrap(CAST($x._key AS Utf8))
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckTransferStateError("unwrap error");
+
+    }
 }
 

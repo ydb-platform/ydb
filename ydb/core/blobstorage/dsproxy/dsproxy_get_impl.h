@@ -223,11 +223,8 @@ public:
             if (replyStatus == NKikimrProto::OK) {
                 // TODO(cthulhu): Verify shift and response size, and cookie
                 DSP_LOG_DEBUG_SX(logCtx, "BPG58", "Got# OK orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
-                resultBuffer.Compact();
                 if (resultBuffer.GetOccupiedMemorySize() > resultBuffer.size() * 2) {
-                    auto temp = TRcBuf::Uninitialized(resultBuffer.size());
-                    resultBuffer.ExtractFrontPlain(temp.GetDataMut(), temp.size());
-                    resultBuffer.Insert(resultBuffer.End(), std::move(temp));
+                    resultBuffer.Compact();
                 }
                 Blackboard.AddResponseData(blobId, orderNumber, resultShift, std::move(resultBuffer));
             } else if (replyStatus == NKikimrProto::NODATA) {

@@ -41,13 +41,14 @@ public:
 
             auto it = Self->State->ScheduledRequests.find(requestId);
             if (it != Self->State->ScheduledRequests.end()) {
+                bool evictVDisks = it->second.Request.GetEvictVDisks();
                 if (Expired) {
                     RemoveRequest(db, requestId, ctx, TStringBuilder() << "Remove request"
                         << ": id# " << requestId
                         << ", reason# " << "permission " << id << " has expired");
                 }
                 
-                if (it->second.Request.GetEvictVDisks()) {
+                if (evictVDisks) {
                     auto ret = Self->ResetHostMarkers(host, txc, ctx);
                     std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));
 

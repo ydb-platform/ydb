@@ -1474,7 +1474,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>,
                         <|
                             Offset:CAST($x._offset AS Uint64),
-                            Value:Unwrap(CAST($x._key AS Utf8))
+                            Value:Unwrap(CAST($x._message AS Utf8))
                         |>
                     ];
                 };

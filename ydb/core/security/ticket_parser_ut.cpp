@@ -2225,14 +2225,14 @@ NKikimrProto::TAuthConfig CreateAuthConfig(const TAuthConfigSettings& authConfig
     auto tokenManagerConfig = authConfig.MutableTokenManager();
     tokenManagerConfig->SetEnable(authConfigSettings.EnableTokenManager);
     auto vmMetadataTokenProviderConfig = tokenManagerConfig->MutableVmMetadataProvider();
-    auto vmMetadataInfos = vmMetadataTokenProviderConfig->MutableVmMetadataInfo();
+    auto vmMetadataInfos = vmMetadataTokenProviderConfig->MutableProvidersInfo();
     const auto& vmMetadataInitializer = authConfigSettings.VmMetadataProviderInitializer;
     for (const auto& infoSettings : vmMetadataInitializer.VmMetadataInfo) {
         auto vmMetadataInfo = vmMetadataInfos->Add();
         vmMetadataInfo->SetId(infoSettings.Id);
         vmMetadataInfo->SetEndpoint(infoSettings.Endpoint);
     }
-    auto vmMetadataProviderSettings = vmMetadataTokenProviderConfig->MutableTokenProviderSettings();
+    auto vmMetadataProviderSettings = vmMetadataTokenProviderConfig->MutableSettings();
     vmMetadataProviderSettings->SetSuccessRefreshPeriod(vmMetadataInitializer.Settings.SuccessRefreshPeriod);
     vmMetadataProviderSettings->SetMinErrorRefreshPeriod(vmMetadataInitializer.Settings.MinErrorRefreshPeriod);
     vmMetadataProviderSettings->SetMaxErrorRefreshPeriod(vmMetadataInitializer.Settings.MaxErrorRefreshPeriod);

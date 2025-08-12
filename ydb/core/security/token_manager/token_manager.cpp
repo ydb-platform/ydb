@@ -133,14 +133,14 @@ void TTokenManager::Bootstrap() {
 void TTokenManager::BootstrapVmMetadataProvider() {
     if (Config.HasVmMetadataProvider()) {
         const auto& vmMetadataProvider = Config.GetVmMetadataProvider();
-        const auto& tokenProviderSettings = vmMetadataProvider.GetTokenProviderSettings();
+        const auto& tokenProviderSettings = vmMetadataProvider.GetSettings();
         VmMetadataProviderSettings =  {
             .SuccessRefreshPeriod = TDuration::Parse(tokenProviderSettings.GetSuccessRefreshPeriod()),
             .MinErrorRefreshPeriod = TDuration::Parse(tokenProviderSettings.GetMinErrorRefreshPeriod()),
             .MaxErrorRefreshPeriod = TDuration::Parse(tokenProviderSettings.GetMaxErrorRefreshPeriod()),
             .RequestTimeout = TDuration::Parse(tokenProviderSettings.GetRequestTimeout())
         };
-        for (const auto& vmMetadataInfo : vmMetadataProvider.GetVmMetadataInfo()) {
+        for (const auto& vmMetadataInfo : vmMetadataProvider.GetProvidersInfo()) {
             BLOG_TRACE("Initialize token provider# " << vmMetadataInfo.GetId());
             TokenProviders[vmMetadataInfo.GetId()] = std::make_shared<TVmMetadataTokenProvider>(this, VmMetadataProviderSettings, HttpProxyId, vmMetadataInfo);
         }

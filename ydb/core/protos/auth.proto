@@ -156,8 +156,8 @@ message TTokenManager {
             optional string Endpoint = 2;
         }
 
-        repeated TVmMetadataInfo VmMetadataInfo = 1;
-        optional TTokenProviderSettings TokenProviderSettings = 2;
+        repeated TVmMetadataInfo ProvidersInfo = 1;
+        optional TTokenProviderSettings Settings = 2;
     }
 
     message TTokenAgentProvider {
@@ -166,8 +166,8 @@ message TTokenManager {
             optional string Endpoint = 2;
         }
 
-        repeated TTokenAgentInfo TokenAgentInfo = 1;
-        optional TTokenProviderSettings TokenProviderSettings = 2;
+        repeated TTokenAgentInfo ProvidersInfo = 1;
+        optional TTokenProviderSettings Settings = 2;
     }
 
     optional bool Enable = 1 [default = false];

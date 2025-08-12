@@ -25,7 +25,7 @@ namespace NKikimr::NStorage {
             } else if (cacheItem.Generation == item.GetGeneration()) {
                 auto printOptionalString = [](const std::optional<TString>& res) -> TString {
                     if (res) {
-                        return *res;
+                        return HexEncode(*res);
                     } else {
                         return "<nullopt>";
                     }

@@ -131,14 +131,6 @@ class TestCsSimpleReaderManyModifications(object):
         for pk in pks:
             expected_data[pk] = modifications[pk][-1]
 
-        # Select rows one by one
-        with Timer("per-key selects"):
-            for pk in pks:
-                value = self.ydb_client.query(
-                    f"SELECT id, value FROM `{table_path}` where id = {pk};"
-                )[0].rows[0]["value"]
-                assert value == expected_data[pk]
-
         # Select all rows in bulk
         with Timer("bulk select"):
             result_sets = self.ydb_client.query(

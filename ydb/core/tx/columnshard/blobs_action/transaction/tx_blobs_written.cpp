@@ -154,7 +154,7 @@ TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKiki
     const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, TInsertedPortions&& pack)
     : TBase(self, "TTxBlobsWritingFinished")
     , Pack(std::move(pack))
-    , WritingActions(writingActions),
+    , WritingActions(writingActions)
     , StartTime(TInstant::Now()) {
 }
 

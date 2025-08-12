@@ -1151,13 +1151,31 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             UNIT_ASSERT_VALUES_EQUAL(
                 CompleteTop(1, engine, "SELECT * FROM Range(#)").at(0).Kind, FolderName);
-            UNIT_ASSERT_VALUES_UNEQUAL(
+            UNIT_ASSERT_VALUES_EQUAL(
                 CompleteTop(1, engine, "SELECT * FROM Range(``, #)").at(0).Kind, FolderName);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "example"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(
+                CompleteTop(10, engine, "SELECT * FROM Range(`test/service`, `#`)"), expected);
+            UNIT_ASSERT_VALUES_EQUAL(
+                CompleteTop(10, engine, "SELECT * FROM Range(`test/service`, ``, `#`)"), expected);
         }
         {
             UNIT_ASSERT_VALUES_UNEQUAL(CompleteTop(1, engine, "SELECT Max(#)").at(0).Kind, FolderName);
             UNIT_ASSERT_VALUES_UNEQUAL(CompleteTop(1, engine, "SELECT Concat(#)").at(0).Kind, FolderName);
         }
+    }
+
+    Y_UNIT_TEST(TableFunctionCluster) {
+        auto engine = MakeSqlCompletionEngineUT();
+        TVector<TCandidate> expected = {
+            {TableName, "`people`"},
+            {FolderName, "`yql/`", 1},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT * FROM example.Concat(#)"), expected);
     }
 
     Y_UNIT_TEST(ColumnsAtSimpleSelect) {
@@ -1429,6 +1447,51 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 FROM example.`/people` AS a
                 JOIN example.`/people` AS b ON a.#
             )";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ColumnFiltration) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = R"sql(
+            SELECT roo#
+            FROM example.`/people` AS roommate
+            JOIN example.`/yql/tutorial` AS query ON 1 = 1;
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "roommate.Age"},
+            {ColumnName, "roommate.Name"},
+            {ColumnName, "query.room"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, query), expected);
+    }
+
+    Y_UNIT_TEST(ColumnFromQuotedAlias) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TString query;
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "`per son`.Age"},
+                {ColumnName, "`per son`.Name"},
+            };
+
+            query = R"sql(SELECT # FROM example.`/people` AS `per son`)sql";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+
+            query = R"sql(SELECT per# FROM example.`/people` AS `per son`)sql";
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TString query = R"sql(SELECT `per son`.# FROM example.`/people` AS `per son`)sql";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "Age"},
+                {ColumnName, "Name"},
+            };
+
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
     }

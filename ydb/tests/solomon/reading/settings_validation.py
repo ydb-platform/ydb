@@ -130,4 +130,4 @@ class TestSettingsValidation(SolomonReadingTestBase):
                 `downsampling.grid_interval` = "15"
             );
         """
-        self.check_query_error(query, "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsamplig.grid_interval is specified")
+        self.check_query_error(query, "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified")

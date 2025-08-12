@@ -355,7 +355,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     auto behaviour = *behaviourConclusion;
 
     if (behaviour == EOperationBehaviour::AbortWriteLock) {
-        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, ToString(EOperationBehaviour::AbortWriteLock), true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED), "");
+        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "AbortWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED), "");
         Execute(new TAbortWriteTransaction(this, record.GetLocks().GetLocks()[0].GetLockId(), source, cookie), ctx);
         return;
     }
@@ -370,23 +370,23 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
         auto conclusionParse = commitOperation->Parse(*ev->Get());
         if (conclusionParse.IsFail()) {
-            LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, ToString(EOperationBehaviour::CommitWriteLock), true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), conclusionParse.GetErrorMessage());
+            LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), conclusionParse.GetErrorMessage());
             sendError(conclusionParse.GetErrorMessage(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         } else {
             auto* lockInfo = OperationsManager->GetLockOptional(commitOperation->GetLockId());
             if (!lockInfo) {
-                LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, ToString(EOperationBehaviour::CommitWriteLock), true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "haven't lock for commit: " + ::ToString(commitOperation->GetLockId()));
+                LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "haven't lock for commit: " + ::ToString(commitOperation->GetLockId()));
                 sendError("haven't lock for commit: " + ::ToString(commitOperation->GetLockId()),
                     NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
             } else {
                 if (commitOperation->NeedSyncLocks()) {
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
-                        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, ToString(EOperationBehaviour::CommitWriteLock), true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN), "tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) + " != " + ::ToString(commitOperation->GetGeneration()));
+                        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN), "tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) + " != " + ::ToString(commitOperation->GetGeneration()));
                         sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
                                       " != " + ::ToString(commitOperation->GetGeneration()),
                             NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
                     } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
-                        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, ToString(EOperationBehaviour::CommitWriteLock), true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN), "tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) + " != " + ::ToString(commitOperation->GetInternalGenerationCounter()));
+                        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN), "tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) + " != " + ::ToString(commitOperation->GetInternalGenerationCounter()));
                         sendError(
                             "tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
                                 " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),

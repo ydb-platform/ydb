@@ -1480,7 +1480,7 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
 
 void TColumnShard::ActivateTiering(const TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {
     AFL_VERIFY(Tiers);
-    Tiers->ActivateTiers(usedTiers);
+    Tiers->ActivateTiers(usedTiers, true);
     OnTieringModified(pathId);
 }
 

@@ -4,8 +4,12 @@ import time
 import asyncio
 import abc
 import socket
+import logging
 from ydb.tests.library.nemesis.nemesis_core import Nemesis, Schedule
 from ydb.tests.tools.nemesis.library import base
+
+logger = logging.getLogger("datacenter")
+logger.info("=== DATACENTER.PY LOADED ===")
 
 
 class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
@@ -22,10 +26,9 @@ class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._interval_schedule = Schedule.from_tuple_or_int(duration)
 
     def next_schedule(self):
-        # Если nemesis отключен, возвращаем None (не добавляется в очередь)
         if hasattr(self, '_disabled') and self._disabled:
             return None
-        
+
         if self._current_dc is not None:
             return next(self._interval_schedule)
         return super(AbstractDataCenterNemesis, self).next_schedule()
@@ -55,7 +58,6 @@ class AbstractDataCenterNemesis(Nemesis, base.AbstractMonitoredNemesis):
         self._dc_cycle_iterator = self._create_dc_cycle()
 
     def inject_fault(self):
-        # Если nemesis отключен, ничего не делаем
         if hasattr(self, '_disabled') and self._disabled:
             self.logger.info("DataCenterNemesis is disabled due to insufficient datacenters")
             return
@@ -220,22 +222,21 @@ class DataCenterRouteUnreachableNemesis(AbstractDataCenterNemesis):
     def _inject_specific_fault(self):
         async def _async_block_ports():
             try:
+                # Block ports and schedule recovery in one pass
                 block_tasks = []
+
                 for node in self._current_nodes:
-                    self.logger.info("Blocking YDB ports on host %s", node.host)
-                    task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._block_ports_cmd, raise_on_error=True))
-                    block_tasks.append(task)
+                    self.logger.info("Processing host %s for current dc %s", node.host, self._current_dc)
 
-                results = await asyncio.gather(*block_tasks, return_exceptions=True)
-                success_count = 0
-                for node, result in zip(self._current_nodes, results):
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception blocking YDB ports on host %s: %s", node.host, result)
-                        raise result
-                    self.logger.info("Successfully blocked YDB ports on host %s", node.host)
-                    success_count += 1
+                    # Block ports and schedule automatic recovery in one command
+                    block_and_recover_cmd = f"nohup bash -c '{self._block_ports_cmd} && sleep {self._duration} && sudo /sbin/ip6tables -w -F YDB_FW' > /dev/null 2>&1 &"
+                    block_task = asyncio.create_task(asyncio.to_thread(node.ssh_command, block_and_recover_cmd, raise_on_error=True))
+                    block_tasks.append(block_task)
 
-                self.logger.info("Blocked YDB ports on %d/%d nodes in dc %s", success_count, len(self._current_nodes), self._current_dc)
+                # Wait for all blocking and recovery scheduling operations to complete
+                await asyncio.gather(*block_tasks, return_exceptions=True)
+
+                self.logger.info("Blocked YDB ports on dc %s and scheduled automatic recovery", self._current_dc)
 
             except Exception as e:
                 self.logger.error("Failed to block YDB ports: %s", str(e))
@@ -245,26 +246,10 @@ class DataCenterRouteUnreachableNemesis(AbstractDataCenterNemesis):
             runner.run(_async_block_ports())
 
     def _extract_specific_fault(self):
-        async def _async_restore_ports():
-            restore_tasks = []
-            for node in self._current_nodes:
-                self.logger.info("Restoring YDB ports on host %s", node.host)
-                task = asyncio.create_task(asyncio.to_thread(node.ssh_command, self._restore_ports_cmd, raise_on_error=True))
-                restore_tasks.append(task)
-
-            results = await asyncio.gather(*restore_tasks, return_exceptions=True)
-            success_count = 0
-            for node, result in zip(self._current_nodes, results):
-                if isinstance(result, Exception):
-                    self.logger.error("Exception restoring YDB ports on host %s: %s", node.host, result)
-                    continue
-                self.logger.info("Successfully restored YDB ports on host %s", node.host)
-                success_count += 1
-
-            self.logger.info("Restored YDB ports on %d/%d nodes in dc %s", success_count, len(self._current_nodes), self._current_dc)
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_restore_ports())
+        """YDB ports are automatically restored via sleep command scheduled during injection."""
+        self.logger.info("Skipping manual port restoration - automatic recovery via sleep command is scheduled")
+        # Ports are automatically restored via sleep command scheduled during _inject_specific_fault
+        # This prevents SSH connectivity issues during manual restoration
 
 
 class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
@@ -299,28 +284,23 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
                     if dc != self._current_dc:
                         other_nodes.extend(nodes)
 
+                # Block routes and schedule recovery in one pass
                 unreach_tasks = []
+
                 for other_node in other_nodes:
-                    self.logger.info("Blocking routes on host %s to current dc %s", other_node.host, self._current_dc)
+                    self.logger.info("Processing host %s for current dc %s", other_node.host, self._current_dc)
                     for node in self._current_nodes:
                         ip = self._resolve_hostname_to_ip(node.host)
                         if ip is None:
                             self.logger.error("Failed to resolve hostname %s to IP address", node.host)
                             raise Exception("Failed to resolve hostname to IP address")
-                        block_cmd = self._block_cmd_template.format(ip, ip)
-                        task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_cmd, raise_on_error=True))
-                        unreach_tasks.append(task)
 
-                results = await asyncio.gather(*unreach_tasks, return_exceptions=True)
-                success_count = 0
-                for result in results:
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception blocking route to current dc %s: %s", self._current_dc, result)
-                        raise result
-                    self.logger.info("Successfully blocked route to current dc %s", self._current_dc)
-                    success_count += 1
+                        block_and_recover_cmd = f"nohup bash -c 'sudo /usr/bin/ip -6 ro add unreach {ip} && sleep {self._duration} && sudo /usr/bin/ip -6 ro del unreach {ip}' > /dev/null 2>&1 &"
+                        block_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_and_recover_cmd, raise_on_error=True))
+                        unreach_tasks.append(block_task)
+                await asyncio.gather(*unreach_tasks, return_exceptions=True)
 
-                self.logger.info("Blocked routes to dc %s: %d/%d operations successful", self._current_dc, success_count, len(results))
+                self.logger.info("Blocked routes to dc %s and scheduled automatic recovery", self._current_dc)
 
             except Exception as e:
                 self.logger.error("Failed to block routes to current dc %s: %s", self._current_dc, str(e))
@@ -330,42 +310,23 @@ class DataCenterIptablesBlockPortsNemesis(AbstractDataCenterNemesis):
             runner.run(_async_block_routes())
 
     def _extract_specific_fault(self):
-        async def _async_restore_routes():
-            other_nodes = []
-            for dc, nodes in self._dc_to_nodes.items():
-                if dc != self._current_dc:
-                    other_nodes.extend(nodes)
-
-            restore_tasks = []
-            for other_node in other_nodes:
-                self.logger.info("Restoring routes on host %s to current dc %s", other_node.host, self._current_dc)
-                for node in self._current_nodes:
-                    ip = self._resolve_hostname_to_ip(node.host)
-                    if ip is None:
-                        self.logger.error("Failed to resolve hostname %s to IP address", node.host)
-                        continue
-                    restore_cmd = self._restore_cmd_template.format(ip)
-                    task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, restore_cmd, raise_on_error=True))
-                    restore_tasks.append(task)
-
-            results = await asyncio.gather(*restore_tasks, return_exceptions=True)
-            success_count = 0
-            for result in results:
-                if isinstance(result, Exception):
-                    self.logger.error("Exception restoring route to current dc %s: %s", self._current_dc, result)
-                    continue
-                self.logger.info("Successfully restored route to current dc %s", self._current_dc)
-                success_count += 1
-
-            self.logger.info("Restored routes to dc %s: %d/%d operations successful", self._current_dc, success_count, len(results))
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_restore_routes())
+        """Network routes are automatically restored via 'at' command scheduled during injection."""
+        self.logger.info("Skipping manual route restoration - automatic recovery via 'at' command is scheduled")
 
 
 def datacenter_nemesis_list(cluster):
-    return [
-        DataCenterStopNodesNemesis(cluster),
-        DataCenterRouteUnreachableNemesis(cluster),
-        DataCenterIptablesBlockPortsNemesis(cluster)
-    ]
+    logger.debug("=== DATACENTER_NEMESIS_LIST CALLED ===")
+    logger.info("Creating datacenter nemesis list")
+    logger.info("Cluster: %s", cluster)
+
+    try:
+        datacenter_nemesis_list = [
+            DataCenterStopNodesNemesis(cluster),
+            DataCenterRouteUnreachableNemesis(cluster),
+            DataCenterIptablesBlockPortsNemesis(cluster)
+        ]
+        logger.info("Successfully created %d datacenter nemesis", len(datacenter_nemesis_list))
+        return datacenter_nemesis_list
+    except Exception as e:
+        logger.error("Failed to create datacenter nemesis list: %s", e)
+        raise

@@ -594,19 +594,6 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     }
 }
 
-namespace {
-
-NView::TViewDescription DescribeView(TDriver driver, const TString& path) {
-    NView::TViewClient client(driver);
-    auto status = NConsoleClient::RetryFunction([&]() {
-        return client.DescribeView(path).ExtractValueSync();
-    });
-    VerifyStatus(status, "describe view");
-    return status.GetViewDescription();
-}
-
-}
-
 /*!
 The BackupView function retrieves the view's description from the database,
 constructs a corresponding CREATE VIEW statement,
@@ -625,12 +612,14 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
 
     LOG_I("Backup view " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    const auto viewDescription = DescribeView(driver, dbPath);
+    TString query;
+    const auto status = NDump::DescribeViewQuery(driver, dbPath, query);
+    VerifyStatus(status, "describe view");
 
     const auto creationQuery = NDump::BuildCreateViewQuery(
         TFsPath(dbPathRelativeToBackupRoot).GetName(),
         dbPath,
-        TString(viewDescription.GetQueryText()),
+        query,
         dbBackupRoot,
         issues
     );

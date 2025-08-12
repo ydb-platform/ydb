@@ -47,7 +47,7 @@ Additionally, there is a separate view that shows statistics on the usage of gro
 | InferPDiskSlotCountFromUnitSize  | Uint64    |         | Size of VSlot in bytes from which `ExpectedSlotCount` and `SlotSizeInUnits` values are inferred unless user-defined. |
 
 The inferred values of `ExpectedSlotCount` and `SlotSizeInUnits` are defined by the formula $\text{ExpectedSlotCount} \times \text{SlotSizeInUnits} = \frac{\text{TotalSize}}{\text{InferPDiskSlotCountFromUnitSize}}
-$, where $\text{SlotSizeInUnits} = 2^N$ is chosen to meet $\text{ExpectedSlotCount} \leq 16$.
+The inferred values of `ExpectedSlotCount` and `SlotSizeInUnits` are defined by the formula $\text{ExpectedSlotCount} \times \text{SlotSizeInUnits} = \frac{\text{TotalSize}}{\text{InferPDiskSlotCountFromUnitSize}}$, where $\text{SlotSizeInUnits} = 2^N$ is chosen to meet $\text{ExpectedSlotCount} \leq 16$.
 
 ### ds_vslots
 

@@ -5213,9 +5213,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvBackup::TEvForgetIncrementalBackupRequest, Handle);
         HFuncTraced(TEvBackup::TEvListIncrementalBackupsRequest, Handle);
 
-        HFuncTraced(TEvBackup::TEvGetIncrementalRestoreRequest, Handle);
-        HFuncTraced(TEvBackup::TEvForgetIncrementalRestoreRequest, Handle);
-        HFuncTraced(TEvBackup::TEvListIncrementalRestoresRequest, Handle);
+        HFuncTraced(TEvBackup::TEvGetBackupCollectionRestoreRequest, Handle);
+        HFuncTraced(TEvBackup::TEvForgetBackupCollectionRestoreRequest, Handle);
+        HFuncTraced(TEvBackup::TEvListBackupCollectionRestoresRequest, Handle);
         // } // NBackup
 
 

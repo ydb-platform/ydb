@@ -9,7 +9,7 @@ using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TIncrementalRestore::TTxForget: public NTabletFlatExecutor::TTransactionBase<TSchemeShard>{
 public:
-    explicit TTxForget(TSelf* self, TEvBackup::TEvForgetIncrementalRestoreRequest::TPtr& ev)
+    explicit TTxForget(TSelf* self, TEvBackup::TEvForgetBackupCollectionRestoreRequest::TPtr& ev)
         : TBase(self)
         , Request(ev)
     {}
@@ -40,11 +40,11 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        Cerr << "FORGET EXECUTE DEBUG: restoreId=" << record.GetIncrementalRestoreId() << Endl;
+        Cerr << "FORGET EXECUTE DEBUG: restoreId=" << record.GetBackupCollectionRestoreId() << Endl;
         LOG_D("Execute " << record.ShortDebugString());
-        LOG_I("FORGET DEBUG: Starting forget transaction for restoreId=" << record.GetIncrementalRestoreId());
+        LOG_I("FORGET DEBUG: Starting forget transaction for restoreId=" << record.GetBackupCollectionRestoreId());
 
-        Response = MakeHolder<TEvBackup::TEvForgetIncrementalRestoreResponse>();
+        Response = MakeHolder<TEvBackup::TEvForgetBackupCollectionRestoreResponse>();
         Response->Record.SetTxId(record.GetTxId());
 
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
@@ -57,7 +57,7 @@ public:
         }
         const TPathId domainPathId = database.GetPathIdForDomain();
 
-        ui64 restoreId = record.GetIncrementalRestoreId();
+        ui64 restoreId = record.GetBackupCollectionRestoreId();
         const auto* incrementalRestorePtr = Self->IncrementalRestoreStates.FindPtr(restoreId);
         if (!incrementalRestorePtr) {
             return Reply(
@@ -158,11 +158,11 @@ public:
 
 private:
     TSideEffects SideEffects;
-    TEvBackup::TEvForgetIncrementalRestoreRequest::TPtr Request;
-    THolder<TEvBackup::TEvForgetIncrementalRestoreResponse> Response;
+    TEvBackup::TEvForgetBackupCollectionRestoreRequest::TPtr Request;
+    THolder<TEvBackup::TEvForgetBackupCollectionRestoreResponse> Response;
 };
 
-ITransaction* TSchemeShard::CreateTxForgetRestore(TEvBackup::TEvForgetIncrementalRestoreRequest::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxForgetRestore(TEvBackup::TEvForgetBackupCollectionRestoreRequest::TPtr& ev) {
     return new TIncrementalRestore::TTxForget(this, ev);
 }
 

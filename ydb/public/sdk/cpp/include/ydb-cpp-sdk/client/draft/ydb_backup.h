@@ -48,7 +48,7 @@ private:
     TMetadata Metadata_;
 };
 
-class TIncrementalRestoreResponse : public TOperation {
+class TBackupCollectionRestoreResponse : public TOperation {
 public:
     struct TMetadata {
         ERestoreProgress Progress;
@@ -57,7 +57,7 @@ public:
 
 public:
     using TOperation::TOperation;
-    TIncrementalRestoreResponse(TStatus&& status, Ydb::Operations::Operation&& operation);
+    TBackupCollectionRestoreResponse(TStatus&& status, Ydb::Operations::Operation&& operation);
 
     const TMetadata& Metadata() const;
 

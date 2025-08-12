@@ -1755,7 +1755,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             // Get restore ID from List API
             ui64 restoreId = 0;
             {
-                auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+                auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
                 UNIT_ASSERT_C(!listResp.GetEntries().empty(), "Should have at least one restore operation");
                 restoreId = listResp.GetEntries().rbegin()->GetId();
                 Cerr << "Found restore operation with ID: " << restoreId << Endl;
@@ -1763,9 +1763,9 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
 
             // Test GET API before reboot
             {
-                auto getResp = TestGetIncrementalRestore(runtime, restoreId, "/MyRoot");
-                UNIT_ASSERT_VALUES_EQUAL(getResp.GetIncrementalRestore().GetId(), restoreId);
-                auto progress = getResp.GetIncrementalRestore().GetProgress();
+                auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+                UNIT_ASSERT_VALUES_EQUAL(getResp.GetBackupCollectionRestore().GetId(), restoreId);
+                auto progress = getResp.GetBackupCollectionRestore().GetProgress();
                 Cerr << "Progress before reboot: " << static_cast<int>(progress) << Endl;
             }
 
@@ -1774,7 +1774,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
                 
                 // After reboot, verify List API still works
-                auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+                auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
                 bool foundOperation = false;
                 for (const auto& entry : listResp.GetEntries()) {
                     if (entry.GetId() == restoreId) {
@@ -1786,8 +1786,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 UNIT_ASSERT_C(foundOperation, "Operation should be visible in List API after reboot");
 
                 // Verify Get API still works
-                auto getResp = TestGetIncrementalRestore(runtime, restoreId, "/MyRoot");
-                UNIT_ASSERT_VALUES_EQUAL(getResp.GetIncrementalRestore().GetId(), restoreId);
+                auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+                UNIT_ASSERT_VALUES_EQUAL(getResp.GetBackupCollectionRestore().GetId(), restoreId);
                 Cerr << "Get API working after reboot 1" << Endl;
             }
 
@@ -1800,7 +1800,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
                 
                 // Verify operation is still listed as DONE
-                auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+                auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
                 bool foundCompleted = false;
                 for (const auto& entry : listResp.GetEntries()) {
                     if (entry.GetId() == restoreId) {
@@ -1814,20 +1814,20 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 UNIT_ASSERT_C(foundCompleted, "Completed operation should be visible after reboot");
 
                 // Test Get API for completed operation
-                auto getResp = TestGetIncrementalRestore(runtime, restoreId, "/MyRoot");
-                UNIT_ASSERT_C(getResp.GetIncrementalRestore().GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE,
+                auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+                UNIT_ASSERT_C(getResp.GetBackupCollectionRestore().GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE,
                     "Get API should show operation as PROGRESS_DONE");
             }
 
             // Test FORGET API
-            TestForgetIncrementalRestore(runtime, ++t.TxId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
+            TestForgetBackupCollectionRestore(runtime, ++t.TxId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
 
             // === REBOOT 3: After FORGET ===
             {
                 TInactiveZone inactive(activeZone);
                 
                 // Verify operation is gone from List
-                auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+                auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
                 bool foundForgotten = false;
                 for (const auto& entry : listResp.GetEntries()) {
                     if (entry.GetId() == restoreId) {
@@ -1838,7 +1838,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 UNIT_ASSERT_C(!foundForgotten, "Forgotten operation should not appear in List after reboot");
 
                 // Verify Get returns NOT_FOUND
-                TestGetIncrementalRestore(runtime, restoreId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+                TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
                 
                 Cerr << "FORGET persisted correctly across reboot" << Endl;
             }
@@ -1874,7 +1874,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
 
             // Get all restore IDs
             {
-                auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+                auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
                 UNIT_ASSERT_C(listResp.GetEntries().size() >= 3, "Should have at least 3 operations");
                 for (const auto& entry : listResp.GetEntries()) {
                     restoreIds.push_back(entry.GetId());
@@ -1887,14 +1887,14 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
                 
                 // Verify all operations are still listed
-                auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+                auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
                 UNIT_ASSERT_C(listResp.GetEntries().size() >= 3, 
                     "All operations should be visible after reboot");
                 
                 // Verify each operation can be retrieved with Get
                 for (ui64 id : restoreIds) {
-                    auto getResp = TestGetIncrementalRestore(runtime, id, "/MyRoot");
-                    UNIT_ASSERT_VALUES_EQUAL(getResp.GetIncrementalRestore().GetId(), id);
+                    auto getResp = TestGetBackupCollectionRestore(runtime, id, "/MyRoot");
+                    UNIT_ASSERT_VALUES_EQUAL(getResp.GetBackupCollectionRestore().GetId(), id);
                 }
                 
                 Cerr << "All " << restoreIds.size() << " operations accessible after reboot 1" << Endl;
@@ -1913,25 +1913,25 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             ui64 toForget2 = restoreIds[1];
             ui64 toKeep = restoreIds[2];
 
-            TestForgetIncrementalRestore(runtime, ++t.TxId, "/MyRoot", toForget1, Ydb::StatusIds::SUCCESS);
-            TestForgetIncrementalRestore(runtime, ++t.TxId, "/MyRoot", toForget2, Ydb::StatusIds::SUCCESS);
+            TestForgetBackupCollectionRestore(runtime, ++t.TxId, "/MyRoot", toForget1, Ydb::StatusIds::SUCCESS);
+            TestForgetBackupCollectionRestore(runtime, ++t.TxId, "/MyRoot", toForget2, Ydb::StatusIds::SUCCESS);
 
             // === REBOOT 2: After selective FORGET ===
             {
                 TInactiveZone inactive(activeZone);
                 
                 // Verify forgotten operations are gone
-                TestGetIncrementalRestore(runtime, toForget1, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-                TestGetIncrementalRestore(runtime, toForget2, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+                TestGetBackupCollectionRestore(runtime, toForget1, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+                TestGetBackupCollectionRestore(runtime, toForget2, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
                 
                 // Verify kept operation is still accessible
-                auto getResp = TestGetIncrementalRestore(runtime, toKeep, "/MyRoot");
-                UNIT_ASSERT_VALUES_EQUAL(getResp.GetIncrementalRestore().GetId(), toKeep);
-                UNIT_ASSERT_C(getResp.GetIncrementalRestore().GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE,
+                auto getResp = TestGetBackupCollectionRestore(runtime, toKeep, "/MyRoot");
+                UNIT_ASSERT_VALUES_EQUAL(getResp.GetBackupCollectionRestore().GetId(), toKeep);
+                UNIT_ASSERT_C(getResp.GetBackupCollectionRestore().GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE,
                     "Kept operation should be marked as PROGRESS_DONE");
                 
                 // Verify List shows only the kept operation
-                auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+                auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
                 bool foundKept = false;
                 bool foundForgotten = false;
                 for (const auto& entry : listResp.GetEntries()) {
@@ -1949,20 +1949,20 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             }
 
             // Forget the remaining operation
-            TestForgetIncrementalRestore(runtime, ++t.TxId, "/MyRoot", toKeep, Ydb::StatusIds::SUCCESS);
+            TestForgetBackupCollectionRestore(runtime, ++t.TxId, "/MyRoot", toKeep, Ydb::StatusIds::SUCCESS);
 
             // === REBOOT 3: After all operations forgotten ===
             {
                 TInactiveZone inactive(activeZone);
                 
                 // Verify List is empty
-                auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+                auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
                 UNIT_ASSERT_VALUES_EQUAL_C(listResp.GetEntries().size(), 0, 
                     "List should be empty after all operations forgotten");
                 
                 // Verify all Get requests return NOT_FOUND
                 for (ui64 id : restoreIds) {
-                    TestGetIncrementalRestore(runtime, id, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+                    TestGetBackupCollectionRestore(runtime, id, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
                 }
                 
                 Cerr << "All operations cleaned up correctly after reboot" << Endl;
@@ -1992,23 +1992,23 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             // Get restore ID
             ui64 restoreId = 0;
             {
-                auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+                auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
                 UNIT_ASSERT_C(!listResp.GetEntries().empty(), "Should have restore operation");
                 restoreId = listResp.GetEntries().rbegin()->GetId();
             }
 
             // First FORGET
-            TestForgetIncrementalRestore(runtime, ++t.TxId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
+            TestForgetBackupCollectionRestore(runtime, ++t.TxId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
 
             // === REBOOT 1: After first FORGET ===
             {
                 TInactiveZone inactive(activeZone);
                 
                 // Verify operation is forgotten
-                TestGetIncrementalRestore(runtime, restoreId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+                TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
                 
                 // Try FORGET again - should be idempotent (NOT_FOUND is acceptable)
-                TestForgetIncrementalRestore(runtime, ++t.TxId, "/MyRoot", restoreId, Ydb::StatusIds::NOT_FOUND);
+                TestForgetBackupCollectionRestore(runtime, ++t.TxId, "/MyRoot", restoreId, Ydb::StatusIds::NOT_FOUND);
                 
                 Cerr << "FORGET idempotency verified after reboot" << Endl;
             }
@@ -2018,10 +2018,10 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
                 
                 // Should still return NOT_FOUND
-                TestForgetIncrementalRestore(runtime, ++t.TxId, "/MyRoot", restoreId, Ydb::StatusIds::NOT_FOUND);
+                TestForgetBackupCollectionRestore(runtime, ++t.TxId, "/MyRoot", restoreId, Ydb::StatusIds::NOT_FOUND);
                 
                 // List should remain empty
-                auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+                auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
                 UNIT_ASSERT_VALUES_EQUAL_C(listResp.GetEntries().size(), 0, 
                     "List should remain empty after multiple FORGET attempts");
             }

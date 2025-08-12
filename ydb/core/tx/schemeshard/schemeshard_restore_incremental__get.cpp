@@ -9,7 +9,7 @@ using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TIncrementalRestore::TTxGet: public NTabletFlatExecutor::TTransactionBase<TSchemeShard>{
 public:
-    explicit TTxGet(TSelf* self, TEvBackup::TEvGetIncrementalRestoreRequest::TPtr& ev)
+    explicit TTxGet(TSelf* self, TEvBackup::TEvGetBackupCollectionRestoreRequest::TPtr& ev)
         : TBase(self)
         , Request(ev)
     {}
@@ -46,7 +46,7 @@ public:
     bool Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString())
     {
         Y_ABORT_UNLESS(Response);
-        auto& restore = *Response->Record.MutableIncrementalRestore();
+        auto& restore = *Response->Record.MutableBackupCollectionRestore();
         restore.SetStatus(status);
         if (errorMessage) {
             auto& issue = *restore.MutableIssues()->Add();
@@ -64,7 +64,7 @@ public:
         const auto& record = Request->Get()->Record;
         LOG_D("Execute " << record.ShortDebugString());
 
-        Response = MakeHolder<TEvBackup::TEvGetIncrementalRestoreResponse>();
+        Response = MakeHolder<TEvBackup::TEvGetBackupCollectionRestoreResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
@@ -74,7 +74,7 @@ public:
         }
         const TPathId domainPathId = database.GetPathIdForDomain();
 
-        ui64 restoreId = record.GetIncrementalRestoreId();
+        ui64 restoreId = record.GetBackupCollectionRestoreId();
         const auto* incrementalRestorePtr = Self->IncrementalRestoreStates.FindPtr(restoreId);
         if (!incrementalRestorePtr) {
             return Reply(
@@ -102,7 +102,7 @@ public:
         }
 
         Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
-        Fill(*Response->Record.MutableIncrementalRestore(), incrementalRestore);
+        Fill(*Response->Record.MutableBackupCollectionRestore(), incrementalRestore);
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
         return Reply();
@@ -114,11 +114,11 @@ public:
 
 private:
     TSideEffects SideEffects;
-    TEvBackup::TEvGetIncrementalRestoreRequest::TPtr Request;
-    THolder<TEvBackup::TEvGetIncrementalRestoreResponse> Response;
+    TEvBackup::TEvGetBackupCollectionRestoreRequest::TPtr Request;
+    THolder<TEvBackup::TEvGetBackupCollectionRestoreResponse> Response;
 };
 
-ITransaction* TSchemeShard::CreateTxGetRestore(TEvBackup::TEvGetIncrementalRestoreRequest::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxGetRestore(TEvBackup::TEvGetBackupCollectionRestoreRequest::TPtr& ev) {
     return new TIncrementalRestore::TTxGet(this, ev);
 }
 

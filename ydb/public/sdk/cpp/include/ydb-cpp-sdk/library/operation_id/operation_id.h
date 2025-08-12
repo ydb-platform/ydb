@@ -27,7 +27,7 @@ public:
         SCRIPT_EXECUTION = 9,
         SS_BG_TASKS = 10,
         INCREMENTAL_BACKUP = 11,
-        INCREMENTAL_RESTORE = 12,
+        BACKUP_COLLECTION_RESTORE = 12,
     };
 
     struct TData {

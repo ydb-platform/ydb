@@ -119,36 +119,36 @@ message TIncrementalRestore {
     optional string UserSID = 8;
 }
 
-message TEvGetIncrementalRestoreRequest {
+message TEvGetBackupCollectionRestoreRequest {
     optional string DatabaseName = 1;
-    optional uint64 IncrementalRestoreId = 2;
+    optional uint64 BackupCollectionRestoreId = 2;
 }
 
-message TEvGetIncrementalRestoreResponse {
+message TEvGetBackupCollectionRestoreResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
-    optional TIncrementalRestore IncrementalRestore = 3;
+    optional TIncrementalRestore BackupCollectionRestore = 3;
 }
 
-message TEvForgetIncrementalRestoreRequest{
+message TEvForgetBackupCollectionRestoreRequest{
     optional uint64 TxId = 1;
     optional string DatabaseName = 2;
-    optional uint64 IncrementalRestoreId = 3;
+    optional uint64 BackupCollectionRestoreId = 3;
 }
 
-message TEvForgetIncrementalRestoreResponse {
+message TEvForgetBackupCollectionRestoreResponse {
     optional uint64 TxId = 1;
     optional Ydb.StatusIds.StatusCode Status = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
 }
 
-message TEvListIncrementalRestoresRequest {
+message TEvListBackupCollectionRestoresRequest {
     optional string DatabaseName = 1;
     optional uint64 PageSize = 2;
     optional string PageToken = 3;
 }
 
-message TEvListIncrementalRestoresResponse {
+message TEvListBackupCollectionRestoresResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
     repeated TIncrementalRestore Entries = 3;

@@ -63,6 +63,53 @@ std::pair<TString, TOperation::TOperationId> StartScriptQuery(TTestActorRuntime&
     return {executionId, TOperation::TOperationId(ScriptExecutionOperationFromExecutionId(executionId))};
 }
 
+void WaitOutputMessage(NYdb::NTopic::TTopicClient& topicClient, const TString& topicName, const TVector<TString>& expectedMessage) {
+    NYdb::NTopic::TReadSessionSettings readSettings;
+    readSettings
+        .WithoutConsumer()
+        .AppendTopics(
+            NTopic::TTopicReadSettings(topicName).ReadFromTimestamp(TInstant::Now() - TDuration::Seconds(146))
+                .AppendPartitionIds(0));
+
+    readSettings.EventHandlers_.StartPartitionSessionHandler(
+        [](NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
+            event.Confirm(0);
+        }
+    );
+    auto readSession = topicClient.CreateReadSession(readSettings);
+    std::vector<std::string> received;
+    while (true) {
+        auto event = readSession->GetEvent(/*block = */true);
+        if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            for (const auto& message : dataEvent->GetMessages()) {
+                received.push_back(message.GetData());
+                if (received.size() == expectedMessage.size()) {
+                    break;
+                }
+            }
+        }
+    }
+    UNIT_ASSERT_EQUAL(received.size(), 1);
+    Cerr << " received[0] " << received[0] << Endl;
+    for (size_t i = 0; i < received.size(); ++i) {
+        UNIT_ASSERT_EQUAL(received[i], expectedMessage[i]);
+    }
+};
+
+// void PQWrite(
+//     const std::vector<TString>& sequence,
+//     ui64 firstMessageOffset = 0) {
+//     ui64 offset = firstMessageOffset;
+//     TVector<TMessage> msgs;
+//     size_t size = 0;
+//     for (const auto& s : sequence) {
+//         TMessage msg(s, nullptr, MakeNextMessageInformation(offset++, s.size()), CreatePartitionSession());
+//         msgs.emplace_back(msg);
+//         size += s.size();
+//     }
+//     MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, CreatePartitionSession()), size);
+// }
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
@@ -352,7 +399,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetString(), "value1");
     }
 
-    Y_UNIT_TEST(InsertTopicBasic) {
+    Y_UNIT_TEST(InsertTopicBasic66) {
         auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory());
 
         TString sourceName = "sourceName";
@@ -376,20 +423,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
         auto query = TStringBuilder() << R"(
-            CREATE OBJECT secret_local_password (TYPE SECRET) WITH (value = "1234");
             CREATE EXTERNAL DATA SOURCE `)" << sourceName << R"(` WITH (
                 SOURCE_TYPE="Ydb",
                 LOCATION=")" << GetEnv("YDB_ENDPOINT") << R"(",
                 DATABASE_NAME=")" << GetEnv("YDB_DATABASE") << R"(",
-                AUTH_METHOD="BASIC",
-                LOGIN="root",
-                PASSWORD_SECRET_NAME="secret_local_password"
+                AUTH_METHOD="NONE"
             );)";
 
         auto db = kikimr->GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
         const TString sql = fmt::format(R"(
                 $input = SELECT key, value FROM `{source}`.`{input_topic}`
@@ -403,48 +448,62 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     SELECT key || value FROM $input;
             )", "source"_a=sourceName, "input_topic"_a=inputTopicName, "output_topic"_a=outputTopicName);
 
-        auto queryClient = kikimr->GetQueryClient();
-        auto settings = TExecuteScriptSettings().StatsMode(EStatsMode::Basic);
-        auto scriptExecutionOperation = queryClient.ExecuteScript(sql, settings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        constexpr TDuration backoffDuration = TDuration::Seconds(5);
+        NKikimrKqp::TScriptExecutionRetryState::TMapping retryMapping;
+        retryMapping.AddStatusCode(Ydb::StatusIds::BAD_REQUEST);
+        auto& policy = *retryMapping.MutableBackoffPolicy();
+        policy.SetRetryPeriodMs(backoffDuration.MilliSeconds());
+        policy.SetBackoffPeriodMs(backoffDuration.MilliSeconds());
+        policy.SetRetryRateLimit(999);
+
+        const auto [executionId, operationId] = StartScriptQuery(runtime, {.Query=sql, .SaveState = true, .RetryMapping = retryMapping});
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
         auto writeSettings = NYdb::NTopic::TWriteSessionSettings().Path(inputTopicName);
         auto topicSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
         topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key1", "value":"value1"})"));
-        topicSession->Close();
+      //  WaitOutputMessage(topicClient, outputTopicName, );
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-        NYdb::NTopic::TReadSessionSettings readSettings;
-        readSettings
-            .WithoutConsumer()
-            .AppendTopics(
-                NTopic::TTopicReadSettings(outputTopicName).ReadFromTimestamp(TInstant::Now() - TDuration::Seconds(146))
-                    .AppendPartitionIds(0));
+       // topicSession->Close();
 
-        readSettings.EventHandlers_.StartPartitionSessionHandler(
-            [](NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
-                event.Confirm(0);
-            }
-        );
-
-        auto readSession = topicClient.CreateReadSession(readSettings);
-        std::vector<std::string> received;
-        while (true) {
-            auto event = readSession->GetEvent(/*block = */true);
-            if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-                for (const auto& message : dataEvent->GetMessages()) {
-                    received.push_back(message.GetData());
-                }
-                break;
-            }
-        }
-        UNIT_ASSERT_EQUAL(received.size(), 1);
-        UNIT_ASSERT_EQUAL(received[0], "key1value1");
-
-        NYdb::NOperation::TOperationClient client(kikimr->GetDriver());
-        status = client.Cancel(scriptExecutionOperation.Id()).ExtractValueSync();
+       Cerr << "recreated topic begin" << Endl;
+        auto dropSettings = NYdb::NTopic::TDropTopicSettings();
+        status = topicClient.DropTopic(inputTopicName, dropSettings).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+
+        topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key7", "value":"value7"})"));
+
+        status = topicClient.CreateTopic(inputTopicName, topicSettings).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        Cerr << "recreated topic " << Endl;
+        
+
+        topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key2", "value":"value2"})"));
+        WaitOutputMessage(topicClient, outputTopicName, {"key1value1", "key2value2"});
+        // NYdb::NOperation::TOperationClient client(kikimr->GetDriver());
+        // status = client.Cancel(operationId).ExtractValueSync();
+        // UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        // topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key2", "value":"value2"})"));
+
+        // const auto edgeActor = runtime.AllocateEdgeActor();
+        // runtime.Register(CreateGetScriptExecutionPhysicalGraphActor(edgeActor, "/Root", executionId));
+        // const auto graph = runtime.GrabEdgeEvent<TEvGetScriptPhysicalGraphResponse>(edgeActor, TDuration::Seconds(10));
+        // UNIT_ASSERT_C(graph, "Empty graph response");
+        // UNIT_ASSERT_VALUES_EQUAL_C(graph->Get()->Status, Ydb::StatusIds::SUCCESS, graph->Get()->Issues.ToString());
+
+        // Cerr << "start PhysicalGraph" << Endl;
+        // const auto [executionId2, operationId2] = StartScriptQuery(runtime, {.SaveState = true, .PhysicalGraph = graph->Get()->PhysicalGraph});
+
+        // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        // topicSession->Write(NYdb::NTopic::TWriteMessage(R"({"key":"key3", "value":"value3"})"));
+        // topicSession->Close();
+
     }
 
     Y_UNIT_TEST(RestoreScriptPhysicalGraphBasic) {
@@ -673,6 +732,131 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), "{\"key\":\"key1\",\"value\":\"value1\"}\n");
         UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(writeBucket), 0);
+    }
+
+
+    Y_UNIT_TEST(RestoreScriptPhysicalGraphOnRetry2) {
+        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph_on_retry";
+        CreateBucket(writeBucket);
+
+        const auto pqGateway = CreateMockPqGateway();
+
+       // constexpr char topicName[] = "restoreScriptTopicOnRetry";
+        TString inputTopicName = "inputTopicName";
+        TString outputTopicName = "outputTopicName";
+        size_t numberEvents = 0;
+
+        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory(), {
+            .PqGateway = pqGateway
+        });
+        auto db = kikimr->GetQueryClient();
+
+        const auto topicDriver = TDriver(TDriverConfig());
+        NTopic::TTopicClient topicClient(topicDriver, NTopic::TTopicClientSettings()
+            .DiscoveryEndpoint(GetEnv("YDB_ENDPOINT"))
+            .Database(GetEnv("YDB_DATABASE")));
+        {
+            auto status = topicClient.CreateTopic(inputTopicName).ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            status = topicClient.CreateTopic(outputTopicName).ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        constexpr char pqSourceName[] = "sourceName";
+        {
+            const auto query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
+                    SOURCE_TYPE = "Ydb",
+                    LOCATION = "{pq_location}",
+                    DATABASE_NAME = "{pq_database_name}",
+                    AUTH_METHOD = "NONE"
+                );)",
+                "pq_source"_a = pqSourceName,
+                "pq_location"_a = GetEnv("YDB_ENDPOINT"),
+                "pq_database_name"_a = GetEnv("YDB_DATABASE")
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        TString executionId;
+        TOperation::TOperationId operationId;
+
+        constexpr TDuration backoffDuration = TDuration::Seconds(5);
+        {
+            NKikimrKqp::TScriptExecutionRetryState::TMapping retryMapping;
+            retryMapping.AddStatusCode(Ydb::StatusIds::BAD_REQUEST);
+            auto& policy = *retryMapping.MutableBackoffPolicy();
+            policy.SetRetryPeriodMs(backoffDuration.MilliSeconds());
+            policy.SetBackoffPeriodMs(backoffDuration.MilliSeconds());
+            policy.SetRetryRateLimit(1);
+
+            const TScriptQuerySettings settings = {
+                .Query = fmt::format(R"(
+                  $input = SELECT key, value FROM `{source}`.`{input_topic}`
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(
+                            key String NOT NULL,
+                            value String  NOT NULL
+                        ));
+                    INSERT INTO `{source}`.`{output_topic}`
+                        SELECT key || value FROM $input;)",
+                    "source"_a = pqSourceName,
+                    "input_topic"_a = inputTopicName,
+                    "output_topic"_a = outputTopicName
+                ),
+                .SaveState = true,
+                .RetryMapping = retryMapping
+            };
+
+            std::tie(executionId, operationId) = StartScriptQuery(runtime, settings);
+        }
+        Sleep(TDuration::MilliSeconds(3000));
+
+        // Sleep(TDuration::MilliSeconds(100));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(numberEvents, R"({"key":"key1", "value": "value1"})", {.Session = CreatePartitionSession()}));
+        Sleep(TDuration::MilliSeconds(1000));
+        Cerr << "Sleep end5" << Endl;
+        pqGateway->AddEvent(inputTopicName, NTopic::TSessionClosedEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")}));
+        Sleep(TDuration::MilliSeconds(1000));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(numberEvents, R"({"key":"key2", "value": "value2"})", {.Session = CreatePartitionSession()}));
+        Sleep(TDuration::MilliSeconds(1000));
+        // NOperation::TOperationClient opClient(kikimr->GetDriver());
+
+        // const auto timeout = TInstant::Now() + TDuration::Seconds(10);
+        // while (true) {
+        //     const auto op = opClient.Get<TScriptExecutionOperation>(operationId).ExtractValueSync();
+        //     UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::SUCCESS, op.Status().GetIssues().ToString());
+        //     UNIT_ASSERT_C(!op.Ready(), "Operation unexpectedly finished");
+        //     if (op.Metadata().ExecStatus == EExecStatus::Failed) {
+        //         break;
+        //     }
+
+        //     if (TInstant::Now() > timeout) {
+        //         UNIT_FAIL("Failed to wait for query to finish (before retry)");
+        //     }
+
+        //     Sleep(TDuration::MilliSeconds(100));
+        // }
+
+        // {
+        //     const auto query = fmt::format(R"(
+        //         DROP EXTERNAL DATA SOURCE `{s3_sink}`;
+        //         DROP EXTERNAL DATA SOURCE `{pq_source}`;)",
+        //         "s3_sink"_a = s3SinkName,
+        //         "pq_source"_a = pqSourceName
+        //     );
+        //     const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        // }
+
+        // const auto readyOp = WaitScriptExecutionOperation(operationId, kikimr->GetDriver());
+        // UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Status().GetStatus(), EStatus::SUCCESS, readyOp.Status().GetIssues().ToString());
+        // UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+        // UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), "{\"key\":\"key1\",\"value\":\"value1\"}\n");
+        // UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(writeBucket), 0);
     }
 }
 

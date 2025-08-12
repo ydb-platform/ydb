@@ -29,6 +29,10 @@ public:
         ThreadPool.Start(1);
     }
 
+    ~TMockTopicReadSession() {
+        Close(TDuration::Zero());
+    }
+
     NThreading::TFuture<void> WaitEvent() override {
         return Settings.EvGen
             ? NThreading::MakeFuture()
@@ -74,8 +78,12 @@ public:
     }
 
     bool Close(TDuration /*timeout*/) override {
+        if (Closed) {
+            return true;
+        }
         Queue->Stop();
         ThreadPool.Stop();
+        Closed = true;
         return true;
     }
 
@@ -94,6 +102,7 @@ private:
     const TSettings Settings;
     const ui64 MaxBatchSize = std::numeric_limits<size_t>::max();
     std::shared_ptr<TQueue> Queue;
+    bool Closed = false;
 };
 
 struct TMockPartitionSession : public NYdb::NTopic::TPartitionSession {
@@ -106,6 +115,72 @@ struct TMockPartitionSession : public NYdb::NTopic::TPartitionSession {
     void RequestStatus() override {
         Y_ENSURE(false, "Not implemented");
     }
+};
+
+class TMockTopicWriteSession : public NYdb::NTopic::IWriteSession, private NYdb::NTopic::TContinuationTokenIssuer {
+public:
+    TMockTopicWriteSession() {
+        Events.emplace_back(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent(std::move(IssueContinuationToken())));
+    }
+
+    NThreading::TFuture<void> WaitEvent() override {
+        if (FirstEvent) {
+            FirstEvent = false;
+            return NThreading::MakeFuture();
+        }
+        return Promise.GetFuture();
+    }
+
+    std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvent(bool /*block*/ = false) override {
+
+        return std::nullopt;
+    }
+
+    std::vector<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvents(bool /*block*/ = false, std::optional<size_t> /*maxEventsCount*/ = std::nullopt) override {
+        return std::move(Events);
+    }
+
+    NThreading::TFuture<uint64_t> GetInitSeqNo() override {
+        return NThreading::MakeFuture<uint64_t>(0);
+    }
+
+    void Write(NYdb::NTopic::TContinuationToken&& /*continuationToken*/, NYdb::NTopic::TWriteMessage&& /*message*/,
+                       NYdb::TTransactionBase* /*tx*/ = nullptr) override {
+
+    }
+
+    void Write(NYdb::NTopic::TContinuationToken&& /*continuationToken*/, std::string_view /*data*/, std::optional<uint64_t> seqNo = std::nullopt,
+                       std::optional<TInstant> /*createTimestamp*/ = std::nullopt) override {
+        std::vector<NYdb::NTopic::TWriteSessionEvent::TWriteAck> acks;
+        NYdb::NTopic::TWriteSessionEvent::TWriteAck ack;
+        ack.SeqNo = *seqNo;
+        acks.push_back(ack);
+        Events.emplace_back(NYdb::NTopic::TWriteSessionEvent::TAcksEvent{.Acks = acks});
+        Promise.SetValue();
+    }
+
+    void WriteEncoded(NYdb::NTopic::TContinuationToken&& /*continuationToken*/, NYdb::NTopic::TWriteMessage&& /*params*/,
+                              NYdb::TTransactionBase* /*tx*/ = nullptr) override {
+
+                              }
+
+    void WriteEncoded(NYdb::NTopic::TContinuationToken&& /*continuationToken*/, std::string_view /*data*/, NYdb::NTopic::ECodec /*codec*/, uint32_t /*originalSize*/,
+                              std::optional<uint64_t> /*seqNo*/ = std::nullopt, std::optional<TInstant> /*createTimestamp*/ = std::nullopt) override {
+
+                              }
+
+
+    bool Close(TDuration /*closeTimeout*/ = TDuration::Max()) override {
+        return true;
+    }
+
+    NYdb::NTopic::TWriterCounters::TPtr GetCounters() override {
+        return nullptr;
+    }
+private:
+    NThreading::TPromise<void> Promise = NThreading::NewPromise();
+    bool FirstEvent = true;
+    std::vector<NYdb::NTopic::TWriteSessionEvent::TEvent> Events;
 };
 
 class TMockPqGateway : public IMockPqGateway {
@@ -172,7 +247,7 @@ class TMockPqGateway : public IMockPqGateway {
         }
 
         std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NTopic::TWriteSessionSettings& /*settings*/) override {
-            Y_ENSURE(false, "Not implemented");
+            return std::make_shared<TMockTopicWriteSession>();
         }
 
         NYdb::TAsyncStatus CommitOffset(const TString& /*path*/, ui64 /*partitionId*/, const TString& /*consumerName*/, ui64 /*offset*/, const NYdb::NTopic::TCommitOffsetSettings& /*settings*/ = {}) override {
@@ -204,7 +279,7 @@ class TMockPqGateway : public IMockPqGateway {
         }
 
         std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NFederatedTopic::TFederatedWriteSessionSettings& /*settings*/) override {
-            Y_ENSURE(false, "Not implemented");
+            return std::make_shared<TMockTopicWriteSession>();
         }
 
     private:
@@ -235,6 +310,7 @@ public:
     }
 
     NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& /*sessionId*/, const TString& /*cluster*/, const TString& /*database*/, const TString& path, const TString& /*token*/) override {
+        Topics[path];
         CheckTopicPath(path);
 
         NPq::NConfigurationManager::TTopicDescription result(path);
@@ -247,6 +323,7 @@ public:
     }
 
     IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& /*sessionId*/, const TString& /*cluster*/, const TString& /*database*/, const TString& path, const TString& /*token*/) override {
+        Topics[path];
         CheckTopicPath(path);
 
         return NThreading::MakeFuture<TDescribeFederatedTopicResult>(IPqGateway::TDescribeFederatedTopicResult{{
@@ -286,6 +363,10 @@ public:
     void AddEventProvider(const TString& topic, TEvGen evGen) override {
         GetTopicInfo(topic).EvGen = evGen;
     }
+
+    // void AddTopic(const TString& topic, TEvGen evGen) override {
+    //     GetTopicInfo(topic).EvGen = evGen;
+    // }
 
 private:
     TTopicInfo& GetTopicInfo(const TString& topic) {

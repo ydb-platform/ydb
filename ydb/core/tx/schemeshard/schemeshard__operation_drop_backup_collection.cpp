@@ -126,6 +126,7 @@ TTxTransaction CreateTableDropTransaction(const TPath& tablePath) {
     return tableDropTx;
 }
 
+// TODO: replace UGLY scan
 void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOperationContext& context, NIceDb::TNiceDb& db) {
     LOG_I("CleanupIncrementalRestoreState for backup collection pathId: " << backupCollectionPathId);
     

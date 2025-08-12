@@ -202,10 +202,9 @@ message RestoreProgress {
         PROGRESS_UNSPECIFIED = 0;
         PROGRESS_PREPARING = 1;
         PROGRESS_TRANSFER_DATA = 2;
-        PROGRESS_APPLYING = 3;
-        PROGRESS_DONE = 4;
-        PROGRESS_CANCELLATION = 5;
-        PROGRESS_CANCELLED = 6;
+        PROGRESS_DONE = 3;
+        PROGRESS_CANCELLATION = 4;
+        PROGRESS_CANCELLED = 5;
     }
 }
 

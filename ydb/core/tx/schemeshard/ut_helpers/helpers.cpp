@@ -3000,8 +3000,6 @@ namespace NSchemeShardUT_Private {
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvForgetBackupCollectionRestoreResponse>(handle);
-        Cerr << "FORGET DEBUG: Expected status=" << expectedStatus << ", Actual status=" << ev->Record.GetStatus() << Endl;
-        Cerr << "FORGET DEBUG: Full response: " << ev->Record.ShortDebugString() << Endl;
         UNIT_ASSERT_EQUAL(ev->Record.GetStatus(), expectedStatus);
 
         return ev->Record;

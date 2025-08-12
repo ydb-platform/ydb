@@ -19,6 +19,12 @@
 
 namespace NKikimr::NSchemeShard {
 
+enum class EIncrementalRestoreShardStatus : ui32 {
+    Unknown = 0,
+    Success = 1,
+    Failed = 2
+};
+
 // Transaction to sequentially process incremental backups
 class TSchemeShard::TTxProgressIncrementalRestore : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 public:
@@ -278,7 +284,7 @@ private:
 class TTxPersistIncrementalRestoreShardProgress : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 public:
     using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
-    TTxPersistIncrementalRestoreShardProgress(TSchemeShard* self, ui64 opId, ui64 shardIdx, ui32 status)
+    TTxPersistIncrementalRestoreShardProgress(TSchemeShard* self, ui64 opId, ui64 shardIdx, EIncrementalRestoreShardStatus status)
         : TBase(self)
         , OpId(opId)
         , ShardIdx(shardIdx)
@@ -288,7 +294,7 @@ public:
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::IncrementalRestoreShardProgress>().Key(OpId, ShardIdx).Update(
-            NIceDb::TUpdate<Schema::IncrementalRestoreShardProgress::Status>(Status)
+            NIceDb::TUpdate<Schema::IncrementalRestoreShardProgress::Status>(static_cast<ui32>(Status))
         );
         return true;
     }
@@ -298,7 +304,7 @@ public:
 private:
     ui64 OpId;
     ui64 ShardIdx;
-    ui32 Status;
+    EIncrementalRestoreShardStatus Status;
 };
 
 void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx) {
@@ -379,7 +385,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvIncrementalRestoreResponse::TPtr& ev,
 
     // Persist shard progress row via tx
     {
-        ui32 status = success ? 1u : 2u; // 1=SUCCESS,2=FAILED
+        EIncrementalRestoreShardStatus status = success ? EIncrementalRestoreShardStatus::Success : EIncrementalRestoreShardStatus::Failed;
         Execute(new TTxPersistIncrementalRestoreShardProgress(this, record.GetOperationId(), record.GetShardIdx(), status), ctx);
     }
 
@@ -569,14 +575,15 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRest
     return new TTxProgressIncrementalRestore(this, msg->OperationId);
 }
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRestore(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRestore(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev);
+    Y_UNUSED(ctx);
     // For allocator results, we need to find the appropriate operation ID
     // For now, return a transaction that will find the right operation to process
     return new TTxProgressIncrementalRestore(this, 0);
 }
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
     TTxId txId(msg->Record.GetTxId());
     
@@ -586,19 +593,21 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRest
         return new TTxProgressIncrementalRestore(this, txToIncrRestoreIt->second);
     }
     
-    // If not found, return a transaction that will log a warning
-    return new TTxProgressIncrementalRestore(this, 0);
+    // Not an incremental restore operation, return nullptr to indicate no action needed
+    LOG_D("Transaction " << txId << " is not associated with incremental restore");
+    return nullptr;
 }
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRestore(TTxId completedTxId) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRestore(TTxId completedTxId, const TActorContext& ctx) {
     // Find the incremental restore operation associated with this transaction
     auto txToIncrRestoreIt = TxIdToIncrementalRestore.find(completedTxId);
     if (txToIncrRestoreIt != TxIdToIncrementalRestore.end()) {
         return new TTxProgressIncrementalRestore(this, txToIncrRestoreIt->second);
     }
     
-    // If not found, return a transaction that will log a warning
-    return new TTxProgressIncrementalRestore(this, 0);
+    // Not an incremental restore operation, return nullptr
+    LOG_D("Transaction " << completedTxId << " is not associated with incremental restore");
+    return nullptr;
 }
 
 } // namespace NKikimr::NSchemeShard

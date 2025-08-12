@@ -13,6 +13,7 @@ namespace NKikimr::NColumnShard {
 LWTRACE_USING(YDB_CS);
 
 bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorContext&) {
+    TInstant startTransactionTime = TInstant::Now();
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Execute");
     txc.DB.NoMoreReadsForTx();
     CommitSnapshot = Self->GetCurrentSnapshotForInternalModification();
@@ -87,10 +88,12 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }
     }
+    TransactionTime = TInstant::Now() - startTransactionTime;
     return true;
 }
 
 void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
+    TInstant startCompleteTime = TInstant::Now();
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Complete");
     NActors::TLogContextGuard logGuard =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "complete");
@@ -143,13 +146,16 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         writeMeta.OnStage(NEvWrite::EWriteStage::Finished);
     }
     Self->SetupCompaction(pathIds);
+    TDuration completeTime = TInstant::Now() - startCompleteTime;
+    LWPROBE(TTxBlobsWritingFinished, Self->TabletID(), TransactionTime, completeTime, totalTime);
 }
 
 TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus /* writeStatus */,
     const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, TInsertedPortions&& pack)
     : TBase(self, "TTxBlobsWritingFinished")
     , Pack(std::move(pack))
-    , WritingActions(writingActions) {
+    , WritingActions(writingActions),
+    , StartTime(TInstant::Now()) {
 }
 
 bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorContext& /* ctx */) {

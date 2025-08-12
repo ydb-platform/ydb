@@ -134,7 +134,7 @@ public:
         , Secrets(std::make_shared<NMetadata::NSecret::TSnapshot>(TInstant::Zero())) {
     }
     TActorId GetActorId() const;
-    void ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers);
+    void ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers, const bool resubscribeToConfig);
 
     void UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
     void UpdateTierConfig(std::optional<NTiers::TTierConfig> config, const NTiers::TExternalStorageId& tierId, const bool notifyShard = true);

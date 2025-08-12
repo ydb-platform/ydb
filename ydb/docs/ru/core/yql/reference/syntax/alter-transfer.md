@@ -20,7 +20,8 @@ ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
   * `PAUSED` — остановка трансфера.
   * `STANDBY` — возобновление работы трансфера после приостановки.
 
-{% include [x](../_includes/transfer_flush.md) %}
+* {% include [x](../_includes/transfer_flush.md) %}
+
 
 ## Разрешения
 

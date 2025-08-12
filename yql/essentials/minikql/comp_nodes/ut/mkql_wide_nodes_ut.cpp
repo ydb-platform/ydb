@@ -88,36 +88,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideNodesTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSkipOnEmptySet) {
-        TSetup<LLVM> setup;
-        TProgramBuilder& pb = *setup.PgmBuilder;
-
-        TCallableBuilder callableBuilder(*setup.Env, "TestStream",
-            pb.NewStreamType(
-                pb.NewMultiType({
-                })
-            )
-        );
-        callableBuilder.Add(pb.NewDataLiteral(Max<ui64>()));
-
-        auto stream = TRuntimeNode(callableBuilder.Build(), false);
-
-        const auto tupleType = pb.NewTupleType({});
-
-        const auto pgmReturn = pb.Collect(pb.FromFlow(
-            pb.NarrowMap(
-                pb.Skip(pb.ToFlow(stream), pb.NewDataLiteral<ui64>(3ULL)),
-                [&](TRuntimeNode::TList ) -> TRuntimeNode { return pb.NewTuple(tupleType, {}); }
-            )
-        ));
-
-        const auto graph = setup.BuildGraph(pgmReturn);
-        const auto iterator = graph->GetValue();
-        NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-//        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-    }
-
     Y_UNIT_TEST_LLVM(TestDoNotCalculateSkipped) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;

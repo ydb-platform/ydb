@@ -159,12 +159,6 @@ Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) lets you more
 
 ## Column-oriented tables {#column-oriented-tables}
 
-{% note warning %}
-
-Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
-
-{% endnote %}
-
 {{ ydb-short-name }}'s column-oriented tables store data of each column separately (independently) from each other. This data storage principle is optimized for handling Online Analytical Processing (OLAP) workloads, as only the columns directly involved in the query are read during its execution. One of the key advantages of this approach is the high data compression ratios since columns often contain repetitive or similar data. A downside, however, is that operations on whole rows become more resource-intensive.
 
 At the moment, the main use case for {{ ydb-short-name }} column-oriented tables is writing data with an increasing primary key (for example, event time), analyzing this data, and deleting outdated data based on TTL. The optimal way to add data to {{ ydb-short-name }} column-oriented tables is [batch upload](../../../dev/batch-upload.md), performed in MB-sized blocks. Data packet insertion is atomic: data will be written either to all partitions or none.

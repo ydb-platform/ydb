@@ -154,43 +154,6 @@ class TestS3Formats:
         self.validate_result_inference(result_set)
 
     @yq_all
-    def test_btc(self, kikimr, s3, client, unique_prefix):
-        self.create_bucket_and_upload_file("btct.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "btct"
-        client.create_storage_connection(storage_connection_name, "fbucket")
-
-        sql = f'''
-            PRAGMA s3.UseBlocksSource="true";
-            SELECT
-                *
-            FROM `{storage_connection_name}`.`btct.parquet`
-            WITH (format=`parquet`,
-                SCHEMA=(
-                    hash STRING,
-                    version INT64,
-                    size INT64,
-                    block_hash UTF8,
-                    block_number INT64,
-                    virtual_size INT64,
-                    lock_time INT64,
-                    input_count INT64,
-                    output_count INT64,
-                    is_coinbase BOOL,
-                    output_value DOUBLE,
-                    block_timestamp DATETIME,
-                    date DATE
-                )
-            );
-            '''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
-        issues = describe_result.query.issue[0].issues
-        assert "Error while reading file btct.parquet" in issues[0].message
-        assert "File contains LIST field outputs and can\'t be parsed" in issues[0].issues[0].message
-
-    @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_format(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(

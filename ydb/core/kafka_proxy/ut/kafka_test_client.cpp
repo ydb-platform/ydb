@@ -424,7 +424,7 @@ TMessagePtr<TOffsetFetchResponseData> TKafkaTestClient::OffsetFetch(TString grou
     return WriteAndRead<TOffsetFetchResponseData>(header, request);
 }
 
-TMessagePtr<TOffsetFetchResponseData> TKafkaTestClient::OffsetFetch(TOffsetFetchRequestData request) {
+TMessagePtr<TOffsetFetchResponseData> TKafkaTestClient::OffsetFetch(TOffsetFetchRequestData& request) {
     Cerr << ">>>>> TOffsetFetchRequestData\n";
     TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_FETCH, 8);
     return WriteAndRead<TOffsetFetchResponseData>(header, request);

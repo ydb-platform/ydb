@@ -8,6 +8,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
+#include <ydb/library/actors/async/event.h>
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -262,10 +263,12 @@ namespace NDiscoveryPrivate {
 
     class TDiscoveryCache: public TActorBootstrapped<TDiscoveryCache> {
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> CurrentCachedMessages;
-        THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> OldCachedMessages; // when subscriptions are enabled
+        THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> OldCachedMessages; // when subscriptions are disabled
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> CachedNotAvailable; // for subscriptions
         THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
         TBridgeInfo::TPtr BridgeInfo;
+
+        THashMap<TString, std::shared_ptr<TAsyncEvent>> Awaiters;
 
         struct TWaiter {
             TActorId ActorId;
@@ -275,6 +278,7 @@ namespace NDiscoveryPrivate {
         THashMap<TString, TVector<TWaiter>> Requested;
         bool Scheduled = false;
         TMaybe<TString> EndpointId;
+        TMaybe<TActorId> NameserviceActorId;
 
         auto Request(const TString& database) {
             auto result = Requested.emplace(database, TVector<TWaiter>());
@@ -312,6 +316,22 @@ namespace NDiscoveryPrivate {
             }
         }
 
+        async<std::reference_wrapper<std::shared_ptr<NDiscovery::TCachedMessageData>>> WaitForCachedMessage(const TString& path) {
+            auto& currentCachedMessage = CurrentCachedMessages[path];
+            if (currentCachedMessage) {
+                co_return currentCachedMessage;
+            }
+
+            auto awaiter = Awaiters[path];
+            if (awaiter == nullptr) {
+                awaiter = std::make_shared<TAsyncEvent>();
+                Awaiters[path] = awaiter;
+            }
+            co_await awaiter->Wait();
+
+            co_return CurrentCachedMessages[path];
+        }
+
         void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr ev) {
             CLOG_T("Handle " << ev->Get()->ToString());
             if (!AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
@@ -325,15 +345,14 @@ namespace NDiscoveryPrivate {
                 co_return;
             }
 
-            auto& currentCachedMessage = CurrentCachedMessages[path];
-
-            Y_ABORT_UNLESS(currentCachedMessage);
+            auto currentCachedMessage = co_await WaitForCachedMessage(path);
+            Y_ABORT_UNLESS(currentCachedMessage.get());
 
             co_await WaitForNameserviceAndBridgeInfo();
 
-            currentCachedMessage = std::make_shared<NDiscovery::TCachedMessageData>(
+            currentCachedMessage.get() = std::make_shared<NDiscovery::TCachedMessageData>(
                 NDiscovery::CreateCachedMessage(
-                    currentCachedMessage->InfoEntries, std::move(msg->Updates),
+                    currentCachedMessage.get()->InfoEntries, std::move(msg->Updates),
                     {}, EndpointId.GetOrElse({}), NameserviceResponse, BridgeInfo)
             );
 
@@ -380,6 +399,10 @@ namespace NDiscoveryPrivate {
             if (!Scheduled) {
                 Scheduled = true;
                 Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+            }
+            if (auto it = Awaiters.find(path); it != Awaiters.end() && it->second != nullptr) {
+                it->second->NotifyAll();
+                Awaiters.erase(it);
             }
         }
 
@@ -435,9 +458,9 @@ namespace NDiscoveryPrivate {
         }
 
     public:
-        TDiscoveryCache() = default;
-        TDiscoveryCache(const TString& endpointId)
+        TDiscoveryCache(const TString& endpointId, const TMaybe<TActorId>& nameserviceActorId)
             : EndpointId(endpointId)
+            , NameserviceActorId(nameserviceActorId)
         {
         }
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -445,7 +468,7 @@ namespace NDiscoveryPrivate {
         }
 
         void Bootstrap(const TActorContext& ctx) {
-            Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
+            Send(NameserviceActorId.GetOrElse(GetNameserviceActorId()), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
             if (IsBridgeMode(ctx)) {
                 const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
@@ -693,8 +716,8 @@ IActor* CreateDiscoverer(
     return new TDiscoverer(f, database, replyTo, cacheId);
 }
 
-IActor* CreateDiscoveryCache(const TString& endpointId) {
-    return new NDiscoveryPrivate::TDiscoveryCache(endpointId);
+IActor* CreateDiscoveryCache(const TString& endpointId, const TMaybe<TActorId>& nameserviceActorId) {
+    return new NDiscoveryPrivate::TDiscoveryCache(endpointId, nameserviceActorId);
 }
 
 }

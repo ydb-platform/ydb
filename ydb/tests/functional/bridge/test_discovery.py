@@ -28,7 +28,7 @@ class TestDiscovery(BridgeKiKiMRTest):
         for endpoint in result.endpoints:
             assert_that(endpoint.bridge_pile_name, is_(expected_pile_names[endpoint.node_id]))
 
-    def test_discovery(self):
+    def test_basic(self):
         result, status = self.list_endpoints()
         assert_that(status, is_(StatusIds.SUCCESS))
         self.check_endpoints(result)

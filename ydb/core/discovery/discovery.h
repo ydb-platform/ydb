@@ -78,6 +78,6 @@ IActor* CreateDiscoverer(
     const TActorId& cacheId);
 
 // Used to reduce number of requests to Board
-IActor* CreateDiscoveryCache(const TString& endpointId = {});
+IActor* CreateDiscoveryCache(const TString& endpointId = {}, const TMaybe<TActorId>& nameserviceActorId = {});
 
 }

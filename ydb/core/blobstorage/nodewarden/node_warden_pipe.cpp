@@ -38,6 +38,7 @@ void TNodeWarden::EstablishPipe() {
     SendInitialGroupRequests();
     SendScrubRequests();
     SendDiskMetrics(true);
+    SendUnfinishedRequests();
 }
 
 void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
@@ -110,6 +111,9 @@ void TNodeWarden::SendRegisterNode() {
             ev->Record.SetStorageConfigHash(NYaml::GetConfigHash(YamlConfig->GetStorageConfig()));
         }
     }
+
+    // report working syncers to the controller
+    FillInWorkingSyncers(ev->Record.MutableSyncerState());
 
     SendToController(std::move(ev));
 }

@@ -421,7 +421,6 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenUpdateCache, Handle);
             hFunc(TEvNodeWardenQueryCache, Handle);
             hFunc(TEvNodeWardenUnsubscribeFromCache, Handle);
-            hFunc(TEvNodeWardenManageSyncersResult, Handle);
             hFunc(TEvNodeWardenUpdateConfigFromPeer, [this](auto ev) { ApplyStorageConfig(ev->Get()->Config); });
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
@@ -473,110 +472,6 @@ namespace NKikimr::NStorage {
         } catch (const std::exception& ex) {
             return ex.what();
         }
-        return std::nullopt;
-    }
-
-    std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config) {
-        // copy bridge info into state storage configs for easier access in replica processors/proxies
-        if (config->HasClusterState()) {
-            auto fillInBridge = [&](auto *pb) -> std::optional<TString> {
-                auto& clusterState = config->GetClusterState();
-
-                // copy cluster state generation
-                pb->SetClusterStateGeneration(clusterState.GetGeneration());
-                pb->SetClusterStateGuid(clusterState.GetGuid());
-
-                if (!pb->RingGroupsSize() || pb->HasRing()) {
-                    return "configuration has Ring field set or no RingGroups";
-                }
-
-                auto *groups = pb->MutableRingGroups();
-                for (int i = 0, count = groups->size(); i < count; ++i) {
-                    auto *group = groups->Mutable(i);
-                    if (!group->HasBridgePileId()) {
-                        return "bridge pile id is not set for a ring group";
-                    } else if (const auto pileId = TBridgePileId::FromProto(group, &std::decay_t<decltype(*group)>::GetBridgePileId);
-                            pileId.GetPileIndex() < clusterState.PerPileStateSize()) {
-                        using T = NKikimrConfig::TDomainsConfig::TStateStorage;
-                        std::optional<T::EPileState> state;
-                        if (pileId == TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPrimaryPile)) {
-                            state = pileId == TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPromotedPile)
-                                ? T::PRIMARY
-                                : T::DEMOTED;
-                        } else if (pileId == TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPromotedPile)) {
-                            state = T::PROMOTED;
-                        } else {
-                            switch (clusterState.GetPerPileState(pileId.GetPileIndex())) {
-                                case NKikimrBridge::TClusterState::DISCONNECTED:
-                                    state = T::DISCONNECTED;
-                                    break;
-
-                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
-                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
-                                    state = T::NOT_SYNCHRONIZED;
-                                    break;
-
-                                case NKikimrBridge::TClusterState::SYNCHRONIZED:
-                                    state = T::SYNCHRONIZED;
-                                    break;
-
-                                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
-                                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
-                                    Y_DEBUG_ABORT("unexpected value");
-                            }
-                        }
-                        if (!state) {
-                            return "can't determine correct pile state for ring group";
-                        }
-                        group->SetPileState(*state);
-                    } else {
-                        return "bridge pile id is out of bounds";
-                    }
-                }
-                return std::nullopt;
-            };
-
-            std::optional<TString> error;
-            if (!error && config->HasStateStorageConfig()) {
-                error = fillInBridge(config->MutableStateStorageConfig());
-            }
-            if (!error && config->HasStateStorageBoardConfig()) {
-                error = fillInBridge(config->MutableStateStorageBoardConfig());
-            }
-            if (!error && config->HasSchemeBoardConfig()) {
-                error = fillInBridge(config->MutableSchemeBoardConfig());
-            }
-            return error;
-        }
-
-        if (config->HasClusterStateDetails()) {
-            auto *details = config->MutableClusterStateDetails();
-            auto *history = details->MutableUnsyncedHistory();
-
-            Y_DEBUG_ABORT_UNLESS(config->HasClusterState());
-            const auto& clusterState = config->GetClusterState();
-
-            // filter out unsynced piles from config (they become synced when they are the part of the quorum)
-            for (int i = 0; i < history->size(); ++i) {
-                auto *unsyncedPiles = history->Mutable(i)->MutableUnsyncedPiles();
-                for (int j = 0; j < unsyncedPiles->size(); ++j) {
-                    const auto unsyncedBridgePileId = TBridgePileId::FromProto(unsyncedPiles,
-                        &std::decay_t<decltype(*unsyncedPiles)>::at, j);
-                    if (clusterState.PerPileStateSize() <= unsyncedBridgePileId.GetPileIndex()) {
-                        Y_DEBUG_ABORT(); // incorrect per pile state
-                    } else if (NBridge::PileStateTraits(clusterState.GetPerPileState(
-                            unsyncedBridgePileId.GetPileIndex())).RequiresConfigQuorum) {
-                        // this pile is a part of quorum we expect to obtain, so it will be config-synced
-                        unsyncedPiles->SwapElements(j--, unsyncedPiles->size() - 1);
-                        unsyncedPiles->RemoveLast();
-                    }
-                }
-                if (unsyncedPiles->empty()) {
-                    history->DeleteSubrange(i--, 1);
-                }
-            }
-        }
-
         return std::nullopt;
     }
 

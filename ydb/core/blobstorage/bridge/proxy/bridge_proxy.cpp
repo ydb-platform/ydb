@@ -1,4 +1,4 @@
-#include "bridge.h"
+#include "bridge_proxy.h"
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/util/stlog.h>
@@ -246,30 +246,35 @@ namespace NKikimr {
 
             auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, *ev->Get());
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->MakeRequestId()),
-                (GroupId, GroupId), (Request, ev->Get()->ToString()));
+            std::unique_ptr<TEvent> evPtr(ev->Release().Release());
 
-            const auto& bridgeGroupIds = Info->GetBridgeGroupIds();
-            for (size_t i = 0; i < bridgeGroupIds.size(); ++i) {
+            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->MakeRequestId()),
+                (GroupId, GroupId), (Request, evPtr->ToString()));
+
+            Y_ABORT_UNLESS(Info->Group);
+            const auto& state = Info->Group->GetBridgeGroupState();
+            for (size_t i = 0; i < state.PileSize(); ++i) {
                 const auto bridgePileId = TBridgePileId::FromPileIndex(i);
                 const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
-                if (!NBridge::PileStateTraits(pile->State).AllowsConnection) {
-                    continue; // ignore this pile, it is disconnected
+                if (!NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
+                    continue; // skip this pile, no data quorum needed
+                }
+
+                // check the sync state for this group
+                const auto& groupPileInfo = state.GetPile(i);
+                const auto groupId = TGroupId::FromProto(&groupPileInfo, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                std::unique_ptr<IEventBase> eventToSend = PrepareEvent(groupPileInfo, evPtr, i + 1 == state.PileSize());
+                if (!eventToSend) {
+                    continue;
                 }
 
                 // allocate cookie for this specific request and bind it to the common one
                 const ui64 cookie = ++LastRequestCookie;
-                const auto [it, inserted] = RequestsInFlight.try_emplace(cookie, request, BridgeInfo, pile,
-                    bridgeGroupIds[i]);
+                const auto [it, inserted] = RequestsInFlight.try_emplace(cookie, request, BridgeInfo, pile, groupId);
                 Y_DEBUG_ABORT_UNLESS(inserted);
 
-                // generate event and send it to corresponding proxy
-                std::unique_ptr<IEventBase> eventToSend(
-                    i + 1 != bridgeGroupIds.size()
-                        ? new TEvent(TEvBlobStorage::CloneEventPolicy, *ev->Get())
-                        : ev->ReleaseBase().Release()
-                );
-                SendToBSProxy(SelfId(), bridgeGroupIds[i], eventToSend.release(), cookie);
+                // send event
+                SendToBSProxy(SelfId(), groupId, eventToSend.release(), cookie);
                 ++request->ResponsesPending;
             }
 
@@ -277,7 +282,55 @@ namespace NKikimr {
         }
 
         template<typename TEvent>
+        std::unique_ptr<IEventBase> PrepareEvent(const NKikimrBridge::TGroupState::TPile& pile,
+                std::unique_ptr<TEvent>& ev, bool last) {
+            std::unique_ptr<TEvent> res;
+
+            switch (pile.GetStage()) {
+                case NKikimrBridge::TGroupState::BLOCKS:
+                    if (!std::is_same_v<TEvent, TEvBlobStorage::TEvBlock>) {
+                        return nullptr; // allow only TEvBlock messages for this stage
+                    }
+                    break;
+
+                case NKikimrBridge::TGroupState::WRITE_KEEP:
+                    if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
+                        if (!ev->Keep) {
+                            return nullptr;
+                        }
+                        // allow only keep flags to be sent
+                        res = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(ev->TabletId, ev->RecordGeneration,
+                            ev->Channel, false, 0, 0, ev->Keep.Release(), nullptr, ev->Deadline);
+                    }
+                    [[fallthrough]];
+                case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
+                    if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
+                        return nullptr; // no not allow put requests
+                    }
+                    break;
+
+                case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA:
+                case NKikimrBridge::TGroupState::SYNCED:
+                    break;
+
+                case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    Y_ABORT();
+            }
+
+            if (!res) {
+                res.reset(last ? ev.release() : new TEvent(TEvBlobStorage::CloneEventPolicy, *ev));
+            }
+            res->ForceGroupGeneration.emplace(pile.GetGroupGeneration());
+            return res;
+        }
+
+        template<typename TEvent>
         void HandleProxyResult(TAutoPtr<TEventHandle<TEvent>>& ev) {
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // TODO(alexvru): handle RACE properly!
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
             const auto it = RequestsInFlight.find(ev->Cookie);
             if (it == RequestsInFlight.end()) {
                 return; // request has already been completed
@@ -329,6 +382,10 @@ namespace NKikimr {
             RequestsInFlight.erase(it);
         }
 
+        void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
+            Info = std::move(ev->Get()->Info);
+        }
+
 #define HANDLE_REQUEST(NAME) hFunc(NAME, HandleProxyRequest)
 #define HANDLE_RESULT(NAME) hFunc(NAME##Result, HandleProxyResult)
 
@@ -336,6 +393,7 @@ namespace NKikimr {
             DSPROXY_ENUM_EVENTS(HANDLE_REQUEST)
             DSPROXY_ENUM_EVENTS(HANDLE_RESULT)
 
+            hFunc(TEvBlobStorage::TEvConfigureProxy, Handle)
             hFunc(TEvNodeWardenStorageConfig, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
         )

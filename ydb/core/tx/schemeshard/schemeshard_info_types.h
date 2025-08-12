@@ -2628,6 +2628,7 @@ struct TSequenceInfo : public TSimpleRefCount<TSequenceInfo> {
         Y_ENSURE(AlterData == nullptr);
         TPtr result = new TSequenceInfo(*this);
         ++result->AlterVersion;
+        this->AlterData = result;
         return result;
     }
 

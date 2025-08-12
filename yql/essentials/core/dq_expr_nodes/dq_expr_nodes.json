@@ -59,6 +59,11 @@
         ]
     },
     {
+        "Name": "TDqPhyBlockHashJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyBlockHashJoin"}
+    },
+    {
         "Name": "TDqPhyMapJoin",
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"}
@@ -182,6 +187,11 @@
         "Name": "TDqCnUnionAll",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnUnionAll"}
+    },
+    {
+        "Name": "TDqCnParallelUnionAll",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnParallelUnionAll"}
     },
     {
         "Name": "TDqCnMap",

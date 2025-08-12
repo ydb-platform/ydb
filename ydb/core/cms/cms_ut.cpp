@@ -521,6 +521,157 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         );
     }
 
+    Y_UNIT_TEST(ManualRequestApproval)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        // Disconnect 3 nodes, in this case locking is not allowed
+        for (ui32 i = 0; i < 3; i++) {
+            auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(i)];
+            node.Connected = false;
+        }
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", false, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        // Request that cannot be fulfilled
+        auto rec1 = env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+
+        auto rid1 = rec1.GetRequestId();
+
+        // Manual approval
+        auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
+        TString permissionId = approveResp.GetManuallyApprovedPermissions(0).GetId();
+        auto rec2 = env.CheckGetPermission("user", permissionId);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
+
+        {
+            // Request cannot be fulfilled, since node 0 is locked by previously approved request
+            auto req = MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+            );
+            req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+            env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+        }
+
+        env.AdvanceCurrentTime(TDuration::Minutes(30));
+
+        {
+            // This will trigger CMS cleanup.
+            env.CheckPermissionRequest(MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+            ), TStatus::DISALLOW_TEMP);
+
+            auto list = env.CheckListRequests("user", 2);
+            auto reqs = list.GetRequests();
+            for (const auto& req : reqs) {
+                UNIT_ASSERT_VALUES_UNEQUAL(req.GetRequestId(), "user-r-1");
+            }
+         
+            // Check that manually approved permission was cleaned up
+            env.CheckGetPermission("user", permissionId, false, TStatus::WRONG_REQUEST);
+        }
+    }
+
+    Y_UNIT_TEST(ManualRequestApprovalLockingAllNodes)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.Connected = false;
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        for (ui32 i = 0; i < 8; i++) {
+            auto req = MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(i), 60000000)
+            );
+            req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+            // Request that cannot be fulfilled
+            auto rec1 = env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+
+            auto rid1 = rec1.GetRequestId();
+
+            // Manual approval
+            auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
+            TString permissionId = approveResp.GetManuallyApprovedPermissions(0).GetId();
+            auto rec2 = env.CheckGetPermission("user", permissionId);
+            UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
+        }
+    }
+
+    Y_UNIT_TEST(ManualRequestApprovalWithPartialAlreadyApproved)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)
+        );
+
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        auto rec1 = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(rec1.PermissionsSize(), 1);
+        auto rec2 = env.CheckGetPermission("user", rec1.GetPermissions(0).GetId());
+        UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), rec1.GetPermissions(0).GetId());
+
+        auto rid1 = rec1.GetRequestId();
+        
+        // // Manual approval
+        auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 2);
+        for (const auto& permission : approveResp.GetManuallyApprovedPermissions()) {
+            auto permissionId = permission.GetId();
+            auto rec3 = env.CheckGetPermission("user", permissionId);
+            UNIT_ASSERT_VALUES_EQUAL(rec3.PermissionsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rec3.GetPermissions(0).GetId(), permissionId);
+        }
+    }
+
+    Y_UNIT_TEST(ManualRequestApprovalAlreadyLockedNode)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        env.CheckPermissionRequest(req, TStatus::ALLOW);
+
+        auto req2 = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req2->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+        auto rec2 = env.CheckPermissionRequest(req2, TStatus::DISALLOW_TEMP);
+        auto rid2 = rec2.GetRequestId();
+
+        // Manual approval should fail since node 0 is already locked
+        env.CheckApproveRequest("user", rid2, false, TStatus::WRONG_REQUEST);
+    }
+
     Y_UNIT_TEST(RequestReplacePDiskDoesntBreakGroup)
     {
         auto opts = TTestEnvOpts(8, 2).WithSentinel().WithDynamicGroups();
@@ -2361,6 +2512,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         for (const auto& node : *nodes) {
             pileMap->at(node.NodeId % pileMap->size()).push_back(node.NodeId);
         }
+        for (auto& node : *nodes) {
+            NActorsInterconnect::TNodeLocation pb;
+            node.Location.Serialize(&pb, true);
+            pb.SetBridgePileName("r" + ToString(node.NodeId % pileMap->size()));
+            node.Location = TNodeLocation(pb);
+        }
 
         auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
             new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes, pileMap))
@@ -2395,6 +2552,29 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         for (const auto [nodeId, pileId] : info.NodeIdToPileId) {
             // In ChangePileMap, nodes are distributed among piles based on the parity.
             UNIT_ASSERT(nodeId % opts.PileCount == pileId);
+        }
+        for (const auto& [nodeId, node] : info.AllNodes()) {
+            UNIT_ASSERT(node->PileId);
+            UNIT_ASSERT_EQUAL(nodeId % opts.PileCount, node->PileId);
+        }
+
+        auto state = env.RequestState();
+        for (const auto& host : state.GetHosts()) {
+            const ui32 correctPileId = host.GetNodeId() % opts.PileCount;
+            if (correctPileId != 0) {
+                UNIT_ASSERT(host.GetPileId());
+                UNIT_ASSERT_EQUAL(correctPileId, host.GetPileId());
+            }
+            const auto bridgePileName = host.GetLocation().GetBridgePileName();
+            UNIT_ASSERT(bridgePileName);
+            UNIT_ASSERT_EQUAL(correctPileId, static_cast<ui32>(bridgePileName[1] - '0'));
+        }
+
+        auto listNodes = env.RequestListNodes();
+        for (const auto& node : listNodes) {
+            const auto bridgePileName = node.location().bridge_pile_name();
+            UNIT_ASSERT(bridgePileName);
+            UNIT_ASSERT_EQUAL(node.node_id() % opts.PileCount, static_cast<ui32>(bridgePileName[1] - '0'));
         }
     }
 
@@ -2455,7 +2635,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Pile #1: There are 0 rings locked on this pile => it is possible to lock.
         env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
-        // Pile #0: There are 0 rings locked on this pile => it is possible to lock.                            
+        // Pile #0: There are 0 rings locked on this pile => it is possible to lock.
         env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
         // Pile #1: There is already one ring locked on this pile => it is not possible to lock.
@@ -2476,6 +2656,117 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Pile #0: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings — the limit has been exhausted => it is not possible to lock.
         env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeNodeLimit)
+    {
+        TTestEnvOpts opts(16);
+        opts.VDisks = 0;
+        opts.NToSelect = 8;
+        TCmsTestEnv env(opts.WithBridgeMode());
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // set limit
+        NKikimrCms::TCmsConfig config;
+        config.MutableClusterLimits()->SetDisabledNodesLimit(1);
+        env.SetCmsConfig(config);
+
+        // Pile #1: We can lock one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        // Pile #0: We can lock one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
+        // Pile #1: We cannot lock more than one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: We cannot lock more than one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeSysTablets) {
+        TTestEnvOpts opts(12, 0);
+        TCmsTestEnv env(opts.WithBridgeMode(2, true));
+        env.EnableSysNodeChecking();
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // Locking 3 nodes in each pile
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+        
+        // Pile #1: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 3, down: 0, limit: 3
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
+        // Pile #2: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 3, down: 0, limit: 3
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+        
+        // Locking 5 nodes in each pile (MODE_KEEP_AVAILABLE)
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
+        
+        // Pile #1: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 5, down: 0, limit: 5 (MODE_KEEP_AVAILABLE)
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(10), 60000000, "storage"));
+        // Pile #0: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 5, down: 0, limit: 5 (MODE_KEEP_AVAILABLE)
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+        
+    }
+
+    Y_UNIT_TEST(CheckSysTabletsOnNodesWithPDisks) {
+        TTestEnvOpts opts(8, 1);
+        opts.NodesWithoutPDisksCount = 4;
+        TCmsTestEnv env(opts);
+        env.EnableSysNodeChecking();
+
+        // Locking 4 nodes without pdisks.
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        // tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes.
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        
     }
 }
 

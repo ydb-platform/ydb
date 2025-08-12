@@ -2,7 +2,6 @@
 
 #include "shared_cache_counters.h"
 #include "shared_cache_switchable.h"
-#include "shared_cache_tiers.h"
 
 namespace NKikimr::NSharedCache {
 
@@ -21,7 +20,7 @@ namespace NKikimr::NSharedCache {
             RegularTier = &CacheTiers.back();
 
             CacheTiers.emplace_back(0, createCache(), cacheCounters.ReplacementPolicySize(policy));
-            TryInMemoryTier = &CacheTiers.back();
+            TryKeepInMemoryTier = &CacheTiers.back();
         }
 
         template <typename TCacheBuilder>
@@ -39,24 +38,24 @@ namespace NKikimr::NSharedCache {
             if (auto evicted = RegularTier->EvictNext(); evicted) {
                 return std::move(evicted);
             } else {
-                return TryInMemoryTier->EvictNext();
+                return TryKeepInMemoryTier->EvictNext();
             }
         }
 
         TIntrusiveList<TPage> Touch(TPage *page) Y_WARN_UNUSED_RESULT {
-            ECacheTier tier = TPageTraits::GetTier(page);
-            return CacheTiers[static_cast<size_t>(tier)].Touch(page);
+            ui32 tier = TPageTraits::GetTier(page);
+            return CacheTiers[tier].Touch(page);
         }
 
         void Erase(TPage *page) {
-            ECacheTier tier = TPageTraits::GetTier(page);
-            CacheTiers[static_cast<size_t>(tier)].Erase(page);
+            ui32 tier = TPageTraits::GetTier(page);
+            CacheTiers[tier].Erase(page);
         }
 
         void UpdateLimit(ui64 limit, ui64 tryKeepInMemoryBytes) {
             ui64 tryKeepInMemoryLimit = Min(limit, tryKeepInMemoryBytes);
             RegularTier->UpdateLimit(limit - tryKeepInMemoryLimit);
-            TryInMemoryTier->UpdateLimit(tryKeepInMemoryLimit);
+            TryKeepInMemoryTier->UpdateLimit(tryKeepInMemoryLimit);
         }
 
         ui64 GetSize() const {
@@ -77,7 +76,7 @@ namespace NKikimr::NSharedCache {
                 } else {
                     result << "; ";
                 }
-                result << static_cast<ECacheTier>(i) << "Tier: " << CacheTiers[i].Dump();
+                result << static_cast<NTable::NPage::ECacheMode>(i) << "Tier: " << CacheTiers[i].Dump();
             }
         
             return result;
@@ -86,7 +85,7 @@ namespace NKikimr::NSharedCache {
     private:
         TVector<TCache> CacheTiers;
         TCache* RegularTier;
-        TCache* TryInMemoryTier;
+        TCache* TryKeepInMemoryTier;
     };
 
 } // namespace NKikimr::NSharedCache

@@ -1,5 +1,6 @@
 #include "ydb_workload_tpcc.h"
 
+#include <ydb/library/workload/tpcc/check.h>
 #include <ydb/library/workload/tpcc/clean.h>
 #include <ydb/library/workload/tpcc/import.h>
 #include <ydb/library/workload/tpcc/init.h>
@@ -37,8 +38,13 @@ TCommandTPCCClean::TCommandTPCCClean(std::shared_ptr<NTPCC::TRunConfig> runConfi
 
 int TCommandTPCCClean::Run(TConfig& connectionConfig) {
     RunConfig->SetFullPath(connectionConfig);
-    NTPCC::CleanSync(connectionConfig, *RunConfig);
-    return 0;
+    try {
+        NTPCC::CleanSync(connectionConfig, *RunConfig);
+        return 0;
+    } catch (const std::exception& e) {
+        Cout << "Clean failed: " << e.what() << Endl;
+        return 1;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -68,7 +74,7 @@ void TCommandTPCCInit::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     config.Opts->AddLongOption(
         "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
@@ -79,8 +85,13 @@ void TCommandTPCCInit::Config(TConfig& config) {
 
 int TCommandTPCCInit::Run(TConfig& connectionConfig) {
     RunConfig->SetFullPath(connectionConfig);
-    NTPCC::InitSync(connectionConfig, *RunConfig);
-    return 0;
+    try {
+        NTPCC::InitSync(connectionConfig, *RunConfig);
+        return 0;
+    } catch (const std::exception& e) {
+        Cout << "Init failed: " << e.what() << Endl;
+        return 1;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -110,7 +121,7 @@ void TCommandTPCCImport::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     // TODO: detect automatically
     config.Opts->AddLongOption(
@@ -142,8 +153,13 @@ void TCommandTPCCImport::Config(TConfig& config) {
 
 int TCommandTPCCImport::Run(TConfig& connectionConfig) {
     RunConfig->SetFullPath(connectionConfig);
-    NTPCC::ImportSync(connectionConfig, *RunConfig);
-    return 0;
+    try {
+        NTPCC::ImportSync(connectionConfig, *RunConfig);
+        return 0;
+    } catch (const std::exception& e) {
+        Cout << "Import failed: " << e.what() << Endl;
+        return 1;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -173,7 +189,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     // TODO: default value should be auto
     config.Opts->AddLongOption(
@@ -243,8 +259,65 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
 int TCommandTPCCRun::Run(TConfig& connectionConfig) {
     RunConfig->SetFullPath(connectionConfig);
-    NTPCC::RunSync(connectionConfig, *RunConfig);
-    return 0;
+    try {
+        NTPCC::RunSync(connectionConfig, *RunConfig);
+        return 0;
+    } catch (const std::exception& e) {
+        Cout << "Run failed: " << e.what() << Endl;
+        return 1;
+    }
+}
+
+//-----------------------------------------------------------------------------
+
+class TCommandTPCCCheck
+    : public TYdbCommand
+{
+public:
+    TCommandTPCCCheck(std::shared_ptr<NTPCC::TRunConfig> runConfig);
+    ~TCommandTPCCCheck() = default;
+
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    std::shared_ptr<NTPCC::TRunConfig> RunConfig;
+};
+
+TCommandTPCCCheck::TCommandTPCCCheck(std::shared_ptr<NTPCC::TRunConfig> runConfig)
+    : TYdbCommand("check", {}, "Check TPC-C data consistency")
+    , RunConfig(std::move(runConfig))
+{
+}
+
+void TCommandTPCCCheck::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption(
+        'w', "warehouses", TStringBuilder() << "Number of warehouses")
+            .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
+
+    config.Opts->AddLongOption(
+        "just-imported", TStringBuilder() << "Turns on additional checks. "
+                << "Should be used only when data has been just imported and no runs have been done yet.")
+            .Optional().StoreTrue(&RunConfig->JustImported);
+
+    config.Opts->AddLongOption(
+        "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
+            .Optional().StoreMappedResult(&RunConfig->LogPriority, [](const TString& v) {
+                return FromString<ELogPriority>(v);
+            }).DefaultValue(RunConfig->LogPriority).Hidden();
+}
+
+int TCommandTPCCCheck::Run(TConfig& connectionConfig) {
+    RunConfig->SetFullPath(connectionConfig);
+    try {
+        NTPCC::CheckSync(connectionConfig, *RunConfig);
+        return 0;
+    } catch (const std::exception& e) {
+        Cout << "Check failed: " << e.what() << Endl;
+        return 1;
+    }
 }
 
 } // anonymous
@@ -259,6 +332,7 @@ TCommandTPCC::TCommandTPCC()
     AddCommand(std::make_unique<TCommandTPCCClean>(RunConfig));
     AddCommand(std::make_unique<TCommandTPCCInit>(RunConfig));
     AddCommand(std::make_unique<TCommandTPCCImport>(RunConfig));
+    AddCommand(std::make_unique<TCommandTPCCCheck>(RunConfig));
 }
 
 void TCommandTPCC::Config(TConfig& config) {

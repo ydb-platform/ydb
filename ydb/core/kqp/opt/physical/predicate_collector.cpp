@@ -22,6 +22,15 @@ bool IsSupportedPredicate(const TCoCompare& predicate) {
     return !predicate.Ref().Content().starts_with("Aggr");
 }
 
+bool CheckSameColumn(const TExprBase &left, const TExprBase &right) {
+    if (auto leftMember = left.Maybe<TCoMember>()) {
+        if (auto rightMember = right.Maybe<TCoMember>()) {
+            return (leftMember.Cast().Name() == rightMember.Cast().Name());
+        }
+    }
+    return false;
+}
+
 bool IsSupportedDataType(const TCoDataCtor& node, bool allowOlapApply) {
     Y_UNUSED(allowOlapApply);
     if (node.Maybe<TCoBool>() || node.Maybe<TCoFloat>() || node.Maybe<TCoDouble>() || node.Maybe<TCoInt8>() || node.Maybe<TCoInt16>() ||
@@ -79,9 +88,17 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
     return false;
 }
 
-bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
+bool IsGoodTypeForUnaryArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-    return (NUdf::EDataTypeFeatures::NumericType & features)
+    return ((NUdf::EDataTypeFeatures::NumericType) & features)
+        || (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
+            NUdf::EDataTypeFeatures::DateType |
+            NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features));
+}
+
+bool IsGoodTypeForBinaryArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
+    const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    return ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TimeIntervalType) & features)
         || (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
             NUdf::EDataTypeFeatures::DateType |
             NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features));
@@ -118,7 +135,6 @@ bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
     return substringMatchUdfs.contains(name);
 }
 
-[[maybe_unused]]
 bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushdownSubstring) {
     if (!expr.Ref().IsCallable({"Apply", "Coalesce", "NamedApply", "IfPresent", "Visit"})) {
         return false;
@@ -194,10 +210,18 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
     }
 
     if (const auto op = node.Maybe<TCoUnaryArithmetic>()) {
-        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, options) && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply);
+        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, options) &&
+               IsGoodTypeForUnaryArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply);
     } else if (const auto op = node.Maybe<TCoBinaryArithmetic>()) {
-        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, options) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, options)
-            && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply) && !op.Cast().Maybe<TCoAggrAdd>();
+        // FIXME: CS should be able to handle bin arithmetic op with the same column.
+        if (!options.AllowOlapApply && CheckSameColumn(op.Cast().Left(), op.Cast().Right())) {
+            return false;
+        }
+
+        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, options) &&
+               CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, options) &&
+               IsGoodTypeForBinaryArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply) &&
+               !op.Cast().Maybe<TCoAggrAdd>();
     }
 
     if (options.AllowOlapApply) {
@@ -257,6 +281,9 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         case ETypeAnnotationKind::Stream:
             inputType = inputType->Cast<TStreamExprType>()->GetItemType();
             break;
+        case ETypeAnnotationKind::Optional:
+            inputType = inputType->Cast<TOptionalExprType>()->GetItemType();
+            break;
         case ETypeAnnotationKind::Struct:
             break;
         default:
@@ -268,6 +295,10 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
 
     if (inputType->GetKind() != ETypeAnnotationKind::Struct) {
         // We do not know how process input that is not a sequence of elements
+        return false;
+    }
+    // FIXME: CS should be able to handle bin cmp op with the same column.
+    if (!options.AllowOlapApply && CheckSameColumn(compare.Left(), compare.Right())) {
         return false;
     }
 
@@ -285,7 +316,7 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         }
     }
 
-    if (options.PushdownSubstring) { //EnableSimpleIlikePushdown FF
+    if (options.PushdownSubstring) {
         if (IgnoreCaseSubstringMatchFunctions.contains(compare.CallableName())) {
             const auto& right = compare.Right().Ref();
             YQL_ENSURE(right.IsCallable("String") || right.IsCallable("Utf8"));

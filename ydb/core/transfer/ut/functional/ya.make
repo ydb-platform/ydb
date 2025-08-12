@@ -12,9 +12,6 @@ PEERDIR(
 )
 
 SRCS(
-    transfer_columntable_ut.cpp
-    transfer_common.cpp
-    transfer_rowtable_ut.cpp
     transfer_ut.cpp
 )
 

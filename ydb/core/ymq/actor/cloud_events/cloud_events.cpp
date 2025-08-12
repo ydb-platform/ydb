@@ -1,9 +1,125 @@
 #include "cloud_events.h"
 
 #include <ydb/core/audit/audit_log.h>
+#include <google/protobuf/util/time_util.h>
 
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
+    template<typename TProtoEvent>
+    void TFiller<TProtoEvent>::FillAuthentication() {
+        static constexpr auto extractSubjectType = [](const TString& authType) {
+            using ESubjectType = ::yandex::cloud::events::Authentication;
+            static const TMap<TString, ESubjectType::SubjectType> Types {
+                {"service_account", ESubjectType::SERVICE_ACCOUNT},
+                {"federated_account", ESubjectType::FEDERATED_USER_ACCOUNT},
+                {"user_account", ESubjectType::YANDEX_PASSPORT_USER_ACCOUNT},
+            };
+            return Types.Value(authType, ESubjectType::SUBJECT_TYPE_UNSPECIFIED);
+        };
+        Ev.mutable_authentication()->set_authenticated(true);
+        Ev.mutable_authentication()->set_subject_id(EventInfo.UserSID);
+        Ev.mutable_authentication()->set_subject_type(extractSubjectType(EventInfo.AuthType));
+
+        if (!EventInfo.MaskedToken.empty()) {
+            Ev.mutable_authentication()->mutable_token_info()->set_masked_iam_token(EventInfo.MaskedToken);
+        }
+    }
+
+    template<typename TProtoEvent>
+    void TFiller<TProtoEvent>::FillAuthorization() {
+        Ev.mutable_authorization()->set_authorized(true);
+
+        auto* permission = Ev.mutable_authorization()->add_permissions();
+        permission->set_permission(EventInfo.Permission);
+        permission->set_resource_type(EventInfo.ResourceType);
+        permission->set_resource_id(EventInfo.ResourceId);
+    }
+
+    template<typename TProtoEvent>
+    void TFiller<TProtoEvent>::FillEventMetadata() {
+        Ev.mutable_event_metadata()->set_event_id(EventInfo.Id);
+        Ev.mutable_event_metadata()->set_event_type(TString("yandex.cloud.events.ymq.") + EventInfo.Type);
+        const auto createdAt_proto = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(EventInfo.CreatedAt.MilliSeconds());
+        *Ev.mutable_event_metadata()->mutable_created_at() = createdAt_proto;
+        Ev.mutable_event_metadata()->set_cloud_id(EventInfo.CloudId);
+        Ev.mutable_event_metadata()->set_folder_id(EventInfo.FolderId);
+    }
+
+    template<typename TProtoEvent>
+    void TFiller<TProtoEvent>::FillRequestMetadata() {
+        Ev.mutable_request_metadata()->set_remote_address(EventInfo.RemoteAddress);
+        Ev.mutable_request_metadata()->set_request_id(EventInfo.RequestId);
+        Ev.mutable_request_metadata()->set_idempotency_id(EventInfo.IdempotencyId);
+    }
+
+    template<typename TProtoEvent>
+    void TFiller<TProtoEvent>::FillStatus() {
+        if (EventInfo.Issue.empty()) {
+            Ev.set_event_status(EStatus::DONE);
+        } else {
+            Ev.set_event_status(EStatus::ERROR);
+            Ev.mutable_error()->set_message(EventInfo.Issue);
+        }
+    }
+
+    template<typename TProtoEvent>
+    void TFiller<TProtoEvent>::FillDetails() {
+        Ev.mutable_details()->set_name(EventInfo.QueueName);
+
+        auto convertLabels = [](const TString& str) -> THashMap<TBasicString<char>, NJson::TJsonValue> {
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(str, &json);
+            return json.GetMap();
+        };
+
+        THashMap<TBasicString<char>, NJson::TJsonValue> protoLabels = convertLabels(EventInfo.Labels);
+
+        for (const auto& [k, jsonValue] : protoLabels) {
+            Ev.mutable_details()->mutable_labels()->insert({TString(k), jsonValue.GetStringRobust()});
+        }
+    }
+
+    template<typename TProtoEvent>
+    void TFiller<TProtoEvent>::Fill() {
+        FillAuthentication();
+        FillAuthorization();
+        FillEventMetadata();
+        FillRequestMetadata();
+        FillStatus();
+        FillDetails();
+    }
+
+    template class TFiller<TCreateQueueEvent>;
+    template class TFiller<TUpdateQueueEvent>;
+    template class TFiller<TDeleteQueueEvent>;
+
+    template<typename TProtoEvent>
+    void TAuditSender::SendProto(const TProtoEvent& ev, IEventsWriterWrapper::TPtr writer) {
+        if (writer) {
+            TString jsonEv;
+            google::protobuf::util::JsonPrintOptions printOpts;
+            printOpts.preserve_proto_field_names = true;
+            auto status = google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
+            Y_ASSERT(status.ok());
+            writer->Write(jsonEv);
+        } else {
+            TString jsonEv;
+            google::protobuf::util::JsonPrintOptions printOpts;
+            printOpts.preserve_proto_field_names = true;
+            auto status = google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
+            std::cerr << "==================================================================" << std::endl;
+            std::cerr << "status.ok() = " << status.ok() << std::endl;
+            std::cerr << jsonEv << std::endl;
+            std::cerr << "==================================================================" << std::endl;
+        }
+    }
+
+    template void TAuditSender::SendProto<TCreateQueueEvent>(const TCreateQueueEvent&, IEventsWriterWrapper::TPtr);
+    template void TAuditSender::SendProto<TUpdateQueueEvent>(const TUpdateQueueEvent&, IEventsWriterWrapper::TPtr);
+    template void TAuditSender::SendProto<TDeleteQueueEvent>(const TDeleteQueueEvent&, IEventsWriterWrapper::TPtr);
+
+// ===============================================================
+
     /*
         This function returns only one random number
         intended to identify an event of the CloudEvent type.
@@ -17,7 +133,7 @@ namespace NCloudEvents {
         return RandomNumber<ui64>();
     }
 
-    void TAuditSender::Send(const TEventInfo& evInfo) {
+    void TAuditSender::Send(const TEventInfo& evInfo, IEventsWriterWrapper::TPtr writer) {
         static constexpr TStringBuf componentName = "ymq";
         static const     TString emptyValue = "{none}";
 
@@ -32,7 +148,7 @@ namespace NCloudEvents {
             AUDIT_PART("masked_token", (!evInfo.MaskedToken.empty() ? evInfo.MaskedToken : emptyValue))
             AUDIT_PART("auth_type", (!evInfo.AuthType.empty() ? evInfo.AuthType : emptyValue))
             AUDIT_PART("permission", evInfo.Permission)
-            AUDIT_PART("created_at", ::ToString(evInfo.CreatedAt))
+            AUDIT_PART("created_at", evInfo.CreatedAt.ToString())
             AUDIT_PART("cloud_id", (!evInfo.CloudId.empty() ? evInfo.CloudId : emptyValue))
             AUDIT_PART("folder_id", (!evInfo.FolderId.empty() ? evInfo.FolderId : emptyValue))
             AUDIT_PART("resource_id", (!evInfo.ResourceId.empty() ? evInfo.ResourceId : emptyValue))
@@ -41,6 +157,25 @@ namespace NCloudEvents {
             AUDIT_PART("queue", (!evInfo.QueueName.empty() ? evInfo.QueueName : emptyValue))
             AUDIT_PART("labels", evInfo.Labels)
         );
+
+        if (evInfo.Type == "CreateMessageQueue") {
+            TCreateQueueEvent ev;
+            TFiller<TCreateQueueEvent> filler(evInfo, ev);
+            filler.Fill();
+            TAuditSender::SendProto<TCreateQueueEvent>(ev, writer);
+        } else if (evInfo.Type == "UpdateMessageQueue") {
+            TUpdateQueueEvent ev;
+            TFiller<TUpdateQueueEvent> filler(evInfo, ev);
+            filler.Fill();
+            TAuditSender::SendProto<TUpdateQueueEvent>(ev, writer);
+        } else if (evInfo.Type == "DeleteMessageQueue") {
+            TDeleteQueueEvent ev;
+            TFiller<TDeleteQueueEvent> filler(evInfo, ev);
+            filler.Fill();
+            TAuditSender::SendProto<TDeleteQueueEvent>(ev, writer);
+        } else {
+            Y_UNREACHABLE();
+        }
     }
 
     TString TProcessor::GetFullTablePath() const {
@@ -85,14 +220,23 @@ namespace NCloudEvents {
     (
         const TString& root,
         const TString& database,
-        const TDuration& retryTimeout
+        const TDuration& retryTimeout,
+        IEventsWriterWrapper::TPtr eventsWriter
     )
         : Root(root)
         , Database(database)
         , RetryTimeout(retryTimeout)
         , SelectQuery(GetInitSelectQuery())
         , DeleteQuery(GetInitDeleteQuery())
+        , EventsWriter(eventsWriter)
     {
+    }
+
+    TProcessor::~TProcessor()
+    {
+        if (EventsWriter) {
+            EventsWriter->Close();
+        }
     }
 
     void TProcessor::RunQuery(TString query, std::unique_ptr<NYdb::TParams> params) {
@@ -142,7 +286,7 @@ namespace NCloudEvents {
             param.AddListItem()
                 .BeginStruct()
                 .AddMember("CreatedAt")
-                    .Uint64(cloudEv.CreatedAt)
+                    .Uint64(cloudEv.CreatedAt.MilliSeconds())
                 .AddMember("Id")
                     .Uint64(cloudEv.OriginalId)
                 .EndStruct();
@@ -191,14 +335,14 @@ namespace NCloudEvents {
         Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
         NYdb::TResultSetParser parser(response.GetYdbResults(0));
 
-        auto convertId = [](ui64 id, const TString& type, ui64 createdAt) -> TString {
-            return TStringBuilder() << id << "$" << type << "$" << createdAt;
+        auto convertId = [](ui64 id, const TString& type, TInstant CreatedAt) -> TString {
+            return TStringBuilder() << id << "$" << type << "$" << CreatedAt.ToString();
         };
 
         while (parser.TryNextRow()) {
             auto& cloudEvent = result.emplace_back();
 
-            cloudEvent.CreatedAt = *parser.ColumnParser(0).GetOptionalUint64();
+            cloudEvent.CreatedAt = TInstant::MilliSeconds(*parser.ColumnParser(0).GetOptionalUint64());
             cloudEvent.OriginalId = *parser.ColumnParser(1).GetOptionalUint64();
             cloudEvent.QueueName = *parser.ColumnParser(2).GetOptionalUtf8();
             cloudEvent.Type = *parser.ColumnParser(3).GetOptionalUtf8();
@@ -212,7 +356,7 @@ namespace NCloudEvents {
             }
 
             cloudEvent.IdempotencyId = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
-            cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, TInstant::Now().MilliSeconds());
+            cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, TInstant::Now());
 
             cloudEvent.CloudId = *parser.ColumnParser(4).GetOptionalUtf8();
             cloudEvent.FolderId = *parser.ColumnParser(5).GetOptionalUtf8();
@@ -258,7 +402,7 @@ namespace NCloudEvents {
 
         if (!Events.empty()) {
             for (const auto& cloudEvent : Events) {
-                TAuditSender::Send(cloudEvent);
+                TAuditSender::Send(cloudEvent, EventsWriter);
             }
 
             MakeDeleteResponse();

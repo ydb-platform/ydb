@@ -124,7 +124,7 @@ namespace {
             .AddExpressionEvaluation(funcRegistry)
             .AddPreTypeAnnotation()
             .AddIOAnnotation()
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
+            .AddTypeAnnotationTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
             .Build(false);
 
         return TPrepareRewriteInfo{
@@ -245,6 +245,8 @@ namespace {
         }
         settingsNodes.push_back(
             exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
+        settingsNodes.push_back(
+            exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "ctas")}));
         create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
         create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, tmpTableName));
 

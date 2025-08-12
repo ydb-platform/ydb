@@ -32,7 +32,7 @@ class TActionQueue::TImpl
     : public TRefCounted
 {
 public:
-    explicit TImpl(const TString& threadName)
+    explicit TImpl(std::string threadName)
         : Queue_(New<TMpscInvokerQueue>(
             CallbackEventCount_,
             GetThreadTags(threadName)))
@@ -90,7 +90,7 @@ private:
     }
 };
 
-TActionQueue::TActionQueue(TString threadName)
+TActionQueue::TActionQueue(std::string threadName)
     : Impl_(New<TImpl>(std::move(threadName)))
 { }
 

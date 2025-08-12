@@ -3,7 +3,6 @@
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
-#include <ydb/core/kqp/runtime/scheduler/new/fwd.h>
 
 namespace NKikimr::NKqp::NComputeActor {
 
@@ -82,7 +81,6 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    NScheduler::TSchedulableTaskFactory SchedulableTaskFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
@@ -96,11 +94,9 @@ public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        NScheduler::TSchedulableTaskFactory schedulableTaskFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
         : ResourceManager_(resourceManager)
         , AsyncIoFactory(asyncIoFactory)
-        , SchedulableTaskFactory(schedulableTaskFactory)
         , FederatedQuerySetup(federatedQuerySetup)
     {
         ApplyConfig(config);
@@ -134,11 +130,10 @@ public:
         resourcesRequest.ExecutionUnits = 1;
         resourcesRequest.Memory = memoryLimits.MkqlLightProgramMemoryLimit;
 
-        auto&& schedulableOptions = args.SchedulableOptions;
-#if defined(USE_HDRF_SCHEDULER)
-        schedulableOptions.SchedulableTask = SchedulableTaskFactory(args.TxId);
-        schedulableOptions.IsSchedulable = !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID;
-#endif
+        NScheduler::TSchedulableActorOptions schedulableOptions {
+            .Query = args.Query,
+            .IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
+        };
 
         TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);
 
@@ -253,10 +248,9 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        NScheduler::TSchedulableTaskFactory schedulableTaskFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
 {
-    return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, schedulableTaskFactory, federatedQuerySetup);
+    return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, federatedQuerySetup);
 }
 
 } // namespace NKikimr::NKqp::NComputeActor

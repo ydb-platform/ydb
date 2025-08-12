@@ -13,6 +13,36 @@
 namespace NKikimr::NCms {
 
 struct TCmsSentinelConfig {
+    struct TStateStorageSelfHealConfig {
+        bool Enable;
+        ui32 NodeBadStateLimit;
+        ui32 NodeGoodStateLimit;
+        ui32 NodePrettyGoodStateLimit;
+        TDuration WaitForConfigStep;
+        TDuration RelaxTime;
+        bool PileupReplicas;
+
+        void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig::TStateStorageSelfHealConfig &config) const {
+            config.SetEnable(Enable);
+            config.SetNodeBadStateLimit(NodeBadStateLimit);
+            config.SetNodeGoodStateLimit(NodeGoodStateLimit);
+            config.SetNodePrettyGoodStateLimit(NodePrettyGoodStateLimit);
+            config.SetWaitForConfigStep(WaitForConfigStep.GetValue());
+            config.SetRelaxTime(RelaxTime.GetValue());
+            config.SetPileupReplicas(PileupReplicas);
+        }
+
+        void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig::TStateStorageSelfHealConfig &config) {
+            Enable = config.GetEnable();
+            NodeBadStateLimit = config.GetNodeBadStateLimit();
+            NodeGoodStateLimit = config.GetNodeGoodStateLimit();
+            NodePrettyGoodStateLimit = config.GetNodePrettyGoodStateLimit();
+            WaitForConfigStep = TDuration::MicroSeconds(config.GetWaitForConfigStep());
+            RelaxTime = TDuration::MicroSeconds(config.GetRelaxTime());
+            PileupReplicas = config.GetPileupReplicas();
+        }
+    };
+
     bool Enable = true;
     bool DryRun = false;
 
@@ -37,6 +67,8 @@ struct TCmsSentinelConfig {
 
     TMaybeFail<EPDiskStatus> EvictVDisksStatus;
 
+    TStateStorageSelfHealConfig StateStorageSelfHealConfig;
+
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
         config.SetDryRun(DryRun);
@@ -48,6 +80,9 @@ struct TCmsSentinelConfig {
         config.SetChangeStatusRetries(ChangeStatusRetries);
         config.SetDefaultStateLimit(DefaultStateLimit);
         config.SetGoodStateLimit(GoodStateLimit);
+
+        StateStorageSelfHealConfig.Serialize(*config.MutableStateStorageSelfHealConfig());
+
         config.SetDataCenterRatio(DataCenterRatio);
         config.SetRoomRatio(RoomRatio);
         config.SetRackRatio(RackRatio);
@@ -74,6 +109,8 @@ struct TCmsSentinelConfig {
         RackRatio = config.GetRackRatio();
         PileRatio = config.GetPileRatio();
         FaultyPDisksThresholdPerNode = config.GetFaultyPDisksThresholdPerNode();
+
+        StateStorageSelfHealConfig.Deserialize(config.GetStateStorageSelfHealConfig());
 
         auto newStateLimits = LoadStateLimits(config);
         StateLimits.swap(newStateLimits);

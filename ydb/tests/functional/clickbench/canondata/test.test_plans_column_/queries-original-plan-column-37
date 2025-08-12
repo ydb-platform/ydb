@@ -60,7 +60,7 @@
                                                 "PlanNodeId": 3,
                                                 "Plans": [
                                                     {
-                                                        "HashFunc": "HashV1",
+                                                        "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "Title"
                                                         ],
@@ -69,12 +69,22 @@
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Filter-TableRangeScan",
+                                                                "Node Type": "Aggregate-Filter-TableRangeScan",
                                                                 "Operators": [
                                                                     {
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Intermediate",
+                                                                        "Pushdown": "True"
+                                                                    },
+                                                                    {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 2
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",

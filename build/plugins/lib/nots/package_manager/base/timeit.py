@@ -27,3 +27,11 @@ def timeit(func):
         return logging.timeit(func)
     else:
         return func
+
+
+def is_timeit_enabled():
+    logging = import_optional_module("devtools.frontend_build_platform.libraries.logging")
+    if logging:
+        return logging.timeit_options.enabled
+    else:
+        return False

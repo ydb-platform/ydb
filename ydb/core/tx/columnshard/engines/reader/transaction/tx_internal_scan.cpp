@@ -1,7 +1,6 @@
 #include "tx_internal_scan.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
@@ -91,8 +90,8 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        Self->DataAccessorsManager.GetObjectPtrVerified(), TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie,
-        Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}, {}));
+        Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie,
+        Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}));
 
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

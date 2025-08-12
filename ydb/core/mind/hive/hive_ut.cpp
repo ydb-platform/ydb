@@ -1488,6 +1488,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         ui32 nodeId = runtime.GetNodeId(0);
         {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
             runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvDrainNode(nodeId));
             {
                 TDispatchOptions options;
@@ -1496,15 +1497,25 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
             Ctest << "Register killer\n";
             runtime.Register(CreateTabletKiller(hiveTablet));
+
             bool wasDedup = false;
             auto observerHolder = runtime.AddObserver<TEvHive::TEvDrainNodeResult>([&](auto&& event) {
                 if (event->Get()->Record.GetStatus() == NKikimrProto::EReplyStatus::ALREADY) {
                     wasDedup = true;
                 }
             });
-            while (!wasDedup) {
-                runtime.DispatchEvents({});
-            }
+
+            // Wait until domain hive retries drain
+            TBlockEvents<TEvHive::TEvDrainNode> blockedDrain(runtime);
+            runtime.WaitFor("drain retry", [&]{ return blockedDrain.size() >= 1; }, TDuration::Seconds(1));
+
+            // Let tenant hive finish its drain
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+            // Unblock the drain retry
+            blockedDrain.Stop().Unblock();
+
+            runtime.WaitFor("dedup", [&]{ return wasDedup; }, TDuration::Seconds(1));
         }
     }
 
@@ -5606,6 +5617,55 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(tabletsOnNodes.size(), 1);
     }
 
+    Y_UNIT_TEST(TestNotEnoughResources) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        std::vector<ui64> tablets;
+
+        // Use default maximums
+        // Otherwise test might depend on the environment
+        auto observer = runtime.AddObserver<TEvLocal::TEvStatus>([](auto&& ev) { ev->Get()->Record.ClearResourceMaximum(); });
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        for (ui64 i = 0; i < 10; ++i) {
+            auto createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS);
+            ui64 tablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, true);
+            WaitForTabletIsUp(runtime, tablet, 0);
+            tablets.push_back(tablet);
+        }
+
+        for (auto tablet: tablets) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+            metric->SetTabletID(tablet);
+            metric->MutableResourceUsage()->SetMemory(250'000'000'000ull);
+            runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
+        }
+
+        auto createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 100500 + tablets.size(), tabletType, BINDED_CHANNELS);
+        ui64 newTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, false);
+
+        MakeSureTabletIsDown(runtime, newTablet, 0);
+
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+
+        for (auto tablet : tablets) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+            metric->SetTabletID(tablet);
+            metric->MutableResourceUsage()->SetMemory(5'000'000);
+            runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
+        }
+
+        WaitForTabletIsUp(runtime, newTablet, 0);
+
+    }
+
     Y_UNIT_TEST(TestUpdateTabletsObjectUpdatesMetrics) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
@@ -7765,13 +7825,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             for (ui32 pile = 0; pile < 2; ++pile) {
                 BridgeInfos[pile] = std::make_shared<TBridgeInfo>();
                 BridgeInfos[pile]->Piles.push_back(TBridgeInfo::TPile{
-                    .BridgePileId = TBridgePileId::FromValue(0),
+                    .BridgePileId = TBridgePileId::FromPileIndex(0),
                     .State = NKikimrBridge::TClusterState::SYNCHRONIZED,
                     .IsPrimary = true,
                     .IsBeingPromoted = false,
                 });
                 BridgeInfos[pile]->Piles.push_back(TBridgeInfo::TPile{
-                    .BridgePileId = TBridgePileId::FromValue(1),
+                    .BridgePileId = TBridgePileId::FromPileIndex(1),
                     .State = NKikimrBridge::TClusterState::SYNCHRONIZED,
                     .IsPrimary = false,
                     .IsBeingPromoted = false,
@@ -7789,7 +7849,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             BridgeConfig.AddPiles()->SetName("pile0");
             BridgeConfig.AddPiles()->SetName("pile1");
             Runtime.AddAppDataInit([this](ui32, TAppData& appData) {
-                appData.BridgeConfig = &BridgeConfig;
+                appData.BridgeConfig = BridgeConfig;
+                appData.BridgeModeEnabled = true;
             });
             Observe();
         }
@@ -7837,7 +7898,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UpdateBridgeInfo([](std::shared_ptr<TBridgeInfo> newState) {
                 for (ui32 i = 0; i < newState->Piles.size(); ++i) {
                     if (newState->Piles[i].State == NKikimrBridge::TClusterState::DISCONNECTED) {
-                        newState->Piles[i].State = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED;
+                        newState->Piles[i].State = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1;
                     }
                 }
             });
@@ -7846,7 +7907,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         void Synchronize() {
             UpdateBridgeInfo([](std::shared_ptr<TBridgeInfo> newState) {
                 for (ui32 i = 0; i < newState->Piles.size(); ++i) {
-                    if (newState->Piles[i].State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED) {
+                    if (newState->Piles[i].State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1) {
                         newState->Piles[i].State = NKikimrBridge::TClusterState::SYNCHRONIZED;
                     }
                 }

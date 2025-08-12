@@ -38,6 +38,7 @@ constexpr ui32 RecordsInSysLog = 16;
 
 constexpr ui64 FullSizeDiskMinimumSize = 800ull * (1 << 30); // 800GB, all disks smaller are considered "small"
 constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20); // 32MB
+constexpr ui64 TinyDiskSizeThreshold = 80ull * (1 << 30); // 80GB, all disks smaller are considered "tiny"
 
 #define PDISK_FORMAT_VERSION 3
 #define PDISK_DATA_VERSION 2

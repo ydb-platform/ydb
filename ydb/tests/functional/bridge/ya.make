@@ -6,17 +6,14 @@ TEST_SRCS(
 
 SPLIT_FACTOR(10)
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:4)
-ENDIF()
+REQUIREMENTS(ram:32 cpu:32)
+SIZE(LARGE)
+TAG(ya:fat)
 
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
-    SIZE(LARGE)
-    TAG(ya:fat)
 ELSE()
     TIMEOUT(60)
-    SIZE(MEDIUM)
 ENDIF()
 
 

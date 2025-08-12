@@ -149,7 +149,7 @@ void TLoader::StageParseMeta()
     }
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView(bool preloadIndex)
+TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
 {
     Y_ENSURE(!PartView, "PartView already initialized in CreatePartView stage");
     Y_ENSURE(Packs && Packs.front());
@@ -272,16 +272,16 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView(bool preloadIndex
 
     LoaderEnv->ProvidePart(PartView.Part.Get());
 
-    return nullptr;
+    return {};
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds()
+TLoader::TFetch TLoader::StageSliceBounds()
 {
     Y_ENSURE(PartView, "Cannot generate bounds for a missing part");
 
     if (PartView.Slices) {
         TOverlay{ PartView.Screen, PartView.Slices }.Validate();
-        return nullptr;
+        return {};
     }
 
     LoaderEnv->EnsureNoNeedPages();
@@ -293,7 +293,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds()
         PartView.Slices = std::move(run);
         TOverlay{ PartView.Screen, PartView.Slices }.Validate();
 
-        return nullptr;
+        return {};
     } else if (auto fetches = LoaderEnv->GetFetch()) {
         return fetches;
     } else {
@@ -316,12 +316,12 @@ void TLoader::StageDeltas()
     }
 }
 
-TAutoPtr<NPageCollection::TFetch> TLoader::StagePreloadData()
+TLoader::TFetch TLoader::StagePreloadData()
 {
     auto partStore = PartView.As<TPartStore>();
 
     // Note: preload works only for main group pages    
-    auto total = partStore->PageCollections[0]->Total();
+    auto total = partStore->PageCollections[0]->PageCollection->Total();
 
     TVector<TPageId> toLoad(::Reserve(total));
     for (TPageId pageId : xrange(total)) {
@@ -331,13 +331,11 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StagePreloadData()
     return LoaderEnv->GetFetch();
 }
 
-void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> loadedPages)
+void TLoader::Save(TVector<NSharedCache::TEvResult::TLoaded>&& pages)
 {
-    Y_ENSURE(cookie == 0, "Only the leader pack is used on load");
-
     if (Stage == EStage::PartView || Stage == EStage::Slice || Stage == EStage::PreloadData) {
-        for (auto& loaded : loadedPages) {
-            LoaderEnv->Save(cookie, std::move(loaded));
+        for (auto& page : pages) {
+            LoaderEnv->Save(std::move(page));
         }
     } else {
         Y_TABLET_ERROR("Unexpected pages save on stage " << int(Stage));

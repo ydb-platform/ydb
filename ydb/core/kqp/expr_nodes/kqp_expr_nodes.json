@@ -562,6 +562,15 @@
             ]
         },
         {
+            "Name": "TKqpOlapPredicateClosure",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "TKqpOlapPredicateClosure"},
+            "Children": [
+                {"Index": 0, "Name": "Lambda", "Type": "TCoLambda"},
+                {"Index": 1, "Name": "ArgsType", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOlapOperationBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},
@@ -633,7 +642,8 @@
             "Children": [
                 {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Left", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Right", "Type": "TExprBase"}
+                {"Index": 2, "Name": "Right", "Type": "TExprBase"},
+                {"Index": 3, "Name": "OpType", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

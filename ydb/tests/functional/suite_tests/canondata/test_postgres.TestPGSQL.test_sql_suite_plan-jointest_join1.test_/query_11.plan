@@ -56,7 +56,7 @@
                                         "PlanNodeId": 11,
                                         "Plans": [
                                             {
-                                                "HashFunc": "HashV1",
+                                                "HashFunc": "HashV2",
                                                 "KeyColumns": [
                                                     "i"
                                                 ],
@@ -108,7 +108,7 @@
                                                 ]
                                             },
                                             {
-                                                "HashFunc": "HashV1",
+                                                "HashFunc": "HashV2",
                                                 "KeyColumns": [
                                                     "i"
                                                 ],

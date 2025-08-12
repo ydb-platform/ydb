@@ -353,7 +353,11 @@ namespace NTabletFlatExecutor {
                         auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
                         sharedPage->Initialize(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
-                        cache->Fill(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList), sticky);
+                        if (sticky) {
+                            cache->AddStickyPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                        } else {
+                            cache->AddPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                        }
                     };
                     for (auto &page : pageCollection.StickyPages) {
                         addPage(page, true);
@@ -377,9 +381,9 @@ namespace NTabletFlatExecutor {
 
                 if (Y_UNLIKELY(fetch)) {
                     TStringBuilder error;
-                    error << "Just compacted part needs to load pages";
-                    for (auto collection : fetch) {
-                        error << " " << collection->DebugString(true);
+                    error << "Just compacted part needs to load page collection " << fetch.PageCollection->Label() << " pages";
+                    for (auto page : fetch.Pages) {
+                        error << " " << page;
                     }
                     Y_TABLET_ERROR(error);
                 }

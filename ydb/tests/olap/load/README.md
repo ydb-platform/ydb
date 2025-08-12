@@ -94,6 +94,12 @@ from .lib.workload_my_workload import TestMyWorkload
 # Тест автоматически будет импортирован и запущен
 ```
 
+### 3. Добавление новго файла в ya.make
+
+Добавить новые файлы с тестами и путь до ворклоада в `ydb/tests/olap/load/ya.make` и в `ydb/tests/olap/load/lib/ya.make`
+
+
+
 ---
 
 ## Setup и Teardown
@@ -488,8 +494,8 @@ T+0s     | ФАЗА 1: Подготовка                         | Остан
 T+0s     | Остановка nemesis в preparation            | Nemesis останавливается на всех нодах для чистого старта
 T+0s     | ФАЗА 2: Выполнение workload                | Workload начинает выполняться на нодах
 T+15s    | Запуск nemesis                             | Nemesis стартует через 15 секунд после начала workload
-T+15s    | Подготовка конфигурации кластера           | Удаление старого cluster.yaml, копирование нового
-T+15s    | Деплой конфигурации кластера               | Файл конфигурации кластера копируется на все ноды
+T+15s    | Деплой конфигурации кластера               | Файл конфигурации кластера копируется на все ноды (если указан cluster_path)
+T+15s    | Деплой конфигурации баз данных             | Файл databases.yaml копируется на все ноды (если указан yaml-config)
 T+15s    | Начало chaos testing                       | Nemesis начинает выполнять операции согласно конфигурации
 T+15s    | Workload продолжает работу                 | Основной workload работает параллельно с nemesis
 T+15s    | Nemesis выполняет операции                 | Случайные операции: паузы, перезапуски, сетевые проблемы и т.д.
@@ -514,7 +520,10 @@ T+N      | Завершение теста                           | Тест 
 ### Параметры nemesis
 
 - `nemesis=True` - включает chaos testing
-- `cluster_path` - путь к файлу конфигурации кластера (копируется как есть, без изменений)
+- `cluster_path` - путь к файлу конфигурации кластера (копируется в `/Berkanavt/kikimr/cfg/cluster.yaml`)
+  - Если не указан, файл не копируется
+- `yaml-config` - путь к файлу конфигурации баз данных (копируется в `/Berkanavt/kikimr/cfg/databases.yaml`)
+  - Если не указан, файл не копируется
 
 ### Пример с параметризацией
 
@@ -1220,7 +1229,8 @@ ydb/tests/olap/load/
   --test-filter test_workload_simple_queue.py::TestSimpleQueue::test_workload_simple_queue[nemesis_true*] \
   --allure=./allure_tmp \
   --test-tag ya:manual \
-  --test-param cluster_path=cluster.yaml
+  --test-param cluster_path=cluster.yaml \
+  --test-param yaml-config=databases.yaml
 ```
 
 #### **Вариант 2: С выгрузкой результатов в YDB**
@@ -1240,7 +1250,8 @@ export RESULT_IAM_FILE_0=iam.json
   --test-param results-endpoint=grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135 \
   --test-param results-db=/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8 \
   --test-param results-table=nemesis/tests_results \
-  --test-param cluster_path=cluster.yaml
+  --test-param cluster_path=cluster.yaml \
+  --test-param yaml-config=databases.yaml
 ```
 
 **Параметры запуска:**
@@ -1249,7 +1260,8 @@ export RESULT_IAM_FILE_0=iam.json
 - `ydb-endpoint=grpc://localhost:2135` - endpoint YDB кластера
 - `--test-filter` - фильтр для запуска конкретного теста
 - `--allure=./allure_tmp` - директория для Allure отчетов
-- `cluster_path=$CROSS` - **конфигурация кластера для nemesis (требуется для chaos testing)**
+- `cluster_path=cluster.yaml` - **конфигурация кластера для nemesis (копируется в cluster.yaml)**
+- `yaml-config=databases.yaml` - **конфигурация баз данных для nemesis (копируется в databases.yaml)**
 
 **Параметры выгрузки в YDB (только для Варианта 2):**
 - `send-results=true` - включить выгрузку результатов в YDB

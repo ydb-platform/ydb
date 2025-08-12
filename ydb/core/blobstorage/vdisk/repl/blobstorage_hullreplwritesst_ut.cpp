@@ -16,7 +16,7 @@ std::shared_ptr<TReplCtx> CreateReplCtx(TVector<TVDiskID>& vdisks, const TIntrus
         nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
     auto hugeBlobCtx = std::make_shared<THugeBlobCtx>("", nullptr, true);
     auto dsk = MakeIntrusive<TPDiskParams>(ui8(1), 1u, 1u, 0u, 128u << 20, 4096u, 0u, 1000000000u, 1000000000u, 65536u, 65536u, 65536u,
-            NPDisk::DEVICE_TYPE_UNKNOWN);
+            NPDisk::DEVICE_TYPE_UNKNOWN, false);
     auto pdiskCtx = std::make_shared<TPDiskCtx>(dsk, TActorId(), TString());
     auto replCtx = std::make_shared<TReplCtx>(
         vctx,
@@ -40,7 +40,7 @@ TVDiskContextPtr CreateVDiskContext(const TBlobStorageGroupInfo& info) {
 TIntrusivePtr<THullCtx> CreateHullCtx(const TBlobStorageGroupInfo& info, ui32 chunkSize, ui32 compWorthReadSize) {
     auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests();
     return MakeIntrusive<THullCtx>(CreateVDiskContext(info), MakeIntrusive<TVDiskConfig>(baseInfo), chunkSize, compWorthReadSize, true, true, true, true, 1u,
-        1u, 2.0, 0.5, TDuration::Minutes(5), TDuration::Seconds(1), true);
+        1u, 2.0, 0.5, TDuration::Minutes(5), TDuration::Seconds(1), true, 8u, 8u);
 }
 
 TIntrusivePtr<THullDs> CreateHullDs(const TBlobStorageGroupInfo& info) {

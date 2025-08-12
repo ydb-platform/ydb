@@ -38,6 +38,10 @@ public:
                 }
             }
         }
+
+        if (AppData()->BridgeModeEnabled) {
+            json["Cluster"]["BridgeModeEnabled"] = true;
+        }
         return json;
     }
 

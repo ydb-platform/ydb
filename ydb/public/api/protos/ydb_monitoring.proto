@@ -142,6 +142,7 @@ message LocationStorageVDisk {
 message LocationStorageGroup {
     repeated string id = 1;
     LocationStorageVDisk vdisk = 2;
+    LocationBridgePile pile = 3;
 }
 
 message LocationStoragePool {
@@ -169,11 +170,16 @@ message LocationComputeSchema {
     string path = 2;
 }
 
+message LocationBridgePile {
+    string name = 1;
+}
+
 message LocationCompute {
     LocationNode node = 1;
     LocationComputePool pool = 2;
     LocationComputeTablet tablet = 3;
     LocationComputeSchema schema = 4;
+    LocationBridgePile pile = 5;
 }
 
 message LocationDatabase {

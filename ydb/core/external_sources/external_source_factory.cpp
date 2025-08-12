@@ -22,7 +22,13 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         : Sources(sources)
         , AllExternalDataSourcesAreAvailable(allExternalDataSourcesAreAvailable)
         , AvailableExternalDataSources(availableExternalDataSources)
-    {}
+    {
+        for (const auto& [type, source] : sources) {
+            if (AvailableExternalDataSources.contains(type)) {
+                AvailableProviders.insert(source->GetName());
+            }
+        }
+    }
 
     IExternalSource::TPtr GetOrCreate(const TString& type) const override {
         auto it = Sources.find(type);
@@ -35,10 +41,18 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         return it->second;
     }
 
+    bool IsAvailableProvider(const TString& provider) const override {
+        if (AllExternalDataSourcesAreAvailable) {
+            return true;
+        }
+        return AvailableProviders.contains(provider);
+    }
+
 private:
     const TMap<TString, IExternalSource::TPtr> Sources;
     bool AllExternalDataSourcesAreAvailable;
     const std::set<TString> AvailableExternalDataSources;
+    std::set<TString> AvailableProviders;
 };
 
 }

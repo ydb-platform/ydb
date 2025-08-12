@@ -40,7 +40,7 @@ namespace NKikimr::NBsController {
 
                 if (CacheUpdate.KeyValuePairsSize()) {
                     State.Outbox.emplace_back(Self->SelfId().NodeId(), std::make_unique<NStorage::TEvNodeWardenUpdateCache>(
-                        std::move(CacheUpdate)), 0);
+                        std::move(CacheUpdate)), 0, true);
                 }
             }
 
@@ -362,7 +362,7 @@ namespace NKikimr::NBsController {
                             disintegratedByExpectedStatus.push_back(overlay->first);
                             errors = true;
                         }
-                     }
+                    }
                 }
             }
 
@@ -722,8 +722,12 @@ namespace NKikimr::NBsController {
         }
 
         ui64 TBlobStorageController::TConfigState::ApplyConfigUpdates() {
-            for (auto& [nodeId, ev, cookie] : Outbox) {
-                Self.SendToWarden(nodeId, std::move(ev), cookie);
+            for (TOutgoingMessage& msg : Outbox) {
+                if (msg.ToLocalWarden) {
+                    Self.Send(MakeBlobStorageNodeWardenID(Self.SelfId().NodeId()), std::move(msg.Event), 0, msg.Cookie);
+                } else {
+                    Self.SendToWarden(msg.NodeId, std::move(msg.Event), msg.Cookie);
+                }
             }
             for (auto& ev : StatProcessorOutbox) {
                 Self.SelfId().Send(Self.StatProcessorActorId, ev.release());
@@ -1244,23 +1248,27 @@ namespace NKikimr::NBsController {
             if (groupInfo.BridgeGroupInfo) {
                 group->MergeFrom(*groupInfo.BridgeGroupInfo);
             }
+            if (groupInfo.BridgeProxyGroupId) {
+                groupInfo.BridgeProxyGroupId->CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
+            }
+            groupInfo.BridgePileId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
         }
 
         void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {
-            settings->SetDefaultMaxSlots(DefaultMaxSlots);
-            settings->SetEnableSelfHeal(SelfHealEnable);
-            settings->SetEnableDonorMode(DonorMode);
-            settings->SetScrubPeriodicitySeconds(ScrubPeriodicity.Seconds());
-            settings->SetPDiskSpaceMarginPromille(PDiskSpaceMarginPromille);
-            settings->SetGroupReserveMin(GroupReserveMin);
-            settings->SetGroupReservePartPPM(GroupReservePart);
-            settings->SetMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
-            settings->SetPDiskSpaceColorBorder(PDiskSpaceColorBorder);
-            settings->SetEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
-            // TODO: settings->SetSerialManagementStage(SerialManagementStage);
-            settings->SetAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
-            settings->SetUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
-            settings->SetTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
+            settings->AddDefaultMaxSlots(DefaultMaxSlots);
+            settings->AddEnableSelfHeal(SelfHealEnable);
+            settings->AddEnableDonorMode(DonorMode);
+            settings->AddScrubPeriodicitySeconds(ScrubPeriodicity.Seconds());
+            settings->AddPDiskSpaceMarginPromille(PDiskSpaceMarginPromille);
+            settings->AddGroupReserveMin(GroupReserveMin);
+            settings->AddGroupReservePartPPM(GroupReservePart);
+            settings->AddMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
+            settings->AddPDiskSpaceColorBorder(PDiskSpaceColorBorder);
+            settings->AddEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
+            // TODO: settings->AddSerialManagementStage(SerialManagementStage);
+            settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
+            settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
+            settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
         }
 
         void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,

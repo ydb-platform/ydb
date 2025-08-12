@@ -187,8 +187,12 @@ private:
         if (SourceId != entity.GetEntityId()) {
             return false;
         }
-        AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount());
-        usage = RecordIndex < entity.GetEntityRecordsCount();
+        if (!entity.GetEntityRecordsCount()) {
+            usage = false;
+        } else {
+            AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount());
+            usage = RecordIndex < entity.GetEntityRecordsCount();
+        }
         return true;
     }
 
@@ -249,8 +253,12 @@ private:
         if (SourceId != entity.GetEntityId()) {
             return false;
         }
-        AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount());
-        usage = RecordIndex < entity.GetEntityRecordsCount();
+        if (!entity.GetEntityRecordsCount()) {
+            usage = false;
+        } else {
+            AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount());
+            usage = RecordIndex < entity.GetEntityRecordsCount();
+        }
         return true;
     }
 

@@ -27,10 +27,11 @@ auto IsSort = [](const TExprNode* node) { return TCoTopBase::Match(node) || TCoS
 
 class TKqpPhysicalOptTransformer : public TOptimizeTransformerBase {
 public:
-    TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+    TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TAutoPtr<NYql::IGraphTransformer> &&typeAnnTransformer)
         : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
         , TypesCtx(typesCtx)
         , KqpCtx(*kqpCtx)
+        , TypeAnnTransformer(std::move(typeAnnTransformer))
     {
 #define HNDL(name) "KqpPhysical-"#name, Hndl(&TKqpPhysicalOptTransformer::name)
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
@@ -51,6 +52,8 @@ public:
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
         AddHandler(0, &TDqPhyLength::Match, HNDL(PushOlapLength));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
+        AddHandler(0, &TCoPruneKeys::Match, HNDL(PushPruneKeysToStage<false>));
+        AddHandler(0, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneAdjacentKeysToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildPureFlatmapStage));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
@@ -100,6 +103,8 @@ public:
 
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
+        AddHandler(1, &TCoPruneKeys::Match, HNDL(PushPruneKeysToStage<true>));
+        AddHandler(1, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneAdjacentKeysToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));
         AddHandler(1, &TCoCombineByKey::Match, HNDL(PushCombineToStage<true>));
@@ -236,7 +241,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> PushOlapFilter(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpPushOlapFilter(node, ctx, KqpCtx, TypesCtx);
+        TExprBase output = KqpPushOlapFilter(node, ctx, KqpCtx, TypesCtx, *TypeAnnTransformer.Get());
         DumpAppliedRule("PushOlapFilter", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -286,6 +291,24 @@ protected:
     {
         TExprBase output = DqPushSkipNullMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("PushSkipNullMembersToStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushPruneKeysToStage(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = DqPushPruneKeysToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("PushPruneKeysToStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushPruneAdjacentKeysToStage(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = DqPushPruneAdjacentKeysToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("PushPruneAdjacentKeysToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -344,7 +367,8 @@ protected:
     TMaybeNode<TExprBase> BuildShuffleStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildShuffleStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleEliminationForAggregation);
+        TExprBase output = DqBuildShuffleStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination);
         DumpAppliedRule("BuildShuffleStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -360,7 +384,8 @@ protected:
     TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleEliminationForAggregation);
+        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination);
         DumpAppliedRule("BuildPartitionsStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -369,10 +394,12 @@ protected:
     TMaybeNode<TExprBase> BuildPartitionStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildPartitionStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleEliminationForAggregation);
+        TExprBase output = DqBuildPartitionStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination);
         DumpAppliedRule("BuildPartitionStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
+
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildTopStageRemoveSort(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
@@ -438,7 +465,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildExtendStage(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqBuildExtendStage(node, ctx);
+        TExprBase output = DqBuildExtendStage(node, ctx, KqpCtx.Config->GetEnableParallelUnionAllConnectionsForExtend());
         DumpAppliedRule("BuildExtendStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -638,12 +665,14 @@ protected:
 private:
     TTypeAnnotationContext& TypesCtx;
     const TKqpOptimizeContext& KqpCtx;
+    TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    NYql::TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr&)
+    NYql::TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<NYql::IGraphTransformer> &&typeAnnTransformer)
 {
-    return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx));
+    Y_UNUSED(config);
+    return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx, std::move(typeAnnTransformer)));
 }
 
 } // namespace NKikimr::NKqp::NOpt

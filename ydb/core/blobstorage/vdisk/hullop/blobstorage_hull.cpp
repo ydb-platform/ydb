@@ -100,11 +100,12 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // Private
     ////////////////////////////////////////////////////////////////////////////
-    void THull::ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool *writtenBeyondBarrier) {
+    void THull::ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool issueKeepFlag,
+            bool *writtenBeyondBarrier) {
         if (Fields->BarrierValidation) {
             // ensure that the new blob would not fall under GC
             TString explanation;
-            if (!BarrierCache.Keep(id, false, &explanation)) {
+            if (!BarrierCache.Keep(id, issueKeepFlag, &explanation)) {
                 LOG_CRIT(ctx, NKikimrServices::BS_HULLRECS,
                         VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                             "Db# LogoBlobs; putting blob beyond the barrier id# %s barrier# %s",
@@ -173,6 +174,7 @@ namespace NKikimr {
             const TActorContext &ctx,
             const TLogoBlobID &id,
             bool ignoreBlock,
+            bool issueKeepFlag,
             const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
             bool *writtenBeyondBarrier)
     {
@@ -202,7 +204,7 @@ namespace NKikimr {
         }
 
         if (writtenBeyondBarrier) {
-            ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
+            ValidateWriteQuery(ctx, id, issueKeepFlag, writtenBeyondBarrier);
         }
         return {NKikimrProto::OK, "", false};
     }
@@ -431,14 +433,16 @@ namespace NKikimr {
             return {NKikimrProto::ERROR, "empty garbage collection command"};
         }
 
-        auto blockStatus = THullDbRecovery::IsBlocked(record);
-        switch (blockStatus.Status) {
-            case TBlocksCache::EStatus::OK:
-                break;
-            case TBlocksCache::EStatus::BLOCKED_PERS:
-                return {NKikimrProto::BLOCKED, "blocked", 0, false};
-            case TBlocksCache::EStatus::BLOCKED_INFLIGH:
-                return {NKikimrProto::BLOCKED, "blocked", blockStatus.Lsn, true};
+        if (!record.GetIgnoreBlock()) {
+            auto blockStatus = THullDbRecovery::IsBlocked(record);
+            switch (blockStatus.Status) {
+                case TBlocksCache::EStatus::OK:
+                    break;
+                case TBlocksCache::EStatus::BLOCKED_PERS:
+                    return {NKikimrProto::BLOCKED, "blocked", 0, false};
+                case TBlocksCache::EStatus::BLOCKED_INFLIGH:
+                    return {NKikimrProto::BLOCKED, "blocked", blockStatus.Lsn, true};
+            }
         }
 
         // check per generation counter

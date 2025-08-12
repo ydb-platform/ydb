@@ -766,27 +766,37 @@ TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, 
     }
 
     if (literals) {
-        YQL_CLOG(DEBUG, Core) << node->Content() <<  " over literal bools";
         TExprNode::TListType children;
         children.reserve(size);
+        bool hasSideEffects = false;
         for (ui32 i = 0U; i < size; ++i) {
             if (node->Child(i)->IsCallable("Bool")) {
                 const bool value = FromString<bool>(node->Child(i)->Head().Content());
                 if (AndOr != value) {
-                    auto res = ctx.WrapByCallableIf(IsOptBoolType(*node), "Just", node->ChildPtr(i));
-                    res = KeepWorld(res, *node, ctx, *optCtx.Types);
-                    return res;
+                    if (!hasSideEffects) {
+                        YQL_CLOG(DEBUG, Core) << node->Content() <<  " over literal bools - const";
+                        auto res = ctx.WrapByCallableIf(IsOptBoolType(*node), "Just", node->ChildPtr(i));
+                        res = KeepWorld(res, *node, ctx, *optCtx.Types);
+                        return res;
+                    } else {
+                        children.emplace_back(node->ChildPtr(i));
+                    }
                 }
             } else {
                 children.emplace_back(node->ChildPtr(i));
             }
+
+            hasSideEffects = hasSideEffects || node->Child(i)->HasSideEffects();
         }
 
-        auto res = children.empty() ?
-            ctx.WrapByCallableIf(IsOptBoolType(*node), "Just", MakeBool(node->Pos(), AndOr, ctx)):
-            ctx.ChangeChildren(*node, std::move(children));
-        res = KeepWorld(res, *node, ctx, *optCtx.Types);
-        return res;
+        if (children.size() < size) {
+            YQL_CLOG(DEBUG, Core) << node->Content() <<  " over literal bools - skipped args";
+            auto res = children.empty() ?
+                ctx.WrapByCallableIf(IsOptBoolType(*node), "Just", MakeBool(node->Pos(), AndOr, ctx)):
+                ctx.ChangeChildren(*node, std::move(children));
+            res = KeepWorld(res, *node, ctx, *optCtx.Types);
+            return res;
+        }
     }
 
     return node;
@@ -1067,15 +1077,26 @@ TExprNode::TPtr OptimizeToOptional(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TExprNode::TPtr ExtractMember(const TExprNode& node) {
-    auto memberName = node.Tail().Content();
-    for (ui32 index = 0; index < node.Head().ChildrenSize(); ++index) {
-        auto tuple = node.Head().Child(index);
-        if (tuple->Head().Content() == memberName) {
-            return tuple->TailPtr();
-        }
-    }
+    struct TAsStructArgLess {
+        bool operator()(const TExprNode::TPtr& x, const TExprNode::TPtr& y) const {
+            return x->Head().Content() < y->Head().Content();
+        };
 
-    YQL_ENSURE(false, "Unexpected member name: " << memberName);
+        bool operator()(const TExprNode::TPtr& x, TStringBuf y) const {
+            return x->Head().Content() < y;
+        };
+
+        bool operator()(TStringBuf x, const TExprNode::TPtr& y) const {
+            return x < y->Head().Content();
+        };
+    };
+
+    auto memberName = node.Tail().Content();
+    const auto& asStructArgs = node.Head().Children();
+    // Type annotation of AsStruct() guarantees that its arguments are ordered by member name, so we can avoid linear scan here
+    auto it = std::lower_bound(asStructArgs.begin(), asStructArgs.end(), memberName, TAsStructArgLess());
+    YQL_ENSURE(it != asStructArgs.end() && (*it)->Head().Content() == memberName, "Unable to find member " << memberName << " in AsStruct");
+    return (*it)->TailPtr();
 }
 
 template <bool RightOrLeft>
@@ -3833,6 +3854,10 @@ TExprNode::TPtr MemberOverRenamingFlatMap(const TExprNode::TPtr& node, TExprCont
     }
 
     auto arg = maybeFlatMap.Cast().Lambda().Args().Arg(0);
+    if (arg.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct) {
+        return node;
+    }
+
     auto asStruct  = maybeFlatMap.Cast().Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
     if (!asStruct) {
         return node;
@@ -7181,6 +7206,20 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         throw yexception() << "Unknown failure kind: " << failureKind;
+    };
+
+    map["Unessential"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
+        YQL_ENSURE(node->Child(TCoUnessential::idx_AssumeAs)->IsComplete(), "AssumeAs argument of Unessential is expected to be complete expression");
+        return node;
+    };
+
+    map["DependsOn"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& optCtx) {
+        if (!optCtx.Types->NormalizeDependsOn) {
+            return node;
+        }
+
+        YQL_CLOG(DEBUG, Core) << "Drop non-inner DependsOn";
+        return node->HeadPtr();
     };
 
     // will be applied to any callable after all above

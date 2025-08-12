@@ -1,7 +1,7 @@
 #include "distconf.h"
+#include "distconf_statestorage_config_generator.h"
 
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
-
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>
@@ -34,11 +34,11 @@ namespace NKikimr::NStorage {
 
                 TGroupId groupId = TGroupId::Zero();
 
-                auto allocateGroup = [&](std::optional<TBridgePileId> bridgePileId) {
+                auto allocateGroup = [&](TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
                     AllocateStaticGroup(config, groupId, /*groupGeneration=*/ 1, TBlobStorageGroupType(species),
                         smConfig.GetGeometry(), smConfig.GetPDiskFilter(),
                         smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt, {}, {}, 0,
-                        nullptr, false, true, false, bridgePileId);
+                        nullptr, false, true, false, bridgePileId, bridgeProxyGroupId);
 
                     const auto& groups = config->GetBlobStorageConfig().GetServiceSet().GetGroups();
                     const auto& allocatedGroup = groups.at(groups.size() - 1);
@@ -47,6 +47,7 @@ namespace NKikimr::NStorage {
 
                 if (const auto& bridge = Cfg->BridgeConfig) {
                     auto *group = config->MutableBlobStorageConfig()->MutableServiceSet()->AddGroups();
+                    const TGroupId bridgeProxyGroupId = groupId;
                     groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetGroupID);
                     ++groupId;
                     group->SetGroupGeneration(1);
@@ -54,12 +55,12 @@ namespace NKikimr::NStorage {
                     const auto& piles = bridge->GetPiles();
                     for (int i = 0; i < piles.size(); ++i) {
                         prefix << "pile# " << i << ' ';
-                        allocateGroup(TBridgePileId::FromValue(i));
+                        allocateGroup(TBridgePileId::FromPileIndex(i), bridgeProxyGroupId);
                         groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::AddBridgeGroupIds);
                         ++groupId;
                     }
                 } else {
-                    allocateGroup(std::nullopt);
+                    allocateGroup(TBridgePileId(), std::nullopt);
                 }
             } catch (const TExConfigError& ex) {
                 return TStringBuilder() << "failed to allocate static group: " << ex.what() << ' ' << prefix.Str();
@@ -113,30 +114,13 @@ namespace NKikimr::NStorage {
             config->MutableStateStorageBoardConfig()->CopyFrom(ss);
             config->MutableSchemeBoardConfig()->CopyFrom(ss);
         } else if (!Cfg->DomainsConfig->StateStorageSize()) { // no StateStorage config, generate a new one
-            GenerateStateStorageConfig(config->MutableStateStorageConfig(), *config);
-            GenerateStateStorageConfig(config->MutableStateStorageBoardConfig(), *config);
-            GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config);
+            std::unordered_set<ui32> usedNodes;
+            GenerateStateStorageConfig(config->MutableStateStorageConfig(), *config, usedNodes);
+            GenerateStateStorageConfig(config->MutableStateStorageBoardConfig(), *config, usedNodes);
+            GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config, usedNodes);
         }
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
-
-        // generate initial cluster state, if needed
-        if (Cfg->BridgeConfig) {
-            auto *state = config->MutableClusterState();
-            state->SetGeneration(1);
-            auto *piles = state->MutablePerPileState();
-            for (size_t i = 0; i < Cfg->BridgeConfig->PilesSize(); ++i) {
-                piles->Add(NKikimrBridge::TClusterState::SYNCHRONIZED);
-            }
-
-            auto *history = config->MutableClusterStateHistory();
-            auto *entry = history->AddUnsyncedEntries();
-            entry->MutableClusterState()->CopyFrom(*state);
-            entry->SetOperationGuid(RandomNumber<ui64>());
-            for (size_t i = 0; i < Cfg->BridgeConfig->PilesSize(); ++i) {
-                entry->AddUnsyncedPiles(i);
-            }
-        }
 
         if (auto error = UpdateClusterState(config)) {
             return error;
@@ -152,7 +136,7 @@ namespace NKikimr::NStorage {
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid, i64 requiredSpace,
             NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
-            bool isSelfHealReasonDecommit, std::optional<TBridgePileId> bridgePileId) {
+            bool isSelfHealReasonDecommit, TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
         using TPDiskId = NBsController::TPDiskId;
 
         NKikimrConfig::TBlobStorageConfig *bsConfig = config->MutableBlobStorageConfig();
@@ -161,10 +145,10 @@ namespace NKikimr::NStorage {
         THashMap<ui32, TNodeLocation> nodeLocations;
         THashSet<ui32> allowedNodeIds;
         for (const auto& node : config->GetAllNodes()) {
-            nodeLocations.try_emplace(node.GetNodeId(), node.GetLocation());
-            const auto pfn = &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId;
-            if (bridgePileId && TBridgePileId::FromProto(&node, pfn) == *bridgePileId) {
-                allowedNodeIds.emplace(node.GetNodeId());
+            TNodeLocation location(node.GetLocation());
+            nodeLocations.try_emplace(node.GetNodeId(), location);
+            if (bridgePileId == ResolveNodePileId(location)) {
+                allowedNodeIds.insert(node.GetNodeId());
             }
         }
 
@@ -223,14 +207,14 @@ namespace NKikimr::NStorage {
 
             if (baseConfig->HasSettings()) {
                 const auto& settings = baseConfig->GetSettings();
-                if (settings.HasDefaultMaxSlots()) {
-                    defaultMaxSlots = settings.GetDefaultMaxSlots();
+                if (settings.DefaultMaxSlotsSize()) {
+                    defaultMaxSlots = settings.GetDefaultMaxSlots(0);
                 }
-                if (settings.HasPDiskSpaceColorBorder()) {
-                    pdiskSpaceColorBorder.emplace(settings.GetPDiskSpaceColorBorder());
+                if (settings.PDiskSpaceColorBorderSize()) {
+                    pdiskSpaceColorBorder.emplace(settings.GetPDiskSpaceColorBorder(0));
                 }
-                if (settings.HasPDiskSpaceMarginPromille()) {
-                    pdiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille();
+                if (settings.PDiskSpaceMarginPromilleSize()) {
+                    pdiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille(0);
                 }
             }
 
@@ -512,6 +496,11 @@ namespace NKikimr::NStorage {
         }
         sGroup->SetGroupGeneration(groupGeneration);
 
+        if (bridgeProxyGroupId) {
+            bridgeProxyGroupId->CopyToProto(sGroup, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
+        }
+        bridgePileId.CopyToProto(sGroup, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+
         TVDiskIdShort prev;
         NKikimrBlobStorage::TGroupInfo::TFailRealm *sRealm = nullptr;
         NKikimrBlobStorage::TGroupInfo::TFailRealm::TFailDomain *sDomain = nullptr;
@@ -586,101 +575,26 @@ namespace NKikimr::NStorage {
         });
     }
 
-    void TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig) {
-        std::map<std::optional<TBridgePileId>, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
-
+    bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
+            , const NKikimrBlobStorage::TStorageConfig& baseConfig, std::unordered_set<ui32>& usedNodes
+            , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig) {
+        std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
+        bool goodConfig = true;
         for (const auto& node : baseConfig.GetAllNodes()) {
-            std::optional<TBridgePileId> pileId = node.HasBridgePileId()
-                ? std::make_optional(TBridgePileId::FromProto(&node, &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId))
-                : std::nullopt;
-
             TNodeLocation location(node.GetLocation());
+            TBridgePileId pileId = ResolveNodePileId(location);
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
-
-        auto pickNodes = [](std::vector<std::tuple<ui32, TNodeLocation>>& nodes, size_t ringsCount, size_t nodesInRing) {
-            Y_ABORT_UNLESS(ringsCount * nodesInRing <= nodes.size());
-            auto comp = [](const auto& x, const auto& y) { return std::get<1>(x).GetRackId() < std::get<1>(y).GetRackId(); };
-            std::ranges::sort(nodes, comp);
-            std::vector<std::vector<ui32>> result;
-            result.resize(ringsCount);
-            THashSet<ui32> disabled;
-            auto iter = nodes.begin();
-            TNodeLocation location;
-            for(ui32 i : xrange(ringsCount)) {
-                std::vector<ui32> &ring = result[i];
-                while (ring.size() < nodesInRing) {
-                    ui32 nodeId = std::get<0>(*iter);
-                    location = std::get<1>(*iter);
-                    iter++;
-                    if (disabled.contains(nodeId)) {
-                        if (iter == nodes.end()) {
-                            iter = nodes.begin();
-                        }
-                        continue;
-                    }
-                    ring.push_back(nodeId);
-                    disabled.insert(nodeId);
-                }
-                while (iter != nodes.end() && std::get<1>(*iter).GetRackId() == location.GetRackId()) {
-                    ++iter;
-                }
-                if (iter == nodes.end()) {
-                    iter = nodes.begin();
-                }
-            }
-            return result;
-        };
-
         for (auto& [pileId, nodesByDataCenter] : nodes) {
-            size_t minNodesInDc = Max<size_t>();
-            for (auto& [_, v] : nodesByDataCenter) {
-                minNodesInDc = Min<size_t>(minNodesInDc, v.size());
-            }
-            const size_t datacenterCoeff = 1000 / nodesByDataCenter.size();
-            ui32 nodesInRing = minNodesInDc / datacenterCoeff + 1;
-
-            std::vector<std::vector<ui32>> rings;
-            const size_t maxNodesPerDataCenter = nodesByDataCenter.size() == 1 ? 8 : 3;
-            for (auto& [_, v] : nodesByDataCenter) {
-                size_t countToSelect = Min<size_t>(v.size(), maxNodesPerDataCenter);
-                if (v.size() < maxNodesPerDataCenter && nodesByDataCenter.size() > 1) {
-                    countToSelect = 1;
-                }
-                auto r = pickNodes(v, countToSelect, nodesInRing);
-                rings.insert(rings.end(), r.begin(), r.end());
-            }
-            auto *rg = ss->AddRingGroups();
-            if (pileId) {
-                pileId->CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
-            }
-            ui32 ringsCnt = rings.size();
-            ui32 nToSelect = 1;
-            if (ringsCnt <= 2) {
-                nToSelect = 1;
-            } else if (ringsCnt < 8) {
-                nToSelect = 3;
-            } else if (ringsCnt == 8) {
-                nToSelect = 5;
-            } else if (ringsCnt > 8) {
-                nToSelect = 9;
-            }
-            rg->SetNToSelect(nToSelect);
-            for (auto &nodes : rings) {
-                auto *ring = rg->AddRing();
-                for(auto nodeId : nodes) {
-                    ring->AddNode(nodeId);
-                }
-            }
+            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes, oldConfig);
+            generator.AddRingGroup(ss);
+            goodConfig &= generator.IsGoodConfig();
         }
+        return goodConfig;
     }
 
-    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {
-        if (UpdateBridgeConfig(config)) {
-            return true;
-        }
-        return false;
+    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config, bool& checkSyncersAfterCommit) {
+        return UpdateBridgeConfig(config, checkSyncersAfterCommit);
     }
 
 } // NKikimr::NStorage

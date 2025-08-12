@@ -223,6 +223,8 @@ common:
     to: /yql/reference/syntax/select/window.md
   - from: /yql/reference/ddl/create-index.md
     to: /yql/reference/syntax/create_table/secondary_index.md
+  - from: /yql/reference/syntax/alter_table/secondary_index.md
+    to: /yql/reference/syntax/alter_table/indexes.md
 
 # Security-related redirects
   - from: /cluster/access.md
@@ -464,3 +466,20 @@ en:
     to: /devops/deployment-options/manual/index.md
   - from: /maintenance/manual/cms.md
     to: /devops/deployment-options/manual/cms.md
+
+  - from: /public-materials/videos/2017.md
+    to: /public-materials/videos/2022.md
+  - from: /public-materials/videos/2018.md
+    to: /public-materials/videos/2022.md
+  - from: /public-materials/videos/2019.md
+    to: /public-materials/videos/2022.md
+  - from: /public-materials/videos/2020.md
+    to: /public-materials/videos/2022.md
+  - from: /public-materials/videos/2021.md
+    to: /public-materials/videos/2022.md
+  - from: /public-materials/publications/2021.md
+    to: /public-materials/publications/2023.md
+  - from: /public-materials/publications/2025.md
+    to: /public-materials/publications/2024.md
+  - from: /public-materials/podcasts.md
+    to: /public-materials/videos.md

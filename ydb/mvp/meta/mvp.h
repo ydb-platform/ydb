@@ -38,6 +38,7 @@ public:
     TString MetaDatabase;
     bool MetaCache = false;
     static TString MetaDatabaseTokenName;
+    static bool DbUserTokenSource;
 
     TMVP(int argc, char** argv);
     int Init();

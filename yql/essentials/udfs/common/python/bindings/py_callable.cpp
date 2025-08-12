@@ -188,7 +188,7 @@ private:
             TPyObjectPtr resultObj =
                     PyObject_CallObject(Function_.Get(), pyArgs.Get());
             if (!resultObj) {
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Failed to execute:\n" << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Failed to execute:\n" << GetLastErrorAsString()).c_str());
             }
 
             auto returnType = Inspector_.GetReturnType();
@@ -198,7 +198,7 @@ private:
 
             return FromPyObject(CastCtx_, returnType, resultObj.Get());
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Failed to cast arguments or result\n" << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Failed to cast arguments or result\n" << e.what()).c_str());
         }
     }
 

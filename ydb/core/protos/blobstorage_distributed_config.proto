@@ -12,7 +12,6 @@ message TNodeIdentifier {
     uint32 Port = 2;
     uint32 NodeId = 3;
     NActorsInterconnect.TNodeLocation Location = 4;
-    optional uint32 BridgePileId = 5;
 }
 
 message TStorageConfigMeta {
@@ -36,7 +35,7 @@ message TStorageConfig { // contents of storage metadata
     optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
     optional uint64 ExpectedStorageYamlVersion = 15;
     NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
-    NKikimrBridge.TClusterStateHistory ClusterStateHistory = 17; // history of unsynced state changes
+    NKikimrBridge.TClusterStateDetails ClusterStateDetails = 17; // history of unsynced state changes
 }
 
 message TPDiskMetadataRecord {
@@ -230,10 +229,29 @@ message TEvNodeConfigInvokeOnRoot {
         bool StateStorage = 3;
         bool StateStorageBoard = 4;
         bool SchemeBoard = 5;
+        optional bool DisableRing = 6;
     }
 
     message TGetStateStorageConfig {
         optional bool Recommended = 1;
+        optional bool PileupReplicas = 2;
+    }
+
+    message TSelfHealStateStorage {
+        optional uint32 WaitForConfigStep = 1;
+        optional bool ForceHeal = 2;
+        optional bool PileupReplicas = 3;
+    }
+
+    message TSelfHealNodesStateUpdate {
+        message TNodeState {
+            optional uint32 NodeId = 1;
+            optional uint32 State = 2;
+        }
+        optional bool EnableSelfHealStateStorage = 1;
+        optional uint32 WaitForConfigStep = 2;
+        repeated TNodeState NodesState = 3;
+        optional bool PileupReplicas = 4;
     }
 
     message TAdvanceGeneration
@@ -298,6 +316,8 @@ message TEvNodeConfigInvokeOnRoot {
         TStateStorageConfig ReconfigStateStorage = 12;
         TGetStateStorageConfig GetStateStorageConfig = 13;
         TNotifyBridgeSyncFinished NotifyBridgeSyncFinished = 14;
+        TSelfHealStateStorage SelfHealStateStorage = 15;
+        TSelfHealNodesStateUpdate SelfHealNodesStateUpdate = 19;
     }
 }
 
@@ -318,7 +338,6 @@ message TEvNodeConfigInvokeOnRootResult {
 
     message TQueryConfig {
         TStorageConfig Config = 1;
-        TStorageConfig CurrentProposedStorageConfig = 2;
     }
 
     message TFetchStorageConfig {
@@ -348,4 +367,9 @@ message TEvNodeWardenDynamicConfigPush {
     TStorageConfig Config = 1;
     bool NoQuorum = 2;
     TCacheUpdate CacheUpdate = 3;
+}
+
+message TConnectivityPayload {
+    TStorageConfig StorageConfig = 1; // storage config of a sender
+    optional uint32 BridgePileId = 2; // bridge pile id of a sender
 }

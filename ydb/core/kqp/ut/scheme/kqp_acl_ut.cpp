@@ -217,10 +217,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 primary key (id)
             ) WITH (STORE=%s);
         )", isOlap ? "COLUMN" : "ROW");
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(appConfig);
+        NKqp::TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
@@ -503,11 +502,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
     }
 
     Y_UNIT_TEST_QUAD(AclDml, UseSink, IsOlap) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
-        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(appConfig);
+        NKqp::TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
+        TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
@@ -628,11 +626,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
     }
 
     Y_UNIT_TEST_QUAD(AclRevoke, UseSink, IsOlap) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
-        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
-        TKikimrRunner kikimr(appConfig);
+        NKqp::TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
+        TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
@@ -776,13 +773,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
     }
 
     Y_UNIT_TEST_QUAD(AclTemporary, IsOlap, UseAdmin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = NKqp::TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false)
-            .SetEnableTempTables(true);
+        auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
         if (UseAdmin) {
             kikimr.GetTestClient().GrantConnect("user_write@builtin");
@@ -1047,6 +1041,89 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         driverWrite.Stop(true);
         driverRead.Stop(true);
+    }
+
+    Y_UNIT_TEST_QUAD(AclCreateTableAs, IsOlap, UseAdmin) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
+        auto settings = NKqp::TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        TKikimrRunner kikimr(settings);
+        if (UseAdmin) {
+            kikimr.GetTestClient().GrantConnect("user_write@builtin");
+            kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+        }
+
+        const TString UserWriteName = "user_write@builtin";
+        const TString UserReadName = "root@builtin";
+
+        AddPermissions(kikimr, "/Root", UserWriteName, {"ydb.deprecated.create_table"});
+
+        auto driverWriteConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken(UserWriteName)
+            .SetDatabase("/Root");
+        auto driverWrite = TDriver(driverWriteConfig);
+        auto clientWrite = NYdb::NQuery::TQueryClient(driverWrite);
+
+        auto sessionWrite = CreateSession(clientWrite);
+        auto sessionWriteOther = CreateSession(clientWrite);
+
+        auto driverReadConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken(UserReadName)
+            .SetDatabase("/Root");
+        auto driverRead = TDriver(driverReadConfig);
+        auto clientRead = NYdb::NQuery::TQueryClient(driverRead);
+
+        auto sessionRead = CreateSession(clientRead);
+
+        {
+            const TString queryWrite = Sprintf(R"(
+                CREATE TABLE `/Root/TestSimple` (
+                    id Uint64 NOT NULL,
+                    name String,
+                    primary key (id)
+                ) WITH (STORE=%s);
+            )", IsOlap ? "COLUMN" : "ROW");
+
+            auto result = sessionWrite.ExecuteQuery(queryWrite, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        
+        {
+            const TString queryWrite = Sprintf(R"(
+                CREATE TABLE `/Root/Test` (
+                    primary key (id)
+                ) WITH (STORE=%s)
+                AS SELECT 1 As id, "test" As name;
+            )", IsOlap ? "COLUMN" : "ROW");
+
+            auto result = sessionWrite.ExecuteQuery(queryWrite, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            // Writer can access table
+            auto result = sessionWriteOther.ExecuteQuery("SELECT * FROM `/Root/Test`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            // Another user can't access table
+            auto result = sessionRead.ExecuteQuery("SELECT * FROM `/Root/Test`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+        }
+
+        AddPermissions(kikimr, "/Root", UserReadName, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+
+        {
+            auto result = sessionRead.ExecuteQuery("SELECT * FROM `/Root/Test`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
     }
 }
 

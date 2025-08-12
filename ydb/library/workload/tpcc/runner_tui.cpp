@@ -3,6 +3,7 @@
 #include "log_backend.h"
 #include "runner.h"
 #include "logs_scroller.h"
+#include "util.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/component_base.hpp>
@@ -11,8 +12,9 @@ using namespace ftxui;
 
 namespace NYdb::NTPCC {
 
-TRunnerTui::TRunnerTui(TLogBackendWithCapture& logBacked, std::shared_ptr<TRunDisplayData> data)
-    : LogBackend(logBacked)
+TRunnerTui::TRunnerTui(std::shared_ptr<TLog>& log, TLogBackendWithCapture& logBacked, std::shared_ptr<TRunDisplayData> data)
+    : Log(log)
+    , LogBackend(logBacked)
     , DataToDisplay(std::move(data))
     , Screen(ScreenInteractive::Fullscreen())
 {
@@ -197,19 +199,27 @@ Element TRunnerTui::BuildUpperPart() {
         }
     }
 
-    // Pad the shorter column with empty lines
-    while (leftThreadElements.size() < rightThreadElements.size()) {
-        leftThreadElements.push_back(text(""));
-    }
-    while (rightThreadElements.size() < leftThreadElements.size()) {
-        rightThreadElements.push_back(text(""));
-    }
+    Element threadSection;
+    if (threadCount > 1) {
+        // Pad the shorter column with empty lines
+        while (leftThreadElements.size() < rightThreadElements.size()) {
+            leftThreadElements.push_back(text(""));
+        }
+        while (rightThreadElements.size() < leftThreadElements.size()) {
+            rightThreadElements.push_back(text(""));
+        }
 
-    auto threadSection = window(text("TPC-C client state"), hbox({
-        vbox(leftThreadElements) | flex,
-        separator(),
-        vbox(rightThreadElements) | flex
-    }));
+        threadSection = window(text("TPC-C client state"), hbox({
+            vbox(leftThreadElements) | flex,
+            separator(),
+            vbox(rightThreadElements) | flex
+        }));
+    } else {
+        // a very rare case when we have just 1 thread
+        threadSection = window(text("TPC-C client state"), hbox({
+            vbox(leftThreadElements) | flex
+        }));
+    }
 
     return vbox({
         topSection,
@@ -218,11 +228,17 @@ Element TRunnerTui::BuildUpperPart() {
 }
 
 Component TRunnerTui::BuildComponent() {
-    // Main layout
-    return Container::Vertical({
-        Renderer([=]{ return BuildUpperPart(); }),
-        LogsScroller(LogBackend),
-    });
+    try {
+        // Main layout
+        return Container::Vertical({
+            Renderer([=]{ return BuildUpperPart(); }),
+            LogsScroller(LogBackend),
+        });
+    } catch (const std::exception& ex) {
+        LOG_E("Exception in TUI: " << ex.what());
+        RequestStop();
+        return Renderer([] { return filler(); });
+    }
 }
 
 } // namespace NYdb::NTPCC

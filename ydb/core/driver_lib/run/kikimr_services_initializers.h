@@ -415,6 +415,12 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TDeduplicationGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
+public:
+    TDeduplicationGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TCompPrioritiesInitializer: public IKikimrServicesInitializer {
 public:
     TCompPrioritiesInitializer(const TKikimrRunConfig& runConfig);
@@ -430,6 +436,12 @@ public:
 class TGeneralCachePortionsMetadataInitializer: public IKikimrServicesInitializer {
 public:
     TGeneralCachePortionsMetadataInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TGeneralCacheColumnDataInitializer: public IKikimrServicesInitializer {
+public:
+    TGeneralCacheColumnDataInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 

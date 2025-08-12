@@ -9,6 +9,10 @@ namespace NKikimr::NBsController {
     struct TAllocator;
 
     class TGroupMapper::TImpl : TNonCopyable {
+        // Note: absolute scores do not matter, only their relations greater / less.
+        static inline TControlWrapper GroupSizeInUnitsLargerThanPDiskPenalty{10, -1000, 1000};
+        static inline TControlWrapper GroupSizeInUnitsSmallerThanPDiskPenalty{20, -1000, 1000};
+
         struct TPDiskInfo : TPDiskRecord {
             TPDiskLayoutPosition Position;
             bool Matching;
@@ -16,9 +20,9 @@ namespace NKikimr::NBsController {
             ui32 SkipToNextRealmGroup;
             ui32 SkipToNextRealm;
             ui32 SkipToNextDomain;
-            std::optional<TBridgePileId> BridgePileId;
+            TBridgePileId BridgePileId;
 
-            TPDiskInfo(const TPDiskRecord& pdisk, TPDiskLayoutPosition position, std::optional<TBridgePileId> bridgePileId)
+            TPDiskInfo(const TPDiskRecord& pdisk, TPDiskLayoutPosition position, TBridgePileId bridgePileId)
                 : TPDiskRecord(pdisk)
                 , Position(std::move(position))
                 , BridgePileId(bridgePileId)
@@ -50,12 +54,16 @@ namespace NKikimr::NBsController {
                 ui32 pu = SlotSizeInUnits ?: 1;
                 if (vu > pu) {
                     // double-unit vdisk occupies two single pdisk slots
-                    penalty += 10;
+                    penalty += TImpl::GroupSizeInUnitsLargerThanPDiskPenalty;
                 } else if (vu < pu) {
                     // single-unit vdisk occupies double-unit pdisk slot (storage waste)
-                    penalty += 20;
+                    penalty += TImpl::GroupSizeInUnitsSmallerThanPDiskPenalty;
                 }
-                return double(NumSlots) / MaxSlots + penalty;
+                if (!MaxSlots) {
+                    return NumSlots + penalty;
+                } else {
+                    return double(NumSlots) / MaxSlots + penalty;
+                }
             }
         };
 
@@ -87,7 +95,7 @@ namespace NKikimr::NBsController {
             const i64 RequiredSpace;
             const bool RequireOperational;
             TForbiddenPDisks ForbiddenDisks;
-            const std::optional<TBridgePileId> BridgePileId;
+            const TBridgePileId BridgePileId;
             THashMap<ui32, unsigned> LocalityFactor;
             TGroupLayout GroupLayout;
             ui32 GroupSizeInUnits;
@@ -95,7 +103,7 @@ namespace NKikimr::NBsController {
 
             TDiskManager(TImpl& self, const TGroupGeometryInfo& geom, i64 requiredSpace, bool requireOperational,
                     TForbiddenPDisks forbiddenDisks, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, ui32 groupSizeInUnits,
-                    std::optional<TBridgePileId> bridgePileId)
+                    TBridgePileId bridgePileId)
                 : Self(self)
                 , Topology(geom.GetType(), geom.GetNumFailRealms(), geom.GetNumFailDomainsPerFailRealm(), geom.GetNumVDisksPerFailDomain(), true)
                 , RequiredSpace(requiredSpace)
@@ -175,7 +183,7 @@ namespace NKikimr::NBsController {
                 if (pdisk.SpaceAvailable < RequiredSpace) {
                     return false;
                 }
-                if (BridgePileId && pdisk.BridgePileId != BridgePileId) {
+                if (pdisk.BridgePileId != BridgePileId) {
                     return false;
                 }
                 if (auto slotsNeeded = i32(TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, pdisk.SlotSizeInUnits)); pdisk.FreeSlots() < slotsNeeded) {
@@ -865,7 +873,23 @@ namespace NKikimr::NBsController {
         TImpl(TGroupGeometryInfo geom, bool randomize)
             : Geom(std::move(geom))
             , Randomize(randomize)
-        {}
+        {
+            static bool controlsRegistered = false;
+            if (controlsRegistered) {
+                return;
+            }
+
+            TActorSystem *actorSystem = TlsActivationContext ? TActivationContext::ActorSystem() : nullptr;
+            if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
+                const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
+
+                icb->RegisterSharedControl(GroupSizeInUnitsLargerThanPDiskPenalty,
+                    "GroupMapperControls.GroupSizeInUnitsLargerThanPDiskPenalty");
+                icb->RegisterSharedControl(GroupSizeInUnitsSmallerThanPDiskPenalty,
+                    "GroupMapperControls.GroupSizeInUnitsSmallerThanPDiskPenalty");
+                controlsRegistered = true;
+            }
+        }
 
         bool RegisterPDisk(const TPDiskRecord& pdisk) {
             // calculate disk position
@@ -957,7 +981,7 @@ namespace NKikimr::NBsController {
         bool AllocateGroup(ui32 groupId, TGroupDefinition& groupDefinition, TGroupMapper::TGroupConstraintsDefinition& constraints,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid,
                 ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational,
-                std::optional<TBridgePileId> bridgePileId, TString& error) {
+                TBridgePileId bridgePileId, TString& error) {
             if (Dirty) {
                 std::sort(PDiskByPosition.begin(), PDiskByPosition.end());
                 Dirty = false;
@@ -1066,7 +1090,7 @@ namespace NKikimr::NBsController {
         }
 
         std::optional<TPDiskId> TargetMisplacedVDisk(ui32 groupId, TGroupDefinition& groupDefinition, TVDiskIdShort vdisk,
-                TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, ui32 groupSizeInUnits, std::optional<TBridgePileId> bridgePileId,
+                TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, ui32 groupSizeInUnits, TBridgePileId bridgePileId,
                 TString& error) {
             if (Dirty) {
                 std::sort(PDiskByPosition.begin(), PDiskByPosition.end());
@@ -1164,14 +1188,14 @@ namespace NKikimr::NBsController {
     bool TGroupMapper::AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
             const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid,
             ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational,
-            std::optional<TBridgePileId> bridgePileId, TString& error) {
+            TBridgePileId bridgePileId, TString& error) {
         return Impl->AllocateGroup(groupId, group, constraints, replacedDisks, std::move(forbid),
             groupSizeInUnits, requiredSpace,
             requireOperational, bridgePileId, error);
     }
 
     bool TGroupMapper::AllocateGroup(ui32 groupId, TGroupDefinition& group, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
-            TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, std::optional<TBridgePileId> bridgePileId,
+            TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TBridgePileId bridgePileId,
             TString& error) {
         TGroupMapper::TGroupConstraintsDefinition emptyConstraints;
         return AllocateGroup(groupId, group, emptyConstraints, replacedDisks, std::move(forbid),
@@ -1185,7 +1209,7 @@ namespace NKikimr::NBsController {
 
     std::optional<TPDiskId> TGroupMapper::TargetMisplacedVDisk(TGroupId groupId, TGroupMapper::TGroupDefinition& group,
             TVDiskIdShort vdisk, TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational,
-            std::optional<TBridgePileId> bridgePileId, TString& error) {
+            TBridgePileId bridgePileId, TString& error) {
         return Impl->TargetMisplacedVDisk(groupId.GetRawId(), group, vdisk, std::move(forbid), groupSizeInUnits, requiredSpace,
             requireOperational, bridgePileId, error);
     }

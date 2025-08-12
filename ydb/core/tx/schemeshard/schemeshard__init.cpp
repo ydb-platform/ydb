@@ -1,4 +1,4 @@
-#include "schemeshard__data_erasure_manager.h"
+#include "schemeshard__shred_manager.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for PQGroupReserve
 
@@ -25,6 +25,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TVector<ui64> ImportsToResume;
     THashMap<TPathId, TVector<TPathId>> CdcStreamScansToResume;
     TVector<TPathId> RestoreTablesToUnmark;
+    TVector<ui64> IncrementalBackupsToResume;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -94,7 +95,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                        TStepId, TTxId, TStepId, TTxId,
                        TString, TTxId,
                        ui64, ui64, ui64,
-                       TString> TPathRec;
+                       TString, TActorId> TPathRec;
     typedef TDeque<TPathRec> TPathRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -112,7 +113,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::DirAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
-            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId_Deprecated>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorIdRaw>()
         );
     }
 
@@ -138,7 +140,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         TPathElement::TPtr path = new TPathElement(pathId, parentPathId, domainId, name, owner);
 
-        TString tempDirOwnerActorId;
+        TString tempDirOwnerActorId_Deprecated;
         std::tie(
             std::ignore, //pathId
             std::ignore, //parentPathId
@@ -154,14 +156,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->DirAlterVersion,
             path->UserAttrs->AlterVersion,
             path->ACLVersion,
-            tempDirOwnerActorId) = rec;
+            tempDirOwnerActorId_Deprecated,
+            path->TempDirOwnerActorId) = rec;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         if (path->StepDropped) {
             path->PathState = TPathElement::EPathState::EPathStateNotExist;
         }
 
-        path->TempDirOwnerActorId.Parse(tempDirOwnerActorId.c_str(), tempDirOwnerActorId.size());
+        if (!path->TempDirOwnerActorId) {
+            path->TempDirOwnerActorId.Parse(tempDirOwnerActorId_Deprecated.c_str(), tempDirOwnerActorId_Deprecated.size());
+        }
 
         return path;
     }
@@ -659,6 +664,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     rowSet.GetValue<Schema::MigratedShardsToDelete::ShardOwnerId>(),
                     rowSet.GetValue<Schema::MigratedShardsToDelete::ShardLocalIdx>()
                 );
+                shardsToDelete.emplace_back(shardIdx);
+
+                if (!rowSet.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    bool LoadSystemShardsToDelete(NIceDb::TNiceDb& db, TShardsToDeleteRows& shardsToDelete) const {
+        {
+            auto rowSet = db.Table<Schema::SystemShardsToDelete>().Range().Select();
+            if (!rowSet.IsReady()) {
+                return false;
+            }
+            while (!rowSet.EndOfSet()) {
+                const auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::SystemShardsToDelete::ShardIdx>());
                 shardsToDelete.emplace_back(shardIdx);
 
                 if (!rowSet.Next()) {
@@ -1880,9 +1904,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         }
 
-        // Read Running data erasure for tenants
+        // Read Running shred for tenants
         {
-            if (!Self->DataErasureManager->Restore(db)) {
+            if (!Self->ShredManager->Restore(db)) {
                 return false;
             }
         }
@@ -3840,6 +3864,23 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read system shards to delete
+        {
+            TShardsToDeleteRows shardsToDelete;
+            if (!LoadSystemShardsToDelete(db, shardsToDelete)) {
+                return false;
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TTxInit for SystemShardToDelete"
+                             << ", read records: " << shardsToDelete.size()
+                             << ", at schemeshard: " << Self->TabletID());
+
+            for (auto& rec: shardsToDelete) {
+                OnComplete.DeleteSystemShard(std::get<0>(rec));
+            }
+        }
+
         // Read backup settings
         {
             TBackupSettingsRows backupSettings;
@@ -4630,6 +4671,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TIndexBuildInfo::FillFromRow(rowset, &buildInfo);
                     });
 
+                    if (!Self->EnableVectorIndex) { // prevent build index from progress
+                        buildInfo->IsBroken = true;
+                    }
+
                     // Note: broken build are also added to IndexBuilds
                     Y_ASSERT(!Self->IndexBuilds.contains(buildInfo->Id));
                     Self->IndexBuilds[buildInfo->Id] = buildInfo;
@@ -5261,14 +5306,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             if (op.HasFullBackupTrimmedName()) {
                                 TString fullBackupName = op.GetFullBackupTrimmedName() + "_full";
                                 TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
-                                
+
                                 // Set state for each table in the full backup
                                 for (const auto& tablePath : op.GetTablePathList()) {
                                     TPath originalTablePath = TPath::Resolve(tablePath, Self);
                                     if (originalTablePath.IsResolved()) {
                                         TString tableName = originalTablePath.LeafName();
                                         TString fullBackupTablePath = fullBackupPath + "/" + tableName;
-                                        
+
                                         TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
                                         if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
                                             auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
@@ -5282,14 +5327,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
                                 TString incrBackupName = trimmedIncrName + "_incremental";
                                 TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
-                                
+
                                 // Set state for each table in the incremental backup
                                 for (const auto& tablePath : op.GetTablePathList()) {
                                     TPath originalTablePath = TPath::Resolve(tablePath, Self);
                                     if (originalTablePath.IsResolved()) {
                                         TString tableName = originalTablePath.LeafName();
                                         TString incrBackupTablePath = incrBackupPath + "/" + tableName;
-                                        
+
                                         TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
                                         if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
                                             auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);
@@ -5339,6 +5384,69 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             << ", at schemeshard: " << Self->TabletID());
                     
                     OnComplete.Send(Self->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
+                }
+            }
+        }
+
+        // Read incremental backups
+        {
+            {
+                auto rowset = db.Table<Schema::IncrementalBackups>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    ui64 id = rowset.GetValue<Schema::IncrementalBackups::Id>();
+                    auto domainPathId = TPathId(rowset.GetValueOrDefault<Schema::IncrementalBackups::DomainPathOwnerId>(selfId),
+                                                rowset.GetValue<Schema::IncrementalBackups::DomainPathId>());
+
+                    TIncrementalBackupInfo::TPtr backupInfo = new TIncrementalBackupInfo(id, domainPathId);
+
+                    backupInfo->State = static_cast<TIncrementalBackupInfo::EState>(rowset.GetValue<Schema::IncrementalBackups::State>());
+
+                    backupInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::IncrementalBackups::StartTime>());
+                    backupInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::IncrementalBackups::EndTime>());
+                    if (rowset.HaveValue<Schema::IncrementalBackups::UserSID>()) {
+                        backupInfo->UserSID = rowset.GetValue<Schema::IncrementalBackups::UserSID>();
+                    }
+
+                    Self->IncrementalBackups[id] = backupInfo;
+
+                    if (!backupInfo->IsFinished()) {
+                        IncrementalBackupsToResume.push_back(backupInfo->Id);
+                    }
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            {
+                auto rowset = db.Table<Schema::IncrementalBackupItems>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    ui64 id = rowset.GetValue<Schema::IncrementalBackupItems::Id>();
+                    Y_VERIFY_S(Self->IncrementalBackups.contains(id), "Incremental backup is not found"
+                               << ": id# " << id);
+
+                    TIncrementalBackupInfo::TPtr info = Self->IncrementalBackups.at(id);
+
+                    TPathId pathId = TPathId(rowset.GetValue<Schema::IncrementalBackupItems::PathOwnerId>(),
+                                             rowset.GetValue<Schema::IncrementalBackupItems::PathId>());
+
+                    auto& item = info->Items[pathId];
+
+                    item.State = static_cast<TIncrementalBackupInfo::TItem::EState>(rowset.GetValue<Schema::IncrementalBackupItems::State>());
+                    item.PathId = pathId;
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
                 }
             }
         }
@@ -5405,6 +5513,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .TablesToClean = std::move(TablesToClean),
             .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
             .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
+            .IncrementalBackupIds = std::move(IncrementalBackupsToResume),
         });
     }
 };

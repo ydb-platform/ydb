@@ -409,4 +409,102 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
         .Done();
 }
 
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExprBase node, TExprContext& ctx) const {
+    const auto ytMap = node.Cast<TYtMap>();
+
+    {
+        static const char optName[] = "KeepPruneKeysOnInputTables";
+        if (!IsOptimizerEnabled<optName>(*State_->Types) || IsOptimizerDisabled<optName>(*State_->Types)) {
+            // Try remove PruneKeys over Input table
+            const auto pruneKeys = ytMap.Mapper().Body().Maybe<TCoPruneKeysBase>();
+
+            if (pruneKeys) {
+                auto identityLambda = MakeIdentityLambda(node.Pos(), ctx);
+                return Build<TYtMap>(ctx, node.Pos())
+                    .InitFrom(ytMap)
+                    .Mapper(identityLambda)
+                .Done();
+            }
+        }
+    }
+
+    const auto flatMap = ytMap.Mapper().Body().Maybe<TCoFlatMapBase>();
+    if (!flatMap) {
+        return node;
+    }
+
+    auto ytMapInput = ytMap.Mapper().Args().Arg(0).Ptr();
+    auto flatMapInput = flatMap.Cast().Input().Ptr();
+
+    auto maybePruneKeys = flatMap.Cast().Input().Maybe<TCoPruneKeysBase>();
+    if (maybePruneKeys) {
+        flatMapInput = maybePruneKeys.Cast().Input().Ptr();
+    }
+
+    if (flatMapInput != ytMapInput) {
+        return node;
+    }
+
+    auto flatMapLambda = flatMap.Cast().Lambda();
+    if (!IsFilterFlatMap(flatMapLambda)) {
+        return node;
+    }
+
+    auto row = flatMapLambda.Args().Arg(0).Ptr();
+    auto predicate = flatMapLambda.Body().Ref().ChildPtr(TCoConditionalValueBase::idx_Predicate);
+
+    TNodeSet banned;
+    VisitExpr(predicate, [&](const TExprNode::TPtr& node) {
+        if (TYtOutput::Match(node.Get())) {
+            // Prevent ReplaceUnessentials to go deeper than current operation
+            banned.insert(node.Get());
+            return false;
+        }
+        return true;
+    });
+
+    auto newPredicate = ReplaceUnessentials(predicate, row, banned, ctx);
+    if (newPredicate == predicate) {
+        return node;
+    }
+
+    auto newFilter = ctx.ChangeChild(flatMapLambda.Body().Ref(), TCoConditionalValueBase::idx_Predicate, std::move(newPredicate));
+    auto newFlatMapLambda = ctx.ChangeChild(flatMapLambda.Ref(), TCoLambda::idx_Body, std::move(newFilter));
+
+    auto newInputLambda = MakeIdentityLambda(node.Pos(), ctx);
+    if (maybePruneKeys) {
+        auto pruneKeys = maybePruneKeys.Cast();
+        newInputLambda = ctx.Builder(node.Pos())
+            .Lambda()
+                .Param({"stream"})
+                .Callable(TCoPruneAdjacentKeys::Match(pruneKeys.Raw()) ? "PruneAdjacentKeys" : "PruneKeys")
+                    .Arg(0, "stream")
+                    .Add(1, pruneKeys.Extractor().Ptr())
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    return Build<TYtMap>(ctx, node.Pos())
+        .InitFrom(ytMap)
+        .Mapper<TCoLambda>()
+            .Args({"stream"})
+            .Body<TCoFlatMapBase>()
+                .CallableName(flatMap.Ref().Content())
+                .Input<TExprApplier>()
+                    .Apply(TCoLambda(newInputLambda))
+                    .With(0, "stream")
+                .Build()
+                .Lambda<TCoLambda>()
+                    .Args({"item"})
+                    .Body<TExprApplier>()
+                        .Apply(TCoLambda(newFlatMapLambda))
+                        .With(0, "item")
+                    .Build()
+                .Build()
+            .Build()
+        .Build()
+        .Done();
+}
+
 }  // namespace NYql

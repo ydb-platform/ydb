@@ -64,6 +64,10 @@ inputs:
     description: "Custom branch name required when workflow branch != checkout branch"
     type: string
     required: false
+  add_vcs_info:
+    type: boolean
+    default: false
+    description: "add ya make vars with git info"
 
 outputs:
   success:
@@ -186,7 +190,12 @@ runs:
           git checkout $ORIGINAL_HEAD
           YA_MAKE_TARGET=.
         else
-          YA_MAKE_TARGET="${{ inputs.build_target }}"
+          YA_MAKE_TARGET=""
+          for TARGET in ${{ inputs.build_target }}; do
+             if [ -e $TARGET ]; then
+                YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
+             fi
+          done
         fi
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
@@ -289,6 +298,14 @@ runs:
         else
           BRANCH_NAME="${{ inputs.custom_branch_name }}"
         fi
+
+        if [[ "${{inputs.add_vcs_info}}" == "true" ]]; then
+          params+=(
+            -DGIT_BRANCH=$BRANCH_NAME
+            -DGIT_COMMIT_SHA=$ORIGINAL_HEAD
+          )
+        fi
+
         echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
         echo "BRANCH_NAME is set to $BRANCH_NAME"
 
@@ -468,6 +485,12 @@ runs:
           fi
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
+            # Set PR number only if it exists (for pull request events)
+            PR_ARG=""
+            if [ -n "${{ github.event.number }}" ]; then
+              PR_ARG="--pr_number ${{ github.event.number }}"
+            fi
+            
             GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
               --summary_links "$SUMMARY_LINKS" \
               --public_dir "$PUBLIC_DIR" \
@@ -480,6 +503,8 @@ runs:
               --is_test_result_ignored $IS_TEST_RESULT_IGNORED \
               --comment_color_file summary_color.txt \
               --comment_text_file summary_text.txt \
+              $PR_ARG \
+              --workflow_run_id "${{ github.run_id }}" \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
           fi
 

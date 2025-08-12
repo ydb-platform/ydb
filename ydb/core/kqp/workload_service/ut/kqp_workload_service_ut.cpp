@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
         auto settings = TQueryRunnerSettings().HangUpDuringExecution(true);
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings);
-        ydb->WaitQueryExecution(hangingRequest);        
+        ydb->WaitQueryExecution(hangingRequest);
 
         auto delayedRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings);
         TSampleQueries::CheckCancelled(hangingRequest.GetResult());
@@ -296,7 +296,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
         // Delay request
         auto result = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().ExecutionExpected(false));
-        ydb->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 0});
+        ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 0});
 
         // Free load
         ydb->ContinueQueryExecution(result);
@@ -533,7 +533,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
 
         // Wait pool change
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));  // Force pool update
-        ydb->WaitPoolHandlersCount(2);
+        ydb->WaitPoolHandlersCount(1);
 
         // Check that pool using tables
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
@@ -561,7 +561,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
 
         // Wait pool change
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));  // Force pool update
-        ydb->WaitPoolHandlersCount(2);
+        ydb->WaitPoolHandlersCount(1);
 
         // Check that pool is not using tables
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().HangUpDuringExecution(true));
@@ -762,7 +762,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     }
 
     void WaitForSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
-        ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier success", [ydb, settings](TString& errorString) {
+        ydb->WaitFor(TDuration::Seconds(20), "Resource pool classifier success", [ydb, settings](TString& errorString) {
             auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
 
             errorString = result.GetIssues().ToOneLineString();
@@ -1655,5 +1655,56 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
         }
     }
 }
+
+Y_UNIT_TEST_SUITE(DefaultPoolSettings) {
+    Y_UNIT_TEST(TestResourcePoolsSysViewFilters) {
+        NKikimrConfig::TWorkloadManagerConfig config;
+        config.SetConcurrentQueryLimit(10);
+        config.SetQueueSize(100);
+
+        auto ydb = TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(true)
+            .WorkloadManagerConfig(config)
+            .Create();
+
+        const auto& dedicatedTenant = ydb->GetSettings().GetDedicatedTenantName();
+
+        auto settings = TQueryRunnerSettings()
+            .PoolId("")
+            .NodeIndex(1);
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pools` ORDER BY Name ASC
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dedicatedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "default");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 10);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 100);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+    }
+}
+
+
 
 }  // namespace NKikimr::NKqp

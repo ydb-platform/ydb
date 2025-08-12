@@ -191,6 +191,25 @@ private:
     TSet<TString> DisabledOpts;
 };
 
+class TKqpPeepholeNewOperatorTransformer : public TOptimizeTransformerBase {
+public:
+    TKqpPeepholeNewOperatorTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
+        : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+    {
+#define HNDL(name) "KqpPeepholeNewOperator-"#name, Hndl(&TKqpPeepholeNewOperatorTransformer::name)
+        if (config->UseDqHashCombine.Get().GetOrElse(false)) {
+            AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashCombiner));
+        }
+#undef HNDL
+    }
+
+    TMaybeNode<TExprBase> RewriteWideCombinerToDqHashCombiner(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteWideCombiner(node, ctx);
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+};
+
 class TKqpPeepholeFinalTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPeepholeFinalTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
@@ -224,7 +243,9 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
         pipeline->Add(new TKqpPeepholeFinalTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeFinal");
     }
 
-    void AfterOptimize(TTransformationPipeline*) const override {}
+    void AfterOptimize(TTransformationPipeline* pipeline) const override {
+        pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+    }
 private:
     const TKikimrConfiguration::TPtr Config;
 };

@@ -3,6 +3,13 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+namespace NKikimr::NOlap {
+class TPortionInfo;
+namespace NReader {
+class TReadMetadataBase;
+}
+}
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 class TReplaceKeyAdapter {
@@ -11,13 +18,20 @@ private:
     NArrow::TSimpleRow Value;
 
 public:
+    static TReplaceKeyAdapter BuildStart(const TPortionInfo& portion, const TReadMetadataBase& readMetadata);
+    static TReplaceKeyAdapter BuildFinish(const TPortionInfo& portion, const TReadMetadataBase& readMetadata);
+
     const NArrow::TSimpleRow& GetValue() const {
         return Value;
     }
 
-    TReplaceKeyAdapter(const NArrow::TSimpleRow& rk, const bool reverse)
+    NArrow::TSimpleRow CopyValue() const {
+        return Value;
+    }
+
+    explicit TReplaceKeyAdapter(NArrow::TSimpleRow&& rk, const bool reverse)
         : Reverse(reverse)
-        , Value(rk) {
+        , Value(std::move(rk)) {
     }
 
     std::partial_ordering Compare(const TReplaceKeyAdapter& item) const;

@@ -221,7 +221,7 @@ void InitViewerStorageUsageJsonHandler(TJsonHandlers &handlers) {
 }
 
 void InitViewerClusterJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/cluster", new TJsonHandler<TJsonCluster>(TJsonCluster::GetSwagger()), 5);
+    handlers.AddHandler("/viewer/cluster", new TJsonHandler<TJsonCluster>(TJsonCluster::GetSwagger()), 6);
 }
 
 void InitViewerLabeledCountersJsonHandler(TJsonHandlers &handlers) {
@@ -261,7 +261,7 @@ void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 16);
+    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 18);
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {

@@ -10,9 +10,9 @@
 
 #include "bg_tasks/events/local.h"
 #include "blobs_action/events/delete_blobs.h"
+#include "common/path_id.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
-#include "tablet/ext_tx_base.h"
 #include "data_sharing/destination/events/control.h"
 #include "data_sharing/destination/events/transfer.h"
 #include "data_sharing/manager/sessions.h"
@@ -27,8 +27,8 @@
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
+#include "tablet/ext_tx_base.h"
 #include "transactions/tx_controller.h"
-#include "common/path_id.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/events.h>
@@ -36,12 +36,13 @@
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/service.h>
@@ -295,6 +296,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
     void Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
+    void Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
@@ -453,6 +455,7 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
             HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
+            HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
 
             default:
@@ -493,7 +496,6 @@ private:
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
 
-    ui64 OwnerPathId = 0;
     ui64 StatsReportRound = 0;
     TString OwnerPath;
 
@@ -508,6 +510,7 @@ private:
     TActorId ResourceSubscribeActor;
     TActorId BufferizationPortionsWriteActorId;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
+    NBackgroundTasks::TControlInterfaceContainer<NOlap::NColumnFetching::TColumnDataManager> ColumnDataManager;
 
     TActorId StatsReportPipe;
     std::vector<TActorId> ActorsToStop;

@@ -247,8 +247,8 @@ public:
     TRuntimeNode FromBlocks(TRuntimeNode flow);
     TRuntimeNode WideFromBlocks(TRuntimeNode flow);
     TRuntimeNode ListFromBlocks(TRuntimeNode list);
-    TRuntimeNode WideSkipBlocks(TRuntimeNode flow, TRuntimeNode count);
-    TRuntimeNode WideTakeBlocks(TRuntimeNode flow, TRuntimeNode count);
+    TRuntimeNode WideSkipBlocks(TRuntimeNode stream, TRuntimeNode count);
+    TRuntimeNode WideTakeBlocks(TRuntimeNode stream, TRuntimeNode count);
     TRuntimeNode WideTopBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
     TRuntimeNode WideTopSortBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
     TRuntimeNode WideSortBlocks(TRuntimeNode flow, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
@@ -408,7 +408,7 @@ public:
     TRuntimeNode SkipNullElements(TRuntimeNode list, const TArrayRef<const ui32>& elements);
 
     TRuntimeNode ExpandMap(TRuntimeNode flow, const TExpandLambda& handler);
-    TRuntimeNode WideMap(TRuntimeNode flow, const TWideLambda& handler);
+    TRuntimeNode WideMap(TRuntimeNode flowOrStream, const TWideLambda& handler);
     TRuntimeNode NarrowMap(TRuntimeNode flow, const TNarrowLambda& handler);
     TRuntimeNode NarrowFlatMap(TRuntimeNode flow, const TNarrowLambda& handler);
     TRuntimeNode NarrowMultiMap(TRuntimeNode flow, const TWideLambda& handler);

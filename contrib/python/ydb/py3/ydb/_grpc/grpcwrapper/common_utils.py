@@ -33,6 +33,8 @@ except ImportError:
     from contrib.ydb.public.api.protos import ydb_topic_pb2, ydb_issue_message_pb2
 
 from ... import issues, connection
+from ...settings import BaseRequestSettings
+from ..._constants import DEFAULT_LONG_STREAM_TIMEOUT
 
 
 class IFromProto(abc.ABC):
@@ -130,7 +132,7 @@ class SyncToAsyncIterator:
 
 class IGrpcWrapperAsyncIO(abc.ABC):
     @abc.abstractmethod
-    async def receive(self) -> Any:
+    async def receive(self, timeout: Optional[int] = None) -> Any:
         ...
 
     @abc.abstractmethod
@@ -160,6 +162,13 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         self._stream_call = None
         self._wait_executor = None
 
+        self._stream_settings: BaseRequestSettings = (
+            BaseRequestSettings()
+            .with_operation_timeout(DEFAULT_LONG_STREAM_TIMEOUT)
+            .with_cancel_after(DEFAULT_LONG_STREAM_TIMEOUT)
+            .with_timeout(DEFAULT_LONG_STREAM_TIMEOUT)
+        )
+
     def __del__(self):
         self._clean_executor(wait=False)
 
@@ -187,6 +196,7 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
             requests_iterator,
             stub,
             method,
+            settings=self._stream_settings,
         )
         self._stream_call = stream_call
         self.from_server_grpc = stream_call.__aiter__()
@@ -195,14 +205,29 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         requests_iterator = AsyncQueueToSyncIteratorAsyncIO(self.from_client_grpc)
         self._wait_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
-        stream_call = await to_thread(driver, requests_iterator, stub, method, executor=self._wait_executor)
+        stream_call = await to_thread(
+            driver,
+            requests_iterator,
+            stub,
+            method,
+            executor=self._wait_executor,
+            settings=self._stream_settings,
+        )
         self._stream_call = stream_call
         self.from_server_grpc = SyncToAsyncIterator(stream_call.__iter__(), self._wait_executor)
 
-    async def receive(self) -> Any:
+    async def receive(self, timeout: Optional[int] = None) -> Any:
         # todo handle grpc exceptions and convert it to internal exceptions
         try:
-            grpc_message = await self.from_server_grpc.__anext__()
+            if timeout is None:
+                grpc_message = await self.from_server_grpc.__anext__()
+            else:
+
+                async def get_response():
+                    return await self.from_server_grpc.__anext__()
+
+                grpc_message = await asyncio.wait_for(get_response(), timeout)
+
         except (grpc.RpcError, grpc.aio.AioRpcError) as e:
             raise connection._rpc_error_handler(self._connection_state, e)
 

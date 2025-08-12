@@ -5,7 +5,7 @@
 
 namespace NKikimr::NStorage {
 
-    void TDistributedConfigKeeper::ReadConfig(ui64 cookie) {
+    void TDistributedConfigKeeper::ReadConfig(std::vector<TString> paths, ui64 cookie) {
         class TReaderActor : public TActorBootstrapped<TReaderActor> {
             const std::vector<TString> Paths;
             const ui64 Cookie;
@@ -80,7 +80,7 @@ namespace NKikimr::NStorage {
                 hFunc(TEvNodeWardenReadMetadataResult, Handle);
             )
         };
-        Register(new TReaderActor(DrivesToRead, cookie));
+        Register(new TReaderActor(std::move(paths), cookie));
     }
 
     void TDistributedConfigKeeper::WriteConfig(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record) {
@@ -153,17 +153,6 @@ namespace NKikimr::NStorage {
 
         auto digest = NOpenSsl::NSha1::Calc(s.data(), s.size());
         config->SetFingerprint(digest.data(), digest.size());
-    }
-
-    void TDistributedConfigKeeper::UpdateBridgeFingerprint(NKikimrBridge::TClusterState *state) {
-        state->ClearFingerprint();
-
-        TString s;
-        const bool success = state->SerializeToString(&s);
-        Y_ABORT_UNLESS(success);
-
-        auto digest = NOpenSsl::NSha1::Calc(s.data(), s.size());
-        state->SetFingerprint(digest.data(), digest.size());
     }
 
     bool TDistributedConfigKeeper::CheckFingerprint(const NKikimrBlobStorage::TStorageConfig& config) {
@@ -281,12 +270,16 @@ namespace NKikimr::NStorage {
 
                 FinishAsyncOperation(it->first);
             }
-        } else { // just loaded the initial config, try to acquire newer configuration
+        } else {
+            // just loaded the initial config, try to acquire newer configuration
+            bool changes = false;
+
             for (const auto& [path, m, guid] : msg.MetadataPerPath) {
                 if (m.HasCommittedStorageConfig()) {
                     const auto& config = m.GetCommittedStorageConfig();
                     if (InitialConfig->GetGeneration() < config.GetGeneration()) {
                         InitialConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
+                        changes = true;
                     } else if (InitialConfig->GetGeneration() && InitialConfig->GetGeneration() == config.GetGeneration() &&
                             InitialConfig->GetFingerprint() != config.GetFingerprint()) {
                         // TODO: error
@@ -298,22 +291,14 @@ namespace NKikimr::NStorage {
                     if (InitialConfig->GetGeneration() < proposed.GetGeneration() && (
                             !ProposedStorageConfig || ProposedStorageConfig->GetGeneration() < proposed.GetGeneration())) {
                         ProposedStorageConfig.emplace(proposed);
+                        changes = true;
                     }
                 }
             }
 
-            // generate new list of drives to acquire
-            std::vector<TString> drivesToRead;
-            if (BaseConfig->GetSelfManagementConfig().GetEnabled()) {
-                EnumerateConfigDrives(*InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
-                    drivesToRead.push_back(drive.GetPath());
-                });
-                std::sort(drivesToRead.begin(), drivesToRead.end());
-            }
-
-            if (DrivesToRead != drivesToRead) { // re-read configuration as it may cover additional drives
-                DrivesToRead = std::move(drivesToRead);
-                ReadConfig();
+            // read if got something new
+            if (changes) {
+                ReadConfig(GetDrivesToRead(true));
             } else {
                 ApplyStorageConfig(*InitialConfig);
                 Y_ABORT_UNLESS(DirectBoundNodes.empty()); // ensure we don't have to spread this config
@@ -321,6 +306,21 @@ namespace NKikimr::NStorage {
                 StorageConfigLoaded = true;
             }
         }
+    }
+
+    std::vector<TString> TDistributedConfigKeeper::GetDrivesToRead(bool initial) const {
+        std::vector<TString> drivesToRead;
+        if (BaseConfig->GetSelfManagementConfig().GetEnabled()) {
+            auto callback = [&](const auto& /*node*/, const auto& drive) { drivesToRead.push_back(drive.GetPath()); };
+            EnumerateConfigDrives(*(initial ? InitialConfig : StorageConfig), SelfId().NodeId(), callback);
+            if (ProposedStorageConfig) {
+                EnumerateConfigDrives(*ProposedStorageConfig, SelfId().NodeId(), callback);
+            }
+            std::ranges::sort(drivesToRead);
+            const auto [begin, end] = std::ranges::unique(drivesToRead);
+            drivesToRead.erase(begin, end);
+        }
+        return drivesToRead;
     }
 
 } // NKikimr::NStorage

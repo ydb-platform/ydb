@@ -1,6 +1,6 @@
-Metadata-Version: 2.3
+Metadata-Version: 2.4
 Name: scramp
-Version: 1.4.5
+Version: 1.4.6
 Summary: An implementation of the SCRAM protocol.
 Project-URL: Homepage, https://github.com/tlocke/scramp
 Author: The Contributors
@@ -408,6 +408,11 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 
 ## Release Notes
+
+### Version 1.4.6, 2025-07-05
+
+- Drop support for Python 3.8, and add support for 3.13
+
 
 ### Version 1.4.5, 2024-04-13
 

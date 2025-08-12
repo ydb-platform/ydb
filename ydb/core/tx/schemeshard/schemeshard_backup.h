@@ -3,9 +3,7 @@
 #include "defs.h"
 
 #include <ydb/public/api/protos/draft/ydb_backup.pb.h>
-
 #include <ydb/core/protos/backup.pb.h>
-
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -108,9 +106,9 @@ struct TEvBackup {
     DECLARE_EVENT_CLASS(EvGetBackupCollectionRestoreRequest) {
         TEvGetBackupCollectionRestoreRequest() = default;
 
-        explicit TEvGetBackupCollectionRestoreRequest(const TString& dbName, ui64 incrementalRestoreId) {
+        explicit TEvGetBackupCollectionRestoreRequest(const TString& dbName, ui64 backupCollectionRestoreId) {
             Record.SetDatabaseName(dbName);
-            Record.SetBackupCollectionRestoreId(incrementalRestoreId);
+            Record.SetBackupCollectionRestoreId(backupCollectionRestoreId);
         }
     };
     DECLARE_EVENT_CLASS(EvGetBackupCollectionRestoreResponse) {};

@@ -40,7 +40,7 @@ using TEvGetOperationRequest = TGrpcRequestOperationCall<Ydb::Operations::GetOpe
 
 class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>,
                          public TExportConv,
-                         public TIncrementalRestoreConv {
+                         public TBackupCollectionRestoreConv {
 
     TStringBuf GetLogPrefix() const override {
         switch (OperationId_.GetKind()) {
@@ -293,7 +293,7 @@ private:
             << ": record# " << record.ShortDebugString());
 
         TEvGetOperationRequest::TResponse resp;
-        *resp.mutable_operation() = TIncrementalRestoreConv::ToOperation(record.GetBackupCollectionRestore());
+        *resp.mutable_operation() = TBackupCollectionRestoreConv::ToOperation(record.GetBackupCollectionRestore());
         Reply(resp, ctx);
     }
 

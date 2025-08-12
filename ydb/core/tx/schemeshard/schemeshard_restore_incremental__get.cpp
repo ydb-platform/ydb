@@ -19,10 +19,10 @@ public:
     }
 
     TTxType GetTxType() const override {
-        return TXTYPE_GET_INCREMENTAL_RESTORE;
+        return TXTYPE_GET_BACKUP_COLLECTION_RESTORE;
     }
 
-    void Fill(NKikimrBackup::TIncrementalRestore& restore, const TIncrementalRestoreState& restoreInfo) {
+    void Fill(NKikimrBackup::TBackupCollectionRestore& restore, const TIncrementalRestoreState& restoreInfo) {
         restore.SetId(restoreInfo.OriginalOperationId);
         restore.SetStatus(Ydb::StatusIds::SUCCESS);
 

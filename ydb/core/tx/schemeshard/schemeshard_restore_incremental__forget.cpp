@@ -19,7 +19,7 @@ public:
     }
 
     TTxType GetTxType() const override {
-        return TXTYPE_FORGET_INCREMENTAL_RESTORE;
+        return TXTYPE_FORGET_BACKUP_COLLECTION_RESTORE;
     }
 
     bool Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString())

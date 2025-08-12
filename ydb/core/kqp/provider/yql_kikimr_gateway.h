@@ -680,7 +680,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     }
 };
 
-using TSetConstraintSettings = NKikimrSchemeOpConstraint::TSetConstraintSettings;
+using TSetConstraintSettings = NKikimrSchemeOpConstraint::TSetColumnConstraintSettings;
 
 struct TAlterDatabaseSettings {
     TString DatabasePath;
@@ -1172,7 +1172,7 @@ public:
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& cluster, TVector<TSetConstraintSettings>&& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<NKikimrSchemeOpConstraint::TSetColumnConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 

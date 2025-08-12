@@ -9,11 +9,10 @@
 namespace NKikimr {
 namespace NSchemeShard {
     TVector<ISubOperation::TPtr> CreateSetConstraint(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-        // Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
-        Y_UNUSED(opId);
+        Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
         Y_UNUSED(tx);
         Y_UNUSED(context);
-        return {};
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "CreateSetConstraint is not implemented")};
     }
 } // namespace NKikimr
 } // namespace NSchemeShard

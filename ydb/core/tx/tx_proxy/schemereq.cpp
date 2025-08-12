@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/docapi/traits.h>
+#include <ydb/core/protos/set_constraint.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -233,7 +234,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableUpgradeSubDomain()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateSetConstraint:
-            Y_ABORT("no implementation for ESchemeOpCreateSetConstraint");
+            return *modifyScheme.MutableSetConstraintRequest()->MutableTablePath();
 
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
             Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
@@ -1047,9 +1048,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSysView:
             return false;
         case NKikimrSchemeOp::ESchemeOpChangePathState:
-        {
+        case NKikimrSchemeOp::ESchemeOpCreateSetConstraint: {
             auto toResolve = TPathToResolve(pbModifyScheme);
-            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.Path = SplitPath(GetPathNameForScheme(pbModifyScheme));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
@@ -1057,7 +1058,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateTableIndex:
         case NKikimrSchemeOp::ESchemeOpDropTableIndex:
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:
-        case NKikimrSchemeOp::ESchemeOpCreateSetConstraint:
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
         case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:

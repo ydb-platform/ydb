@@ -643,21 +643,23 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> SetConstraint(const TString& cluster, TVector<TSetConstraintSettings>&& settings) override {
+    TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<NKikimrSchemeOpConstraint::TSetColumnConstraintSettings>&& settings) override {
         try {
-            if (cluster != SessionCtx->GetCluster()) {
-                return InvalidCluster<TGenericResult>(cluster);
+            auto dirname = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath).first;
+            if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+                dirname = JoinPath({GetDatabase(), dirname});
             }
 
-            Y_UNUSED(settings);
-            NKikimrSchemeOpConstraint::TSetConstraintRequest setConstraintRequestSettings;
-
+            NKikimrSchemeOpConstraint::TSetColumnConstraintsRequest setConstraintRequestSettings;
             for (auto&& setting : settings) {
                 setConstraintRequestSettings.AddConstraintSettings()->CopyFrom(std::move(setting));
             }
 
+            setConstraintRequestSettings.SetTablePath(tablePath);
+
             NKikimrSchemeOp::TModifyScheme modifyScheme;
             *modifyScheme.MutableSetConstraintRequest() = std::move(setConstraintRequestSettings);
+            modifyScheme.SetWorkingDir(std::move(dirname));
             modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
 
             return Gateway->ModifyScheme(std::move(modifyScheme));

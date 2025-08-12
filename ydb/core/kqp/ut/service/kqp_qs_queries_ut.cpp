@@ -5501,6 +5501,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    // TODO: flown4qqqq
     Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableSetConstraint(true);
@@ -5536,27 +5537,39 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
         }
 
+        // need to remove
         {
             auto setNotNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNotNull`
                 ALTER COLUMN val SET NOT NULL;
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::GENERIC_ERROR, setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "One of the shards report CHECKING_NOT_NULL_ERROR at Filling stage, process has to be canceled");
+            UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraint is not implemented");
         }
 
-        {
-            auto initNullValues = client.ExecuteQuery(R"sql(
-                REPLACE INTO `/Root/test/alterNotNull` (id, val)
-                VALUES
-                ( 1, NULL ),
-                ( 2, NULL );
-            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
-        }
+        // {
+        //     auto setNotNull = client.ExecuteQuery(R"sql(
+        //         ALTER TABLE `/Root/test/alterNotNull`
+        //         ALTER COLUMN val SET NOT NULL;
+        //     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+        //     UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::GENERIC_ERROR, setNotNull.GetIssues().ToString());
+        //     UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "One of the shards report CHECKING_NOT_NULL_ERROR at Filling stage, process has to be canceled");
+        // }
+
+        // {
+        //     auto initNullValues = client.ExecuteQuery(R"sql(
+        //         REPLACE INTO `/Root/test/alterNotNull` (id, val)
+        //         VALUES
+        //         ( 1, NULL ),
+        //         ( 2, NULL );
+        //     )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        // }
     }
 
+    // TODO: flown4qqqq
     Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSetConstraint(true);
@@ -5593,24 +5606,35 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
         }
 
+        // need to remove
         {
             auto setNotNull = client.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/test/alterNotNull`
                 ALTER COLUMN val SET NOT NULL;
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraint is not implemented");
         }
 
-        {
-            auto initNullValues = client.ExecuteQuery(R"sql(
-                REPLACE INTO `/Root/test/alterNotNull` (id, val)
-                VALUES
-                ( 1, NULL ),
-                ( 2, NULL );
-            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(initNullValues.GetStatus(), EStatus::GENERIC_ERROR, initNullValues.GetIssues().ToString());
-        }
+        // {
+        //     auto setNotNull = client.ExecuteQuery(R"sql(
+        //         ALTER TABLE `/Root/test/alterNotNull`
+        //         ALTER COLUMN val SET NOT NULL;
+        //     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+        // }
+
+        // {
+        //     auto initNullValues = client.ExecuteQuery(R"sql(
+        //         REPLACE INTO `/Root/test/alterNotNull` (id, val)
+        //         VALUES
+        //         ( 1, NULL ),
+        //         ( 2, NULL );
+        //     )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        //     UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+        //     UNIT_ASSERT_VALUES_EQUAL_C(initNullValues.GetStatus(), EStatus::GENERIC_ERROR, initNullValues.GetIssues().ToString());
+        // }
     }
 
     Y_UNIT_TEST(AlterTable_DropNotNull_WithSetFamily_Valid) {

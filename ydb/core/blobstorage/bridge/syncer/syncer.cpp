@@ -241,7 +241,8 @@ namespace NKikimr::NBridge {
         };
 
 #define MERGE(NAME) \
-        if (!DoMergeEntities(SourceState.NAME, TargetState.NAME, SourceState.NAME##Finished, TargetState.NAME##Finished, merge##NAME)) { \
+        if (!DoMergeEntities(SourceState.NAME, TargetState.NAME, SourceState.NAME##Finished, TargetState.NAME##Finished, \
+                merge##NAME, LastMerged##NAME)) { \
             return finish(); \
         }
         MERGE(Blocks)
@@ -266,6 +267,9 @@ namespace NKikimr::NBridge {
                 std::ranges::fill(GroupAssimilateState, TAssimilateState());
                 SourceState.SkipBlocksUpTo.emplace(TargetState.SkipBlocksUpTo.emplace(0));
                 SourceState.SkipBlobsUpTo.emplace(TargetState.SkipBlobsUpTo.emplace(Min<TLogoBlobID>()));
+                LastMergedBlocks.reset();
+                LastMergedBarriers.reset();
+                LastMergedBlobs.reset();
 
                 // issue next assimilate queries for barriers
                 IssueAssimilateRequest(false);
@@ -280,25 +284,31 @@ namespace NKikimr::NBridge {
         }
     }
 
-    template<typename T, typename TCallback>
+    template<typename T, typename TCallback, typename TKey>
     bool TSyncerActor::DoMergeEntities(std::deque<T>& source, std::deque<T>& target, bool sourceFinished, bool targetFinished,
-            TCallback&& merge) {
+            TCallback&& merge, std::optional<TKey>& lastMerged) {
         while ((!source.empty() || sourceFinished) && (!target.empty() || targetFinished)) {
             auto *sourceItem = source.empty() ? nullptr : &source.front();
             auto *targetItem = target.empty() ? nullptr : &target.front();
             if (!sourceItem && !targetItem) { // both queues have exhausted
                 Y_ABORT_UNLESS(sourceFinished && targetFinished);
                 return true;
-            } else if (sourceItem && targetItem) { // we have items in both queues, have to pick one according to key
-                const auto& sourceKey = sourceItem->GetKey();
-                const auto& targetKey = targetItem->GetKey();
-                if (sourceKey < targetKey) {
-                    targetItem = nullptr;
-                } else if (targetKey < sourceKey) {
+            }
+            const TKey& key = sourceItem && (!targetItem || targetItem->GetKey() < sourceItem->GetKey())
+                ? sourceItem->GetKey()
+                : targetItem->GetKey();
+            if (sourceItem && targetItem) {
+                if (sourceItem->GetKey() < targetItem->GetKey()) {
                     sourceItem = nullptr;
+                } else if (targetItem->GetKey() < sourceItem->GetKey()) {
+                    targetItem = nullptr;
                 }
             }
-            merge(sourceItem, targetItem, sourceItem ? sourceItem->GetKey() : targetItem->GetKey());
+            Y_ABORT_UNLESS(!lastMerged || key < lastMerged);
+            Y_DEBUG_ABORT_UNLESS(!sourceItem || sourceItem->GetKey() == key);
+            Y_DEBUG_ABORT_UNLESS(!targetItem || targetItem->GetKey() == key);
+            lastMerged.emplace(key);
+            merge(sourceItem, targetItem, key);
             if (sourceItem) {
                 source.pop_front();
             }

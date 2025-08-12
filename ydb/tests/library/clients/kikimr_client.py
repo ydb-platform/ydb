@@ -175,7 +175,7 @@ class KiKiMRMessageBusClient(object):
 
         return self.send_request(request, 'SchemeOperationStatus')
 
-    def bind_storage_pools(self, domain_name, spools):
+    def bind_storage_pools(self, domain_name, spools, token=None):
         request = msgbus.TSchemeOperation()
         scheme_transaction = request.Transaction
         scheme_operation = scheme_transaction.ModifyScheme

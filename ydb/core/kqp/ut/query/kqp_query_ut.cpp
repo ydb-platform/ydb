@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         NDataShard::gCancelTxFailPoint.Disable();
     }
 
-    Y_UNIT_TEST(QuerySkipAndTakeUsingSameLimit) {
+    Y_UNIT_TEST(QuerySkipHasNoColumns) {
         return; // https://github.com/ydb-platform/ydb/issues/22493
 
         TKikimrRunner kikimr;

@@ -38,7 +38,7 @@ public:
         if (!clientCertificates.empty()) {
             TBase::SetSecurityToken(TString(clientCertificates.front()));
         } else {
-            TBase::SetSecurityToken(BUILTIN_ACL_ROOT); // NBS compatibility
+            TBase::SetSecurityToken(request.GetSecurityToken());
         }
         TBase::SetPeerName(msg.GetPeerName());
     }

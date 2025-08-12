@@ -81,6 +81,8 @@ SRCS(
 
     rpc_common/rpc_common_kqp_session.cpp
 
+    legacy/rpc_legacy.cpp
+
     query/rpc_execute_query.cpp
     query/rpc_execute_script.cpp
     query/rpc_fetch_script_results.cpp
@@ -136,6 +138,7 @@ PEERDIR(
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
     ydb/library/yql/parser/pg_wrapper/interface
+    ydb/library/protobuf_printer
     ydb/library/yql/public/types
     ydb/library/yql/public/issue
     ydb/library/services

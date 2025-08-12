@@ -229,8 +229,6 @@ void TExecutor::Broken() {
 void TExecutor::RecreatePageCollectionsCache()
 {
     PrivatePageCache = MakeHolder<TPrivatePageCache>();
-    StickyPagesMemory = 0;
-    TryKeepInMemoryMemory = 0;
 
     Stats->PacksMetaBytes = 0;
 
@@ -717,11 +715,13 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView, const THash
             Stats->PacksMetaBytes += pack->Meta.Raw.size();
     }
 
-    for (size_t collectionsIndex : xrange( partStore->PageCollections.size())) {
-        auto& cache = partStore->PageCollections[collectionsIndex];
-        if (collectionsIndex < partView->GroupsCount) {
-            cache->UpdateCacheMode(GetCacheMode(partView->Scheme->Groups[collectionsIndex].Columns, cacheModes));
-        }
+    for (size_t groupIndex : xrange(partView->GroupsCount)) {
+        partStore->PageCollections[groupIndex]->SetCacheMode(
+            GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes)
+        );
+    }
+
+    for (auto &cache : partStore->PageCollections) {
         AddSingleCache(cache);
     }
 
@@ -734,12 +734,6 @@ void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &in
     auto sharedCacheTouches = PrivatePageCache->AddPageCollection(info);
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, info->GetCacheMode()));
     SendSharedCacheTouches(std::move(sharedCacheTouches));
-
-    StickyPagesMemory += info->GetStickySize();
-    TryKeepInMemoryMemory += info->GetTryKeepInMemorySize();
-
-    Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY] = StickyPagesMemory;
-    Counters->Simple()[TExecutorCounters::CACHE_TOTAL_TRY_KEEP_IN_MEMORY] = TryKeepInMemoryMemory;
 }
 
 void TExecutor::DropCachesOfBundle(const NTable::TPart &part)
@@ -764,22 +758,11 @@ void TExecutor::DropSingleCache(const TLogoBlobID &label)
 {
     auto pageCollection = PrivatePageCache->GetPageCollection(label);
 
-    ui64 stickySize = pageCollection->GetStickySize();
-    Y_ENSURE(StickyPagesMemory >= stickySize);
-    StickyPagesMemory -= stickySize;
-
-    ui64 tryKeepInMemorySize = pageCollection->GetTryKeepInMemorySize();
-    Y_ENSURE(TryKeepInMemoryMemory >= tryKeepInMemorySize);
-    TryKeepInMemoryMemory -= tryKeepInMemorySize;
-
     PrivatePageCache->DropPageCollection(pageCollection);
 
     // Note: Shared Cache will send TEvResult with NKikimrProto::RACE status
     // it activates all transactions that are waiting for being dropped page collection
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvDetach(label));
-
-    Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY] = StickyPagesMemory;
-    Counters->Simple()[TExecutorCounters::CACHE_TOTAL_TRY_KEEP_IN_MEMORY] = TryKeepInMemoryMemory;
 }
 
 void TExecutor::SendSharedCacheTouches(THashMap<TLogoBlobID, THashSet<TPageId>>&& touches) {
@@ -814,29 +797,6 @@ void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
         table.PendingCacheEnable = false;
         table.PendingCacheModeChange = false;
     }
-}
-
-void TExecutor::StickInMemPages(NSharedCache::TEvResult *msg) {
-    const auto& scheme = Scheme();
-    for (auto& pr : scheme.Tables) {
-        const ui32 tid = pr.first;
-        auto subset = Database->Subset(tid, NTable::TEpoch::Max(), { } , { });
-        for (auto &partView : subset->Flatten) {
-            auto partStore = partView.As<NTable::TPartStore>();
-            for (auto &pageCollection : partStore->PageCollections) {
-                // Note: page collection search optimization seems useless
-                if (pageCollection->PageCollection == msg->PageCollection) {
-                    ui64 stickySizeBefore = pageCollection->GetStickySize();
-                    for (auto& loaded : msg->Pages) {
-                        pageCollection->AddStickyPage(loaded.PageId, loaded.Page);
-                    }
-                    StickyPagesMemory += pageCollection->GetStickySize() - stickySizeBefore;
-                }
-            }
-        }
-    }
-    Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY] = StickyPagesMemory;
-    // Note: the next call of ProvideBlock will also fill pages bodies
 }
 
 TExecutorCaches TExecutor::CleanupState() {
@@ -1511,24 +1471,12 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
 
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
         ECacheMode cacheMode = GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes);
+        auto* pageCollection = partView.As<NTable::TPartStore>()->PageCollections[groupIndex].Get();
 
-        auto& cacheInfo = partView.As<NTable::TPartStore>()->PageCollections[groupIndex];
-        ui64 tryKeepInMemorySizeBefore = cacheInfo->GetTryKeepInMemorySize();
-
-        if (cacheInfo->UpdateCacheMode(cacheMode)) {
-            Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(cacheInfo->PageCollection, cacheInfo->GetCacheMode()));
-            switch (cacheMode) {
-            case ECacheMode::Regular:
-                Y_ENSURE(TryKeepInMemoryMemory >= tryKeepInMemorySizeBefore);
-                TryKeepInMemoryMemory -= tryKeepInMemorySizeBefore;
-                break;
-            case ECacheMode::TryKeepInMemory:
-                TryKeepInMemoryMemory += cacheInfo->GetTryKeepInMemorySize();
-                break;
-            }
+        if (PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection)) {
+            Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode()));
         }
     }
-    Counters->Simple()[TExecutorCounters::CACHE_TOTAL_TRY_KEEP_IN_MEMORY] = TryKeepInMemoryMemory;
 }
 
 void TExecutor::RequestInMemPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns) {
@@ -3094,12 +3042,13 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
             }
 
             if (requestType == ESharedCacheRequestType::InMemPages) {
-                StickInMemPages(msg);
-            }
-            for (auto& loaded : msg->Pages) {
-                PrivatePageCache->AddPage(loaded.PageId, loaded.Page, pageCollection);
-            }
-            if (requestType == ESharedCacheRequestType::Transaction) {
+                for (auto& loaded : msg->Pages) {
+                    PrivatePageCache->AddStickyPage(loaded.PageId, std::move(loaded.Page), pageCollection);
+                }
+            } else { // requestType == ESharedCacheRequestType::Transaction
+                for (auto& loaded : msg->Pages) {
+                    PrivatePageCache->AddPage(loaded.PageId, loaded.Page, pageCollection);
+                }
                 TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
             }
         }
@@ -3925,8 +3874,11 @@ void TExecutor::UpdateUsedTabletMemory() {
     UsedTabletMemory = 50_KB;
 
     // Count the number of bytes that can't be offloaded right now:
-    UsedTabletMemory += StickyPagesMemory;
-    UsedTabletMemory += TryKeepInMemoryMemory;
+    if (PrivatePageCache) {
+        const auto &stats = PrivatePageCache->GetStats();
+        UsedTabletMemory += stats.StickyBytes;
+        UsedTabletMemory += stats.TryKeepInMemoryBytes;
+    }
     UsedTabletMemory += TransactionPagesMemory;
 
     // Estimate memory used by internal database structures:
@@ -4026,11 +3978,12 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
             if (PrivatePageCache) {
                 const auto &stats = PrivatePageCache->GetStats();
-                Counters->Simple()[TExecutorCounters::CACHE_TOTAL_COLLECTIONS].Set(stats.TotalCollections);
-                Counters->Simple()[TExecutorCounters::CACHE_TOTAL_SHARED_BODY].Set(stats.TotalSharedBody);
+                Counters->Simple()[TExecutorCounters::CACHE_TOTAL_COLLECTIONS].Set(stats.PageCollections);
+                Counters->Simple()[TExecutorCounters::CACHE_TOTAL_SHARED_BODY].Set(stats.SharedBodyBytes);
+                Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY].Set(stats.StickyBytes);
+                Counters->Simple()[TExecutorCounters::CACHE_TOTAL_TRY_KEEP_IN_MEMORY].Set(stats.TryKeepInMemoryBytes);
             }
-            Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY].Set(StickyPagesMemory);
-            Counters->Simple()[TExecutorCounters::CACHE_TOTAL_TRY_KEEP_IN_MEMORY].Set(TryKeepInMemoryMemory);
+            
             Counters->Simple()[TExecutorCounters::CACHE_TOTAL_USED].Set(TransactionPagesMemory);
 
             const auto &memory = Memory->Stats();
@@ -4558,10 +4511,10 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                 CompactionLogic->OutputHtml(str, *scheme, cgi);
 
             TAG(TH3) {str << "Page collection cache:";}
-            DIV_CLASS("row") {str << "Total collections: " << PrivatePageCache->GetStats().TotalCollections; }
-            DIV_CLASS("row") {str << "Total bytes in shared cache: " << PrivatePageCache->GetStats().TotalSharedBody; }
-            DIV_CLASS("row") {str << "Total bytes marked as sticky: " << StickyPagesMemory; }
-            DIV_CLASS("row") {str << "Total bytes for try-keep-in-memory Mode: " << TryKeepInMemoryMemory; }
+            DIV_CLASS("row") {str << "Total collections: " << PrivatePageCache->GetStats().PageCollections; }
+            DIV_CLASS("row") {str << "Total bytes in shared cache: " << PrivatePageCache->GetStats().SharedBodyBytes; }
+            DIV_CLASS("row") {str << "Total bytes marked as sticky: " << PrivatePageCache->GetStats().StickyBytes; }
+            DIV_CLASS("row") {str << "Total bytes for try-keep-in-memory Mode: " << PrivatePageCache->GetStats().TryKeepInMemoryBytes; }
             DIV_CLASS("row") {str << "Total bytes currently in use: " << TransactionPagesMemory; }
 
             if (GcLogic) {

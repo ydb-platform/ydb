@@ -29,7 +29,6 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     : Id(info.Id)
     , PageCollection(info.PageCollection)
     , StickyPages(info.StickyPages)
-    , StickyPagesSize(info.StickyPagesSize)
     , CacheMode(info.CacheMode)
 {
     PageMap.resize(info.PageMap.size());
@@ -53,16 +52,23 @@ TPrivatePageCache::TInfo* TPrivatePageCache::GetPageCollection(const TLogoBlobID
 THashMap<TLogoBlobID, THashSet<TPageId>> TPrivatePageCache::AddPageCollection(TIntrusivePtr<TInfo> info) {
     auto inserted = PageCollections.insert(decltype(PageCollections)::value_type(info->Id, info));
     Y_ENSURE(inserted.second, "double registration of page collection is forbidden");
-    ++Stats.TotalCollections;
+    ++Stats.PageCollections;
 
     THashMap<TLogoBlobID, THashSet<TPageId>> sharedCacheTouches;
     for (const auto& [pageId, page] : info->GetPageMap()) {
         Y_ASSERT(page);
         
-        Stats.TotalSharedBody += page->Size;
+        Stats.SharedBodyBytes += page->Size;
+        if (info->IsStickyPage(pageId)) {
+            Stats.StickyBytes += page->Size;
+        }
 
         // notify shared cache that we have a page handle
         sharedCacheTouches[page->Info->Id].insert(page->Id);
+    }
+
+    if (info->GetCacheMode() == ECacheMode::TryKeepInMemory) {
+        Stats.TryKeepInMemoryBytes += info->PageCollection->BackingSize();
     }
 
     return sharedCacheTouches;
@@ -72,13 +78,20 @@ void TPrivatePageCache::DropPageCollection(TInfo *info) {
     for (const auto& [pageId, page] : info->GetPageMap()) {
         Y_ASSERT(page);
 
-        Stats.TotalSharedBody -= page->Size;
+        Stats.SharedBodyBytes -= page->Size;
+        if (info->IsStickyPage(pageId)) {
+            Stats.StickyBytes -= page->Size;
+        }
+    }
+
+    if (info->GetCacheMode() == ECacheMode::TryKeepInMemory) {
+        Stats.TryKeepInMemoryBytes -= info->PageCollection->BackingSize();
     }
 
     info->Clear();
 
     PageCollections.erase(info->Id);
-    --Stats.TotalCollections;
+    --Stats.PageCollections;
 }
 
 TSharedPageRef TPrivatePageCache::TryGetPage(TPageId pageId, TInfo *info) {
@@ -98,16 +111,46 @@ TSharedPageRef TPrivatePageCache::TryGetPage(TPageId pageId, TInfo *info) {
 
 void TPrivatePageCache::DropPage(TPageId pageId, TInfo *info) {
     if (info->DropPage(pageId)) {
-        Stats.TotalSharedBody -= info->GetPageSize(pageId);
+        Y_ENSURE(!info->IsStickyPage(pageId));
+        Stats.SharedBodyBytes -= info->GetPageSize(pageId);
     }
 }
 
 void TPrivatePageCache::AddPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info)
 {
     if (info->AddPage(pageId, std::move(sharedBody))) {
-        Stats.TotalSharedBody += info->GetPageSize(pageId);
+        Stats.SharedBodyBytes += info->GetPageSize(pageId);
     }
 }
+
+void TPrivatePageCache::AddStickyPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info)
+{
+    AddPage(pageId, sharedBody, info);
+    if (info->AddStickyPage(pageId, std::move(sharedBody))) {
+        Stats.StickyBytes += info->GetPageSize(pageId);
+    }
+}
+
+bool TPrivatePageCache::UpdateCacheMode(ECacheMode newCacheMode, TInfo *info)
+{
+    auto oldCacheMode = info->GetCacheMode();
+    if (oldCacheMode == newCacheMode) {
+        return false;
+    }
+
+    auto tryKeepInMemoryBytesDelta = info->PageCollection->BackingSize();
+    if (oldCacheMode == ECacheMode::TryKeepInMemory) {
+        Stats.TryKeepInMemoryBytes -= tryKeepInMemoryBytesDelta;
+    }
+
+    info->SetCacheMode(newCacheMode);
+
+    if (newCacheMode == ECacheMode::TryKeepInMemory) {
+        Stats.TryKeepInMemoryBytes += tryKeepInMemoryBytesDelta;
+    }
+
+    return true;
+};
 
 THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache::DetachPrivatePageCache() {
     THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> ret;

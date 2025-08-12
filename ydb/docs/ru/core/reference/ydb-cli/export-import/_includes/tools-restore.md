@@ -39,6 +39,12 @@
 {{ ydb-cli }} [connection options] admin database restore -i <PATH> [options]
 ```
 
+{% note warning %}
+
+В текущей версии {{ ydb-short-name }} команда `admin database restore` не восстанавливает данные колоночных таблиц. Создаются только объекты схемы данных. Для импорта данных из колоночных таблиц можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/import_and_export.md#import).
+
+{% endnote %}
+
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 {% include [restore-database-nodes.md](./restore-database-nodes.md) %}
@@ -67,6 +73,12 @@
 ```bash
 {{ ydb-cli }} [connection options] tools restore -p <PATH> -i <PATH> [options]
 ```
+
+{% note warning %}
+
+В текущей версии {{ ydb-short-name }} команда `tools restore` не восстанавливает данные колоночных таблиц. Создаются только объекты схемы данных. Для импорта данных из колоночных таблиц можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/import_and_export.md#import).
+
+{% endnote %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 

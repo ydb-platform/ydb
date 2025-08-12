@@ -22,6 +22,12 @@
 {{ ydb-cli }} [connection options] admin database dump [options]
 ```
 
+{% note warning %}
+
+В текущей версии {{ ydb-short-name }} команда `admin database dump` не выгружает данные колоночных таблиц. Выгружаются только метаданные. Для экспорта данных из колоночных таблиц можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/write_data.md#export-to-s3).
+
+{% endnote %}
+
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 {% include [dump-options.md](./dump-options.md) %}
@@ -35,6 +41,12 @@
 ```bash
 {{ ydb-cli }} [connection options] tools dump [options]
 ```
+
+{% note warning %}
+
+В текущей версии {{ ydb-short-name }} команда `tools dump` не выгружает данные колоночных таблиц. Выгружаются только метаданные. Для экспорта данных из колоночных таблиц можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/write_data.md#export-to-s3).
+
+{% endnote %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 

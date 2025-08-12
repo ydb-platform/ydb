@@ -380,6 +380,14 @@ public:
         QueryPhysicalGraph = std::make_shared<const NKikimrKqp::TQueryPhysicalGraph>(std::move(queryPhysicalGraph));
     }
 
+    void SetDisableDefaultTimeout(bool disableDefaultTimeout) {
+        DisableDefaultTimeout = disableDefaultTimeout;
+    }
+
+    bool GetDisableDefaultTimeout() const {
+        return DisableDefaultTimeout;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -412,6 +420,7 @@ private:
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
     bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
+    bool DisableDefaultTimeout = false;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

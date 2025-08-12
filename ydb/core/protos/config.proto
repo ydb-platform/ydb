@@ -1144,6 +1144,10 @@ message TFinalizeScriptServiceConfig {
     optional uint32 MaxInFlightFinalizationsCount = 2 [default = 10];
 };
 
+message TStreamingQueriesConfig {
+    optional uint64 MaxQueryExecutions = 1 [default = 30];
+}
+
 message TQueryServiceConfig {
     optional uint64 ScriptOperationTimeoutDefaultSeconds = 1 [default = 604800]; // default = 1 week
     optional uint64 ScriptForgetAfterDefaultSeconds = 2 [default = 31536000]; // default = 1 year; 0 = infinity
@@ -1169,6 +1173,7 @@ message TQueryServiceConfig {
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
+    optional TStreamingQueriesConfig StreamingQueries = 24;
 }
 
 // Config describes immediate controls and allows

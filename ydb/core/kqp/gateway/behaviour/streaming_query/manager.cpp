@@ -39,10 +39,10 @@ struct TFeatureFlagExtractor : public IFeatureFlagExtractor {
 
     // Validation of features values will be performed on execution step
     for (const auto& property : {
-        "query_text",
-        "run",
-        "resource_pool",
-        "force"
+        TStreamingQueryConfig::TProperties::QueryText,
+        TStreamingQueryConfig::TProperties::Run,
+        TStreamingQueryConfig::TProperties::ResourcePool,
+        TStreamingQueryConfig::TProperties::Force,
     }) {
         if (const auto& value = featuresExtractor.Extract(property)) {
             if (!properties.emplace(property, *value).second) {
@@ -111,6 +111,10 @@ TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOper
 }
 
 TYqlConclusionStatus TStreamingQueryManager::PrepareCreateStreamingQuery(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
+    if (settings.GetExistingOk() && settings.GetReplaceIfExists()) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Options 'OR REPLACE' and 'IF NOT EXISTS' can not be used together for STREAMING_QUERY objects");
+    }
+
     auto pathPairStatus = SplitPath(settings.GetObjectId(), context.GetExternalData().GetDatabase(), /* createDir */ true);
     if (pathPairStatus.IsFail()) {
         return pathPairStatus;

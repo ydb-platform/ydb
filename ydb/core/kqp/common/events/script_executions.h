@@ -183,6 +183,16 @@ struct TEvCancelScriptExecutionOperation : public TEventWithDatabaseId<TEvCancel
     NOperationId::TOperationId OperationId;
 };
 
+struct TEvResetScriptExecutionRetriesResponse : public TEventLocal<TEvResetScriptExecutionRetriesResponse, TKqpScriptExecutionEvents::EvResetScriptExecutionRetriesResponse> {
+    explicit TEvResetScriptExecutionRetriesResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
+        : Status(status)
+        , Issues(std::move(issues))
+    {}
+
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+};
+
 struct TEvCancelScriptExecutionOperationResponse : public TEventLocal<TEvCancelScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvCancelScriptExecutionOperationResponse> {
     TEvCancelScriptExecutionOperationResponse() = default;
 
@@ -456,6 +466,19 @@ struct TEvRefreshScriptExecutionLeasesResponse : public TEventLocal<TEvRefreshSc
     {}
 
     bool Success;
+    NYql::TIssues Issues;
+};
+
+// Send to request actor after saving state or finishing query
+struct TEvScriptExecutionProgress : public TEventLocal<TEvScriptExecutionProgress, TKqpScriptExecutionEvents::EvScriptExecutionProgress> {
+    TEvScriptExecutionProgress(Ydb::StatusIds::StatusCode status, bool stateSaved, NYql::TIssues issues)
+        : Status(status)
+        , StateSaved(stateSaved)
+        , Issues(std::move(issues))
+    {}
+
+    Ydb::StatusIds::StatusCode Status;
+    bool StateSaved = false;
     NYql::TIssues Issues;
 };
 

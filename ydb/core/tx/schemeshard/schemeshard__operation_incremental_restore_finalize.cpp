@@ -74,20 +74,23 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             {
                 ui64 originalOpId = finalize.GetOriginalOperationId();
                 NIceDb::TNiceDb db(context.GetDB());
-                db.Table<Schema::IncrementalRestoreState>().Key(originalOpId).Update(
-                    NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(TIncrementalRestoreState::EState::Completed))
-                );
+                
                 auto shardProgressRowset = db.Table<Schema::IncrementalRestoreShardProgress>().Range().Select();
-                if (shardProgressRowset.IsReady()) {
-                    while (!shardProgressRowset.EndOfSet()) {
-                        ui64 opId = shardProgressRowset.GetValue<Schema::IncrementalRestoreShardProgress::OperationId>();
-                        ui64 shardIdx = shardProgressRowset.GetValue<Schema::IncrementalRestoreShardProgress::ShardIdx>();
-                        if (opId == originalOpId) {
-                            db.Table<Schema::IncrementalRestoreShardProgress>().Key(opId, shardIdx).Delete();
-                        }
-                        if (!shardProgressRowset.Next()) break;
+                if (!shardProgressRowset.IsReady()) {
+                    return false;
+                }
+                
+                while (!shardProgressRowset.EndOfSet()) {
+                    ui64 opId = shardProgressRowset.GetValue<Schema::IncrementalRestoreShardProgress::OperationId>();
+                    ui64 shardIdx = shardProgressRowset.GetValue<Schema::IncrementalRestoreShardProgress::ShardIdx>();
+                    if (opId == originalOpId) {
+                        db.Table<Schema::IncrementalRestoreShardProgress>().Key(opId, shardIdx).Delete();
+                    }
+                    if (!shardProgressRowset.Next()) {
+                        break;
                     }
                 }
+                
                 db.Table<Schema::IncrementalRestoreState>().Key(originalOpId).Delete();
             }
 
@@ -141,9 +144,6 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 auto& state = stateIt->second;
                 state.State = TIncrementalRestoreState::EState::Completed;
                 
-                db.Table<Schema::IncrementalRestoreState>().Key(originalOpId).Update(
-                    NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
-                );
                 LOG_I("Marked incremental restore state as completed for operation: " << originalOpId);
             }
             

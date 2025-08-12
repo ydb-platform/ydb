@@ -108,7 +108,7 @@ message TEvListIncrementalBackupsResponse {
     optional string NextPageToken = 4;
 }
 
-message TIncrementalRestore {
+message TBackupCollectionRestore {
     optional uint64 Id = 1;
     optional Ydb.StatusIds.StatusCode Status = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
@@ -127,7 +127,7 @@ message TEvGetBackupCollectionRestoreRequest {
 message TEvGetBackupCollectionRestoreResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
-    optional TIncrementalRestore BackupCollectionRestore = 3;
+    optional TBackupCollectionRestore BackupCollectionRestore = 3;
 }
 
 message TEvForgetBackupCollectionRestoreRequest{
@@ -151,6 +151,6 @@ message TEvListBackupCollectionRestoresRequest {
 message TEvListBackupCollectionRestoresResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
-    repeated TIncrementalRestore Entries = 3;
+    repeated TBackupCollectionRestore Entries = 3;
     optional string NextPageToken = 4;
 }

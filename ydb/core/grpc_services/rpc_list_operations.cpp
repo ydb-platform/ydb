@@ -33,7 +33,8 @@ using TEvListOperationsRequest = TGrpcRequestNoOperationCall<Ydb::Operations::Li
     Ydb::Operations::ListOperationsResponse>;
 
 class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, TEvListOperationsRequest>,
-                          public TExportConv {
+                          public TExportConv,
+                          public TBackupCollectionRestoreConv {
 
     TStringBuf GetLogPrefix() const override {
         switch (ParseKind(GetProtoRequest()->kind())) {
@@ -198,7 +199,7 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
             response.mutable_issues()->CopyFrom(record.GetIssues());
         }
         for (const auto& entry : record.GetEntries()) {
-            *response.add_operations() = TIncrementalRestoreConv::ToOperation(entry);
+            *response.add_operations() = TBackupCollectionRestoreConv::ToOperation(entry);
         }
         response.set_next_page_token(record.GetNextPageToken());
         Reply(response);

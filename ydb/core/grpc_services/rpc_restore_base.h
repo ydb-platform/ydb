@@ -11,7 +11,7 @@
 
 namespace NKikimr::NGRpcService {
 
-struct TIncrementalRestoreConv: public TOperationConv<NKikimrBackup::TIncrementalRestore> {
+struct TBackupCollectionRestoreConv: public TOperationConv<NKikimrBackup::TBackupCollectionRestore> {
     static Ydb::TOperationId MakeOperationId(const ui64 id) {
         Ydb::TOperationId operationId;
         operationId.SetKind(Ydb::TOperationId::INCREMENTAL_RESTORE);
@@ -19,7 +19,7 @@ struct TIncrementalRestoreConv: public TOperationConv<NKikimrBackup::TIncrementa
         return operationId;
     }
 
-    static Operation ToOperation(const NKikimrBackup::TIncrementalRestore& in) {
+    static Operation ToOperation(const NKikimrBackup::TBackupCollectionRestore& in) {
         auto operation = TOperationConv::ToOperation(in);
 
         if (operation.status() == Ydb::StatusIds::SUCCESS) {
@@ -40,6 +40,6 @@ struct TIncrementalRestoreConv: public TOperationConv<NKikimrBackup::TIncrementa
         return operation;
     }
 
-}; // TIncrementalRestoreConv
+}; // TBackupCollectionRestoreConv
 
 } // namespace NKikimr::NGRpcService

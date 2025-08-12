@@ -1447,7 +1447,7 @@ private:
 
         const auto& databaseId = ev->Get()->GetDatabaseId();
         if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall()) {
-            ev->Get()->SetPoolId("");
+            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
             return true;
         }
 
@@ -1460,6 +1460,8 @@ private:
         const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
 
         if (!poolInfo) {
+            Y_ASSERT(!poolId.empty());
+            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
             return true;
         }
 

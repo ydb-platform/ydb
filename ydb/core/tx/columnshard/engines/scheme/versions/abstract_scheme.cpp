@@ -316,8 +316,9 @@ public:
 
 TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
+    const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters, std::optional<TSnapshot> snapshot) const {
     AFL_VERIFY(incomingBatch->num_rows());
+    // incomingBatch->AddColumn()
     auto itIncoming = incomingBatch->schema()->fields().begin();
     auto itIncomingEnd = incomingBatch->schema()->fields().end();
     auto itIndex = GetIndexInfo().ArrowSchema().begin();
@@ -354,9 +355,14 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
         ++itIndex;
     }
     AFL_VERIFY(itIncoming == itIncomingEnd);
-    // AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("debug", "iurii")("HMMM", "FOOO");
+    if (snapshot) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("debug", "iurii")("plan", snapshot->GetPlanStep())("tx", snapshot->GetTxId());
+    }
+    else {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("debug", "iurii")("HMMM", "FOOO");
+    }
 
-    if (AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+    if (snapshot && AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
         const ui32 rowsCount = incomingBatch->num_rows();
         for (const ui32 columnId : {(ui32) IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32) IIndexInfo::ESpecialColumn::TX_ID}) {
             if (chunks.contains(columnId)) {
@@ -369,8 +375,8 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast());
             const auto& columnFeatures = GetIndexInfo().GetColumnFeaturesVerified(columnId);
 
-            auto zeroScalar = std::make_shared<arrow::UInt64Scalar>(columnId == (ui32) IIndexInfo::ESpecialColumn::PLAN_STEP ? GetSnapshot().GetPlanStep() : GetSnapshot().GetTxId());
-            // AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("debug", "iurii")("GetPlanStep", GetSnapshot().GetPlanStep());
+            auto zeroScalar = std::make_shared<arrow::UInt64Scalar>(columnId == (ui32) IIndexInfo::ESpecialColumn::PLAN_STEP ? snapshot->GetPlanStep() : snapshot->GetTxId());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("debug", "iurii")("GetPlanStep", snapshot->GetPlanStep())("GetTxId", snapshot->GetTxId());
             AFL_VERIFY(zeroScalar)("error", "Cannot create zero scalar for type " + columnFeatures.GetArrowField()->type()->ToString());
             auto array = NArrow::TThreadSimpleArraysCache::Get(columnFeatures.GetArrowField()->type(), zeroScalar, rowsCount);
             auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);

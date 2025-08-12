@@ -15,6 +15,7 @@ private:
     std::shared_ptr<arrow::RecordBatch> OriginalBatch;
     std::optional<std::vector<NArrow::TSerializedBatch>> BuildSlices();
     const TWritingContext Context;
+    const std::optional<TSnapshot> Snapshot;
     void ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
 
 protected:
@@ -26,11 +27,12 @@ public:
     }
 
     TBuildSlicesTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch,
-        const TWritingContext& context)
+        const TWritingContext& context, std::optional<TSnapshot> snapshot)
         : WriteData(std::move(writeData))
         , TabletId(context.GetTabletId())
         , OriginalBatch(batch)
-        , Context(context) {
+        , Context(context)
+        , Snapshot(snapshot) {
         WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::SlicesConstruction);
     }
 };

@@ -810,6 +810,7 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpDropExternalTable: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpDropExternalDataSource: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpCreateColumnBuild: return TxInvalid;
+            case NKikimrSchemeOp::ESchemeOpDropColumnBuild: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpDropContinuousBackup: return TxInvalid;

@@ -1717,6 +1717,12 @@ message TAlterShards {
     }
 }
 
+message TDropColumnBuild {
+    optional NKikimrIndexBuilder.TColumnBuildSettings Settings = 1;
+    optional uint64 SnapshotTxId = 2;
+    optional uint64 BuildIndexId = 3;
+}
+
 // Request for scheme modification
 // Has only one of the operations
 message TModifyScheme {
@@ -1789,6 +1795,7 @@ message TModifyScheme {
     optional TDropBlockStoreVolume DropBlockStoreVolume = 60;
 
     optional NKikimrIndexBuilder.TColumnBuildSettings InitiateColumnBuild = 61;
+    optional TDropColumnBuild DropColumnBuild = 86;
 
     optional bool SuccessOnNotExist = 62;
 

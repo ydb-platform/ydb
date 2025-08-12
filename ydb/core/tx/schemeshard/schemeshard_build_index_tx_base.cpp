@@ -244,6 +244,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         index.SetState(Ydb::Table::IndexBuildState::STATE_DONE);
         index.SetProgress(100.0);
         break;
+    case TIndexBuildInfo::EState::DroppingColumns:
     case TIndexBuildInfo::EState::Cancellation_Applying:
     case TIndexBuildInfo::EState::Cancellation_Unlocking:
         index.SetState(Ydb::Table::IndexBuildState::STATE_CANCELLATION);
@@ -348,6 +349,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo&
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.ApplyTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.UnlockTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.AlterMainTableTxId);
+    Self->TxIdToIndexBuilds.erase(indexBuildInfo.DropColumnsTxId);
 
     Self->IndexBuildsByUid.erase(indexBuildInfo.Uid);
     Self->IndexBuilds.erase(indexBuildInfo.Id);

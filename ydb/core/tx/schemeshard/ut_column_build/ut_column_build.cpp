@@ -617,6 +617,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,
                             NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(6)});
+                            NLs::PathVersionEqual(7),
+                            NLs::CheckColumns("Table", {"key", "index", "value"}, {"DefaultValue"}, {"key"})});
     }
 }

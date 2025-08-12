@@ -1490,6 +1490,10 @@ public:
     void PersistBuildIndexUnlockTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexUnlockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
+    void PersistBuildIndexDropColumnsTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexDropColumnsTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexDropColumnsTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+
     void PersistBuildIndexUploadInitiate(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
     void PersistBuildIndexUploadProgress(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
     void PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, TIndexBuildInfo::TShardStatus& shardStatus);

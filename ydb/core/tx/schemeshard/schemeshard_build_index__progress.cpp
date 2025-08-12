@@ -501,15 +501,35 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
-    if (buildInfo.IsBuildColumns()) {
-        for (const auto& colInfo : buildInfo.BuildColumns) {
-            auto col = indexBuild.AddColumnsToDrop();
-            colInfo.SerializeToProto(col);
-        }
-    }
-
     LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
         "CancelPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.DropColumnsTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropColumnBuild);
+    modifyScheme.SetInternal(true);
+    modifyScheme.SetWorkingDir(TPath::Init(buildInfo.DomainPathId, ss).PathString());
+    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+
+    auto* columnBuild = modifyScheme.MutableDropColumnBuild();
+    columnBuild->SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
+    columnBuild->SetBuildIndexId(ui64(buildInfo.Id));
+
+    auto* settings = columnBuild->MutableSettings();
+    settings->SetTable(TPath::Init(buildInfo.TablePathId, ss).PathString());
+
+    buildInfo.SerializeToProto(ss, settings);
+
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
+        "DropColumnsPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -1273,9 +1293,13 @@ public:
             break;
         case TIndexBuildInfo::EState::Filling: {
             if (buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
+                auto cancelState = buildInfo.IsBuildColumns()
+                    ? TIndexBuildInfo::EState::DroppingColumns
+                    : TIndexBuildInfo::EState::Cancellation_Applying;
+
                 ClearAfterFill(ctx, buildInfo);
                 ChangeState(BuildId, buildInfo.IsCancellationRequested()
-                                         ? TIndexBuildInfo::EState::Cancellation_Applying
+                                         ? cancelState
                                          : TIndexBuildInfo::EState::Applying);
                 Progress(BuildId);
 
@@ -1383,6 +1407,18 @@ public:
         case TIndexBuildInfo::EState::Done:
             SendNotificationsIfFinished(buildInfo);
             // stay calm keep status/issues
+            break;
+        case TIndexBuildInfo::EState::DroppingColumns:
+            if (buildInfo.DropColumnsTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+            } else if (buildInfo.DropColumnsTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), DropColumnsPropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.DropColumnsTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.DropColumnsTxId)));
+            } else {
+                ChangeState(BuildId, TIndexBuildInfo::EState::Cancellation_Applying);
+                Progress(BuildId);
+            }
             break;
         case TIndexBuildInfo::EState::Cancellation_Applying:
             if (buildInfo.ApplyTxId == InvalidTxId) {
@@ -2064,6 +2100,14 @@ public:
             Self->PersistBuildIndexInitiateTxDone(db, buildInfo);
             break;
         }
+        case TIndexBuildInfo::EState::DroppingColumns:
+        {
+            Y_ENSURE(txId == buildInfo.DropColumnsTxId);
+
+            buildInfo.DropColumnsTxDone = true;
+            Self->PersistBuildIndexDropColumnsTxDone(db, buildInfo);
+            break;
+        }
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
@@ -2250,6 +2294,16 @@ public:
             ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
             break;
         }
+        case TIndexBuildInfo::EState::DroppingColumns:
+        {
+            Y_ENSURE(txId == buildInfo.DropColumnsTxId);
+
+            buildInfo.DropColumnsTxStatus = record.GetStatus();
+            Self->PersistBuildIndexDropColumnsTxStatus(db, buildInfo);
+
+            ifErrorMoveTo(TIndexBuildInfo::EState::Cancellation_Applying);
+            break;
+        }
         case TIndexBuildInfo::EState::Cancellation_Applying:
         {
             Y_ENSURE(txId == buildInfo.ApplyTxId);
@@ -2354,6 +2408,12 @@ public:
             if (!buildInfo.ApplyTxId) {
                 buildInfo.ApplyTxId = txId;
                 Self->PersistBuildIndexApplyTxId(db, buildInfo);
+            }
+            break;
+        case TIndexBuildInfo::EState::DroppingColumns:
+            if (!buildInfo.DropColumnsTxId) {
+                buildInfo.DropColumnsTxId = txId;
+                Self->PersistBuildIndexDropColumnsTxId(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Unlocking:

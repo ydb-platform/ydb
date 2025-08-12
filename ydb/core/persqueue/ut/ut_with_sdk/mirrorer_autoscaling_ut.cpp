@@ -114,7 +114,7 @@ namespace NKikimr::NPersQueueTests {
 
             Sleep(TDuration::Seconds(1));
 
-            Cerr << "ALTER_SCHEME: " << scheme << Endl << Flush;
+            Cerr << (TStringBuilder() << "ALTER_SCHEME: " << scheme << "\n") << Flush;
 
             const auto sender = runtime.AllocateEdgeActor();
             const auto request = CreateRequest(txId, CreateTransaction("/Root/PQ", scheme));

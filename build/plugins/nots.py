@@ -151,6 +151,11 @@ class NotsUnitType(UnitType):
         Setup test recipe to extract peer's output before running tests
         """
 
+    def on_ts_proto_auto_prepare_deps_configure(self) -> None:
+        """
+        Configure prepare deps for TS_PROTO_AUTO
+        """
+
 
 TS_TEST_FIELDS_BASE = (
     df.BinaryPath.normalized,
@@ -317,6 +322,10 @@ def _get_var_name(s: str) -> tuple[bool, str]:
     return False, ""
 
 
+def _is_real_file(path: str) -> bool:
+    return os.path.isfile(path) and not os.path.islink(path)
+
+
 def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
     parts = [p for p in (flags or []) if p]
     parts_str = ";".join(parts)
@@ -434,7 +443,7 @@ def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
 def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
     from lib.nots.package_manager import BasePackageManager
 
-    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
     erm_json = _create_erm_json(unit)
     dirs = []
 
@@ -613,7 +622,7 @@ def _setup_eslint(unit: NotsUnitType) -> None:
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
@@ -678,7 +687,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
@@ -728,7 +737,7 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     test_type = TsTestType.TS_STYLELINT
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
 
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
     if deps:
@@ -804,7 +813,15 @@ def _select_matching_version(
 
 @_with_report_configure_error
 def on_prepare_deps_configure(unit: NotsUnitType) -> None:
+    from lib.nots.package_manager.base.utils import build_pj_path
+
     pm = _create_pm(unit)
+
+    if not _is_real_file(build_pj_path(pm.sources_path)) and unit.get("TS_PROTO_PREPARE_DEPS") == "yes":
+        # if this is a PREPARE_DEPS for TS_PROTO and there is no package.json - this is TS_PROTO_AUTO
+        unit.on_ts_proto_auto_prepare_deps_configure()
+        return
+
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
@@ -820,6 +837,18 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
     else:
         __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["output"], sorted(outs)))
         unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
+
+
+@_with_report_configure_error
+def on_ts_proto_auto_prepare_deps_configure(unit: NotsUnitType) -> None:
+    deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
+    unit.onpeerdir([deps_path])
+
+    pm = _create_pm(unit)
+    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    _, outs, _ = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
+    unit.set(["_PREPARE_DEPS_TS_PROTO_AUTO_FLAG", f"--ts-proto-auto-deps-path {deps_path}"])
 
 
 def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
@@ -931,7 +960,7 @@ def on_ts_test_for_configure(
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:

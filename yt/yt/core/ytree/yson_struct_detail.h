@@ -94,7 +94,7 @@ struct IYsonStructParameter
 
     virtual void PostprocessParameter(const TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const = 0;
 
-    virtual void SetDefaultsInitialized(TYsonStructBase* self) = 0;
+    virtual void SetDefaultsInitialized(TYsonStructBase* self, bool dontSetLiteMembers = false) = 0;
 
     virtual bool CanOmitValue(const TYsonStructBase* self) const = 0;
 
@@ -121,7 +121,7 @@ struct IYsonStructMeta
 {
     virtual const THashMap<std::string, IYsonStructParameterPtr>& GetParameterMap() const = 0;
     virtual const std::vector<std::pair<std::string, IYsonStructParameterPtr>>& GetParameterSortedList() const = 0;
-    virtual void SetDefaultsOfInitializedStruct(TYsonStructBase* target) const = 0;
+    virtual void SetDefaultsOfInitializedStruct(TYsonStructBase* target, bool dontSetLiteMembers = false) const = 0;
     virtual const THashSet<std::string>& GetRegisteredKeys() const = 0;
     virtual void PostprocessStruct(TYsonStructBase* target, const std::function<NYPath::TYPath()>& pathGetter) const = 0;
     virtual IYsonStructParameterPtr GetParameter(const std::string& keyOrAlias) const = 0;
@@ -163,7 +163,7 @@ class TYsonStructMeta
     : public IYsonStructMeta
 {
 public:
-    void SetDefaultsOfInitializedStruct(TYsonStructBase* target) const override;
+    void SetDefaultsOfInitializedStruct(TYsonStructBase* target, bool dontSetLiteMembers = false) const override;
 
     const THashMap<std::string, IYsonStructParameterPtr>& GetParameterMap() const override;
     const std::vector<std::pair<std::string, IYsonStructParameterPtr>>& GetParameterSortedList() const override;
@@ -211,6 +211,7 @@ private:
     THashMap<std::string, IYsonStructParameterPtr> Parameters_;
     std::vector<std::pair<std::string, IYsonStructParameterPtr>> SortedParameters_;
     THashSet<std::string> RegisteredKeys_;
+    THashMap<std::string, i64> RegisteredParametersIndexes_;
 
     std::vector<std::function<void(TYsonStructBase*)>> Preprocessors_;
     std::vector<std::function<void(TYsonStructBase*)>> Postprocessors_;
@@ -295,7 +296,7 @@ public:
         const std::function<void()>& validate) override;
 
     void PostprocessParameter(const TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const override;
-    void SetDefaultsInitialized(TYsonStructBase* self) override;
+    void SetDefaultsInitialized(TYsonStructBase* self, bool dontSetLiteMembers = false) override;
     void Save(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
     bool CanOmitValue(const TYsonStructBase* self) const override;
     bool IsRequired() const override;
@@ -357,6 +358,7 @@ private:
 
     std::unique_ptr<IYsonFieldAccessor<TValue>> FieldAccessor_;
     std::optional<std::function<TValue()>> DefaultCtor_;
+    bool DefaultIsDefaultConstruction_ = false;
     bool SerializeDefault_ = true;
     std::vector<TValidator> Validators_;
     std::vector<std::string> Aliases_;

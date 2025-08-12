@@ -70,4 +70,38 @@ FROM my_table;
         UNIT_ASSERT_GE(Count(random.Body, '\n'), 5);
     }
 
+    Y_UNIT_TEST(NestedSections) {
+        TString markdown = R"(
+# Section 1 {#s1}
+Section 1 Text.
+## Subsection 1 {#s1s1}
+Subsection 1.1 Text.
+## Subsection 2 {#s1s2}
+Subsection 1.2 Text.
+# Section 2 {#s2}
+Section 2 Text.
+## Subsection 1 {#s2s1}
+Subsection 2.1 Text.
+## Subsection 2 {#s2s2}
+Subsection 2.2 Text.
+### Subsubsection 1 {#s2s2s1}
+Subsection 2.2.1 Text.
+# Section 3 {#s3}
+Section 3 Text.
+)";
+        TMarkdownPage page = ParseMarkdownPage(markdown);
+        {
+            const TMarkdownSection& section = page.SectionsByAnchor["s1s2"];
+            UNIT_ASSERT_STRING_CONTAINS(section.Body, "Subsection 1.2 Text.");
+            UNIT_ASSERT_C(!section.Body.Contains("Section 1 Text."), section.Body);
+            UNIT_ASSERT_C(!section.Body.Contains("Section 2 Text."), section.Body);
+            UNIT_ASSERT_C(!section.Body.Contains("Section 3 Text."), section.Body);
+        }
+        {
+            const TMarkdownSection& section = page.SectionsByAnchor["s2s2s1"];
+            UNIT_ASSERT_STRING_CONTAINS(section.Body, "Subsection 2.2.1 Text.");
+            UNIT_ASSERT_C(!section.Body.Contains("Section 3 Text."), section.Body);
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(MarkdownParserTests)

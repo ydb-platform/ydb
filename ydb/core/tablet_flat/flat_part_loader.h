@@ -65,7 +65,7 @@ namespace NTable {
                 auto savedPage = SavedPages.find(pageId);
                 
                 if (savedPage == SavedPages.end()) {
-                    if (auto cachedPage = Cache->GetPage(pageId); cachedPage) {
+                    if (auto cachedPage = Cache->FindPage(pageId); cachedPage) {
                         if (auto sharedPageRef = cachedPage->SharedBody; sharedPageRef && sharedPageRef.Use()) {
                             // Save page in case it's evicted on the next iteration
                             AddSavedPage(pageId, std::move(sharedPageRef));
@@ -110,7 +110,11 @@ namespace NTable {
                 
                 bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
                 AddSavedPage(loaded.PageId, loaded.Page);
-                Cache->Fill(loaded.PageId, std::move(loaded.Page), sticky);
+                if (sticky) {
+                    Cache->AddStickyPage(loaded.PageId, std::move(loaded.Page));
+                } else {
+                    Cache->AddPage(loaded.PageId, std::move(loaded.Page));
+                }
             }
 
         private:

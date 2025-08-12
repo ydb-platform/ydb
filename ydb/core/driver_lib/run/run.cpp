@@ -1741,6 +1741,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableGroupedMemoryLimiter) {
         sil->AddServiceInitializer(new TScanGroupedMemoryLimiterInitializer(runConfig));
         sil->AddServiceInitializer(new TCompGroupedMemoryLimiterInitializer(runConfig));
+        sil->AddServiceInitializer(new TDeduplicationGroupedMemoryLimiterInitializer(runConfig));
     }
 
     if (serviceMask.EnableCompPriorities) {

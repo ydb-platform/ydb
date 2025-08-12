@@ -39,6 +39,7 @@ namespace NSQLTranslationV1 {
     struct TRegexPattern {
         TString Body;
         TString After = "";
+        TString Before = "";
         bool IsCaseInsensitive = false;
     };
 

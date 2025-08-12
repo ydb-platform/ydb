@@ -11,6 +11,7 @@
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/thread_affinity.h>
+#include <yt/yt/core/concurrency/context_switch.h>
 
 #include <library/cpp/yt/threading/event_count.h>
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -26,7 +27,7 @@ namespace NYT {
 
 namespace NConcurrency {
 
-// Forward declaration from scheduler.h
+// Forward declaration from scheduler_api.h
 TCallback<void(const NYT::TError&)> GetCurrentFiberCanceler();
 
 //! Thrown when a fiber is being terminated by an external event.

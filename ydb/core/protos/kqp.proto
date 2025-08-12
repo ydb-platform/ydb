@@ -354,6 +354,15 @@ message TEvCloseSessionResponse {
     optional TCloseSessionResponse Response = 3;
 }
 
+message TCompileCacheQueryInfo {
+    // optional uint32 NodeId = 1;
+    optional string QueryId = 2;
+    optional string Query = 3;
+    optional uint64 AccessCount = 4;
+    optional int64 CompiledQueryAt = 5;
+    optional string UserSID = 6;
+}
+
 message TSessionInfo {
     optional string SessionId = 1;
     /// optional ui32 NodeId = 2;
@@ -387,6 +396,24 @@ message TEvListSessionsRequest {
 message TEvListSessionsResponse {
     optional int64 NodeId = 1;
     repeated TSessionInfo Sessions = 2;
+    optional bool Finished = 3;
+    optional string ContinuationToken = 4;
+}
+
+message TEvListCompileCacheQueriesRequest {
+    optional string QueryIdStart = 1;
+    optional bool QueryIdStartInclusive = 2;
+    optional string QueryIdEnd = 3;
+    optional bool QueryIdEndInclusive = 4;
+    repeated uint32 Columns = 5;
+    optional int64 FreeSpace = 6;
+    optional int64 Limit = 7;
+    optional string TenantName = 8;
+}
+
+message TEvListCompileCacheQueriesResponse {
+    optional int64 NodeId = 1;
+    repeated TCompileCacheQueryInfo CacheCacheQueries = 2;
     optional bool Finished = 3;
     optional string ContinuationToken = 4;
 }
@@ -611,19 +638,16 @@ message TEvStartKqpTasksRequest {
     optional string PoolId = 9;
     optional double MemoryPoolPercent = 10 [default = 100];
     optional string Database = 11;
-    optional string DatabaseId = 17;
+    optional string DatabaseId = 17; // used as unique id in case database was removed/added with the same name
     optional uint64 LockTxId = 13;
     optional uint32 LockNodeId = 14;
-
-    // TODO(scheduler): only for old scheduler.
-    optional double PoolMaxCpuShare = 12;
-    optional double QueryCpuShare = 16;
-    optional double ResourceWeight = 18;
-    // TODO(scheduler): end.
-
+    optional double PoolMaxCpuShare = 12; // used for TCPULimits for ColumnShards
     optional NKikimrDataEvents.ELockMode LockMode = 19;
-
     optional string UserToken = 20;
+
+    reserved 15;
+    reserved 16;
+    reserved 18;
 }
 
 message TEvStartKqpTasksResponse {

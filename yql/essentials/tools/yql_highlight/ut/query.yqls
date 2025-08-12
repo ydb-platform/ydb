@@ -1,0 +1,28 @@
+(
+    # This is a meaningless YQLs example
+    (let config (DataSource 'config))
+    (let res_sink (DataSink 'result))
+    (let data (AsList (Uint32 '1)))
+    (let x (Read! world config (Key '('clusters)) '() '()))
+    (let world (Write! world res_sink (Key) data '()))
+    (let world (Commit! world res_sink))
+    (let str (String '"single-line string"))
+    (let txt (String '@@some
+    multiline with double at: @@@@
+    text@@))
+    (let py (String '@@#py
+        from yql.typing import *
+
+        def foo(
+            x:Optional[Int32],
+            y:Struct['a':Int32, 'b':Int32],
+            z:slice("name", Int32, {AutoMap})) -> Optional[Int32]:
+            """
+            foo function description
+            @@@@
+            """
+            return x + y.a + z
+    @@))
+    (let func (Udf 'SimpleUdf.Repeat))
+    (return world)
+)

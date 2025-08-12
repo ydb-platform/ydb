@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/public/udf/udf_helpers.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/ipv6_address/ipv6_address.h>
 #include <library/cpp/ipmath/ipmath.h>
@@ -8,7 +9,9 @@
 
 namespace {
     using TAutoMapString = NKikimr::NUdf::TAutoMap<char*>;
+    using TAutoMapUint32 = NKikimr::NUdf::TAutoMap<ui32>;
     using TOptionalString = NKikimr::NUdf::TOptional<char*>;
+    using TOptionalUint32 = NKikimr::NUdf::TOptional<ui32>;
     using TOptionalByte = NKikimr::NUdf::TOptional<ui8>;
     using TStringRef = NKikimr::NUdf::TStringRef;
     using TUnboxedValue = NKikimr::NUdf::TUnboxedValue;
@@ -229,6 +232,13 @@ namespace {
         return valueBuilder->NewString(SerializeAddress(addr));
     }
 
+    SIMPLE_STRICT_UDF_OPTIONS(TIpv4FromUint32, char*(TAutoMapUint32), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3))) {
+        // in_addr expects bytes in network byte order.
+        in_addr addr;
+        addr.s_addr = htonl(args[0].Get<ui32>());
+        return valueBuilder->NewString(SerializeAddress(TIpv6Address{addr}));
+    }
+
     SIMPLE_STRICT_UDF(TSubnetFromString, TOptionalString(TAutoMapString)) {
         TIpAddressRange range = TIpAddressRange::FromCompactString(args[0].AsStringRef());
         auto res = SerializeSubnet(range);
@@ -237,6 +247,19 @@ namespace {
 
     SIMPLE_UDF(TToString, char*(TAutoMapString)) {
         return valueBuilder->NewString(DeserializeAddress(args[0].AsStringRef()).ToString(false));
+    }
+
+    SIMPLE_UDF_OPTIONS(TIpv4ToUint32, TOptionalUint32(TAutoMapString), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3))) {
+        Y_UNUSED(valueBuilder);
+        TIpv6Address addr = DeserializeAddress(args[0].AsStringRef());
+        if (addr.Type() != TIpv6Address::Ipv4) {
+            return TUnboxedValue();
+        }
+
+        in_addr tmp;
+        addr.ToInAddr(tmp);
+        ui32 ret = ntohl(tmp.s_addr);
+        return TUnboxedValuePod(ret);
     }
 
     SIMPLE_UDF(TSubnetToString, char*(TAutoMapString)) {
@@ -345,8 +368,10 @@ namespace {
 
 #define EXPORTED_IP_BASE_UDF \
     TFromString, \
+    TIpv4FromUint32, \
     TSubnetFromString, \
     TToString, \
+    TIpv4ToUint32, \
     TSubnetToString, \
     TIsIPv4, \
     TIsIPv6, \

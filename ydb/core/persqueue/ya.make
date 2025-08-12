@@ -85,7 +85,6 @@ RECURSE(
     events
     partition_key_range
     pqrb
-    purecalc
     writer
 )
 

@@ -1318,15 +1318,15 @@ private:
                 AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "false");
                 settingsProto.SetInconsistentTx(false);
 
-                const bool canUseStreamIndex = Config->EnableIndexStreamWrite
-                    && std::all_of(tableMeta->Indexes.begin(), tableMeta->Indexes.end(), [](const auto& index) {
-                        return index.Type == TIndexDescription::EType::GlobalSync;
-                    });
-
-                if (canUseStreamIndex && settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                if (Config->EnableIndexStreamWrite && settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
                     for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
                         const auto& indexDescription = tableMeta->Indexes[index];
+
+                        if (indexDescription.Type != TIndexDescription::EType::GlobalSync
+                               && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
+                            continue;
+                        }
                         const auto& implTable = tableMeta->ImplTables[index];
 
                         AFL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync);

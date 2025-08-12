@@ -497,7 +497,7 @@ public:
 
     void SuppressRequest(TRequestId requestId)
     {
-        if (RequestSuppressionEnabled_.load(std::memory_order_relaxed)) {
+        if (RequestSuppressionEnabled_.load(std::memory_order::relaxed)) {
             SuppressedRequestIdQueue_.Enqueue(requestId);
         }
     }

@@ -313,7 +313,7 @@ private:
             .AddIOAnnotation()
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(),
                 *typesCtx, Config))
-            .Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
+            .Add(NOpt::CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")

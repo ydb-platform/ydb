@@ -432,6 +432,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     std::function<IActor*(void)> TransferWriterFn(
+            const TString& database,
             const NKikimrReplication::TTransferWriterSettings& writerSettings,
             const ITransferWriterFactory* transferWriterFactory)
     {
@@ -447,9 +448,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             compilationService = *CompilationService,
             batchingSettings = writerSettings.GetBatching(),
             transferWriterFactory = transferWriterFactory,
-            runAsUser = writerSettings.GetRunAsUser()
+            runAsUser = writerSettings.GetRunAsUser(),
+            directoryPath = writerSettings.GetDirectoryPath(),
+            database = database
         ]() {
-            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser});
+            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser, directoryPath, database});
         };
     }
 
@@ -503,7 +506,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 return;
             }
             autoCommit = false;
-            writerFn = TransferWriterFn(writerSettings, transferWriterFactory);
+            writerFn = TransferWriterFn(cmd.GetDatabase(), writerSettings, transferWriterFactory);
         } else {
             Y_ABORT("Unsupported");
         }

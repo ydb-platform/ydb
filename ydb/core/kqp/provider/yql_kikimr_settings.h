@@ -63,6 +63,8 @@ public:
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
 
+    NCommon::TConfSetting<bool, Static> UseDqHashCombine;
+
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
 
@@ -80,6 +82,10 @@ public:
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
+
+    // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
+    NCommon::TConfSetting<TString, Static> CostBasedOptimization;
+
     NCommon::TConfSetting<bool, Static> UseBlockReader;
 
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> HashShuffleFuncType;
@@ -206,6 +212,9 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableIndexStreamWrite = false;
     bool EnableOlapPushdownProjections = false;
     bool EnableParallelUnionAllConnectionsForExtend = false;
+    bool EnableTempTablesForUser = false;
+
+    bool EnableSimpleProgramsSinglePartitionOptimization = true;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;

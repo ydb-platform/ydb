@@ -9,7 +9,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -166,6 +166,7 @@ public:
         , BlockTrackingMode(executerConfig.TableServiceConfig.GetBlockTrackingMode())
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
+        , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
         , CheckpointCoordinatorId(checkpointCoordinatorId)
     {
         if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
@@ -577,16 +578,17 @@ protected:
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 
-#if defined(USE_HDRF_SCHEDULER)
-        const auto& poolId = GetUserRequestContext()->PoolId;
+        const auto& databaseId = GetUserRequestContext()->DatabaseId;
+        const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
 
-        auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
-        addQueryEvent->DatabaseId = Database;
-        addQueryEvent->PoolId = poolId.empty() ? NResourcePool::DEFAULT_POOL_ID : poolId;
-        addQueryEvent->QueryId = TxId;
-        this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, TxId);
-        Query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(TxId))->Get()->Query; // TODO: Y_DEFER
-#endif
+        if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
+            auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
+            addQueryEvent->DatabaseId = databaseId;
+            addQueryEvent->PoolId = poolId;
+            addQueryEvent->QueryId = TxId;
+            this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, TxId);
+            Query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(TxId))->Get()->Query; // TODO: Y_DEFER
+        }
 
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
@@ -1750,9 +1752,7 @@ protected:
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
             .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
-#if defined(USE_HDRF_SCHEDULER)
             .Query = Query,
-#endif
             .CheckpointCoordinator = CheckpointCoordinatorId
         });
 
@@ -2028,7 +2028,9 @@ protected:
     }
 
     void SaveScriptExternalEffect(std::unique_ptr<TEvSaveScriptExternalEffectRequest> scriptEffects) {
-        this->Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptEffects.release());
+        const auto runScriptActorId = GetUserRequestContext()->RunScriptActorId;
+        Y_ENSURE(runScriptActorId);
+        this->Send(runScriptActorId, scriptEffects.release());
     }
 
 protected:
@@ -2356,9 +2358,7 @@ protected:
     TMaybe<TInstant> CancelAt;
     TActorId Target;
     ui64 TxId = 0;
-#if defined(USE_HDRF_SCHEDULER)
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-#endif
 
     bool ShardsResolved = false;
     TKqpTasksGraph TasksGraph;
@@ -2423,7 +2423,9 @@ protected:
     TMaybe<NBatchOperations::TSettings> BatchOperationSettings;
 
     bool EnableParallelPointReadConsolidation = false;
+    bool AccountDefaultPoolInScheduler = false;
     TActorId CheckpointCoordinatorId;
+
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

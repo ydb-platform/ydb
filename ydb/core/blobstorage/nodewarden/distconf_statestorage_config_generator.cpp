@@ -1,6 +1,7 @@
 #include "distconf.h"
 #include "distconf_statestorage_config_generator.h"
 
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -10,12 +11,14 @@ namespace NKikimr::NStorage {
 
     TStateStoragePerPileGenerator::TStateStoragePerPileGenerator(THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>& nodes
         , const std::unordered_map<ui32, ui32>& selfHealNodesState
-        , const std::optional<TBridgePileId>& pileId
+        , TBridgePileId pileId
         , std::unordered_set<ui32>& usedNodes
+        , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
     )
         : PileId(pileId)
         , SelfHealNodesState(selfHealNodesState)
         , UsedNodes(usedNodes)
+        , OldConfig(oldConfig)
     {
         FillNodeGroups(nodes);
         CalculateRingsParameters();
@@ -30,7 +33,7 @@ namespace NKikimr::NStorage {
             for (auto& n : dc) {
                 NodeGroups[0].Nodes.emplace_back(n);
                 ui32 nodeId = std::get<0>(n);
-                ui32 state = CalcNodeState(nodeId);
+                ui32 state = CalcNodeState(nodeId, false);
                 NodeGroups[0].State[state]++;
             }
 
@@ -44,6 +47,9 @@ namespace NKikimr::NStorage {
             });
         }
         Y_ABORT_UNLESS(NodeGroups.size() > 0 && NodeGroups[0].Nodes.size() > 0);
+        for (auto& ng : NodeGroups) {
+            ng.Disconnected = ng.State[0] + ng.State[1] <= ng.Nodes.size() / 2;
+        }
     }
 
     void TStateStoragePerPileGenerator::CalculateRingsParameters() {
@@ -72,26 +78,39 @@ namespace NKikimr::NStorage {
     }
 
     bool TStateStoragePerPileGenerator::IsGoodConfig() const {
-        return GoodConfig;
+         for (auto &nodes : Rings) {
+            for (auto nodeId : nodes) {
+                if (CalcNodeState(nodeId, false) > 1) {
+                    return false;
+                }
+            }
+         }
+         return true;
     }
 
     void TStateStoragePerPileGenerator::AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss) {
         auto *rg = ss->AddRingGroups();
-        if (PileId) {
-            PileId->CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
-        }
+        PileId.CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
         rg->SetNToSelect(NToSelect);
         for (auto &nodes : Rings) {
+            std::ranges::sort(nodes, [&](const auto& x, const auto& y) {
+                return x < y;
+            });
+        }
+        std::ranges::sort(Rings, [&](const auto& x, const auto& y) {
+            return x[0] < y[0];
+        });
+        for (auto &nodes : Rings) {
             auto *ring = rg->AddRing();
-            for(auto nodeId : nodes) {
+            for (auto nodeId : nodes) {
                 ring->AddNode(nodeId);
                 UsedNodes.insert(nodeId);
             }
         }
     }
 
-    ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId) {
-        ui32 state = SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : (NodeStatesSize - 1);
+    ui32 TStateStoragePerPileGenerator::CalcNodeState(ui32 nodeId, bool disconnected) const {
+        ui32 state = disconnected ? 0 : (SelfHealNodesState.contains(nodeId) ? SelfHealNodesState.at(nodeId) : (NodeStatesSize - 1));
         Y_ABORT_UNLESS(state < NodeStatesSize);
         Y_ABORT_UNLESS(state != NCms::NSentinel::TNodeStatusComputer::ENodeState::PRETTY_GOOD);
         if (state == 0 && UsedNodes.contains(nodeId)) {
@@ -117,7 +136,7 @@ namespace NKikimr::NStorage {
                 }
                 ui32 nodeId = std::get<0>(*iter);
                 location = std::get<1>(*iter);
-                if (CalcNodeState(nodeId) <= stateLimit) {
+                if (CalcNodeState(nodeId, group.Disconnected) <= stateLimit) {
                     ring.push_back(nodeId);
                 }
                 iter++;
@@ -134,23 +153,73 @@ namespace NKikimr::NStorage {
         return true;
     }
 
+    bool TStateStoragePerPileGenerator::PickOldNodesStrategy(TNodeGroup& group) {
+        if (!group.Disconnected || (OldConfig.RingGroupsSize() == 0 && !OldConfig.HasRing())) {
+            return false;
+        }
+        std::unordered_set<ui32> nodesInGroup;
+        for (auto& n : group.Nodes) {
+            nodesInGroup.insert(std::get<0>(n));
+        }
+        ui32 ringGroupIdx = 0;
+        for (ui32 i : xrange(OldConfig.RingGroupsSize())) {
+            if (PileId == TBridgePileId::FromProto(&OldConfig.GetRingGroups(i), &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId)) {
+                ringGroupIdx = i;
+                break;
+            }
+        }
+        std::vector<std::vector<ui32>> result;
+        TIntrusivePtr<TStateStorageInfo> info = BuildStateStorageInfo(OldConfig);
+        if (info->RingGroups.size() <= ringGroupIdx) {
+            return false;
+        }
+        if (info->RingGroups[ringGroupIdx].NToSelect != NToSelect) {
+            return false;
+        }
+        ui32 ringsSize = info->RingGroups[ringGroupIdx].Rings.size();
+        for (ui32 ringIdx : xrange(ringsSize)) {
+            if (nodesInGroup.contains(info->RingGroups[ringGroupIdx].Rings[ringIdx].Replicas.front().NodeId())) {
+                result.push_back({});
+                for (auto& r : info->RingGroups[ringGroupIdx].Rings[ringIdx].Replicas) {
+                    if (!nodesInGroup.contains(r.NodeId())) {
+                        return false;
+                    }
+                    result.back().emplace_back(r.NodeId());
+                }
+                if (result.back().size() != ReplicasInRingCount) {
+                    return false;
+                }
+            }
+        }
+        if (result.size() != RingsInGroupCount) {
+            return false;
+        }
+        for (auto& ring : result) {
+            Rings.emplace_back(ring);
+        }
+        return true;
+    }
+
     void TStateStoragePerPileGenerator::PickNodes(TNodeGroup& group) {
+        if (PickOldNodesStrategy(group)) {
+            return;
+        }
         std::unordered_map<TString, std::array<ui32, NodeStatesSize>> rackStates;
         for (auto& n : group.Nodes) {
             auto rack = std::get<1>(n).GetRackId();
             auto nodeId = std::get<0>(n);
             auto& rackState = rackStates[rack];
-            rackState[CalcNodeState(nodeId)]++;
+            rackState[CalcNodeState(nodeId, group.Disconnected)]++;
         }
 
-        auto compByRack = [&](const auto& x, const auto& y) {
+        auto compByState = [&](const auto& x, const auto& y) {
             auto rackX = std::get<1>(x).GetRackId();
             auto rackY = std::get<1>(y).GetRackId();
             if (rackX == rackY) {
                 auto nodeX = std::get<0>(x);
                 auto nodeY = std::get<0>(y);
-                ui32 state1 = CalcNodeState(nodeX);
-                ui32 state2 = CalcNodeState(nodeY);
+                ui32 state1 = CalcNodeState(nodeX, group.Disconnected);
+                ui32 state2 = CalcNodeState(nodeY, group.Disconnected);
                 return state1 < state2 || (state1 == state2 && nodeX < nodeY);
             }
             auto& rackStateX = rackStates[rackX];
@@ -163,15 +232,13 @@ namespace NKikimr::NStorage {
             return rackX < rackY;
         };
 
-        std::ranges::sort(group.Nodes, compByRack);
+        std::ranges::sort(group.Nodes, compByState);
         for (ui32 stateLimit : xrange(NodeStatesSize)) {
             if (PickNodesSimpleStrategy(group, stateLimit, rackStates.size() < RingsInGroupCount)) {
-                GoodConfig &= stateLimit <= 1;
                 return;
             }
         }
-        GoodConfig = false;
+        STLOG(PRI_DEBUG, BS_NODE, NW103, "TStateStoragePerPileGenerator::PickNodesByState without limits");
         Y_ABORT_UNLESS(PickNodesSimpleStrategy(group, NodeStatesSize, true));
     }
-
 }

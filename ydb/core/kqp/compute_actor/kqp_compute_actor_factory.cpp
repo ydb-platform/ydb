@@ -3,7 +3,6 @@
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
-#include <ydb/core/kqp/runtime/scheduler/new/fwd.h>
 
 namespace NKikimr::NKqp::NComputeActor {
 
@@ -131,11 +130,10 @@ public:
         resourcesRequest.ExecutionUnits = 1;
         resourcesRequest.Memory = memoryLimits.MkqlLightProgramMemoryLimit;
 
-        auto&& schedulableOptions = args.SchedulableOptions;
-#if defined(USE_HDRF_SCHEDULER)
-        schedulableOptions.SchedulableTask = MakeHolder<NScheduler::TSchedulableTask>(args.Query);
-        schedulableOptions.IsSchedulable = !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID;
-#endif
+        NScheduler::TSchedulableActorOptions schedulableOptions {
+            .Query = args.Query,
+            .IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
+        };
 
         TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);
 

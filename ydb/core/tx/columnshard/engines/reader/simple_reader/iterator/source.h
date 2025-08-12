@@ -84,6 +84,27 @@ public:
                type == NCommon::IDataSource::EType::SimpleSysInfo;
     }
 
+    void ActualizeAggregatedMemoryGuards() {
+        const ui64 originalRecordsCount = GetRecordsCount();
+        AFL_VERIFY(originalRecordsCount);
+        if (!HasStageData()) {
+            return;
+        }
+        const ui64 resultRecordsCount = GetStageData().HasTable() ? GetStageData().GetTable().GetRecordsCountActualOptional().value_or(0) : 0;
+        if (!resultRecordsCount) {
+            ClearMemoryGuards();
+            return;
+        }
+        if (originalRecordsCount <= resultRecordsCount) {
+            return;
+        }
+
+        const double kffCorrection = resultRecordsCount * 1.0 / originalRecordsCount;
+        for (auto&& i : ResourceGuards) {
+            i->Update(kffCorrection * i->GetMemory(), false);
+        }
+    }
+
     void ClearMemoryGuards() {
         ResourceGuards.clear();
         SourceGroupGuard.reset();
@@ -406,7 +427,7 @@ private:
     const ui64 LastSourceRecordsCount;
 
     void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
-        const ui32 recordsCount = GetStageData().GetTable()->GetRecordsCountActualVerified();
+        const ui32 recordsCount = GetStageData().GetTable().GetRecordsCountActualVerified();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, recordsCount, 0) });
         StageResult->SetResultChunk(StageResult->GetBatch()->BuildTableVerified(), 0, recordsCount);
@@ -483,7 +504,7 @@ private:
     static ui32 CalcInputRecordsCount(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources) {
         ui32 recordsCount = 0;
         for (auto&& i : sources) {
-            recordsCount += i->GetStageData().GetTable()->GetRecordsCountActualVerified();
+            recordsCount += i->GetStageData().GetTable().GetRecordsCountActualVerified();
         }
         return recordsCount;
     }

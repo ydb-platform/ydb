@@ -190,9 +190,16 @@ TTerminalTask TTerminal::Run() {
             LOG_E(ss.Str());
             RequestStop();
             co_return;
+        } catch (const std::exception& ex) {
+            TStringStream ss;
+            ss << "Terminal " << Context.TerminalID << " got exception while " << transaction.Name << " execution: "
+                << ex.what();
+            LOG_E(ss.Str());
+            RequestStop();
+            co_return;
         }
 
-        // only here if exception cought
+        // only here if exception caught
 
         TaskQueue.DecInflight();
     }

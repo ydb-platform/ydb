@@ -499,7 +499,6 @@ class TExecutor
     size_t ReadyPartSwitches = 0;
 
     ui64 UsedTabletMemory = 0;
-    ui64 StickyPagesMemory = 0;
     ui64 TransactionPagesMemory = 0;
 
     TActorContext SelfCtx() const;
@@ -547,19 +546,21 @@ class TExecutor
     void EnqueueActivation(TSeat* seat, bool activate);
     void PlanTransactionActivation();
     void MakeLogSnapshot();
-    void TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad);
-    void ActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad);
-    void LogWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad);
-    void AddCachesOfBundle(const NTable::TPartView &partView);
+    void TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& pages, TPrivatePageCache::TInfo* collectionInfo);
+    void ActivateWaitingTransaction(TTransactionWaitPad& transaction);
+    void LogWaitingTransaction(const TTransactionWaitPad& transaction);
+    void AddCachesOfBundle(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info);
     void DropCachesOfBundle(const NTable::TPart &part);
     void DropSingleCache(const TLogoBlobID&);
 
-    void TranslateCacheTouchesToSharedCache();
-    void RequestInMemPagesForDatabase(bool pendingOnly = false);
-    void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns);
-    void StickInMemPages(NSharedCache::TEvResult *msg);
+    void SendSharedCacheTouches(THashMap<TLogoBlobID, THashSet<TPageId>>&& touches);
+    void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
+    void UpdateCachePagesForDatabase(bool pendingOnly = false);
+    void RequestInMemPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
+    THashMap<NTable::TTag, ECacheMode> GetCacheModes(ui32 tableId);
+    ECacheMode GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);

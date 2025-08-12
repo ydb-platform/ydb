@@ -34,6 +34,12 @@ void TWriteId::ToStream(IOutputStream& s) const
     }
 }
 
+TString TWriteId::ToString() const {
+    TStringStream ss;
+    ToStream(ss);
+    return ss.Str();
+}
+
 template <class T>
 TWriteId GetWriteIdImpl(const T& m)
 {

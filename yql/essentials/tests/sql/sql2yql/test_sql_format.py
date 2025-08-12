@@ -3,20 +3,20 @@ import yatest.common
 import pytest
 
 from test_sql2yql import get_sql2yql_cmd
-from test_utils import pytest_generate_tests_by_template
+from test_utils import pytest_generate_tests_by_template, get_case_file
 
 DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 
 
 def pytest_generate_tests(metafunc):
-    return pytest_generate_tests_by_template('.sql', metafunc, data_path=DATA_PATH)
+    return pytest_generate_tests_by_template({'.sql', '.yql'}, metafunc, data_path=DATA_PATH)
 
 
 def test(suite, case, tmpdir):
     files = []
     # case can contain slash because of nested suites
     out_dir = tmpdir.mkdir(suite).mkdir(case.replace('/', '_')).dirname
-    case_file = os.path.join(DATA_PATH, suite, '%s.sql' % case)
+    case_file = get_case_file(DATA_PATH, suite, case, {'.sql', '.yql'})
     ansi_lexer = False
     with open(case_file, 'r') as f:
         content = f.read()

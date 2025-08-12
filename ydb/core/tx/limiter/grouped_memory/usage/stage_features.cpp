@@ -15,13 +15,14 @@ TString TStageFeatures::DebugString() const {
     return result;
 }
 
-TStageFeatures::TStageFeatures(const TString& name, const ui64 limit, const std::optional<ui64>& hardLimit,
+TStageFeatures::TStageFeatures(const TString& name, const std::optional<ui64>& limit, const std::optional<ui64>& hardLimit,
     const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters)
     : Name(name)
-    , Limit(limit)
+    , Limit(limit.value_or(DEFAULT_LIMIT))
     , HardLimit(hardLimit)
     , Owner(owner)
-    , Counters(counters) {
+    , Counters(counters)
+    , UseLimitFromConfig(limit.has_value()) {
     if (Counters) {
         Counters->ValueSoftLimit->Set(Limit);
         if (HardLimit) {
@@ -140,11 +141,34 @@ void TStageFeatures::Add(const ui64 volume, const bool allocated) {
     UpdateConsumption(this);
 }
 
+
 void TStageFeatures::SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func) {
     MemoryConsumptionUpdate = std::move(func);
 }
 
+void TStageFeatures::AttachOwner(const std::shared_ptr<TStageFeatures>& owner) {
+    if (Owner) {
+        return;
+    }
+    Owner = owner;
+}
+
+void TStageFeatures::AttachCounters(const std::shared_ptr<TStageCounters>& counters) {
+    Counters = counters;
+    if (Counters) {
+        Counters->ValueSoftLimit->Set(Limit);
+        if (HardLimit) {
+            Counters->ValueHardLimit->Set(*HardLimit);
+        }
+    }
+}
+
 void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased) {
+    if (UseLimitFromConfig) {
+        isLimitIncreased = false;
+        return;
+    }
+
     isLimitIncreased = limit > Limit;
 
     Limit = limit;

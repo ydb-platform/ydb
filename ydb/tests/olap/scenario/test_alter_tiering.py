@@ -6,6 +6,7 @@ from ydb.tests.olap.scenario.helpers import (
     CreateTableStore,
     DropTable,
     DropTableStore,
+    skip_test,
 )
 from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 from helpers.tiering_helper import (
@@ -243,10 +244,10 @@ class TestAlterTiering(TieringTestBase):
 
         for _ in loop:
             LOGGER.info('executing SELECT')
-            sth.execute_scan_query(
+            sth.execute_query(
                 f'SELECT MIN(writer) FROM `{sth.get_full_path(table)}`',
                 expected_status=expected_scan_status,
-                timeout=duration.seconds
+                ignore_error={"Query invalidated on scheme/internal error during Scan execution"}  # https://github.com/ydb-platform/ydb/issues/12854
             )
 
     def _loop_set_ttl(
@@ -299,6 +300,8 @@ class TestAlterTiering(TieringTestBase):
             sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), retries=2)
 
     def scenario_many_tables(self, ctx: TestContext):
+        skip_test.check_test_for_skipping(ctx)
+
         self._setup_tiering_test(ctx)
 
         self.test_duration = self._get_test_duration(get_external_param('test-class', 'SMALL'))

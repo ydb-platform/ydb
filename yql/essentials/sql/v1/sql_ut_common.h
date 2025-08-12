@@ -1800,6 +1800,45 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(3, elementStat["Union"]);
     }
 
+    Y_UNIT_TEST(UnionAssumeOrderByWarning) {
+        {
+            NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                SELECT a FROM x
+                ASSUME ORDER BY a;
+            )sql");
+            UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                SELECT a FROM x
+                UNION ALL
+                SELECT a FROM y
+                ORDER BY a;
+            )sql");
+            UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "");
+        }
+        {
+            NYql::TAstParseResult warn = SqlToYql(R"sql(
+                USE plato;
+                SELECT a FROM x
+                UNION ALL
+                SELECT a FROM y
+                ASSUME ORDER BY a;
+            )sql");
+            UNIT_ASSERT_C(warn.Root, warn.Issues.ToString());
+            UNIT_ASSERT_STRINGS_EQUAL(
+                warn.Issues.ToString(),
+                "<main>:6:33: Warning: ASSUME ORDER BY is used, "
+                "but UNION, INTERSECT and EXCEPT operators "
+                "have no ordering guarantees, "
+                "therefore consider using ORDER BY, code: 3\n");
+        }
+    }
+
     // INTERSECT
 
     Y_UNIT_TEST(IntersectAllTest) {
@@ -8948,4 +8987,45 @@ Y_UNIT_TEST_SUITE(Aggregation) {
         UNIT_ASSERT_VALUES_EQUAL(1, count["percentile_traits_factory"]);
     }
 
+}
+
+Y_UNIT_TEST_SUITE(Watermarks) {
+    Y_UNIT_TEST(Insert) {
+        const auto stmt = R"sql(
+USE plato;
+
+INSERT INTO Output
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK AS (ts)
+);
+)sql";
+        const auto& res = SqlToYql(stmt);
+        Err2Str(res, EDebugOutput::ToCerr);
+        UNIT_ASSERT(res.IsOk());
+    }
+
+    Y_UNIT_TEST(Select) {
+        const auto stmt = R"sql(
+USE plato;
+
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK AS (ts)
+);
+)sql";
+        const auto& res = SqlToYql(stmt);
+        Err2Str(res, EDebugOutput::ToCerr);
+        UNIT_ASSERT(res.IsOk());
+    }
 }

@@ -856,7 +856,6 @@ struct TEvControlPlaneStorage {
 
     struct TEvDeleteFolderResourcesRequest : NActors::TEventLocal<TEvDeleteFolderResourcesRequest, EvDeleteFolderResourcesRequest> {
         explicit TEvDeleteFolderResourcesRequest(
-            const TString& folderId,
             const TString& scope,
             const TString& user,
             const TString& token,
@@ -865,8 +864,7 @@ struct TEvControlPlaneStorage {
             TMaybe<TQuotaMap> quotas,
             TTenantInfo::TPtr tenantInfo,
             const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase)
-            : FolderId(folderId)
-            , Scope(scope)
+            : Scope(scope)
             , User(user)
             , Token(token)
             , CloudId(cloudId)
@@ -877,14 +875,12 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + FolderId.size()
                     + Scope.size()
                     + User.size()
                     + Token.size()
                     + CloudId.size();
         }
 
-        TString FolderId;
         TString Scope;
         TString User;
         TString Token;

@@ -345,6 +345,40 @@ Apple,2,22,
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_inference_sigsegv(self, kikimr, s3, client, unique_prefix):
+        # YQ-4511
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        read_data = '{' + (','.join(map(lambda k: f'"{k}":{k}', range(1024)))) + ',"1023":2}'
+        s3_client.put_object(Body=read_data, Bucket='fbucket', Key='data.json', ContentType='text/plain')
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "json_bucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT *
+            FROM `{storage_connection_name}`.`data.json`
+            WITH (format=json_each_row, with_infer='true');
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        assert "couldn\\'t open json file, check format and compression parameters:" in str(
+            client.describe_query(query_id).result
+        )
+
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_parameters(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"

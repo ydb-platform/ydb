@@ -53,7 +53,7 @@ struct TEvScanExchange {
             return ArrowBatch ? ArrowBatch->num_rows() : Rows.size();
         }
 
-        TEvSendData(const ui64 tabletId, TEvKqpCompute::TEvScanData& data, const std::shared_ptr<arrow::Table>& arrowBatch)
+        TEvSendData(const ui64 tabletId, const TEvKqpCompute::TEvScanData& data, const std::shared_ptr<arrow::Table>& arrowBatch)
             : ArrowBatch(arrowBatch)
             , TabletId(tabletId)
             , LocksInfo(data.LocksInfo)
@@ -65,7 +65,7 @@ struct TEvScanExchange {
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 
-        TEvSendData(const ui64 tabletId, TEvKqpCompute::TEvScanData& data, const std::shared_ptr<arrow::Table>& arrowBatch, std::vector<ui32>&& dataIndexes)
+        TEvSendData(const ui64 tabletId, const TEvKqpCompute::TEvScanData& data, const std::shared_ptr<arrow::Table>& arrowBatch, std::vector<ui32>&& dataIndexes)
             : ArrowBatch(arrowBatch)
             , TabletId(tabletId)
             , DataIndexes(std::move(dataIndexes))
@@ -78,7 +78,7 @@ struct TEvScanExchange {
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 
-        TEvSendData(const ui64 tabletId, TEvKqpCompute::TEvScanData& data, TVector<TOwnedCellVec>&& rows)
+        TEvSendData(const ui64 tabletId, const TEvKqpCompute::TEvScanData& data, TVector<TOwnedCellVec>&& rows)
             : Rows(std::move(rows))
             , TabletId(tabletId)
             , LocksInfo(data.LocksInfo)
@@ -89,7 +89,7 @@ struct TEvScanExchange {
             Y_ABORT_UNLESS(Rows.size());
         }
 
-        TEvSendData(const ui64 tabletId, TEvKqpCompute::TEvScanData& data)
+        TEvSendData(const ui64 tabletId, const TEvKqpCompute::TEvScanData& data)
             : TabletId(tabletId)
             , LocksInfo(data.LocksInfo)
             , Finished(data.Finished)

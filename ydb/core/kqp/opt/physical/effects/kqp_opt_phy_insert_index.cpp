@@ -88,71 +88,6 @@ TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TK
         .Done();
 }
 
-TExprBase BuildVectorResolveOverPrecompute(const NYql::NNodes::TDqPhyPrecompute& rowsPrecompute,
-    const NYql::NNodes::TExprBase& originalInput, const TKqpTable& kqpTableNode,
-    const TString& kqpIndexName, const TPositionHandle& pos, TExprContext& ctx)
-{
-    const TTypeAnnotationNode* originalAnnotation = originalInput.Ptr()->GetTypeAnn();
-    YQL_ENSURE(originalAnnotation, "vector resolve received non-annotated input");
-
-    TExprNode::TPtr input = originalInput.Ptr();
-    const TTypeAnnotationNode* itemType = nullptr;
-
-    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
-        itemType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-    } else {
-        YQL_ENSURE(EnsureListType(*input, ctx), "stream or list is allowed as input of vector resolve");
-        itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-    }
-
-    YQL_ENSURE(itemType->GetKind() == ETypeAnnotationKind::Struct);
-    auto* columns = itemType->Cast<TStructExprType>();
-    const TTypeAnnotationNode* resolveInputType = ctx.MakeType<TListExprType>(columns);
-
-    auto upsertIndexRows = Build<TKqpCnVectorResolve>(ctx, pos)
-        .Output()
-            .Stage<TDqStage>()
-                .Inputs()
-                    .Add(rowsPrecompute)
-                    .Build()
-                .Program()
-                    .Args({"vector_resolve_rows"})
-                    .Body<TCoToStream>()
-                        .Input("vector_resolve_rows")
-                        .Build()
-                    .Build()
-                .Settings().Build()
-                .Build()
-            .Index().Build(0)
-            .Build()
-        .Table(kqpTableNode)
-        .InputType(ExpandType(pos, *resolveInputType, ctx))
-        .Index(ctx.NewAtom(pos, kqpIndexName))
-        .Done();
-
-    // Wrap into a stage + union, TKqlUpsertRows doesn't work without it
-
-    auto upsertIndexStage = Build<TDqStage>(ctx, pos)
-        .Inputs()
-            .Add(upsertIndexRows)
-            .Build()
-        .Program()
-            .Args({"rows"})
-            .Body<TCoToStream>()
-                .Input("rows")
-                .Build()
-            .Build()
-        .Settings().Build()
-        .Done();
-
-    return Build<TDqCnUnionAll>(ctx, pos)
-        .Output()
-            .Stage(upsertIndexStage)
-            .Index().Build("0")
-            .Build()
-        .Done();
-}
-
 } // namespace
 
 TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription& table,
@@ -263,24 +198,6 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
         effects.emplace_back(upsertTable);
 
         for (const auto& [tableNode, indexDesc] : indexes) {
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                auto indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
-
-                auto upsertUnion = BuildVectorResolveOverPrecompute(insertRowsPrecompute, insert.Input(), insert.Table(), indexDesc->Name, insert.Pos(), ctx);
-
-                auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
-                    .Table(tableNode)
-                    .Input(upsertUnion)
-                    .Columns(BuildColumnsList(indexTableColumns, insert.Pos(), ctx))
-                    .ReturningColumns<TCoAtomList>().Build()
-                    .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
-                    .Done();
-
-                effects.emplace_back(upsertIndex);
-
-                continue;
-            }
-
             THashSet<TStringBuf> indexTableColumnsSet;
             TVector<TStringBuf> indexTableColumns;
 
@@ -304,6 +221,11 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
             auto upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
                 insert.Pos(), ctx, true);
+
+            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns, upsertIndexRows, insert.Pos(), ctx);
+                indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+            }
 
             auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
                 .Table(tableNode)

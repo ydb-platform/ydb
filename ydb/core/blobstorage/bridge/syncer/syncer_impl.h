@@ -55,9 +55,9 @@ namespace NKikimr::NBridge {
 
         void CheckIfDone();
 
-        template<typename T, typename TCallback>
+        template<typename T, typename TCallback, typename TKey>
         bool DoMergeEntities(std::deque<T>& source, std::deque<T>& target, bool sourceFinished, bool targetFinished,
-            TCallback&& merge);
+            TCallback&& merge, std::optional<TKey>& lastMerged);
 
         void IssueQuery(bool toTargetGroup, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {});
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
@@ -84,6 +84,10 @@ namespace NKikimr::NBridge {
         std::array<TAssimilateState, 2> GroupAssimilateState; // indexed by toTargetGroup
         TAssimilateState& SourceState = GroupAssimilateState[0];
         TAssimilateState& TargetState = GroupAssimilateState[1];
+
+        std::optional<std::tuple<ui64>> LastMergedBlocks;
+        std::optional<std::tuple<ui64, ui8>> LastMergedBarriers;
+        std::optional<std::tuple<TLogoBlobID>> LastMergedBlobs;
 
         void IssueAssimilateRequest(bool toTargetGroup);
         void Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev);

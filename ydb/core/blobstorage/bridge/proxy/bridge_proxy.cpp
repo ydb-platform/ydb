@@ -95,10 +95,10 @@ namespace NKikimr {
             }
 
             std::unique_ptr<IEventBase> Combine(TThis& /*self*/, TEvBlobStorage::TEvCollectGarbageResult *ev, auto *current) {
-                Y_DEBUG_ABORT_UNLESS(!current || (current->TabletId == ev->TabletId
+                Y_VERIFY_DEBUG_S(!current || (current->TabletId == ev->TabletId
                     && current->RecordGeneration == ev->RecordGeneration
                     && current->PerGenerationCounter == ev->PerGenerationCounter
-                    && current->Channel == ev->Channel));
+                    && current->Channel == ev->Channel), "ev# " << ev->ToString() << " current# " << current->ToString());
                 return CreateWithErrorReason(ev, ev->Status, ev->TabletId, ev->RecordGeneration,
                     ev->PerGenerationCounter, ev->Channel);
             }
@@ -300,7 +300,8 @@ namespace NKikimr {
                         }
                         // allow only keep flags to be sent
                         res = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(ev->TabletId, ev->RecordGeneration,
-                            ev->Channel, false, 0, 0, ev->Keep.Release(), nullptr, ev->Deadline);
+                            ev->PerGenerationCounter, ev->Channel, false, 0, 0, ev->Keep.Release(), nullptr, ev->Deadline,
+                            true, false, false);
                     }
                     [[fallthrough]];
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:

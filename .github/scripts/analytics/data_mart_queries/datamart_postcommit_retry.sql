@@ -43,7 +43,7 @@ $max_retries_by_commit = (
 
 
 
--- Итоговый результат
+-- Final result
 SELECT
     m.commit as commit,
     m.postcommit_start_run_timestamp as postcommit_start_run_timestamp,

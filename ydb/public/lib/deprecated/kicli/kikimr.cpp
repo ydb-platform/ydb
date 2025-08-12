@@ -94,6 +94,9 @@ public:
                                 // long polling in progress
                                 TAutoPtr<NMsgBusProxy::TBusSchemeOperationStatus> statusRequest = new NMsgBusProxy::TBusSchemeOperationStatus();
                                 statusRequest->Record.MutableFlatTxId()->CopyFrom(response.GetFlatTxId());
+                                if (SecurityToken) {
+                                    statusRequest->Record.SetSecurityToken(SecurityToken);
+                                }
                                 statusRequest->Record.MutablePollOptions()->SetTimeout(POLLING_TIMEOUT);
                                 auto status = ExecuteRequest(promise, statusRequest.Release());
                                 if (status != NBus::MESSAGE_OK) {
@@ -159,6 +162,13 @@ public:
     virtual NBus::EMessageStatus ExecuteRequest(NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request) = 0;
     virtual TString GetCurrentLocation() const = 0;
     virtual TCleanupCallback SwitchToLocation(const TString& location) = 0;
+
+    virtual void SetSecurityToken(const TString& securityToken) {
+        SecurityToken = securityToken;
+    }
+
+private:
+    TString SecurityToken;
 };
 
 class TKikimr::TMsgBusImpl : public TKikimr::TImpl {
@@ -538,6 +548,7 @@ NThreading::TFuture<TResult> TKikimr::CreateTable(TSchemaObject& object, const T
 
 void TKikimr::SetSecurityToken(const TString& securityToken) {
     SecurityToken = securityToken;
+    Impl->SetSecurityToken(securityToken);
 }
 
 TPreparedQuery TKikimr::Query(const TUnbindedQuery& query) {
@@ -574,6 +585,9 @@ NThreading::TFuture<TResult> TKikimr::RegisterNode(const TString& domainPath, co
     request->Record.SetFixedNodeId(fixedNodeId);
     if (path) {
         request->Record.SetPath(*path);
+    }
+    if (SecurityToken) {
+        request->Record.SetSecurityToken(SecurityToken);
     }
     return ExecuteRequest(request.Release());
 }

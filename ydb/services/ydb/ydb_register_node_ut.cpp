@@ -1043,15 +1043,25 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
 
     Cerr << "Trying to register node" << Endl;
 
-    auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
-    UNIT_ASSERT_C(resp->IsSuccess(), resp->GetErrorMessage());
+    {
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+        UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "unauthenticated, unauthenticated: { <main>: Error: Access denied without user token }");
+    }
 
-    Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    {
+        kikimr.SetSecurityToken(BUILTIN_ACL_ROOT);
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(resp->IsSuccess(), resp->GetErrorMessage());
+
+        Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    }
 }
 
 Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
     TKikimrServerForTestNodeRegistration server({
         .EnforceUserToken = true,
+        .EnableDynamicNodeAuth = true
     });
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -1083,10 +1093,26 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
 
     Cerr << "Trying to register node" << Endl;
 
-    auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
-    UNIT_ASSERT_C(resp->IsSuccess(), resp->GetErrorMessage());
+    {
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+        UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "unauthenticated, unauthenticated: { <main>: Error: Access denied without user token }");
+    }
 
-    Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    {
+        kikimr.SetSecurityToken(BUILTIN_ACL_ROOT);
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(resp->IsSuccess(), resp->GetErrorMessage());
+
+        Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    }
+
+    {
+        kikimr.SetSecurityToken("wrong_token");
+        auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
+        UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
+        UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "unauthenticated, unauthenticated: { <main>: Error: Could not find correct token validator }");
+    }
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
@@ -1108,9 +1134,11 @@ Y_UNIT_TEST(ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
 
     auto resp = TryToRegisterDynamicNode(kikimr, "Root", "localhost", "localhost", "localhost", GetRandomPort());
     UNIT_ASSERT_C(!resp->IsSuccess(), resp->GetErrorMessage());
-    UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "Cannot create token from certificate. Client certificate failed verification");
+    UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "unauthenticated, unauthenticated: { <main>: Error: Cannot create token from certificate. Client certificate failed verification }");
 
-    Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    if (resp->GetTransportStatus() == NBus::MESSAGE_OK) {
+        Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
+    }
 }
 
 }

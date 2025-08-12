@@ -744,7 +744,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasLegacy) {
             // start legacy service
-            auto grpcService = new NGRpcProxy::TGRpcService();
+            auto grpcService = new NGRpcProxy::TGRpcService(grpcRequestProxies[0]);
             auto future = grpcService->Prepare(ActorSystem.Get(), NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NMsgBusProxy::CreateMsgBusProxyId(), Counters);
             auto startCb = [grpcService](NThreading::TFuture<void> result) {
                 if (result.HasException()) {

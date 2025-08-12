@@ -23,7 +23,7 @@ public:
         {}
     };
 
-    struct TInfo;
+    struct TPageCollection;
 
     struct TStats {
         ui64 PageCollections = 0;
@@ -36,19 +36,19 @@ public:
         const TPageId Id;
         const size_t Size;
         const TSharedPageRef SharedBody;
-        const TInfo* const Info;
+        const TPageCollection* const PageCollection;
 
-        TPage(TPageId id, size_t size, TSharedPageRef sharedBody, TInfo* info);
+        TPage(TPageId id, size_t size, TSharedPageRef sharedBody, TPageCollection* pageCollection);
 
         bool IsSticky() const noexcept {
             // Note: because this method doesn't use TPage flags
             // it may be called from multiple threads later
             // also it doesn't affect offloading, only touched memory counting
-            return Info->IsStickyPage(Id);
+            return PageCollection->IsStickyPage(Id);
         }
     };
 
-    struct TInfo : public TThrRefBase {
+    struct TPageCollection : public TThrRefBase {
         TPage* FindPage(TPageId pageId) const noexcept {
             return PageMap[pageId].Get();
         }
@@ -106,8 +106,8 @@ public:
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
 
-        explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection);
-        TInfo(const TInfo &info);
+        explicit TPageCollection(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection);
+        TPageCollection(const TPageCollection &pageCollection);
 
     private:
         // all pages in PageMap have valid unused shared body
@@ -119,24 +119,24 @@ public:
     };
 
 public:
-    TInfo* FindPageCollection(const TLogoBlobID &id) const;
-    TInfo* GetPageCollection(const TLogoBlobID &id) const;
-    THashMap<TLogoBlobID, THashSet<TPageId>> AddPageCollection(TIntrusivePtr<TInfo> info);
-    void DropPageCollection(TInfo *info);
+    TPageCollection* FindPageCollection(const TLogoBlobID &id) const;
+    TPageCollection* GetPageCollection(const TLogoBlobID &id) const;
+    THashMap<TLogoBlobID, THashSet<TPageId>> AddPageCollection(TIntrusivePtr<TPageCollection> pageCollection);
+    void DropPageCollection(TPageCollection *pageCollection);
 
     const TStats& GetStats() const { return Stats; }
 
-    TSharedPageRef TryGetPage(TPageId pageId, TInfo *info);
+    TSharedPageRef TryGetPage(TPageId pageId, TPageCollection *pageCollection);
 
-    void DropPage(TPageId pageId, TInfo *info);
-    void AddPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info);
-    void AddStickyPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info);
-    bool UpdateCacheMode(ECacheMode newCacheMode, TInfo *info);
+    void DropPage(TPageId pageId, TPageCollection *pageCollection);
+    void AddPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection);
+    void AddStickyPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection);
+    bool UpdateCacheMode(ECacheMode newCacheMode, TPageCollection *pageCollection);
 
-    THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
+    THashMap<TLogoBlobID, TIntrusivePtr<TPageCollection>> DetachPrivatePageCache();
 
 private:
-    THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> PageCollections;
+    THashMap<TLogoBlobID, TIntrusivePtr<TPageCollection>> PageCollections;
 
     TStats Stats;
 };

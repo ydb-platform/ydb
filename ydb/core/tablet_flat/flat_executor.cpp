@@ -226,7 +226,7 @@ void TExecutor::Broken() {
     return PassAway();
 }
 
-void TExecutor::RecreatePageCollectionsCache()
+void TExecutor::RecreatePrivateCache()
 {
     PrivatePageCache = MakeHolder<TPrivatePageCache>();
 
@@ -236,7 +236,7 @@ void TExecutor::RecreatePageCollectionsCache()
         auto subset = Database->Subset(it.first, NTable::TEpoch::Max(), { }, { });
         const auto& cacheModes = GetCacheModes(it.first);
         for (auto &partView : subset->Flatten) {
-            AddCachesOfBundle(partView, cacheModes);
+            AddPartStorePageCollections(partView, cacheModes);
         }
     }
 
@@ -431,7 +431,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
     PendingBlobQueue.Config.NoDataCounter = GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
 
     ReadResourceProfile();
-    RecreatePageCollectionsCache();
+    RecreatePrivateCache();
     ReflectSchemeSettings();
 
     UpdateCachePagesForDatabase();
@@ -482,7 +482,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     PendingBlobQueue.Config.NoDataCounter = GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
 
     ReadResourceProfile();
-    RecreatePageCollectionsCache();
+    RecreatePrivateCache();
     ReflectSchemeSettings();
 
     UpdateCachePagesForDatabase();
@@ -643,7 +643,7 @@ void TExecutor::PlanTransactionActivation() {
     }
 }
 
-void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& loadedPages, TPrivatePageCache::TInfo* collectionInfo) {
+void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& loadedPages, TPrivatePageCache::TPageCollection* pageCollection) {
     Y_ENSURE(waitPad);
     Y_ENSURE(waitPad->PendingRequests);
     --waitPad->PendingRequests;
@@ -654,8 +654,8 @@ void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPa
     }
     TTransactionWaitPad& transaction = *it->second;
     
-    if (collectionInfo) {
-        auto &pinnedCollection = transaction.Seat->Pinned[collectionInfo->Id];
+    if (pageCollection) {
+        auto &pinnedCollection = transaction.Seat->Pinned[pageCollection->Id];
         for (auto& loaded : loadedPages) {
             auto inserted = pinnedCollection.insert(std::make_pair(loaded.PageId, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
             Y_ENSURE(inserted.second);
@@ -704,7 +704,7 @@ void TExecutor::LogWaitingTransaction(const TTransactionWaitPad& transaction) {
     }
 }
 
-void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes)
+void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes)
 {
     auto *partStore = partView.As<NTable::TPartStore>();
 
@@ -722,21 +722,21 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView, const THash
     }
 
     for (auto &cache : partStore->PageCollections) {
-        AddSingleCache(cache);
+        AddPageCollection(cache);
     }
 
     if (const auto &blobs = partStore->Pseudo)
-        AddSingleCache(blobs);
+        AddPageCollection(blobs);
 }
 
-void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info)
+void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection)
 {
-    auto sharedCacheTouches = PrivatePageCache->AddPageCollection(info);
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, info->GetCacheMode()));
+    auto sharedCacheTouches = PrivatePageCache->AddPageCollection(pageCollection);
+    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode()));
     SendSharedCacheTouches(std::move(sharedCacheTouches));
 }
 
-void TExecutor::DropCachesOfBundle(const NTable::TPart &part)
+void TExecutor::DropPartStorePageCollections(const NTable::TPart &part)
 {
     auto *partStore = CheckedCast<const NTable::TPartStore*>(&part);
 
@@ -748,21 +748,21 @@ void TExecutor::DropCachesOfBundle(const NTable::TPart &part)
     }
 
     for (auto &cache : partStore->PageCollections)
-        DropSingleCache(cache->Id);
+        DropPageCollection(cache->Id);
 
     if (const auto &blobs = partStore->Pseudo)
-        DropSingleCache(blobs->Id);
+        DropPageCollection(blobs->Id);
 }
 
-void TExecutor::DropSingleCache(const TLogoBlobID &label)
+void TExecutor::DropPageCollection(const TLogoBlobID &pageCollectionId)
 {
-    auto pageCollection = PrivatePageCache->GetPageCollection(label);
+    auto pageCollection = PrivatePageCache->GetPageCollection(pageCollectionId);
 
     PrivatePageCache->DropPageCollection(pageCollection);
 
     // Note: Shared Cache will send TEvResult with NKikimrProto::RACE status
     // it activates all transactions that are waiting for being dropped page collection
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvDetach(label));
+    Send(MakeSharedPageCacheId(), new NSharedCache::TEvDetach(pageCollectionId));
 }
 
 void TExecutor::SendSharedCacheTouches(THashMap<TLogoBlobID, THashSet<TPageId>>&& touches) {
@@ -807,7 +807,7 @@ TExecutorCaches TExecutor::CleanupState() {
         caches = BootLogic->DetachCaches();
     } else {
         if (PrivatePageCache) {
-            caches.PageCaches = PrivatePageCache->DetachPrivatePageCache();
+            caches.PageCollections = PrivatePageCache->DetachPrivatePageCache();
         }
         if (Database) {
             Database->EnumerateTxStatusParts([&caches](const TIntrusiveConstPtr<NTable::TTxStatusPart>& txStatus) {
@@ -1106,7 +1106,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
 
         for (auto &subset : Database->RollUp(Stamp(), schemeUpdate, dataUpdate, annex))
             for (auto &partView: subset->Flatten)
-                DropCachesOfBundle(*partView);
+                DropPartStorePageCollections(*partView);
 
         if (schemeUpdate) {
             ReadResourceProfile();
@@ -1555,7 +1555,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
     for (auto &bundle : partSwitch.NewBundles) {
         auto* stage = bundle.GetStage<TPendingPartSwitch::TResultStage>();
         Y_ENSURE(stage && stage->PartView, "Missing bundle result in part switch");
-        AddCachesOfBundle(stage->PartView, cacheModes);
+        AddPartStorePageCollections(stage->PartView, cacheModes);
         if (stickyColumns) {
             RequestInMemPagesForPartStore(stage->PartView, stickyColumns);
         }
@@ -1614,7 +1614,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         Database->Replace(partSwitch.TableId, *subset, std::move(newParts), std::move(newTxStatus));
 
         for (auto &gone : subset->Flatten)
-            DropCachesOfBundle(*gone);
+            DropPartStorePageCollections(*gone);
 
         Send(Owner->Tablet(), new TEvTablet::TEvFGcAck(Owner->TabletID(), Generation(), partSwitch.FollowerUpdateStep));
     } else {
@@ -3021,7 +3021,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     case ESharedCacheRequestType::Transaction:
     case ESharedCacheRequestType::InMemPages:
         {
-            TPrivatePageCache::TInfo *pageCollection = PrivatePageCache->FindPageCollection(msg->PageCollection->Label());
+            TPrivatePageCache::TPageCollection *pageCollection = PrivatePageCache->FindPageCollection(msg->PageCollection->Label());
             if (!pageCollection) {
                 if (requestType == ESharedCacheRequestType::Transaction) {
                     TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
@@ -3504,7 +3504,7 @@ void TExecutor::UtilizeSubset(const NTable::TSubset &subset,
             seen.Sieve[it].MaterializeTo(commit->GcDelta.Deleted);
         }
 
-        DropCachesOfBundle(*partStore);
+        DropPartStorePageCollections(*partStore);
     }
 
     for (auto it : xrange(subset.ColdParts.size())) {
@@ -3677,7 +3677,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         for (const auto &result : results) {
             const auto &newPart = result.Part;
 
-            AddCachesOfBundle(newPart, cacheModes);
+            AddPartStorePageCollections(newPart, cacheModes);
 
             auto *partStore = newPart.As<NTable::TPartStore>();
 

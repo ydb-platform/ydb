@@ -4084,16 +4084,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TTestHelper testHelper(settings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("hash").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("length").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-        };
-
-        TTestHelper::TColumnTable testTable;
-        const TString tableName = "/Root/ttt";
-        testTable.SetName(tableName).SetPrimaryKey({ "hash" }).SetSharding({ "hash" }).SetSchema(schema);
-        testHelper.CreateTable(testTable);
+        auto queryClient = testHelper.GetKikimr().GetQueryClient();
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                    CREATE TABLE `/Root/arrow/columns` (
+                        hash Utf8 NOT NULL, 
+                        length Int32 NOT NULL, 
+                        PRIMARY KEY(hash)
+                    )
+                    WITH (STORE = COLUMN)
+                )", NQuery::TTxControl::NoTx())
+                              .GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         const unsigned char schemaBytes[] = { 0xff, 0xff, 0xff, 0xff, 0xe0, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00,
             0x0e, 0x00, 0x06, 0x00, 0x0d, 0x00, 0x08, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x01,
@@ -4121,15 +4125,19 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a,
             0x00, 0x00, 0x00, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-        const auto& serializedData = TString{ (const char*)dataBytes, sizeof(dataBytes) };
-
-        const auto& arrowSchema = NArrow::DeserializeSchema(serializedSchema);
-        const auto& arrowData = NArrow::DeserializeBatch(serializedData, arrowSchema);
-        testHelper.BulkUpsert(testTable, arrowData, Ydb::StatusIds::SUCCESS);
+        {
+            //write prepared serialized batch, that contains a single row
+            const auto& serializedData = TString{ (const char*)dataBytes, sizeof(dataBytes) };
+            const auto& arrowSchema = NArrow::DeserializeSchema(serializedSchema);
+            const auto& arrowBatch = NArrow::DeserializeBatch(serializedData, arrowSchema);
+            auto csHelper = NKikimr::Tests::NCS::THelper{ testHelper.GetKikimr().GetTestServer() };
+            csHelper.SendDataViaActorSystem("/Root/arrow/columns", arrowBatch, Ydb::StatusIds::SUCCESS);
+        }
 
         {
+            //check that the row is written to the table
             auto queryClient = testHelper.GetKikimr().GetQueryClient();
-            auto result = queryClient.ExecuteQuery("SELECT * FROM `/Root/ttt`", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = queryClient.ExecuteQuery("SELECT * FROM `/Root/arrow/columns`", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson("[[\"1234567890\";10]]", FormatResultSetYson(result.GetResultSet(0)));
         }

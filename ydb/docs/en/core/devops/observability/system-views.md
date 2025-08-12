@@ -46,8 +46,13 @@ Additionally, there is a separate view that shows statistics on the usage of gro
 | DecommitStatus        | String    |         | Status of PDisk [decommissioning](../deployment-options/manual/decommissioning.md) (`DECOMMIT_NONE`, `DECOMMIT_PENDING`, `DECOMMIT_IMMINENT`, `DECOMMIT_REJECTED`)       |
 | InferPDiskSlotCountFromUnitSize  | Uint64    |         | Size of VSlot in bytes from which `ExpectedSlotCount` and `SlotSizeInUnits` values are inferred unless user-defined. |
 
-The inferred values of `ExpectedSlotCount` and `SlotSizeInUnits` are defined by the formula $\text{ExpectedSlotCount} \times \text{SlotSizeInUnits} = \frac{\text{TotalSize}}{\text{InferPDiskSlotCountFromUnitSize}}
-The inferred values of `ExpectedSlotCount` and `SlotSizeInUnits` are defined by the formula $\text{ExpectedSlotCount} \times \text{SlotSizeInUnits} = \frac{\text{TotalSize}}{\text{InferPDiskSlotCountFromUnitSize}}$, where $\text{SlotSizeInUnits} = 2^N$ is chosen to meet $\text{ExpectedSlotCount} \leq 16$.
+The inferred values of `ExpectedSlotCount` and `SlotSizeInUnits` are defined by the following formula:
+
+$$
+\text{ExpectedSlotCount} \times \text{SlotSizeInUnits} = \frac{\text{TotalSize}}{\text{InferPDiskSlotCountFromUnitSize}}
+$$
+
+$\text{SlotSizeInUnits} = 2^N$ is chosen to meet $\text{ExpectedSlotCount} \leq 16$.
 
 ### ds_vslots
 

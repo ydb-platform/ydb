@@ -71,7 +71,7 @@ Where $\text{SlotSizeInUnits} = 2^N$ is chosen to meet $\text{ExpectedSlotCount}
 | Status          | String   |         | State of the running VDisk in this VSlot (`INIT_PENDING`, `REPLICATING`, `READY`, `ERROR`)             |
 | Kind            | String   |         | Preset VDisk operating mode setting (`Default`, `Log`, ...)                                        |
 
-Note that the tuple (NodeId, PDiskId) forms a foreign key to the `ds_pdisks` view, and (GroupId) to the `ds_groups` view.
+Note that the tuple `(NodeId, PDiskId)` forms a foreign key to the `ds_pdisks` view, and `(GroupId)` to the `ds_groups` view.
 
 ### ds_groups
 

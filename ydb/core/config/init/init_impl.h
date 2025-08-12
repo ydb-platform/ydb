@@ -339,6 +339,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
+    bool ForceApplyDynconfig = false;
     EWorkload Workload = EWorkload::Hybrid;
     TString BridgePileName;
     TString SeedNodesFile;
@@ -348,6 +349,9 @@ struct TCommonAppOptions {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
             .DefaultValue("unknown").OptionalArgument("STR")
             .Handler(new TWithDefaultOptHandler(&ClusterName));
+        opts.AddLongOption("force-apply-dynconfig", "is set if you need to start a dynamic node in emergency no-console mode, using the configuration from --yaml-config")
+            .NoArgument()
+            .SetFlag(&ForceApplyDynconfig);
         opts.AddLongOption("log-level", "default logging level").OptionalArgument("1-7")
             .DefaultValue(ToString(DefaultLogLevel))
             .Handler(new TWithDefaultOptHandler(&LogLevel));
@@ -1053,6 +1057,7 @@ class TInitialConfiguratorImpl
     TString TenantName;
     TString ClusterName;
     TString NodeName;
+    TString YamlConfigString;
 
     TMap<TString, TString> Labels;
 
@@ -1134,6 +1139,9 @@ public:
         if (CommonAppOptions.IsStaticNode()) {
             InitStaticNode();
         } else {
+            if (CommonAppOptions.ForceApplyDynconfig && CommonAppOptions.YamlConfigFile) {
+                FillYamlConfigString(refs, CommonAppOptions.YamlConfigFile);
+            }
             InitDynamicNode();
         }
 
@@ -1382,6 +1390,12 @@ public:
         std::optional<TString> StartupStorageYaml;
     };
 
+    void FillYamlConfigString(TConfigRefs refs, const TString& yamlConfigFile) {
+        IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
+        IErrorCollector& errorCollector = refs.ErrorCollector;
+        YamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
+    }
+
     void InitStaticNode() {
         CommonAppOptions.ValidateStaticNodeConfig();
         Labels["node_kind"] = "static";
@@ -1415,6 +1429,23 @@ public:
             return;
         }
 
+        if (CommonAppOptions.ForceApplyDynconfig && !CommonAppOptions.YamlConfigFile) {
+            ythrow yexception() << "YAML config is not specified with --force-apply-dynconfig";
+        } 
+
+        if (CommonAppOptions.ForceApplyDynconfig) {
+            NKikimrConfig::TAppConfig yamlConfig;
+            NYamlConfig::ResolveAndParseYamlConfig(
+                YamlConfigString,
+                {},
+                Labels,
+                yamlConfig,
+                std::nullopt);
+            InitDebug.YamlConfig.CopyFrom(yamlConfig);
+            NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, yamlConfig, ConfigUpdateTracer);
+            return ApplyConfigForNode(appConfig);
+        }
+
         TVector<TString> addrs;
         CommonAppOptions.FillClusterEndpoints(AppConfig, addrs);
 
@@ -1432,7 +1463,6 @@ public:
         if (!result) {
             return;
         }
-
         NKikimrConfig::TAppConfig yamlConfig = GetYamlConfigFromResult(*result, Labels);
         NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
 

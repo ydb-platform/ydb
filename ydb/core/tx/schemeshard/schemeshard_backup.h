@@ -31,12 +31,12 @@ struct TEvBackup {
         EvListIncrementalBackupsRequest,
         EvListIncrementalBackupsResponse,
 
-        EvGetIncrementalRestoreRequest,
-        EvGetIncrementalRestoreResponse,
-        EvForgetIncrementalRestoreRequest,
-        EvForgetIncrementalRestoreResponse,
-        EvListIncrementalRestoresRequest,
-        EvListIncrementalRestoresResponse,
+        EvGetBackupCollectionRestoreRequest,
+        EvGetBackupCollectionRestoreResponse,
+        EvForgetBackupCollectionRestoreRequest,
+        EvForgetBackupCollectionRestoreResponse,
+        EvListBackupCollectionRestoresRequest,
+        EvListBackupCollectionRestoresResponse,
 
         EvEnd
     };
@@ -105,45 +105,45 @@ struct TEvBackup {
     };
     DECLARE_EVENT_CLASS(EvListIncrementalBackupsResponse) {};
 
-    DECLARE_EVENT_CLASS(EvGetIncrementalRestoreRequest) {
-        TEvGetIncrementalRestoreRequest() = default;
+    DECLARE_EVENT_CLASS(EvGetBackupCollectionRestoreRequest) {
+        TEvGetBackupCollectionRestoreRequest() = default;
 
-        explicit TEvGetIncrementalRestoreRequest(const TString& dbName, ui64 incrementalRestoreId) {
+        explicit TEvGetBackupCollectionRestoreRequest(const TString& dbName, ui64 incrementalRestoreId) {
             Record.SetDatabaseName(dbName);
-            Record.SetIncrementalRestoreId(incrementalRestoreId);
+            Record.SetBackupCollectionRestoreId(incrementalRestoreId);
         }
     };
-    DECLARE_EVENT_CLASS(EvGetIncrementalRestoreResponse) {};
-    DECLARE_EVENT_CLASS(EvForgetIncrementalRestoreRequest) {
-        TEvForgetIncrementalRestoreRequest() = default;
+    DECLARE_EVENT_CLASS(EvGetBackupCollectionRestoreResponse) {};
+    DECLARE_EVENT_CLASS(EvForgetBackupCollectionRestoreRequest) {
+        TEvForgetBackupCollectionRestoreRequest() = default;
 
-        explicit TEvForgetIncrementalRestoreRequest(
+        explicit TEvForgetBackupCollectionRestoreRequest(
             const ui64 txId,
             const TString& dbName,
             ui64 incrementalRestoreId
             ) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
-            Record.SetIncrementalRestoreId(incrementalRestoreId);
+            Record.SetBackupCollectionRestoreId(incrementalRestoreId);
         }
     };
-    DECLARE_EVENT_CLASS(EvForgetIncrementalRestoreResponse) {
-        TEvForgetIncrementalRestoreResponse() = default;
+    DECLARE_EVENT_CLASS(EvForgetBackupCollectionRestoreResponse) {
+        TEvForgetBackupCollectionRestoreResponse() = default;
 
-        explicit TEvForgetIncrementalRestoreResponse(const ui64 txId) {
+        explicit TEvForgetBackupCollectionRestoreResponse(const ui64 txId) {
             Record.SetTxId(txId);
         }
     };
-    DECLARE_EVENT_CLASS(EvListIncrementalRestoresRequest) {
-        TEvListIncrementalRestoresRequest() = default;
+    DECLARE_EVENT_CLASS(EvListBackupCollectionRestoresRequest) {
+        TEvListBackupCollectionRestoresRequest() = default;
 
-        explicit TEvListIncrementalRestoresRequest(const TString& dbName, ui64 pageSize, TString pageToken) {
+        explicit TEvListBackupCollectionRestoresRequest(const TString& dbName, ui64 pageSize, TString pageToken) {
             Record.SetDatabaseName(dbName);
             Record.SetPageSize(pageSize);
             Record.SetPageToken(pageToken);
         }
     };
-    DECLARE_EVENT_CLASS(EvListIncrementalRestoresResponse) {};
+    DECLARE_EVENT_CLASS(EvListBackupCollectionRestoresResponse) {};
 
 
 #undef DECLARE_EVENT_CLASS

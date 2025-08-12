@@ -9,7 +9,7 @@ using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TIncrementalRestore::TTxList: public NTabletFlatExecutor::TTransactionBase<TSchemeShard>{
 public:
-    explicit TTxList(TSelf* self, TEvBackup::TEvListIncrementalRestoresRequest::TPtr& ev)
+    explicit TTxList(TSelf* self, TEvBackup::TEvListBackupCollectionRestoresRequest::TPtr& ev)
         : TBase(self)
         , Request(ev)
     {}
@@ -59,7 +59,7 @@ public:
         const auto& record = Request->Get()->Record;
         LOG_D("Execute " << record.ShortDebugString());
 
-        Response = MakeHolder<TEvBackup::TEvListIncrementalRestoresResponse>();
+        Response = MakeHolder<TEvBackup::TEvListBackupCollectionRestoresResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
@@ -128,11 +128,11 @@ public:
 
 private:
     TSideEffects SideEffects;
-    TEvBackup::TEvListIncrementalRestoresRequest::TPtr Request;
-    THolder<TEvBackup::TEvListIncrementalRestoresResponse> Response;
+    TEvBackup::TEvListBackupCollectionRestoresRequest::TPtr Request;
+    THolder<TEvBackup::TEvListBackupCollectionRestoresResponse> Response;
 };
 
-ITransaction* TSchemeShard::CreateTxListRestore(TEvBackup::TEvListIncrementalRestoresRequest::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxListRestore(TEvBackup::TEvListBackupCollectionRestoresRequest::TPtr& ev) {
     return new TIncrementalRestore::TTxList(this, ev);
 }
 

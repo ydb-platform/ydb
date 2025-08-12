@@ -2985,21 +2985,21 @@ namespace NSchemeShardUT_Private {
         }
     }
 
-    NKikimrBackup::TEvGetIncrementalRestoreResponse TestGetIncrementalRestore(TTestActorRuntime& runtime, ui64 id, const TString& dbName, Ydb::StatusIds::StatusCode expectedStatus) {
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvGetIncrementalRestoreRequest(dbName, id));
+    NKikimrBackup::TEvGetBackupCollectionRestoreResponse TestGetBackupCollectionRestore(TTestActorRuntime& runtime, ui64 id, const TString& dbName, Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvGetBackupCollectionRestoreRequest(dbName, id));
 
         TAutoPtr<IEventHandle> handle;
-        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvGetIncrementalRestoreResponse>(handle);
-        UNIT_ASSERT_EQUAL(ev->Record.GetIncrementalRestore().GetStatus(), expectedStatus);
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvGetBackupCollectionRestoreResponse>(handle);
+        UNIT_ASSERT_EQUAL(ev->Record.GetBackupCollectionRestore().GetStatus(), expectedStatus);
 
         return ev->Record;
     }
 
-    NKikimrBackup::TEvForgetIncrementalRestoreResponse TestForgetIncrementalRestore(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 restoreId, Ydb::StatusIds::StatusCode expectedStatus) {
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvForgetIncrementalRestoreRequest(txId, dbName, restoreId));
+    NKikimrBackup::TEvForgetBackupCollectionRestoreResponse TestForgetBackupCollectionRestore(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 restoreId, Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvForgetBackupCollectionRestoreRequest(txId, dbName, restoreId));
 
         TAutoPtr<IEventHandle> handle;
-        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvForgetIncrementalRestoreResponse>(handle);
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvForgetBackupCollectionRestoreResponse>(handle);
         Cerr << "FORGET DEBUG: Expected status=" << expectedStatus << ", Actual status=" << ev->Record.GetStatus() << Endl;
         Cerr << "FORGET DEBUG: Full response: " << ev->Record.ShortDebugString() << Endl;
         UNIT_ASSERT_EQUAL(ev->Record.GetStatus(), expectedStatus);
@@ -3007,11 +3007,11 @@ namespace NSchemeShardUT_Private {
         return ev->Record;
     }
 
-    NKikimrBackup::TEvListIncrementalRestoresResponse TestListIncrementalRestores(TTestActorRuntime& runtime, const TString& dbName, ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus) {
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvListIncrementalRestoresRequest(dbName, pageSize, pageToken));
+    NKikimrBackup::TEvListBackupCollectionRestoresResponse TestListBackupCollectionRestores(TTestActorRuntime& runtime, const TString& dbName, ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus) {
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), new TEvBackup::TEvListBackupCollectionRestoresRequest(dbName, pageSize, pageToken));
 
         TAutoPtr<IEventHandle> handle;
-        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvListIncrementalRestoresResponse>(handle);
+        auto ev = runtime.GrabEdgeEvent<TEvBackup::TEvListBackupCollectionRestoresResponse>(handle);
         UNIT_ASSERT_EQUAL(ev->Record.GetStatus(), expectedStatus);
 
         return ev->Record;

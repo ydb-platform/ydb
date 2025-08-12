@@ -41,15 +41,15 @@ void TSchemeShard::Handle(TEvBackup::TEvListIncrementalBackupsRequest::TPtr& ev,
     Execute(CreateTxList(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvBackup::TEvGetIncrementalRestoreRequest::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvBackup::TEvGetBackupCollectionRestoreRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxGetRestore(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvBackup::TEvForgetIncrementalRestoreRequest::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvBackup::TEvForgetBackupCollectionRestoreRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxForgetRestore(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvBackup::TEvListIncrementalRestoresRequest::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvBackup::TEvListBackupCollectionRestoresRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxListRestore(ev), ctx);
 }
 

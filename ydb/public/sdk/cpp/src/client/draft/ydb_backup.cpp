@@ -61,7 +61,7 @@ const TIncrementalBackupResponse::TMetadata& TIncrementalBackupResponse::Metadat
     return Metadata_;
 }
 
-TIncrementalRestoreResponse::TIncrementalRestoreResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
+TBackupCollectionRestoreResponse::TBackupCollectionRestoreResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
      : TOperation(std::move(status), std::move(operation))
 {
     Ydb::Backup::IncrementalRestoreMetadata metadata;
@@ -71,7 +71,7 @@ TIncrementalRestoreResponse::TIncrementalRestoreResponse(TStatus&& status, Ydb::
     Metadata_.ProgressPercent = metadata.progress_percent();
 }
 
-const TIncrementalRestoreResponse::TMetadata& TIncrementalRestoreResponse::Metadata() const {
+const TBackupCollectionRestoreResponse::TMetadata& TBackupCollectionRestoreResponse::Metadata() const {
     return Metadata_;
 }
 

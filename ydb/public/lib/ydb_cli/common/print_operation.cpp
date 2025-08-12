@@ -349,11 +349,11 @@ namespace {
     }
 
     // Incremental restore
-    TPrettyTable MakeTable(const NYdb::NBackup::TIncrementalRestoreResponse&) {
+    TPrettyTable MakeTable(const NYdb::NBackup::TBackupCollectionRestoreResponse&) {
         return TPrettyTable({"id", "ready", "status", "progress"});
     }
 
-    TString PrintProgress(const NYdb::NBackup::TIncrementalRestoreResponse::TMetadata& metadata) {
+    TString PrintProgress(const NYdb::NBackup::TBackupCollectionRestoreResponse::TMetadata& metadata) {
         TStringBuilder result;
 
         result << metadata.Progress;
@@ -366,7 +366,7 @@ namespace {
         return result;
     }
 
-    void PrettyPrint(const NYdb::NBackup::TIncrementalRestoreResponse& operation, TPrettyTable& table) {
+    void PrettyPrint(const NYdb::NBackup::TBackupCollectionRestoreResponse& operation, TPrettyTable& table) {
         const auto& status = operation.Status();
         const auto& metadata = operation.Metadata();
 
@@ -520,11 +520,11 @@ void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TIncre
 }
 
 // Incremental restore
-void PrintOperation(const NYdb::NBackup::TIncrementalRestoreResponse& operation, EDataFormat format) {
+void PrintOperation(const NYdb::NBackup::TBackupCollectionRestoreResponse& operation, EDataFormat format) {
     PrintOperationImpl(operation, format);
 }
 
-void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TIncrementalRestoreResponse>& operations, EDataFormat format) {
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TBackupCollectionRestoreResponse>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 
@@ -581,69 +581,6 @@ void Out<NYdb::NQuery::EExecMode>(IOutputStream& o, NYdb::NQuery::EExecMode stat
             o << TStringBuf("unspecified");
             return;
         default:
-            o << TStringBuf("unknown");
-            return;
-    }
-
-    Y_ABORT(); // for GCC
-}
-
-template <>
-void Out<NYdb::NBackup::EBackupProgress>(IOutputStream& o, NYdb::NBackup::EBackupProgress progress) {
-    using NYdb::NBackup::EBackupProgress;
-    switch (progress) {
-        case EBackupProgress::Unspecified:
-            o << TStringBuf("unspecified");
-            return;
-        case EBackupProgress::Preparing:
-            o << TStringBuf("preparing");
-            return;
-        case EBackupProgress::TransferData:
-            o << TStringBuf("transfer-data");
-            return;
-        case EBackupProgress::Done:
-            o << TStringBuf("done");
-            return;
-        case EBackupProgress::Cancellation:
-            o << TStringBuf("cancelling");
-            return;
-        case EBackupProgress::Cancelled:
-            o << TStringBuf("cancelled");
-            return;
-        case EBackupProgress::Unknown:
-            o << TStringBuf("unknown");
-            return;
-    }
-
-    Y_ABORT(); // for GCC
-}
-
-template <>
-void Out<NYdb::NBackup::ERestoreProgress>(IOutputStream& o, NYdb::NBackup::ERestoreProgress progress) {
-    using NYdb::NBackup::ERestoreProgress;
-    switch (progress) {
-        case ERestoreProgress::Unspecified:
-            o << TStringBuf("unspecified");
-            return;
-        case ERestoreProgress::Preparing:
-            o << TStringBuf("preparing");
-            return;
-        case ERestoreProgress::TransferData:
-            o << TStringBuf("transfer-data");
-            return;
-        case ERestoreProgress::Applying:
-            o << TStringBuf("applying");
-            return;
-        case ERestoreProgress::Done:
-            o << TStringBuf("done");
-            return;
-        case ERestoreProgress::Cancellation:
-            o << TStringBuf("cancelling");
-            return;
-        case ERestoreProgress::Cancelled:
-            o << TStringBuf("cancelled");
-            return;
-        case ERestoreProgress::Unknown:
             o << TStringBuf("unknown");
             return;
     }

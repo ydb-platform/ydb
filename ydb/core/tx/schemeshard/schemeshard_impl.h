@@ -1446,9 +1446,9 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxForget(TEvBackup::TEvForgetIncrementalBackupRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxList(TEvBackup::TEvListIncrementalBackupsRequest::TPtr& ev);
 
-    NTabletFlatExecutor::ITransaction* CreateTxGetRestore(TEvBackup::TEvGetIncrementalRestoreRequest::TPtr& ev);
-    NTabletFlatExecutor::ITransaction* CreateTxForgetRestore(TEvBackup::TEvForgetIncrementalRestoreRequest::TPtr& ev);
-    NTabletFlatExecutor::ITransaction* CreateTxListRestore(TEvBackup::TEvListIncrementalRestoresRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxGetRestore(TEvBackup::TEvGetBackupCollectionRestoreRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxForgetRestore(TEvBackup::TEvForgetBackupCollectionRestoreRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxListRestore(TEvBackup::TEvListBackupCollectionRestoresRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgress(ui64 id);
     NTabletFlatExecutor::ITransaction* CreateTxProgress(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgress(TEvPersQueue::TEvOffloadStatus::TPtr& ev);
@@ -1457,9 +1457,9 @@ public:
     void Handle(TEvBackup::TEvForgetIncrementalBackupRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBackup::TEvListIncrementalBackupsRequest::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvBackup::TEvGetIncrementalRestoreRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvBackup::TEvForgetIncrementalRestoreRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvBackup::TEvListIncrementalRestoresRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvGetBackupCollectionRestoreRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvForgetBackupCollectionRestoreRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBackup::TEvListBackupCollectionRestoresRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvOffloadStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev, const TActorContext& ctx);
 

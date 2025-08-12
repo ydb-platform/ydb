@@ -39,8 +39,8 @@ void PrintOperation(const NYdb::NBackup::TIncrementalBackupResponse& operation, 
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TIncrementalBackupResponse>& operations, EDataFormat format);
 
 // Incremental restore
-void PrintOperation(const NYdb::NBackup::TIncrementalRestoreResponse& operation, EDataFormat format);
-void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TIncrementalRestoreResponse>& operations, EDataFormat format);
+void PrintOperation(const NYdb::NBackup::TBackupCollectionRestoreResponse& operation, EDataFormat format);
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TBackupCollectionRestoreResponse>& operations, EDataFormat format);
 
 }
 }

@@ -49,8 +49,8 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
             return "[SchemeShardTasks]";
         case TOperationId::INCREMENTAL_BACKUP:
             return "[ListIncrementalBackups]";
-        case TOperationId::INCREMENTAL_RESTORE:
-            return "[ListIncrementalRestores]";
+        case TOperationId::BACKUP_COLLECTION_RESTORE:
+            return "[ListBackupCollectionRestores]";
         default:
             return "[Untagged]";
         }
@@ -70,8 +70,8 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
             return new TEvIndexBuilder::TEvListRequest(GetDatabaseName(), request.page_size(), request.page_token());
         case TOperationId::INCREMENTAL_BACKUP:
             return new TEvBackup::TEvListIncrementalBackupsRequest(GetDatabaseName(), request.page_size(), request.page_token());
-        case TOperationId::INCREMENTAL_RESTORE:
-            return new TEvBackup::TEvListIncrementalRestoresRequest(GetDatabaseName(), request.page_size(), request.page_token());
+        case TOperationId::BACKUP_COLLECTION_RESTORE:
+            return new TEvBackup::TEvListBackupCollectionRestoresRequest(GetDatabaseName(), request.page_size(), request.page_token());
         default:
             Y_ABORT("unreachable");
         }
@@ -186,10 +186,10 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
         Reply(response);
     }
 
-    void Handle(TEvBackup::TEvListIncrementalRestoresResponse::TPtr& ev) {
+    void Handle(TEvBackup::TEvListBackupCollectionRestoresResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvListIncrementalRestoresResponse"
+        LOG_D("Handle TEvBackup::TEvListBackupCollectionRestoresResponse"
             << ": record# " << record.ShortDebugString());
 
         TResponse response;
@@ -216,7 +216,7 @@ public:
         case TOperationId::BUILD_INDEX:
         case TOperationId::SS_BG_TASKS:
         case TOperationId::INCREMENTAL_BACKUP:
-        case TOperationId::INCREMENTAL_RESTORE:
+        case TOperationId::BACKUP_COLLECTION_RESTORE:
             break;
         case TOperationId::SCRIPT_EXECUTION:
             SendListScriptExecutions();
@@ -237,7 +237,7 @@ public:
             hFunc(TEvIndexBuilder::TEvListResponse, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperationsResponse, Handle);
             hFunc(TEvBackup::TEvListIncrementalBackupsResponse, Handle);
-            hFunc(TEvBackup::TEvListIncrementalRestoresResponse, Handle);
+            hFunc(TEvBackup::TEvListBackupCollectionRestoresResponse, Handle);
         default:
             return StateBase(ev);
         }

@@ -217,10 +217,10 @@ TFuture<TOperationsList<NBackup::TIncrementalBackupResponse>> TOperationClient::
     return List<NBackup::TIncrementalBackupResponse>("incbackup", pageSize, pageToken);
 }
 
-template TFuture<NBackup::TIncrementalRestoreResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template TFuture<NBackup::TBackupCollectionRestoreResponse> TOperationClient::Get(const TOperation::TOperationId& id);
 template <>
-TFuture<TOperationsList<NBackup::TIncrementalRestoreResponse>> TOperationClient::List(ui64 pageSize, const std::string& pageToken) {
-    return List<NBackup::TIncrementalRestoreResponse>("increstore", pageSize, pageToken);
+TFuture<TOperationsList<NBackup::TBackupCollectionRestoreResponse>> TOperationClient::List(ui64 pageSize, const std::string& pageToken) {
+    return List<NBackup::TBackupCollectionRestoreResponse>("bcrestore", pageSize, pageToken);
 }
 #endif
 

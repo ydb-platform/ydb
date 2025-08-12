@@ -54,8 +54,8 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
             return "[GetScriptExecution]";
         case TOperationId::INCREMENTAL_BACKUP:
             return "[GetIncrementalBackup]";
-        case TOperationId::INCREMENTAL_RESTORE:
-            return "[GetIncrementalRestore]";
+        case TOperationId::BACKUP_COLLECTION_RESTORE:
+            return "[GetBackupCollectionRestore]";
         default:
             return "[Untagged]";
         }
@@ -71,8 +71,8 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
             return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::INCREMENTAL_BACKUP:
             return new NSchemeShard::TEvBackup::TEvGetIncrementalBackupRequest(GetDatabaseName(), RawOperationId_);
-        case TOperationId::INCREMENTAL_RESTORE:
-            return new NSchemeShard::TEvBackup::TEvGetIncrementalRestoreRequest(GetDatabaseName(), RawOperationId_);
+        case TOperationId::BACKUP_COLLECTION_RESTORE:
+            return new NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreRequest(GetDatabaseName(), RawOperationId_);
         default:
             Y_ABORT("unreachable");
         }
@@ -104,7 +104,7 @@ public:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
             case TOperationId::INCREMENTAL_BACKUP:
-            case TOperationId::INCREMENTAL_RESTORE:
+            case TOperationId::BACKUP_COLLECTION_RESTORE:
                 if (!TryGetId(OperationId_, RawOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
                 }
@@ -134,7 +134,7 @@ public:
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
             HFunc(NKqp::TEvGetScriptExecutionOperationResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse, Handle);
-            HFunc(NSchemeShard::TEvBackup::TEvGetIncrementalRestoreResponse, Handle);
+            HFunc(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse, Handle);
 
         default:
             return StateBase(ev);
@@ -286,14 +286,14 @@ private:
         Reply(resp, ctx);
     }
 
-    void Handle(NSchemeShard::TEvBackup::TEvGetIncrementalRestoreResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvGetIncrementalRestoreResponse"
+        LOG_D("Handle TEvBackup::TEvGetBackupCollectionRestoreResponse"
             << ": record# " << record.ShortDebugString());
 
         TEvGetOperationRequest::TResponse resp;
-        *resp.mutable_operation() = TIncrementalRestoreConv::ToOperation(record.GetIncrementalRestore());
+        *resp.mutable_operation() = TIncrementalRestoreConv::ToOperation(record.GetBackupCollectionRestore());
         Reply(resp, ctx);
     }
 

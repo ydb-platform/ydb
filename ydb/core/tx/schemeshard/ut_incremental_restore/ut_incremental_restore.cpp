@@ -1132,7 +1132,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             "Operation Id should match expected value");
         
         // Also verify the operation can be found via list API (tests in-memory state consistency)
-        auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
         bool foundInList = false;
         for (const auto& entry : listResp.GetEntries()) {
             if (entry.GetId() == operationId) {
@@ -1345,7 +1345,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         env.TestWaitNotification(runtime, startTxId);
 
         // List should show exactly one entry for this DB
-        auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
         const auto& entries = listResp.GetEntries();
         UNIT_ASSERT_C(entries.size() >= 1, "Expected at least one incremental restore entry");
 
@@ -1353,11 +1353,11 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         ui64 restoreId = entries.rbegin()->GetId();
 
         // Get should return SUCCESS
-        auto getResp = TestGetIncrementalRestore(runtime, restoreId, "/MyRoot");
-        UNIT_ASSERT_VALUES_EQUAL(getResp.GetIncrementalRestore().GetId(), restoreId);
+        auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(getResp.GetBackupCollectionRestore().GetId(), restoreId);
 
         // Forget during progress should fail
-        auto forgetRespPre = TestForgetIncrementalRestore(runtime, ++txId, "/MyRoot", restoreId, Ydb::StatusIds::PRECONDITION_FAILED);
+        auto forgetRespPre = TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId, Ydb::StatusIds::PRECONDITION_FAILED);
         Y_UNUSED(forgetRespPre);
 
         // Wait until operation completes (tables created)
@@ -1369,14 +1369,14 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         runtime.SimulateSleep(TDuration::MilliSeconds(500));
 
         // Get after completion should report DONE progress
-        auto getAfter = TestGetIncrementalRestore(runtime, restoreId, "/MyRoot");
-        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetIncrementalRestore().GetId(), restoreId);
-        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetIncrementalRestore().GetProgress(), Ydb::Backup::RestoreProgress::PROGRESS_DONE);
+        auto getAfter = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetBackupCollectionRestore().GetId(), restoreId);
+        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetBackupCollectionRestore().GetProgress(), Ydb::Backup::RestoreProgress::PROGRESS_DONE);
 
         // Now Forget should succeed and subsequent Get should be NOT_FOUND
-        auto forgetResp = TestForgetIncrementalRestore(runtime, ++txId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
+        auto forgetResp = TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
         Y_UNUSED(forgetResp);
-        (void)TestGetIncrementalRestore(runtime, restoreId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        (void)TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
     Y_UNIT_TEST(IncrementalRestorePersistenceRowsLifecycle) {
@@ -1394,7 +1394,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         env.TestWaitNotification(runtime, startTxId);
 
         // Obtain restoreId from list
-        auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
         UNIT_ASSERT_GE(listResp.GetEntries().size(), 1);
         ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
 
@@ -1426,12 +1426,12 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         runtime.SimulateSleep(TDuration::MilliSeconds(500));
 
         // Verify the restore is actually done before trying to forget
-        auto getAfter = TestGetIncrementalRestore(runtime, restoreId, "/MyRoot");
-        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetIncrementalRestore().GetId(), restoreId);
-        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetIncrementalRestore().GetProgress(), Ydb::Backup::RestoreProgress::PROGRESS_DONE);
+        auto getAfter = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetBackupCollectionRestore().GetId(), restoreId);
+        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetBackupCollectionRestore().GetProgress(), Ydb::Backup::RestoreProgress::PROGRESS_DONE);
 
         // Forget and ensure tables are cleaned
-        TestForgetIncrementalRestore(runtime, ++txId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
 
         // Now IncrementalRestoreState should be empty (or at least no row for this op)
         {
@@ -1524,7 +1524,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 TStringBuilder() << "IncrementalRestoreState should be empty, found: " << statesCount);
             
             // Verify list API returns empty
-            auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+            auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
             UNIT_ASSERT_VALUES_EQUAL_C(listResp.GetEntries().size(), 0,
                 TStringBuilder() << "List API should return empty, found: " << listResp.GetEntries().size());
         };
@@ -1567,7 +1567,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         env.TestWaitNotification(runtime, restore3TxId);
 
         // List should show all three operations
-        auto listResp = TestListIncrementalRestores(runtime, "/MyRoot");
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
         const auto& entries = listResp.GetEntries();
         UNIT_ASSERT_C(entries.size() >= 3, 
             TStringBuilder() << "Expected at least 3 incremental restore entries, got: " << entries.size());
@@ -1589,7 +1589,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         runtime.SimulateSleep(TDuration::MilliSeconds(1000));
 
         // Verify all operations show as DONE
-        auto listAfterCompletion = TestListIncrementalRestores(runtime, "/MyRoot");
+        auto listAfterCompletion = TestListBackupCollectionRestores(runtime, "/MyRoot");
         ui32 doneCount = 0;
         TVector<ui64> cycle1CompletedIds;
         for (const auto& entry : listAfterCompletion.GetEntries()) {
@@ -1621,14 +1621,14 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         }
 
         // Verify system is still functional after failure - list should still work
-        auto listAfterFailure = TestListIncrementalRestores(runtime, "/MyRoot");
+        auto listAfterFailure = TestListBackupCollectionRestores(runtime, "/MyRoot");
         UNIT_ASSERT_C(listAfterFailure.GetEntries().size() >= 3,
             "List API should still work after failed restore");
 
         // Verify successful operations are still accessible after failure
         for (ui64 id : cycle1CompletedIds) {
-            auto getResp = TestGetIncrementalRestore(runtime, id, "/MyRoot");
-            UNIT_ASSERT_VALUES_EQUAL(getResp.GetIncrementalRestore().GetId(), id);
+            auto getResp = TestGetBackupCollectionRestore(runtime, id, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(getResp.GetBackupCollectionRestore().GetId(), id);
         }
 
         Cerr << "=== PHASE 3: Second Restore Cycle (after cleanup) ===" << Endl;
@@ -1649,7 +1649,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         env.TestWaitNotification(runtime, restore2Cycle2TxId);
 
         // Verify we now have operations from both cycles visible
-        auto listCycle2 = TestListIncrementalRestores(runtime, "/MyRoot");
+        auto listCycle2 = TestListBackupCollectionRestores(runtime, "/MyRoot");
         UNIT_ASSERT_C(listCycle2.GetEntries().size() >= 5, // 3 from cycle1 + 2 from cycle2
             TStringBuilder() << "Should have operations from both cycles, got: " << listCycle2.GetEntries().size());
 
@@ -1672,11 +1672,11 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         // Forget some operations from cycle1, keep others
         ui64 toForgetCycle1 = cycle1CompletedIds[0];
-        auto forgetResp = TestForgetIncrementalRestore(runtime, ++txId, "/MyRoot", toForgetCycle1, Ydb::StatusIds::SUCCESS);
+        auto forgetResp = TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", toForgetCycle1, Ydb::StatusIds::SUCCESS);
         Y_UNUSED(forgetResp);
 
         // Verify selective forget worked
-        auto listAfterSelectiveForget = TestListIncrementalRestores(runtime, "/MyRoot");
+        auto listAfterSelectiveForget = TestListBackupCollectionRestores(runtime, "/MyRoot");
         bool foundForgotten = false;
         ui32 remainingCycle1 = 0;
         ui32 remainingCycle2 = 0;
@@ -1701,14 +1701,14 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
         // Forget ALL remaining operations
         TVector<ui64> allRemainingIds;
-        auto listBeforeCleanup = TestListIncrementalRestores(runtime, "/MyRoot");
+        auto listBeforeCleanup = TestListBackupCollectionRestores(runtime, "/MyRoot");
         for (const auto& entry : listBeforeCleanup.GetEntries()) {
             allRemainingIds.push_back(entry.GetId());
         }
 
         Cerr << "Forgetting " << allRemainingIds.size() << " remaining operations..." << Endl;
         for (ui64 id : allRemainingIds) {
-            auto forgetResp = TestForgetIncrementalRestore(runtime, ++txId, "/MyRoot", id, Ydb::StatusIds::SUCCESS);
+            auto forgetResp = TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", id, Ydb::StatusIds::SUCCESS);
             Y_UNUSED(forgetResp);
         }
 

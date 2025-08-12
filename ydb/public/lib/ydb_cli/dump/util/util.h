@@ -44,6 +44,7 @@ inline TResult Result(const TString& path, TStatus&& status) {
 TStatus DescribeTable(NTable::TTableClient& tableClient, const TString& path, TMaybe<NTable::TTableDescription>& out);
 TStatus DescribeExternalDataSource(NTable::TTableClient& tableClient, const TString& path, Ydb::Table::DescribeExternalDataSourceResult& out);
 TStatus DescribeReplication(NReplication::TReplicationClient& replicationClient, const TString& path, TMaybe<NReplication::TReplicationDescription>& out);
+TStatus DescribeViewQuery(const NYdb::TDriver& driver, const TString& path, TString& out);
 
 NScheme::TDescribePathResult DescribePath(
     NScheme::TSchemeClient& schemeClient,

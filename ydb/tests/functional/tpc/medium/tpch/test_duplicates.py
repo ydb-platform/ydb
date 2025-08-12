@@ -26,7 +26,7 @@ class TpchDoubleImportTestBase(tpch.TestTpch1, FunctionalTestBase):
         super().setup_class()
 
 
-class TestTpchDuplicatesZeroLevel(TestTpchDoubleImportBase):
+class TestTpchDuplicatesZeroLevel(TpchDoubleImportTestBase):
     """https://github.com/ydb-platform/ydb/issues/22253"""
 
     @classmethod
@@ -40,7 +40,7 @@ class TestTpchDuplicatesZeroLevel(TestTpchDoubleImportBase):
         cls.run_cli(['table', 'query', 'execute', '-t', 'scheme', '-q', set_compaction_query])
 
 
-class TestTpchDuplicatesNoCompaction(TestTpchDoubleImportBase):
+class TestTpchDuplicatesNoCompaction(TpchDoubleImportTestBase):
     """https://github.com/ydb-platform/ydb/issues/22252"""
 
     @classmethod

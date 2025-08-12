@@ -244,7 +244,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         index.SetState(Ydb::Table::IndexBuildState::STATE_DONE);
         index.SetProgress(100.0);
         break;
-    case TIndexBuildInfo::EState::DroppingColumns:
+    case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
     case TIndexBuildInfo::EState::Cancellation_Applying:
     case TIndexBuildInfo::EState::Cancellation_Unlocking:
         index.SetState(Ydb::Table::IndexBuildState::STATE_CANCELLATION);
@@ -254,10 +254,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         index.SetState(Ydb::Table::IndexBuildState::STATE_CANCELLED);
         index.SetProgress(0.0);
         break;
+    case TIndexBuildInfo::EState::Rejection_DroppingColumns:
     case TIndexBuildInfo::EState::Rejection_Applying:
-        index.SetState(Ydb::Table::IndexBuildState::STATE_REJECTION);
-        index.SetProgress(0.0);
-        break;
     case TIndexBuildInfo::EState::Rejection_Unlocking:
         index.SetState(Ydb::Table::IndexBuildState::STATE_REJECTION);
         index.SetProgress(0.0);

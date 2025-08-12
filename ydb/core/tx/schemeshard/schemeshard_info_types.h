@@ -3042,14 +3042,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Unlocking = 60,
         Done = 200,
 
-        DroppingColumns = 300,
-
         Cancellation_Applying = 350,
         Cancellation_Unlocking = 360,
+        Cancellation_DroppingColumns = 370,
         Cancelled = 400,
 
         Rejection_Applying = 500,
         Rejection_Unlocking = 510,
+        Rejection_DroppingColumns = 520,
         Rejected = 550
     };
 

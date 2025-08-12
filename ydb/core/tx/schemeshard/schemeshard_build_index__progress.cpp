@@ -1294,7 +1294,7 @@ public:
         case TIndexBuildInfo::EState::Filling: {
             if (buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
                 auto cancelState = buildInfo.IsBuildColumns()
-                    ? TIndexBuildInfo::EState::DroppingColumns
+                    ? TIndexBuildInfo::EState::Cancellation_DroppingColumns
                     : TIndexBuildInfo::EState::Cancellation_Applying;
 
                 ClearAfterFill(ctx, buildInfo);
@@ -1408,7 +1408,7 @@ public:
             SendNotificationsIfFinished(buildInfo);
             // stay calm keep status/issues
             break;
-        case TIndexBuildInfo::EState::DroppingColumns:
+        case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
             if (buildInfo.DropColumnsTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.DropColumnsTxStatus == NKikimrScheme::StatusSuccess) {
@@ -1447,6 +1447,18 @@ public:
         case TIndexBuildInfo::EState::Cancelled:
             SendNotificationsIfFinished(buildInfo);
             // stay calm keep status/issues
+            break;
+        case TIndexBuildInfo::EState::Rejection_DroppingColumns:
+            if (buildInfo.DropColumnsTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+            } else if (buildInfo.DropColumnsTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), DropColumnsPropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.DropColumnsTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.DropColumnsTxId)));
+            } else {
+                ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+                Progress(BuildId);
+            }
             break;
         case TIndexBuildInfo::EState::Rejection_Applying:
             if (buildInfo.ApplyTxId == InvalidTxId) {
@@ -1500,7 +1512,14 @@ public:
             return;
         }
 
-        buildInfo->State = TIndexBuildInfo::EState::Rejection_Applying;
+        if (buildInfo->IsBuildIndex()) {
+            buildInfo->State = TIndexBuildInfo::EState::Rejection_Applying;
+        } else if (buildInfo->IsBuildColumns()) {
+            buildInfo->State = TIndexBuildInfo::EState::Rejection_DroppingColumns;
+        } else {
+            Y_ENSURE(false, "TTxBuildProgress: OnUnhandledException: unknown build type");
+        }
+
         Self->PersistBuildIndexState(db, *buildInfo);
         Self->Execute(Self->CreateTxProgress(buildInfo->Id), ctx);
     }
@@ -1641,7 +1660,14 @@ public:
             return;
         }
 
-        buildInfo->State = TIndexBuildInfo::EState::Rejection_Applying;
+        if (buildInfo->IsBuildIndex()) {
+            buildInfo->State = TIndexBuildInfo::EState::Rejection_Applying;
+        } else if (buildInfo->IsBuildColumns()) {
+            buildInfo->State = TIndexBuildInfo::EState::Rejection_DroppingColumns;
+        } else {
+            Y_ENSURE(false, "TTxReply : OnUnhandledException: unknown build type");
+        }
+
         Self->PersistBuildIndexState(db, *buildInfo);
         Self->Execute(Self->CreateTxProgress(buildInfo->Id), ctx);
     }
@@ -1813,7 +1839,15 @@ public:
                 << ", shardIdx: " << shardIdx);
             Self->PersistBuildIndexUploadProgress(db, BuildId, shardIdx, shardStatus);
             Self->IndexBuildPipes.Close(BuildId, shardId, ctx);
-            ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+
+            if (buildInfo.IsBuildIndex()) {
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+            } else if (buildInfo.IsBuildColumns()) {
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            } else {
+                Y_ENSURE(false, "TTxShardReply : DoExecute: unknown build type");
+            }
+
             Progress(BuildId);
             return true;
         }
@@ -1987,7 +2021,15 @@ public:
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetIssues(), issues);
             Self->PersistBuildIndexAddIssue(db, buildInfo, issues.ToString());
-            ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+
+            if (buildInfo.IsBuildIndex()) {
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+            } else if (buildInfo.IsBuildColumns()) {
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_DroppingColumns);
+            } else {
+                Y_ENSURE(false, "TTxReplyUploadSample : DoExecute: unknown build type");
+            }
+
             Progress(BuildId);
         }
 
@@ -2100,7 +2142,8 @@ public:
             Self->PersistBuildIndexInitiateTxDone(db, buildInfo);
             break;
         }
-        case TIndexBuildInfo::EState::DroppingColumns:
+        case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
+        case TIndexBuildInfo::EState::Rejection_DroppingColumns:
         {
             Y_ENSURE(txId == buildInfo.DropColumnsTxId);
 
@@ -2294,7 +2337,8 @@ public:
             ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
             break;
         }
-        case TIndexBuildInfo::EState::DroppingColumns:
+        case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
+        case TIndexBuildInfo::EState::Rejection_DroppingColumns:
         {
             Y_ENSURE(txId == buildInfo.DropColumnsTxId);
 
@@ -2410,7 +2454,8 @@ public:
                 Self->PersistBuildIndexApplyTxId(db, buildInfo);
             }
             break;
-        case TIndexBuildInfo::EState::DroppingColumns:
+        case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
+        case TIndexBuildInfo::EState::Rejection_DroppingColumns:
             if (!buildInfo.DropColumnsTxId) {
                 buildInfo.DropColumnsTxId = txId;
                 Self->PersistBuildIndexDropColumnsTxId(db, buildInfo);

@@ -44,9 +44,8 @@ Y_UNIT_TEST_SUITE(Discovery) {
         auto discoveryDataEvent = runtime.GrabEdgeEvent<TEvDiscovery::TEvDiscoveryData>(edge)->Release();
         UNIT_ASSERT(discoveryDataEvent);
 
-        auto* ev = discoveryDataEvent.Release();
-        auto discoveryData = UnpackDiscoveryData(ev->CachedMessageData->CachedMessage);
-        auto discoverySslData = UnpackDiscoveryData(ev->CachedMessageData->CachedMessageSsl);
+        auto discoveryData = UnpackDiscoveryData(discoveryDataEvent->CachedMessageData->CachedMessage);
+        auto discoverySslData = UnpackDiscoveryData(discoveryDataEvent->CachedMessageData->CachedMessageSsl);
 
         UNIT_ASSERT_EQUAL(discoveryData.endpoints_size(), 1);
         UNIT_ASSERT_EQUAL(discoverySslData.endpoints_size(), 0);

@@ -144,38 +144,91 @@ namespace NKikimr::NPersQueueTests {
             return e->Record.GetTxId();
         }
 
+        std::tuple<TString> WriteToPartition(const ui32 partition, NYdb::TDriver& driver, const TString& srcTopic, const ui32 messagesCount) try {
+            const ui32 targetPartitionGroup = partition + 1;
+            const TString sourceId = "some_sourceid_" + ToString(partition);
+            const std::unordered_map<std::string, std::string> sessionMeta = {
+                {"partition", ToString(partition)},
+            };
+            auto writer = CreateSimpleWriter(driver, srcTopic, sourceId, targetPartitionGroup, std::nullopt, std::nullopt, sessionMeta);
+
+            ui64 seqNo = writer->GetInitSeqNo();
+
+            for (ui32 i = 1; i <= messagesCount; ++i) {
+                auto res = writer->Write(TStringBuilder() << "[[[" << LabeledOutput(i, partition, seqNo) << "]]]", ++seqNo);
+                UNIT_ASSERT(res);
+            }
+            auto res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+            return std::make_tuple(sourceId);
+        } catch (const std::exception& e) {
+            UNIT_FAIL("Unable to write to partition " << partition << ": " << CurrentExceptionMessage());
+            throw;
+        }
+
+        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> ReadMessages(auto&& reader, auto&& passFilter, bool commit, TDuration nextMessageTimeout, TStringBuf description) {
+            TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> result;
+            for (;;) {
+                auto event = GetNextMessageSkipAssignment(reader, nextMessageTimeout);
+                if (!event) {
+                    break;
+                }
+                std::vector messages = event->GetMessages();
+                for (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message : messages) {
+                    Cerr << "READ " << LabeledOutput(description, message.GetOffset(), message.GetProducerId(), message.GetMessageGroupId(), message.GetSeqNo(), message.GetData().size(), message.GetMeta()->Fields.contains("precharge")) << "\n";
+                    if (!passFilter(message)) {
+                        continue;
+                    }
+                    result.push_back(std::move(message));
+                }
+                if (commit) {
+                    event->Commit();
+                }
+            }
+            return result;
+        }
+
+        bool SkipPrecharge(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+            const auto& meta = message.GetMeta()->Fields;
+            return !meta.contains("precharge");
+        }
+
+        void ComparePartitions(auto&& srcReader, auto&& dstReader, TStringBuf descr) {
+            const TDuration nextMessageTimeout = TDuration::Seconds(1);
+            TVector srcMessages = ReadMessages(srcReader, SkipPrecharge, false, nextMessageTimeout, TString::Join("srcTopic ", descr));
+            TVector dstMessages = ReadMessages(dstReader, SkipPrecharge, false, nextMessageTimeout, TString::Join("dstTopic ", descr));
+
+            for (size_t j = 0; j < Min(dstMessages.size(), srcMessages.size()); ++j) {
+                const TString caseDescription = TStringBuilder() << LabeledOutput(descr, j);
+                const auto& dstMessage = dstMessages[j];
+                const auto& srcMessage = srcMessages[j];
+                UNIT_ASSERT_VALUES_EQUAL_C(dstMessage.GetData(), srcMessage.GetData(), caseDescription);
+                UNIT_ASSERT_VALUES_EQUAL_C(dstMessage.GetOffset(), srcMessage.GetOffset(), caseDescription);
+                UNIT_ASSERT_VALUES_EQUAL_C(dstMessage.GetMessageGroupId(), srcMessage.GetMessageGroupId(), caseDescription);
+                UNIT_ASSERT_VALUES_EQUAL_C(dstMessage.GetSeqNo(), srcMessage.GetSeqNo(), caseDescription);
+                UNIT_ASSERT_VALUES_EQUAL_C(dstMessage.GetCreateTime(), srcMessage.GetCreateTime(), caseDescription);
+                UNIT_ASSERT_VALUES_EQUAL_C(dstMessage.GetWriteTime(), srcMessage.GetWriteTime(), caseDescription);
+                const auto& dstMeta = dstMessage.GetMeta()->Fields;
+                const auto& srcMeta = srcMessage.GetMeta()->Fields;
+                UNIT_ASSERT_VALUES_EQUAL(dstMeta.size(), srcMeta.size());
+                for (auto& item : srcMeta) {
+                    UNIT_ASSERT(dstMeta.count(item.first));
+                    UNIT_ASSERT_EQUAL(dstMeta.at(item.first), item.second);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(dstMessages.size(), srcMessages.size(), LabeledOutput(descr));
+            Cerr << (TStringBuilder() << descr << " has " << dstMessages.size() << " messages\n");
+        }
     } // namespace
 
     Y_UNIT_TEST_SUITE(TPersQueueMirrorerWith) {
         Y_UNIT_TEST(TestBasicRemote) {
+            auto fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
             auto pqSettings = NKikimr::NPersQueueTests::PQSettings(0, 2);
             pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
             NPersQueue::TTestServer server(pqSettings);
-
-            auto omniObserver = [&](TAutoPtr<IEventHandle>& ev) {
-                ui32 type = ev->GetTypeRewrite();
-                Cerr << (TStringBuilder() << "Captured event " << type << " " << Hex(type) << " " << ev->GetTypeName() << " " << LabeledOutput(ev->Sender.ToString(), ev->Recipient.ToString())
-                                          << "\n"
-                                          << ev->ToString()
-                                          << Endl);
-
-                if (auto* msg = ev->CastAsLocal<TEvPQ::TEvPartitionScaleStatusChanged>()) {
-                    Cerr << "Captured TEvPQ::TEvPartitionScaleStatusChanged event from " << ev->Sender.ToString() << Endl;
-                    return TTestActorRuntimeBase::EEventAction::PROCESS;
-                }
-
-                return TTestActorRuntimeBase::EEventAction::PROCESS;
-            };
-
-            auto prevObserver = server.CleverServer->GetRuntime()->SetObserverFunc(omniObserver);
-            Y_DEFER {
-                auto prev = server.CleverServer->GetRuntime()->SetObserverFunc(prevObserver);
-                Cerr << "prevObserver: " << (const void*)(prev.target<decltype(omniObserver)>()) << Endl;
-            };
-
             const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
 
-            auto fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
             fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), settings);
             for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
                 server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
@@ -187,6 +240,7 @@ namespace NKikimr::NPersQueueTests {
             const ui32 sourcesCount = 8;
             const ui32 partitionsCount = 2;
             const ui32 maxPartitionsCount = 4;
+            const ui32 finalPartitionsCount = 4;
             const TString srcTopic = "topic2_src";
             const TString dstTopic = "topic1_dst";
             const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
@@ -262,152 +316,40 @@ namespace NKikimr::NPersQueueTests {
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 3);
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 3);
 
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Partitions, finalPartitionsCount);
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Partitions, finalPartitionsCount);
+
             // write to source topic
-            TVector<ui32> messagesPerPartition(partitionsCount, 0);
-            THashMap<TString, size_t> messagesPerSourceId;
-            for (ui32 partition = 0; partition < partitionsCount; ++partition) {
-                try {
-                    const ui32 targetPartition = partition == 0 ? 1 : 4;
-                    const TString sourceId = "some_sourceid_" + ToString(partition);
-                    const std::unordered_map<std::string, std::string> sessionMeta = {
-                        {"partition", ToString(partition)},
-                    };
-                    auto writer = CreateSimpleWriter(*driver, srcTopic, sourceId, targetPartition, std::nullopt, std::nullopt, sessionMeta);
-
-                    ui64 seqNo = writer->GetInitSeqNo();
-
-                    for (ui32 i = 1; i <= 10 + partition; ++i) {
-                        auto res = writer->Write(TStringBuilder() << "[[[" << LabeledOutput(i, partition, seqNo) << "]]]", ++seqNo);
-                        UNIT_ASSERT(res);
-                        messagesPerPartition[partition] += 1;
-                        messagesPerSourceId[sourceId] += 1;
-                    }
-                    auto res = writer->Close(TDuration::Seconds(10));
-                    UNIT_ASSERT(res);
-                } catch (const std::exception& e) {
-                    UNIT_FAIL("Unable to write to partition " << partition << ": " << CurrentExceptionMessage());
-                }
+            TMap<ui32, ui32> messagesPerPartition;
+            TMap<TString, size_t> messagesPerSourceId;
+            struct TWriteCount {
+                ui32 Partiton;
+                ui32 Count;
+            };
+            constexpr TWriteCount writeBatch[]{
+                {0, 10},
+                {2, 15},
+                {3, 5},
+            };
+            for (const TWriteCount& wc : writeBatch) {
+                Cerr << (TStringBuilder() << "Writing to partition " << wc.Partiton << " " << wc.Count << " messages\n");
+                const auto [sourceId] = WriteToPartition(wc.Partiton, *driver, srcTopic, wc.Count);
+                messagesPerPartition[wc.Partiton] += wc.Count;
+                messagesPerSourceId[sourceId] += wc.Count;
             }
 
-            constexpr TDuration nextMessageTimeout = TDuration::Seconds(2);
             auto createReader = [&](const TString& topic, ui32 partition) {
                 auto settings =
                     NYdb::NTopic::TReadSessionSettings()
                         .AppendTopics(NYdb::NTopic::TTopicReadSettings(topic)
                                           .AppendPartitionIds(partition))
                         .ConsumerName("shared/user")
-                        // .ReadOnlyOriginal(false)
                         .Decompress(true);
 
                 return topicClient.CreateReadSession(settings);
             };
-
-            THashMap<TString, size_t> messagesPerSourceIdRead;
-            Cerr << "DST\n";
-            for (size_t partition = 0; partition < 4; ++partition) {
-                auto dstReader = createReader(dstTopic, partition);
-
-                for (;;) {
-                    auto dstEvent = GetNextMessageSkipAssignment(dstReader, nextMessageTimeout);
-                    if (!dstEvent) {
-                        break;
-                    }
-                    const std::vector dstMessages = dstEvent->GetMessages();
-                    for (const auto& dstMessage : dstMessages) {
-                        const auto& dstMeta = dstMessage.GetMeta()->Fields;
-
-                        Cerr << "READ " << LabeledOutput(partition, dstMessage.GetOffset(), dstMessage.GetProducerId(), dstMessage.GetMessageGroupId(), dstMessage.GetSeqNo(), dstMessage.GetData().size(), dstMeta.contains("precharge")) << "\n";
-                        if (!dstMeta.contains("precharge")) {
-                            messagesPerSourceIdRead[dstMessage.GetProducerId()] += 1;
-                        }
-                    }
-                    // dstEvent->Commit();
-                }
-            }
-
-            Cerr << "SRC\n";
-            for (size_t partition = 0; partition < 4; ++partition) {
-                auto dstReader = createReader(srcTopic, partition);
-
-                for (;;) {
-                    auto dstEvent = GetNextMessageSkipAssignment(dstReader, nextMessageTimeout);
-                    if (!dstEvent) {
-                        break;
-                    }
-                    const std::vector dstMessages = dstEvent->GetMessages();
-                    for (const auto& dstMessage : dstMessages) {
-                        const auto& dstMeta = dstMessage.GetMeta()->Fields;
-                        Cerr << "READ " << LabeledOutput(partition, dstMessage.GetOffset(), dstMessage.GetProducerId(), dstMessage.GetMessageGroupId(), dstMessage.GetSeqNo(), dstMessage.GetData().size(), dstMeta.contains("precharge")) << "\n";
-                    }
-                    // dstEvent->Commit();
-                }
-            }
-
-            TSet<TString> ids;
-            for (const auto& [id, count] : messagesPerSourceId) {
-                ids.insert(id);
-            }
-            for (const auto& [id, count] : messagesPerSourceIdRead) {
-                ids.insert(id);
-            }
-
-            for (const auto& id : ids) {
-                TString log = TStringBuilder() << "ID '" << id << "': " << messagesPerSourceId.Value(id, 0) << " == " << messagesPerSourceIdRead.Value(id, 0) << "\n";
-                Cerr << log;
-            }
-            for (const auto& id : ids) {
-                UNIT_ASSERT_VALUES_EQUAL_C(messagesPerSourceId.Value(id, 0), messagesPerSourceIdRead.Value(id, 0), id);
-            }
-
-            return;
-            for (ui32 partition = 0; partition < partitionsCount; ++partition) {
-                auto srcReader = createReader(srcTopic, partition);
-                auto dstReader = createReader(dstTopic, partition);
-
-                for (ui32 i = 0; i < messagesPerPartition[partition]; ++i) {
-                    auto dstEvent = GetNextMessageSkipAssignment(dstReader, nextMessageTimeout);
-                    UNIT_ASSERT_C(dstEvent, LabeledOutput(partition, i));
-                    Cerr << "Destination read message: " << dstEvent->DebugString() << "\n";
-                    auto srcEvent = GetNextMessageSkipAssignment(srcReader, nextMessageTimeout);
-                    UNIT_ASSERT_C(srcEvent, LabeledOutput(partition, i));
-                    Cerr << "Source read message: " << srcEvent->DebugString() << "\n";
-
-                    const auto& dstMessages = dstEvent->GetMessages();
-                    const auto& srcMessages = srcEvent->GetMessages();
-
-                    for (size_t j = 0; j < dstMessages.size(); ++j) {
-                        Cerr << "DST " << LabeledOutput(i, j) << "\n";
-                        Cerr << dstMessages[j].DebugString(true) << "\n";
-                    }
-                    for (size_t j = 0; j < srcMessages.size(); ++j) {
-                        Cerr << "SRC " << LabeledOutput(i, j) << "\n";
-                        Cerr << srcMessages[j].DebugString(true) << "\n";
-                    }
-                    Cerr << "\n";
-
-                    UNIT_ASSERT_EQUAL(dstMessages.size(), srcMessages.size());
-                    UNIT_ASSERT_VALUES_EQUAL(dstMessages.size(), 1);
-
-                    for (size_t j = 0; j < dstMessages.size(); ++j) {
-                        // Cerr << "SRC " << srcMessages[j].GetMessageGroupId() << " DST " << dstMessages[j].GetMessageGroupId() << "\n";
-
-                        UNIT_ASSERT_VALUES_EQUAL_C(dstMessages[j].GetData(), srcMessages[j].GetData(), LabeledOutput(i, j));
-
-                        UNIT_ASSERT_VALUES_EQUAL_C(dstMessages[j].GetOffset(), srcMessages[j].GetOffset(), LabeledOutput(i, j));
-                        UNIT_ASSERT_VALUES_EQUAL_C(dstMessages[j].GetMessageGroupId(), srcMessages[j].GetMessageGroupId(), LabeledOutput(i, j));
-                        UNIT_ASSERT_VALUES_EQUAL_C(dstMessages[j].GetSeqNo(), srcMessages[j].GetSeqNo(), LabeledOutput(i, j));
-                        UNIT_ASSERT_VALUES_EQUAL_C(dstMessages[j].GetCreateTime(), srcMessages[j].GetCreateTime(), LabeledOutput(i, j));
-                        UNIT_ASSERT_VALUES_EQUAL_C(dstMessages[j].GetWriteTime(), srcMessages[j].GetWriteTime(), LabeledOutput(i, j));
-
-                        const auto& dstMeta = dstMessages[j].GetMeta()->Fields;
-                        const auto& srcMeta = srcMessages[j].GetMeta()->Fields;
-                        UNIT_ASSERT_VALUES_EQUAL(dstMeta.size(), srcMeta.size());
-                        for (auto& item : srcMeta) {
-                            UNIT_ASSERT(dstMeta.count(item.first));
-                            UNIT_ASSERT_EQUAL(dstMeta.at(item.first), item.second);
-                        }
-                    }
-                }
+            for (ui32 partition = 0; partition < finalPartitionsCount; ++partition) {
+                ComparePartitions(createReader(srcTopic, partition), createReader(dstTopic, partition), TStringBuilder() << LabeledOutput(partition));
             }
         }
     } // Y_UNIT_TEST_SUITE(TPersQueueMirrorerWith)

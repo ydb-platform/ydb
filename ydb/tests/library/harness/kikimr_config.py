@@ -148,8 +148,10 @@ class KikimrConfigGenerator(object):
             enable_alter_database_create_hive_first=False,
             overrided_actor_system_config=None,
             default_users=None,  # dict[user]=password
-            extra_feature_flags=None,  # list[str]
-            extra_grpc_services=None,  # list[str]
+            extra_feature_flags=None,    # list[str]
+            disabled_feature_flags=None, # list[str]
+            extra_grpc_services=None,    # list[str]
+            disabled_grpc_services=None, # list[str]
             hive_config=None,
             datashard_config=None,
             enforce_user_token_requirement=False,
@@ -182,8 +184,12 @@ class KikimrConfigGenerator(object):
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
+        if disabled_feature_flags is None:
+            disabled_feature_flags = []
         if extra_grpc_services is None:
             extra_grpc_services = []
+        if disabled_grpc_services is None:
+            disabled_grpc_services = []
 
         self.cms_config = cms_config
         self.use_log_files = use_log_files
@@ -307,6 +313,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_resource_pools"] = enable_resource_pools
         for extra_feature_flag in extra_feature_flags:
             self.yaml_config["feature_flags"][extra_feature_flag] = True
+        for disabled_feature_flag in disabled_feature_flags:
+            self.yaml_config["feature_flags"][disabled_feature_flag] = False
         if enable_alter_database_create_hive_first:
             self.yaml_config["feature_flags"]["enable_alter_database_create_hive_first"] = enable_alter_database_create_hive_first
         self.yaml_config['pqconfig']['enabled'] = enable_pq
@@ -326,7 +334,11 @@ class KikimrConfigGenerator(object):
             for service_type in pq_client_service_types:
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
 
-        self.yaml_config['grpc_config']['services'].extend(extra_grpc_services)
+        self.yaml_config['grpc_config']['services'] = [
+            item for item in (self.yaml_config['grpc_config']['services'] + extra_grpc_services)
+            if item not in disabled_grpc_services
+        ]
+
 
         # NOTE(shmel1k@): change to 'true' after migration to YDS scheme
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs

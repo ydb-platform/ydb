@@ -20,8 +20,8 @@ using namespace NThreading;
 
 namespace {
 
-static bool CheckAlterAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
-    bool isDatabase = true; // first entry is always database
+bool CheckAddIndexAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
+    bool isDatabaseEntry = true; // first entry is always database
 
     using TEntry = NSchemeCache::TSchemeCacheNavigate::TEntry;
 
@@ -29,13 +29,15 @@ static bool CheckAlterAccess(const NACLib::TUserToken& userToken, const NSchemeC
         if (!entry.SecurityObject) {
             continue;
         }
+        if (isDatabaseEntry) { // first entry is always database
+            isDatabaseEntry = false;
+            continue;
+        }
 
-        const ui32 access = isDatabase ? NACLib::CreateDirectory | NACLib::CreateTable : NACLib::GenericRead | NACLib::GenericWrite;
+        const ui32 access = NACLib::AlterSchema | NACLib::DescribeSchema;
         if (!entry.SecurityObject->CheckAccess(access, userToken)) {
             return false;
         }
-
-        isDatabase = false;
     }
 
     return true;
@@ -708,7 +710,7 @@ public:
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssue(error));
         }
 
-        if (UserToken && !UserToken->GetSerializedToken().empty() && !CheckAlterAccess(*UserToken, resp)) {
+        if (UserToken && !UserToken->GetSerializedToken().empty() && !CheckAddIndexAccess(*UserToken, resp)) {
             LOG_E("Access check failed");
             return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, NYql::TIssue("Unauthorized"));
         }

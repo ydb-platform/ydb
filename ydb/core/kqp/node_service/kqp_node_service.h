@@ -78,7 +78,7 @@ struct TNodeServiceState : public NKikimr::NKqp::NComputeActor::IKqpNodeState {
     static constexpr ui64 BucketsCount = 64;
 
 public:
-    void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) {
+    void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) override {
         auto& bucket = GetStateBucketByTx(txId);
         bucket.RemoveTask(txId, taskId, success);
     }

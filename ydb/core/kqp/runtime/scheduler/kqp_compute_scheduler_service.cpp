@@ -139,11 +139,7 @@ public:
     }
 
     void Handle(TEvRemoveQuery::TPtr& ev) {
-        const auto& databaseId = ev->Get()->DatabaseId;
-        const auto& poolId = ev->Get()->PoolId;
-        const auto& queryId = ev->Get()->QueryId;
-
-        Scheduler->RemoveQuery(databaseId, poolId, queryId);
+        Scheduler->RemoveQuery(ev->Get()->Query);
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
@@ -254,12 +250,13 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
     return query;
 }
 
-void TComputeScheduler::RemoveQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId) {
-    TWriteGuard lock(Mutex);
+void TComputeScheduler::RemoveQuery(const TQueryPtr& query) {
+    Y_ENSURE(query);
 
-    auto database = Root->GetDatabase(databaseId);
-    auto pool = database->GetPool(poolId);
-    pool->RemoveQuery(queryId);
+    TWriteGuard lock(Mutex);
+    const auto& queryId = std::get<NHdrf::TQueryId>(query->GetId());
+
+    query->GetParent()->RemoveQuery(queryId);
     Queries.erase(queryId);
 }
 

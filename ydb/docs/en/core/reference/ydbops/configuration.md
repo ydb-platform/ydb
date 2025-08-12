@@ -13,8 +13,8 @@ The configuration file for `ydbops` is a YAML-formatted file containing multiple
 
 Default configuration file location follows the same convention as {{ ydb-short-name }} CLI does, it is located in the same folder in `ydbops` subdirectory. For comparison:
 
-- default configuration file for {{ ydb-short-name }} CLI: `$HOME/ydb/config/config.yaml`
-- default configuration file for `ydbops` CLI is in same folder, `ydbops` subdirectory: `$HOME/ydb/ydbops/config/config.yaml`
+- default configuration file for {{ ydb-short-name }} CLI: `$HOME/.ydb/config/config.yaml`
+- default configuration file for `ydbops` CLI, `ydbops` subdirectory: `$HOME/ydb/ydbops/config/config.yaml`
 
 Certain command line options can be written in the configuration file instead of being specified directly in the `ydbops` invocation.
 

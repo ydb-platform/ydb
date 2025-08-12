@@ -28,7 +28,7 @@
 
 ## Где хранятся профили {#location}
 
-Профили хранятся локально в файле `~/ydb/config/config.yaml`.
+Профили хранятся локально в файле `~/.ydb/config/config.yaml`.
 
 {% include [location_overlay.md](location_overlay.md) %}
 

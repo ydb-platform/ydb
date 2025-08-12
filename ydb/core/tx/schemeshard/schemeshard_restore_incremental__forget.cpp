@@ -40,9 +40,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        Cerr << "FORGET EXECUTE DEBUG: restoreId=" << record.GetBackupCollectionRestoreId() << Endl;
         LOG_D("Execute " << record.ShortDebugString());
-        LOG_I("FORGET DEBUG: Starting forget transaction for restoreId=" << record.GetBackupCollectionRestoreId());
 
         Response = MakeHolder<TEvBackup::TEvForgetBackupCollectionRestoreResponse>();
         Response->Record.SetTxId(record.GetTxId());

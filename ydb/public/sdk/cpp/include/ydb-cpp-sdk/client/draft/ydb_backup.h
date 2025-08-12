@@ -23,10 +23,9 @@ enum class ERestoreProgress {
     Unspecified = 0,
     Preparing = 1,
     TransferData = 2,
-    Applying = 3,
-    Done = 4,
-    Cancellation = 5,
-    Cancelled = 6,
+    Done = 3,
+    Cancellation = 4,
+    Cancelled = 5,
 
     Unknown = std::numeric_limits<int>::max(),
 };

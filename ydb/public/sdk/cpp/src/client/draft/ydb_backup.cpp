@@ -32,8 +32,6 @@ namespace {
             return NBackup::ERestoreProgress::Preparing;
         case Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA:
             return NBackup::ERestoreProgress::TransferData;
-        case Ydb::Backup::RestoreProgress::PROGRESS_APPLYING:
-            return NBackup::ERestoreProgress::Applying;
         case Ydb::Backup::RestoreProgress::PROGRESS_DONE:
             return NBackup::ERestoreProgress::Done;
         case Ydb::Backup::RestoreProgress::PROGRESS_CANCELLATION:

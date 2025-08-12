@@ -357,8 +357,7 @@ namespace {
         TStringBuilder result;
 
         result << metadata.Progress;
-        if (metadata.Progress != NYdb::NBackup::ERestoreProgress::TransferData && 
-            metadata.Progress != NYdb::NBackup::ERestoreProgress::Applying) {
+        if (metadata.Progress != NYdb::NBackup::ERestoreProgress::TransferData) {
             return result;
         }
 

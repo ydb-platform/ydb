@@ -10,35 +10,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-// Add Out operator for Ydb::Backup::RestoreProgress::Progress enum to enable streaming
 template<>
 void Out<Ydb::Backup::RestoreProgress::Progress>(IOutputStream& out, TTypeTraits<Ydb::Backup::RestoreProgress::Progress>::TFuncParam value) {
-    switch (value) {
-        case Ydb::Backup::RestoreProgress::PROGRESS_UNSPECIFIED:
-            out << "PROGRESS_UNSPECIFIED";
-            break;
-        case Ydb::Backup::RestoreProgress::PROGRESS_PREPARING:
-            out << "PROGRESS_PREPARING";
-            break;
-        case Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA:
-            out << "PROGRESS_TRANSFER_DATA";
-            break;
-        case Ydb::Backup::RestoreProgress::PROGRESS_APPLYING:
-            out << "PROGRESS_APPLYING";
-            break;
-        case Ydb::Backup::RestoreProgress::PROGRESS_DONE:
-            out << "PROGRESS_DONE";
-            break;
-        case Ydb::Backup::RestoreProgress::PROGRESS_CANCELLATION:
-            out << "PROGRESS_CANCELLATION";
-            break;
-        case Ydb::Backup::RestoreProgress::PROGRESS_CANCELLED:
-            out << "PROGRESS_CANCELLED";
-            break;
-        default:
-            out << "UNKNOWN_PROGRESS(" << static_cast<int>(value) << ")";
-            break;
-    }
+    out << Ydb::Backup::RestoreProgress_Progress_Name(value);
 }
 
 using namespace NKikimr;
@@ -1330,7 +1304,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         VerifyPathStatesNormalized(setup.Runtime, "ConcurrentCollection2", {"ConcurrentTable2"});
     }
 
-    Y_UNIT_TEST(IncrementalRestoreApi_GetListForget) {
+    Y_UNIT_TEST(BackupCollectionRestoreOpApiGetListForget) {
         TLongOpTestSetup setup;
         auto& runtime = setup.Runtime;
         auto& env = setup.Env;
@@ -1462,7 +1436,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         }
     }
 
-    Y_UNIT_TEST(IncrementalRestoreApi_MultipleOperationsListing) {
+    Y_UNIT_TEST(BackupCollectionRestoreOpApiMultipleOperationsListing) {
         TLongOpTestSetup setup;
         auto& runtime = setup.Runtime;
         auto& env = setup.Env;
@@ -1712,14 +1686,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             Y_UNUSED(forgetResp);
         }
 
-        // Final verification: database should be completely clean
         VerifyDatabaseCompletelyClean();
-
-        Cerr << "=== SUCCESS: All phases completed ===" << Endl;
-        Cerr << "- Cycle 1: " << cycle1RestoreIds.size() << " operations completed" << Endl;  
-        Cerr << "- Cycle 2: " << cycle2RestoreIds.size() << " operations completed" << Endl;
-        Cerr << "- Failed restore handled gracefully" << Endl;
-        Cerr << "- Selective forget verified" << Endl;
-        Cerr << "- Complete cleanup verified" << Endl;
     }
 }

@@ -297,8 +297,10 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
     }
 
     if (OpType == EAlterOperationKind::Common) {
-        modifyScheme->SetOperationType(
-            NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        const auto opType = req->drop_columns().empty() ?
+            NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable :
+            NKikimrSchemeOp::EOperationType::ESchemeOpDropColumn;
+        modifyScheme->SetOperationType(opType);
 
         auto desc = modifyScheme->MutableAlterTable();
         desc->SetName(name);

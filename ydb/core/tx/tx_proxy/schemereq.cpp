@@ -171,6 +171,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
+        case NKikimrSchemeOp::ESchemeOpDropColumn:
             return *modifyScheme.MutableAlterTable()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup:
@@ -651,7 +652,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     bool ExamineTables(NKikimrSchemeOp::TModifyScheme& pbModifyScheme, const TActorContext& ctx) {
         switch (pbModifyScheme.GetOperationType()) {
-            case NKikimrSchemeOp::ESchemeOpAlterTable: {
+            case NKikimrSchemeOp::ESchemeOpAlterTable:
+            case NKikimrSchemeOp::ESchemeOpDropColumn: {
                 auto path = JoinPath({pbModifyScheme.GetWorkingDir(), GetPathNameForScheme(pbModifyScheme)});
                 if (!CheckTablePrereqs(pbModifyScheme.GetAlterTable(), path, ctx)) {
                     return false;
@@ -726,6 +728,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             break;
         }
         case NKikimrSchemeOp::ESchemeOpAlterTable:
+        case NKikimrSchemeOp::ESchemeOpDropColumn:
         case NKikimrSchemeOp::ESchemeOpDropIndex:
         case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterCdcStream:

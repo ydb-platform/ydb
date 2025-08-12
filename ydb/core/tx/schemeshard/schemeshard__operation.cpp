@@ -1328,6 +1328,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         }
         return {CreateNewTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumn:
         return CreateConsistentAlterTable(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions:
         return {CreateSplitMerge(op.NextPartId(), tx)};

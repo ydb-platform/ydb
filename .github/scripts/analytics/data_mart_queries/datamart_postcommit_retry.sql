@@ -15,7 +15,7 @@ $test_data = (
         AND a.job_name LIKE 'Postcommit%'
 );
 
--- Подсчет запусков каждого теста по коммитам
+-- Count test runs for each test by commit
 $test_runs_by_commit_test = (
     SELECT 
         postcommit_start_run_timestamp,

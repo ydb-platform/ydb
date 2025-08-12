@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
                         return <|
                             partition_id: $x._partition,
                             offset: $x._offset,
-                            line: CAST($line.0 AS Uint32),
+                            line: Unwrap(CAST($line.0 AS Uint32)),
                             message: $line.1 || '%s'
                         |>;
                     };

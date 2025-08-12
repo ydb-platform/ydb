@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     return [
                         <|
                             Key:CAST($x._offset AS Uint64),
-                            Message:CAST($x._data || " new lambda" AS Utf8)
+                            Message:COALESCE(CAST($x._data || " new lambda" AS Utf8), "Message is empty")
                         |>
                     ];
                 };
@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         return [
                             <|
                                 Key:CAST($x._offset AS Uint64),
-                                Message:CAST($x._data || " 1 lambda" AS Utf8)
+                                Message:COALESCE(CAST($x._data || " 1 lambda" AS Utf8), "Message is empty")
                             |>
                         ];
                     };
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         return [
                             <|
                                 Key:CAST($x._offset AS Uint64),
-                                Message:CAST($x._data || " 2 lambda" AS Utf8)
+                                Message:COALESCE(CAST($x._data || " 2 lambda" AS Utf8), "Message is empty")
                             |>
                         ];
                     };
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     return [
                         <|
                             Key:CAST($x._offset AS Uint64),
-                            Message:CAST($x._data AS Utf8)
+                            Message:Unwrap(CAST($x._data AS Utf8), "data is empty")
                         |>
                     ];
                 };
@@ -1451,6 +1451,38 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.DropTopic();
         testCase.DropTransfer();
+    }
+
+    Y_UNIT_TEST(ErrorInMultiLine) {
+        MainTestCase testCase(std::nullopt, "ROW");
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8 NOT NULL,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:Unwrap(Nothing(Utf8?), "unwrap error")
+                        |>,
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:Unwrap(CAST($x._data AS Utf8))
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckTransferStateError("unwrap error");
     }
 }
 

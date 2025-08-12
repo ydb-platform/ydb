@@ -143,7 +143,7 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
         {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
         {"incbackup", &ListOperations<NBackup::TIncrementalBackupResponse>},
-        {"bcrestore", &ListOperations<NBackup::TBackupCollectionRestoreResponse>},
+        {"restore", &ListOperations<NBackup::TBackupCollectionRestoreResponse>},
     };
     if (config.UseExportToYt) {
         KindToHandler.emplace("export", THandlerWrapper(&ListOperations<NExport::TExportToYtResponse>, true)); // deprecated

@@ -1249,6 +1249,9 @@ class Roaring64Map {
             });
     }
 
+    /**
+     * For advanced users only.
+     */
     static const Roaring64Map frozenView(const char *buf) {
         // size of bitmap buffer and key
         const size_t metadata_size = sizeof(size_t) + sizeof(uint32_t);
@@ -1284,6 +1287,10 @@ class Roaring64Map {
         return result;
     }
 
+    /**
+     * For advanced users only. This function is unsafe in the sense that
+     * that it may trigger unaligned memory access. Use with caution.
+     */
     static const Roaring64Map portableDeserializeFrozen(const char *buf) {
         Roaring64Map result;
         // get map size

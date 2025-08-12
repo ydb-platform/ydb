@@ -39,7 +39,7 @@
 | AvailableSize         | Uint64    |          | Число доступных для выделения байт на PDisk                                                                                                                      |
 | TotalSize             | Uint64    |          | Общее число байт на PDisk                                                                                                                                        |
 | Status                | String    |          | Режим работы PDisk, который влияет на его участие в выделении групп (`ACTIVE`, `INACTIVE`, `BROKEN`, `FAULTY`, `TO_BE_REMOVED`)                                            |
-| StatusChangeTimestamp | Timestamp |          | Время, когда последний раз поменялся `Statu`s; если `NULL`, то `Status` не менялся с момента создания PDisk                                                            |
+| StatusChangeTimestamp | Timestamp |          | Время, когда последний раз поменялся `Status`; если `NULL`, то `Status` не менялся с момента создания PDisk                                                            |
 | ExpectedSlotCount     | Uint32    |          | Максимальное число VSlot, которое может быть создано на этом PDisk. Либо заданное пользователем, либо вычисленное из параметра `InferPDiskSlotCountFromUnitSize`.  |
 | NumActiveSlots        | Uint32    |          | Количество занятых VSlot с учетом значений `GroupSizeInUnits` у VDisk                                                                                              |
 | SlotSizeInUnits       | Uint32    |          | Размер VSlot в условных единицах. Либо заданный пользователем, либо вычисленный из параметра `InferPDiskSlotCountFromUnitSize`.                                    |

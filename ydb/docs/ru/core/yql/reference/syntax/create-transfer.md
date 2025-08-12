@@ -68,7 +68,7 @@ CREATE TRANSFER example_transfer
 
 {% note tip %}
 
-Перед созданием трансфера [создайте](create-object-type-secret.md) секрет с аутентификационными данными для подключения.
+Перед созданием трансфера [создайте секрет](create-object-type-secret.md) с аутентификационными данными для подключения.
 
 {% endnote %}
 

@@ -1,34 +1,37 @@
 package NKikimrSchemeOpConstraint;
 option java_package = "ru.yandex.kikimr.proto";
 
-message TSetConstraintSettings {
+message TSetColumnConstraintSettings {
     enum EConstraint {
         NOT_NULL = 1;
     }
 
+    optional string ColumnName = 1;
+    optional EConstraint Constraint = 2;
+}
+
+message TSetColumnConstraintsRequest {
     optional string TablePath = 1;
-    optional string ColumnName = 2;
-    optional EConstraint Constraint = 3;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
 }
 
-message TSetConstraintRequest {
-    repeated TSetConstraintSettings ConstraintSettings = 1;
+message TSetColumnConstraintsLock {
+    optional string TablePath = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
 }
 
-message TSetConstraintLock {
-    repeated TSetConstraintSettings ConstraintSettings = 1;
+message TSetColumnConstraintsCheck {
+    optional string TablePath = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
 }
 
-message TSetConstraintCheck {
-    repeated TSetConstraintSettings ConstraintSettings = 1;
-}
-
-message TSetConstraintFinalize {
+message TSetColumnConstraintsFinalize {
     enum EStatus {
         SUCCESS = 0;
         COLUMN_CONSTRAINT_VIOLATION = 1;
     }
 
-    repeated TSetConstraintSettings ConstraintSettings = 1;
-    optional EStatus Status = 2;
+    optional string TablePath = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+    optional EStatus Status = 3;
 }

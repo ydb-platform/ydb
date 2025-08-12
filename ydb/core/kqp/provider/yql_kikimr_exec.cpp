@@ -1771,7 +1771,6 @@ public:
                                     alterTableRequest.mutable_alter_columns()->RemoveLast();
 
                                     TSetConstraintSettings value;
-                                    value.SetTablePath(table.Metadata->Name);
                                     value.SetColumnName(TString(columnName));
                                     value.SetConstraint(TSetConstraintSettings::NOT_NULL);
 
@@ -2249,7 +2248,7 @@ public:
             bool isSetConstraint = (!constraintSetObjects.empty());
 
             if (isSetConstraint) {
-                future = Gateway->SetConstraint(cluster, std::move(constraintSetObjects));
+                future = Gateway->SetConstraint(table.Metadata->Name, std::move(constraintSetObjects));
             } else if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {

@@ -5,7 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/queue.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -19,13 +19,15 @@ private:
 
 protected:
     virtual TConclusionStatus DoStart() override {
-        SpecialReadContext->RegisterActors();
         return Scanner->Start();
     }
 
     virtual TString DoDebugString(const bool verbose) const override {
         TStringBuilder sb;
-        sb << SpecialReadContext->DebugString() << ";";
+        sb << "CTX:{" << SpecialReadContext->DebugString() << "};";
+        sb << "SCANNER:{" << Scanner->DebugString() << "};";
+        sb << "SF:" << Scanner->IsFinished() << ";";
+        sb << "PR:" << PartialResults.size() << ";";
         if (verbose) {
             sb << "intervals_schema=" << Scanner->DebugString();
         }

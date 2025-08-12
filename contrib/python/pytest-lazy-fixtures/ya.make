@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.1.4)
+VERSION(1.3.2)
 
 LICENSE(MIT)
 
@@ -15,11 +15,13 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     pytest_lazy_fixtures/__init__.py
+    pytest_lazy_fixtures/fixture_collector.py
     pytest_lazy_fixtures/lazy_fixture.py
     pytest_lazy_fixtures/lazy_fixture_callable.py
     pytest_lazy_fixtures/loader.py
     pytest_lazy_fixtures/normalizer.py
     pytest_lazy_fixtures/plugin.py
+    pytest_lazy_fixtures/utils.py
 )
 
 RESOURCE_FILES(

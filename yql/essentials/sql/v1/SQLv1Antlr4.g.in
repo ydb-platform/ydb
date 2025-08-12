@@ -374,9 +374,9 @@ select_unparenthesized_stmt_intersect: select_kind_partial (intersect_op select_
 
 select_kind_parenthesis: select_kind_partial | LPAREN select_kind_partial RPAREN;
 
-union_op: UNION (DISTINCT | ALL)?;
+union_op: (UNION | EXCEPT) (DISTINCT | ALL)?;
 
-intersect_op: (INTERSECT | EXCEPT) (DISTINCT | ALL)?;
+intersect_op: INTERSECT (DISTINCT | ALL)?;
 
 select_kind_partial: select_kind
   (LIMIT expr ((OFFSET | COMMA) expr)?)?
@@ -731,6 +731,7 @@ alter_table_action:
   | alter_table_rename_index_to
   | alter_table_alter_index
   | alter_table_alter_column_drop_not_null
+  | alter_table_alter_column_set_not_null
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -753,6 +754,7 @@ alter_table_add_column: ADD COLUMN? column_schema;
 alter_table_drop_column: DROP COLUMN? an_id;
 alter_table_alter_column: ALTER COLUMN an_id SET family_relation;
 alter_table_alter_column_drop_not_null: ALTER COLUMN an_id DROP NOT NULL;
+alter_table_alter_column_set_not_null: ALTER COLUMN an_id SET NOT NULL;
 alter_table_add_column_family: ADD family_entry;
 alter_table_alter_column_family: ALTER FAMILY an_id SET an_id family_setting_value;
 alter_table_set_table_setting_uncompat: SET an_id table_setting_value;
@@ -976,6 +978,7 @@ table_hint:
       an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
+    | WATERMARK AS LPAREN expr RPAREN
 ;
 
 object_ref: (cluster_expr DOT)? id_or_at;
@@ -986,7 +989,7 @@ into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 delete_stmt: BATCH? DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)? returning_columns_list?;
 update_stmt: BATCH? UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source)  returning_columns_list?;
 
-/// out of 2003 standart
+/// out of 2003 standard
 set_clause_choice: set_clause_list | multiple_column_assignment;
 
 set_clause_list: set_clause (COMMA set_clause)*;
@@ -1538,6 +1541,7 @@ keyword_as_compat:
   | VALUES
 //  | VIEW
   | VIRTUAL
+  | WATERMARK
 //  | WITH
   | WRAPPER
 //  | WRITE
@@ -1768,6 +1772,7 @@ keyword_compat: (
   | VIEW
   | VIRTUAL
   | WITH
+  | WATERMARK
   | WRAPPER
 //  | WRITE
   | XOR
@@ -2155,6 +2160,7 @@ VALUES: V A L U E S;
 VARIANT: V A R I A N T;
 VIEW: V I E W;
 VIRTUAL: V I R T U A L;
+WATERMARK: W A T E R M A R K;
 WHEN: W H E N;
 WHERE: W H E R E;
 WINDOW: W I N D O W;

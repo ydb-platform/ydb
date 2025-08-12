@@ -97,13 +97,13 @@ void TSslDeleter::operator()(SSL* ssl) const noexcept
 
 TString GetFingerprintSHA256(const TX509Ptr& certificate)
 {
-    auto md_type = EVP_sha256();
+    auto mdType = EVP_sha256();
     unsigned char md[EVP_MAX_MD_SIZE];
-    unsigned int md_len = 0;
-    if (!X509_digest(certificate.get(), md_type, md, &md_len)) {
+    unsigned int mdLen = 0;
+    if (!X509_digest(certificate.get(), mdType, md, &mdLen)) {
         THROW_ERROR GetLastSslError("X509_digest() failed");
     }
-    return HexEncode(md, md_len);
+    return HexEncode(md, mdLen);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -901,48 +901,28 @@ void TSslContext::AddPrivateKey(const TString& privateKey)
 void TSslContext::AddCertificateAuthority(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddCertificateAuthorityFromFile(filePath);
-        } else {
-            AddCertificateAuthority(pem->LoadBlob());
-        }
+        AddCertificateAuthority(pem->LoadBlob(resolver));
     }
 }
 
 void TSslContext::AddCertificate(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddCertificateFromFile(filePath);
-        } else {
-            AddCertificate(pem->LoadBlob());
-        }
+        AddCertificate(pem->LoadBlob(resolver));
     }
 }
 
 void TSslContext::AddCertificateChain(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddCertificateChainFromFile(filePath);
-        } else {
-            AddCertificateChain(pem->LoadBlob());
-        }
+        AddCertificateChain(pem->LoadBlob(resolver));
     }
 }
 
 void TSslContext::AddPrivateKey(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver)
 {
     if (pem) {
-        if (pem->FileName) {
-            auto filePath = resolver ? resolver(*pem->FileName) : *pem->FileName;
-            AddPrivateKeyFromFile(filePath);
-        } else {
-            AddPrivateKey(pem->LoadBlob());
-        }
+        AddPrivateKey(pem->LoadBlob(resolver));
     }
 }
 

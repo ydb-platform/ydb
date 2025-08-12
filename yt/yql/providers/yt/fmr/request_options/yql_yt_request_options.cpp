@@ -1,16 +1,31 @@
 #include "yql_yt_request_options.h"
+#include <yql/essentials/utils/yql_panic.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
 
 namespace NYql::NFmr {
 
+TString TYtTableRef::GetPath() const {
+    return RichPath.Path_;
+}
+
+TString TYtTableRef::GetCluster() const {
+    YQL_ENSURE(RichPath.Cluster_.Defined(), "YtTableRef cluster should be set");
+    return *RichPath.Cluster_;
+}
+
 TFmrTableId::TFmrTableId(const TString& id): Id(id)
 {
-};
+}
+
+TFmrTableId::TFmrTableId(const NYT::TRichYPath& path) {
+    YQL_ENSURE(path.Cluster_.Defined(), "YtTableRef cluster should be set");
+    Id = *path.Cluster_+ "." + path.Path_;
+}
 
 TFmrTableId::TFmrTableId(const TString& cluster, const TString& path): Id(cluster + "." + path)
 {
-};
+}
 
 TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections, const TMaybe<NYT::TNode>& jobSettings) {
     return MakeIntrusive<TTask>(taskType, taskId, taskParams, sessionId, clusterConnections, jobSettings);
@@ -25,14 +40,13 @@ TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, co
 // Helper serialization functions
 
 void SaveRichPath(IOutputStream* buffer, const NYT::TRichYPath& path) {
-    TString serializedPath = NYT::NodeToYsonString(NYT::PathToNode(path));
+    TString serializedPath = SerializeRichPath(path);
     ::Save(buffer, serializedPath);
 }
 void LoadRichPath(IInputStream* buffer, NYT::TRichYPath& path) {
     TString serializedPath;
     ::Load(buffer, serializedPath);
-    auto node = NYT::NodeFromYsonString(serializedPath);
-    NYT::Deserialize(path, node);
+    path = DeserializeRichPath(serializedPath);
 }
 
 void TYtTableTaskRef::Save(IOutputStream* buffer) const {
@@ -79,7 +93,9 @@ void TFmrTableInputRef::Save(IOutputStream* buffer) const {
     ::SaveMany(
         buffer,
         TableId,
-        TableRanges
+        TableRanges,
+        Columns,
+        SerializedColumnGroups
     );
 }
 
@@ -87,7 +103,9 @@ void TFmrTableInputRef::Load(IInputStream* buffer) {
     ::LoadMany(
         buffer,
         TableId,
-        TableRanges
+        TableRanges,
+        Columns,
+        SerializedColumnGroups
     );
 }
 
@@ -99,11 +117,25 @@ void TTaskTableInputRef::Load(IInputStream* buffer) {
     ::Load(buffer, Inputs);
 }
 
+TFmrTableOutputRef::TFmrTableOutputRef(const TString& tableId, const TMaybe<TString>& partId): TableId(tableId) {
+    if (partId) {
+        PartId = *partId;
+    }
+}
+
+// Helper constructor which initializes all fields except PartId.
+TFmrTableOutputRef::TFmrTableOutputRef(const TFmrTableRef& fmrTableRef)
+    : TableId(fmrTableRef.FmrTableId.Id)
+    , SerializedColumnGroups(fmrTableRef.SerializedColumnGroups)
+{
+}
+
 void TFmrTableOutputRef::Save(IOutputStream* buffer) const {
     ::SaveMany(
         buffer,
         TableId,
-        PartId
+        PartId,
+        SerializedColumnGroups
     );
 }
 
@@ -111,7 +143,8 @@ void TFmrTableOutputRef::Load(IInputStream* buffer) {
     ::LoadMany(
         buffer,
         TableId,
-        PartId
+        PartId,
+        SerializedColumnGroups
     );
 }
 
@@ -139,6 +172,19 @@ void TFmrTableId::Save(IOutputStream* buffer) const {
 
 void TFmrTableId::Load(IInputStream* buffer) {
     ::Load(buffer, Id);
+}
+
+// helper functions for rich path
+
+TString SerializeRichPath(const NYT::TRichYPath& richPath) {
+    return NYT::NodeToYsonString(NYT::PathToNode(richPath));
+}
+
+NYT::TRichYPath DeserializeRichPath(const TString& serializedRichPath) {
+    auto node = NYT::NodeFromYsonString(serializedRichPath);
+    NYT::TRichYPath richPath;
+    NYT::Deserialize(richPath, node);
+    return richPath;
 }
 
 } // namespace NYql::NFmr

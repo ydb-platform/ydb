@@ -1,5 +1,8 @@
 #include "comparable.h"
 
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 std::partial_ordering TReplaceKeyAdapter::Compare(const TReplaceKeyAdapter& item) const {
@@ -14,6 +17,22 @@ std::partial_ordering TReplaceKeyAdapter::Compare(const TReplaceKeyAdapter& item
     } else {
         AFL_VERIFY(false);
         return std::partial_ordering::less;
+    }
+}
+
+TReplaceKeyAdapter TReplaceKeyAdapter::BuildStart(const TPortionInfo& portion, const TReadMetadataBase& readMetadata) {
+    if (readMetadata.IsDescSorted()) {
+        return TReplaceKeyAdapter(portion.IndexKeyEnd(), true);
+    } else {
+        return TReplaceKeyAdapter(portion.IndexKeyStart(), false);
+    }
+}
+
+TReplaceKeyAdapter TReplaceKeyAdapter::BuildFinish(const TPortionInfo& portion, const TReadMetadataBase& readMetadata) {
+    if (readMetadata.IsDescSorted()) {
+        return TReplaceKeyAdapter(portion.IndexKeyStart(), true);
+    } else {
+        return TReplaceKeyAdapter(portion.IndexKeyEnd(), false);
     }
 }
 

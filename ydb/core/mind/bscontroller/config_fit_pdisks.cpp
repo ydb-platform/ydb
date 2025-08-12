@@ -85,7 +85,10 @@ namespace NKikimr {
                 pdiskInfo->BoxId = disk.BoxId;
                 if (pdiskInfo->PDiskConfig != disk.PDiskConfig
                         || pdiskInfo->InferPDiskSlotCountFromUnitSize != disk.InferPDiskSlotCountFromUnitSize) {
-                    if (const auto id = FindStaticPDisk(disk, state); id && state.StaticPDisks.at(*id).PDiskConfig != disk.PDiskConfig) {
+                    const std::optional<TBlobStorageController::TStaticPDiskInfo> staticPDisk = FindStaticPDisk(disk, state).transform(
+                        [&](TPDiskId id) {return state.StaticPDisks.at(id);});
+                    if (staticPDisk && (staticPDisk->PDiskConfig != disk.PDiskConfig
+                            || staticPDisk->InferPDiskSlotCountFromUnitSize != disk.InferPDiskSlotCountFromUnitSize)) {
                         throw TExError() << "PDiskConfig mismatch for static disk" << TErrorParams::NodeId(disk.NodeId) << TErrorParams::Path(disk.Path);
                     } else {
                         pdiskInfo->PDiskConfig = disk.PDiskConfig;
@@ -159,7 +162,7 @@ namespace NKikimr {
                     const auto& hostConfig = it->second;
 
                     const TBlobStorageController::THostId hostId(hostKey.Fqdn, hostKey.IcPort);
-                    const auto& nodeId = state.HostRecords->ResolveNodeId(hostKey, hostValue);
+                    const auto& nodeId = hostValue.EnforcedNodeId ? hostValue.EnforcedNodeId : state.HostRecords->ResolveNodeId(hostKey);
                     if (!nodeId) {
                         throw TExHostNotFound(hostKey) << TErrorParams::BoxId(boxId) << TErrorParams::NodeId(*nodeId);
                     } else if (!usedNodes.insert(*nodeId).second) {

@@ -3,13 +3,13 @@
 #include "kqp_scan_events.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
-class TKqpScanComputeActor: public TSchedulableComputeActorBase<TKqpScanComputeActor> {
+class TKqpScanComputeActor: public NScheduler::TSchedulableComputeActorBase<TKqpScanComputeActor> {
 private:
     using TBase = TSchedulableComputeActorBase<TKqpScanComputeActor>;
 
@@ -69,7 +69,7 @@ public:
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
     }
 
-    TKqpScanComputeActor(TSchedulableOptions schedulableOptions, const TActorId& executerId, ui64 txId,
+    TKqpScanComputeActor(NScheduler::TSchedulableActorOptions schedulableOptions, const TActorId& executerId, ui64 txId,
         NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode);
@@ -160,4 +160,4 @@ public:
 
 };
 
-}
+} // namespace NKikimr::NKqp::NScanPrivate

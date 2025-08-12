@@ -228,6 +228,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        lib/ngtcp2_callbacks.c [4:4]
+        lib/ngtcp2_callbacks.h [4:4]
         lib/ngtcp2_dcidtr.c [4:4]
         lib/ngtcp2_dcidtr.h [4:4]
 

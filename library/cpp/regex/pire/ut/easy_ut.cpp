@@ -31,27 +31,27 @@
 #include <easy.h>
 
 Y_UNIT_TEST_SUITE(TestPireEasy) {
-	
+
 Y_UNIT_TEST(Match)
 {
-	Pire::Regexp re("(foo|bar)+", Pire::I);
-	UNIT_ASSERT("prefix fOoBaR suffix" ==~ re);
-	UNIT_ASSERT(!("bla bla bla" ==~ re));
+    Pire::Regexp re("(foo|bar)+", Pire::I);
+    UNIT_ASSERT("prefix fOoBaR suffix" ==~ re);
+    UNIT_ASSERT(!("bla bla bla" ==~ re));
 }
 
 Y_UNIT_TEST(Utf8)
 {
-	Pire::Regexp re("^.$", Pire::I | Pire::UTF8);
-	UNIT_ASSERT("\x41" ==~ re);
-	UNIT_ASSERT(!("\x81" ==~ re));
+    Pire::Regexp re("^.$", Pire::I | Pire::UTF8);
+    UNIT_ASSERT("\x41" ==~ re);
+    UNIT_ASSERT(!("\x81" ==~ re));
 }
 
 Y_UNIT_TEST(TwoFeatures)
 {
-	Pire::Regexp re("^(a.c&.b.)$", Pire::I | Pire::ANDNOT);
-	UNIT_ASSERT("abc" ==~ re);
-	UNIT_ASSERT("ABC" ==~ re);
-	UNIT_ASSERT(!("adc" ==~ re));
+    Pire::Regexp re("^(a.c&.b.)$", Pire::I | Pire::ANDNOT);
+    UNIT_ASSERT("abc" ==~ re);
+    UNIT_ASSERT("ABC" ==~ re);
+    UNIT_ASSERT(!("adc" ==~ re));
 }
-	
+
 }

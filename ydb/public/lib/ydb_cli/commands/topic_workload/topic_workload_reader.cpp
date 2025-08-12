@@ -12,8 +12,9 @@ void TTopicWorkloadReader::RetryableReaderLoop(const TTopicWorkloadReaderParams&
     const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
 
     while (!*params.ErrorFlag && Now() < endTime) {
+        const TInstant iterationEndTime = Min(params.RestartInterval.ToDeadLine(), endTime);
         try {
-            ReaderLoop(params, endTime);
+            ReaderLoop(params, iterationEndTime);
         } catch (const yexception& ex) {
             WRITE_LOG(params.Log, ELogPriority::TLOG_WARNING, TStringBuilder() << ex);
         }
@@ -103,7 +104,7 @@ void TTopicWorkloadReader::ReaderLoop(const TTopicWorkloadReaderParams& params, 
                         << " createTime " << message.GetCreateTime() << " fullTimeMs " << fullTime);
                 }
 
-                if (!params.ReadWithoutConsumer && (!txSupport || params.UseTopicCommit)) {
+                if (!params.ReadWithoutConsumer && (!txSupport || params.UseTopicCommit) && !params.ReadWithoutCommit) {
                     dataEvent->Commit();
                 }
             } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {

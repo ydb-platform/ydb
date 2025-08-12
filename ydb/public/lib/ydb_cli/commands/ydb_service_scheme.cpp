@@ -289,7 +289,7 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     case NScheme::ESchemeEntryType::ExternalTable:
         return DescribeExternalTable(driver);
     case NScheme::ESchemeEntryType::SysView:
-        return DescribeTable(driver);
+        return DescribeSystemView(driver);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -613,6 +613,7 @@ int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDes
     Cout << Endl << "State: ";
     switch (desc.GetState()) {
     case NReplication::TTransferDescription::EState::Running:
+    case NReplication::TTransferDescription::EState::Paused:
         Cout << desc.GetState();
         break;
     case NReplication::TTransferDescription::EState::Error:
@@ -697,8 +698,20 @@ int TCommandDescribe::DescribeExternalTable(const TDriver& driver) {
     return PrintDescription(this, OutputFormat, result.GetExternalTableDescription(), &TCommandDescribe::PrintExternalTableResponsePretty);
 }
 
+int TCommandDescribe::DescribeSystemView(const TDriver& driver) {
+    NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    const auto result = sessionResult.GetSession().DescribeSystemView(Path).ExtractValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    const auto desc = result.GetSystemViewDescription();
+    return PrintDescription(this, OutputFormat, desc, &TCommandDescribe::PrintSystemViewResponsePretty);
+}
+
 namespace {
-    void PrintColumns(const NTable::TTableDescription& tableDescription) {
+    template<typename TTableLikeObjectDescription>
+    void PrintColumns(const TTableLikeObjectDescription& tableDescription) {
         if (!tableDescription.GetTableColumns().size()) {
             return;
         }
@@ -837,7 +850,8 @@ namespace {
         Cout << table;
     }
 
-    void PrintAttributes(const NTable::TTableDescription& tableDescription) {
+    template<typename TTableLikeObjectDescription>
+    void PrintAttributes(const TTableLikeObjectDescription& tableDescription) {
         if (tableDescription.GetAttributes().empty()) {
             return;
         }
@@ -1054,6 +1068,14 @@ int TCommandDescribe::PrintTableResponsePretty(const NTable::TTableDescription& 
     return EXIT_SUCCESS;
 }
 
+int TCommandDescribe::PrintSystemViewResponsePretty(const NYdb::NTable::TSystemViewDescription& result) const {
+    Cout << "Id: "  << result.GetSysViewId() << " (" << result.GetSysViewName() <<  ")" << Endl;
+    PrintColumns(result);
+    PrintAttributes(result);
+
+    return EXIT_SUCCESS;
+}
+
 std::pair<TString, TString> TCommandDescribe::ParseTopicConsumer() const {
     const size_t slashPos = Path.find_last_of('/');
     std::pair<TString, TString> result;
@@ -1214,6 +1236,7 @@ void TCommandPermissionGrant::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to grant permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to grant")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/grant")
         .RequiredArgument("NAME").AppendTo(&PermissionsToGrant);
 }
 
@@ -1259,6 +1282,7 @@ void TCommandPermissionRevoke::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to revoke permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to revoke")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/revoke")
         .RequiredArgument("NAME").AppendTo(&PermissionsToRevoke);
 }
 
@@ -1304,6 +1328,7 @@ void TCommandPermissionSet::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to set permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to set")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/grant")
         .RequiredArgument("NAME").AppendTo(&PermissionsToSet);
 }
 

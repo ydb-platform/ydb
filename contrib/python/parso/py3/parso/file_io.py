@@ -15,9 +15,9 @@ class FileIO:
         # We would like to read unicode here, but we cannot, because we are not
         # sure if it is a valid unicode file. Therefore just read whatever is
         # here.
-        data = res.resfs_read(self.path)
-        if data:
-            return data
+        if not os.getenv("Y_PYTHON_SOURCE_ROOT"):
+            if data := res.resfs_read(self.path):
+                return data
         with open(self.path, 'rb') as f:
             return f.read()
 

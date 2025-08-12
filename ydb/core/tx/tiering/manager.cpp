@@ -119,9 +119,9 @@ public:
         , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
               []() {
                   return ERetryErrorClass::ShortRetry;
-              },
-              TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 10))
-        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()) {
+              }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 10000))
+        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
+    {
     }
 
     void Bootstrap() {
@@ -257,8 +257,11 @@ const NTiers::TManager* TTiersManager::GetManagerOptional(const NTiers::TExterna
 void TTiersManager::ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers) {
     AFL_VERIFY(Actor)("error", "tiers_manager_is_not_started");
     for (const NTiers::TExternalStorageId& tierId : usedTiers) {
-        if (!Tiers.contains(tierId)) {
-            Tiers.emplace(tierId, TTierGuard(tierId, this));
+        auto findTier = Tiers.find(tierId);
+        if (findTier == Tiers.end()) {
+            findTier = Tiers.emplace(tierId, TTierGuard(tierId, this)).first;
+        }
+        if (findTier->second.GetState() != TTiersManager::ETierState::AVAILABLE) {
             const auto& actorContext = NActors::TActivationContext::AsActorContext();
             AFL_VERIFY(&actorContext)("error", "no_actor_context");
             actorContext.Send(Actor->SelfId(), new NTiers::TEvWatchSchemeObject({ tierId.GetConfigPath() }));
@@ -277,14 +280,12 @@ void TTiersManager::UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TS
 void TTiersManager::UpdateTierConfig(
     std::optional<NTiers::TTierConfig> config, const NTiers::TExternalStorageId& tierId, const bool notifyShard) {
     AFL_INFO(NKikimrServices::TX_TIERING)("event", "update_tier_config")("name", tierId.ToString())("tablet", TabletId)("has_config", !!config);
+    TTierGuard* findTier = Tiers.FindPtr(tierId);
+    AFL_VERIFY(findTier)("tier", tierId.ToString());
     if (config) {
-        TTierGuard* findTier = Tiers.FindPtr(tierId);
-        if (!findTier) {
-            findTier = &Tiers.emplace(tierId, TTierGuard(tierId, this)).first->second;
-        }
         findTier->UpsertConfig(*config);
     } else {
-        Tiers.erase(tierId);
+        findTier->ResetConfig();
     }
     OnConfigsUpdated(notifyShard);
 }
@@ -292,7 +293,7 @@ void TTiersManager::UpdateTierConfig(
 ui64 TTiersManager::GetAwaitedConfigsCount() const {
     ui64 count = 0;
     for (const auto& [id, tier] : Tiers) {
-        if (!tier.HasConfig()) {
+        if (tier.GetState() == ETierState::REQUESTED) {
             ++count;
         }
     }

@@ -11,11 +11,8 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
 
     Y_UNIT_TEST_TWIN(TestReadOnly, withSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
-        auto settings = TKikimrSettings()
-            .SetKeepSnapshotTimeout(TDuration::Seconds(1))
-            .SetAppConfig(appConfig);
+        auto settings = TKikimrSettings().SetKeepSnapshotTimeout(TDuration::Seconds(1));
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
 
         TKikimrRunner kikimr(settings);
 
@@ -55,11 +52,8 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
 
 
     Y_UNIT_TEST_TWIN(TestSnapshotExpiration, withSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
-        auto settings = TKikimrSettings()
-            .SetKeepSnapshotTimeout(TDuration::Seconds(1))
-            .SetAppConfig(appConfig);
+        auto settings = TKikimrSettings().SetKeepSnapshotTimeout(TDuration::Seconds(1));
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
 
         TKikimrRunner kikimr(settings);
 
@@ -114,9 +108,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_TWIN(ReadOnlyTxCommitsOnConcurrentWrite, withSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
-        TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
-        );
+        TKikimrRunner kikimr{ TKikimrSettings(appConfig) };
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -176,10 +168,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_TWIN(ReadOnlyTxWithIndexCommitsOnConcurrentWrite, withSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
-        TKikimrRunner kikimr(
-            TKikimrSettings()
-                .SetAppConfig(appConfig)
-        );
+        TKikimrRunner kikimr{ TKikimrSettings(appConfig) };
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -242,10 +231,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_TWIN(ReadWriteTxFailsOnConcurrentWrite1, withSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
-        TKikimrRunner kikimr(
-            TKikimrSettings()
-                .SetAppConfig(appConfig)
-        );
+        TKikimrRunner kikimr{ TKikimrSettings(appConfig) };
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -284,10 +270,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_TWIN(ReadWriteTxFailsOnConcurrentWrite2, withSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
-        TKikimrRunner kikimr(
-            TKikimrSettings()
-                .SetAppConfig(appConfig)
-        );
+        TKikimrRunner kikimr{ TKikimrSettings(appConfig) };
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
@@ -332,10 +315,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_TWIN(ReadWriteTxFailsOnConcurrentWrite3, withSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
-        TKikimrRunner kikimr(
-            TKikimrSettings()
-                .SetAppConfig(appConfig)
-        );
+        TKikimrRunner kikimr{ TKikimrSettings(appConfig) };
 
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
 //        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);

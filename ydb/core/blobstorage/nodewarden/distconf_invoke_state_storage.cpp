@@ -6,11 +6,20 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    void TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
-        const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
-        GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config);
-        GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config);
-        GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config);
+    bool TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool pileupReplicas) {
+        const NKikimrBlobStorage::TStorageConfig& config = *Self->StorageConfig;
+        bool result = true;
+        std::unordered_set<ui32> usedNodes;
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config, usedNodes, config.GetStateStorageConfig());
+        if (pileupReplicas) {
+            usedNodes.clear();
+        }
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config, usedNodes, config.GetStateStorageBoardConfig());
+        if (pileupReplicas) {
+            usedNodes.clear();
+        }
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config, usedNodes, config.GetSchemeBoardConfig());
+        return result;
     }
 
     void TInvokeRequestHandlerActor::AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
@@ -69,11 +78,11 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd) {
         RunCommonChecks();
 
-        FinishWithSuccess([&](auto *record) {
+        Finish(TResult::OK, std::nullopt, [&](auto *record) {
             auto* currentConfig = record->MutableStateStorageConfig();
 
             if (cmd.GetRecommended()) {
-                GetRecommendedStateStorageConfig(currentConfig);
+                GetRecommendedStateStorageConfig(currentConfig, cmd.GetPileupReplicas());
                 AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(currentConfig);
             } else {
                 GetCurrentStateStorageConfig(currentConfig);
@@ -81,22 +90,46 @@ namespace NKikimr::NStorage {
         });
     }
 
-    void TInvokeRequestHandlerActor::SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd) {
+    void TInvokeRequestHandlerActor::SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd) {
         RunCommonChecks();
+        Self->SelfHealNodesState.clear();
+        for (auto node : cmd.GetNodesState()) {
+            Self->SelfHealNodesState[node.GetNodeId()] = node.GetState();
+        }
+        if (cmd.GetEnableSelfHealStateStorage()) {
+            SelfHealStateStorage(cmd.GetWaitForConfigStep(), true, cmd.GetPileupReplicas());
+        }
+    }
+
+    void TInvokeRequestHandlerActor::SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd) {
+        SelfHealStateStorage(cmd.GetWaitForConfigStep(), cmd.GetForceHeal(), cmd.GetPileupReplicas());
+    }
+
+    void TInvokeRequestHandlerActor::SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal, bool pileupReplicas) {
+        RunCommonChecks();
+        STLOG(PRI_DEBUG, BS_NODE, NW105, "TInvokeRequestHandlerActor::SelfHealStateStorage", (waitForConfigStep, waitForConfigStep), (forceHeal, forceHeal), (pileupReplicas, pileupReplicas));
+        NKikimrBlobStorage::TStateStorageConfig targetConfig;
+        if (!GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas) && !forceHeal) {
+            throw TExError() << "Recommended configuration has faulty nodes and can not be applyed";
+        }
+
+        NKikimrBlobStorage::TStateStorageConfig currentConfig;
+        GetCurrentStateStorageConfig(&currentConfig);
 
         if (Self->StateStorageSelfHealActor) {
             Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->StateStorageSelfHealActor.value(), Self->SelfId(), nullptr, 0));
             Self->StateStorageSelfHealActor.reset();
         }
-        NKikimrBlobStorage::TStateStorageConfig currentConfig;
-        GetCurrentStateStorageConfig(&currentConfig);
-
-        NKikimrBlobStorage::TStateStorageConfig targetConfig;
-        GetRecommendedStateStorageConfig(&targetConfig);
-
+        enum ReconfigType {
+            NONE,
+            ONE_NODE,
+            FULL
+        };
+        std::unordered_map<ui32, std::tuple<ui32, ui32, ui32>> nodesToReplace;
         auto needReconfig = [&](auto clearFunc, auto ssMutableFunc, auto buildFunc) {
             auto copyCurrentConfig = currentConfig;
             auto ss = *(copyCurrentConfig.*ssMutableFunc)();
+            auto targetSS = *(targetConfig.*ssMutableFunc)();
             if (ss.RingGroupsSize() == 0) {
                 ss.MutableRing()->ClearRingGroupActorIdOffset();
             } else {
@@ -107,36 +140,156 @@ namespace NKikimr::NStorage {
             TIntrusivePtr<TStateStorageInfo> newSSInfo;
             TIntrusivePtr<TStateStorageInfo> oldSSInfo;
             oldSSInfo = (*buildFunc)(ss);
-            newSSInfo = (*buildFunc)(*(targetConfig.*ssMutableFunc)());
-            STLOG(PRI_DEBUG, BS_NODE, NW52, "needReconfig " << (oldSSInfo->RingGroups == newSSInfo->RingGroups));
+            newSSInfo = (*buildFunc)(targetSS);
             if (oldSSInfo->RingGroups == newSSInfo->RingGroups) {
                 (targetConfig.*clearFunc)();
-                return false;
+                 STLOG(PRI_DEBUG, BS_NODE, NW104, "needReconfig clear config"
+                , (CurrentConfig, ss), (TargetConfig, targetSS), (oldSSInfo, oldSSInfo->ToString()), (newSSInfo, newSSInfo->ToString()));
+                return ReconfigType::NONE;
             }
-            return true;
+
+            if (oldSSInfo->RingGroups.size() != newSSInfo->RingGroups.size()) {
+                return ReconfigType::FULL;
+            }
+
+            bool hasBadNodes = false;
+            for (ui32 ringGroupIdx : xrange(oldSSInfo->RingGroups.size())) {
+                auto& oldRg = oldSSInfo->RingGroups[ringGroupIdx];
+                auto& newRg = newSSInfo->RingGroups[ringGroupIdx];
+                if (oldRg.NToSelect != newRg.NToSelect || oldRg.Rings.size() != newRg.Rings.size()) {
+                    return ReconfigType::FULL;
+                }
+                for (ui32 j : xrange(oldRg.Rings.size())) {
+                    auto& oldRing = oldRg.Rings[j];
+                    auto& newRing = newRg.Rings[j];
+                    if (oldRing.IsDisabled != newRing.IsDisabled
+                        || oldRing.UseRingSpecificNodeSelection != newRing.UseRingSpecificNodeSelection
+                        || oldRing.Replicas.size() != newRing.Replicas.size()) {
+                        return ReconfigType::FULL;
+                    }
+                    for (auto& actorId : oldRing.Replicas) {
+                        if (!Self->SelfHealNodesState.contains(actorId.NodeId()) || Self->SelfHealNodesState.at(actorId.NodeId()) > 0) {
+                            hasBadNodes = true;
+                        }
+                    }
+                }
+            }
+            if (!hasBadNodes && !pileupReplicas) {
+                return ReconfigType::NONE; // Current config is optimal and all nodes are good
+            }
+
+            // Check can be node replacement applyed
+            for (ui32 ringGroupIdx : xrange(oldSSInfo->RingGroups.size())) {
+                auto& oldRg = oldSSInfo->RingGroups[ringGroupIdx];
+                auto& newRg = newSSInfo->RingGroups[ringGroupIdx];
+
+                // Find not changed rings and place them on previous position
+                auto equalRingsByNodes = [](auto& ring1, auto& ring2) {
+                    if (ring1.Replicas.size() != ring2.Replicas.size()) {
+                        return false;
+                    }
+                    for(ui32 replicaPos : xrange(ring1.Replicas.size())) {
+                        if (ring1.Replicas[replicaPos].NodeId() != ring2.Replicas[replicaPos].NodeId()) {
+                            return false;
+                        }
+                    }
+                    return true;
+                };
+                for (ui32 oldRingIdx : xrange(oldRg.Rings.size())) {
+                    for (ui32 newRingIdx : xrange(newRg.Rings.size())) {
+                        if (newRingIdx != oldRingIdx && equalRingsByNodes(oldRg.Rings[oldRingIdx], newRg.Rings[newRingIdx])) {
+                            std::swap(newRg.Rings[newRingIdx], newRg.Rings[oldRingIdx]);
+                            break;
+                        }
+                    }
+                }
+                for (ui32 ringIdx : xrange(oldRg.Rings.size())) {
+                    auto& oldRing = oldRg.Rings[ringIdx];
+                    auto& newRing = newRg.Rings[ringIdx];
+                    if (oldRing == newRing) {
+                        continue;
+                    }
+                    // Place replicas in ring on previous position
+                    for (ui32 oldReplicaPos : xrange(oldRing.Replicas.size())) {
+                        for (ui32 newReplicaPos : xrange(newRing.Replicas.size())) {
+                            if (newReplicaPos != oldReplicaPos && oldRing.Replicas[oldReplicaPos].NodeId() == newRing.Replicas[newReplicaPos].NodeId()) {
+                                std::swap(newRing.Replicas[newReplicaPos], newRing.Replicas[oldReplicaPos]);
+                                break;
+                            }
+                        }
+                    }
+
+                    for (ui32 k : xrange(oldRing.Replicas.size())) {
+                        auto oldRep = oldRing.Replicas[k].NodeId();
+                        auto newRep = newRing.Replicas[k].NodeId();
+                        if (oldRep == newRep) {
+                            continue;
+                        }
+                        std::tuple<ui32, ui32, ui32> placement{ ringGroupIdx, ringIdx, newRep };
+                        if (auto it = nodesToReplace.find(oldRep); it != nodesToReplace.end() && it->second != placement) {
+                            return ReconfigType::FULL;
+                        }
+                        nodesToReplace[oldRep] = placement;
+                    }
+                }
+            }
+            if (nodesToReplace.size() == 1) {
+                auto placement = nodesToReplace.begin();
+                auto oldRg = oldSSInfo->RingGroups[std::get<0>(placement->second)];
+                std::unordered_set<ui32> badRings;
+                for (ui32 ringIdx : xrange(oldRg.Rings.size())) {
+                    auto& oldRing = oldRg.Rings[ringIdx];
+                    for (auto& rep : oldRing.Replicas) {
+                        auto oldRep = rep.NodeId();
+                        if (Self->SelfHealNodesState[oldRep]) {
+                            badRings.insert(ringIdx);
+                        }
+                    }
+                }
+                ui32 majority = oldRg.NToSelect / 2 + 1;
+                return badRings.size() <= oldRg.NToSelect - majority ? ReconfigType::ONE_NODE : ReconfigType::FULL;
+            }
+            return nodesToReplace.empty() ? ReconfigType::NONE : ReconfigType::FULL;
         };
         #define NEED_RECONFIG(NAME) needReconfig(&NKikimrBlobStorage::TStateStorageConfig::Clear##NAME##Config, &NKikimrBlobStorage::TStateStorageConfig::Mutable##NAME##Config, &NKikimr::Build##NAME##Info)
         auto needReconfigSS = NEED_RECONFIG(StateStorage);
         auto needReconfigSSB = NEED_RECONFIG(StateStorageBoard);
         auto needReconfigSB = NEED_RECONFIG(SchemeBoard);
+        #undef NEED_RECONFIG
 
-        if (!needReconfigSS && !needReconfigSSB && !needReconfigSB) {
+        if (needReconfigSS == ReconfigType::NONE && needReconfigSSB == ReconfigType::NONE && needReconfigSB == ReconfigType::NONE) {
             throw TExError() << "Current configuration is recommended. Nothing to self-heal.";
         }
-        #undef NEED_RECONFIG
+        if (nodesToReplace.size() == 1 && needReconfigSS != ReconfigType::FULL && needReconfigSSB != ReconfigType::FULL && needReconfigSB != ReconfigType::FULL) {
+            STLOG(PRI_DEBUG, BS_NODE, NW100, "Need to reconfig one node " << nodesToReplace.begin()->first << " to " << std::get<2>(nodesToReplace.begin()->second)
+                , (CurrentConfig, currentConfig), (TargetConfig, targetConfig));
+            auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+            Y_ABORT_UNLESS(op);
+            Self->StateStorageSelfHealActor = Register(new TStateStorageReassignNodeSelfhealActor(op->Sender, op->Cookie
+                , TDuration::Seconds(waitForConfigStep), nodesToReplace.begin()->first, std::get<2>(nodesToReplace.begin()->second)
+                , needReconfigSS == ReconfigType::ONE_NODE, needReconfigSSB == ReconfigType::ONE_NODE, needReconfigSB == ReconfigType::ONE_NODE));
+            Finish(TResult::OK, std::nullopt);
+            return;
+        }
 
         AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(&targetConfig);
 
-        Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(Sender, Cookie,
-            TDuration::Seconds(cmd.GetWaitForConfigStep()), std::move(currentConfig), std::move(targetConfig)));
+        STLOG(PRI_DEBUG, BS_NODE, NW101, "Need to reconfig, starting StateStorageSelfHealActor", (CurrentConfig, currentConfig), (TargetConfig, targetConfig));
 
-        FinishWithSuccess();
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        ui32 pilesCnt = Self->BridgePileNameMap.size();
+        if (pilesCnt == 0)
+            pilesCnt = 1;
+        Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
+            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), pilesCnt));
+        Finish(TResult::OK, std::nullopt);
     }
 
     void TInvokeRequestHandlerActor::ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd) {
         RunCommonChecks();
 
-        STLOG(PRI_DEBUG, BS_NODE, NW52, "TInvokeRequestHandlerActor::ReconfigStateStorage",
+        STLOG(PRI_DEBUG, BS_NODE, NW67, "TInvokeRequestHandlerActor::ReconfigStateStorage",
                 (StateStorageConfig, cmd));
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
@@ -173,7 +326,7 @@ namespace NKikimr::NStorage {
                     if (ring.RingSize() > 0) {
                         throw TExError() << name << " too deep nested ring declaration";
                     }
-                    if(ring.HasRingGroupActorIdOffset()) {
+                    if (ring.HasRingGroupActorIdOffset()) {
                         throw TExError() << name << " RingGroupActorIdOffset should be used in ring group level, not ring";
                     }
                     if (ring.NodeSize() < 1) {
@@ -188,8 +341,8 @@ namespace NKikimr::NStorage {
                 oldSSInfo = (*buildInfo)(*(config.*configMutableFunc)());
                 THashSet<TActorId> replicas;
                 for (auto& ringGroup : newSSInfo->RingGroups) {
-                    for(auto& ring : ringGroup.Rings) {
-                        for(auto& node : ring.Replicas) {
+                    for (auto& ring : ringGroup.Rings) {
+                        for (auto& node : ring.Replicas) {
                             if (!replicas.insert(node).second) {
                                 throw TExError() << name << " replicas ActorId intersection, specify"
                                     " RingGroupActorIdOffset if you run multiple replicas on one node";
@@ -264,6 +417,8 @@ namespace NKikimr::NStorage {
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
+        STLOG(PRI_DEBUG, BS_NODE, NW67, "TInvokeRequestHandlerActor::ReassignStateStorageNode",
+                (config, config));
         auto process = [&](const char *name, auto hasFunc, auto mutableFunc) {
             if (!(config.*hasFunc)()) {
                 throw TExError() << name << " configuration is not filled in";
@@ -286,7 +441,12 @@ namespace NKikimr::NStorage {
                             throw TExError() << name << " ambiguous From node";
                         } else {
                             found = true;
-                            ring->MutableNode()->Set(i, cmd.GetTo());
+                            if (!cmd.GetDisableRing()) {
+                                ring->MutableNode()->Set(i, cmd.GetTo());
+                                ring->ClearIsDisabled();
+                            } else {
+                                ring->SetIsDisabled(true);
+                            }
                         }
                     }
                 };
@@ -324,7 +484,8 @@ namespace NKikimr::NStorage {
         F(StateStorageBoard)
         F(SchemeBoard)
 #undef F
-
+        STLOG(PRI_DEBUG, BS_NODE, NW67, "TInvokeRequestHandlerActor::ReassignStateStorageNode new config ",
+                (config, config));
         StartProposition(&config);
     }
 

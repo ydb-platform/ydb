@@ -45,12 +45,14 @@ public:
 
     struct TFamily /* group of columns configuration */ {
         using ECodec = NPage::ECodec;
+        using ECacheMode = NPage::ECacheMode;
 
         ui32 Room = DefaultRoom;
         ECache Cache = ECache::None;    /* How to cache data pages      */
         ECodec Codec = ECodec::Plain;   /* How to encode data pages     */
         ui32 Small = Max<ui32>();       /* When pack values to outer blobs  */
         ui32 Large = Max<ui32>();       /* When keep values in single blobs */
+        ECacheMode CacheMode = ECacheMode::Regular;
     };
 
     using TColumn = NTable::TColumn;
@@ -87,7 +89,8 @@ public:
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
 
         // When true this table has an in-memory caching enabled that has not been processed yet
-        mutable bool PendingCacheEnable = false;
+        mutable bool PendingCacheEnable = false; // has unprocessed NPage::ECache change
+        mutable bool PendingCacheModeChange = false; // has unprocessed NPage::ECacheMode change
     };
 
     struct TRedo {
@@ -208,6 +211,7 @@ class TAlter {
 public:
     using ECodec = NPage::ECodec;
     using ECache = NPage::ECache;
+    using ECacheMode = NPage::ECacheMode;
 
     TAlter(IAlterSink* sink = nullptr)
         : Sink(sink)
@@ -229,7 +233,10 @@ public:
     TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);
     TAlter& AddColumnToKey(ui32 table, ui32 column);
-    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec);
+    TAlter& SetFamilyCompression(ui32 table, ui32 family, ECodec codec);
+    TAlter& SetFamilyCacheMode(ui32 table, ui32 family, ECacheMode cacheMode);
+    TAlter& SetFamilyCache(ui32 table, ui32 family, ECache cache);
+    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec); // legacy
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
     TAlter& SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);

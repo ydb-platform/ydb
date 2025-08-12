@@ -104,6 +104,7 @@ enum class EGroupFields : ui8 {
     VDisk, // VDisk information
     PDisk, // PDisk information
     Latency,
+    PileName,
     COUNT
 };
 
@@ -123,6 +124,9 @@ public:
     std::unordered_map<TPathId, TTabletId> PathId2HiveId;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveStorageStats>> HiveStorageStats;
     ui64 HiveStorageStatsInFlight = 0;
+    std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfo;
+    std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfigResponse;
+    bool NodeWardenStorageConfigResponseProcessed = false;
 
     // BSC
     bool FallbackToWhiteboard = false;
@@ -136,7 +140,6 @@ public:
     bool GetPDisksResponseProcessed = false;
 
     // Whiteboard
-    std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfo;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvBSGroupStateResponse>> BSGroupStateResponse;
     ui64 BSGroupStateRequestsInFlight = 0;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvVDiskStateResponse>> VDiskStateResponse;
@@ -283,6 +286,7 @@ public:
         NKikimrViewer::EFlag Overall = NKikimrViewer::EFlag::Grey;
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
         float DiskSpaceUsage = 0; // the highest
+        TString PileName;
 
         std::vector<TVDisk> VDisks;
         std::vector<TNodeId> VDiskNodeIds; // filter nodes to request disk info from the whiteboard. could be duplicated.
@@ -475,9 +479,9 @@ public:
             DiskSpace = NKikimrViewer::EFlag::Grey;
             DiskSpaceUsage = 0;
             for (const TVDisk& vdisk : VDisks) {
+                available += vdisk.AvailableSize;
                 auto itPDisk = pDisks.find(vdisk.VSlotId);
                 if (itPDisk != pDisks.end()) {
-                    available += std::min(itPDisk->second.GetSlotTotalSize() - vdisk.AllocatedSize, vdisk.AvailableSize);
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
                 }
@@ -536,6 +540,9 @@ public:
                 case EGroupFields::Latency:
                     groupName = GetLatencyForGroup();
                     break;
+                case EGroupFields::PileName:
+                    groupName = PileName;
+                    break;
                 default:
                     break;
             }
@@ -552,6 +559,7 @@ public:
                 case EGroupFields::PoolName:
                 case EGroupFields::Kind:
                 case EGroupFields::MediaType:
+                case EGroupFields::PileName:
                     return GetGroupName(groupBy);
                 case EGroupFields::State:
                     return StateSortKey;
@@ -622,6 +630,7 @@ public:
     std::unordered_map<TVSlotId, const NKikimrSysView::TVSlotInfo*> VSlotsByVSlotId;
     std::unordered_map<TVSlotId, const NKikimrWhiteboard::TVDiskStateInfo*> VDisksByVSlotId;
     std::unordered_map<TPDiskId, const NKikimrWhiteboard::TPDiskStateInfo*> PDisksByPDiskId;
+    std::unordered_map<TBridgePileId, TString> PileNames;
 
     TFieldsType FieldsRequested; // fields that were requested by user
     TFieldsType FieldsRequired; // fields that are required to calculate the response
@@ -737,6 +746,8 @@ public:
             result = EGroupFields::Latency;
         } else if (field == "Available") {
             result = EGroupFields::Available;
+        } else if (field == "PileName") {
+            result = EGroupFields::PileName;
         }
         return result;
     }
@@ -848,6 +859,20 @@ public:
             NeedSort = false;
             NeedLimit = false;
         }
+
+    }
+
+public:
+    void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
+        if (!Viewer->CheckAccessViewer(TBase::GetRequest())) {
+            FieldsRequired.reset(+EGroupFields::NodeId); // fields that are not available for database users
+            FieldsRequired.reset(+EGroupFields::PDiskId);
+            FieldsRequired.reset(+EGroupFields::PDisk);
+            FieldsRequired.reset(+EGroupFields::PileName);
+        }
         FieldsRequested = FieldsRequired; // no dependent fields
         for (auto field = +EGroupFields::GroupId; field != +EGroupFields::COUNT; ++field) {
             if (FieldsRequired.test(field)) {
@@ -856,13 +881,6 @@ public:
                     FieldsRequired |= itDependentFields->second;
                 }
             }
-        }
-    }
-
-public:
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
         }
         if (Database) {
             if (!DatabaseNavigateResponse) {
@@ -873,6 +891,10 @@ public:
                 auto result = NavigateKeySetResult.emplace(pathId, std::move(*DatabaseNavigateResponse));
                 ProcessNavigate(result.first->second, true);
             }
+        }
+        if (AppData()->BridgeModeEnabled) {
+            NodeWardenStorageConfigResponse = MakeRequest<TEvNodeWardenStorageConfig>(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ false));
         }
         if (FallbackToWhiteboard) {
             RequestWhiteboard();
@@ -1100,6 +1122,7 @@ public:
                 case EGroupFields::Kind:
                 case EGroupFields::Encryption:
                 case EGroupFields::MediaType:
+                case EGroupFields::PileName:
                     GroupCollection();
                     SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; });
                     NeedGroup = false;
@@ -1182,6 +1205,9 @@ public:
                     break;
                 case EGroupFields::Latency:
                     SortCollection(GroupView, [](const TGroup* group) { return group->GetLatencyForSort(); }, ReverseSort);
+                    break;
+                case EGroupFields::PileName:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->GetGroupName(EGroupFields::PileName); }, ReverseSort);
                     break;
                 case EGroupFields::PDiskId:
                 case EGroupFields::NodeId:
@@ -1292,6 +1318,23 @@ public:
 
     void ProcessResponses() {
         AddEvent("ProcessResponses");
+        if (NodeWardenStorageConfigResponse && !NodeWardenStorageConfigResponseProcessed) {
+            if (NodeWardenStorageConfigResponse->IsDone()) {
+                if (NodeWardenStorageConfigResponse->IsOk()) {
+                    if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
+                        const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
+                        for (const auto& pile : srcBridgeInfo.Piles) {
+                            PileNames[pile.BridgePileId] = pile.Name;
+                        }
+                    } else {
+                        AddProblem("empty-node-warden-bridge-info");
+                    }
+                }
+                NodeWardenStorageConfigResponseProcessed = true;
+            } else {
+                return; // do not process further until NodeWarden response is processed
+            }
+        }
         if (GetGroupsResponse && GetGroupsResponse->IsDone() && !GetGroupsResponseProcessed) {
             if (GetGroupsResponse->IsOk()) {
                 GroupData.reserve(GetGroupsResponse->Get()->Record.EntriesSize());
@@ -1310,6 +1353,11 @@ public:
                     group.PutTabletLogLatency = info.GetPutTabletLogLatency();
                     group.PutUserDataLatency = info.GetPutUserDataLatency();
                     group.GetFastLatency = info.GetGetFastLatency();
+                    if (info.HasBridgePileId() && !PileNames.empty()) {
+                        const auto bridgePileId = TBridgePileId::FromProto(&info, &NKikimrSysView::TGroupInfo::GetBridgePileId);
+                        group.PileName = PileNames[bridgePileId];
+                        FieldsAvailable.set(+EGroupFields::PileName);
+                    }
                 }
                 for (TGroup& group : GroupData) {
                     GroupView.emplace_back(&group);
@@ -1573,6 +1621,13 @@ public:
                 RequestDone();
                 return;
             }
+            ProcessResponses();
+            RequestDone();
+        }
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
+        if (NodeWardenStorageConfigResponse->Set(std::move(ev))) {
             ProcessResponses();
             RequestDone();
         }
@@ -1943,6 +1998,7 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvents::TEvWakeup, HandleTimeout);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvBSGroupStateResponse, Handle);
@@ -2008,26 +2064,28 @@ public:
             }
         }
 
-        auto itPDisk = PDisks.find(vdisk.VSlotId);
-        if (itPDisk != PDisks.end()) {
-            const TPDisk& pdisk = itPDisk->second;
-            NKikimrViewer::TStoragePDisk& jsonPDisk = *jsonVDisk.MutablePDisk();
-            jsonPDisk.SetPDiskId(pdisk.GetPDiskId());
-            jsonPDisk.SetPath(pdisk.Path);
-            jsonPDisk.SetType(pdisk.Type);
-            jsonPDisk.SetGuid(::ToString(pdisk.Guid));
-            jsonPDisk.SetCategory(pdisk.Category);
-            jsonPDisk.SetTotalSize(pdisk.TotalSize);
-            jsonPDisk.SetAvailableSize(pdisk.AvailableSize);
-            jsonPDisk.SetStatus(pdisk.Status);
-            jsonPDisk.SetDecommitStatus(pdisk.DecommitStatus);
-            jsonPDisk.SetSlotSize(pdisk.GetSlotTotalSize());
-            if (pdisk.DiskSpace != NKikimrViewer::Grey) {
-                jsonPDisk.SetDiskSpace(pdisk.DiskSpace);
-            }
-            auto itPDiskByPDiskId = PDisksByPDiskId.find(vdisk.VSlotId);
-            if (itPDiskByPDiskId != PDisksByPDiskId.end()) {
-                jsonPDisk.MutableWhiteboard()->CopyFrom(*(itPDiskByPDiskId->second));
+        if (FieldsRequested.test(+EGroupFields::PDisk)) {
+            auto itPDisk = PDisks.find(vdisk.VSlotId);
+            if (itPDisk != PDisks.end()) {
+                const TPDisk& pdisk = itPDisk->second;
+                NKikimrViewer::TStoragePDisk& jsonPDisk = *jsonVDisk.MutablePDisk();
+                jsonPDisk.SetPDiskId(pdisk.GetPDiskId());
+                jsonPDisk.SetPath(pdisk.Path);
+                jsonPDisk.SetType(pdisk.Type);
+                jsonPDisk.SetGuid(::ToString(pdisk.Guid));
+                jsonPDisk.SetCategory(pdisk.Category);
+                jsonPDisk.SetTotalSize(pdisk.TotalSize);
+                jsonPDisk.SetAvailableSize(pdisk.AvailableSize);
+                jsonPDisk.SetStatus(pdisk.Status);
+                jsonPDisk.SetDecommitStatus(pdisk.DecommitStatus);
+                jsonPDisk.SetSlotSize(pdisk.GetSlotTotalSize());
+                if (pdisk.DiskSpace != NKikimrViewer::Grey) {
+                    jsonPDisk.SetDiskSpace(pdisk.DiskSpace);
+                }
+                auto itPDiskByPDiskId = PDisksByPDiskId.find(vdisk.VSlotId);
+                if (itPDiskByPDiskId != PDisksByPDiskId.end()) {
+                    jsonPDisk.MutableWhiteboard()->CopyFrom(*(itPDiskByPDiskId->second));
+                }
             }
         }
         if (!vdisk.Donors.empty()) {
@@ -2149,6 +2207,9 @@ public:
                     jsonGroup.SetLatencyPutTabletLog(group->PutTabletLogLatency);
                     jsonGroup.SetLatencyPutUserData(group->PutUserDataLatency);
                     jsonGroup.SetLatencyGetFast(group->GetFastLatency);
+                }
+                if (FieldsAvailable.test(+EGroupFields::PileName) && FieldsRequested.test(+EGroupFields::PileName)) {
+                    jsonGroup.SetPileName(group->PileName);
                 }
             }
         } else {

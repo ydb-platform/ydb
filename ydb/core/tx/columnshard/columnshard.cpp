@@ -11,9 +11,12 @@
 
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/tiering/manager.h>
+
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 namespace NKikimr {
 
@@ -91,6 +94,8 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
+    using namespace NOlap::NReader;
+    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_READER));
     StartInstant = TMonotonic::Now();
     Counters.GetCSCounters().Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);
     const TLogContextGuard gLogging =
@@ -107,6 +112,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Tiers->Start(Tiers);
     if (const auto& tiersSnapshot = NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs(); !tiersSnapshot.empty()) {
         for (const auto& [id, tier] : tiersSnapshot) {
+            Tiers->ActivateTiers({ NTiers::TExternalStorageId(id) });
             Tiers->UpdateTierConfig(tier, NTiers::TExternalStorageId(id), false);
         }
     }
@@ -121,6 +127,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(SelfId());
+    ColumnDataManager = std::make_shared<NOlap::NColumnFetching::TColumnDataManager>(SelfId());
     NormalizerController.SetDataAccessorsManager(DataAccessorsManager);
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
     Execute(CreateTxInitSchema(), ctx);
@@ -413,10 +420,11 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
 void TColumnShard::SendPeriodicStats() {
     LOG_S_DEBUG("Send periodic stats.");
 
-    if (!CurrentSchemeShardId || !OwnerPathId) {
+    if (!CurrentSchemeShardId || !TablesManager.GetTabletPathIdOptional()) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
+    const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
 
     const TActorContext& ctx = ActorContext();
     const TInstant now = TAppData::TimeProvider->Now();
@@ -433,7 +441,7 @@ void TColumnShard::SendPeriodicStats() {
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
 
-    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), OwnerPathId);
+    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
 
     FillOlapStats(ctx, ev);
     FillColumnTableStats(ctx, ev);

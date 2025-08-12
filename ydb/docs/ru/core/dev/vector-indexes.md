@@ -40,7 +40,7 @@
 
 Векторный индекс может быть **покрывающим**, что означает включение дополнительных колонок для возможности чтения из индекса без обращения к основной таблице.
 
-Или же он может быть **префиксным**, что позволяет учитывать дополнительные колонки для быстрой фильтрации при выполнении чтения.
+Или же он может быть с поддержкой **фильтрации**, что позволяет учитывать дополнительные колонки для быстрой фильтрации при выполнении чтения.
 
 Ниже приведены примеры создания векторного индекса различных типов.
 
@@ -69,9 +69,9 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
-### Векторный индекс с префиксом {#prefixed}
+### Векторный индекс с фильтрацией {#filtered}
 
-Векторный индекс с префиксом, позволяющий фильтровать по префиксной колонке `user` в момент выполнения векторного поиска:
+Векторный индекс с фильтрацией, позволяющий фильтровать по колонке `user` в момент выполнения векторного поиска:
 
 ```yql
 ALTER TABLE my_table
@@ -81,9 +81,9 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
-### Векторный индекс с префиксом и покрывающими колонками {#prefixed-covering}
+### Векторный индекс с фильтрацией и покрывающими колонками {#filtered-covering}
 
-Векторный индекс с префиксом и покрывающими колонками:  
+Векторный индекс с фильтрацией и покрывающими колонками:  
 
 ```yql
 ALTER TABLE my_table
@@ -102,13 +102,25 @@ ALTER TABLE my_table
 
 ## Использование векторных индексов {#select}
 
-Запросы к векторным индексам выполняются с использованием синтаксиса `VIEW` в YQL. Для индексов с префиксом укажите префиксные колонки в условии `WHERE`:
+Запросы к векторным индексам выполняются с использованием синтаксиса `VIEW` в YQL:
 
 ```yql
 DECLARE $query_vector AS List<Uint8>;
 
 SELECT user, data
 FROM my_table VIEW my_index
+ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
+LIMIT 10;
+```
+
+Для индексов с фильтрацией укажите соответствующие колонки в условии `WHERE`:
+
+```yql
+DECLARE $query_vector AS List<Uint8>;
+
+SELECT user, data
+FROM my_table VIEW my_index
+WHERE user = 'john'
 ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
 LIMIT 10;
 ```
@@ -127,5 +139,5 @@ LIMIT 10;
 
 Для начала работы с векторным индексом можно воспользоваться следующими рецептами:
 
-*  [YDB CLI & YQL](../recipes/vector-search)
-*  [YDB SDK: Python, C++](../recipes/ydb-sdk/vector-search.md)
+* [YDB CLI & YQL](../recipes/vector-search)
+* [YDB SDK: Python, C++](../recipes/ydb-sdk/vector-search.md)

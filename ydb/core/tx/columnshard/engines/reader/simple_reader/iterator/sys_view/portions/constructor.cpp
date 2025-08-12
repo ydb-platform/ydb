@@ -7,9 +7,10 @@ namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
     const std::optional<NOlap::TInternalPathId> internalPathId, const TSnapshot reqSnapshot,
     const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting)
-    : TabletId(tabletId)
-    , Sorting(sorting) {
+    : TBase(sorting, tabletId) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
+
+    std::deque<TDataSourceConstructor> constructors;
     for (auto&& i : engineImpl->GetTables()) {
         if (internalPathId && *internalPathId != i.first) {
             continue;
@@ -31,35 +32,22 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
         for (auto&& p : portionsAll) {
             portions.emplace_back(p);
             if (portions.size() == 10) {
-                AddConstructors(pathIdTranslator, i.first, std::move(portions), pkFilter);
+                constructors.emplace_back(pathIdTranslator.GetUnifiedByInternalVerified(i.first), TabletId, std::move(portions));
+                if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
+                    constructors.pop_back();
+                }
                 portions.clear();
             }
         }
         if (portions.size()) {
-            AddConstructors(pathIdTranslator, i.first, std::move(portions), pkFilter);
+            constructors.emplace_back(pathIdTranslator.GetUnifiedByInternalVerified(i.first), TabletId, std::move(portions));
+            if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
+                constructors.pop_back();
+            }
             portions.clear();
         }
     }
-    if (Sorting != ERequestSorting::NONE) {
-        std::make_heap(Constructors.begin(), Constructors.end(), TPortionDataConstructor::TComparator(Sorting == ERequestSorting::DESC));
-    }
-}
-
-std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNext(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
-    AFL_VERIFY(Constructors.size());
-
-    Constructors.front().SetIndex(CurrentSourceIdx);
-    ++CurrentSourceIdx;
-    if (Sorting == ERequestSorting::NONE) {
-        std::shared_ptr<NReader::NCommon::IDataSource> result = Constructors.front().Construct(context);
-        Constructors.pop_front();
-        return result;
-    } else {
-        std::pop_heap(Constructors.begin(), Constructors.end(), TPortionDataConstructor::TComparator(Sorting == ERequestSorting::DESC));
-        std::shared_ptr<NReader::NCommon::IDataSource> result = Constructors.back().Construct(context);
-        Constructors.pop_back();
-        return result;
-    }
+    Constructors.Initialize(std::move(constructors));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions

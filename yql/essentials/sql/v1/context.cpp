@@ -72,7 +72,8 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"DistinctOverKeys", &TContext::DistinctOverKeys},
     {"GroupByExprAfterWhere", &TContext::GroupByExprAfterWhere},
     {"FailOnGroupByExprOverride", &TContext::FailOnGroupByExprOverride},
-    {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike}
+    {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike},
+    {"DebugPositions", &TContext::DebugPositions},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -110,6 +111,10 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
 {
     if (settings.LangVer >= MakeLangVersion(2025, 2)) {
         GroupByExprAfterWhere = true;
+    }
+
+    if (settings.LangVer >= MakeLangVersion(2025, 3)) {
+        PersistableFlattenAndAggrExprs = true;
     }
 
     for (auto lib : settings.Libraries) {

@@ -600,6 +600,7 @@ public:
             // even if we have successfully compilation result, it doesn't mean anything
             // in terms of current schema version of the table if response of compilation is from the cache.
             // because of that, we are forcing to run schema version check
+            QueryState->CompileResult->IncUsage();
             if (QueryState->NeedCheckTableVersions()) {
                 auto ev = QueryState->BuildNavigateKeySet();
                 Send(MakeSchemeCacheID(), ev.release());
@@ -646,6 +647,12 @@ public:
 
         // table versions are not the same. need the query recompilation.
         if (!QueryState->EnsureTableVersions(*response)) {
+            if (QueryState->QueryPhysicalGraph) {
+                // Query recompilation is not allowed with restore physical graph request
+                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Restore query state failed, table versions are not the same");
+                return;
+            }
+
             auto ev = QueryState->BuildReCompileRequest(CompilationCookie, GUCSettings);
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
                 QueryState->KqpSessionSpan.GetTraceId());
@@ -689,6 +696,7 @@ public:
             return;
         }
 
+        QueryState->CompileResult->IncUsage();
         LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
         // even if we have successfully compilation result, it doesn't mean anything
         // in terms of current schema version of the table if response of compilation is from the cache.
@@ -712,6 +720,7 @@ public:
         if (QueryState->TryGetFromCache(*QueryCache, GUCSettings, Counters, SelfId()) && !QueryState->CompileResult->NeedToSplit) {
             LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << QueryState->CompileResult->Status);
 
+            QueryState->CompileResult->IncUsage();
             // even if we have successfully compilation result, it doesn't mean anything
             // in terms of current schema version of the table if response of compilation is from the cache.
             // because of that, we are forcing to run schema version check
@@ -1249,6 +1258,74 @@ public:
         return false;
     }
 
+    bool CheckScriptExecutionState(TKqpPhyTxHolder::TConstPtr tx, bool isBatchQuery) {
+        if (!QueryState->SaveQueryPhysicalGraph) {
+            return true;
+        }
+
+        YQL_ENSURE(QueryState->GetType() == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+        YQL_ENSURE(QueryState->HasImplicitTx());
+        YQL_ENSURE(QueryState->Commit, "Expected commit for implicit tx");
+
+        if (!QueryState->PreparedQuery) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported without prepared query");
+            return false;
+        }
+
+        if (isBatchQuery) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for batch queries");
+            return false;
+        }
+
+        if (QueryState->IsSplitted()) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for perstatement query execution");
+            return false;
+        }
+
+        if (const auto txCount = QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize(); txCount != 1) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Save state of query supported only for exactly one transaction, but got: " << txCount);
+            return false;
+        }
+
+        const auto& txCtx = *QueryState->TxCtx;
+        if (txCtx.HasTableRead || txCtx.HasTableWrite || txCtx.TopicOperations.GetSize() != 0) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table and topic operations");
+            return false;
+        }
+
+        if (!CanCacheQuery(QueryState->PreparedQuery->GetPhysicalQuery())) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Can not cache query, save state of query is not allowed");
+            return false;
+        }
+
+        if (!tx) {
+            if (txCtx.DeferredEffects.Empty()) {
+                // All transactions already finished
+                return true;
+            }
+            tx = txCtx.DeferredEffects.begin()->PhysicalTx;
+        }
+
+        YQL_ENSURE(tx);
+
+        if (tx->ResultsSize()) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for queries with results");
+            return false;
+        }
+
+        if (const auto txType = tx->GetType(); !IsIn({NKqpProto::TKqpPhyTx::TYPE_DATA, NKqpProto::TKqpPhyTx::TYPE_GENERIC, NKqpProto::TKqpPhyTx::TYPE_COMPUTE}, txType)) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Save state of query is not supported for this tx type: " << NKqpProto::TKqpPhyTx::EType_Name(txType));
+            return false;
+        }
+
+        if (tx->IsLiteralTx()) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for literal tx");
+            return false;
+        }
+
+        return true;
+    }
+
     void ExecuteOrDefer() {
         bool haveWork = QueryState->PreparedQuery &&
                 QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()
@@ -1266,11 +1343,11 @@ public:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }
 
-        if (!CheckTransactionLocks(tx) || !CheckTopicOperations()) {
+        const bool isBatchQuery = IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery());
+        if (!CheckTransactionLocks(tx) || !CheckTopicOperations() || !CheckScriptExecutionState(tx, isBatchQuery)) {
             return;
         }
 
-        bool isBatchQuery = IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery());
         if (QueryState->TxCtx->EnableOltpSink.value_or(false) && isBatchQuery && (!tx || !tx->IsLiteralTx())) {
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
@@ -1363,7 +1440,6 @@ public:
                     }
 
                     SendToSchemeExecuter(tx);
-                    ++QueryState->CurrentTx;
                     return false;
 
                 case NKqpProto::TKqpPhyTx::TYPE_DATA:
@@ -1530,6 +1606,8 @@ public:
             temporary, TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
+
+        ++QueryState->CurrentTx;
     }
 
     static ui32 GetResultsCount(const IKqpGateway::TExecPhysicalRequest& req) {
@@ -1550,6 +1628,8 @@ public:
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
+        request.SaveQueryPhysicalGraph = QueryState && QueryState->SaveQueryPhysicalGraph && request.Transactions.size() == 1;
+        request.QueryPhysicalGraph = QueryState ? QueryState->QueryPhysicalGraph : nullptr;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
         if (txCtx->EnableOltpSink.value_or(false) && !txCtx->TxManager) {

@@ -98,11 +98,9 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
 Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(StreamExecuteScanQueryCancelation) {
-        NKikimrConfig::TAppConfig appConfig;
+        TKikimrSettings settings;
         // This test expects SourceRead is enabled for ScanQuery
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
         TKikimrRunner kikimr{settings};
 
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
@@ -1838,8 +1836,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(SecondaryIndex) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2214,11 +2211,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(DqSourceFullScan) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
+        TKikimrSettings settings = TKikimrSettings().SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -2233,11 +2227,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(DqSource) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
+        TKikimrSettings settings = TKikimrSettings().SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -2253,12 +2244,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(DqSourceLiteralRange) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
-
+        TKikimrSettings settings = TKikimrSettings().SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
@@ -2354,8 +2341,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(StreamLookupByFullPk) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
 
@@ -2407,8 +2393,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(LimitOverSecondaryIndexRead) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2446,8 +2431,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(TopSortOverSecondaryIndexRead) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

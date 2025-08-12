@@ -209,7 +209,7 @@ namespace {
                 }
 
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -248,7 +248,7 @@ namespace {
                         const StringPiece rewrite(rewriteRef.data(), rewriteRef.size());
                         TString rewriteError;
                         if (!Regexp_->CheckRewriteString(rewrite, &rewriteError)) {
-                            UdfTerminate((TStringBuilder() << Pos_ << " [rewrite error] " << rewriteError).data());
+                            UdfTerminate((TStringBuilder() << Pos_ << " [rewrite error] " << rewriteError).c_str());
                         }
                         std::string result(input);
                         RE2::GlobalReplace(&result, *Regexp_, rewrite);
@@ -289,7 +289,7 @@ namespace {
                 Y_ABORT("Unexpected mode");
             }
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
         std::unique_ptr<RE2> Regexp_;
@@ -392,7 +392,7 @@ namespace {
         if (hasEscape) {
             const std::string_view escapeRef(args[1].AsStringRef());
             if (escapeRef.size() != 1U) {
-                UdfTerminate((TStringBuilder() << GetPos() << " Escape should be single character").data());
+                UdfTerminate((TStringBuilder() << GetPos() << " Escape should be single character").c_str());
             }
             escape = escapeRef.front();
         }

@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto it = tableClient.StreamExecuteScanQuery(selectQuery, NYdb::NTable::TStreamExecScanQuerySettings()).GetValueSync();
             auto streamPart = it.ReadNext().GetValueSync();
             UNIT_ASSERT(!streamPart.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "Error reading blob range");
+            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "/Root/tier1");
         }
 
         testHelper.CreateTier("tier1");
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitCompactions(TDuration::Seconds(5));
         THashSet<NColumnShard::TInternalPathId> pathsToLock;
         for (const auto& [_, pathIdTranslator] : csController->GetActiveTablets()) {
-            if (auto internalPathId = pathIdTranslator->ResolveInternalPathId(tablePathId)) {
+            if (auto internalPathId = pathIdTranslator->ResolveInternalPathId(tablePathId, false)) {
                 pathsToLock.insert(*internalPathId);
             }
         };

@@ -45,11 +45,13 @@ namespace TEvPrivate {
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
-        EvRunDataErasure,
-        EvRunTenantDataErasure,
-        EvAddNewShardToDataErasure,
+        EvRunShred,
+        EvRunTenantShred,
+        EvAddNewShardToShred,
         EvVerifyPassword,
         EvLoginFinalize,
+        EvContinuousBackupCleanerResult,
+        EvTestNotifySubdomainCleanup,
         EvEnd
     };
 
@@ -204,6 +206,14 @@ namespace TEvPrivate {
         { }
     };
 
+    struct TEvTestNotifySubdomainCleanup : public TEventLocal<TEvTestNotifySubdomainCleanup, EvTestNotifySubdomainCleanup> {
+        TPathId SubdomainPathId;
+
+        explicit TEvTestNotifySubdomainCleanup(const TPathId& subdomainPathId)
+            : SubdomainPathId(subdomainPathId)
+        { }
+    };
+
     struct TEvCompletePublication: public TEventLocal<TEvCompletePublication, EvCompletePublication> {
         const TOperationId OpId;
         const TPathId PathId;
@@ -283,7 +293,7 @@ namespace TEvPrivate {
 
     struct TEvProgressIncrementalRestore : public TEventLocal<TEvProgressIncrementalRestore, EvProgressIncrementalRestore> {
         ui64 OperationId;
-        
+
         explicit TEvProgressIncrementalRestore(ui64 operationId)
             : OperationId(operationId)
         {}
@@ -300,10 +310,10 @@ namespace TEvPrivate {
         { }
     };
 
-    struct TEvAddNewShardToDataErasure : public TEventLocal<TEvAddNewShardToDataErasure, EvAddNewShardToDataErasure> {
+    struct TEvAddNewShardToShred : public TEventLocal<TEvAddNewShardToShred, EvAddNewShardToShred> {
         const std::vector<TShardIdx> Shards;
 
-        TEvAddNewShardToDataErasure(std::vector<TShardIdx>&& shards)
+        TEvAddNewShardToShred(std::vector<TShardIdx>&& shards)
             : Shards(std::move(shards))
         {}
     };
@@ -352,6 +362,22 @@ namespace TEvPrivate {
         const TString PasswordHash;
         const bool NeedUpdateCache;
     };
+
+    struct TEvContinuousBackupCleanerResult : public NActors::TEventLocal<TEvContinuousBackupCleanerResult, EvContinuousBackupCleanerResult> {
+    public:
+        TEvContinuousBackupCleanerResult(ui64 backupId, TPathId item, bool success, const TString& error = "")
+            : BackupId(backupId)
+            , Item(item)
+            , Success(success)
+            , Error(error)
+        {}
+
+        const ui64 BackupId = 0;
+        const TPathId Item;
+        const bool Success = false;
+        const TString Error;
+    };
+
 }; // TEvPrivate
 
 } // NSchemeShard

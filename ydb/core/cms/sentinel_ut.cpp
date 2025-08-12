@@ -289,7 +289,12 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
                     location.SetUnit(ToString(id));
 
                     state->ClusterInfo->AddNode(TEvInterconnect::TNodeInfo(id, name, name, name, 10000, TNodeLocation(location)), nullptr);
-                    sentinelState->Nodes[id] = NSentinel::TNodeInfo{name, NActors::TNodeLocation(location), Nothing(), {}};
+                    sentinelState->Nodes[id] = NSentinel::TNodeInfo{
+                        .Host = name,
+                        .Location = NActors::TNodeLocation(location),
+                        .PileId = Nothing(),
+                        .Markers = {},
+                    };
 
                     for (ui64 npdisk : xrange(pdisksPerNode)) {
                         NKikimrBlobStorage::TBaseConfig::TPDisk pdisk;
@@ -388,10 +393,10 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
 
         for (const auto& node : nodes) {
             const ui64 nodeId = node.second->NodeId;
-            
+
             for (ui32 i = 0; i < disksPerNode; i++) {
                 const TPDiskID id(nodeId, i);
-    
+
                 if (i < badDisks) {
                     all.AddPDisk(id, false);
                     changed.AddPDisk(id, false);
@@ -797,6 +802,70 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             env.SetPDiskState({id1, id2, id3}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
         }
     }
+
+    Y_UNIT_TEST(NodeStatusComputer) {
+        TNodeStatusComputer computer{
+            .BadStateLimit = 5,
+            .GoodStateLimit = 5,
+            .PrettyGoodStateLimit = 3,
+        };
+        UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
+        for (ui32 _ : xrange(2)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_GOOD);
+        }
+        for (ui32 _ : xrange(2)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.ActualState == TNodeStatusComputer::ENodeState::PRETTY_GOOD);
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
+        }
+        computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+
+        UNIT_ASSERT(computer.Compute());
+        for (ui32 _ : xrange(4)) {
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+        }
+        for (ui32 _ : xrange(4)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::BAD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_BAD);
+        }
+        computer.AddState(TNodeStatusComputer::ENodeState::BAD);
+        UNIT_ASSERT(computer.Compute());
+        UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::BAD);
+        for (ui32 _ : xrange(6)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::BAD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::BAD);
+        }
+        for (ui32 _ : xrange(6)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_GOOD);
+            computer.AddState(TNodeStatusComputer::ENodeState::BAD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_BAD);
+        }
+        for (ui32 _ : xrange(2)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::MAY_BE_GOOD);
+        }
+        for (ui32 _ : xrange(2)) {
+            computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+            UNIT_ASSERT(!computer.Compute());
+            UNIT_ASSERT(computer.ActualState == TNodeStatusComputer::ENodeState::PRETTY_GOOD);
+            UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
+        }
+        computer.AddState(TNodeStatusComputer::ENodeState::GOOD);
+        UNIT_ASSERT(computer.Compute());
+        UNIT_ASSERT(computer.GetCurrentNodeState() == TNodeStatusComputer::ENodeState::GOOD);
+    }
+
 } // TSentinelTests
 
 }

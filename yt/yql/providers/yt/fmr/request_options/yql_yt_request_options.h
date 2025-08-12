@@ -65,17 +65,14 @@ struct TError {
 };
 
 struct TYtTableRef {
-    TString Path;
-    TString Cluster;
-    TMaybe<TString> FilePath = Nothing();
+    NYT::TRichYPath RichPath; // Path to yt table
+    TMaybe<TString> FilePath = Nothing(); // Path to file corresponding to yt table, filled for file gateway
 
-    // TODO - maybe just use TRichYPath here also instead of Path and Cluster?
+    TString GetPath() const;
+    TString GetCluster() const;
 
     bool operator == (const TYtTableRef&) const = default;
 };
-
-void SaveRichPath(IOutputStream* buffer, const NYT::TRichYPath& path);
-void LoadRichPath(IInputStream* buffer, NYT::TRichYPath& path);
 
 struct TYtTableTaskRef {
     std::vector<NYT::TRichYPath> RichPaths;
@@ -87,6 +84,12 @@ struct TYtTableTaskRef {
     bool operator == (const TYtTableTaskRef&) const = default;
 }; // corresponds to a partition of several yt input tables.
 
+void SaveRichPath(IOutputStream* buffer, const NYT::TRichYPath& path);
+void LoadRichPath(IInputStream* buffer, NYT::TRichYPath& path);
+
+TString SerializeRichPath(const NYT::TRichYPath& richPath);
+NYT::TRichYPath DeserializeRichPath(const TString& serializedRichPath);
+
 struct TFmrTableId {
     TString Id;
 
@@ -96,6 +99,8 @@ struct TFmrTableId {
 
     TFmrTableId(const TString& cluster, const TString& path);
 
+    TFmrTableId(const NYT::TRichYPath& richPath);
+
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
@@ -104,6 +109,8 @@ struct TFmrTableId {
 
 struct TFmrTableRef {
     TFmrTableId FmrTableId;
+    std::vector<TString> Columns = {};
+    TString SerializedColumnGroups = TString();
     bool operator == (const TFmrTableRef&) const = default;
 };
 
@@ -121,6 +128,8 @@ struct TTableRange {
 struct TFmrTableInputRef {
     TString TableId;
     std::vector<TTableRange> TableRanges;
+    std::vector<TString> Columns = {};
+    TString SerializedColumnGroups = TString();
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
@@ -131,6 +140,13 @@ struct TFmrTableInputRef {
 struct TFmrTableOutputRef {
     TString TableId;
     TString PartId;
+    TString SerializedColumnGroups = TString(); // Serialized TNode of columnGroupSpec, empty if column groups is not set
+
+    TFmrTableOutputRef() = default;
+
+    TFmrTableOutputRef(const TString& tableId, const TMaybe<TString>& partId = Nothing());
+
+    TFmrTableOutputRef(const TFmrTableRef& fmrTableRef);
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
@@ -171,14 +187,8 @@ namespace std {
     template<>
     struct hash<NYql::NFmr::TFmrTableOutputRef> {
         size_t operator()(const NYql::NFmr::TFmrTableOutputRef& ref) const {
-            return CombineHashes(hash<TString>()(ref.TableId), hash<TString>()(ref.PartId));
-        }
-    };
-
-    template<>
-    struct hash<NYql::NFmr::TYtTableRef> {
-        size_t operator()(const NYql::NFmr::TYtTableRef& ref) const {
-            return CombineHashes(hash<TString>()(ref.Cluster), hash<TString>()(ref.Path));
+            return CombineHashes(hash<TString>()(ref.TableId),
+                CombineHashes(hash<TString>()(ref.PartId), hash<TString>()(ref.SerializedColumnGroups)));
         }
     };
 }

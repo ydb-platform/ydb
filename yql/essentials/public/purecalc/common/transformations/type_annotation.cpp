@@ -152,7 +152,7 @@ namespace {
                 }
             }
 
-            if (input->Head().IsCallable(NNodes::TCoDependsOn::CallableName())) {
+            if (NNodes::TCoDependsOnBase::Match(&input->Head())) {
                 if (!EnsureArgsCount(input->Head(), 1, ctx)) {
                     return TStatus::Error;
                 }

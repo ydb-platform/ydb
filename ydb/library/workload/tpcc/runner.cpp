@@ -312,7 +312,7 @@ void TPCCRunner::RunSync() {
     // produced after this point and before the first screen update
     if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
         LogBackend->StartCapture(); // start earlier?
-        Tui = std::make_unique<TRunnerTui>(*LogBackend, DataToDisplay);
+        Tui = std::make_unique<TRunnerTui>(Log, *LogBackend, DataToDisplay);
     }
 
     if (forcedWarmup) {
@@ -650,14 +650,13 @@ void TPCCRunner::PrintFinalResultPretty() {
 
     if (minutesPassed >= 1) {
         std::cout << "warehouses: " << Config.WarehouseCount << std::endl;
-        std::cout << "tpmC*: " << DataToDisplay->StatusData.Tpmc << std::endl;
-        std::cout << "efficiency: " << std::setprecision(2) << DataToDisplay->StatusData.Efficiency << "%" << std::endl;
+        std::cout << "tpmC: " << DataToDisplay->StatusData.Tpmc << "*" << std::endl;
+        std::cout << "efficiency: " << std::fixed << std::setprecision(2) << DataToDisplay->StatusData.Efficiency << "%" << std::endl;
+        std::cout << "* These results are not officially recognized TPC results "
+                  << "and are not comparable with other TPC-C test results published on the TPC website" << std::endl;
     } else {
         std::cout << "Less than minute passed, tpmC calculation skipped" << std::endl;
     }
-
-    std::cout << "* These results are not officially recognized TPC results "
-              << "and are not comparable with other TPC-C test results published on the TPC website" << std::endl;
 }
 
 void TPCCRunner::PrintFinalResultJson() {
@@ -755,8 +754,13 @@ void TRunConfig::SetDisplay() {
 //-----------------------------------------------------------------------------
 
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
-    TPCCRunner runner(connectionConfig, runConfig);
-    runner.RunSync();
+    try {
+        TPCCRunner runner(connectionConfig, runConfig);
+        runner.RunSync();
+    } catch (const std::exception& ex) {
+        std::cerr << "Exception while execution: " << ex.what() << std::endl;
+        throw NConsoleClient::TNeedToExitWithCode(EXIT_FAILURE);
+    }
 }
 
 } // namespace NYdb::NTPCC

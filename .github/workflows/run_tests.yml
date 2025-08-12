@@ -32,6 +32,11 @@ on:
         required: false
         type: string
         default: '["main"]'
+      branches_config_path:
+        description: 'Path to JSON file with branches to test'
+        required: false
+        type: string
+        default: ''
 
   workflow_dispatch:
     inputs:
@@ -75,10 +80,17 @@ jobs:
     outputs:
       branch_array: ${{ steps.set-branches.outputs.branch_array }}
     steps:
+      - name: Checkout ${{ matrix.branch }}
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/config/stable_branches.json
+
       - name: Set branches
         id: set-branches
         env:
           CALLED_BRANCHES: '${{ inputs.branches }}'
+          BRANCHES_CONFIG_PATH: '${{ inputs.branches_config_path }}'
         run: |
           # Проверяем, был ли передан параметр branches из вызывающего workflow
           if [[ -n "$CALLED_BRANCHES" ]]; then
@@ -91,6 +103,8 @@ jobs:
               # Если это одна ветка, создаем JSON-массив с одним элементом
               echo "branch_array=[\"$CALLED_BRANCHES\"]" >> $GITHUB_OUTPUT
             fi
+          elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
+            echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
           else
             # Если ветки не переданы, значит это прямой запуск workflow_dispatch
             echo "No branches specified, using current branch: ${{ github.ref_name }}"

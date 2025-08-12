@@ -18,6 +18,7 @@ SRCS(
     assimilation.cpp
     backpressure.cpp
     block_race.cpp
+    bsc_cache.cpp
     counting_events.cpp
     deadlines.cpp
     decommit_3dc.cpp
@@ -82,4 +83,5 @@ RECURSE_FOR_TESTS(
     ut_read_only_pdisk
     ut_stop_pdisk
     ut_cluster_balancing
+    ut_move_pdisk
 )

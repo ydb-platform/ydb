@@ -5,6 +5,8 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/sys_view/common/path.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -174,7 +176,8 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
     record.SetTxId(snap.GetPlanStep());
     record.SetScanId(scanId);
-    // record.SetLocalPathId(0);
+    AFL_VERIFY(!pathIds.empty());
+    record.SetLocalPathId(pathIds[0]);
     record.SetTablePath(TString("/") + NSysView::SysPathName + "/" + NSysView::StorePrimaryIndexPortionStatsName);
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}

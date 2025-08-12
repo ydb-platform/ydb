@@ -1,5 +1,6 @@
 src:*contrib/tools/python/src*
 src:*contrib/tools/python3*
+src:*contrib/tools/python3_prev*
 src:*contrib/libs/luajit*
 type:std::__*::locale::id=init
 

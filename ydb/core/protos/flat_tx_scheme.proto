@@ -417,11 +417,11 @@ message TEvFindTabletSubDomainPathIdResult {
 message TEvOwnerActorAck {
 }
 
-message TEvTenantDataErasureRequest {
+message TEvTenantShredRequest {
     optional uint64 Generation = 1;
 }
 
-message TEvTenantDataErasureResponse {
+message TEvTenantShredResponse {
     enum EStatus {
         UNSPECIFIED = 0;
         COMPLETED = 1;
@@ -433,10 +433,10 @@ message TEvTenantDataErasureResponse {
     optional EStatus Status = 3;
 }
 
-message TEvDataErasureInfoRequest {
+message TEvShredInfoRequest {
 }
 
-message TEvDataErasureInfoResponse {
+message TEvShredInfoResponse {
     enum EStatus {
         UNSPECIFIED = 0;
         COMPLETED = 1;
@@ -448,5 +448,5 @@ message TEvDataErasureInfoResponse {
     optional uint64 Generation = 2;
 }
 
-message TEvDataErasureManualStartupRequest {
+message TEvShredManualStartupRequest {
 }

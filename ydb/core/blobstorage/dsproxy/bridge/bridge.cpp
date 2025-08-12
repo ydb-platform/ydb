@@ -251,9 +251,9 @@ namespace NKikimr {
 
             const auto& bridgeGroupIds = Info->GetBridgeGroupIds();
             for (size_t i = 0; i < bridgeGroupIds.size(); ++i) {
-                const auto bridgePileId = TBridgePileId::FromValue(i);
+                const auto bridgePileId = TBridgePileId::FromPileIndex(i);
                 const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
-                if (pile->State == TClusterState::DISCONNECTED) {
+                if (!NBridge::PileStateTraits(pile->State).AllowsConnection) {
                     continue; // ignore this pile, it is disconnected
                 }
 
@@ -272,6 +272,8 @@ namespace NKikimr {
                 SendToBSProxy(SelfId(), bridgeGroupIds[i], eventToSend.release(), cookie);
                 ++request->ResponsesPending;
             }
+
+            Y_ABORT_UNLESS(request->ResponsesPending);
         }
 
         template<typename TEvent>
@@ -284,8 +286,9 @@ namespace NKikimr {
             auto& pile = *item.Pile;
             auto& request = item.Request;
 
-            const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA &&
-                item.Pile->State != TClusterState::DISCONNECTED;
+            const bool isError = ev->Get()->Status != NKikimrProto::OK
+                && ev->Get()->Status != NKikimrProto::NODATA
+                && NBridge::PileStateTraits(item.Pile->State).RequiresDataQuorum;
 
             STLOG(isError ? PRI_DEBUG : PRI_NOTICE, BS_PROXY_BRIDGE, BPB02, "intermediate response",
                 (RequestId, request->MakeRequestId()),

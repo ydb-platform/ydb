@@ -139,4 +139,27 @@ Y_UNIT_TEST_SUITE(TFastCheckTests) {
         UNIT_ASSERT(!CheckProgram("(return world)", options, errors));
         UNIT_ASSERT_VALUES_EQUAL(1, errors.Size());
     }
+
+    Y_UNIT_TEST(UsedFlags) {
+        TString program = R"sql(
+            $input = AsList(
+                AsStruct(1 AS key, 1001 AS subkey, 'AAA' AS value),
+            );
+
+            SELECT
+                count(DISTINCT i1.key) OVER (
+                    PARTITION BY
+                        i1.subkey
+                ) AS cnt,
+            FROM
+                AS_TABLE($input) AS i1
+        )sql";
+
+        TOptions options;
+        options.IsSql = true;
+
+        TIssues errors;
+        UNIT_ASSERT_C(CheckProgram(program, options, errors), errors.ToOneLineString());
+    }
+
 }

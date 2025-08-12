@@ -1527,7 +1527,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 *errorReason = "missing pile name";
                 return false;
             }
-            const auto [it, inserted] = piles.try_emplace(p[i].GetName(), TBridgePileId::FromValue(i));
+            const auto [it, inserted] = piles.try_emplace(p[i].GetName(), TBridgePileId::FromPileIndex(i));
             if (!inserted) {
                 *errorReason = TStringBuilder() << "duplicate pile name " << p[i].GetName();
                 return false;
@@ -1557,12 +1557,6 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
                 return false;
             }
-            const auto it = piles.find(*bridgePileName);
-            if (it == piles.end()) {
-                *errorReason = TStringBuilder() << "incorrect pile name " << *bridgePileName;
-                return false;
-            }
-            it->second.CopyToProto(r, &NKikimrBlobStorage::TNodeIdentifier::SetBridgePileId);
         } else if (bridgePileName) {
             *errorReason = "pile name can't be specified when Bridge mode is not enabled";
             return false;

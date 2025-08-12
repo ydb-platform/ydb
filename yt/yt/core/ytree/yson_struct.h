@@ -92,7 +92,7 @@ public:
 
     void Postprocess(const std::function<NYPath::TYPath()>& pathGetter = {});
 
-    void SetDefaults();
+    void SetDefaults(bool dontSetLiteMembers = false);
 
     void Save(NYson::IYsonConsumer* consumer) const;
 
@@ -132,9 +132,6 @@ public:
     bool IsEqual(const TYsonStructBase& rhs) const;
 
     const IYsonStructMeta* GetMeta() const;
-
-protected:
-    void MarkUnrecognized(const std::string& key, const IMapNodePtr& node);
 
 private:
     template <class TValue>

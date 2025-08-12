@@ -29,6 +29,7 @@ struct TWriteId {
     bool operator<(const TWriteId& rhs) const;
 
     void ToStream(IOutputStream& s) const;
+    TString ToString() const;
 
     size_t GetHash() const
     {
@@ -42,11 +43,16 @@ struct TWriteId {
         return !KafkaApiTransaction;
     }
 
+    bool IsKafkaApiTransaction() const 
+    {
+        return KafkaApiTransaction;
+    }
+
     bool KafkaApiTransaction = false;
     // these fields are used to identify topic api transaction
     ui64 NodeId = 0;
     ui64 KeyId = 0;
-    // Iidentifies kafka api transaction
+    // Identifies kafka api transaction
     NKafka::TProducerInstanceId KafkaProducerInstanceId;
 };
 

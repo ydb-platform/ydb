@@ -213,6 +213,7 @@ message TManageRequestRequest {
     LIST = 1;
     GET = 2;
     REJECT = 3;
+    APPROVE = 4;
   }
 
   optional string   User = 1;
@@ -234,6 +235,7 @@ message TManageRequestResponse {
 
   optional TStatus           Status = 1;
   repeated TScheduledRequest Requests = 2;
+  repeated TPermission       ManuallyApprovedPermissions = 3;
 }
 
 message TCheckRequest {
@@ -426,6 +428,16 @@ message TCmsConfig {
     }
 
     message TSentinelConfig {
+        message TStateStorageSelfHealConfig {
+            optional bool Enable = 1 [default = true];
+            optional uint32 NodeGoodStateLimit = 2 [default = 10];
+            optional uint32 NodePrettyGoodStateLimit = 3 [default = 7];
+            optional uint32 NodeBadStateLimit = 4 [default = 10];
+            optional uint32 WaitForConfigStep = 5 [default = 60000000];
+            optional uint32 RelaxTime = 6 [default = 600000000];
+            optional bool PileupReplicas = 7 [default = false];
+        }
+
         message TStateLimit {
             optional uint32 State = 1; // EPDiskState
             optional uint32 Limit = 2;
@@ -466,8 +478,10 @@ message TCmsConfig {
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
         optional EEvictVDisksStatus EvictVDisksStatus = 15;
-        
+
         optional uint32 GoodStateLimit = 16 [default = 5];
+
+        optional TStateStorageSelfHealConfig StateStorageSelfHealConfig = 19;
     }
 
     message TLogConfig {

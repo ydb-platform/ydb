@@ -16,6 +16,9 @@ NJson::TJsonValue IResourceProcessor::DebugJson() const {
         result.InsertValue("o", JoinSeq(",", Output));
     }
     result.InsertValue("t", ::ToString(ProcessorType));
+    if (IsAggregation()) {
+        result.InsertValue("a", IsAggregation());
+    }
     auto internalJson = DoDebugJson();
     if (!internalJson.IsMap() || internalJson.GetMapSafe().size()) {
         result.InsertValue("p", std::move(internalJson));
@@ -24,6 +27,7 @@ NJson::TJsonValue IResourceProcessor::DebugJson() const {
 }
 
 TConclusion<IResourceProcessor::EExecutionResult> IResourceProcessor::Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("execute", GetProcessorType());
     return DoExecute(context, nodeContext);
 }
 

@@ -111,11 +111,6 @@ public:
         return Nothing();
     }
 
-    TMaybe<TTasksRequest> RemoveRequest(ui64 txId, const TActorId& requester) {
-        TWriteGuard guard(RWLock);
-        return RemoveRequestImpl(txId, requester);
-    }
-
     // return the vector of pairs where the first element is a taskId
     // and the second one is the compute actor id associated with this task.
     std::vector<std::pair<ui64, TActorId>> GetTasksByTxId(ui64 txId) {
@@ -169,29 +164,6 @@ public:
                 }
             }
         }
-    }
-private:
-
-    TMaybe<TTasksRequest> RemoveRequestImpl(ui64 txId, const TActorId& requester) {
-        auto key = std::make_pair(txId, requester);
-        auto* request = Requests.FindPtr(key);
-        if (!request) {
-            return Nothing();
-        }
-
-        TMaybe<TTasksRequest> ret = std::move(*request);
-        Requests.erase(key);
-
-        const auto senders = SenderIdsByTxId.equal_range(txId);
-        for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
-            if (senderIt->second == requester) {
-                SenderIdsByTxId.erase(senderIt);
-                break;
-            }
-        }
-
-        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
-        return ret;
     }
 
 private:

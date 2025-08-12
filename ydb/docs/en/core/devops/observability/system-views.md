@@ -52,7 +52,7 @@ $$
 \text{ExpectedSlotCount} \times \text{SlotSizeInUnits} = \frac{\text{TotalSize}}{\text{InferPDiskSlotCountFromUnitSize}}
 $$
 
-$\text{SlotSizeInUnits} = 2^N$ is chosen to meet $\text{ExpectedSlotCount} \leq 16$.
+Where $\text{SlotSizeInUnits} = 2^N$ is chosen to meet $\text{ExpectedSlotCount} \leq 16$.
 
 ### ds_vslots
 

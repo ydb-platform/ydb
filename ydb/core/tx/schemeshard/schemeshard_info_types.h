@@ -3764,8 +3764,19 @@ struct TSysViewInfo : TSimpleRefCount<TSysViewInfo> {
 };
 
 struct TIncrementalRestoreState {
-    TPathId BackupCollectionPathId;
-    ui64 OriginalOperationId;
+    enum class EState : ui32 {
+        Running = 1,
+        Finalizing = 2,
+        Completed = 3,
+    };
+
+    EState State = EState::Running;
+
+    // The backup collection path this restore belongs to
+    TPathId BackupCollectionPathId; // used for DB scoping and finalization
+
+    // Global id of the original incremental restore operation
+    ui64 OriginalOperationId = 0;
 
     // Sequential incremental backup processing
     struct TIncrementalBackup {

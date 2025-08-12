@@ -52,3 +52,41 @@ SELECT * FROM $to_update;
 * [BATCH UPDATE](batch-update.md)
 
 {% endif %}
+
+## RETURNING
+
+`RETURNING` возвращает значения обновленных строк. Это позволяет сразу получить результаты операции без отдельного запроса SELECT.
+
+## Примеры
+
+Возврат всех колонок обновленных строк
+
+```
+UPDATE orders
+SET status = 'shipped'
+WHERE order_date < '2023-01-01'
+RETURNING *;
+```
+
+Результат:
+
+|order_id|order_date|status|amount|
+|-|-|-|-|
+|1001|2022-12-15|shipped|200|
+|1002|2022-11-20|shipped|350|
+
+Возврат конкретных колонок
+
+```
+UPDATE products
+SET price = price * 0.9 
+WHERE category = 'Electronics'
+RETURNING product_id, name, price AS new_price;
+```
+
+Результат:
+
+|product_id|name|new_price|
+|-|-|-|
+|305|Smartphone|900|
+|422|Laptop|1350|

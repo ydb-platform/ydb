@@ -47,3 +47,38 @@ SELECT * FROM $to_delete;
 * [BATCH DELETE](batch-delete.md)
 
 {% endif %}
+
+## RETURNING
+
+`RETURNING` возвращает значения удаленных строк. Это позволяет сразу получить результаты операции без отдельного запроса SELECT.
+
+## Примеры
+
+Возврат всех колонок удаленных строк
+
+```
+DELETE FROM my_table
+WHERE Key1 = 1
+RETURNING *;
+```
+
+Результат:
+
+|Key1|Key2|Value|
+|-|-|-|
+|1|A|100|
+
+Возврат конкретных колонок
+
+```
+DELETE FROM orders
+WHERE status = 'cancelled'
+RETURNING order_id, order_date;
+```
+
+Результат:
+
+|order_id|order_date|
+|-|-|
+|1005|2023-03-10|
+|1008|2023-02-28|

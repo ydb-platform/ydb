@@ -46,3 +46,39 @@ VALUES ( 1, 10, 'Some text', Date('2021-10-07')),
        ( 2, 10, 'Some text', Date('2021-10-08'))
 ```
 
+## RETURNING
+
+`RETURNING` возвращает значения:
+* Для новых строк - все вставленные значения
+* Для обновленных строк - новые значения после обновления 
+Это позволяет сразу получить результаты операции без отдельного запроса SELECT.
+
+## Примеры
+
+Возврат всех колонок измененной строки
+
+```
+UPSERT INTO orders (order_id, status, amount)
+VALUES (1001, 'shipped', 500)
+RETURNING *;
+```
+
+Результат:
+
+|order_id|status|amount|
+|-|-|-|
+|1001|shipped |500|
+
+Возврат конкретных колонок
+
+```
+UPSERT INTO users (user_id, name, email)
+VALUES (42, 'John Doe', 'john@example.com')
+RETURNING user_id, email;
+```
+
+Результат:
+
+|user_id|email|
+|-|-|
+|42|john@example.com|

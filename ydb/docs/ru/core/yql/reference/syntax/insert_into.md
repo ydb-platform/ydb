@@ -113,3 +113,39 @@ SELECT
 
 {% endif %}
 
+## RETURNING
+
+`RETURNING` возвращает значения вставленных строк. Это позволяет сразу получить результаты операции без отдельного запроса SELECT.
+
+## Пример
+
+Возврат конкретных столбцов
+
+```
+INSERT INTO some_table (id, color, price)
+VALUES 
+    (1101, 'red', 200),
+    (1102, 'green', 300)
+RETURNING id, price;
+```
+
+Результат:
+
+|id|price|
+|-|-|
+|1101|200|
+|1102|300|
+
+Возврат всех столбцов
+
+```
+INSERT INTO some_table (id, year, color, price)
+VALUES (1103, 2023, 'blue', 400)
+RETURNING *;
+```
+
+Результат:
+
+|id|year|color|price|
+|-|-|-|-|
+|1103|2023|blue|400|

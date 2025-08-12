@@ -45,3 +45,38 @@ SELECT * FROM $to_delete;
 * [BATCH DELETE](batch-delete.md)
 
 {% endif %}
+
+## RETURNING
+
+`RETURNING` returns values of deleted rows. This allows getting operation results immediately without a separate SELECT query.
+
+## Examples
+
+Return all columns of deleted rows
+
+```
+DELETE FROM my_table
+WHERE Key1 = 1
+RETURNING *;
+```
+
+Result:
+
+|Key1|Key2|Value|
+|-|-|-|
+|1|A|100|
+
+Return specific columns
+
+```
+DELETE FROM orders
+WHERE status = 'cancelled'
+RETURNING order_id, order_date;
+```
+
+Result:
+
+|order_id|order_date|
+|-|-|
+|1005|2023-03-10|
+|1008|2023-02-28|

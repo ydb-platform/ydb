@@ -96,6 +96,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Topic.DescribeConsumer", ERequestType::TOPIC_DESCRIBECONSUMER},
     {"Topic.AlterTopic", ERequestType::TOPIC_ALTERTOPIC},
     {"Topic.DropTopic", ERequestType::TOPIC_DROPTOPIC},
+    {"Topic.Transaction", ERequestType::TOPIC_PROPOSE_TRANSACTION},
 
     {"Bridge.GetClusterState", ERequestType::BRIDGE_GETCLUSTERSTATE},
     {"Bridge.UpdateClusterState", ERequestType::BRIDGE_UPDATECLUSTERSTATE},

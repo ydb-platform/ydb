@@ -180,6 +180,9 @@ public:
 
     bool HasThisPartitionAlreadyBeenAdded(const TString& topic, ui32 partitionId);
 
+    void SetTabletId(const TString& topic, ui32 partition,
+                     ui64 tabletId);
+
 private:
     THashMap<TTopicPartition, TTopicPartitionOperations, TTopicPartition::THash> Operations_;
     bool HasReadOperations_ = false;

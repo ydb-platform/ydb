@@ -29,7 +29,7 @@ $test_runs_by_commit_test = (
     GROUP BY postcommit_start_run_timestamp,postcommit_start_job_id, commit, full_name
 );
 
--- Агрегация по коммитам для подсчета максимального количества ретраев
+-- Aggregation by commits to count maximum number of retries
 $max_retries_by_commit = (
     SELECT
         commit,

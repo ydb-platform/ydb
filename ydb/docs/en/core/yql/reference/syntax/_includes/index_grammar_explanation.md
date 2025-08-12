@@ -1,4 +1,7 @@
-* `GLOBAL/LOCAL` — global or local index, depending on index type (`<index_type>`) only one of them may be available.
+* `GLOBAL/LOCAL` — global or local index; depending on the index type (`<index_type>`), only one of them may be available:
+  
+    * `GLOBAL` — an index implemented as a separate table or set of tables. Synchronous updates to such an index require distributed transactions.  
+    * `LOCAL` — a local index within a shard of a row-oriented or column-oriented table. Does not require distributed transactions for updates, but does not provide pruning during search.
 * `<index_name>` — unique index name that will be used to access data.
 * `SYNC/ASYNC` — synchronous or asynchronous writes to the index, synchronous by default.
 * `<index_type>` - index type, currently supported:

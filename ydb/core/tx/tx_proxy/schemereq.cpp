@@ -236,7 +236,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
 
         case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
-            return *modifyScheme.MutableDropColumnBuild()->MutableSettings()->MutableTable();
+            Y_ABORT("no implementation for ESchemeOpDropColumnBuild");
 
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
             Y_ABORT("no implementation for ESchemeOpCreateIndexBuild");

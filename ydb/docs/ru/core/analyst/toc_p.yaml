@@ -1,8 +1,4 @@
 items:
-  - name: Типичные OLAP-сценарии
-    href: scenarios.md
-  - name: Оптимизация аналитических запросов
-    href: optimizing.md
   - name: Импорт датасетов
     href: datasets/index.md
     include:

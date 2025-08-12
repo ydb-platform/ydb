@@ -74,8 +74,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(counters.RecompileRequestGet()->Val(), 1);
     }
 
-
-
     Y_UNIT_TEST(QueryCache) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

@@ -560,6 +560,50 @@ void TPlan::ResolveOperatorInputs() {
     }
 }
 
+void TPlan::MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime) {
+
+            std::vector<ui64> updatedCpuTimes;
+            std::vector<ui64> updatedCpuValues;
+
+            auto itt = TotalCpuTimes.begin();
+            auto itv = TotalCpuValues.begin();
+            auto ith = cpuTime->History.Values.begin();
+
+            ui64 v0 = 0;
+            ui64 v1 = 0;
+            ui64 t = 0;
+
+            while (itt != TotalCpuTimes.end() || ith != cpuTime->History.Values.end()) {
+
+                if (itt == TotalCpuTimes.end()) {
+                    t = ith->first;
+                    v1 = ith->second;
+                    ith++;
+                } else if (ith == cpuTime->History.Values.end()) {
+                    t = *itt++;
+                    v0 = *itv++;
+                } else if (*itt == ith->first) {
+                    t = *itt++;
+                    v0 = *itv++;
+                    v1 = ith->second;
+                    ith++;
+                } else if (*itt > ith->first) {
+                    t = ith->first;
+                    v1 = ith->second;
+                    ith++;
+                } else {
+                    t = *itt++;
+                    v0 = *itv++;
+                }
+
+                updatedCpuTimes.push_back(t);
+                updatedCpuValues.push_back(v0 + v1);
+            }
+
+            TotalCpuTimes.swap(updatedCpuTimes);
+            TotalCpuValues.swap(updatedCpuValues);
+}
+
 void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, TConnection* outputConnection) {
 
     if (auto* planNodeIdNode = node.GetValueByPath("PlanNodeId")) {
@@ -975,6 +1019,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         externalStage->EgressRows = std::make_shared<TSingleMetric>(ExternalRows, *externalRowsNode);
                         externalStage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *externalRowsNode);
                     }
+                    if (auto* cpuTimeNode = externalNode->GetValueByPath("CpuTimeUs")) {
+                        externalStage->CpuTime = std::make_shared<TSingleMetric>(ExternalCpuTime, *cpuTimeNode);
+                        MergeTotalCpu(externalStage->CpuTime);
+                    }
                     if (auto* partitionCountNode = externalNode->GetValueByPath("PartitionCount")) {
                         externalStage->Tasks = partitionCountNode->GetIntegerSafe();
                     }
@@ -1277,47 +1325,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
 
         if (auto* cpuTimeNode = stage->StatsNode->GetValueByPath("CpuTimeUs")) {
             stage->CpuTime = std::make_shared<TSingleMetric>(CpuTime, *cpuTimeNode, stage->MinTime, stage->MaxTime);
-
-            std::vector<ui64> updatedCpuTimes;
-            std::vector<ui64> updatedCpuValues;
-
-            auto itt = TotalCpuTimes.begin();
-            auto itv = TotalCpuValues.begin();
-            auto ith = stage->CpuTime->History.Values.begin();
-
-            ui64 v0 = 0;
-            ui64 v1 = 0;
-            ui64 t = 0;
-
-            while (itt != TotalCpuTimes.end() || ith != stage->CpuTime->History.Values.end()) {
-
-                if (itt == TotalCpuTimes.end()) {
-                    t = ith->first;
-                    v1 = ith->second;
-                    ith++;
-                } else if (ith == stage->CpuTime->History.Values.end()) {
-                    t = *itt++;
-                    v0 = *itv++;
-                } else if (*itt == ith->first) {
-                    t = *itt++;
-                    v0 = *itv++;
-                    v1 = ith->second;
-                    ith++;
-                } else if (*itt > ith->first) {
-                    t = ith->first;
-                    v1 = ith->second;
-                    ith++;
-                } else {
-                    t = *itt++;
-                    v0 = *itv++;
-                }
-
-                updatedCpuTimes.push_back(t);
-                updatedCpuValues.push_back(v0 + v1);
-            }
-
-            TotalCpuTimes.swap(updatedCpuTimes);
-            TotalCpuValues.swap(updatedCpuValues);
+            MergeTotalCpu(stage->CpuTime);
         }
 
         if (auto* mmuNode = stage->StatsNode->GetValueByPath("MaxMemoryUsage")) {

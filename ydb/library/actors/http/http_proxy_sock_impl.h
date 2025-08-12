@@ -200,6 +200,8 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         case SSL_ERROR_NONE:
         case SSL_ERROR_SYSCALL:
             return res;
+        case SSL_ERROR_ZERO_RETURN:
+            return 0; // Connection closed
         case SSL_ERROR_WANT_READ:
             read = true;
             return -EAGAIN;

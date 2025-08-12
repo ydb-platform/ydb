@@ -301,6 +301,8 @@ namespace Tests {
     }
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options) {
+        auto system(Runtime->GetAnyNodeActorSystem());
+
         const size_t proxyCount = Max(ui32{1}, Settings->AppConfig->GetGRpcConfig().GetGRpcProxyCount());
         TVector<TActorId> grpcRequestProxies;
         grpcRequestProxies.reserve(proxyCount);
@@ -317,8 +319,6 @@ namespace Tests {
 
         GRpcServer.reset(new NYdbGrpc::TGRpcServer(options));
         auto grpcService = new NGRpcProxy::TGRpcService(grpcRequestProxies[0]);
-
-        auto system(Runtime->GetAnyNodeActorSystem());
 
         Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
 

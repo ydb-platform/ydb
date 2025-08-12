@@ -3,8 +3,8 @@
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
-#include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <memory>

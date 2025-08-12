@@ -57,6 +57,12 @@ void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<RequestType>& requ
     SetToken(config, request);
 }
 
+inline void PrepareRequest(TClientCommand::TConfig&, TAutoPtr<NMsgBusProxy::TBusLoginRequest>&) {
+}
+
+inline void PrepareRequest(TClientCommand::TConfig&, TAutoPtr<NMsgBusProxy::TBusKeyValue>&) { // not used in real life, not implemented in server
+}
+
 template <typename ResponseType>
 int OnMessageBus(const TClientCommand::TConfig& config, const ResponseType& response);
 

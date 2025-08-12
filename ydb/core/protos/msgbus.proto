@@ -403,6 +403,7 @@ message TMessageBusTraceStatus {
 
 message TTabletKillRequest {
     optional uint64 TabletID = 1;
+    optional string SecurityToken = 2 [(Ydb.sensitive) = true];
 };
 
 message TTabletStateRequest {

@@ -8,7 +8,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/grpc/server/grpc_request_base.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 namespace NKikimr::NGRpcService {
 

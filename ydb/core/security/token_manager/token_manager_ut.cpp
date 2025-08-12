@@ -38,13 +38,13 @@ struct TVmMetadataProviderInitializer {
 
 NKikimrProto::TTokenManager::TVmMetadataProvider ConfigureVmMetadataProvider(const TVmMetadataProviderInitializer& initializer) {
     NKikimrProto::TTokenManager::TVmMetadataProvider vmMetadataTokenProviderConfig;
-    auto vmMetadataInfoList = vmMetadataTokenProviderConfig.MutableVmMetadataInfo();
+    auto vmMetadataInfoList = vmMetadataTokenProviderConfig.MutableProvidersInfo();
     for (const auto& infoSettings : initializer.VmMetadataInfo) {
         auto vmMetadataInfo = vmMetadataInfoList->Add();
         vmMetadataInfo->SetId(infoSettings.Id);
         vmMetadataInfo->SetEndpoint(infoSettings.Endpoint);
     }
-    auto vmMetadataProviderSettings = vmMetadataTokenProviderConfig.MutableTokenProviderSettings();
+    auto vmMetadataProviderSettings = vmMetadataTokenProviderConfig.MutableSettings();
     vmMetadataProviderSettings->SetSuccessRefreshPeriod(initializer.Settings.SuccessRefreshPeriod);
     vmMetadataProviderSettings->SetMinErrorRefreshPeriod(initializer.Settings.MinErrorRefreshPeriod);
     vmMetadataProviderSettings->SetMaxErrorRefreshPeriod(initializer.Settings.MaxErrorRefreshPeriod);

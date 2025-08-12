@@ -1800,6 +1800,45 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(3, elementStat["Union"]);
     }
 
+    Y_UNIT_TEST(UnionAssumeOrderByWarning) {
+        {
+            NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                SELECT a FROM x
+                ASSUME ORDER BY a;
+            )sql");
+            UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                SELECT a FROM x
+                UNION ALL
+                SELECT a FROM y
+                ORDER BY a;
+            )sql");
+            UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "");
+        }
+        {
+            NYql::TAstParseResult warn = SqlToYql(R"sql(
+                USE plato;
+                SELECT a FROM x
+                UNION ALL
+                SELECT a FROM y
+                ASSUME ORDER BY a;
+            )sql");
+            UNIT_ASSERT_C(warn.Root, warn.Issues.ToString());
+            UNIT_ASSERT_STRINGS_EQUAL(
+                warn.Issues.ToString(),
+                "<main>:6:33: Warning: ASSUME ORDER BY is used, "
+                "but UNION, INTERSECT and EXCEPT operators "
+                "have no ordering guarantees, "
+                "therefore consider using ORDER BY, code: 3\n");
+        }
+    }
+
     // INTERSECT
 
     Y_UNIT_TEST(IntersectAllTest) {

@@ -25,7 +25,6 @@ tcmalloc/internal/ya.make
 {% block ya_make %}
 SUBSCRIBER(
     g:cpp-contrib
-    ayles
 )
 
 SRCS(

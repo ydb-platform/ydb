@@ -86,7 +86,6 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
                 Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             }
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
-            UpdateOverloadsStatus();
         }
         Execute(new TTxBlobsWritingFinished(this, ev->Get()->GetWriteStatus(), ev->Get()->GetWriteAction(), std::move(writtenData)), ctx);
     } else {
@@ -102,11 +101,12 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_error")(
                 "writing_id", i.GetWriteMeta().GetId())("reason", i.GetErrorMessage());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
-            UpdateOverloadsStatus();
         }
 
         Execute(new TTxBlobsWritingFailed(this, std::move(writtenData)), ctx);
     }
+
+    UpdateOverloadsStatus();
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx) {
@@ -126,7 +126,6 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "blobs_write_finished")("writing_size", aggr->GetSize())(
             "writing_id", writeMeta.GetId())("status", putResult.GetPutStatus());
         Counters.GetWritesMonitor()->OnFinishWrite(aggr->GetSize(), 1);
-        UpdateOverloadsStatus();
 
         Counters.GetCSCounters().OnWritePutBlobsFail(TMonotonic::Now() - writeMeta.GetWriteStartInstant());
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
@@ -140,6 +139,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
     }
     AFL_VERIFY(wBuffer.IsEmpty());
+
+    UpdateOverloadsStatus();
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx) {
@@ -441,12 +442,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded")("source", "dataevent");
     }
     auto overloadStatus = outOfSpace ? EOverloadStatus::Disk : CheckOverloadedImmediate(*internalPathId);
-    auto RejectReasons = NOverload::MakeRejectReasons(overloadStatus);
     if (overloadStatus != EOverloadStatus::None) {
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
 
-        OverloadSubscribers.SetOverloadSubscribed(record.GetOverloadSubscribe(), ev->Recipient, ev->Sender, RejectReasons, result->Record);
+        const auto rejectReasons = NOverload::MakeRejectReasons(overloadStatus);
+        OverloadSubscribers.SetOverloadSubscribed(record.GetOverloadSubscribe(), ev->Recipient, ev->Sender, rejectReasons, result->Record);
         OverloadWriteFail(overloadStatus,
             NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
                 Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()),

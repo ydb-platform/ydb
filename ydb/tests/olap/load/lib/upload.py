@@ -223,6 +223,9 @@ class UploadTpchBase(UploadClusterBase):
 
     @classmethod
     def get_remote_tmpdir(cls):
+        for node in cls.__static_nodes:
+            if re.is_localhost(node.host):
+                return yatest.common.work_path(f'scripts/{cls.get_path()}')
         return f'/tmp/{cls.get_path()}'
 
     @classmethod

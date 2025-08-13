@@ -775,13 +775,14 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
         if (srcFieldIndex == -1) {
             throw parquet::ParquetException(TStringBuilder() << "Missing field: " << outputSchema->field(i)->name() << ", found fields in arrow file: " << dataSchema->ToString());
         };
-        switch (dataSchema->field(srcFieldIndex)->type()->id()) {
+        const auto& field = dataSchema->field(srcFieldIndex);
+        switch (field->type()->id()) {
         case arrow::Type::LIST:
             throw parquet::ParquetException(TStringBuilder() << "File contains LIST field "
-                << dataSchema->field(srcFieldIndex)->name() << " and can't be parsed");
+                << field->name() << " and can't be parsed");
         case arrow::Type::STRUCT:
             throw parquet::ParquetException(TStringBuilder() << "File contains STRUCT field "
-                << dataSchema->field(srcFieldIndex)->name() << " and can't be parsed");
+                << field->name() << " and can't be parsed");
         default:
             ;
         }
@@ -791,6 +792,9 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
     for (int i = 0; i < outputSchema->num_fields(); ++i) {
         const auto& targetField = outputSchema->field(i);
         auto srcFieldIndex = dataSchema->GetFieldIndex(targetField->name());
+        if (srcFieldIndex == -1) {
+            throw parquet::ParquetException(TStringBuilder() << "Missing field: " << outputSchema->field(i)->name() << ", found fields in arrow file: " << dataSchema->ToString());
+        };
         auto targetType = targetField->type();
         auto originalType = dataSchema->field(srcFieldIndex)->type();
         if (originalType->layout().has_dictionary) {

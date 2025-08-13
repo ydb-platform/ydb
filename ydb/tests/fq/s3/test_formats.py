@@ -153,6 +153,25 @@ class TestS3Formats:
         result_set = data.result.result_set
         self.validate_result_inference(result_set)
 
+    @yq_v2
+    def test_btc(self, kikimr, s3, client, unique_prefix):
+        self.create_bucket_and_upload_file("btct.parquet", s3, kikimr)
+        storage_connection_name = unique_prefix + "btct"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            PRAGMA s3.UseBlocksSource="true";
+            SELECT
+                *
+            FROM `{storage_connection_name}`.`btct.parquet`
+            WITH (format=`parquet`, with_infer="true");
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        describe_result = client.describe_query(query_id).result
+        assert len(describe_result.query.issue) == 0
+
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_format(self, kikimr, s3, client, unique_prefix):

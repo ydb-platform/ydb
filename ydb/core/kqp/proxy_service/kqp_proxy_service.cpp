@@ -1447,7 +1447,7 @@ private:
 
         const auto& databaseId = ev->Get()->GetDatabaseId();
         if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall()) {
-            ev->Get()->SetPoolId(NResourcePool::DEFAULT_POOL_ID);
+            ev->Get()->SetPoolId("");
             return true;
         }
 

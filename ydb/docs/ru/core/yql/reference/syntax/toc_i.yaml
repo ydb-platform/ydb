@@ -3,62 +3,21 @@ items:
 - { name: Лексическая структура,        href: lexer.md }
 - { name: Выражения,                    href: expressions.md }
 - { name: ACTION,                       href: action.md }
-- { name: ALTER ASYNC REPLICATION,      href: alter-async-replication.md,    when: feature_async_replication }
-- { name: ALTER GROUP,                  href: alter-group.md,                when: feature_user_and_group }
-- { name: ALTER TABLE,                  include: { mode: link, path: alter_table/toc_p.yaml },                when: feature_map_tables }
-- { name: ALTER VIEW,                   href: alter-view.md,                 when: feature_view }
-- { name: ALTER RESOURCE POOL,          href: alter-resource-pool.md,        when: feature_resource_pool }
-- { name: ALTER RESOURCE POOL CLASSIFIER,    href: alter-resource-pool-classifier.md,   when: feature_resource_pool_classifier }
-- { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
-- { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
-- { name: ANALYZE,                      href: analyze.md, when: backend_name == "YDB" }
-- { name: BATCH DELETE,                 href: batch-delete.md,               when: feature_batch_operations }
-- { name: BATCH UPDATE,                 href: batch-update.md,               when: feature_batch_operations }
-- { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md,   when: feature_async_replication }
-- { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
-- { name: CREATE EXTERNAL DATA SOURCE,  href: create-external-data-source.md,when: feature_federated_queries}
-- { name: CREATE EXTERNAL TABLE,        href: create-external-table.md,      when: feature_federated_queries}
-- { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
-- { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
-- { name: CREATE TABLE,                 include: { mode: link, path: create_table/toc_p.yaml } }
-- { name: CREATE VIEW,                  href: create-view.md,                when: feature_view }
-- { name: CREATE RESOURCE POOL,         href: create-resource-pool.md,                when: feature_resource_pool }
-- { name: CREATE RESOURCE POOL CLASSIFIER,    href: create-resource-pool-classifier.md,          when: feature_resource_pool_classifier }
-- { name: CREATE TOPIC,                 href: create-topic.md,               when: feature_topic_control_plane }
-- { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }
-- { name: COMMIT,                       href: commit.md                                                   }
+- { name: COMMIT,                       href: commit.md }
 - { name: DECLARE,                      href: declare.md }
-- { name: DELETE,                       href: delete.md,                     when: feature_map_tables }
-- { name: DISCARD,                      href: discard.md,                    when: backend_name != "YDB" }
-- { name: DROP ASYNC REPLICATION,       href: drop-async-replication.md,     when: feature_async_replication }
-- { name: DROP GROUP,                   href: drop-group.md,                 when: feature_user_and_group }
-- { name: DROP EXTERNAL DATA SOURCE,    href: drop-external-data-source.md,  when: feature_federated_queries}
-- { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}
-- { name: DROP OBJECT TYPE SECRET,    href: drop-object-type-secret.md,      when: feature_federated_queries}
-- { name: DROP OBJECT TYPE SECRET_ACCESS,    href: drop-object-type-secret-access.md,  when: feature_federated_queries}
-- { name: DROP TABLE,                   href: drop_table.md }
-- { name: DROP VIEW,                    href: drop-view.md,                  when: feature_view }
-- { name: DROP RESOURCE POOL,           href: drop-resource-pool.md,         when: feature_resource_pool }
-- { name: DROP RESOURCE POOL CLASSIFIER,    href: drop-resource-pool-classifier.md,     when: feature_resource_pool_classifier }
-- { name: DROP TOPIC,                   href: drop-topic.md,                 when: feature_topic_control_plane }
-- { name: DROP USER,                    href: drop-user.md,                  when: feature_user_and_group }
-- { name: GRANT,                        href: grant.md,                      when: feature_user_and_group }
-- { name: EXPORT и IMPORT,              href: export_import.md,              when: feature_mapreduce }
+- { name: DISCARD,                      href: discard.md }
+- { name: GROUP BY,                     href: group_by.md }
+- { name: EXPORT и IMPORT,              href: export_import.md }
+- { name: FLATTEN,                      href: flatten.md }
 - { name: INSERT,                       href: insert_into.md }
 - { name: INTO RESULT,                  href: into_result.md }
-- { name: PRAGMA,                       href: pragma.md }
-- { name: PROCESS STREAM,               href: process.md,                    when: feature_mapreduce and process_command == "PROCESS STREAM" }
-- { name: PROCESS,                      href: process.md,                    when: feature_mapreduce and process_command == "PROCESS" }
-- { name: REDUCE,                       href: reduce.md,                     when: feature_mapreduce and reduce_command == "REDUCE" }
-- { name: REPLACE,                      href: replace_into.md,               when: feature_replace }
-- { name: REVOKE,                       href: revoke.md,                     when: feature_user_and_group }
+- { name: JOIN,                         href: join.md }
+- { name: PRAGMA,                       include: { mode: link, path: pragma/toc_p.yaml } }
+- { name: PROCESS,                      href: process.md }
+- { name: REDUCE,                       href: reduce.md }
 - { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml } }
-- { name: SELECT STREAM,                href: select_stream.md,              when: feature_mapreduce and process_command == "PROCESS STREAM" }
-- { name: SHOW CREATE,                  href: show_create.md }
-- { name: SUBQUERY,                     href: subquery.md,                   when: feature_subquery }
-- { name: UPDATE,                       href: update.md,                     when: feature_map_tables }
-- { name: UPSERT,                       href: upsert_into.md,                when: feature_upsert }
-- { name: UPSERT OBJECT TYPE SECRET,    href: upsert-object-type-secret.md,  when: feature_federated_queries}
-- { name: USE,                          href: use.md,                        when: feature_mapreduce }
+- { name: SUBQUERY,                     href: subquery.md }
+- { name: USE,                          href: use.md }
 - { name: VALUES,                       href: values.md }
+- { name: WINDOW,                       href: window.md }
 - { name: Неподдерживаемые конструкции, href: not_yet_supported.md }

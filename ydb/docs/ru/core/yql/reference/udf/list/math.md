@@ -4,13 +4,13 @@
 
 ## Константы {#constants}
 
-### Список функций
+#### Список функций
 
 * `Math::Pi() -> Double`
 * `Math::E() -> Double`
 * `Math::Eps() -> Double`
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Math::Pi();  -- 3.141592654
@@ -20,13 +20,13 @@ SELECT Math::Eps(); -- 2.220446049250313e-16
 
 ## (Double) -> Bool {#double-bool}
 
-### Список функций
+#### Список функций
 
 * `Math::IsInf(Double{Flags:AutoMap}) -> Bool`
 * `Math::IsNaN(Double{Flags:AutoMap}) -> Bool`
 * `Math::IsFinite(Double{Flags:AutoMap}) -> Bool`
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Math::IsNaN(0.0/0.0);    -- true
@@ -35,7 +35,7 @@ SELECT Math::IsFinite(1.0/0.0); -- false
 
 ## (Double) -> Double {#double-double}
 
-### Список функций
+#### Список функций
 
 * `Math::Abs(Double{Flags:AutoMap}) -> Double`
 * `Math::Acos(Double{Flags:AutoMap}) -> Double`
@@ -67,7 +67,7 @@ SELECT Math::IsFinite(1.0/0.0); -- false
 * `Math::Log2(Double{Flags:AutoMap}) -> Double`
 * `Math::Log10(Double{Flags:AutoMap}) -> Double`
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Math::Sqrt(256);     -- 16
@@ -76,7 +76,7 @@ SELECT Math::Trunc(1.2345); -- 1
 
 ## (Double, Double) -> Double {#doubledouble-double}
 
-### Список функций
+#### Список функций
 
 * `Math::Atan2(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double`
 * `Math::Fmod(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double`
@@ -84,7 +84,7 @@ SELECT Math::Trunc(1.2345); -- 1
 * `Math::Pow(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double`
 * `Math::Remainder(Double{Flags:AutoMap}, Double{Flags:AutoMap}) -> Double`
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Math::Atan2(1, 0);       -- 1.570796327
@@ -93,12 +93,12 @@ SELECT Math::Remainder(2.1, 2); -- 0.1
 
 ## (Double, Int32) -> Double {#doubleint32-double}
 
-### Список функций
+#### Список функций
 
 * `Math::Ldexp(Double{Flags:AutoMap}, Int32{Flags:AutoMap}) -> Double`
 * `Math::Round(Double{Flags:AutoMap}, [Int32?]) -> Double` - во втором аргументе указывается степень 10, до которой округляем (отрицательная для знаков после запятой и положительная для округления до десятков—тысяч—миллионов); по умолчанию 0
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Math::Pow(2, 10);        -- 1024
@@ -107,7 +107,7 @@ SELECT Math::Round(1.2345, -2); -- 1.23
 
 ## (Double, Double, \[Double?\]) -> Bool {#doubledouble-bool}
 
-### Список функций
+#### Список функций
 
 * `Math::FuzzyEquals(Double{Flags:AutoMap}, Double{Flags:AutoMap}, [Double?]) -> Bool` - сравнивает два Double на нахождение внутри окрестности, задаваемой третьим аргументом; по умолчанию 1.0e-13. Окрестность указывается в относительных единицах от минимального по модулю аргумента.
 
@@ -117,7 +117,7 @@ SELECT Math::Round(1.2345, -2); -- 1.23
 
 {% endnote %}
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Math::FuzzyEquals(1.01, 1.0, 0.05); -- true
@@ -125,7 +125,7 @@ SELECT Math::FuzzyEquals(1.01, 1.0, 0.05); -- true
 
 ## Функции взятия остатка
 
-### Список функций
+#### Список функций
 
 * `Math::Mod(Int64{Flags:AutoMap}, Int64) -> Int64?`
 * `Math::Rem(Int64{Flags:AutoMap}, Int64) -> Int64?`
@@ -137,28 +137,43 @@ SELECT Math::FuzzyEquals(1.01, 1.0, 0.05); -- true
 
 Функции возвращают null, если делитель равен нулю.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Math::Mod(-1, 7);        -- 6
 SELECT Math::Rem(-1, 7);        -- -1
 ```
 
+## SwapBytes {#swap-bytes}
+
+#### Сигнатура
+
+* `Math::SwapBytes(T{Flags:AutoMap}) -> T`
+
+Меняет порядок байтов в заданном целочисленном значении на обратный. Поддерживаемые типы: Uint8, Uint16, Uint32, Uint64.
+
+#### Examples
+
+```yql
+-- 0x0001 -> 0x0100
+SELECT Math::SwapBytes(Uint16("1")); -- 256
+```
+
 ## Функции округления до целого числа в заданном режиме
 
-### Список функций
+#### Список функций
 
-* `Math::RoundDownward() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards negative infinity
-* `Math::RoundToNearest() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards nearest representable value
-* `Math::RoundTowardZero() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards zero
-* `Math::RoundUpward() -> Tagged<Uint32, MathRoundingMode>` -- rounding towards positive infinity
-* `Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>`
+* `Math::RoundDownward() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону отрицательной бесконечности
+* `Math::RoundToNearest() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону ближайшего представимого значения
+* `Math::RoundTowardZero() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону нуля
+* `Math::RoundUpward() -> Tagged<Uint32, MathRoundingMode>` &mdash; округление в сторону положительной бесконечности
+* `Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>` &mdash; округление до ближайшего целого значения
 
-Функция `Math::NearbyInt` округляет первый аргумент до целого числа в соответсвии с режимом, заданным вторым аргументом.
+Функция `Math::NearbyInt` округляет первый аргумент до целого числа в соответствии с режимом, заданным вторым аргументом.
 
-Если результат выходит за пределы 64-битного целого числа, возращается NULL.
+Если результат выходит за пределы 64-битного целого числа, возвращается NULL.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Math::NearbyInt(1.5, Math::RoundDownward()); -- 1

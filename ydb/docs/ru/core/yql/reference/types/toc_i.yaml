@@ -3,9 +3,6 @@ items:
   href: index.md
 - name: Простые
   href: primitive.md
-- name: Серийные
-  href: serial.md
-  when: feature_serial
 - name: Опциональные
   href: optional.md
 - name: Контейнеры

@@ -2,7 +2,7 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-[YQL](../../index.md) предоставляет возможность доступа к [функциям](https://www.postgresql.org/docs/16/functions.html) и [типам данных](https://www.postgresql.org/docs/16/datatype.html) PostgreSQL.
+YQL предоставляет возможность доступа к [функциям](https://www.postgresql.org/docs/16/functions.html) и [типам данных](https://www.postgresql.org/docs/16/datatype.html) PostgreSQL.
 
 Имена PostgreSQL типов в YQL получаются добавлением префикса `Pg` к исходному имени типа.
 Например `PgVarchar`, `PgInt4`, `PgText`. Имена pg типов (как и вообще всех типов) в YQL являются case-insensitive. На данный момент поддерживаются все простые типы данных из PostgreSQL, а также массивы.
@@ -15,31 +15,31 @@
 
 ### Целочисленные литералы {#intliterals}
 
-| Суффикс | Тип | Комментарий                                                        |
-|---------| ----- |------------------------------------------------------------------|
-| `p`     | `PgInt4` | 32-битное знаковое целое (в PostgreSQL нет беззнаковых типов) |
-| `ps`    | `PgInt2` | 16-битное знаковое целое                                      |
-| `pi`    | `PgInt4` |                                                               |
-| `pb`    | `PgInt8` | 64-битное знаковое цело                                       |
-| `pn`    | `PgNumeric` | знаковое целое произвольной точности (до 131072 цифр)      |
+Суффикс | Тип | Комментарий
+----- | ----- | -----
+`p` | `PgInt4` | 32-битное знаковое целое (в PostgreSQL нет беззнаковых типов)
+`ps`| `PgInt2` | 16-битное знаковое целое
+`pi`| `PgInt4` |
+`pb`| `PgInt8` | 64-битное знаковое цело
+`pn`| `PgNumeric` | знаковое целое произвольной точности (до 131072 цифр)
 
 ### Литералы с плавающей точкой {#floatliterals}
 
-| Суффикс | Тип         | Комментарий                                                                                                |
-|--------|-------------|------------------------------------------------------------------------------------------------------------|
-| `p`    | `PgFloat8`  | число с плавающей точкой (64 бит double)                                                                   |
-| `pf4`  | `PgFloat4`  | число с плавающей точкой (32 бит float)                                                                    |
-| `pf8`  | `PgFloat8`  |                                                                                                            |
-| `pn`   | `PgNumeric` | число с плавающей точкой произвольной точности (до 131072 цифр перед запятой, до 16383 цифр после запятой) |
+Суффикс | Тип | Комментарий
+----- | ----- | -----
+`p` | `PgFloat8` | число с плавающей точкой (64 бит double)
+`pf4`| `PgFloat4` | число с плавающей точкой (32 бит float)
+`pf8`| `PgFloat8` |
+`pn` | `PgNumeric` | число с плавающей точкой произвольной точности (до 131072 цифр перед запятой, до 16383 цифр после запятой)
 
 ### Строковые литералы {#stringliterals}
 
-| Суффикс | Тип         | Комментарий       |
-|---------|-------------|-------------------|
-| `p`     | `PgText`    | текстовая строка  |
-| `pt`    | `PgText`    |                   |
-| `pv`    | `PgVarchar` | текстовая строка  |
-| `pb`    | `PgBytea`   | бинарная строка   |
+Суффикс | Тип | Комментарий
+----- | ----- | -----
+`p` | `PgText` | текстовая строка
+`pt`| `PgText` |
+`pv`| `PgVarchar` | текстовая строка
+`pb`| `PgBytea` | бинарная строка
 
 {% note warning "Внимание" %}
 
@@ -59,7 +59,7 @@ SELECT
 ;
 ```
 
-### Литерал массива
+### Литерал массива {#array-literal}
 
 Для построения литерала массива используется функция `PgArray`:
 
@@ -188,9 +188,9 @@ SELECT
 | `Datetime64` | `timestamp` |`pgtimestamp` |
 | `Timestamp64` | `timestamp` |`pgtimestamp` |
 | `Interval64`| `interval` |`pginterval` |
-| `TzDate32` | `text` | `pgtext` |
-| `TzDatetime64` | `text` | `pgtext` |
-| `TzTimestamp64` | `text` | `pgtext` |
+| `TzDate32` | `text` |  |`pgtext` |
+| `TzDatetime64` | `text` |  |`pgtext` |
+| `TzTimestamp64` | `text` |  |`pgtext` |
 | `Decimal` | `numeric` |`pgnumeric` |
 | `DyNumber` | `numeric` |`pgnumeric` |
 
@@ -235,8 +235,6 @@ SELECT * FROM
     --- 'b'p,pgjson('"bar"')
 ;
 ```
-
-
 
 ## Вызов агрегационных PostgreSQL функций {#pgaggrfunction}
 
@@ -289,7 +287,7 @@ FROM (VALUES ('a'p),('b'p),('c'p)) as a(x); -- 'a'p,'a,b'p,'a,b,c'p
 
 {% endnote %}
 
-## Логические операции
+## Логические операции {#logic-operations}
 
 Для выполнения логических операций используются функции `PgAnd`, `PgOr`, `PgNot`:
 
@@ -300,4 +298,3 @@ SELECT
     PgNot(PgBool(true)), -- PgBool(false)
 ;
 ```
-

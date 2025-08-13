@@ -1,8 +1,14 @@
 # Агрегатные функции
 
+{% note info %}
+
+Агрегатные функции не учитывают `NULL` в своих аргументах, за исключением функции `COUNT`, если в качестве аргумента указана `*`, а также функций `BOOL_AND` / `BOOL_OR` / `BOOL_XOR`, в которых `NULL` учитывается без пропусков.
+
+{% endnote %}
+
 ## COUNT {#count}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 COUNT(*)->Uint64
@@ -12,9 +18,9 @@ COUNT(T?)->Uint64
 
 Подсчет количества строк в строковой или колоночной таблице (если в качестве аргумента указана `*` или константа) или непустых значений в столбце таблицы (если в качестве аргумента указано имя столбца).
 
-Как и другие агрегатные функции, может использоваться в сочетании с [GROUP BY](../syntax/select/group-by.md) для получения статистики по частям таблицы, соответствующим значениям в столбцах, по которым идет группировка. {% if select_statement != "SELECT STREAM" %}А модификатор [DISTINCT](../syntax/select/group-by.md#distinct) позволяет посчитать число уникальных значений.{% endif %}
+Как и другие агрегатные функции, может использоваться в сочетании с [GROUP BY](../syntax/group_by.md) для получения статистики по частям таблицы, соответствующим значениям в столбцах, по которым идет группировка. А модификатор [DISTINCT](../syntax/group_by.md#distinct) позволяет посчитать число уникальных значений.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT COUNT(*) FROM my_table;
@@ -23,16 +29,14 @@ SELECT COUNT(*) FROM my_table;
 ```yql
 SELECT key, COUNT(value) FROM my_table GROUP BY key;
 ```
-{% if select_statement != "SELECT STREAM" %}
 
 ```yql
 SELECT COUNT(DISTINCT value) FROM my_table;
 ```
-{% endif %}
 
 ## MIN и MAX {#min-max}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 MIN(T?)->T?
@@ -45,7 +49,7 @@ MAX(T)->T?
 
 В качестве аргумента допустимо произвольное вычислимое выражение с результатом, допускающим сравнение значений.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT MIN(value), MAX(value) FROM my_table;
@@ -53,7 +57,7 @@ SELECT MIN(value), MAX(value) FROM my_table;
 
 ## SUM {#sum}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SUM(Unsigned?)->Uint64?
@@ -74,7 +78,7 @@ SELECT SUM(value) FROM my_table;
 
 ## AVG {#avg}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AVG(Double?)->Double?
@@ -88,7 +92,7 @@ AVG(Decimal(N, M)?)->Decimal(N, M)?
 
 Целочисленные значения и интервалы времени автоматически приводятся к Double.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT AVG(value) FROM my_table;
@@ -96,10 +100,10 @@ SELECT AVG(value) FROM my_table;
 
 ## COUNT_IF {#count-if}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
-COUNT_IF(Bool?)->Uint64?
+COUNT_IF(Bool?)->Uint64
 ```
 
 Количество строк, для которых указанное в качестве аргумента выражение истинно (результат вычисления выражения — true).
@@ -108,33 +112,22 @@ COUNT_IF(Bool?)->Uint64?
 
 Функция *не* выполняет неявного приведения типов к булевым для строк и чисел.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
   COUNT_IF(value % 2 == 1) AS odd_count
-FROM my_table;
 ```
-
-{% if select_statement != "SELECT STREAM" %}
 
 {% note info %}
 
-Если нужно посчитать число уникальных значений на строках, где выполняется условие, то в отличие от остальных агрегатных функций модификатор [DISTINCT](../syntax/select/group-by.md#distinct) тут не поможет, так как в аргументах нет никаких значений. Для получения данного результата можно использовать запрос следующего вида:
-
-```yql
-SELECT
-    COUNT(DISTINCT IF(value % 2 == 1, value))
-FROM my_table;
-```
+Если нужно посчитать число уникальных значений на строках, где выполняется условие, то в отличие от остальных агрегатных функций модификатор [DISTINCT](../syntax/group_by.md#distinct) тут не поможет, так как в аргументах нет никаких значений. Для получения данного результата, стоит воспользоваться в подзапросе встроенной функцией [IF](../builtins/basic.md#if) с двумя аргументами (чтобы в else получился `NULL`), а снаружи сделать [COUNT(DISTINCT ...)](#count) по её результату.
 
 {% endnote %}
 
-{% endif %}
-
 ## SUM_IF и AVG_IF {#sum-if}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SUM_IF(Unsigned?, Bool?)->Uint64?
@@ -148,7 +141,7 @@ AVG_IF(Double?, Bool?)->Double?
 
 Таким образом, `SUM_IF(value, condition)` является чуть более короткой записью для `SUM(IF(condition, value))`, аналогично для `AVG`. Расширение типа данных аргумента работает так же аналогично одноименным функциям без суффикса.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -171,7 +164,7 @@ FROM my_table;
 
 ## SOME {#some}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SOME(T?)->T?
@@ -182,7 +175,7 @@ SOME(T)->T?
 
 Из-за отсутствия гарантий `SOME` вычислительно дешевле, чем часто использующиеся в подобных ситуациях [MIN и MAX](#min-max).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -198,7 +191,7 @@ FROM my_table;
 
 ## CountDistinctEstimate, HyperLogLog и HLL {#countdistinctestimate}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 CountDistinctEstimate(T)->Uint64?
@@ -217,7 +210,7 @@ HLL(T)->Uint64?
 
 На данный момент все три функции являются алиасами, но в будущем `CountDistinctEstimate` может начать использовать другой алгоритм.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -235,7 +228,7 @@ FROM my_table;
 
 ## AGGREGATE_LIST {#agg-list}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AGGREGATE_LIST(T? [, limit:Uint64])->List<T>
@@ -252,9 +245,9 @@ AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
 
 Чтобы получить список нескольких значений с одной строки, важно *НЕ* использовать функцию `AGGREGATE_LIST` несколько раз, а сложить все нужные значения в контейнер, например через [AsList](basic.md#aslist) или [AsTuple](basic.md#astuple) и передать этот контейнер в один вызов `AGGREGATE_LIST`.
 
-Например, можно использовать в сочетании с `DISTINCT` и функцией [String::JoinFromList](../udf/list/string.md) (аналог `','.join(list)` из Python) для распечатки в строку всех значений, которые встретились в столбце после применения [GROUP BY](../syntax/select/group-by.md).
+Например, можно использовать в сочетании с `DISTINCT` и функцией [String::JoinFromList](../udf/list/string.md) (аналог `','.join(list)` из Python) для распечатки в строку всех значений, которые встретились в столбце после применения [GROUP BY](../syntax/group_by.md).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -284,7 +277,7 @@ FROM users
 
 ## MAX_BY и MIN_BY {#max-min-by}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 MAX_BY(T1?, T2)->T1?
@@ -303,7 +296,7 @@ MIN_BY(T1, T2, limit:Uint64)->List<T1>?
 * Если N не указано — будет возвращено значение одной из строк, а остальные отбрасываются.
 * Если N указано — будет возвращен список со всеми значениями, но не более N, все значения после достижения указанного числа отбрасываются.
 
-При выборе значения N рекомендуется не превышать порядка сотен или тысяч, чтобы не возникало проблем с ограниченной доступной памятью на кластерах {{ backend_name }}.
+При выборе значения N рекомендуется не превышать порядка сотен или тысяч, чтобы не возникало проблем с лимтами памяти.
 
 Если для задачи обязательно нужны все значения, и их количество может измеряться десятками тысяч и больше, то вместо данных агрегационных функций следует использовать `JOIN` исходной таблицы с подзапросом, где по ней же сделан `GROUP BY + MIN/MAX` на интересующих вас колонках.
 
@@ -315,7 +308,7 @@ MIN_BY(T1, T2, limit:Uint64)->List<T1>?
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и ключа.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -337,7 +330,7 @@ FROM my_table;
 
 ## TOP и BOTTOM {#top-bottom}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TOP(T?, limit:Uint32)->List<T>
@@ -348,7 +341,7 @@ BOTTOM(T, limit:Uint32)->List<T>
 
 Вернуть список максимальных/минимальных значений выражения. Первый аргумент - выражение, второй - ограничение на количество элементов.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -369,7 +362,7 @@ FROM my_table;
 
 ## TOP_BY и BOTTOM_BY {#top-bottom-by}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TOP_BY(T1, T2, limit:Uint32)->List<T1>
@@ -380,7 +373,7 @@ BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и ключа. Ограничение на количество элементов в этом случае передаётся вторым аргументом при создании фабрики.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -402,7 +395,7 @@ FROM my_table;
 
 ## TOPFREQ и MODE {#topfreq-mode}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TOPFREQ(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
@@ -421,7 +414,7 @@ MODE(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T
 1. Для `TOPFREQ` — желаемое число элементов в результате. `MODE` является алиасом к `TOPFREQ` с 1 в этом аргументе. У `TOPFREQ` по умолчанию тоже 1.
 2. Число элементов в используемом буфере, что позволяет разменивать потребление памяти на точность. По умолчанию 100.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -433,7 +426,7 @@ FROM my_table;
 
 ## STDDEV и VARIANCE {#stddev-variance}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 STDDEV(Double?)->Double?
@@ -460,7 +453,7 @@ VARIANCE_SAMPLE(Double?)->Double?
 
 Если все переданные значения — `NULL`, возвращает `NULL`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -472,7 +465,7 @@ FROM my_table;
 
 ## CORRELATION и COVARIANCE {#correlation-covariance}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 CORRELATION(Double?, Double?)->Double?
@@ -489,7 +482,7 @@ COVARIANCE_POPULATION(Double?, Double?)->Double?
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из двух значений.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -508,7 +501,7 @@ FROM my_table;
 
 ## PERCENTILE и MEDIAN {#percentile-median}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 PERCENTILE(T, Double)->T
@@ -531,7 +524,7 @@ MEDIAN(T, [ List<Double> ])->List<T>
 
 Значения прецентиля должны лежать в диапазоне от 0.0 до 1.0 включительно.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -547,7 +540,7 @@ FROM my_table;
 
 ## HISTOGRAM {#histogram}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 HISTOGRAM(Double?)->HistogramStruct?
@@ -571,8 +564,6 @@ HISTOGRAM(Double?, weight:Double, intervals:Uint32)->HistogramStruct?
 Имеется возможность указать «вес» для каждого значения, участвующего в построении гистограммы. Для этого вторым аргументом в агрегатную функцию нужно передать выражение для вычисления веса. По умолчанию всегда используется вес `1.0`. Если используются нестандартные веса, ограничение на число корзин можно задать третьим аргументом.
 
 В случае, если передано два аргумента, смысл второго аргумента определяется по его типу (целочисленный литерал — ограничение на число корзин, в противном случае — вес).
-
-{% if tech %}
 
 ### Алгоритмы
 
@@ -623,16 +614,14 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 {% endblock %}
 
-{% endif %}
-
 ### Если нужна точная гистограмма
 
 1. Можно воспользоваться описанными ниже агрегатными функциями с фиксированными сетками корзин: [LinearHistogram](#linearhistogram) или [LogarithmicHistogram](#linearhistogram).
-2. Можно самостоятельно вычислить номер корзины для каждой строки и сделать по нему [GROUP BY](../syntax/select/group-by.md).
+2. Можно самостоятельно вычислить номер корзины для каждой строки и сделать по нему [GROUP BY](../syntax/group_by.md).
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и веса.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -661,7 +650,7 @@ FROM my_table;
 
 Построение гистограммы по явно указанной фиксированной шкале корзин.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 LinearHistogram(Double?)->HistogramStruct?
@@ -684,7 +673,7 @@ LogHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->Histogra
 
 Если разброс входных значений неконтролируемо велик, рекомендуется указывать минимальное и максимальное значение для предотвращения потенциальных падений из-за высокого потребления памяти.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -714,7 +703,7 @@ FROM my_table;
 
 ## BOOL_AND, BOOL_OR и BOOL_XOR {#bool-and-or-xor}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 BOOL_AND(Bool?)->Bool?
@@ -747,7 +736,7 @@ BOOL_XOR(Bool?)->Bool?
 
 Для агрегации с пропуском `NULL`-ов можно использовать функции `MIN`/`MAX` или `BIT_AND`/`BIT_OR`/`BIT_XOR`.
 
-### Примеры
+#### Примеры
 
 ```yql
 $data = [
@@ -776,7 +765,7 @@ FROM AS_TABLE($data);
 
 Применение соответствующей битовой операции ко всем значениям числовой колонки или выражения.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -784,34 +773,22 @@ SELECT
 FROM my_table;
 ```
 
+## SessionStart {#session-start}
 
-{% if feature_window_functions %}
-
-  ## SessionStart {#session-start}
-
-Без аргументов. Допускается только при наличии [SessionWindow](../syntax/select/group-by.md#session-window) в
-[GROUP BY](../syntax/select/group-by.md) / [PARTITION BY](../syntax/select/window.md#partition).
+Без аргументов. Допускается только при наличии [SessionWindow](../syntax/group_by.md#session-window) в
+[GROUP BY](../syntax/group_by.md) / [PARTITION BY](../syntax/window.md#partition).
 Возвращает значение ключевой колонки `SessionWindow`. В случае `SessionWindow` с двумя аргументами – минимальное значение первого аргумента внутри группы/раздела.
-В случае расширенного варианта `SessionWindow` – значение второго элемента кортежа, возвращаемого `<calculate_lambda>`, при котором первый элемент кортежа равен `True`.
-
-
-{% endif %}
+В случае раширенного варианта `SessionWindoow` – значение второго элемента кортежа, возвращаемого `<calculate_lambda>`, при котором первый элемент кортежа равен `True`.
 
 
 ## AGGREGATE_BY и MULTI_AGGREGATE_BY {#aggregate-by}
-
-{% if backend_name == "YDB" and oss == true %}
-
-{% include [not_allow_for_olap_note](../../../_includes/not_allow_for_olap_note.md) %}
-
-{% endif %}
 
 Применение [фабрики агрегационной функции](basic.md#aggregationfactory) ко всем значениям колонки или выражения. Функция `MULTI_AGGREGATE_BY` требует, чтобы в значении колонки или выражения была структура, кортеж или список, и применяет фабрику поэлементно, размещая результат в контейнере той же формы. Если в разных значениях колонки или выражения содержатся списки разной длины, результирующий список будет иметь наименьшую из длин этих списков.
 
 1. Колонка, `DISTINCT` колонка или выражение;
 2. Фабрика.
 
-### Примеры
+#### Примеры
 
 ```yql
 $count_factory = AggregationFactory("COUNT");

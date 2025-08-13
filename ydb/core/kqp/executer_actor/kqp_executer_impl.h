@@ -2286,12 +2286,6 @@ protected:
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
         }
 
-        if (Query) {
-            auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
-            removeQueryEvent->Query = Query;
-            this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQueryEvent.Release());
-        }
-
         this->Send(this->SelfId(), new TEvents::TEvPoison);
         LOG_T("Terminate, become ZombieState");
         this->Become(&TKqpExecuterBase::ZombieState);

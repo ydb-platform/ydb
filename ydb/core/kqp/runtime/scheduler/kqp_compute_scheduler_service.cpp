@@ -256,8 +256,8 @@ void TComputeScheduler::RemoveQuery(const TQueryPtr& query) {
     TWriteGuard lock(Mutex);
     const auto& queryId = std::get<NHdrf::TQueryId>(query->GetId());
 
+    Y_ENSURE(Queries.erase(queryId));
     query->GetParent()->RemoveQuery(queryId);
-    Queries.erase(queryId);
 }
 
 void TComputeScheduler::UpdateFairShare() {

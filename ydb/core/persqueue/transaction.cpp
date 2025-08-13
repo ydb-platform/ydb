@@ -215,7 +215,7 @@ void TDistributedTransaction::OnPlanStep(ui64 step)
 
 void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event)
 {
-    PQ_LOG_D("Handle TEvTxCalcPredicateResult");
+    PQ_LOG_TX_D("Handle TEvTxCalcPredicateResult");
 
     TMaybe<EDecision> decision;
 
@@ -242,7 +242,7 @@ void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, NKikimrPQ::TPa
 
 void TDistributedTransaction::OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event)
 {
-    PQ_LOG_D("Handle TEvProposePartitionConfigResult");
+    PQ_LOG_TX_D("Handle TEvProposePartitionConfigResult");
 
     UpdatePartitionsData(PartitionsData, event.Data);
 
@@ -264,14 +264,14 @@ void TDistributedTransaction::OnPartitionResult(const E& event, TMaybe<EDecision
 
     ++PartitionRepliesCount;
 
-    PQ_LOG_D("Partition responses " << PartitionRepliesCount << "/" << PartitionRepliesExpected);
+    PQ_LOG_TX_D("Partition responses " << PartitionRepliesCount << "/" << PartitionRepliesExpected);
 }
 
 void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
                                         const TActorId& sender,
                                         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack)
 {
-    PQ_LOG_D("Handle TEvReadSet");
+    PQ_LOG_TX_D("Handle TEvReadSet " << TxId);
 
     Y_ABORT_UNLESS((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
     Y_ABORT_UNLESS(event.HasTxId() && (TxId == event.GetTxId()));
@@ -288,7 +288,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
             p.SetPredicate(data.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT);
             ++ReadSetCount;
 
-            PQ_LOG_D("Predicates " << ReadSetCount << "/" << PredicatesReceived.size());
+            PQ_LOG_TX_D("Predicates " << ReadSetCount << "/" << PredicatesReceived.size());
         }
 
         NKikimrPQ::TPartitions d;
@@ -307,7 +307,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 
 void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event)
 {
-    PQ_LOG_D("Handle TEvReadSetAck");
+    PQ_LOG_TX_D("Handle TEvReadSetAck txId " << TxId);
 
     Y_ABORT_UNLESS(event.HasStep() && (Step == event.GetStep()));
     Y_ABORT_UNLESS(event.HasTxId() && (TxId == event.GetTxId()));
@@ -321,7 +321,7 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
         PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
-        PQ_LOG_D("Predicate acks " << PredicateAcksCount << "/" << PredicateRecipients.size());
+        PQ_LOG_TX_D("Predicate acks " << PredicateAcksCount << "/" << PredicateRecipients.size());
     }
 }
 
@@ -363,7 +363,7 @@ bool TDistributedTransaction::HaveParticipantsDecision() const
 
 bool TDistributedTransaction::HaveAllRecipientsReceive() const
 {
-    PQ_LOG_D("PredicateAcks: " << PredicateAcksCount << "/" << PredicateRecipients.size());
+    PQ_LOG_TX_D("PredicateAcks: " << PredicateAcksCount << "/" << PredicateRecipients.size());
     return PredicateRecipients.size() == PredicateAcksCount;
 }
 
@@ -371,7 +371,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
                                           EState state)
 {
     auto tx = Serialize(state);
-    PQ_LOG_D("save tx " << tx.ShortDebugString());
+    PQ_LOG_TX_D("save tx " << tx.ShortDebugString());
 
     TString value;
     Y_ABORT_UNLESS(tx.SerializeToString(&value));

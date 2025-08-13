@@ -6,6 +6,7 @@
 
 * [Подключение к YDB](#connect-ydb)
 * [Создание таблицы для хранения векторов](#create-table)
+* [Способ конвертации векторов в байты](#convert-vector-to-bytes)
 * [Вставка векторов в таблицу](#insert-vectors)
 * [Добавление векторного индекса](#add-vector-index)
 * [Поиск ближайших векторов](#search-by-vector)
@@ -108,6 +109,39 @@
         }));
 
         std::cout << "Vector table created: " << tableName << std::endl;
+    }
+    ```
+
+{% endlist %}
+
+
+## Способ конвертации векторов в байты {#convert-vector-to-bytes}
+
+Для дальнейшей работы с векторами может потребоваться их конвертация в байты. Сделать это можно следующим образом:
+
+{% list tabs %}
+
+- Python
+
+    ```python
+    import struct
+
+    def convert_vector_to_bytes(vector: list[float]) -> bytes:
+        b = struct.pack("f" * len(vector), *vector)
+        return b + b"\x01"
+    ```
+
+- C++
+
+    ```cpp
+    std::string ConvertVectorToBytes(const std::vector<float>& vector)
+    {
+        std::string result;
+        for (const auto& value : vector) {
+            const char* bytes = reinterpret_cast<const char*>(&value);
+            result += std::string(bytes, sizeof(float));
+        }
+        return result + "\x01";
     }
     ```
 

@@ -229,7 +229,7 @@ private:
         TMaybe<TInstant> watermarkInjectedToOutputs;
         THolder<TMiniKqlProgramState> mkqlProgramState;
         if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
-            if (shouldHandleWatermark) {
+            if (WatermarkRequest == TaskRunner->GetWatermark().WatermarkIn) {
                 LOG_T("Task runner. Watermarks. Injecting requested watermark " << WatermarkRequest
                     << " to " << OutputsWithWatermarks.size() << " outputs ");
 

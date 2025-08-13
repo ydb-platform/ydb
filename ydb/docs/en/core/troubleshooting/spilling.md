@@ -9,8 +9,9 @@
 **Solution:**
 
 - Ensure the directory has write and read permissions for the user under which ydbd is running
-- Check access permissions: `ls -la /path/to/spilling/directory`
-- If necessary, change permissions: `chmod 755 /path/to/spilling/directory`
+- Check access permissions to the spilling directory (see [Spilling Configuration](../reference/configuration/spilling.md#root) for information on how to find the spilling directory)
+- Verify that the user under which `ydbd` runs can read and write to the directory
+- If permissions are incorrect, change the directory owner to the user under which `ydbd` runs and ensure read/write permissions are set
 
 ### 2. Spilling Service not started / Service not started {#spilling-service-not-started}
 

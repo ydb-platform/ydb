@@ -8,8 +8,6 @@
 {{ ydb-cli }} [connection options] admin cluster dump [options]
 ```
 
-{% include [limitation](./limitation-dump-column-tables.md) %}
-
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 {% include [dump-options.md](./dump-options.md) %}

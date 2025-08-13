@@ -8,8 +8,6 @@
 {{ ydb-cli }} [connection options] admin cluster restore -i <PATH> [options]
 ```
 
-{% include [limitation](./limitation-restore-column-tables.md) %}
-
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 Перед восстановлением целевой кластер должен быть [запущен и проинициализирован](../../../../devops/index.md).

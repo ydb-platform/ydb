@@ -1,14 +1,14 @@
 # {{ spark-name }}
 
-{{ spark-name }} — это быстрая система кластерных вычислений с открытым исходным кодом для обработки больших данных, позволяющая работать с различными хранилищами данных и поддерживающая несколько языков программирования (Scala, Java, Python, R). {{ spark-name }} может работать с {{ ydb-full-name }} с помощью [{{ ydb-full-name }} Spark Connector](https://github.com/ydb-platform/ydb-spark-connector) — специального модуля, предоставляющего реализацию основных примитивов {{ spark-name }}. Поддерживается:
+{{ spark-name }} — это быстрая система кластерных вычислений с открытым исходным кодом для обработки больших данных, позволяющая работать с различными хранилищами данных и поддерживающая несколько языков программирования (Scala, Java, Python, R). {{ spark-name }} может работать с {{ ydb-full-name }} с помощью [{{ ydb-full-name }} Spark Connector](https://github.com/ydb-platform/ydb-spark-connector) — специального модуля, предоставляющего реализацию основных примитивов {{ spark-name }}. Поддерживаются:
 
-* Распределение операций по партициям таблиц {{ ydb-full-name }}
-* Параллельная запись и чтение таблиц {{ ydb-full-name }}
-* Автоматическое создание таблиц при их отсутствии
+* Распределение операций по партициям таблиц {{ ydb-full-name }};
+* Параллельная запись и чтение таблиц {{ ydb-full-name }};
+* Автоматическое создание таблиц при их отсутствии.
 
 {% note info %}
 
-Для более быстрой работы {{ ydb-full-name }} Spark Connector может потребоваться увеличить размер памяти, доступной для каждого исполнителя {{ spark-name }}. Рекомендуется указывать 4 GB или больше на один [executor](https://spark.apache.org/docs/latest/configuration.html#application-properties).
+Для более быстрой работы {{ ydb-full-name }} Spark Connector может потребоваться увеличить объем памяти, доступной для каждого исполнителя {{ spark-name }}. Рекомендуется указывать 4 ГБ или больше на один [executor](https://spark.apache.org/docs/latest/configuration.html#application-properties).
 
 {% endnote %}
 
@@ -40,7 +40,7 @@
 
   {% endlist %}
 
-* Скачать последнюю версию shaded-сборки (вариант коннектора, включающий в себя все зависимости) из [GitHub](https://github.com/ydb-platform/ydb-spark-connector/releases) или [Маven Central](https://central.sonatype.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) и указать скачанный артефакт в опции `--jars`:
+* Скачать последнюю версию shaded-сборки (вариант коннектора, включающий все зависимости) из [GitHub](https://github.com/ydb-platform/ydb-spark-connector/releases) или [Maven Central](https://central.sonatype.com/artifact/tech.ydb.spark/ydb-spark-connector-shaded) и указать скачанный артефакт в опции `--jars`:
 
   {% list tabs %}
 
@@ -68,7 +68,7 @@
 
 ### Работа через DataFrame API {#dataframe-api}
 
-[DataFrame API](https://spark.apache.org/docs/latest/sql-data-sources-load-save-functions.html) позволяет работать с {{ ydb-short-name }} в интерактивных `spark-shell` или `pyspark`, а так же при написании кода на `Java`, `Scala` или `Python` для `spark-submit`.
+[DataFrame API](https://spark.apache.org/docs/latest/sql-data-sources-load-save-functions.html) позволяет работать с {{ ydb-short-name }} в интерактивных `spark-shell` или `pyspark`, а также при написании кода на `Java`, `Scala` или `Python` для `spark-submit`.
 
 Для создания `DataFrame` нужно указать формат `ydb`, передать набор [опций подключения](#connection-options) и путь к таблице {{ ydb-short-name }}:
 
@@ -88,7 +88,7 @@
 
 {% endlist %}
 
-Для сохранения любого `DataFrame` в таблице {{ ydb-short-name }} аналогично нужно указать формат `ydb`, [опции подключения](#connection-options) и путь к таблице:
+Для сохранения любого `DataFrame` в таблицу {{ ydb-short-name }} аналогично нужно указать формат `ydb`, [опции подключения](#connection-options) и путь к таблице:
 
 {% list tabs %}
 
@@ -108,11 +108,11 @@
 
 {% note info %}
 
-При записи данных в {{ ydb-short-name }} рекомендуется использовать режим `append`, который использует [пакетную загрузку данных](../../dev/batch-upload.md). Если указанная в методе `save()` таблица не существует, то она будет создана в соответствии с опциями [автосоздания таблиц](#autocreate-options)
+При записи данных в {{ ydb-short-name }} рекомендуется использовать режим `append`, который использует [пакетную загрузку данных](../../dev/batch-upload.md). Если указанная в методе `save()` таблица не существует, она будет создана в соответствии с опциями [автосоздания таблиц](#autocreate-options).
 
 {% endnote %}
 
-Более подробный пример приведен в разделе [Пример работы с {{ ydb-short-name }} в spark-shell](#example-spark-shell).
+Более подробный пример приведён в разделе [Пример работы с {{ ydb-short-name }} в spark-shell](#example-spark-shell).
 
 ### Работа через Catalog API {#catalog-api}
 
@@ -128,29 +128,29 @@ spark.sql.catalog.<catalog_name>.url=<ydb-connection-url>
 spark.sql.catalog.<catalog_name>.<param-name>=<param-value>
 ```
 
-После задания каталогов можно работать с таблицами {{ ydb-short-name }} через стандартные SQL запросы {{ spark-name }}. Обратите внимание, что в качестве разделителя в пути к таблице нужно использовать `.`:
+После задания каталогов можно работать с таблицами {{ ydb-short-name }} через стандартные SQL-запросы {{ spark-name }}. Обратите внимание, что в качестве разделителя в пути к таблице нужно использовать `.`:
 
 ```sql
 SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 ```
 
-Более подробный пример приведен в разделе [Пример работы с {{ ydb-short-name }} в spark-sql](#example-spark-sql).
+Более подробный пример приведён в разделе [Пример работы с {{ ydb-short-name }} в spark-sql](#example-spark-sql).
 
 ## Список параметров {{ ydb-short-name }} Spark Connector {#options}
 
-Поведение {{ ydb-short-name }} Spark Connector настраивается с помощью опций, которые как могут передаваться в виде одного набора с помощью метода `options`, так и указываться по одной с помощью метода `option`. При этом каждый `DataFrame` и даже каждая отдельная операция над `DataFrame` может иметь свой набор опций.
+Поведение {{ ydb-short-name }} Spark Connector настраивается с помощью опций, которые могут передаваться в виде одного набора с помощью метода `options` или указываться по одной с помощью метода `option`. При этом каждый `DataFrame` и даже каждая отдельная операция над `DataFrame` может иметь свой набор опций.
 
 ### Опции подключения {#connection-options}
 
-* `url` — обязательный параметр с адресом подключения к {{ ydb-short-name }}. Имеет вид `grpc[s]://<endpoint>:<port>/<database>[?<options>]`
+* `url` — обязательный параметр с адресом подключения к {{ ydb-short-name }}. Имеет вид `grpc[s]://<endpoint>:<port>/<database>[?<options>]`.
    Примеры использования:
    - Локальный Docker-контейнер с анонимной аутентификацией и без TLS:<br/>`grpc://localhost:2136/local`
-   - Удаленный кластер, размещенный на собственном сервере:<br/>`grpcs://my-private-cluster:2135/Root/my-database?secureConnectionCertificate=~/myCertificate.cer`
+   - Удалённый кластер, размещённый на собственном сервере:<br/>`grpcs://my-private-cluster:2135/Root/my-database?secureConnectionCertificate=~/myCertificate.cer`
    - Экземпляр облачной базы данных с токеном:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
    - Экземпляр облачной базы данных с файлом сервисного аккаунта:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
 
-* `auth.use_env` — если указано `true`, то будет использоваться режим аутентификации на основе [переменных среды окружения](../../reference/ydb-sdk/auth#env).
-* `auth.use_metadata` — если указано `true`, то будет использоваться режим аутентификации [Metadata](../../security/authentication.md#iam). Может быть указан прямо в `url` в виде опции `useMetadata`.
+* `auth.use_env` — если указано `true`, используется режим аутентификации на основе [переменных среды окружения](../../reference/ydb-sdk/auth.md#env).
+* `auth.use_metadata` — если указано `true`, используется режим аутентификации [Metadata](../../security/authentication.md#iam). Может быть указан прямо в `url` в виде опции `useMetadata`.
 * `auth.login` и `auth.password` — логин и пароль для [статической аутентификации](../../security/authentication.md#static-credentials).
 * `auth.token` — аутентификация с использованием указанного [Access Token](../../security/authentication.md#iam).
 * `auth.token.file` — аутентификация с использованием [Access Token](../../security/authentication.md#iam) из указанного файла. Может быть указан прямо в `url` в виде опции `tokenFile`.
@@ -161,16 +161,22 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 ### Опции автоматического создания таблиц {#autocreate-options}
 
+{% note tip %}
+
+Если вам нужно настроить параметры таблицы, создайте её вручную заранее с помощью [CREATE TABLE](../../yql/reference/syntax/create_table/index.md) или измените их позже с помощью [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md).
+
+{% endnote %}
+
 * `table.autocreate` — если указано `true`, то при записи в несуществующую таблицу она будет создана автоматически. По умолчанию включено.
 * `table.type` — тип автоматически создаваемой таблицы. Возможные варианты:
     - `row` — для создания строчной таблицы (по умолчанию);
     - `column` — для создания колоночной таблицы;
-* `table.primary_keys` — разделённый запятой список колонок для использования в качестве первичного ключа. При отсутствии этой опции для ключа будет использоваться новая колонка со случайным содержимым.
-* `table.auto_pk_name` — имя колонки для случайного создаваемого ключа. По умолчанию `_spark_key`.
+* `table.primary_keys` — разделённый запятой список колонок для использования в качестве первичного ключа. При отсутствии этой опции для ключа будет автоматически создана новая колонка.
+* `table.auto_pk_name` — имя колонки для автоматически создаваемого ключа. Эта колонка будет создана  с типом `Utf8` и будет заполняться случайными [UUID v4](https://en.wikipedia.org/wiki/Universally_unique_identifier#Version_4_(random)) значениями. По умолчанию `_spark_key`.
 
 ## Пример работы с {{ ydb-short-name }} в spark-shell и pyspark {#example-spark-shell}
 
-В качестве примера покажем как загрузить в {{ ydb-short-name }} список всех постов StackOverflow за 2020 год. Эти данные доступны в виде parquet-файла, расположенного по адресу [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet):
+В качестве примера покажем, как загрузить в {{ ydb-short-name }} список всех постов StackOverflow за 2020 год. Эти данные доступны в виде Parquet-файла, расположенного по адресу [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet):
 
 {% list tabs %}
 
@@ -208,7 +214,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 {% endlist %}
 
-Выведем схему файла с данными и посмотрим число строк в нём:
+Выведем схему файла с данными и посмотрим количество строк в нём:
 
 {% list tabs %}
 
@@ -305,7 +311,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 {% endlist %}
 
-В итоге мы можем прочитать записанные данные из {{ ydb-short-name }} и, например, подсчитать число постов, у которых есть подтверждённый ответ:
+В итоге мы можем прочитать записанные данные из {{ ydb-short-name }} и, например, подсчитать количество постов c подтверждённым ответом:
 
 {% list tabs %}
 
@@ -388,9 +394,9 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 
 ## Пример работы с {{ ydb-short-name }} в spark-sql {#example-spark-sql}
 
-В качестве примера покажем как загрузить в {{ ydb-short-name }} список всех постов StackOverflow за 2020 год. Эти данные доступны в виде parquet-файла, расположенного по адресу [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet):
+В качестве примера покажем, как загрузить в {{ ydb-short-name }} список всех постов StackOverflow за 2020 год. Эти данные доступны в виде Parquet-файла, расположенного по адресу [https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet](https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/2020.parquet):
 
-Для начала запустим `spark-sql` c настроенным каталогом `my_ydb`:
+Для начала запустим `spark-sql` с настроенным каталогом `my_ydb`:
 
 ```shell
 ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 \
@@ -411,7 +417,7 @@ spark-sql (default)> SHOW TABLES FROM my_ydb.stackoverflow;
 Time taken: 0.041 seconds
 ```
 
-Подсчитаем число строк в оригинальном файле:
+Подсчитаем количество строк в оригинальном файле:
 
 ```shell
 spark-sql (default)> SELECT COUNT(*) FROM parquet.`/home/username/2020.parquet`;
@@ -457,7 +463,7 @@ ClosedDate            timestamp
 Year                  int
 ```
 
-В итоге мы можем прочитать записанные данные из {{ ydb-short-name }} и, например, подсчитать число постов, у которых есть подтверждённый ответ:
+В итоге мы можем прочитать записанные данные из {{ ydb-short-name }} и, например, подсчитать количество постов с подтверждённым ответом:
 
 ```shell
 spark-sql (default)> SELECT COUNT(*) FROM my_ydb.stackoverflow.posts;

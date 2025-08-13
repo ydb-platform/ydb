@@ -108,7 +108,7 @@ To save any `DataFrame` in the table {{ ydb-short-name }}, you similarly need to
 
 {% note info %}
 
-For writing data to {{ ydb-short-name }} it's recommended to use the `append` mode, which uses [batch data loading](../../dev/batch-upload.md). If specified in the `save()` method a table is not exist, it will be created automatically according to [the table autocreation options](#autocreate-options)
+For writing data to {{ ydb-short-name }} it is recommended to use the `append` mode, which uses [batch data loading](../../dev/batch-upload.md). If the table specified in the `save()` method does not exist, it will be created automatically according to [the table autocreation options](#autocreate-options).
 
 {% endnote %}
 
@@ -139,7 +139,7 @@ A more detailed example is provided in the [Spark SQL example](#example-spark-sq
 
 ## {{ ydb-short-name }} Spark Connector Options {#options}
 
-The behavior of the {{ ydb-short-name }} Spark Connector is configured using options that can be passed as a `Map` using the `options` method, or specified one by one using the `option` method. Each `DataFrame` and even each individual operation on a `DataFrame` can have its own configuration of options.
+The behavior of the {{ ydb-short-name }} Spark Connector is configured using options that can be passed as one set with the `options` method or specified individually with the `option` method. Each `DataFrame` and each individual operation on a `DataFrame` can have its own configuration of options.
 
 ### Connection Options {#connection-options}
 
@@ -151,24 +151,30 @@ The behavior of the {{ ydb-short-name }} Spark Connector is configured using opt
     - Cloud database instance with a token:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?tokenFile=~/my_token`
     - Cloud database instance with a service account key:<br/>`grpcs://ydb.my-cloud.com:2135/my_folder/test_database?saKeyFile=~/sa_key.json`
 
-* `auth.use_env` —  if set to `true`, authentication based on [environment variables](../../reference/ydb-sdk/auth#env) will be used.
+* `auth.use_env` —  if set to `true`, authentication based on [environment variables](../../reference/ydb-sdk/auth.md#env) will be used.
 * `auth.use_metadata` —  if set to `true`, [metadata-based](../../security/authentication.md#iam) authentication mode will be used. You can specify it directly in `url` as the `useMetadata` option.
 * `auth.login` and `auth.password` — login and password for [static authentication](../../security/authentication.md#static-credentials).
 * `auth.token` — authentication using the specified [Access Token](../../security/authentication.md#iam).
 * `auth.token.file` — authentication using [Access Token](../../security/authentication.md#iam) from the specified file. You can specify it directly in `url` as the `tokenFile` option.
 * `auth.ca.text` — specifies the [certificate](../../concepts/connect.md#tls-cert) value for establishing a TLS connection.
 * `auth.ca.file` — specifies the path to the [certificate](../../concepts/connect.md#tls-cert) for establishing a TLS connection. You can specify it directly in `url` as the `secureConnectionCertificate` option.
-* `auth.sakey.text` — uses to specify the key content for authentication using [a service account key](../../security/authentication.md#iam).
-* `auth.sakey.file` — uses to specify the path to the key file for authentication using [a service account key](../../security/authentication.md#iam). You can specify it directly in `url` as the `saKeyFile` option.
+* `auth.sakey.text` — used to specify the key content for authentication with [a service account key](../../security/authentication.md#iam).
+* `auth.sakey.file` — used to specify the path to the key file for authentication with [a service account key](../../security/authentication.md#iam). You can specify it directly in `url` as the `saKeyFile` option.
 
-### Table autocreation Options {#autocreate-options}
+### Table Autocreation Options {#autocreate-options}
+
+{% note tip %}
+
+If you need the table to have some custom settings configured, create it manually beforehand with [CREATE TABLE](../../yql/reference/syntax/create_table/index.md) or modify it afterward with [ALTER TABLE](../../yql/reference/syntax/alter_table/index.md).
+
+{% endnote %}
 
 * `table.autocreate` — if set to `true`, then when writing to a non-existent table, it will be created automatically. Enabled by default;
 * `table.type` — the type of automatically created table. Possible values:
-    - `row` for creating a row-oriented table (default).
-    - `column` for creating a column-oriented table.
+    - `row` for creating a [row-oriented table](../../concepts/glossary.md#row-oriented-table) (default).
+    - `column` for creating a [column-oriented table](../../concepts/glossary.md#column-oriented-table).
 * `table.primary_keys` — a comma-separated list of columns to use as the primary key. If this option is not provided, a new column with random content will be used for the key.
-* `table.auto_pk_name` — the name of the column for the randomly created key. Default value is `_spark_key`.
+* `table.auto_pk_name` — the name of the column for the randomly created key. This column will be created with the type `Utf8` and will be filled with random [UUID v4](https://en.wikipedia.org/wiki/Universally_unique_identifier#Version_4_(random)) values. Default value is `_spark_key`.
 
 ## Spark Shell and PySpark Example {#example-spark-shell}
 

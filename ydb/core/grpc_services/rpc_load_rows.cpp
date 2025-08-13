@@ -18,7 +18,6 @@
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
-#include <algorithm>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -28,35 +27,22 @@ using namespace Ydb;
 
 namespace {
 
-std::shared_ptr<arrow::RecordBatch> ConvertDecimalToFixedSizeBinaryBatch(std::shared_ptr<arrow::RecordBatch> batch) {
+bool CheckNoDecimalTypes(const std::shared_ptr<arrow::RecordBatch>& batch, TString& errorMessage) {
     if (!batch) {
-        return batch;
+        return true;
     }
 
-    bool needConversion = std::any_of(batch->columns().begin(), batch->columns().end(),
-        [](const auto& column) { return column->type()->id() == arrow::Type::DECIMAL128; });
-
-    if (!needConversion) {
-        return batch;
-    }
-
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    fields.reserve(batch->num_columns());
-    columns.reserve(batch->num_columns());
     for (i32 i = 0; i < batch->num_columns(); ++i) {
-        auto field = batch->schema()->field(i);
         auto column = batch->column(i);
-        if (column->type()->id() == arrow::Type::DECIMAL128) {
-            const_cast<arrow::ArrayData*>(column->data().get())->type = arrow::fixed_size_binary(16);
-            field = field->WithType(arrow::fixed_size_binary(16));
+        if (column->type()->id() == arrow::Type::DECIMAL128 || column->type()->id() == arrow::Type::DECIMAL256) {
+            errorMessage = TString::Join("Decimal types are not supported. Column '", 
+                                       batch->schema()->field(i)->name(), 
+                                       "' has type ", column->type()->ToString(), 
+                                       ". Use fixed_size_binary(16) for decimal128 or fixed_size_binary(32) for decimal256 instead.");
+            return false;
         }
-
-        fields.push_back(std::move(field));
-        columns.push_back(std::move(column));
     }
-
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), batch->num_rows(), std::move(columns));
+    return true;
 }
 
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
@@ -107,13 +93,7 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
         case arrow::Type::DURATION:
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
-        case arrow::Type::DECIMAL: {
-            auto arrowDecimal = static_cast<const arrow::DecimalType *>(&type);
-            Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
-            decimalType->set_precision(arrowDecimal->precision());
-            decimalType->set_scale(arrowDecimal->scale());
-            return true;
-        }
+        case arrow::Type::DECIMAL:
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
         case arrow::Type::FIXED_SIZE_BINARY:
@@ -311,7 +291,10 @@ private:
 
     bool ExtractBatch(TString& errorMessage) override {
         Batch = RowsToBatch(AllRows, errorMessage);
-        Batch = ConvertDecimalToFixedSizeBinaryBatch(Batch);
+        if (!CheckNoDecimalTypes(Batch, errorMessage)) {
+            return false;
+        }
+
         return Batch.get();
     }
 
@@ -497,7 +480,10 @@ private:
                     return false;
                 }
 
-                Batch = ConvertDecimalToFixedSizeBinaryBatch(Batch);
+                if (!CheckNoDecimalTypes(Batch, errorMessage)) {
+                    return false;
+                }
+
                 break;
             }
             case EUploadSource::CSV:
@@ -519,7 +505,10 @@ private:
                     return false;
                 }
 
-                Batch = ConvertDecimalToFixedSizeBinaryBatch(Batch);
+                if (!CheckNoDecimalTypes(Batch, errorMessage)) {
+                    return false;
+                }
+
                 break;
             }
         }

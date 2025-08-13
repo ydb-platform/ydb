@@ -1,5 +1,11 @@
 ## Unreleased
 
+* 21917:Support in asynchronous replication new kind of change record — `reset` record (in addition to `update` & `erase` records). [#21917](https://github.com/ydb-platform/ydb/pull/21917) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 21835:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/21814) where a replication instance with an unspecified `COMMIT_INTERVAL` option caused the process to crash. [#21835](https://github.com/ydb-platform/ydb/pull/21835) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 21651:Fixed rare errors when reading using the pqv0 protocol from a topic during partition balancing. [#21651](https://github.com/ydb-platform/ydb/pull/21651) ([Nikolay Shestakov](https://github.com/nshestakov))
+
+## 25.1.2
+
 ### Functionality
 
 * 17114:Improved audit logging for user management operations. The audit logs now include details about user modification actions such as password changes, user blocking, and unblocking, making it easier to troubleshoot login issues. [#17114](https://github.com/ydb-platform/ydb/pull/17114) ([flown4qqqq](https://github.com/flown4qqqq))

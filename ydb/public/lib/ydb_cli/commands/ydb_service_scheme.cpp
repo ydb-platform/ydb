@@ -664,26 +664,12 @@ namespace {
 
 }
 
-int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {
-    PrintViewQuery(result.GetViewDescription().GetQueryText());
-    return EXIT_SUCCESS;
-}
-
 int TCommandDescribe::DescribeView(const TDriver& driver) {
     TString query;
     auto status = NDump::DescribeViewQuery(driver, Path, query);
     if (status.IsSuccess()) {
         PrintViewQuery(query);
         return EXIT_SUCCESS;
-    }
-    if (status.GetStatus() == EStatus::GENERIC_ERROR) {
-        // If the server does not support `SHOW CREATE` statements, retry using the deprecated view description API.
-
-        NView::TViewClient client(driver);
-        auto result = client.DescribeView(Path, {}).ExtractValueSync();
-        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
-        return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintViewResponsePretty);
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
     return EXIT_FAILURE;

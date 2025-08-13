@@ -594,6 +594,17 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     }
 }
 
+namespace {
+
+TString DescribeViewQuery(TDriver driver, const TString& path) {
+    TString query;
+    auto status = NDump::DescribeViewQuery(driver, path, query);
+    VerifyStatus(status, "describe view");
+    return query;
+}
+
+}
+
 /*!
 The BackupView function retrieves the view's description from the database,
 constructs a corresponding CREATE VIEW statement,
@@ -612,9 +623,7 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
 
     LOG_I("Backup view " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    TString query;
-    const auto status = NDump::DescribeViewQuery(driver, dbPath, query);
-    VerifyStatus(status, "describe view");
+    const auto query = DescribeViewQuery(driver, dbPath);
 
     const auto creationQuery = NDump::BuildCreateViewQuery(
         TFsPath(dbPathRelativeToBackupRoot).GetName(),

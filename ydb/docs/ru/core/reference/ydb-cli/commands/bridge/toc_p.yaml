@@ -1,0 +1,13 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: Вывод состояния пайлов
+    href: list.md
+  - name: Плановая смена PRIMARY
+    href: switchover.md
+  - name: Аварийное отключение пайла
+    href: failover.md
+  - name: Вывод пайла из кластера
+    href: takedown.md
+  - name: Возвращение пайла в кластер
+    href: rejoin.md

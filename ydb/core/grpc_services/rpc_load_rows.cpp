@@ -35,7 +35,7 @@ bool CheckNoDecimalTypes(const std::shared_ptr<arrow::RecordBatch>& batch, TStri
     for (i32 i = 0; i < batch->num_columns(); ++i) {
         auto column = batch->column(i);
         if (column->type()->id() == arrow::Type::DECIMAL128) {
-            errorMessage = "Decimal types are not supported";
+            errorMessage = "Decimal type is not supported";
             return false;
         }
     }

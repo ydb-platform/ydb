@@ -23,7 +23,16 @@ namespace NKikimr::NStorage {
                         : std::nullopt));
                 }
             } else if (cacheItem.Generation == item.GetGeneration()) {
-                Y_DEBUG_ABORT_UNLESS(cacheItem.Value == newValue);
+                auto printOptionalString = [](const std::optional<TString>& res) -> TString {
+                    if (res) {
+                        return HexEncode(*res);
+                    } else {
+                        return "<nullopt>";
+                    }
+                };
+                Y_VERIFY_DEBUG_S(cacheItem.Value == newValue, "CachedItem# " <<
+                        printOptionalString(cacheItem.Value) << " NewItem# " << printOptionalString(newValue));
+                Y_UNUSED(printOptionalString);  // for release build
             }
         }
 

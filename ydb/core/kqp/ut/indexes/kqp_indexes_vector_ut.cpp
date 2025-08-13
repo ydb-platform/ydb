@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_bulk);
     }
 
-    void DoTestVectorIndexDelete(const TString& deleteQuery) {
+    void DoTestVectorIndexDelete(const TString& deleteQuery, bool returning) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -487,6 +487,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             auto result = session.ExecuteDataQuery(deleteQuery, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
+            if (returning) {
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"vv\\3\"];[9]]]");
+            }
         }
 
         // Check that PK 9 is not present in the posting table
@@ -504,20 +507,35 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(VectorIndexDeletePk) {
         // DELETE WHERE from the table with index should succeed
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=9;)"));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=9;)"), false);
     }
 
     Y_UNIT_TEST(VectorIndexDeleteFilter) {
         // DELETE WHERE with non-PK filter from the table with index should succeed
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9";)"));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9";)"), false);
     }
 
     Y_UNIT_TEST(VectorIndexDeleteOn) {
         // DELETE ON from the table with index should succeed too (it uses a different code path)
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk`;)"));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk`;)"), false);
     }
 
-    Y_UNIT_TEST(VectorIndexInsert) {
+    Y_UNIT_TEST(VectorIndexDeletePkReturning) {
+        // DELETE WHERE from the table with index should succeed
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=9 RETURNING data, emb, pk;)"), true);
+    }
+
+    Y_UNIT_TEST(VectorIndexDeleteFilterReturning) {
+        // DELETE WHERE with non-PK filter from the table with index should succeed
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9" RETURNING data, emb, pk;)"), true);
+    }
+
+    Y_UNIT_TEST(VectorIndexDeleteOnReturning) {
+        // DELETE ON from the table with index should succeed too (it uses a different code path)
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk` RETURNING data, emb, pk;)"), true);
+    }
+
+    void DoTestVectorIndexInsert(bool returning) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -535,32 +553,49 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         // Insert to the table with index should succeed
         {
-            const TString query1(Q_(R"(
+            TString query1(Q_(R"(
                 INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
-                (10, "\x76\x77\x03", "10"),
-                (11, "\x77\x75\x03", "11");
+                (10, "\x11\x62\x03", "10"),
+                (11, "\x77\x75\x03", "11")
             )"));
+            query1 += (returning ? " RETURNING data, emb, pk;" : ";");
 
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
+            if (returning) {
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"10\"];[\"\\021b\\3\"];[10]];[[\"11\"];[\"wu\\3\"];[11]]]");
+            }
         }
 
         // Index is updated
         const TString postingTable1_ins = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
         UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable1_ins);
 
-        // Check that PK 8, 9, 10, 11 are now in the same cluster
+        // Check that PK 7 and 10 are now in the same cluster
+        // Check that PK 8 and 11 are now in the same cluster
         {
             const TString query1(Q_(R"(
                 SELECT COUNT(DISTINCT __ydb_parent) FROM `/Root/TestTable/index1/indexImplPostingTable`
-                WHERE pk IN (8, 9, 10, 11);
+                WHERE pk IN (7, 10)
+                UNION ALL
+                SELECT COUNT(DISTINCT __ydb_parent) FROM `/Root/TestTable/index1/indexImplPostingTable`
+                WHERE pk IN (8, 11)
+                ;
             )"));
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u];[1u]]");
         }
+    }
+
+    Y_UNIT_TEST(VectorIndexInsert) {
+        DoTestVectorIndexInsert(false);
+    }
+
+    Y_UNIT_TEST(VectorIndexInsertReturning) {
+        DoTestVectorIndexInsert(true);
     }
 
     Y_UNIT_TEST(VectorIndexUpdateNoChange) {
@@ -625,7 +660,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
     }
 
-    void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery) {
+    void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery, bool returning) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -646,6 +681,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             auto result = session.ExecuteDataQuery(updateQuery, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
+            if (returning) {
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"\\0031\\3\"];[9]]]");
+            }
         }
 
         const TString updated = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
@@ -665,15 +703,27 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST(VectorIndexUpdatePkClusterChange) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9;)"));
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9;)"), false);
     }
 
     Y_UNIT_TEST(VectorIndexUpdateFilterClusterChange) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9";)"));
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9";)"), false);
     }
 
     Y_UNIT_TEST(VectorIndexUpsertClusterChange) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9");)"));
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9");)"), false);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpdatePkClusterChangeReturning) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9 RETURNING `data`, `emb`, `pk`;)"), true);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpdateFilterClusterChangeReturning) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9" RETURNING `data`, `emb`, `pk`;)"), true);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpsertClusterChangeReturning) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9") RETURNING `data`, `emb`, `pk`;)"), true);
     }
 
     Y_UNIT_TEST_TWIN(SimpleVectorIndexOrderByCosineDistanceWithCover, Nullable) {

@@ -20,7 +20,7 @@ using namespace NThreading;
 
 namespace {
 
-bool CheckAddIndexAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
+bool CheckAlterAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
     bool isDatabaseEntry = true; // first entry is always database
 
     using TEntry = NSchemeCache::TSchemeCacheNavigate::TEntry;
@@ -710,7 +710,7 @@ public:
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssue(error));
         }
 
-        if (UserToken && !UserToken->GetSerializedToken().empty() && !CheckAddIndexAccess(*UserToken, resp)) {
+        if (UserToken && !UserToken->GetSerializedToken().empty() && !CheckAlterAccess(*UserToken, resp)) {
             LOG_E("Access check failed");
             return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, NYql::TIssue("Unauthorized"));
         }

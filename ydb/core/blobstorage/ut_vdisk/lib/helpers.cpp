@@ -987,6 +987,7 @@ class TWaitForDefragOneDisk : public TActorBootstrapped<TWaitForDefragOneDisk> {
     }
 
     void Handle(TEvBlobStorage::TEvVDefragResult::TPtr &ev, const TActorContext &ctx) {
+        Cerr << "TWaitForDefragOneDisk::Handle " << ev->ToString() << Endl;
         if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
             Check(ev);
             // Finished

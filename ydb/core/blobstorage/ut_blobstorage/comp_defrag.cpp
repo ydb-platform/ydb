@@ -22,10 +22,13 @@ struct TLsmMetrics {
 
     ui64 HugeUsedChunks = 0;
     ui64 HugeChunksCanBeFreed = 0;
+    ui64 HugeLockedChunks = 0;
+    
     ui64 DskSpaceCurInplacedData = 0;
-
     ui64 DskUsedBytes = 0;
     ui64 DskTotalBytes = 0;
+
+    ui64 SpaceInHugeChunksCouldBeFreedViaCompaction = 0;
 };
 
 struct TTestEnv {
@@ -141,10 +144,13 @@ struct TTestEnv {
 
         metrics.HugeUsedChunks = AggregateVDiskCounters("outofspace", "HugeUsedChunks");
         metrics.HugeChunksCanBeFreed = AggregateVDiskCounters("outofspace", "HugeChunksCanBeFreed");
-        metrics.DskSpaceCurInplacedData = AggregateVDiskCounters("outofspace", "DskSpaceCurInplacedData");
+        metrics.HugeLockedChunks = AggregateVDiskCounters("outofspace", "HugeLockedChunks");
 
+        metrics.DskSpaceCurInplacedData = AggregateVDiskCounters("outofspace", "DskSpaceCurInplacedData");
         metrics.DskUsedBytes = AggregateVDiskCounters("outofspace", "DskUsedBytes");
         metrics.DskTotalBytes = AggregateVDiskCounters("outofspace", "DskTotalBytes");
+
+        metrics.SpaceInHugeChunksCouldBeFreedViaCompaction = AggregateVDiskCounters("defrag", "SpaceInHugeChunksCouldBeFreedViaCompaction");
 
         return metrics;
     }
@@ -181,9 +187,11 @@ TLsmMetrics PrintMetrics(TTestEnv& env) {
          << "Level 3: " << metrics.Level3 << Endl
          << "Huge Used Chunks: " << metrics.HugeUsedChunks << Endl
          << "Huge Chunks Can Be Freed: " << metrics.HugeChunksCanBeFreed << Endl
+         << "Huge Locked Chunks: " << metrics.HugeLockedChunks << Endl
          << "Dsk Space Cur Inplaced Data: " << metrics.DskSpaceCurInplacedData << Endl
          << "Dsk Used Bytes: " << metrics.DskUsedBytes << Endl
          << "Dsk Total Bytes: " << metrics.DskTotalBytes << Endl
+         << "Space In Huge Chunks Could Be Freed Via Compaction: " << metrics.SpaceInHugeChunksCouldBeFreedViaCompaction << Endl
          << "=========================================================" << Endl;
     return metrics;
 }

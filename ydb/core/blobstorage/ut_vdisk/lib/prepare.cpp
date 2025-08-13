@@ -340,7 +340,8 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     );
     TString explanation;
     //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_SKELETON, explanation);
-    //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, explanation);
+    logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_VDISK_DEFRAG, explanation);
+    logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, explanation);
     //logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_HULLQUERY, explanation);
     //logSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_SYNCLOG, explanation);
     //logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_SYNCJOB, explanation);

@@ -192,7 +192,7 @@ namespace NKikimr {
 
             TString ToString() const {
                 TStringStream str;
-                str << "UsefulSlots# " << UsefulSlots << "/" << NumberOfSlotsInChunk;
+                str << "UsefulSlots# " << UsefulSlots << " UselessSlots# " << UselessSlots << " NumberOfSlotsInChunk# " << NumberOfSlotsInChunk << " SlotSize# " << SlotSize;
                 return str.Str();
             }
         };

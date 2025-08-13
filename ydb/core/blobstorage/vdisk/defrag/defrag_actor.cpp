@@ -164,6 +164,7 @@ namespace NKikimr {
                         // Y_VERIFY_S(chunksToDefrag, DCtx->VCtx->VDiskLogPrefix);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (FreedChunks, freedChunks), (UsefulChunks, usefulChunks),
+                            (LocalTotalChunks, oos.GetLocalTotalChunks()), (ChunksSize, DCtx->PDiskCtx->Dsk->ChunkSize),
                             (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
                             (ChunksToDefrag, chunksToDefrag), (SpaceCouldBeFreedViaCompactionRatio, spaceCouldBeFreedViaCompactionRatio),
                             (DefragThresholdToRunCompaction, defragThresholdToRunCompaction));
@@ -171,6 +172,7 @@ namespace NKikimr {
                     } else {
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD04, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (FreedChunks, freedChunks), (UsefulChunks, usefulChunks),
+                            (LocalTotalChunks, oos.GetLocalTotalChunks()), (ChunksSize, DCtx->PDiskCtx->Dsk->ChunkSize),
                             (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
                             (SpaceCouldBeFreedViaCompactionRatio, spaceCouldBeFreedViaCompactionRatio),
                             (DefragThresholdToRunCompaction, defragThresholdToRunCompaction));

@@ -3123,6 +3123,7 @@ public:
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (Self->AreWeRootHive()) {
             Error = "Cannot migrate to root hive";
+            return true;
         }
         TActorId waitActorId;
         TInitMigrationWaitActor* waitActor = nullptr;
@@ -3131,8 +3132,21 @@ public:
             waitActorId = ctx.RegisterWithSameMailbox(waitActor);
             Self->SubActors.emplace_back(waitActor);
         }
-        // TODO: pass arguments as post data json
-        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvInitMigration()));
+        auto ev = std::make_unique<TEvHive::TEvInitMigration>();
+        if (Event->ExtendedQuery && Event->ExtendedQuery->HasPostContent()) {
+            NJson::TJsonValue params;
+            if (!NJson::ReadJsonTree(Event->ExtendedQuery->GetPostContent(), &params)) {
+                Error = "Invalid json in body";
+                return true;
+            }
+            try {
+                NProtobufJson::Json2Proto(params, ev->Record);
+            } catch (yexception e) {
+                Error = "Bad request";
+                return true;
+            }
+        }
+        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, ev.release()));
         return true;
     }
 

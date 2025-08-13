@@ -46,18 +46,22 @@ int HandleResponse(const NThreading::TFuture<ResultType>& future, std::function<
 int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClient::TKikimr&)> handler);
 
 template <typename RequestType>
-void PrepareRequest(TClientCommand::TConfig&, TAutoPtr<RequestType>&) {}
+void SetToken(TClientCommand::TConfig& config, TAutoPtr<RequestType>& request) {
+    if (!config.SecurityToken.empty()) {
+        request->Record.SetSecurityToken(config.SecurityToken);
+    }
+}
 
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusRequest>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeInitRoot>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeOperation>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeDescribe>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusCmsRequest>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusConsoleRequest>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTabletLocalMKQL>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusFillNode>& request);
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusDrainNode>& request);
+template <typename RequestType>
+void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<RequestType>& request) {
+    SetToken(config, request);
+}
+
+inline void PrepareRequest(TClientCommand::TConfig&, TAutoPtr<NMsgBusProxy::TBusLoginRequest>&) {
+}
+
+inline void PrepareRequest(TClientCommand::TConfig&, TAutoPtr<NMsgBusProxy::TBusKeyValue>&) { // not used in real life, not implemented in server
+}
 
 template <typename ResponseType>
 int OnMessageBus(const TClientCommand::TConfig& config, const ResponseType& response);

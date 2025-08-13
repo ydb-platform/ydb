@@ -751,6 +751,18 @@ namespace {
 
 }
 
+// Policy class that provides common access to method's request and response types.
+template <typename TReq, typename TResp, bool IsOperation>
+struct TYdbGrpcMethodAccessorTraits {
+    static void FillResponse(TResp& resp, const NYql::TIssues& issues, Ydb::CostInfo* costInfo, Ydb::StatusIds::StatusCode status) {
+        TCommonResponseFiller<TResp, IsOperation>::Fill(resp, issues, costInfo, status);
+    }
+
+    static const TMaybe<TString> GetYdbToken(const TReq&, const NYdbGrpc::IRequestContextBase* ctx) {
+        return ExtractYdbToken(ctx->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
+    }
+};
+
 template <ui32 TRpcId, typename TReq, typename TResp>
 class TGRpcRequestBiStreamWrapper
     : public IRequestProxyCtx
@@ -1091,7 +1103,7 @@ public:
     }
 };
 
-template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
+template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
 class TGRpcRequestWrapperImpl
     : public std::conditional_t<IsOperation,
         TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>,
@@ -1119,7 +1131,7 @@ public:
     }
 
     const TMaybe<TString> GetYdbToken() const override {
-        return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
+        return TMethodAccessorTraits::GetYdbToken(*GetProtoRequest(), Ctx_.Get());
     }
 
     bool HasClientCapability(const TString& capability) const override {
@@ -1213,7 +1225,7 @@ public:
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResponse* resp = CreateResponseMessage();
-        TCommonResponseFiller<TResponse, TDerived::IsOp>::Fill(*resp, IssueManager.GetIssues(), CostInfo, status);
+        TMethodAccessorTraits::FillResponse(*resp, IssueManager.GetIssues(), CostInfo, status);
         FinishRequest();
         Reply(resp, status);
         if (Ctx_->IsStreamCall()) {
@@ -1407,7 +1419,7 @@ public:
 private:
     void Reply(NProtoBuf::Message* resp, ui32 status) override {
         // End Of Request for non streaming requests
-        if (RequestFinished) {
+        if (RequestFinished || !Ctx_->IsStreamCall()) {
             AuditLogRequestEnd(Ydb::StatusIds::StatusCode(status));
         }
         if (RespHook) {
@@ -1462,13 +1474,13 @@ private:
     TMaybe<TString> TraceId;
 };
 
-template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
-class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived> {
+template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
+class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, TMethodAccessorTraits> {
 public:
     static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
 
     TGRpcRequestValidationWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
-        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>(ctx)
+        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, TMethodAccessorTraits>(ctx)
     { }
 
     bool Validate(TString& error) override {
@@ -1493,13 +1505,13 @@ public:
 
 class IFacilityProvider;
 
-template <typename TReq, typename TResp, bool IsOperation>
+template <typename TReq, typename TResp, bool IsOperation, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
 class TGrpcRequestCall
     : public std::conditional_t<TProtoHasValidate<TReq>::Value,
         TGRpcRequestValidationWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>,
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits>, TMethodAccessorTraits>,
         TGRpcRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>>
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits>, TMethodAccessorTraits>>
 {
     using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
 
@@ -1509,9 +1521,9 @@ public:
 
     using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
         TGRpcRequestValidationWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>,
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits>, TMethodAccessorTraits>,
         TGRpcRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>>;
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits>, TMethodAccessorTraits>>;
 
     template <typename TCallback>
     TGrpcRequestCall(NYdbGrpc::IRequestContextBase* ctx, TCallback&& cb, TRequestAuxSettings auxSettings = {})
@@ -1566,11 +1578,11 @@ private:
     const TRequestAuxSettings AuxSettings;
 };
 
-template <typename TReq, typename TResp>
-using TGrpcRequestOperationCall = TGrpcRequestCall<TReq, TResp, true>;
+template <typename TReq, typename TResp, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, true>>
+using TGrpcRequestOperationCall = TGrpcRequestCall<TReq, TResp, true, TMethodAccessorTraits>;
 
-template <typename TReq, typename TResp>
-using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false>;
+template <typename TReq, typename TResp, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>>
+using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false, TMethodAccessorTraits>;
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off>
 class TGRpcRequestWrapper

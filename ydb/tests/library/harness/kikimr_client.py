@@ -127,21 +127,23 @@ class KiKiMRMessageBusClient(object):
 
     def send_and_poll_request(self, protobuf_request, method='SchemeOperation'):
         response = self.send_request(protobuf_request, method)
-        return self.__poll(response)
+        return self.__poll(response, protobuf_request.SecurityToken)
 
-    def __poll(self, flat_transaction_response):
+    def __poll(self, flat_transaction_response, token):
         if not MessageBusStatus.is_ok_status(flat_transaction_response.Status):
             return flat_transaction_response
 
-        return self.send_request(
-            TSchemeOperationStatus(
-                flat_transaction_response.FlatTxId.TxId,
-                flat_transaction_response.FlatTxId.SchemeShardTabletId
-            ).protobuf,
-            'SchemeOperationStatus'
-        )
+        request = TSchemeOperationStatus(
+            flat_transaction_response.FlatTxId.TxId,
+            flat_transaction_response.FlatTxId.SchemeShardTabletId
+        ).protobuf
 
-    def bind_storage_pools(self, domain_name, spools):
+        if token:
+            request.SecurityToken = token
+
+        return self.send_request(request, 'SchemeOperationStatus')
+
+    def bind_storage_pools(self, domain_name, spools, token=None):
         request = msgbus.TSchemeOperation()
         scheme_transaction = request.Transaction
         scheme_operation = scheme_transaction.ModifyScheme
@@ -156,21 +158,24 @@ class KiKiMRMessageBusClient(object):
                 self.invoke(
                     request, 'SchemeOperation'
                 )
-            )
+            ),
+            token
         )
 
-    def flat_transaction_status(self, tx_id, tablet_id, timeout=120):
+    def flat_transaction_status(self, tx_id, tablet_id, timeout=120, token=None):
         request = msgbus.TSchemeOperationStatus()
         request.FlatTxId.TxId = tx_id
         request.FlatTxId.SchemeShardTabletId = tablet_id
         request.PollOptions.Timeout = timeout * 1000
+        if token:
+            request.SecurityToken = token
         return self.invoke(request, 'SchemeOperationStatus')
 
     def send(self, request, method):
         return self.invoke(request, method)
 
-    def ddl_exec_status(self, flat_tx_id):
-        return self.flat_transaction_status(flat_tx_id.tx_id, flat_tx_id.schemeshard_tablet_id)
+    def ddl_exec_status(self, flat_tx_id, token=None):
+        return self.flat_transaction_status(flat_tx_id.tx_id, flat_tx_id.schemeshard_tablet_id, token=token)
 
     def add_attr(self, working_dir, name, attributes, token=None):
         request = msgbus.TSchemeOperation()

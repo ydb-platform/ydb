@@ -22,6 +22,7 @@ import "ydb/core/protos/sqs.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/load_test.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -56,7 +57,7 @@ message TRequest {
     optional NKikimrTxUserProxy.TTransaction Transaction = 1;
     optional uint64 ProxyFlags = 2;
     optional uint64 ExecTimeoutPeriod = 4;
-    optional string SecurityToken = 5;
+    optional string SecurityToken = 5 [(Ydb.sensitive) = true];
 }
 
 message TFlatTxId {
@@ -305,7 +306,7 @@ message TSchemeInitRoot {
     optional uint32 TagId = 2;
     optional bytes TagName = 3;
     optional NKikimrTxScheme.TConfig GlobalConfig = 4;
-    optional string SecurityToken = 5;
+    optional string SecurityToken = 5 [(Ydb.sensitive) = true];
     repeated NKikimrStoragePool.TStoragePool StoragePools = 6;
 }
 
@@ -329,6 +330,7 @@ message THiveCreateTablet {
     repeated TCmdLookupTablet CmdLookupTablet = 3;
     optional uint32 DomainUid = 2; // mandatory, Domain unique id, in most cases 1
     optional uint64 HiveId = 4;
+    optional string SecurityToken = 5 [(Ydb.sensitive) = true];
 }
 
 message THiveCreateTabletResult {
@@ -401,12 +403,14 @@ message TMessageBusTraceStatus {
 
 message TTabletKillRequest {
     optional uint64 TabletID = 1;
+    optional string SecurityToken = 2 [(Ydb.sensitive) = true];
 };
 
 message TTabletStateRequest {
     optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
     optional bool Alive = 2;
     repeated fixed64 TabletIDs = 3;
+    optional string SecurityToken = 4 [(Ydb.sensitive) = true];
 };
 
 message TFlatTxPollOptions {
@@ -416,7 +420,7 @@ message TFlatTxPollOptions {
 message TSchemeOperation {
     optional NKikimrTxUserProxy.TTransaction Transaction = 1;
     optional TFlatTxPollOptions PollOptions = 10;
-    optional string SecurityToken = 5;
+    optional string SecurityToken = 5 [(Ydb.sensitive) = true];
 };
 
 
@@ -424,7 +428,7 @@ message TSchemeDescribe {
     optional string Path = 1;
     optional uint64 PathId = 2;
     optional uint64 SchemeshardId = 3;
-    optional string SecurityToken = 5;
+    optional string SecurityToken = 5 [(Ydb.sensitive) = true];
     optional NKikimrSchemeOp.TDescribeOptions Options = 6;
 };
 
@@ -443,6 +447,7 @@ message TFlatDescribeResponse {
 
 message TSchemeOperationStatus {
     optional TFlatTxId FlatTxId = 1;
+    optional string SecurityToken = 2 [(Ydb.sensitive) = true];
     optional TFlatTxPollOptions PollOptions = 10;
 };
 
@@ -452,7 +457,7 @@ message TJsonSettings {
 
 message TJSON {
     optional string JSON = 1;
-    optional string SecurityToken = 2;
+    optional string SecurityToken = 2 [(Ydb.sensitive) = true];
     optional TJsonSettings JsonSettings = 3;
 };
 
@@ -460,28 +465,30 @@ message TChooseProxyRequest {
     optional uint32 DataCenterNum = 1;
     optional string DataCenter = 3;
     optional bool PreferLocalProxy = 2 [default = false];
+    optional string SecurityToken = 4 [(Ydb.sensitive) = true];
 }
 
 message TBlobStorageConfigRequest {
     optional uint32 Domain = 1;
     optional NKikimrBlobStorage.TConfigRequest Request = 2;
-    optional string SecurityToken = 3;
+    optional string SecurityToken = 3 [(Ydb.sensitive) = true];
 }
 
 message TDrainNodeRequest {
     optional uint32 NodeID = 1;
-    optional string SecurityToken = 5;
+    optional string SecurityToken = 5 [(Ydb.sensitive) = true];
 };
 
 message TFillNodeRequest {
     optional uint32 NodeID = 1;
-    optional string SecurityToken = 5;
+    optional string SecurityToken = 5 [(Ydb.sensitive) = true];
 };
 
 message TResolveNodeRequest {
     optional string Host = 1;
     optional uint32 NodeId = 2;
     optional bool ResolveLocalNode = 3; // for compatibility of resolving local '.' node
+    optional string SecurityToken = 4 [(Ydb.sensitive) = true];
 };
 
 message TNodeRegistrationRequest {
@@ -493,6 +500,7 @@ message TNodeRegistrationRequest {
     optional string DomainPath = 6;
     optional bool FixedNodeId = 7;
     optional string Path = 8;
+    optional string SecurityToken = 9 [(Ydb.sensitive) = true];
 }
 
 message TNodeRegistrationResponse {
@@ -522,7 +530,7 @@ message TCmsRequest {
         NKikimrCms.TGetLogTailRequest GetLogTailRequest = 13;
     }
     optional string DomainName = 100;
-    optional string SecurityToken = 101;
+    optional string SecurityToken = 101 [(Ydb.sensitive) = true];
 }
 
 message TCmsResponse {
@@ -645,6 +653,8 @@ message TInterconnectDebug {
     optional uint64 SleepMax = 203;
     optional uint64 RescheduleMin = 204;
     optional uint64 RescheduleMax = 205;
+
+    optional string SecurityToken = 13 [(Ydb.sensitive) = true];
 }
 
 message TConsoleRequest {
@@ -667,7 +677,7 @@ message TConsoleRequest {
         NKikimrConsole.TUpdateTenantPoolConfig UpdateTenantPoolConfig = 16;
     }
     optional string DomainName = 100;
-    optional string SecurityToken = 101;
+    optional string SecurityToken = 101 [(Ydb.sensitive) = true];
 }
 
 message TConsoleResponse {
@@ -724,6 +734,7 @@ message TTestShardControlRequest {
     oneof Command {
         TCmdInitialize Initialize = 2;
     }
+    optional string SecurityToken = 3 [(Ydb.sensitive) = true];
 }
 
 message TTestShardControlResponse {
@@ -734,4 +745,3 @@ message TLoginRequest {
     optional string User = 2;
     optional string Password = 3;
 };
-

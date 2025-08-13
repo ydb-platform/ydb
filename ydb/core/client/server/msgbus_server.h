@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
@@ -46,6 +47,7 @@ class TMessageBusSessionIdentHolder {
 
     class TImplMessageBus;
     class TImplGRpc;
+    class TImplNoOpGrpc;
 
     // to create session
     friend class TBusMessageContext;
@@ -64,6 +66,9 @@ public:
 
     template <typename U /* <: TBusMessage */>
     void SendReplyAutoPtr(TAutoPtr<U>& resp) { SendReplyMove(resp); }
+
+    // If ticket parser authentication/authorization is already done, returns the internal token.
+    TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const;
 };
 
 class TBusMessageContext {
@@ -72,12 +77,14 @@ class TBusMessageContext {
 
     class TImplMessageBus;
     class TImplGRpc;
+    class TImplNoOpGrpc;
 
 public:
     TBusMessageContext();
     TBusMessageContext(const TBusMessageContext& other);
     TBusMessageContext(NBus::TOnMessageContext &messageContext, IMessageWatcher *messageWatcher = nullptr);
     TBusMessageContext(NGRpcProxy::IRequestContext *requestContext, int type);
+    TBusMessageContext(std::unique_ptr<NGRpcService::IRequestNoOpCtx> requestContext, int type);
     ~TBusMessageContext();
 
     TBusMessageContext& operator =(TBusMessageContext other);
@@ -88,6 +95,9 @@ public:
     void Swap(TBusMessageContext& msg);
     TVector<TStringBuf> FindClientCert() const;
     TString GetPeerName() const;
+
+    // If ticket parser authentication/authorization is already done, returns the internal token.
+    TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const;
 
 private:
     friend class TMessageBusSessionIdentHolder;

@@ -204,6 +204,18 @@ BELONGS ya.make
         lib/ngtcp2_strm.c [4:4]
         lib/ngtcp2_strm.h [4:4]
 
+KEEP     COPYRIGHT_SERVICE_LABEL c2cfa77ac3d9ff1a7cc25ef313f22981
+BELONGS crypto/boringssl/ya.make ya.make
+    License text:
+         * Copyright (c) 2020 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        crypto/boringssl/boringssl.c [4:4]
+        crypto/includes/ngtcp2/ngtcp2_crypto_boringssl.h [4:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL c812bfe524d8bc74ad8cf40a45902020
 BELONGS ya.make
     License text:
@@ -259,7 +271,7 @@ BELONGS ya.make
         lib/ngtcp2_window_filter.h [31:31]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f467e93f3d8b0ebd3dc4ff1696f09048
-BELONGS ya.make
+BELONGS crypto/quictls/ya.make ya.make
     License text:
          * Copyright (c) 2019 ngtcp2 contributors
     Scancode info:

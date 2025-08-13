@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
         {
             TString query = "SELECT * FROM Concat(a, #)";
             TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
-            TFunctionContext expected = {"Concat", 1};
+            TFunctionContext expected = {"Concat", 1, "a"};
             UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, expected);
         }
         {
@@ -111,6 +111,12 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
             TString query = "SELECT * FROM (#)";
             TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
             UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, Nothing());
+        }
+        {
+            TString query = "SELECT * FROM plato.Concat(#)";
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+            TClusterContext expected = {"", "plato"};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction->Cluster, expected);
         }
     }
 

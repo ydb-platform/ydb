@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Spilling Service** is an [actor service](../concepts/glossary.md#actor-service) that provides temporary storage for data blobs in the {{ ydb-short-name }} system. The service operates as a key-value store where clients can save data by a unique identifier and retrieve it back using that identifier.
+The **Spilling Service** is an [actor service](../concepts/glossary.md#actor-service) that provides temporary storage for data blobs in the {{ ydb-short-name }} system. The service operates as a key-value store where clients can save data using a unique identifier and later retrieve it with that identifier.
 
 ## Architecture
 
@@ -17,7 +17,7 @@
 
 Data is saved in files on the local file system. The Spilling Service ensures:
 
-* distribution of records between files
+* distribution of records across files
 * file deletion
 * data lifecycle management
 
@@ -25,21 +25,21 @@ In case of an unexpected restart, obsolete files are automatically deleted.
 
 ## Component Interaction
 
-System components are integrated with the Spilling Service and interact with it through actor system events:
+System components are integrated with the Spilling Service and interact with it through actor system events, explained below.
 
 ### Memory State Monitoring
 
-Compute nodes continuously monitor memory state through the allocator. The allocator informs nodes about decreasing free memory volume. However, the system does not wait for complete memory exhaustion, since the spilling process also requires additional memory resources for serialization and buffering.
+Compute nodes continuously monitor memory state through the allocator. The allocator informs nodes about decreasing free memory volume. However, the system does not wait for complete memory exhaustion because the spilling process also requires additional memory resources for serialization and buffering.
 
 ### Event Dispatch
 
 When spilling is required, the compute component (data transfer channel or compute core) performs the following actions:
 
-1. Serializes data into a blob
-2. Generates a unique identifier for the blob
-3. Creates a spilling request with the blob and generated identifier
-4. Sends the request to the Spilling Service
-5. Releases resources and enters waiting mode, allowing other tasks to utilize computational resources
+1. Serializes data into a blob.
+2. Generates a unique identifier for the blob.
+3. Creates a spilling request with the blob and the generated identifier.
+4. Sends the request to the Spilling Service.
+5. Releases resources and enters waiting mode, allowing other tasks to utilize computational resources.
 
 ### Waiting for Results
 
@@ -51,7 +51,7 @@ The Spilling Service processes the request and returns a write confirmation for 
 
 ### Data Reading
 
-When data recovery is needed, the component sends a read request with the blob identifier. The Spilling Service reads data from external storage and returns a response with the recovered data. During data loading, freed computational resources are utilized for processing other tasks.
+When data recovery is needed, the component sends a read request with the blob identifier. The Spilling Service reads data from external storage and returns a response with the recovered data. During data loading, freed computational resources are utilized to process other tasks.
 
 ## Spilling Workflow Diagram
 

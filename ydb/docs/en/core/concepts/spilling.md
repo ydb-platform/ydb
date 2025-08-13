@@ -6,9 +6,9 @@
 
 In data processing systems, including {{ ydb-short-name }}, spilling is essential for:
 
-- processing queries with large data volumes when intermediate results don't fit in RAM;
-- executing complex analytical operations (aggregations, table joins) over large datasets;
-- optimizing query performance through intermediate materialization of part of the data in external memory, which in certain scenarios can accelerate overall execution time.
+- processing queries with large data volumes when intermediate results don't fit in RAM
+- executing complex analytical operations (aggregations, table joins) over large datasets
+- optimizing query performance through intermediate materialization of part of the data in external memory, which in certain scenarios can accelerate overall execution time
 
 
 Spilling operates based on the memory hierarchy principle:
@@ -27,39 +27,43 @@ When memory usage approaches the limit, the system:
 
 ## Spilling in {{ ydb-short-name }}
 
-{{ ydb-short-name }} implements the spilling mechanism through **Spilling Service** — an [actor service](glossary.md#actor-service) that provides temporary storage for data blobs. Detailed technical information about Spilling Service is available in the [Spilling Service](../contributor/spilling-service.md) section.
+{{ ydb-short-name }} implements the spilling mechanism through the **Spilling Service**, an [actor service](glossary.md#actor-service) that provides temporary storage for data blobs. Detailed technical information about it is available in [{#T}](../contributor/spilling-service.md).
 
 ### Types of Spilling in {{ ydb-short-name }}
 
-{{ ydb-short-name }} implements two main types of spilling operating at different levels of the computational process. These types work independently and can activate simultaneously within a single query, providing comprehensive memory management.
+{{ ydb-short-name }} implements two primary types of spilling that operate at different levels of the computational process:
 
-#### Compute Node Spilling
+* [Compute Node Spilling](#compute-node-spilling)
+* [Channel Spilling](#channel-spilling)
+
+These types work independently and can activate simultaneously within a single query, providing comprehensive memory management.
+
+#### Compute Node Spilling {#compute-node-spilling}
 
 {{ ydb-short-name }} compute cores automatically offload intermediate data to disk when executing operations that require significant memory. This type of spilling is implemented at the level of individual computational operations and activates when memory limits are reached.
 
 Main usage scenarios:
 
-* **Aggregations** — when grouping large data volumes, the system offloads intermediate hash tables to disk  
-  
-* **Join operations** — when joining large tables, the Grace Hash Join algorithm is used with data partitioning and offloading to disk  
+* **Aggregations** — when grouping large data volumes, the system offloads intermediate hash tables to disk.
+* **Join operations** — when joining large tables, the [Grace Hash Join](https://en.wikipedia.org/wiki/Hash_join#Grace_hash_join) algorithm is used with data partitioning and offloading to disk.
 
-##### Operation mechanism
+##### Operation Mechanism
 
-Compute nodes contain specialized objects for monitoring memory usage. When data volume approaches the set limit:
+Compute nodes contain specialized objects for monitoring memory usage. When the data volume approaches the set limit:
 
-1. The system switches to spilling mode
-2. Data is serialized and divided into blocks (buckets)
-3. Part of the blocks is transferred to the Spilling Service for disk storage
-4. Metadata about data location is kept in memory
-5. The system continues processing data remaining in memory, which allows freeing additional space
-6. When necessary, data is loaded back and processed
+1. The system switches to spilling mode.
+2. Data is serialized and divided into blocks (buckets).
+3. Part of the blocks is transferred to the Spilling Service for disk storage.
+4. Metadata about the data location is kept in memory.
+5. The system continues processing the data remaining in memory, which frees additional space.
+6. When necessary, data is loaded back and processed.
 
 
-#### Channel Spilling
+#### Channel Spilling {#channel-spilling}
 
 This type of spilling operates at the level of data transfer between different query execution stages. Data transfer channels automatically buffer and offload data when buffers overflow. This helps avoid blocking the execution of the data-generating node, even when one of the receiving nodes is not ready to accept data.
 
-##### Operation mechanism
+##### Operation Mechanism
 
 Data transfer channels continuously monitor their state:
 

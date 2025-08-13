@@ -1,12 +1,9 @@
 # Spilling Configuration
 
-## Overview
+[Spilling](../../concepts/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that temporarily saves data to disk when the system runs out of RAM. This section describes configuration parameters for setting up spilling in production environments.
 
-[Spilling](../../concepts/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that allows temporarily saving data to disk when running out of RAM. This section describes configuration parameters for setting up spilling in production environments.
 
-All spilling settings are located in the `table_service_config` section, which is at the same level as `host_configs`.
-
-## Main Configuration Parameters
+## Primary Configuration Parameters
 
 ### Spilling Service (spilling_service_config)
 
@@ -25,14 +22,14 @@ table_service_config:
         queue_size: 1000
 ```
 
-#### Root
+#### root
 
 **Type:** `string`  
 **Default:** `""` (automatic detection)  
-**Description:** Directory for saving spilling files. When empty, the system automatically creates a directory in the format `{TMP}/spilling-tmp-<username>`.
+**Description:** A filesystem directory for saving spilling files. When empty, the system automatically creates a directory in the format `{TMP}/spilling-tmp-<username>`.
 
 - `{TMP}` — system temporary directory, determined from the `TMPDIR` environment variable or standard system paths
-- `<username>` — username under which the {{ ydb-short-name }} process is running
+- `<username>` — username under which the `ydbd` process is running
 
 Spilling files have the following name format:
 
@@ -43,7 +40,7 @@ Where:
 - `node_id` — node identifier
 - `session_id` — unique session identifier that is created when initializing the [Spilling Service](../../contributor/spilling-service.md) once when the ydbd process starts
 
-**Example of a complete spilling file path:**
+Example of a complete spilling file path:
 
 ```bash
 /tmp/spilling-tmp-user/node_1_32860791-037c-42b4-b201-82a0a337ac80
@@ -64,25 +61,25 @@ Where:
 
 - **Permission denied** — insufficient directory access permissions. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#permission-denied)
 
-#### MaxTotalSize
+#### max_total_size
 
 **Type:** `uint64`  
 **Default:** `21474836480` (20 GiB)  
 **Description:** Maximum total size of all spilling files. When the limit is exceeded, spilling operations fail with an error.
 
-**Recommendations:**
+##### Recommendations
 
 - Set the value based on available disk space
 
 **Possible errors:**
 
-- **Total size limit exceeded: X/YMb** — maximum total size of spilling files exceeded. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#total-size-limit-exceeded)
+- `Total size limit exceeded: X/YMb` — maximum total size of spilling files exceeded. See [{#T}](../../troubleshooting/spilling.md#total-size-limit-exceeded)
 
 ### Thread Pool Configuration (TIoThreadPoolConfig)
 
 {% note info %}
 
-I/O pool threads for spilling are created in addition to threads allocated for the [actor system](../../concepts/glossary.md#actor-system). When planning the number of threads, consider the overall system load.
+I/O pool threads for spilling are created in addition to the threads allocated to the [actor system](../../concepts/glossary.md#actor-system). When planning the number of threads, consider the overall system load.
 
 {% endnote %}
 
@@ -141,7 +138,7 @@ ydb soft nofile 10000
 ydb hard nofile 10000
 ```
 
-Where `ydb` is the username under which {{ ydb-short-name }} is running.
+Where `ydb` is the username under which `ydbd` runs.
 
 After changing the file, you need to reboot the system or re-login to apply the new limits.
 
@@ -177,13 +174,13 @@ table_service_config:
         queue_size: 500
 ```
 
-## Complete Configuration
+## Advanced Configuration
 
 ### Enabling and Disabling Spilling
 
 The following parameters control the enabling and disabling of various spilling types. They should typically only be changed when there are specific system requirements.
 
-#### Enable
+#### local_file_config.enable
 
 **Location:** `table_service_config.spilling_service_config.local_file_config.enable`
 **Type:** `boolean`  
@@ -228,7 +225,7 @@ table_service_config:
 
 **Important:** This setting works in conjunction with the local spilling service configuration. When disabled (`false`), channel spilling does not function even with enabled `spilling_service_config`.
 
-### Complete Configuration Example
+## Complete Example
 
 ```yaml
 table_service_config:

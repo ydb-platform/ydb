@@ -13,17 +13,16 @@ bool OperatorIsCommutative(EJoinKind);
 
 bool OperatorsAreAssociative(EJoinKind, EJoinKind);
 
-/* (e1 o12 e2) o13 e3 == (e1 o13 e3) o12 e2 */
-bool OperatorsAreLeftAsscom(EJoinKind, EJoinKind);
-
-/* e1 o13 (e2 o23 e3) == e2 o23 (e1 o13 e3) */
-bool OperatorsAreRightAsscom(EJoinKind, EJoinKind);
-
 /*
  * Asscom property is important for semi-joins:
  * enables pushing semi-join conditions down to reduce intermediate sizes
  */
 
+/* (e1 o12 e2) o13 e3 == (e1 o13 e3) o12 e2 */
+bool OperatorsAreLeftAsscom(EJoinKind, EJoinKind);
+
+/* e1 o13 (e2 o23 e3) == e2 o23 (e1 o13 e3) */
+bool OperatorsAreRightAsscom(EJoinKind, EJoinKind);
 
 /*
  * Represents a constraint that restricts join reordering to maintain correctness.

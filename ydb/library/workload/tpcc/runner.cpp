@@ -35,7 +35,7 @@ namespace {
 
 //-----------------------------------------------------------------------------
 
-constexpr auto GracefulShutdownTimeout = std::chrono::seconds(5);
+constexpr auto GracefulShutdownTimeout = std::chrono::seconds(10);
 constexpr auto MinWarmupPerTerminal = std::chrono::milliseconds(1);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
@@ -259,7 +259,7 @@ void TPCCRunner::Join() {
             auto now = Clock::now();
             auto delta = now - shutdownTs;
             if (delta >= GracefulShutdownTimeout) {
-                LOG_E("Graceful shutdown timeout on terminal " << terminal->GetID());
+                LOG_W("Graceful shutdown timeout on terminal " << terminal->GetID());
                 break;
             }
         }
@@ -347,7 +347,13 @@ void TPCCRunner::RunSync() {
 
     StopWarmup.store(true, std::memory_order_relaxed);
 
-    LOG_I("Measuring during " << Config.RunDuration);
+    // If warmup was interrupted we don't want to print INFO log about measurements.
+    // However, we still initialize all displayed variables on the screen and used in
+    // final calculations
+
+    if (!GetGlobalInterruptSource().stop_requested()) {
+        LOG_I("Measuring during " << Config.RunDuration);
+    }
 
     MeasurementsStartTs = Clock::now();
     MeasurementsStartTsWall = TInstant::Now();

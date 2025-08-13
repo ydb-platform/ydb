@@ -207,24 +207,12 @@ class TestSimpleReaderTabletTransfer(RollingUpgradeAndDowngradeFixture):
         for _ in self.roll():
             if step_count >= 8:
                 break
-            try:
-                workload.write_data_with_overlaps()
-            except ydb.issues.ConnectionLost:
-                import sys
-                print("Warning: Connection lost during rolling upgrade, skipping data write", file=sys.stderr)
+
+            workload.write_data_with_overlaps()
             step_count += 1
 
-        try:
-            final_consistency = workload.verify_data_consistency(16)
-            assert final_consistency["is_consistent"], f"Final data consistency check failed: {final_consistency}"
-        except ydb.issues.ConnectionLost:
-            import sys
-            print("Warning: Connection lost during final consistency check, skipping", file=sys.stderr)
-            final_consistency = None
-        try:
-            query_results = workload.test_simple_reader_queries()
-            failed_queries = [(q, r) for q, r, success in query_results if not success]
-            assert len(failed_queries) == 0, f"Failed queries: {failed_queries}"
-        except ydb.issues.ConnectionLost:
-            import sys
-            print("Warning: Connection lost during query execution, skipping", file=sys.stderr)
+        final_consistency = workload.verify_data_consistency(16)
+        assert final_consistency["is_consistent"], f"Final data consistency check failed: {final_consistency}"
+        query_results = workload.test_simple_reader_queries()
+        failed_queries = [(q, r) for q, r, success in query_results if not success]
+        assert len(failed_queries) == 0, f"Failed queries: {failed_queries}"

@@ -200,6 +200,7 @@ YT_DEFINE_ERROR_ENUM(
     ((StringLikeValueLengthLimitExceeded)(326))
     ((NameTableUpdateFailed)             (327))
     ((InvalidTableChunkFormat)           (328))
+    ((UnableToSynchronizeReplicationCard)(329))
 );
 
 DEFINE_ENUM(EControlAttribute,
@@ -396,6 +397,8 @@ DECLARE_REFCOUNTED_STRUCT(TChunkReaderOptions)
 DECLARE_REFCOUNTED_STRUCT(TChunkWriterOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TVersionedRowDigestConfig)
+
+DECLARE_REFCOUNTED_STRUCT(TMinHashDigestConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TSchemalessBufferedDynamicTableWriterConfig)
 

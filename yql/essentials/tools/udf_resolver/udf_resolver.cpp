@@ -194,6 +194,8 @@ void ResolveUDFs() {
 
             udfRes->SetSupportsBlocks(funcInfo.SupportsBlocks);
             udfRes->SetIsStrict(funcInfo.IsStrict);
+            udfRes->SetMinLangVer(funcInfo.MinLangVer);
+            udfRes->SetMaxLangVer(funcInfo.MaxLangVer);
         } catch (yexception& e) {
             udfRes->SetError(TStringBuilder()
                 << "Internal error was found when udf metadata is loading for function: " << udf.GetName()

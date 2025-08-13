@@ -88,7 +88,7 @@ struct TIssueTemporaryTokenOptions
 
 struct TIssueTokenResult
 {
-    TString Token;
+    std::string Token;
     //! Cypress node corresponding to issued token.
     //! Deleting this node will revoke the token.
     NCypressClient::TNodeId NodeId;
@@ -141,13 +141,13 @@ struct ISecurityClient
         const TGetCurrentUserOptions& options = {}) = 0;
 
     virtual TFuture<void> AddMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TAddMemberOptions& options = {}) = 0;
 
     virtual TFuture<void> RemoveMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TRemoveMemberOptions& options = {}) = 0;
 
     virtual TFuture<TCheckPermissionResponse> CheckPermission(

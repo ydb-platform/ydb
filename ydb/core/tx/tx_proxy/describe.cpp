@@ -7,7 +7,8 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/path.h>
+#include <ydb/core/sys_view/common/resolver.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -400,7 +401,7 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
 
     const auto& describePath = SchemeRequest->Ev->Get()->Record.GetDescribePath();
 
-    if (entry.TableId.IsSystemView() && entry.Kind != TNavigate::KindSysView) {
+    if (entry.TableId.IsSystemView()) {
         // don't go to schemeshard if entry describes sys view path and this path is virtual
         // for materialized sys view paths send the request to SchemeShard
         const auto& path = describePath.GetPath();

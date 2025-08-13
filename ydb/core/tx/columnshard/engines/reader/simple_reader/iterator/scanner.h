@@ -20,10 +20,6 @@ private:
     std::vector<std::shared_ptr<ISyncPoint>> SyncPoints;
 
 public:
-    const std::shared_ptr<ISyncPoint>& GetResultSyncPoint() const {
-        return SyncPoints.back();
-    }
-
     const std::shared_ptr<ISyncPoint>& GetSyncPoint(const ui32 index) const {
         AFL_VERIFY(index < SyncPoints.size());
         return SyncPoints[index];
@@ -43,12 +39,15 @@ public:
     void Abort();
 
     bool IsFinished() const {
+        if (!SourcesCollection->IsFinished()) {
+            return false;
+        }
         for (auto&& i : SyncPoints) {
             if (!i->IsFinished()) {
                 return false;
             }
         }
-        return SourcesCollection->IsFinished();
+        return true;
     }
 
     const TReadContext& GetContext() const;
@@ -66,7 +65,7 @@ public:
 
     TConclusionStatus Start();
 
-    TScanHead(std::deque<TSourceConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
+    TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context);
 
     [[nodiscard]] TConclusion<bool> BuildNextInterval();
 };

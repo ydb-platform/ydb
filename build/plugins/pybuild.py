@@ -11,7 +11,6 @@ from _common import (
     pathid,
     lazy,
     get_no_lint_value,
-    ugly_conftest_exception,
     resolve_common_const,
 )
 
@@ -206,7 +205,12 @@ def py_program(unit, py3):
     if py3:
         peers = ['library/python/runtime_py3/main']
         if unit.get('PYTHON_SQLITE3') != 'no':
-            peers.append('contrib/tools/python3/Modules/_sqlite')
+            peer = (
+                'contrib/tools/python3_prev/Modules/_sqlite'
+                if unit.get('USE_PYTHON3_PREV') == 'yes'
+                else 'contrib/tools/python3/Modules/_sqlite'
+            )
+            peers.append(peer)
     else:
         peers = ['library/python/runtime/main']
         if unit.get('PYTHON_SQLITE3') != 'no':
@@ -551,7 +555,6 @@ def onpy_srcs(unit, *args):
 
         if py3:
             mod_list_md5 = md5()
-            compress = False
             resfs_mocks = []
 
             for path, mod in pys:
@@ -574,8 +577,6 @@ def onpy_srcs(unit, *args):
                         dst = path + uniq_suffix(path, unit)
                         unit.on_py3_compile_bytecode([root_rel_path + '-', path, dst])
                         res += ['DEST', dest + '.yapyc3', dst + '.yapyc3']
-                    if not compress and ugly_conftest_exception(path):
-                        compress = True
 
             if resfs_mocks:
                 unit.onresource(['DONT_COMPRESS'] + resfs_mocks)
@@ -590,7 +591,7 @@ def onpy_srcs(unit, *args):
                 unit.onresource(ns_res)
 
             _split_macro_call(
-                unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0), compress=compress
+                unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0), compress=False
             )
             add_python_lint_checks(
                 unit, 3, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()

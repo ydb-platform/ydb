@@ -827,6 +827,8 @@ public:
             if (SynchronousIOCount_ > 0) {
                 return;
             }
+            ReadDirection_.OnShutdown();
+            WriteDirection_.OnShutdown();
         }
 
         if (ReadDirection_.Operation) {
@@ -843,9 +845,6 @@ public:
         FD_ = -1;
 
         OnPeerDisconnected();
-        ReadDirection_.OnShutdown();
-        WriteDirection_.OnShutdown();
-
         ShutdownPromise_.Set();
     }
 

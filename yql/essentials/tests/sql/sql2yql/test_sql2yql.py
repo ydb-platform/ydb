@@ -2,13 +2,35 @@ import os
 
 import yatest.common
 
-from test_utils import pytest_generate_tests_by_template, SQLRUN_PATH, SQL_FLAGS
+from test_utils import get_config, pytest_generate_tests_by_template, SQLRUN_PATH, SQL_FLAGS, get_case_file
 
+from yql_utils import get_langver
+
+DEFAULT_LANG_VER = '2025.01'
 DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 
 
 def pytest_generate_tests(metafunc):
-    return pytest_generate_tests_by_template('.sql', metafunc, data_path=DATA_PATH)
+    return pytest_generate_tests_by_template({'.sql', '.yql'}, metafunc, data_path=DATA_PATH)
+
+
+def _get_cfg_path(suite, case, data_path):
+    cfg_path = os.path.join(data_path, suite, case)
+    if os.path.exists(cfg_path + '.cfg'):
+        return ""
+    else:
+        return "default.txt"
+
+
+def _get_langver(suite, case, data_path):
+    cfg_path = _get_cfg_path(suite, case, data_path)
+    config = get_config(suite, case, cfg_path, data_path=DATA_PATH)
+
+    langver = get_langver(config)
+    if langver is None:
+        langver = DEFAULT_LANG_VER
+
+    return langver
 
 
 def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format, test_double_format):
@@ -29,6 +51,7 @@ def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format, te
     else:
         cmd.append('--yql')
         cmd.append('--test-lexers')
+        cmd.append('--test-complete')
         cmd.append('--output=%s' % os.path.join(out_dir, 'sql.yql'))
     if suite == 'kikimr':
         cmd.append('--cluster=plato@kikimr')
@@ -49,6 +72,8 @@ def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format, te
     if SQL_FLAGS:
         cmd.append('--flags=%s' % ','.join(SQL_FLAGS))
 
+    cmd.append('--langver=%s' % _get_langver(suite, case, data_path=DATA_PATH))
+
     return cmd
 
 
@@ -56,7 +81,7 @@ def test(suite, case, tmpdir):
     files = []
     # case can contain slash because of nested suites
     out_dir = tmpdir.mkdir(suite).mkdir(case.replace('/', '_')).dirname
-    case_file = os.path.join(DATA_PATH, suite, '%s.sql' % case)
+    case_file = get_case_file(DATA_PATH, suite, case, {'.sql', '.yql'})
     with open(case_file, 'r') as f:
         content = f.read()
         ansi_lexer = 'ansi_lexer' in content

@@ -4,14 +4,13 @@ Tracing utils
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 from typing import Callable
-from typing import Sequence
-from typing import Tuple
 
 
 _Writer = Callable[[str], object]
-_Processor = Callable[[Tuple[str, ...], Tuple[Any, ...]], object]
+_Processor = Callable[[tuple[str, ...], tuple[Any, ...]], object]
 
 
 class TagTracer:

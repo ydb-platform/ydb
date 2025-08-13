@@ -1,4 +1,18 @@
-{%- include "[generator]/common_dir.jinja" -%}
+pluginManagement {
+    val bucketUsername: String by settings
+    val bucketPassword: String by settings
+    repositories {
+        maven {
+            url = uri("https://bucket.yandex-team.ru/v1/maven/gradle")
+            credentials {
+                username = "$bucketUsername"
+                password = "$bucketPassword"
+            }
+        }
+    }
+}
+
+{%  include "[generator]/common_dir.jinja" -%}
 rootProject.name = "{{ project_name }}"
 {%  for subdir in subdirs -%}
 {%-     set arcadia_subdir = arcadia_root + "/" + subdir -%}

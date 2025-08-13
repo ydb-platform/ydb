@@ -7,6 +7,7 @@
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/core/persqueue/user_info.h>
 
 
 namespace NKafka {
@@ -61,9 +62,9 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
             const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
-        Y_UNUSED(appData);
-        Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
+        const auto& pqConfig = appData->PQConfig;
+
 
         auto partitionConfig = groupConfig.MutablePQTabletConfig()->MutablePartitionConfig();
 
@@ -76,6 +77,24 @@ public:
         }
         if (CleanupPolicy.has_value()) {
             groupConfig.MutablePQTabletConfig()->SetEnableCompactification(CleanupPolicy.value() == ECleanupPolicy::COMPACT);
+        }
+        if (pqGroupDescription.GetPQTabletConfig().GetEnableCompactification() && !groupConfig.GetPQTabletConfig().GetEnableCompactification()) {
+            NKikimr::NGRpcProxy::V1::RemoveReadRuleFromConfig(
+                groupConfig.MutablePQTabletConfig(),
+                pqGroupDescription.GetPQTabletConfig(),
+                NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER,
+                appData->PQConfig
+            );
+        } else if (!pqGroupDescription.GetPQTabletConfig().GetEnableCompactification() && groupConfig.GetPQTabletConfig().GetEnableCompactification()) {
+            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
+            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            compConsumer.set_important(true);
+            compConsumer.set_starting_message_timestamp_ms(0);
+            NKikimr::NGRpcProxy::V1::AddReadRuleToConfig(
+                groupConfig.MutablePQTabletConfig(),
+                compConsumer,
+                NKikimr::NGRpcProxy::V1::GetSupportedClientServiceTypes(pqConfig),
+                pqConfig);
         }
     }
 

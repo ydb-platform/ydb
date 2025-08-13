@@ -26,7 +26,7 @@ namespace NKikimr::NReplication::NService {
 class TSessionInfo {
     struct TWorkerInfo {
         const TActorId ActorId;
-        TRowVersion Heartbeat;
+        TRowVersion Heartbeat = TRowVersion::Min();
 
         explicit TWorkerInfo(const TActorId& actorId)
             : ActorId(actorId)
@@ -274,9 +274,14 @@ private:
 
 }; // TSessionInfo
 
-struct TConnectionParams: std::tuple<TString, TString, bool, TString> {
-    explicit TConnectionParams(const TString& endpoint, const TString& database, bool ssl, const TString& user)
-        : std::tuple<TString, TString, bool, TString>(endpoint, database, ssl, user)
+struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
+    explicit TConnectionParams(
+            const TString& endpoint,
+            const TString& database,
+            bool ssl,
+            const TString& caCert,
+            const TString& user)
+        : std::tuple<TString, TString, bool, TString, TString>(endpoint, database, ssl, caCert, user)
     {
     }
 
@@ -291,17 +296,22 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString> {
     bool EnableSsl() const {
         return std::get<2>(*this);
     }
+ 
+    const TString& CaCert() const {
+        return std::get<3>(*this);
+    }
 
     static TConnectionParams FromProto(const NKikimrReplication::TConnectionParams& params) {
         const auto& endpoint = params.GetEndpoint();
         const auto& database = params.GetDatabase();
         const bool ssl = params.GetEnableSsl();
+        const auto& caCert = params.GetCaCert();
 
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            return TConnectionParams(endpoint, database, ssl, params.GetStaticCredentials().GetUser());
+            return TConnectionParams(endpoint, database, ssl, caCert, params.GetStaticCredentials().GetUser());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return TConnectionParams(endpoint, database, ssl, params.GetOAuthToken().GetToken());
+            return TConnectionParams(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken());
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -312,7 +322,7 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString> {
 } // NKikimr::NReplication::NService
 
 template <>
-struct THash<NKikimr::NReplication::NService::TConnectionParams> : THash<std::tuple<TString, TString, bool, TString>> {};
+struct THash<NKikimr::NReplication::NService::TConnectionParams> : THash<std::tuple<TString, TString, bool, TString, TString>> {};
 
 namespace NKikimr::NReplication {
 
@@ -365,11 +375,15 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     template <typename... Args>
-    const TActorId& GetOrCreateYdbProxy(TConnectionParams&& params, Args&&... args) {
-        auto it = YdbProxies.find(params);
+    const TActorId& GetOrCreateYdbProxy(const TString& database, TConnectionParams&& params, Args&&... args) {
+        auto key = params.Endpoint().empty() ? TYdbProxyKey{database} : TYdbProxyKey{params};
+        auto it = YdbProxies.find(key);
         if (it == YdbProxies.end()) {
-            auto ydbProxy = Register(CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), std::forward<Args>(args)...));
-            auto res = YdbProxies.emplace(std::move(params), std::move(ydbProxy));
+            auto* actor = params.Endpoint().empty()
+                ? CreateLocalYdbProxy(std::move(database))
+                : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), params.CaCert(), std::forward<Args>(args)...);
+            auto ydbProxy = Register(actor);
+            auto res = YdbProxies.emplace(std::move(key), std::move(ydbProxy));
             Y_ABORT_UNLESS(res.second);
             it = res.first;
         }
@@ -377,15 +391,15 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         return it->second;
     }
 
-    std::function<IActor*(void)> ReaderFn(const NKikimrReplication::TRemoteTopicReaderSettings& settings, bool autoCommit) {
+    std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings, bool autoCommit) {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetStaticCredentials());
+            ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetStaticCredentials());
             break;
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
+            ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
             break;
         default:
             Y_ABORT("Unexpected credentials");
@@ -418,6 +432,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     std::function<IActor*(void)> TransferWriterFn(
+            const TString& database,
             const NKikimrReplication::TTransferWriterSettings& writerSettings,
             const ITransferWriterFactory* transferWriterFactory)
     {
@@ -433,9 +448,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             compilationService = *CompilationService,
             batchingSettings = writerSettings.GetBatching(),
             transferWriterFactory = transferWriterFactory,
-            runAsUser = writerSettings.GetRunAsUser()
+            runAsUser = writerSettings.GetRunAsUser(),
+            directoryPath = writerSettings.GetDirectoryPath(),
+            database = database
         ]() {
-            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser});
+            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser, directoryPath, database});
         };
     }
 
@@ -489,12 +506,12 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 return;
             }
             autoCommit = false;
-            writerFn = TransferWriterFn(writerSettings, transferWriterFactory);
+            writerFn = TransferWriterFn(cmd.GetDatabase(), writerSettings, transferWriterFactory);
         } else {
             Y_ABORT("Unsupported");
         }
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(readerSettings, autoCommit), std::move(writerFn)));
+            CreateWorker(SelfId(), ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit), std::move(writerFn)));
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 
@@ -723,7 +740,23 @@ private:
     mutable TMaybe<TString> LogPrefix;
     TActorId BoardPublisher;
     THashMap<ui64, TSessionInfo> Sessions;
-    THashMap<TConnectionParams, TActorId> YdbProxies;
+
+    using TYdbProxyKey = std::variant<TString, TConnectionParams>;
+
+    struct TYdbProxyKeyHash {
+        size_t operator()(const TYdbProxyKey& key) const {
+            switch (key.index()) {
+                case 0:
+                    return THash<TString>()(std::get<TString>(key));
+                case 1:
+                    return THash<TConnectionParams>()(std::get<TConnectionParams>(key));
+                default:
+                    Y_ABORT("unreachable");
+            }
+        }
+    };
+
+    THashMap<TYdbProxyKey, TActorId, TYdbProxyKeyHash> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
     mutable TMaybe<TActorId> CompilationService;
 

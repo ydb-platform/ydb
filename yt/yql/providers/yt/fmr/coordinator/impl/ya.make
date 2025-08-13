@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     yql_yt_coordinator_impl.cpp
+    yql_yt_partitioner.cpp
 )
 
 PEERDIR(
@@ -11,12 +12,16 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/common
     yt/yql/providers/yt/fmr/coordinator/interface
-    yql/essentials/utils/log
+    yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface
+    yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/impl
+    yt/yql/providers/yt/fmr/gc_service/impl
+    yt/yql/providers/yt/fmr/utils
     yql/essentials/utils
+    yql/essentials/utils/log
 )
 
 RESOURCE(
-    default_coordinator_settings.yson default_coordinator_settings.yson
+    default_operation_settings.yson default_operation_settings.yson
 )
 
 YQL_LAST_ABI_VERSION()

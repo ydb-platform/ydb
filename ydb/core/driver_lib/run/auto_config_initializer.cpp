@@ -244,14 +244,65 @@ namespace NKikimr::NAutoConfigInitializer {
             scheduler->SetProgressThreshold(10'000);
         }
 
+        auto *serviceExecutor = config->AddServiceExecutor();
+        serviceExecutor->SetServiceName("Interconnect");
+
+        if (useSharedThreads && cpuCount >= 1 && cpuCount <= 3) {
+            config->SetUserExecutor(0);
+            config->SetSysExecutor(1);
+            config->SetBatchExecutor(2);
+            config->SetIoExecutor(3);
+            serviceExecutor->SetExecutorId(4);
+
+            auto *systemExecutor = config->AddExecutor();
+            auto *userExecutor = config->AddExecutor();
+            auto *batchExecutor = config->AddExecutor();
+            auto *ioExecutor = config->AddExecutor();
+            auto *icExecutor = config->AddExecutor();
+
+            ioExecutor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
+            ioExecutor->SetThreads(config->HasForceIOPoolThreads() ? config->GetForceIOPoolThreads() : 1);
+            ioExecutor->SetName("IO");
+
+            auto assignPool = [&](auto *executor, TString name, i16 priority, bool hasSharedThread) {
+                executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+                executor->SetThreads(hasSharedThread);
+                executor->SetMaxThreads(hasSharedThread);
+                executor->SetName(name);
+                executor->SetPriority(priority);
+                executor->SetSpinThreshold(0);
+                executor->SetHasSharedThread(hasSharedThread);
+            };
+
+            assignPool(systemExecutor, "System", 30, cpuCount >= 3);
+            assignPool(userExecutor, "User", 20, cpuCount >= 2);
+            assignPool(batchExecutor, "Batch", 10, false);
+            assignPool(icExecutor, "IC", 40, true);
+
+            batchExecutor->SetForcedForeignSlots(1);
+            userExecutor->SetForcedForeignSlots(2);
+            icExecutor->SetForcedForeignSlots(2);
+            systemExecutor->SetForcedForeignSlots(2);
+
+            if (cpuCount >= 2) {
+                userExecutor->AddAdjacentPools(2);
+            }
+            if (cpuCount <= 2) {
+                icExecutor->AddAdjacentPools(0);
+            }
+            if (cpuCount == 1) {
+                icExecutor->AddAdjacentPools(1);
+                icExecutor->AddAdjacentPools(2);
+            }
+
+            return;
+        }
+
         TASPools pools = GetASPools(cpuCount);
         ui8 poolCount = pools.GetRealPoolCount();
         std::vector<TString> names = pools.GetRealPoolNames();
         std::vector<ui8> executorIds = pools.GetIndeces();
         std::vector<ui8> priorities = pools.GetPriorities();
-
-        auto *serviceExecutor = config->AddServiceExecutor();
-        serviceExecutor->SetServiceName("Interconnect");
 
         config->SetUserExecutor(pools.SystemPoolId);
         config->SetSysExecutor(pools.UserPoolId);
@@ -357,3 +408,11 @@ namespace NKikimr::NAutoConfigInitializer {
     }
 
 } // NKikimr::NActorSystemInitializer
+
+namespace NKikimr {
+    bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config) {
+        return config.GetUseAutoConfig()
+            || config.HasNodeType()
+            || config.HasCpuCount();
+    }
+}

@@ -2,17 +2,17 @@
 #include "yql_generic_mkql_compiler.h"
 #include "yql_generic_predicate_pushdown.h"
 
-#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
-#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/providers/generic/proto/source.pb.h>
-#include <ydb/library/yql/providers/generic/proto/partition.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
-#include <yql/essentials/utils/log/log.h>
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/proto/partition.pb.h>
+#include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -46,6 +46,8 @@ namespace NYql {
                     return "PrometheusGeneric";
                 case NYql::EGenericDataSourceKind::MONGO_DB:
                     return "MongoDBGeneric";
+                case NYql::EGenericDataSourceKind::OPENSEARCH:
+                    return "OpenSearchGeneric";
                 default:
                     throw yexception() << "Data source kind is unknown or not specified";
             }
@@ -70,9 +72,15 @@ namespace NYql {
                 return Nothing();
             }
 
-            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
+            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
+
+                    if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
+                        ctx.AddError(TIssue(ctx.GetPosition(genReadTable.Pos()), "Cannot use watermarks"));
+                        return {};
+                    }
+
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
                     const auto token = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
                     const auto rowType = genReadTable.Ref()
@@ -177,7 +185,7 @@ namespace NYql {
             }
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
-                                    TString& sourceType, size_t, TExprContext&) override {
+                                    TString& sourceType, size_t, TExprContext& ctx) override {
                 const TDqSource source(&node);
                 if (const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>()) {
                     const auto settings = maybeSettings.Cast();
@@ -220,7 +228,7 @@ namespace NYql {
 
                     if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
                         TStringBuilder err;
-                        if (!SerializeFilterPredicate(predicate, select->mutable_where()->mutable_filter_typed(), err)) {
+                        if (!SerializeFilterPredicate(ctx, predicate, select->mutable_where()->mutable_filter_typed(), err)) {
                             throw yexception() << "Failed to serialize filter predicate for source: " << err;
                         }
                     }
@@ -296,6 +304,9 @@ namespace NYql {
                             break;
                         case NYql::EGenericDataSourceKind::PROMETHEUS:
                             properties["SourceType"] = "Prometheus";
+                            break;
+                        case NYql::EGenericDataSourceKind::OPENSEARCH:
+                            properties["SourceType"] = "OpenSearch";
                             break;
                         case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;

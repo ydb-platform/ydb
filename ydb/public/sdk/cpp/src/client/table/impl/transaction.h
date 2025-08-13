@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <mutex>
+
 namespace NYdb::inline Dev::NTable {
 
 class TTransaction::TImpl : public std::enable_shared_from_this<TImpl> {
@@ -40,6 +42,9 @@ private:
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
     mutable std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
     mutable std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
+
+    std::mutex PrecommitCallbacksMutex;
+    std::mutex OnFailureCallbacksMutex;
 };
 
 }

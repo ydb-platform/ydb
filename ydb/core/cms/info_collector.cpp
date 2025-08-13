@@ -197,11 +197,30 @@ void TInfoCollector::Bootstrap() {
     Become(&TThis::StateWork);
 }
 
+using TPileMap = TEvInterconnect::TEvNodesInfo::TPileMap;
+
+THashMap<ui32, ui32> FlipPileMap(const std::shared_ptr<const TPileMap> pileMap) {
+    THashMap<ui32, ui32> result;
+
+    if (!pileMap)
+        return result;
+
+    for (ui32 i = 0; i < pileMap->size(); ++i) {
+        for (ui32 j : pileMap->at(i)) {
+            result.emplace(j, i);
+        }
+    }
+    return result;
+}
+
 void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
     RequestBaseConfig();
     RequestBootstrapConfig();
     RequestStateStorageConfig();
 
+    const auto& pileMap = ev->Get()->PileMap;
+    Info->IsBridgeMode = static_cast<bool>(pileMap);
+    Info->NodeIdToPileId = FlipPileMap(pileMap);
     for (const auto& node : ev->Get()->Nodes) {
         Info->AddNode(node, &TlsActivationContext->AsActorContext());
         SendNodeRequests(node.NodeId);
@@ -292,7 +311,9 @@ void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& e
         }
 
         for (const auto& group : record.GetStatus(0).GetBaseConfig().GetGroup()) {
-            Info->AddBSGroup(group);
+            if (!group.GetIsProxyGroup()) {
+                Info->AddBSGroup(group);
+            }
         }
 
         MaybeReplyAndDie();

@@ -44,6 +44,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Table.ReadRows", ERequestType::TABLE_READROWS},
     {"Table.DescribeExternalDataSource", ERequestType::TABLE_DESCRIBEEXTERNALDATASOURCE},
     {"Table.DescribeExternalTable", ERequestType::TABLE_DESCRIBEEXTERNALTABLE},
+    {"Table.DescribeSystemView", ERequestType::TABLE_DESCRIBESYSTEMVIEW},
 
     {"Query.ExecuteQuery", ERequestType::QUERY_EXECUTEQUERY},
     {"Query.ExecuteScript", ERequestType::QUERY_EXECUTESCRIPT},
@@ -95,6 +96,9 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Topic.DescribeConsumer", ERequestType::TOPIC_DESCRIBECONSUMER},
     {"Topic.AlterTopic", ERequestType::TOPIC_ALTERTOPIC},
     {"Topic.DropTopic", ERequestType::TOPIC_DROPTOPIC},
+
+    {"Bridge.GetClusterState", ERequestType::BRIDGE_GETCLUSTERSTATE},
+    {"Bridge.UpdateClusterState", ERequestType::BRIDGE_UPDATECLUSTERSTATE},
 };
 
 extern const THashSet<ERequestType> NoDefaultSamplingRequestTypes = {

@@ -1,6 +1,6 @@
 # Importing data from the file system
 
-## Cluster
+## Cluster {#cluster}
 
 The `admin cluster restore` command restores a cluster from a backup on the file system. The backup must have been previously exported or prepared manually as described in the [{#T}](../file-structure.md) article:
 
@@ -98,6 +98,10 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 - `--save-partial-result`: Save the partial import result. If disabled, an import error results in reverting to the database state before the import.
 
 - `--import-data`: Use ImportData, a more efficient method for uploading data than the default approach. This method sends data to the server partitioned by the client and in a lighter format. However, it returns an error when attempting to import exported data into an existing table that already has indexes or is in the process of building them. To restore a table with indexes, ensure they are not already present in the schema (for example, using the [`ydb scheme ls`](../../../../reference/ydb-cli/commands/scheme-ls.md) command). By default, ImportData is disabled.
+
+- `--replace`: Remove existing objects from the database that match those in the backup before restoration. Objects present in the backup but missing in the database are restored as usual; removal is skipped. If both `--replace` and `--verify-existence` are specified, restoration stops with an error when the first such object is found.
+
+- `--verify-existence`: Use with `--replace` option to report an error if an object in the backup is missing from the database instead of silently skipping its removal.
 
 ### Workload restriction parameters {#limiters}
 

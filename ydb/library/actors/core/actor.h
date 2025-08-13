@@ -12,6 +12,7 @@
 #include <util/generic/noncopyable.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 namespace NActors {
     class TActorSystem;
@@ -418,6 +419,133 @@ namespace NActors {
         ui32 Index;
     };
 
+    /**
+     * A type erased actor task running within an actor
+     */
+    class TActorTask : public TIntrusiveListItem<TActorTask> {
+    protected:
+        ~TActorTask() = default;
+
+    public:
+        /**
+         * Requests task to cancel
+         */
+        virtual void Cancel() noexcept = 0;
+
+        /**
+         * Requests task to stop and destroy itself immediately
+         */
+        virtual void Destroy() noexcept = 0;
+    };
+
+    /**
+     * A type erased event awaiter, used for dynamic event dispatch
+     */
+    class TActorEventAwaiter : public TIntrusiveListItem<TActorEventAwaiter> {
+    public:
+        template<class TDerived>
+        class TImpl;
+
+        inline bool Handle(TAutoPtr<IEventHandle>& ev) {
+            return (*HandleFn)(this, ev);
+        }
+
+    private:
+        // All subclasses must use TImpl
+        TActorEventAwaiter() = default;
+        ~TActorEventAwaiter() = default;
+
+    protected:
+        // A single function pointer is cheaper than a vtable, may be changed at runtime and allows multiple instances in a class
+        bool (*HandleFn)(TActorEventAwaiter*, TAutoPtr<IEventHandle>&);
+    };
+
+    /**
+     * Base class for TActorEventAwaiter implementation classes
+     */
+    template<class TDerived>
+    class TActorEventAwaiter::TImpl : public TActorEventAwaiter {
+    public:
+        TImpl() noexcept {
+            this->HandleFn = +[](TActorEventAwaiter* self, TAutoPtr<IEventHandle>& ev) -> bool {
+                return static_cast<TDerived&>(static_cast<TImpl&>(*self)).DoHandle(ev);
+            };
+        }
+
+        explicit TImpl(bool (*handleFn)(TActorEventAwaiter*, TAutoPtr<IEventHandle>&)) noexcept {
+            this->HandleFn = handleFn;
+        }
+    };
+
+    /**
+     * A type erased runnable item for local execution
+     */
+    class TActorRunnableItem : public TIntrusiveListItem<TActorRunnableItem> {
+    public:
+        template<class TDerived>
+        class TImpl;
+
+        inline void Run(IActor* actor) noexcept {
+            (*RunFn)(this, actor);
+        }
+
+    private:
+        // All subclasses must use TImpl
+        TActorRunnableItem() = default;
+        ~TActorRunnableItem() = default;
+
+    protected:
+        // A single function pointer is cheaper than a vtable, may be changed at runtime and allows multiple instances in a class
+        void (*RunFn)(TActorRunnableItem*, IActor*) noexcept;
+    };
+
+    /**
+     * Base class for TActorRunnableItem implementation classes
+     */
+    template<class TDerived>
+    class TActorRunnableItem::TImpl : public TActorRunnableItem {
+    public:
+        TImpl() noexcept {
+            this->RunFn = +[](TActorRunnableItem* self, IActor* actor) noexcept {
+                static_cast<TDerived&>(static_cast<TImpl&>(*self)).DoRun(actor);
+            };
+        }
+
+        explicit TImpl(void (*runFn)(TActorRunnableItem*, IActor*) noexcept) noexcept {
+            this->RunFn = runFn;
+        }
+    };
+
+    /**
+     * A per-thread actor runnable queue available in an event handler
+     */
+    class TActorRunnableQueue {
+    public:
+        TActorRunnableQueue(IActor* actor) noexcept;
+        ~TActorRunnableQueue();
+
+        /**
+         * Schedules a runnable item for execution
+         */
+        static void Schedule(TActorRunnableItem* runnable) noexcept;
+
+        /**
+         * Execute currently scheduled items
+         */
+        void Execute() noexcept;
+
+    private:
+        IActor* Actor_;
+        TActorRunnableQueue* Prev_;
+        TIntrusiveList<TActorRunnableItem> Queue_;
+    };
+
+    namespace NDetail {
+        class TActorAsyncHandlerPromise;
+        template<class TEvent>
+        class TActorSpecificEventAwaiter;
+    }
+
     class IActor
         : protected IActorOps
         , public TActorUsageImpl<ActorLibCollectUsageStats>
@@ -444,6 +572,24 @@ namespace NActors {
 
     private:
         TReceiveFunc StateFunc_;
+
+    private:
+        friend class NDetail::TActorAsyncHandlerPromise;
+        template<class TEvent>
+        friend class NDetail::TActorSpecificEventAwaiter;
+
+        TIntrusiveList<TActorTask> ActorTasks;
+        absl::flat_hash_map<ui64, TIntrusiveList<TActorEventAwaiter>> EventAwaiters;
+        bool PassedAway = false;
+
+        void FinishPassAway();
+        void DestroyActorTasks();
+        bool RegisterActorTask(TActorTask* task);
+        void UnregisterActorTask(TActorTask* task);
+        void RegisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
+        void UnregisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
+        bool HandleResumeRunnable(TAutoPtr<IEventHandle>& ev);
+        bool HandleRegisteredEvent(TAutoPtr<IEventHandle>& ev);
 
     public:
         using TEventFlags = IEventHandle::TEventFlags;
@@ -637,6 +783,9 @@ namespace NActors {
             return TActivationContext::ActorContextFor(SelfId());
         }
 
+    private:
+        bool OnUnhandledExceptionSafe(const std::exception& exc);
+
     protected:
         void SetEnoughCpu(bool isEnough);
 
@@ -800,7 +949,7 @@ namespace NActors {
 #define STFUNC(funcName) void funcName(TAutoPtr<::NActors::IEventHandle>& ev)
 #define STATEFN(funcName) void funcName(TAutoPtr<::NActors::IEventHandle>& ev)
 
-#define STFUNC_STRICT_UNHANDLED_MSG_HANDLER Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, etype);
+#define STFUNC_STRICT_UNHANDLED_MSG_HANDLER Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type %s 0x%08" PRIx32, __func__, ev->GetTypeName().c_str(), etype);
 
 #define STFUNC_BODY(HANDLERS, UNHANDLED_MSG_HANDLER)                    \
     switch (const ui32 etype = ev->GetTypeRewrite()) {                  \

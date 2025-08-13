@@ -120,6 +120,7 @@ template <CNodePtr TNodePtr>
 struct TYsonSourceTraits<TNodePtr>
 {
     static constexpr bool IsValid = true;
+    static constexpr bool IsPullParser = false;
 
     static INodePtr AsNode(TNodePtr& source)
     {
@@ -163,6 +164,7 @@ template <>
 struct TYsonSourceTraits<NYson::TYsonPullParserCursor*>
 {
     static constexpr bool IsValid = true;
+    static constexpr bool IsPullParser = true;
 
     static INodePtr AsNode(NYson::TYsonPullParserCursor*& source)
     {
@@ -240,7 +242,11 @@ void LoadFromSource(
     using TTraits = TYsonSourceTraits<TSource>;
 
     try {
-        Deserialize(parameter, TTraits::AsNode(source));
+        if constexpr (TTraits::IsPullParser && NYson::ArePullParserDeserializable<T>()) {
+            Deserialize(parameter, source);
+        } else {
+            Deserialize(parameter, TTraits::AsNode(source));
+        }
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", pathGetter())
             << ex;
@@ -923,11 +929,10 @@ void TYsonStructParameter<TValue>::PostprocessParameter(const TYsonStructBase* s
 }
 
 template <class TValue>
-void TYsonStructParameter<TValue>::SetDefaultsInitialized(TYsonStructBase* self)
+void TYsonStructParameter<TValue>::SetDefaultsInitialized(TYsonStructBase* self, bool dontSetLiteMembers)
 {
-    TValue& value = FieldAccessor_->GetValue(self);
-
-    if (DefaultCtor_) {
+    if (DefaultCtor_ && !(std::is_base_of_v<TYsonStructLite, TValue> && dontSetLiteMembers && DefaultIsDefaultConstruction_)) {
+        TValue& value = FieldAccessor_->GetValue(self);
         value = (*DefaultCtor_)();
     }
 }
@@ -955,6 +960,13 @@ bool TYsonStructParameter<TValue>::CanOmitValue(const TYsonStructBase* self) con
 
     if (TriviallyInitializedIntrusivePtr_) {
         return false;
+    }
+
+    using TDefaultValue = decltype((*DefaultCtor_)());
+    using TCanOmitValueResult = decltype(NYT::NYTree::NDetail::CanOmitValue(&value, static_cast<TDefaultValue*>(nullptr)));
+    if constexpr (!std::is_same_v<bool, TCanOmitValueResult>) {
+        // TCanOmitValueResult is either bool or std::integral_constant. In the latter case there's no need to call the function.
+        return TCanOmitValueResult::value;
     }
 
     auto defaultValue = (*DefaultCtor_)();
@@ -1014,6 +1026,7 @@ TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Optional(bool init)
 
     if (init) {
         DefaultCtor_ = [] () { return TValue{}; };
+        DefaultIsDefaultConstruction_ = true;
     }
 
     return *this;

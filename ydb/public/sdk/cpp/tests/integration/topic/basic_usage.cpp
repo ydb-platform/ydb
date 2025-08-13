@@ -1,3 +1,7 @@
+#include "setup/fixture.h"
+
+#include "utils/managed_executor.h"
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
@@ -13,10 +17,7 @@
 #include <future>
 
 
-static const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
-
-
-namespace NYdb::NPersQueue::NTests {
+namespace NYdb::inline Dev::NPersQueue::NTests {
 
 class TSimpleWriteSessionTestAdapter {
 public:
@@ -40,200 +41,11 @@ std::uint64_t TSimpleWriteSessionTestAdapter::GetAcquiredMessagesCount() const {
 
 }
 
-namespace NYdb::NTopic::NTests {
-
-class TManagedExecutor : public IExecutor {
-public:
-    using TExecutorPtr = IExecutor::TPtr;
-
-    explicit TManagedExecutor(TExecutorPtr executor);
-
-    bool IsAsync() const override;
-    void Post(TFunction&& f) override;
-
-    void StartFuncs(const std::vector<size_t>& indicies);
-
-    size_t GetFuncsCount() const;
-
-    size_t GetPlannedCount() const;
-    size_t GetRunningCount() const;
-    size_t GetExecutedCount() const;
-
-    void RunAllTasks();
-
-private:
-    void DoStart() override;
-
-    TFunction MakeTask(TFunction func);
-    void RunTask(TFunction&& func);
-
-    TExecutorPtr Executor;
-    mutable std::mutex Mutex;
-    std::vector<TFunction> Funcs;
-    std::atomic<size_t> Planned = 0;
-    std::atomic<size_t> Running = 0;
-    std::atomic<size_t> Executed = 0;
-};
-
-TManagedExecutor::TManagedExecutor(TExecutorPtr executor) :
-    Executor{std::move(executor)}
-{
-}
-
-bool TManagedExecutor::IsAsync() const
-{
-    return Executor->IsAsync();
-}
-
-void TManagedExecutor::Post(TFunction &&f)
-{
-    std::lock_guard lock(Mutex);
-
-    Funcs.push_back(std::move(f));
-    ++Planned;
-}
-
-void TManagedExecutor::DoStart()
-{
-    Executor->Start();
-}
-
-auto TManagedExecutor::MakeTask(TFunction func) -> TFunction
-{
-    return [this, func = std::move(func)]() {
-        ++Running;
-
-        func();
-
-        --Running;
-        ++Executed;
-    };
-}
-
-void TManagedExecutor::RunTask(TFunction&& func)
-{
-    Y_ABORT_UNLESS(Planned > 0);
-    --Planned;
-    Executor->Post(MakeTask(std::move(func)));
-}
-
-void TManagedExecutor::StartFuncs(const std::vector<size_t>& indicies)
-{
-    std::lock_guard lock(Mutex);
-
-    for (auto index : indicies) {
-            Y_ABORT_UNLESS(index < Funcs.size());
-            Y_ABORT_UNLESS(Funcs[index]);
-
-        RunTask(std::move(Funcs[index]));
-    }
-}
-
-size_t TManagedExecutor::GetFuncsCount() const
-{
-    std::lock_guard lock(Mutex);
-
-    return Funcs.size();
-}
-
-size_t TManagedExecutor::GetPlannedCount() const
-{
-    return Planned;
-}
-
-size_t TManagedExecutor::GetRunningCount() const
-{
-    return Running;
-}
-
-size_t TManagedExecutor::GetExecutedCount() const
-{
-    return Executed;
-}
-
-void TManagedExecutor::RunAllTasks()
-{
-    std::lock_guard lock(Mutex);
-
-    for (auto& func : Funcs) {
-        if (func) {
-            RunTask(std::move(func));
-        }
-    }
-}
-
-TIntrusivePtr<TManagedExecutor> CreateThreadPoolManagedExecutor(size_t threads)
-{
-    return MakeIntrusive<TManagedExecutor>(NYdb::NTopic::CreateThreadPoolExecutor(threads));
-}
-
-TIntrusivePtr<TManagedExecutor> CreateSyncManagedExecutor()
-{
-    return MakeIntrusive<TManagedExecutor>(NYdb::NTopic::CreateSyncExecutor());
-}
-
-class TTopicTestFixture : public ::testing::Test {
-protected:
-    void SetUp() override {
-        TTopicClient client(MakeDriver());
-        client.DropTopic(GetTopicPath()).GetValueSync();
-
-        CreateTopic(GetTopicPath());
-    }
-
-    void TearDown() override {
-        DropTopic(GetTopicPath());
-    }
-
-    void CreateTopic(const std::string& path, const std::string& consumer = "test-consumer", size_t partitionCount = 1,
-                     std::optional<size_t> maxPartitionCount = std::nullopt) {
-        TTopicClient client(MakeDriver());
-
-        TCreateTopicSettings topics;
-        topics
-            .BeginConfigurePartitioningSettings()
-            .MinActivePartitions(partitionCount)
-            .MaxActivePartitions(maxPartitionCount.value_or(partitionCount));
-
-        if (maxPartitionCount.has_value() && maxPartitionCount.value() > partitionCount) {
-            topics
-                .BeginConfigurePartitioningSettings()
-                .BeginConfigureAutoPartitioningSettings()
-                .Strategy(EAutoPartitioningStrategy::ScaleUp);
-        }
-
-        TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
-        topics.AppendConsumers(consumers);
-
-        auto status = client.CreateTopic(path, topics).GetValueSync();
-        ASSERT_TRUE(status.IsSuccess());
-    }
-
-    std::string GetTopicPath() {
-        const testing::TestInfo* const testInfo = testing::UnitTest::GetInstance()->current_test_info();
-
-        return std::string(testInfo->test_suite_name()) + "/" + std::string(testInfo->name()) + "/test-topic";
-    }
-
-    void DropTopic(const std::string& path) {
-        TTopicClient client(MakeDriver());
-        auto status = client.DropTopic(path).GetValueSync();
-        ASSERT_TRUE(status.IsSuccess());
-    }
-
-    TDriver MakeDriver() {
-        auto cfg = NYdb::TDriverConfig()
-            .SetEndpoint(std::getenv("YDB_ENDPOINT"))
-            .SetDatabase(std::getenv("YDB_DATABASE"))
-            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
-
-        return NYdb::TDriver(cfg);
-    }
-};
+namespace NYdb::inline Dev::NTopic::NTests {
 
 class BasicUsage : public TTopicTestFixture {};
 
-TEST_F(BasicUsage, ConnectToYDB) {
+TEST_F(BasicUsage, TEST_NAME(ConnectToYDB)) {
     auto cfg = NYdb::TDriverConfig()
         .SetEndpoint("invalid:2136")
         .SetDatabase("/Invalid")
@@ -245,7 +57,7 @@ TEST_F(BasicUsage, ConnectToYDB) {
 
         auto writeSettings = TWriteSessionSettings()
             .Path(GetTopicPath())
-            .MessageGroupId("test-message_group_id")
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             // TODO why retries? see LOGBROKER-8490
             .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
         auto writeSession = client.CreateWriteSession(writeSettings);
@@ -263,7 +75,7 @@ TEST_F(BasicUsage, ConnectToYDB) {
 
         auto writeSettings = TWriteSessionSettings()
             .Path(GetTopicPath())
-            .MessageGroupId("test-message_group_id")
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
         auto writeSession = client.CreateWriteSession(writeSettings);
 
@@ -272,7 +84,7 @@ TEST_F(BasicUsage, ConnectToYDB) {
     }
 }
 
-TEST_F(BasicUsage, WriteRead) {
+TEST_F(BasicUsage, TEST_NAME(WriteRead)) {
     auto driver = MakeDriver();
 
     TTopicClient client(driver);
@@ -280,8 +92,8 @@ TEST_F(BasicUsage, WriteRead) {
     for (size_t i = 0; i < 100; ++i) {
         auto writeSettings = TWriteSessionSettings()
                     .Path(GetTopicPath())
-                    .ProducerId("test-message_group_id")
-                    .MessageGroupId("test-message_group_id");
+                    .ProducerId(TEST_MESSAGE_GROUP_ID)
+                    .MessageGroupId(TEST_MESSAGE_GROUP_ID);
         std::cerr << ">>> open write session " << i << std::endl;
         auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
         ASSERT_TRUE(writeSession->Write("message_using_MessageGroupId"));
@@ -292,7 +104,7 @@ TEST_F(BasicUsage, WriteRead) {
     {
         auto writeSettings = TWriteSessionSettings()
                     .Path(GetTopicPath())
-                    .ProducerId("test-message_group_id")
+                    .ProducerId(TEST_MESSAGE_GROUP_ID)
                     .PartitionId(0);
         std::cerr << ">>> open write session 100" << std::endl;
         auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
@@ -304,7 +116,7 @@ TEST_F(BasicUsage, WriteRead) {
 
     {
         auto readSettings = TReadSessionSettings()
-            .ConsumerName("test-consumer")
+            .ConsumerName(GetConsumerName())
             .AppendTopics(GetTopicPath())
             // .DirectRead(EnableDirectRead)
             ;
@@ -329,20 +141,20 @@ TEST_F(BasicUsage, WriteRead) {
     }
 }
 
-TEST_F(BasicUsage, MaxByteSizeEqualZero) {
+TEST_F(BasicUsage, TEST_NAME(MaxByteSizeEqualZero)) {
     auto driver = MakeDriver();
 
     TTopicClient client(driver);
 
     auto writeSettings = TWriteSessionSettings()
         .Path(GetTopicPath())
-        .MessageGroupId("test-message_group_id");
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID);
     auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
     ASSERT_TRUE(writeSession->Write("message"));
     writeSession->Close();
 
     auto readSettings = TReadSessionSettings()
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .AppendTopics(GetTopicPath())
         // .DirectRead(EnableDirectRead)
         ;
@@ -364,13 +176,13 @@ TEST_F(BasicUsage, MaxByteSizeEqualZero) {
     dataReceived.Commit();
 }
 
-TEST_F(BasicUsage, WriteAndReadSomeMessagesWithSyncCompression) {
+TEST_F(BasicUsage, TEST_NAME(WriteAndReadSomeMessagesWithSyncCompression)) {
     auto driver = MakeDriver();
 
     IExecutor::TPtr executor = new TSyncExecutor();
     auto writeSettings = NPersQueue::TWriteSessionSettings()
         .Path(GetTopicPath())
-        .MessageGroupId("test-message_group_id")
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID)
         .Codec(NPersQueue::ECodec::RAW)
         .CompressionExecutor(executor);
 
@@ -412,7 +224,7 @@ TEST_F(BasicUsage, WriteAndReadSomeMessagesWithSyncCompression) {
     // Create read session.
     TReadSessionSettings readSettings;
     readSettings
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .MaxMemoryUsageBytes(1_MB)
         .AppendTopics(GetTopicPath())
         // .DirectRead(EnableDirectRead)
@@ -446,11 +258,11 @@ TEST_F(BasicUsage, WriteAndReadSomeMessagesWithSyncCompression) {
     ReadSession->Close(TDuration::MilliSeconds(10));
     check.store(0);
 
-    auto status = topicClient.CommitOffset(GetTopicPath(), 0, "test-consumer", 50);
+    auto status = topicClient.CommitOffset(GetTopicPath(), 0, GetConsumerName(), 50);
     ASSERT_TRUE(status.GetValueSync().IsSuccess());
 
     auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-    auto result = topicClient.DescribeConsumer(GetTopicPath(), "test-consumer", describeConsumerSettings).GetValueSync();
+    auto result = topicClient.DescribeConsumer(GetTopicPath(), GetConsumerName(), describeConsumerSettings).GetValueSync();
     ASSERT_TRUE(result.IsSuccess());
 
     auto description = result.GetConsumerDescription();
@@ -460,7 +272,7 @@ TEST_F(BasicUsage, WriteAndReadSomeMessagesWithSyncCompression) {
     ASSERT_EQ(stats->GetCommittedOffset(), 50u);
 }
 
-TEST_F(BasicUsage, SessionNotDestroyedWhileCompressionInFlight) {
+TEST_F(BasicUsage, TEST_NAME(SessionNotDestroyedWhileCompressionInFlight)) {
     auto driver = MakeDriver();
 
     // controlled executor
@@ -477,14 +289,14 @@ TEST_F(BasicUsage, SessionNotDestroyedWhileCompressionInFlight) {
 
     TWriteSessionSettings writeSettings;
     writeSettings.Path(GetTopicPath())
-                    .MessageGroupId("test-message_group_id")
-                    .ProducerId("test-message_group_id")
+                    .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+                    .ProducerId(TEST_MESSAGE_GROUP_ID)
                     .CompressionExecutor(stepByStepExecutor);
 
     // Create read session.
     TReadSessionSettings readSettings;
     readSettings
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .MaxMemoryUsageBytes(1_MB)
         .AppendTopics(GetTopicPath())
         .DecompressionExecutor(stepByStepExecutor)
@@ -570,7 +382,7 @@ TEST_F(BasicUsage, SessionNotDestroyedWhileCompressionInFlight) {
     std::cerr << ">>> TEST: gracefully closed" << std::endl;
 }
 
-TEST_F(BasicUsage, SessionNotDestroyedWhileUserEventHandlingInFlight) {
+TEST_F(BasicUsage, TEST_NAME(SessionNotDestroyedWhileUserEventHandlingInFlight)) {
     auto driver = MakeDriver();
 
     // controlled executor
@@ -587,8 +399,8 @@ TEST_F(BasicUsage, SessionNotDestroyedWhileUserEventHandlingInFlight) {
 
     auto writeSettings = TWriteSessionSettings()
         .Path(GetTopicPath())
-        .MessageGroupId("test-message_group_id")
-        .ProducerId("test-message_group_id");
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+        .ProducerId(TEST_MESSAGE_GROUP_ID);
 
     auto writeSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
     std::string message(2'000, 'x');
@@ -601,7 +413,7 @@ TEST_F(BasicUsage, SessionNotDestroyedWhileUserEventHandlingInFlight) {
 
     // Create read session.
     auto readSettings = TReadSessionSettings()
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .MaxMemoryUsageBytes(1_MB)
         .AppendTopics(GetTopicPath())
         // .DirectRead(EnableDirectRead)
@@ -702,11 +514,11 @@ TEST_F(BasicUsage, SessionNotDestroyedWhileUserEventHandlingInFlight) {
     std::cerr << ">>> TEST: gracefully closed" << std::endl;
 }
 
-TEST_F(BasicUsage, ReadSessionCorrectClose) {
+TEST_F(BasicUsage, TEST_NAME(ReadSessionCorrectClose)) {
     auto driver = MakeDriver();
 
     NPersQueue::TWriteSessionSettings writeSettings;
-    writeSettings.Path(GetTopicPath()).MessageGroupId("src_id");
+    writeSettings.Path(GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
     writeSettings.Codec(NPersQueue::ECodec::RAW);
     IExecutor::TPtr executor = new TSyncExecutor();
     writeSettings.CompressionExecutor(executor);
@@ -731,7 +543,7 @@ TEST_F(BasicUsage, ReadSessionCorrectClose) {
     // Create read session.
     NYdb::NTopic::TReadSessionSettings readSettings;
     readSettings
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .MaxMemoryUsageBytes(1_MB)
         .Decompress(false)
         .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy())
@@ -759,7 +571,7 @@ TEST_F(BasicUsage, ReadSessionCorrectClose) {
     std::this_thread::sleep_for(std::chrono::seconds(5));
 }
 
-TEST_F(BasicUsage, ConfirmPartitionSessionWithCommitOffset) {
+TEST_F(BasicUsage, TEST_NAME(ConfirmPartitionSessionWithCommitOffset)) {
     // TStartPartitionSessionEvent::Confirm(readOffset, commitOffset) should work,
     // if commitOffset passed to Confirm is greater than the offset committed previously by the consumer.
     // https://st.yandex-team.ru/KIKIMR-23015
@@ -770,8 +582,8 @@ TEST_F(BasicUsage, ConfirmPartitionSessionWithCommitOffset) {
         // Write 2 messages:
         auto settings = NTopic::TWriteSessionSettings()
             .Path(GetTopicPath())
-            .MessageGroupId("test-message_group_id")
-            .ProducerId("test-message_group_id");
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .ProducerId(TEST_MESSAGE_GROUP_ID);
         TTopicClient client(driver);
         auto writer = client.CreateSimpleBlockingWriteSession(settings);
         writer->Write("message");
@@ -782,7 +594,7 @@ TEST_F(BasicUsage, ConfirmPartitionSessionWithCommitOffset) {
     {
         // Read messages:
         auto settings = NTopic::TReadSessionSettings()
-            .ConsumerName("test-consumer")
+            .ConsumerName(GetConsumerName())
             .AppendTopics(GetTopicPath())
             // .DirectRead(EnableDirectRead)
             ;
@@ -819,7 +631,7 @@ TEST_F(BasicUsage, ConfirmPartitionSessionWithCommitOffset) {
     }
 }
 
-TEST_F(BasicUsage, TWriteSession_WriteEncoded) {
+TEST_F(BasicUsage, TEST_NAME(TWriteSession_WriteEncoded)) {
     // This test was adapted from ydb_persqueue tests.
     // It writes 4 messages: 2 with default codec, 1 with explicitly set GZIP codec, 1 with RAW codec.
     // The last message MUST be sent in a separate WriteRequest, as it has a codec field applied for all messages in the request.
@@ -831,7 +643,7 @@ TEST_F(BasicUsage, TWriteSession_WriteEncoded) {
 
     auto settings = TWriteSessionSettings()
         .Path(GetTopicPath())
-        .MessageGroupId("test-message_group_id");
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID);
 
     size_t batchSize = 100000000;
     settings.BatchFlushInterval(TDuration::Seconds(1000)); // Batch on size, not on time.
@@ -890,7 +702,7 @@ TEST_F(BasicUsage, TWriteSession_WriteEncoded) {
     ASSERT_EQ(tokens, 2u);
 
     auto readSettings = TReadSessionSettings()
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .AppendTopics(GetTopicPath())
         // .DirectRead(EnableDirectRead)
         ;
@@ -945,7 +757,7 @@ namespace {
 
 class TSettingsValidation : public TTopicTestFixture {};
 
-TEST_F(TSettingsValidation, TestDifferentDedupParams) {
+TEST_F(TSettingsValidation, TEST_NAME(TestDifferentDedupParams)) {
     char* ydbVersion = std::getenv("YDB_VERSION");
     if (ydbVersion != nullptr && std::string(ydbVersion) != "trunk" && std::string(ydbVersion) < "24.3") {
         GTEST_SKIP() << "Skipping test for YDB version " << ydbVersion;
@@ -1062,13 +874,13 @@ TEST_F(TSettingsValidation, TestDifferentDedupParams) {
     runTest({}, "msgGroup", {}, false, EExpectedTestResult::SUCCESS);
 }
 
-TEST_F(TSettingsValidation, ValidateSettingsFailOnStart) {
+TEST_F(TSettingsValidation, TEST_NAME(ValidateSettingsFailOnStart)) {
     auto driver = MakeDriver();
 
     TTopicClient client(driver);
 
     auto readSettings = TReadSessionSettings()
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .MaxMemoryUsageBytes(0)
         .AppendTopics(GetTopicPath())
         // .DirectRead(EnableDirectRead)

@@ -20,21 +20,6 @@ namespace {
         NYql::TExprNode::TPtr MoveTable = nullptr;
     };
 
-    bool IsOlap(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
-        if (!tableSettings) {
-            return false;
-        }
-        for (const auto& field : tableSettings.Cast()) {
-            if (field.Name().Value() == "storeType") {
-                YQL_ENSURE(field.Value().Maybe<NYql::NNodes::TCoAtom>());
-                if (field.Value().Cast<NYql::NNodes::TCoAtom>().StringValue() == "COLUMN") {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     bool IsCreateTableAs(
             NYql::TExprNode::TPtr root,
             NYql::TExprContext& exprCtx) {
@@ -98,6 +83,7 @@ namespace {
             NYql::TExprContext& exprCtx,
             NYql::TTypeAnnotationContext& typeCtx,
             const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+            const NMiniKQL::IFunctionRegistry& funcRegistry,
             const TString& cluster) {
         NYql::NNodes::TExprBase expr(root);
         auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
@@ -135,9 +121,10 @@ namespace {
 
         auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
             .AddServiceTransformers()
+            .AddExpressionEvaluation(funcRegistry)
             .AddPreTypeAnnotation()
             .AddIOAnnotation()
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
+            .AddTypeAnnotationTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
             .Build(false);
 
         return TPrepareRewriteInfo{
@@ -185,8 +172,6 @@ namespace {
         const auto& insertData = writeArgs.Get(3);
         YQL_ENSURE(insertData.Ptr()->Content() != "Void");
 
-        const bool isOlap = IsOlap(settings.TableSettings);
-
         const auto pos = insertData.Ref().Pos();
 
         auto type = insertDataPtr->GetTypeAnn();
@@ -215,21 +200,8 @@ namespace {
             const auto name = item->GetName();
             auto currentType = item->GetItemType();
 
-            // All CTAS columns are created as nullable columns. Exception: primary keys for OLAP table.
-            const bool notNull = primariKeyColumns.contains(name) && isOlap;
-
-            if (notNull && currentType->GetKind() == NYql::ETypeAnnotationKind::Optional) {
-                exprCtx.AddError(NYql::TIssue(
-                    exprCtx.GetPosition(pos),
-                    TStringBuilder() << "Can't create column table with nullable primary key column `" << name << "`."));
-                return std::nullopt;
-            }
-
+            const bool notNull = (currentType->GetKind() != NYql::ETypeAnnotationKind::Optional);
             auto typeNode = NYql::ExpandType(pos, *currentType, exprCtx);
-
-            if (!notNull && currentType->GetKind() != NYql::ETypeAnnotationKind::Optional) {
-                typeNode = exprCtx.NewCallable(pos, "AsOptionalType", { typeNode });
-            }
 
             columnNodes.push_back(exprCtx.NewList(pos, {
                 exprCtx.NewAtom(pos, name),
@@ -254,16 +226,12 @@ namespace {
             return std::nullopt;
         }
 
-        const bool isAtomicOperation = !isOlap;
-
         const TString tmpTableName = TStringBuilder()
             << tableName
             << "_cas_"
             << TAppData::RandomProvider->GenRand();
 
-        const TString createTableName = !isAtomicOperation
-            ? tableName
-            : (TStringBuilder()
+        const TString createTableName = (TStringBuilder()
                 << CanonizePath(AppData()->TenantName)
                 << "/.tmp/sessions/"
                 << sessionCtx->GetSessionId()
@@ -271,16 +239,16 @@ namespace {
 
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
 
-        if (isAtomicOperation) {
-            std::vector<NYql::TExprNodePtr> settingsNodes;
-            for (size_t index = 0; index < create->Child(4)->ChildrenSize(); ++index) {
-                settingsNodes.push_back(create->Child(4)->ChildPtr(index));
-            }
-            settingsNodes.push_back(
-                exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
-            create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
-            create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, tmpTableName));
+        std::vector<NYql::TExprNodePtr> settingsNodes;
+        for (size_t index = 0; index < create->Child(4)->ChildrenSize(); ++index) {
+            settingsNodes.push_back(create->Child(4)->ChildPtr(index));
         }
+        settingsNodes.push_back(
+            exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "temporary")}));
+        settingsNodes.push_back(
+            exprCtx.NewList(pos, {exprCtx.NewAtom(pos, "ctas")}));
+        create = exprCtx.ReplaceNode(std::move(create), *create->Child(4), exprCtx.NewList(pos, std::move(settingsNodes)));
+        create = exprCtx.ReplaceNode(std::move(create), *tableNameNode, exprCtx.NewAtom(pos, tmpTableName));
 
         NYql::TNodeOnNodeOwnedMap deepClones;
         auto insertDataCopy = exprCtx.DeepCopy(insertData.Ref(), exprCtx, deepClones, false, false);
@@ -336,39 +304,37 @@ namespace {
             }),
         });
 
-        if (isAtomicOperation) {
-            result.MoveTable = exprCtx.NewCallable(pos, "Write!", {
-                exprCtx.NewWorld(pos),
-                exprCtx.NewCallable(pos, "DataSink", {
-                    exprCtx.NewAtom(pos, "kikimr"),
-                    exprCtx.NewAtom(pos, "db"),
-                }),
-                exprCtx.NewCallable(pos, "Key", {
-                    exprCtx.NewList(pos, {
-                        exprCtx.NewAtom(pos, "tablescheme"),
-                        exprCtx.NewCallable(pos, "String", {
-                            exprCtx.NewAtom(pos, createTableName),
-                        }),
-                    }),
-                }),
-                exprCtx.NewCallable(pos, "Void", {}),
+        result.MoveTable = exprCtx.NewCallable(pos, "Write!", {
+            exprCtx.NewWorld(pos),
+            exprCtx.NewCallable(pos, "DataSink", {
+                exprCtx.NewAtom(pos, "kikimr"),
+                exprCtx.NewAtom(pos, "db"),
+            }),
+            exprCtx.NewCallable(pos, "Key", {
                 exprCtx.NewList(pos, {
-                    exprCtx.NewList(pos, {
-                        exprCtx.NewAtom(pos, "mode"),
-                        exprCtx.NewAtom(pos, "alter"),
+                    exprCtx.NewAtom(pos, "tablescheme"),
+                    exprCtx.NewCallable(pos, "String", {
+                        exprCtx.NewAtom(pos, createTableName),
                     }),
+                }),
+            }),
+            exprCtx.NewCallable(pos, "Void", {}),
+            exprCtx.NewList(pos, {
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "mode"),
+                    exprCtx.NewAtom(pos, "alter"),
+                }),
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "actions"),
                     exprCtx.NewList(pos, {
-                        exprCtx.NewAtom(pos, "actions"),
                         exprCtx.NewList(pos, {
-                            exprCtx.NewList(pos, {
-                                exprCtx.NewAtom(pos, "renameTo"),
-                                exprCtx.NewAtom(pos, tableName),
-                            }),
+                            exprCtx.NewAtom(pos, "renameTo"),
+                            exprCtx.NewAtom(pos, tableName),
                         }),
                     }),
                 }),
-            });
-        }
+            }),
+        });
 
         return result;
     }
@@ -428,6 +394,7 @@ TPrepareRewriteInfo PrepareRewrite(
         NYql::TExprContext& exprCtx,
         NYql::TTypeAnnotationContext& typeCtx,
         const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+        const NMiniKQL::IFunctionRegistry& funcRegistry,
         const TString& cluster) {
     // CREATE TABLE AS statement can be used only with perstatement execution.
     // Thus we assume that there is only one such statement. (it was checked in CheckRewrite)
@@ -440,7 +407,7 @@ TPrepareRewriteInfo PrepareRewrite(
     });
     YQL_ENSURE(createTableAsNode);
 
-    return PrepareCreateTableAs(createTableAsNode, exprCtx, typeCtx, sessionCtx, cluster);
+    return PrepareCreateTableAs(createTableAsNode, exprCtx, typeCtx, sessionCtx, funcRegistry, cluster);
 }
 
 TVector<NYql::TExprNode::TPtr> RewriteExpression(

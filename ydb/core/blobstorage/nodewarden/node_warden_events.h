@@ -13,7 +13,7 @@ namespace NKikimr::NStorage {
         TEvNodeConfigPush() = default;
 
         bool IsUseful() const {
-            return Record.BoundNodesSize() || Record.DeletedBoundNodeIdsSize();
+            return Record.BoundNodesSize() || Record.DeletedBoundNodeIdsSize() || Record.HasCacheUpdate();
         }
     };
 
@@ -66,6 +66,19 @@ namespace NKikimr::NStorage {
         : TEventLocal<TEvNodeWardenQueryBaseConfig, TEvBlobStorage::EvNodeWardenQueryBaseConfig>
     {};
 
+    struct TEvNodeWardenNotifyConfigMismatch
+        : TEventLocal<TEvNodeWardenNotifyConfigMismatch, TEvBlobStorage::EvNodeWardenNotifyConfigMismatch> {
+        ui32 NodeId;
+        ui64 ClusterStateGeneration;
+        ui64 ClusterStateGuid;
+
+        TEvNodeWardenNotifyConfigMismatch(ui32 nodeId, ui64 clusterStateGeneration, ui64 clusterStateGuid)
+            : NodeId(nodeId)
+            , ClusterStateGeneration(clusterStateGeneration)
+            , ClusterStateGuid(clusterStateGuid)
+        {}
+    };
+
     struct TEvNodeWardenBaseConfig
         : TEventLocal<TEvNodeWardenBaseConfig, TEvBlobStorage::EvNodeWardenBaseConfig>
     {
@@ -115,6 +128,72 @@ namespace NKikimr::NStorage {
             : Guid(guid)
             , Outcome(outcome)
         {}
+    };
+
+    struct TEvNodeWardenUpdateCache : TEventLocal<TEvNodeWardenUpdateCache, TEvBlobStorage::EvNodeWardenUpdateCache> {
+        NKikimrBlobStorage::TCacheUpdate CacheUpdate;
+
+        TEvNodeWardenUpdateCache(NKikimrBlobStorage::TCacheUpdate&& cacheUpdate)
+            : CacheUpdate(std::move(cacheUpdate))
+        {}
+    };
+
+    struct TEvNodeWardenQueryCache : TEventLocal<TEvNodeWardenQueryCache, TEvBlobStorage::EvNodeWardenQueryCache> {
+        TString Key;
+        bool Subscribe;
+
+        TEvNodeWardenQueryCache(TString key, bool subscribe)
+            : Key(std::move(key))
+            , Subscribe(subscribe)
+        {}
+    };
+
+    struct TEvNodeWardenQueryCacheResult : TEventLocal<TEvNodeWardenQueryCacheResult, TEvBlobStorage::EvNodeWardenQueryCacheResult> {
+        TString Key;
+        std::optional<std::tuple<ui32, TString>> GenerationValue;
+
+        TEvNodeWardenQueryCacheResult(TString key, std::optional<std::tuple<ui32, TString>> generationValue)
+            : Key(std::move(key))
+            , GenerationValue(std::move(generationValue))
+        {}
+    };
+
+    struct TEvNodeWardenUnsubscribeFromCache : TEventLocal<TEvNodeWardenUnsubscribeFromCache, TEvBlobStorage::EvNodeWardenUnsubscribeFromCache> {
+        TString Key;
+
+        TEvNodeWardenUnsubscribeFromCache(TString key)
+            : Key(std::move(key))
+        {}
+    };
+
+    struct TEvNodeWardenUpdateConfigFromPeer
+        : TEventLocal<TEvNodeWardenUpdateConfigFromPeer, TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer>
+    {
+        NKikimrBlobStorage::TStorageConfig Config;
+
+        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig config)
+            : Config(std::move(config))
+        {}
+    };
+
+    struct TEvNodeWardenNotifySyncerFinished
+        : TEventLocal<TEvNodeWardenNotifySyncerFinished, TEvBlobStorage::EvNodeWardenNotifySyncerFinished>
+    {
+        const TGroupId BridgeProxyGroupId;
+        const ui32 BridgeProxyGroupGeneration;
+        const TGroupId SourceGroupId;
+        const TGroupId TargetGroupId;
+        std::optional<TString> ErrorReason;
+
+        TEvNodeWardenNotifySyncerFinished(TGroupId bridgeProxyGroupId, ui32 bridgeProxyGroupGeneration,
+                TGroupId sourceGroupId, TGroupId targetGroupId, std::optional<TString> errorReason)
+            : BridgeProxyGroupId(bridgeProxyGroupId)
+            , BridgeProxyGroupGeneration(bridgeProxyGroupGeneration)
+            , SourceGroupId(sourceGroupId)
+            , TargetGroupId(targetGroupId)
+            , ErrorReason(errorReason)
+        {}
+
     };
 
 } // NKikimr::NStorage

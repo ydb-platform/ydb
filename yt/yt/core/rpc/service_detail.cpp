@@ -377,7 +377,9 @@ public:
     {
         if (!Replied_) {
             // Prevent alerting.
-            RequestInfoSet_ = true;
+            SuppressMissingRequestInfoCheck();
+
+            TCurrentTraceContextGuard guard(TraceContext_);
             if (CanceledList_.IsFired()) {
                 if (TimedOutLatch_) {
                     Reply(TError(NYT::EErrorCode::Timeout, "Request timed out"));
@@ -430,6 +432,7 @@ public:
     void CheckAndRun(const TErrorOr<TLiteHandler>& handlerOrError)
     {
         if (!handlerOrError.IsOK()) {
+            TCurrentTraceContextGuard guard(TraceContext_);
             Reply(TError(handlerOrError));
             return;
         }
@@ -1003,7 +1006,7 @@ private:
             if (auto timeout = GetTimeout()) {
                 auto timeoutCookie = TDelayedExecutor::Submit(
                     BIND([replySent] {
-                        replySent.Cancel(TError());
+                        replySent.Cancel(TError(NYT::EErrorCode::Timeout, "Request timed out"));
                     }),
                     ArriveInstant_ + *timeout);
 
@@ -1134,6 +1137,8 @@ private:
             }
         }
         YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->RequestLoggingAnchor, logMessage);
+
+        RequestInfoState_ = ERequestInfoState::Flushed;
     }
 
     void LogResponse() override
@@ -2282,7 +2287,7 @@ bool TServiceBase::TryCancelQueuedReply(TRequestId requestId)
     }
 
     if (queuedReply) {
-        queuedReply.Cancel(TError());
+        queuedReply.Cancel(TError(NYT::EErrorCode::Canceled, "Request canceled"));
         return true;
     } else {
         return false;

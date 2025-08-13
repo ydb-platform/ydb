@@ -33,6 +33,7 @@ struct TNodeLocation {
     std::optional<uint32_t> BodyNum;
     std::optional<uint32_t> Body;
 
+    std::optional<std::string> BridgePileName;
     std::optional<std::string> DataCenter;
     std::optional<std::string> Module;
     std::optional<std::string> Rack;

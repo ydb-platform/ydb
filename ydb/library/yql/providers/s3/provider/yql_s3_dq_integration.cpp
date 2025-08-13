@@ -239,9 +239,15 @@ public:
         }
     }
 
-    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& ) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
         if (const auto& maybeS3ReadObject = TMaybeNode<TS3ReadObject>(read)) {
             const auto& s3ReadObject = maybeS3ReadObject.Cast();
+
+            if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
+                ctx.AddError(TIssue(ctx.GetPosition(s3ReadObject.Pos()), "Cannot use watermarks in S3"));
+                return {};
+            }
+
             YQL_ENSURE(s3ReadObject.Ref().GetTypeAnn(), "No type annotation for node " << s3ReadObject.Ref().Content());
 
             const auto rowType = s3ReadObject.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
@@ -367,7 +373,7 @@ public:
         return read;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxPartitions, TExprContext&) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxPartitions, TExprContext& ctx) override {
         const TDqSource source(&node);
         if (const auto maySettings = source.Settings().Maybe<TS3SourceSettingsBase>()) {
             const auto settings = maySettings.Cast();
@@ -405,7 +411,7 @@ public:
 
                 if (auto predicate = parseSettings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
                     TStringBuilder err;
-                    if (!SerializeFilterPredicate(predicate, srcDesc.mutable_predicate(), err)) {
+                    if (!SerializeFilterPredicate(ctx, predicate, srcDesc.mutable_predicate(), err)) {
                         ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
                     }
                 }
@@ -527,6 +533,7 @@ public:
                     readLimit = FromString<ui64>(sizeLimitIter->second);
                 }
 
+                YQL_ENSURE(NActors::TlsActivationContext, "s3.RuntimeListing incompatible with service"); // TODO: move actor creation elsewhere
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                     NDq::CreateS3FileQueueActor(
                         0ul,

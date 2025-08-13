@@ -1,4 +1,5 @@
 #include "common_queries.h"
+#include "constants.h"
 #include "log.h"
 #include "transactions.h"
 
@@ -64,11 +65,11 @@ TAsyncExecuteQueryResult GetCustomerById(
         SELECT C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
                C_CITY, C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM,
                C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
-          FROM `customer`
+          FROM `{}`
          WHERE C_W_ID = $c_w_id
            AND C_D_ID = $c_d_id
            AND C_ID = $c_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_CUSTOMER);
 
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()
@@ -108,12 +109,12 @@ TAsyncExecuteQueryResult GetCustomersByLastName(
         SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
                C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
                C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
-          FROM `customer` VIEW idx_customer_name AS idx
+          FROM `{}` VIEW `{}` AS idx
          WHERE idx.C_W_ID = $c_w_id
            AND idx.C_D_ID = $c_d_id
            AND idx.C_LAST = $c_last
          ORDER BY idx.C_FIRST;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_CUSTOMER, INDEX_CUSTOMER_NAME);
 
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()

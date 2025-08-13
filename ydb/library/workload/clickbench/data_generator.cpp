@@ -15,7 +15,8 @@ void TClickbenchWorkloadDataInitializerGenerator::ConfigureOpts(NLastGetopt::TOp
     opts.AddLongOption('i', "input",
         "File or Directory with clickbench dataset. If directory is set, all its available files will be used."
         "Now supported zipped and unzipped csv and tsv files, that may be downloaded here:  https://datasets.clickhouse.com/hits_compatible/hits.csv.gz, "
-        "https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz. "
+        "https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz and parquet one: https://datasets.clickhouse.com/hits_compatible/hits.csv.gz, "
+        "https://datasets.clickhouse.com/hits_compatible/hits.parquet. "
         "For better perfomanse you may split it to some parts for parrallel upload."
         ).StoreResult(&DataFiles);
 }
@@ -35,7 +36,7 @@ TBulkDataGeneratorList TClickbenchWorkloadDataInitializerGenerator::DoGetBulkIni
     for (const auto& c: columns) {
         header.emplace_back(c["name"].GetString());
     }
-    return {std::make_shared<TDataGenerator>(*this, "hits", DataSetSize, "", DataFiles, header)};
+    return {std::make_shared<TDataGenerator>(*this, "hits", DataSetSize, "", DataFiles, header, TDataGenerator::EPortionSizeUnit::Line)};
 }
 
 }

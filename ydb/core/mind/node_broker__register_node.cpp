@@ -16,6 +16,7 @@ public:
         , Event(resolvedEv->Get()->Request)
         , ScopeId(resolvedEv->Get()->ScopeId)
         , ServicedSubDomain(resolvedEv->Get()->ServicedSubDomain)
+        , ResolveError(std::move(resolvedEv->Get()->Error))
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
@@ -84,6 +85,10 @@ public:
 
         Response = new TEvNodeBroker::TEvRegistrationResponse;
 
+        if (ResolveError) {
+            return Error(TStatus::WRONG_REQUEST, TStringBuilder() << ResolveError << " for " << host << ':' << port, ctx);
+        }
+
         if (rec.HasPath() && ScopeId == NActors::TScopeId()) {
             return Error(TStatus::ERROR,
                          TStringBuilder() << "Failed to resolve the database by its path. Perhaps the database " << rec.GetPath() << " does not exist",
@@ -102,18 +107,24 @@ public:
             auto &node = Self->Dirty.Nodes.find(it->second)->second;
             NodeId = node.NodeId;
 
-            if (node.Address != rec.GetAddress()
-                || node.ResolveHost != rec.GetResolveHost())
-                return Error(TStatus::WRONG_REQUEST,
-                             TStringBuilder() << "Another address is registered for "
-                             << host << ":" << port,
-                             ctx);
+            if (node.Address != rec.GetAddress() || node.ResolveHost != rec.GetResolveHost()) {
+                auto errorText = TStringBuilder() << "Another address is registered for " << host << ":" << port
+                    << ", expected (address, resolve host) = (" << node.Address << ", " << node.ResolveHost << ")"
+                    << ", got (address, resolve host) = (" << rec.GetAddress() << ", " << rec.GetResolveHost() << ")";
+
+                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, errorText);
+                return Error(TStatus::WRONG_REQUEST, errorText, ctx);
+            }
 
             if (node.Location != loc && node.Location != TNodeLocation()) {
-                return Error(TStatus::WRONG_REQUEST,
-                             TStringBuilder() << "Another location is registered for "
-                             << host << ":" << port,
-                             ctx);
+                auto errorText = TStringBuilder() << "Another location is registered for " << host << ":" << port
+                    << ", expected = " << node.Location.ToString()
+                    << ", got = " << loc.ToString();
+
+                LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, errorText);
+                return Error(TStatus::WRONG_REQUEST, errorText, ctx);
+            } else if (node.Location.GetBridgePileName() != loc.GetBridgePileName()) {
+                return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);
             } else if (node.Location != loc) {
                 Self->Dirty.UpdateLocation(node, loc);
                 Self->Dirty.DbAddNode(node, txc);
@@ -226,12 +237,15 @@ public:
         }
 
         Reply(ctx);
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:
     TEvNodeBroker::TEvRegistrationRequest::TPtr Event;
     const NActors::TScopeId ScopeId;
     const TSubDomainKey ServicedSubDomain;
+    TString ResolveError;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;
     ui32 NodeId;

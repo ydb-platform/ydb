@@ -107,6 +107,10 @@ bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
     return std::find(AllowedDataCenters.begin(), AllowedDataCenters.end(), dc) != AllowedDataCenters.end();
 }
 
+bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
+    return Hive->IsAllowedPile(pile);
+}
+
 template <typename K, typename V>
 std::unordered_map<V, K> MakeReverseMap(const std::unordered_map<K, V>& map) {
     std::unordered_map<V, K> result;

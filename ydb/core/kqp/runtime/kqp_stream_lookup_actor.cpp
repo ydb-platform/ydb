@@ -39,6 +39,7 @@ public:
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , AllowInconsistentReads(settings.GetAllowInconsistentReads())
         , UseFollowers(settings.GetAllowUseFollowers())
+        , IsTableImmutable(settings.GetIsTableImmutable())
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
@@ -152,14 +153,13 @@ private:
         const ui64 Id;
         const ui64 ShardId;
         EReadState State;
-        TMaybe<TOwnedCellVec> LastProcessedKey;
-        ui32 FirstUnprocessedQuery = 0;
         ui64 LastSeqNo = 0;
     };
 
     struct TShardState {
         ui64 RetryAttempts = 0;
         std::unordered_set<ui64> Reads;
+        bool HasPipe = false;
     };
 
     struct TReads {
@@ -174,8 +174,8 @@ private:
             return Reads.find(readId);
         }
 
-        void insert(TReadState&& read) {
-            const auto [readIt, succeeded] = Reads.insert({read.Id, std::move(read)});
+        void insert(ui64 readId, TReadState&& read) {
+            const auto [readIt, succeeded] = Reads.insert({readId, std::move(read)});
             YQL_ENSURE(succeeded);
             ReadsPerShard[readIt->second.ShardId].Reads.emplace(readIt->second.Id);
         }
@@ -211,8 +211,11 @@ private:
 
         std::vector<TReadState*> GetShardReads(ui64 shardId) {
             auto it = ReadsPerShard.find(shardId);
-            YQL_ENSURE(it != ReadsPerShard.end());
             std::vector<TReadState*> result;
+            if (it == ReadsPerShard.end()) {
+                return result;
+            }
+
             for(ui64 readId: it->second.Reads) {
                 auto it = Reads.find(readId);
                 YQL_ENSURE(it != Reads.end());
@@ -220,6 +223,18 @@ private:
             }
 
             return result;
+        }
+
+        bool NeedToCreatePipe(ui64 shardId) {
+            return !ReadsPerShard[shardId].HasPipe;
+        }
+
+        void SetPipeCreated(ui64 shardId) {
+            ReadsPerShard[shardId].HasPipe = true;
+        }
+
+        void SetPipeDestroyed(ui64 shardId) {
+            ReadsPerShard[shardId].HasPipe = false;
         }
     };
 
@@ -280,6 +295,11 @@ private:
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
+
+        if (ResolveShardsInProgress) {
+            finished = false;
+            return 0;
+        }
 
         auto replyResultStats = StreamLookupWorker->ReplyResult(batch, freeSpace);
         ReadRowsCount += replyResultStats.ReadRowsCount;
@@ -346,8 +366,11 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        ResoleShardsInProgress = false;
         CA_LOG_D("TEvResolveKeySetResult was received for table: " << StreamLookupWorker->GetTablePath());
+        if (!ResolveShardsInProgress) {
+            return;
+        }
+        ResolveShardsInProgress = false;
         if (ev->Get()->Request->ErrorCount > 0) {
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: "
                 << StreamLookupWorker->GetTablePath();
@@ -363,6 +386,8 @@ private:
         Partitioning = resultSet[0].KeyDescription->Partitioning;
 
         ProcessInputRows();
+
+        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
@@ -409,7 +434,7 @@ private:
 
         if (UseFollowers) {
             YQL_ENSURE(Locks.empty());
-            if (!record.GetFinished()) {
+            if (!record.GetFinished() && !IsTableImmutable) {
                 RuntimeError("read from follower returned partial data.", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                 return;
             }
@@ -439,7 +464,7 @@ private:
                 break;
             case Ydb::StatusIds::NOT_FOUND:
             {
-                StreamLookupWorker->ResetRowsProcessing(read.Id, read.FirstUnprocessedQuery, read.LastProcessedKey);
+                StreamLookupWorker->ResetRowsProcessing(read.Id);
                 CA_LOG_D("NOT_FOUND was received from tablet: " << read.ShardId << ". "
                     << getIssues().ToOneLineString());
                 Reads.erase(read);
@@ -478,19 +503,6 @@ private:
         if (record.GetFinished()) {
             Reads.erase(read);
         } else {
-            YQL_ENSURE(record.HasContinuationToken(), "Successful TEvReadResult should contain continuation token");
-            NKikimrTxDataShard::TReadContinuationToken continuationToken;
-            bool parseResult = continuationToken.ParseFromString(record.GetContinuationToken());
-            YQL_ENSURE(parseResult, "Failed to parse continuation token");
-            read.FirstUnprocessedQuery = continuationToken.GetFirstUnprocessedQuery();
-
-            if (continuationToken.HasLastProcessedKey()) {
-                TSerializedCellVec lastKey(continuationToken.GetLastProcessedKey());
-                read.LastProcessedKey = TOwnedCellVec(lastKey.GetCells());
-            } else {
-                read.LastProcessedKey.Clear();
-            }
-
             Counters->SentIteratorAcks->Inc();
             THolder<TEvDataShard::TEvReadAck> request(new TEvDataShard::TEvReadAck());
             request->Record.SetReadId(record.GetReadId());
@@ -500,8 +512,17 @@ private:
             request->Record.SetMaxRows(defaultSettings.GetMaxRows());
             request->Record.SetMaxBytes(defaultSettings.GetMaxBytes());
 
-            Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), read.ShardId, true),
+            const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
+
+            Send(PipeCacheId,
+                new TEvPipeCache::TEvForward(
+                    request.Release(), read.ShardId, TEvPipeCache::TEvForwardOptions{
+                        .AutoConnect = needToCreatePipe,
+                        .Subscribe = needToCreatePipe,
+                    }),
                 IEventHandle::FlagTrackDelivery);
+
+            Reads.SetPipeCreated(read.ShardId);
 
             CA_LOG_D("TEvReadAck was sent to shard: " << read.ShardId);
 
@@ -524,6 +545,8 @@ private:
 
         const auto& tabletId = ev->Get()->TabletId;
 
+        Reads.SetPipeDestroyed(tabletId);
+
         TVector<TReadState*> toRetry;
         for (auto* read : Reads.GetShardReads(tabletId)) {
             if (read->State == EReadState::Running) {
@@ -544,21 +567,26 @@ private:
         if (!Partitioning) {
             LookupActorStateSpan.EndError("timeout exceeded");
             CA_LOG_D("Retry attempt to resolve shards for table: " << StreamLookupWorker->GetTablePath());
-            ResoleShardsInProgress = false;
+            ResolveShardsInProgress = false;
             ResolveTableShards();
         }
     }
 
     void Handle(TEvPrivate::TEvRetryRead::TPtr& ev) {
         auto readIt = Reads.find(ev->Get()->ReadId);
-        YQL_ENSURE(readIt != Reads.end(), "Unexpected readId: " << ev->Get()->ReadId);
+        if (readIt == Reads.end()) {
+            CA_LOG_D("received retry request for already finished/non-existing read, read_id: " << ev->Get()->ReadId);
+            return;
+        }
+
         auto& read = readIt->second;
 
         YQL_ENSURE(read.State != EReadState::Blocked || read.LastSeqNo <= ev->Get()->LastSeqNo);
 
         if ((read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) || read.State == EReadState::Blocked) {
             if (ev->Get()->InstantStart) {
-                auto requests = StreamLookupWorker->RebuildRequest(read.Id, read.FirstUnprocessedQuery, read.LastProcessedKey, ReadId);
+                auto guard = BindAllocator();
+                auto requests = StreamLookupWorker->RebuildRequest(read.Id, ReadId);
                 for (auto& request : requests) {
                     StartTableRead(read.ShardId, std::move(request));
                 }
@@ -628,14 +656,27 @@ private:
             << ", lockTxId=" << record.GetLockTxId()
             << ", lockNodeId=" << record.GetLockNodeId());
 
-        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), shardId, true),
-            IEventHandle::FlagTrackDelivery, 0, LookupActorSpan.GetTraceId());
+        const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
+
+        Send(PipeCacheId,
+            new TEvPipeCache::TEvForward(
+                request.Release(),
+                shardId,
+                TEvPipeCache::TEvForwardOptions{
+                    .AutoConnect = needToCreatePipe,
+                    .Subscribe = needToCreatePipe,
+                }),
+            IEventHandle::FlagTrackDelivery,
+            0,
+            LookupActorSpan.GetTraceId());
+
+        Reads.SetPipeCreated(read.ShardId);
 
         read.State = EReadState::Running;
 
         auto readId = read.Id;
         auto lastSeqNo = read.LastSeqNo;
-        Reads.insert(std::move(read));
+        Reads.insert(readId, std::move(read));
 
         if (auto delay = ShardTimeout()) {
             TlsActivationContext->Schedule(
@@ -660,14 +701,15 @@ private:
         ++TotalRetryAttempts;
 
         if (Reads.CheckShardRetriesExeeded(failedRead)) {
-            StreamLookupWorker->ResetRowsProcessing(failedRead.Id, failedRead.FirstUnprocessedQuery, failedRead.LastProcessedKey);
+            StreamLookupWorker->ResetRowsProcessing(failedRead.Id);
             Reads.erase(failedRead);
             return ResolveTableShards();
         }
 
         auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
         if (delay == TDuration::Zero()) {
-            auto requests = StreamLookupWorker->RebuildRequest(failedRead.Id, failedRead.FirstUnprocessedQuery, failedRead.LastProcessedKey, ReadId);
+            auto guard = BindAllocator();
+            auto requests = StreamLookupWorker->RebuildRequest(failedRead.Id, ReadId);
             for (auto& request : requests) {
                 StartTableRead(failedRead.ShardId, std::move(request));
             }
@@ -681,7 +723,7 @@ private:
     }
 
     void ResolveTableShards() {
-        if (ResoleShardsInProgress) {
+        if (ResolveShardsInProgress) {
             return;
         }
 
@@ -691,7 +733,7 @@ private:
         }
 
         CA_LOG_D("Resolve shards for table: " << StreamLookupWorker->GetTablePath());
-        ResoleShardsInProgress = true;
+        ResolveShardsInProgress = true;
 
         Partitioning.reset();
 
@@ -751,6 +793,7 @@ private:
     IKqpGateway::TKqpSnapshot Snapshot;
     const bool AllowInconsistentReads;
     const bool UseFollowers;
+    const bool IsTableImmutable;
     const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;
@@ -767,7 +810,7 @@ private:
     ui64 ReadId = 0;
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
-    bool ResoleShardsInProgress = false;
+    bool ResolveShardsInProgress = false;
 
     // stats
     ui64 ReadRowsCount = 0;

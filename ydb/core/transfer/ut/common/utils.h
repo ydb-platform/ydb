@@ -1,12 +1,14 @@
 #pragma once
 
+#include <util/string/join.h>
 #include <util/system/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
@@ -62,9 +64,59 @@ struct DateTimeChecker : public Checker<TInstant> {
     }
 };
 
+struct Timestamp64Checker : public Checker<TInstant> {
+    Timestamp64Checker(TInstant&& expected, TDuration&& precision)
+        : Checker<TInstant>(std::move(expected))
+        , Precision(precision) {
+    }
+
+    TInstant Get(const ::Ydb::Value& value) override {
+        return TInstant::MicroSeconds(value.uint64_value());
+    }
+
+    void Assert(const std::string& msg, const ::Ydb::Value& value) override {
+        auto v = Get(value);
+        if (Expected - Precision > v || Expected + Precision < v) {
+            UNIT_ASSERT_VALUES_EQUAL_C(v, Expected, msg);
+        }
+    }
+
+    TDuration Precision;
+};
+
+struct NullChecker : public IChecker {
+    bool Get(const ::Ydb::Value& value) {
+        return value.has_null_flag_value();
+    }
+
+    void Assert(const std::string& msg, const ::Ydb::Value& value) override {
+        UNIT_ASSERT_VALUES_EQUAL_C(Get(value), true, msg);
+    }
+};
+
 template<>
 inline bool Checker<bool>::Get(const ::Ydb::Value& value) {
     return value.bool_value();
+}
+
+template<>
+inline i8 Checker<i8>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i16 Checker<i16>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i32 Checker<i32>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i64 Checker<i64>::Get(const ::Ydb::Value& value) {
+    return value.int64_value();
 }
 
 template<>
@@ -105,11 +157,11 @@ std::pair<TString, std::shared_ptr<IChecker>> _C(std::string&& name, T&& expecte
     };
 }
 
-template<typename C, typename T>
-std::pair<TString, std::shared_ptr<IChecker>> _T(std::string&& name, T&& expected) {
+template<typename C, typename... T>
+std::pair<TString, std::shared_ptr<IChecker>> _T(std::string&& name, T&&... expected) {
     return {
         std::move(name),
-        std::make_shared<C>(std::move(expected))
+        std::make_shared<C>(std::forward<T>(expected)...)
     };
 }
 
@@ -119,6 +171,8 @@ struct TMessage {
     std::optional<std::string> ProducerId = std::nullopt;
     std::optional<std::string> MessageGroupId = std::nullopt;
     std::optional<ui64> SeqNo = std::nullopt;
+    std::optional<TInstant> CreateTimestamp = std::nullopt;
+    std::map<std::string, std::string> Attributes = {};
 };
 
 inline TMessage _withSeqNo(ui64 seqNo) {
@@ -151,6 +205,29 @@ inline TMessage _withMessageGroupId(const std::string& messageGroupId) {
     };
 }
 
+inline TMessage _withCreateTimestamp(const TInstant& timestamp) {
+    return {
+        .Message = TStringBuilder() << "Message-" << timestamp,
+        .Partition = 0,
+        .ProducerId = std::nullopt,
+        .MessageGroupId = std::nullopt,
+        .SeqNo = std::nullopt,
+        .CreateTimestamp = timestamp
+    };
+}
+
+inline TMessage _withAttributes(std::map<std::string, std::string>&& attributes) {
+    return {
+        .Message = TStringBuilder() << "Message",
+        .Partition = 0,
+        .ProducerId = std::nullopt,
+        .MessageGroupId = std::nullopt,
+        .SeqNo = std::nullopt,
+        .CreateTimestamp = std::nullopt,
+        .Attributes = std::move(attributes)
+    };
+}
+
 using TExpectations = TVector<TVector<std::pair<TString, std::shared_ptr<IChecker>>>>;
 
 struct TConfig {
@@ -168,11 +245,11 @@ struct MainTestCase {
         if (user) {
             config.SetAuthToken(TStringBuilder() << user.value() << "@builtin");
         }
-        // config.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_INFO).Release()))
+        // config.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         return config;
     }
 
-    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "COLUMN")
+    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "ROW")
         : TableType(std::move(tableType))
         , Id(RandomNumber<size_t>())
         , ConnectionString(GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE"))
@@ -184,7 +261,6 @@ struct MainTestCase {
         , TransferName(TStringBuilder() << "Transfer_" << Id)
         , Driver(CreateDriverConfig(ConnectionString, user))
         , TableClient(Driver)
-        , Session(TableClient.GetSession().GetValueSync().GetSession())
         , TopicClient(Driver)
     {
     }
@@ -193,9 +269,19 @@ struct MainTestCase {
         Driver.Stop(true);
     }
 
+    void CreateDirectory(const std::string& directoryName) {
+        NScheme::TSchemeClient schemeClient(Driver);
+        auto result = schemeClient.MakeDirectory(directoryName).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+    }
+
+    auto Session() {
+        return TableClient.GetSession().GetValueSync().GetSession();
+    }
+
     void ExecuteDDL(const std::string& ddl, bool checkResult = true, const std::optional<std::string> expectedMessage = std::nullopt) {
         Cerr << "DDL: " << ddl << Endl << Flush;
-        auto res = Session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
+        auto res = Session().ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
         if (checkResult) {
             if (expectedMessage) {
                 UNIT_ASSERT(!res.IsSuccess());
@@ -211,7 +297,7 @@ struct MainTestCase {
     auto ExecuteQuery(const std::string& query, bool retry = true) {
         for (size_t i = 10; i--;) {
             Cerr << ">>>>> Query: " << query << Endl << Flush;
-            auto res = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            auto res = Session().ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             if (!res.IsSuccess()) {
                 Cerr << ">>>>> Query error: " << res.GetIssues().ToString() << Endl << Flush;
             }
@@ -235,8 +321,16 @@ struct MainTestCase {
     }
 
     void Grant(const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
+        ChangePermissions("GRANT", "TO", object, username, permissions);
+    }
+
+    void Revoke(const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
+        ChangePermissions("REVOKE", "FROM", object, username, permissions);
+    }
+
+    void ChangePermissions(const std::string& statement, const std::string& statementClause, const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
         TStringBuilder sql;
-        sql << "GRANT ";
+        sql << statement << " ";
         for (size_t i = 0; i < permissions.size(); ++i) {
             if (i) {
                 sql << ", ";
@@ -251,7 +345,7 @@ struct MainTestCase {
         if (!object.empty()) {
             sql << "/" << object;
         }
-        sql << "` TO `" << username << "@builtin`";
+        sql << "` " << statementClause << " `" << username << "@builtin`";
 
         ExecuteDDL(sql);
     }
@@ -282,13 +376,41 @@ struct MainTestCase {
         )", SourceTableName.data(), ChangefeedName.data()));
     }
 
+    struct CreatTopicSettings {
+        size_t MinPartitionCount = 1;
+        size_t MaxPartitionCount = 100;
+        bool AutoPartitioningEnabled = false;
+    };
+
     void CreateTopic(size_t partitionCount = 10) {
-        ExecuteDDL(Sprintf(R"(
-            CREATE TOPIC `%s`
-            WITH (
-                min_active_partitions = %d
-            );
-        )", TopicName.data(), partitionCount));
+        CreateTopic({
+            .MinPartitionCount = partitionCount
+        });
+    }
+
+    void CreateTopic(const CreatTopicSettings& settings) {
+        if (settings.AutoPartitioningEnabled) {
+            ExecuteDDL(Sprintf(R"(
+                CREATE TOPIC `%s`
+                WITH (
+                    MIN_ACTIVE_PARTITIONS = %d,
+                    MAX_ACTIVE_PARTITIONS = %d,
+                    AUTO_PARTITIONING_STRATEGY = 'UP',
+                    auto_partitioning_down_utilization_percent = 1,
+                    auto_partitioning_up_utilization_percent=2,
+                    auto_partitioning_stabilization_window = Interval('PT1S'),
+                    partition_write_speed_bytes_per_second = 3
+                );
+            )", TopicName.data(), settings.MinPartitionCount, settings.MaxPartitionCount));
+        } else {
+            ExecuteDDL(Sprintf(R"(
+                CREATE TOPIC `%s`
+                WITH (
+                    MIN_ACTIVE_PARTITIONS = %d
+
+                );
+            )", TopicName.data(), settings.MinPartitionCount));
+        }
     }
 
     void DropTopic() {
@@ -311,13 +433,22 @@ struct MainTestCase {
 
     struct CreateTransferSettings {
         std::optional<std::string> TopicName;
+        bool LocalTopic = false;
         std::optional<std::string> ConsumerName;
         std::optional<TDuration> FlushInterval = TDuration::Seconds(1);
         std::optional<ui64> BatchSizeBytes = 8_MB;
         std::optional<std::string> ExpectedError;
         std::optional<std::string> Username;
+        std::optional<std::string> UserSecretName;
+        std::optional<std::string> Directory;
 
         CreateTransferSettings() {};
+
+        static CreateTransferSettings WithLocalTopic(bool local) {
+            CreateTransferSettings result;
+            result.LocalTopic = local;
+            return result;
+        }
 
         static CreateTransferSettings WithTopic(const std::string& topicName, std::optional<TString> consumerName = std::nullopt) {
             CreateTransferSettings result;
@@ -350,24 +481,50 @@ struct MainTestCase {
             result.Username = username;
             return result;
         }
-};
+
+        static CreateTransferSettings WithDirectory(const TString& directory) {
+            CreateTransferSettings result;
+            result.Directory = directory;
+            return result;
+        }
+
+        static CreateTransferSettings WithSecretName(const TString& secret) {
+            CreateTransferSettings result;
+            result.UserSecretName = secret;
+            return result;
+        }
+    };
 
     void CreateTransfer(const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
-        TStringBuilder sb;
+        CreateTransfer(TransferName, lambda, settings);
+    }
+
+    void CreateTransfer(const std::string& name, const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
+        std::vector<std::string> options;
+        if (!settings.LocalTopic) {
+            options.push_back(TStringBuilder() << "CONNECTION_STRING = 'grpc://" << ConnectionString << "'");
+        }
         if (settings.ConsumerName) {
-            sb << ", CONSUMER = '" << *settings.ConsumerName << "'" << Endl;
+            options.push_back(TStringBuilder() <<  "CONSUMER = '" << *settings.ConsumerName << "'");
         }
         if (settings.FlushInterval) {
-            sb << ", FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl;
+            options.push_back(TStringBuilder() <<  "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')");
         }
         if (settings.BatchSizeBytes) {
-            sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
+            options.push_back(TStringBuilder() <<  "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes);
+        }
+        if (settings.UserSecretName) {
+            options.push_back(TStringBuilder() <<  "TOKEN_SECRET_NAME = '" << *settings.UserSecretName << "'");
         }
         if (settings.Username) {
-            sb << ", TOKEN = '" << *settings.Username << "@builtin'" << Endl;
+            options.push_back(TStringBuilder() <<  "TOKEN = '" << *settings.Username << "@builtin'");
+        }
+        if (settings.Directory) {
+            options.push_back(TStringBuilder() <<  "DIRECTORY = '" << *settings.Directory << "'");
         }
 
-        TString topicName = settings.TopicName.value_or(TopicName);
+        std::string topicName = settings.TopicName.value_or(TopicName);
+        std::string optionsStr = JoinRange(",\n", options.begin(), options.end());
 
         auto ddl = Sprintf(R"(
             %s;
@@ -375,18 +532,18 @@ struct MainTestCase {
             CREATE TRANSFER `%s`
             FROM `%s` TO `%s` USING $l
             WITH (
-                CONNECTION_STRING = 'grpc://%s'
                 %s
             );
-        )", lambda.data(), TransferName.data(), topicName.data(), TableName.data(), ConnectionString.data(), sb.data());
+        )", lambda.data(), name.data(), topicName.data(), TableName.data(), optionsStr.data());
 
         ExecuteDDL(ddl, true, settings.ExpectedError);
     }
 
     struct AlterTransferSettings {
-        std::optional<TString> TransformLambda;
+        std::optional<std::string> TransformLambda;
         std::optional<TDuration> FlushInterval;
         std::optional<ui64> BatchSizeBytes;
+        std::optional<std::string> Directory;
 
         AlterTransferSettings()
             : FlushInterval(std::nullopt)
@@ -404,6 +561,12 @@ struct MainTestCase {
             result.TransformLambda = lambda;
             return result;
         }
+
+        static AlterTransferSettings WithDirectory(const std::string& directory) {
+            AlterTransferSettings result;
+            result.Directory = directory;
+            return result;
+        }
     };
 
     void AlterTransfer(const std::string& lambda) {
@@ -411,30 +574,37 @@ struct MainTestCase {
     }
 
     void AlterTransfer(const AlterTransferSettings& settings, bool success = true) {
-        TString lambda = settings.TransformLambda ? *settings.TransformLambda : "";
-        TString setLambda = settings.TransformLambda ? "SET USING $l" : "";
+        AlterTransfer(TransferName, settings, success);
+    }
 
-        TStringBuilder sb;
+    void AlterTransfer(const std::string& name, const AlterTransferSettings& settings, bool success = true) {
+        std::string lambda = settings.TransformLambda ? *settings.TransformLambda : "";
+        std::string setLambda = settings.TransformLambda ? "SET USING $l" : "";
+
+        std::vector<std::string> options;
         if (settings.FlushInterval) {
-            sb << "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl;
+            options.push_back(TStringBuilder() << "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')");
         }
         if (settings.BatchSizeBytes) {
-            sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
+            options.push_back(TStringBuilder() << "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes);
         }
 
-        TString setOptions;
-        if (!sb.empty()) {
-            setOptions = TStringBuilder() << "SET (" << sb << " )";
+        if (settings.Directory) {
+            options.push_back(TStringBuilder() << "DIRECTORY = \"" << *settings.Directory << "\"");
         }
 
-        auto res = Session.ExecuteQuery(Sprintf(R"(
+        std::string setOptions;
+        if (!options.empty()) {
+            setOptions = TStringBuilder() << "SET (" << JoinRange(",\n", options.begin(), options.end()) << " )";
+        }
+
+        ExecuteDDL(Sprintf(R"(
             %s;
 
             ALTER TRANSFER `%s`
             %s
             %s;
-        )", lambda.data(), TransferName.data(), setLambda.data(), setOptions.data()), TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(success, res.IsSuccess(), res.GetIssues().ToString());
+        )", lambda.data(), name.data(), setLambda.data(), setOptions.data()), success);
     }
 
     void DropTransfer() {
@@ -462,10 +632,7 @@ struct MainTestCase {
     auto DescribeTransfer() {
         TReplicationClient client(Driver);
 
-        TDescribeReplicationSettings settings;
-        settings.IncludeStats(true);
-
-        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName, settings).ExtractValueSync();
+        return client.DescribeTransfer(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName).ExtractValueSync();
     }
 
     auto DescribeConsumer(const std::string& consumerName) {
@@ -474,22 +641,33 @@ struct MainTestCase {
         settings.IncludeStats(true);
 
         auto c = TopicClient.DescribeConsumer(TopicName, consumerName, settings).GetValueSync();
-        UNIT_ASSERT(c.IsSuccess());
+        UNIT_ASSERT_C(c.IsSuccess(), c.GetIssues().ToOneLineString());
         return c;
     }
 
     auto DescribeConsumer() {
-        auto topic = DescribeTopic();
-        auto consumers = topic.GetTopicDescription().GetConsumers();
+        const auto topic = DescribeTopic();
+        const auto& consumers = topic.GetTopicDescription().GetConsumers();
         UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
         return DescribeConsumer(consumers[0].GetConsumerName());
     }
 
-    void CheckCommittedOffset(size_t partitionId, size_t expectedOffset) {
-        auto d = DescribeConsumer();
-        UNIT_ASSERT(d.IsSuccess());
-        auto s = d.GetConsumerDescription().GetPartitions().at(partitionId).GetPartitionConsumerStats();
-        UNIT_ASSERT_VALUES_EQUAL(expectedOffset, s->GetCommittedOffset());
+    void CheckCommittedOffset(size_t partitionId, size_t expectedOffset, TDuration timeout = TDuration::Seconds(5)) {
+        auto end = TInstant::Now() + timeout;
+
+        while(true) {
+            auto d = DescribeConsumer();
+            UNIT_ASSERT(d.IsSuccess());
+            auto s = d.GetConsumerDescription().GetPartitions().at(partitionId).GetPartitionConsumerStats();
+            if (expectedOffset == s->GetCommittedOffset()) {
+                break;
+            }
+            if (end < TInstant::Now()) {
+                UNIT_ASSERT_VALUES_EQUAL(expectedOffset, s->GetCommittedOffset());
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
     }
 
     void CreateReplication() {
@@ -554,13 +732,21 @@ struct MainTestCase {
         settings.IncludeLocation(true);
         settings.IncludeStats(true);
 
-        return TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();
+        auto result = TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        return result;
     }
 
-    void CreateUser(const std::string& username) {
-        ExecuteDDL(Sprintf(R"(
-            CREATE USER %s
-        )", username.data()));
+    void CreateUser(const std::string& username, const std::optional<std::string> password = std::nullopt) {
+        if (password) {
+            ExecuteDDL(Sprintf(R"(
+                CREATE USER %s PASSWORD '%s'
+            )", username.data(), password.value().data()));
+        } else {
+            ExecuteDDL(Sprintf(R"(
+                CREATE USER %s
+            )", username.data()));
+        }
     }
 
     void Write(const TMessage& message) {
@@ -578,11 +764,27 @@ struct MainTestCase {
         }
         auto writeSession = TopicClient.CreateSimpleBlockingWriteSession(writeSettings);
 
-        UNIT_ASSERT(writeSession->Write(message.Message, message.SeqNo));
+        TWriteMessage msg(message.Message);
+        msg.SeqNo(message.SeqNo);
+        msg.CreateTimestamp(message.CreateTimestamp);
+
+        if (!message.Attributes.empty()) {
+            TWriteMessage::TMessageMeta meta;
+            for (auto& [k, v] : message.Attributes) {
+                meta.push_back({k , v});
+            }
+            msg.MessageMeta(meta);
+        }
+
+        UNIT_ASSERT(writeSession->Write(std::move(msg)));
         writeSession->Close(TDuration::Seconds(1));
     }
 
     std::pair<i64, Ydb::ResultSet> DoRead(const TExpectations& expectations) {
+        return DoRead(TableName, expectations);
+    }
+
+    std::pair<i64, Ydb::ResultSet> DoRead(const std::string& tableName, const TExpectations& expectations) {
         auto& e = expectations.front();
 
         TStringBuilder columns;
@@ -594,7 +796,7 @@ struct MainTestCase {
         }
 
 
-        auto res = ExecuteQuery(Sprintf("SELECT %s FROM `%s` ORDER BY %s", columns.data(), TableName.data(), columns.data()), false);
+        auto res = ExecuteQuery(Sprintf("SELECT %s FROM `%s` ORDER BY %s", columns.data(), tableName.data(), columns.data()), false);
         if (!res.IsSuccess()) {
             TResultSet r{Ydb::ResultSet()};
             return {-1, NYdb::TProtoAccessor::GetProto(r)};
@@ -604,9 +806,9 @@ struct MainTestCase {
         return {proto.rowsSize(), proto};
     }
 
-    void CheckResult(const TExpectations& expectations) {
+    void CheckResult(const std::string& tableName, const TExpectations& expectations) {
         for (size_t attempt = 20; attempt--; ) {
-            auto res = DoRead(expectations);
+            auto res = DoRead(tableName, expectations);
             Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
             if (res.first == (ssize_t)expectations.size()) {
                 const Ydb::ResultSet& proto = res.second;
@@ -626,19 +828,23 @@ struct MainTestCase {
             Sleep(TDuration::Seconds(1));
         }
 
-        CheckTransferState(TReplicationDescription::EState::Running);
+        CheckTransferState(TTransferDescription::EState::Running);
         UNIT_ASSERT_C(false, "Unable to wait transfer result");
     }
 
-    TReplicationDescription CheckTransferState(TReplicationDescription::EState expected) {
+    void CheckResult(const TExpectations& expectations) {
+        CheckResult(TableName, expectations);
+    }
+
+    TTransferDescription CheckTransferState(TTransferDescription::EState expected) {
         for (size_t i = 20; i--;) {
-            auto result = DescribeTransfer().GetReplicationDescription();
+            auto result = DescribeTransfer().GetTransferDescription();
             if (expected == result.GetState()) {
                 return result;
             }
     
             std::string issues;
-            if (result.GetState() == TReplicationDescription::EState::Error) {
+            if (result.GetState() == TTransferDescription::EState::Error) {
                 issues = result.GetErrorState().GetIssues().ToOneLineString();
             }
     
@@ -650,7 +856,7 @@ struct MainTestCase {
     }
 
     void CheckTransferStateError(const std::string& expectedMessage) {
-        auto result = CheckTransferState(TReplicationDescription::EState::Error);
+        auto result = CheckTransferState(TTransferDescription::EState::Error);
         Cerr << ">>>>> ACTUAL: " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
         Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
         UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
@@ -704,7 +910,6 @@ struct MainTestCase {
 
     TDriver Driver;
     TQueryClient TableClient;
-    TSession Session;
     TTopicClient TopicClient;
 };
 

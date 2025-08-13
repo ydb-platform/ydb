@@ -49,6 +49,8 @@ def do(args):
         'FailDomainIdx',
         'VDiskIdx',
         'VDiskKind',
+        'GroupSizeInUnits',
+        'PDiskSlotSizeInUnits',
         'Usage',
         'UsedSize',
         'AvailableSize',
@@ -65,6 +67,7 @@ def do(args):
         'NodeId:PDiskId',
         'VSlotId',
         'VSlotStatus',
+        'GroupSizeInUnits',
         'IsDonor',
         'ReadOnly',
     ]
@@ -109,6 +112,8 @@ def do(args):
             row['FailDomainIdx'] = vslot.FailDomainIdx
             row['VDiskIdx'] = vslot.VDiskIdx
             row['VDiskKind'] = vslot.VDiskKind
+            row['GroupSizeInUnits'] = group_map[group].GroupSizeInUnits
+            _, row['PDiskSlotSizeInUnits'] = common.get_pdisk_inferred_settings(pdisk)
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']

@@ -9,11 +9,11 @@ void TUserData::UserDataToLibraries(
     THashMap<TString,TString>& modules
 ) {
     for (const TUserData& item : userData) {
-        if (item.Type_ == EType::LIBRARY) {
-            if (item.Disposition_ == EDisposition::RESOURCE) { // TODO: support other disposition options
-                modules[to_lower(item.Name_)] = item.Content_;
-            } else if (item.Disposition_ == EDisposition::RESOURCE_FILE) {
-                modules[to_lower(item.Name_)] = item.Name_;
+        if (item.Type == EType::LIBRARY) {
+            if (item.Disposition == EDisposition::RESOURCE) { // TODO: support other disposition options
+                modules[to_lower(item.Name)] = item.Content;
+            } else if (item.Disposition == EDisposition::RESOURCE_FILE) {
+                modules[to_lower(item.Name)] = item.Name;
             }
         }
     }

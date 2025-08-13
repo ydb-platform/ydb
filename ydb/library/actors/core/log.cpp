@@ -27,6 +27,56 @@ namespace {
             return TLogRecord(Priority, Buf.Data(), Buf.Filled());
         }
     };
+
+    struct TRecordWithColorsAndNewline {
+        ELogPriority Priority;
+        TTempBuf Buf;
+
+        TRecordWithColorsAndNewline(const TLogRecord& rec)
+            : Priority(rec.Priority)
+            , Buf(rec.Len + 16)
+        {
+            switch (rec.Priority) {
+                case ELogPriority::TLOG_EMERG:
+                    Buf.Append("\x1b[31m", 5); // Red color for emergencies
+                    break;
+                case ELogPriority::TLOG_ALERT:
+                    Buf.Append("\x1b[31;1m", 7); // Bright red
+                    break;
+                case ELogPriority::TLOG_CRIT:
+                    Buf.Append("\x1b[35m", 5); // Magenta color for critical logs
+                    break;
+                case ELogPriority::TLOG_ERR:
+                    Buf.Append("\x1b[31;1m", 7); // Bright red
+                    break;
+                case ELogPriority::TLOG_WARNING:
+                    Buf.Append("\x1b[33m", 5); // Yellow color for warnings
+                    break;
+                case ELogPriority::TLOG_NOTICE:
+                    Buf.Append("\x1b[36m", 5); // Cyan color for notices
+                    break;
+                case ELogPriority::TLOG_INFO:
+                    Buf.Append("\x1b[37m", 5); // White color for info
+                    break;
+                case ELogPriority::TLOG_DEBUG:
+                    Buf.Append("\x1b[38;5;248m", 11); // White-grey color for debug
+                    break;
+                case ELogPriority::TLOG_RESOURCES:
+                    Buf.Append("\x1b[38;5;242m", 11); // Gray color for trace
+                    break;
+                default:
+                    Buf.Append("\x1b[0m", 4); // Reset color for unknown
+                    break;
+            }
+            Buf.Append(rec.Data, rec.Len);
+            Buf.Append("\x1b[0m", 4); // Reset color
+            *Buf.Proceed(1) = '\n';
+        }
+
+        operator TLogRecord() const {
+            return TLogRecord(Priority, Buf.Data(), Buf.Filled());
+        }
+    };
 }
 
 namespace NActors {
@@ -220,7 +270,7 @@ namespace NActors {
                     }
                 }
                 TABLEBODY() {
-                    for (EComponent i = Settings->MinVal; i < Settings->MaxVal; i++) {
+                    for (EComponent i = Settings->MinVal; i <= Settings->MaxVal; i++) {
                         auto name = Settings->ComponentName(i);
                         if (!*name)
                             continue;
@@ -597,6 +647,7 @@ namespace NActors {
         return new TSysLogBackend(ident.data(), TSysLogBackend::TSYSLOG_LOCAL1, flags);
     }
 
+    template<typename TNewLineProcessor>
     class TStderrBackend: public TLogBackend {
     public:
         TStderrBackend() {
@@ -614,7 +665,7 @@ namespace NActors {
             bool isOk = false;
             do {
                 try {
-                    TRecordWithNewline r(rec);
+                    TNewLineProcessor r(rec);
                     Cerr.Write(r.Buf.Data(), r.Buf.Filled());
                     isOk = true;
                 } catch (TSystemError err) {
@@ -661,8 +712,12 @@ namespace NActors {
         TVector<TAutoPtr<TLogBackend>> UnderlyingBackends;
     };
 
-    TAutoPtr<TLogBackend> CreateStderrBackend() {
-        return new TStderrBackend();
+    TAutoPtr<TLogBackend> CreateStderrBackend(bool useColors) {
+        if (useColors) {
+            return new TStderrBackend<TRecordWithColorsAndNewline>();
+        } else {
+            return new TStderrBackend<TRecordWithNewline>();
+        }
     }
 
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName) {

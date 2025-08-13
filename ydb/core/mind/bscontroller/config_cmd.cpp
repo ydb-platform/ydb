@@ -12,21 +12,24 @@ namespace NKikimr::NBsController {
             const NKikimrBlobStorage::TConfigRequest Cmd;
             const bool SelfHeal;
             const bool GroupLayoutSanitizer;
+            std::optional<THostRecordMap> EnforceHostRecords;
             THolder<TEvBlobStorage::TEvControllerConfigResponse> Ev;
             NKikimrBlobStorage::TConfigResponse *Response;
             std::optional<TConfigState> State;
             bool Success = true;
+            bool RollbackSuccess = false;
             TString Error;
 
         public:
             TTxConfigCmd(const NKikimrBlobStorage::TConfigRequest &cmd, const TActorId &notifyId, ui64 cookie,
-                    bool selfHeal, bool groupLayoutSanitizer, TBlobStorageController *controller)
+                    bool selfHeal, bool groupLayoutSanitizer, std::optional<THostRecordMap> enforceHostRecords, TBlobStorageController *controller)
                 : TTransactionBase(controller)
                 , NotifyId(notifyId)
                 , Cookie(cookie)
                 , Cmd(cmd)
                 , SelfHeal(selfHeal)
                 , GroupLayoutSanitizer(groupLayoutSanitizer)
+                , EnforceHostRecords(std::move(enforceHostRecords))
                 , Ev(new TEvBlobStorage::TEvControllerConfigResponse())
                 , Response(Ev->Record.MutableResponse())
             {}
@@ -52,6 +55,7 @@ namespace NKikimr::NBsController {
 
             void Finish() {
                 Response->SetSuccess(Success);
+                Response->SetRollbackSuccess(RollbackSuccess);
                 if (!Success) {
                     Response->SetErrorDescription(Error);
                 }
@@ -88,69 +92,69 @@ namespace NKikimr::NBsController {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings: {
                         const auto& settings = cmd.GetUpdateSettings();
                         using T = Schema::State;
-                        if (settings.HasDefaultMaxSlots()) {
-                            Self->DefaultMaxSlots = settings.GetDefaultMaxSlots();
+                        for (ui32 value : settings.GetDefaultMaxSlots()) {
+                            Self->DefaultMaxSlots = value;
                             db.Table<T>().Key(true).Update<T::DefaultMaxSlots>(Self->DefaultMaxSlots);
                         }
-                        if (settings.HasEnableSelfHeal()) {
-                            Self->SelfHealEnable = settings.GetEnableSelfHeal();
+                        for (bool value : settings.GetEnableSelfHeal()) {
+                            Self->SelfHealEnable = value;
                             db.Table<T>().Key(true).Update<T::SelfHealEnable>(Self->SelfHealEnable);
                         }
-                        if (settings.HasEnableDonorMode()) {
-                            Self->DonorMode = settings.GetEnableDonorMode();
+                        for (bool value : settings.GetEnableDonorMode()) {
+                            Self->DonorMode = value;
                             db.Table<T>().Key(true).Update<T::DonorModeEnable>(Self->DonorMode);
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
                             ev->DonorMode = Self->DonorMode;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
-                        if (settings.HasScrubPeriodicitySeconds()) {
-                            Self->ScrubPeriodicity = TDuration::Seconds(settings.GetScrubPeriodicitySeconds());
+                        for (ui64 value : settings.GetScrubPeriodicitySeconds()) {
+                            Self->ScrubPeriodicity = TDuration::Seconds(value);
                             db.Table<T>().Key(true).Update<T::ScrubPeriodicity>(Self->ScrubPeriodicity.Seconds());
                             Self->ScrubState.OnScrubPeriodicityChange();
                         }
-                        if (settings.HasPDiskSpaceMarginPromille()) {
-                            Self->PDiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille();
+                        for (ui32 value : settings.GetPDiskSpaceMarginPromille()) {
+                            Self->PDiskSpaceMarginPromille = value;
                             db.Table<T>().Key(true).Update<T::PDiskSpaceMarginPromille>(Self->PDiskSpaceMarginPromille);
                         }
-                        if (settings.HasGroupReserveMin()) {
-                            Self->GroupReserveMin = settings.GetGroupReserveMin();
+                        for (ui32 value : settings.GetGroupReserveMin()) {
+                            Self->GroupReserveMin = value;
                             db.Table<T>().Key(true).Update<T::GroupReserveMin>(Self->GroupReserveMin);
                             Self->SysViewChangedSettings = true;
                         }
-                        if (settings.HasGroupReservePartPPM()) {
-                            Self->GroupReservePart = settings.GetGroupReservePartPPM();
+                        for (ui32 value : settings.GetGroupReservePartPPM()) {
+                            Self->GroupReservePart = value;
                             db.Table<T>().Key(true).Update<T::GroupReservePart>(Self->GroupReservePart);
                             Self->SysViewChangedSettings = true;
                         }
-                        if (settings.HasMaxScrubbedDisksAtOnce()) {
-                            Self->MaxScrubbedDisksAtOnce = settings.GetMaxScrubbedDisksAtOnce();
+                        for (ui32 value : settings.GetMaxScrubbedDisksAtOnce()) {
+                            Self->MaxScrubbedDisksAtOnce = value;
                             db.Table<T>().Key(true).Update<T::MaxScrubbedDisksAtOnce>(Self->MaxScrubbedDisksAtOnce);
                             Self->ScrubState.OnMaxScrubbedDisksAtOnceChange();
                         }
-                        if (settings.HasPDiskSpaceColorBorder()) {
-                            Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(settings.GetPDiskSpaceColorBorder());
+                        for (auto value : settings.GetPDiskSpaceColorBorder()) {
+                            Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(value);
                             db.Table<T>().Key(true).Update<T::PDiskSpaceColorBorder>(Self->PDiskSpaceColorBorder);
                         }
-                        if (settings.HasEnableGroupLayoutSanitizer()) {
-                            Self->GroupLayoutSanitizerEnabled = settings.GetEnableGroupLayoutSanitizer();
+                        for (bool value : settings.GetEnableGroupLayoutSanitizer()) {
+                            Self->GroupLayoutSanitizerEnabled = value;
                             db.Table<T>().Key(true).Update<T::GroupLayoutSanitizer>(Self->GroupLayoutSanitizerEnabled);
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
                             ev->GroupLayoutSanitizerEnabled = Self->GroupLayoutSanitizerEnabled;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
-                        if (settings.HasAllowMultipleRealmsOccupation()) {
-                            Self->AllowMultipleRealmsOccupation = settings.GetAllowMultipleRealmsOccupation();
+                        for (bool value : settings.GetAllowMultipleRealmsOccupation()) {
+                            Self->AllowMultipleRealmsOccupation = value;
                             db.Table<T>().Key(true).Update<T::AllowMultipleRealmsOccupation>(Self->AllowMultipleRealmsOccupation);
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
                             ev->AllowMultipleRealmsOccupation = Self->AllowMultipleRealmsOccupation;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
-                        if (settings.HasUseSelfHealLocalPolicy()) {
-                            Self->UseSelfHealLocalPolicy = settings.GetUseSelfHealLocalPolicy();
+                        for (bool value : settings.GetUseSelfHealLocalPolicy()) {
+                            Self->UseSelfHealLocalPolicy = value;
                             db.Table<T>().Key(true).Update<T::UseSelfHealLocalPolicy>(Self->UseSelfHealLocalPolicy);
                         }
-                        if (settings.HasTryToRelocateBrokenDisksLocallyFirst()) {
-                            Self->TryToRelocateBrokenDisksLocallyFirst = settings.GetTryToRelocateBrokenDisksLocallyFirst();
+                        for (bool value : settings.GetTryToRelocateBrokenDisksLocallyFirst()) {
+                            Self->TryToRelocateBrokenDisksLocallyFirst = value;
                             db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
                         }
                         return true;
@@ -180,7 +184,8 @@ namespace NKikimr::NBsController {
                     Response->MutableStatus()->RemoveLast();
                 }
 
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
+                const auto& hostRecords = EnforceHostRecords ? *EnforceHostRecords : Self->HostRecords;
+                State.emplace(*Self, hostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 State->CheckConsistency();
 
                 TString m;
@@ -243,6 +248,7 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(WipeVDisk, WIPE_VDISK)
                             MAP_TIMING(SanitizeGroup, SANITIZE_GROUP)
                             MAP_TIMING(CancelVirtualGroup, CANCEL_VIRTUAL_GROUP)
+                            MAP_TIMING(ChangeGroupSizeInUnits, CHANGE_GROUP_SIZE_IN_UNITS)
 
                             default:
                                 break;
@@ -255,6 +261,7 @@ namespace NKikimr::NBsController {
 
                 if (Success && Cmd.GetRollback()) {
                     Success = false;
+                    RollbackSuccess = true;
                     Error = "transaction rollback";
                 }
 
@@ -340,6 +347,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(ReassignGroupDisk)
                     HANDLE_COMMAND(MergeBoxes)
                     HANDLE_COMMAND(MoveGroups)
+                    HANDLE_COMMAND(ChangeGroupSizeInUnits)
                     HANDLE_COMMAND(DropDonorDisk)
                     HANDLE_COMMAND(AddDriveSerial)
                     HANDLE_COMMAND(RemoveDriveSerial)
@@ -355,6 +363,8 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(SetPDiskReadOnly)
                     HANDLE_COMMAND(StopPDisk)
                     HANDLE_COMMAND(GetInterfaceVersion)
+                    HANDLE_COMMAND(MovePDisk)
+                    HANDLE_COMMAND(UpdateBridgeGroupInfo)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
@@ -378,6 +388,8 @@ namespace NKikimr::NBsController {
                     STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, state->UniqueId),
                             (NextConfigTxSeqNo, configTxSeqNo));
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(configTxSeqNo);
+                } else {
+                    Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
                 Self->UpdatePDisksCounters();
@@ -396,7 +408,7 @@ namespace NKikimr::NBsController {
             NKikimrBlobStorage::TEvControllerConfigRequest& record(ev->Get()->Record);
             const NKikimrBlobStorage::TConfigRequest& request = record.GetRequest();
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCC01, "Execute TEvControllerConfigRequest", (Request, request));
-            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, this));
+            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, ev->Get()->EnforceHostRecords, this));
         }
 
 } // NKikimr::NBsController

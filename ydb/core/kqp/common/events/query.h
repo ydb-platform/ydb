@@ -96,8 +96,16 @@ public:
         return Record.GetRequest().GetTopicOperations();
     }
 
+    const ::NKikimrKqp::TKafkaApiOperationsRequest& GetKafkaApiOperations() const {
+        return Record.GetRequest().GetKafkaApiOperations();
+    }
+
     bool HasTopicOperations() const {
         return Record.GetRequest().HasTopicOperations();
+    }
+
+    bool HasKafkaApiOperations() const {
+        return Record.GetRequest().HasKafkaApiOperations();
     }
 
     bool GetKeepSession() const {
@@ -302,16 +310,7 @@ public:
         return req;
     }
 
-    void SetClientLostAction(TActorId actorId, NActors::TActorSystem* as) {
-        if (RequestCtx) {
-            RequestCtx->SetFinishAction([actorId, as]() {
-                as->Send(actorId, new NGRpcService::TEvClientLost());
-                });
-        } else if (Record.HasCancelationActor()) {
-            auto cancelationActor = ActorIdFromProto(Record.GetCancelationActor());
-            NGRpcService::SubscribeRemoteCancel(cancelationActor, actorId, as);
-        }
-    }
+    void SetClientLostAction(TActorId actorId, NActors::TActorSystem* as);
 
     void SetUserRequestContext(TIntrusivePtr<TUserRequestContext> userRequestContext) {
         UserRequestContext = userRequestContext;
@@ -365,6 +364,22 @@ public:
         DatabaseId = databaseId;
     }
 
+    bool GetSaveQueryPhysicalGraph() const {
+        return SaveQueryPhysicalGraph;
+    }
+
+    void SetSaveQueryPhysicalGraph(bool saveQueryPhysicalGraph) {
+        SaveQueryPhysicalGraph = saveQueryPhysicalGraph;
+    }
+
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> GetQueryPhysicalGraph() const {
+        return QueryPhysicalGraph;
+    }
+
+    void SetQueryPhysicalGraph(NKikimrKqp::TQueryPhysicalGraph queryPhysicalGraph) {
+        QueryPhysicalGraph = std::make_shared<const NKikimrKqp::TQueryPhysicalGraph>(std::move(queryPhysicalGraph));
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -395,6 +410,8 @@ private:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
+    bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

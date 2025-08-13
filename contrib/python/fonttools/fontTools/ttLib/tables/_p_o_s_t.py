@@ -122,13 +122,16 @@ class table__p_o_s_t(DefaultTable.DefaultTable):
             glyphName = psName = self.glyphOrder[i]
             if glyphName == "":
                 glyphName = "glyph%.5d" % i
+
             if glyphName in allNames:
                 # make up a new glyphName that's unique
                 n = allNames[glyphName]
-                while (glyphName + "#" + str(n)) in allNames:
+                # check if the exists in any of the seen names or later ones
+                names = set(allNames.keys()) | set(self.glyphOrder)
+                while (glyphName + "." + str(n)) in names:
                     n += 1
                 allNames[glyphName] = n + 1
-                glyphName = glyphName + "#" + str(n)
+                glyphName = glyphName + "." + str(n)
 
             self.glyphOrder[i] = glyphName
             allNames[glyphName] = 1
@@ -171,10 +174,9 @@ class table__p_o_s_t(DefaultTable.DefaultTable):
         extraNames = self.extraNames = [
             n for n in self.extraNames if n not in standardGlyphOrder
         ]
-        for i in range(len(extraNames)):
-            extraDict[extraNames[i]] = i
-        for glyphID in range(numGlyphs):
-            glyphName = glyphOrder[glyphID]
+        for i, name in enumerate(extraNames):
+            extraDict[name] = i
+        for glyphName in glyphOrder:
             if glyphName in self.mapping:
                 psName = self.mapping[glyphName]
             else:

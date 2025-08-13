@@ -14,6 +14,8 @@ SRCS(
     kqp_statistics_transformer.cpp
     kqp_column_statistics_requester.cpp
     kqp_constant_folding_transformer.cpp
+    kqp_opt_hash_func_propagate_transformer.cpp
+    kqp_type_ann.cpp
 )
 
 PEERDIR(

@@ -54,6 +54,7 @@
                                         "PlanNodeId": 4,
                                         "Plans": [
                                             {
+                                                "HashFunc": "HashV2",
                                                 "KeyColumns": [
                                                     "string4"
                                                 ],
@@ -86,11 +87,9 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_select_distinct.test_plan/onek",
                                                                         "ReadColumns": [
-                                                                            "string4"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "unique1 (-\u221e, +\u221e)",
-                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                            "unique2 (-\u221e, +\u221e)",
+                                                                            "string4"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
                                                                         "Scan": "Parallel",

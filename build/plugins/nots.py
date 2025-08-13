@@ -151,6 +151,11 @@ class NotsUnitType(UnitType):
         Setup test recipe to extract peer's output before running tests
         """
 
+    def on_ts_proto_auto_prepare_deps_configure(self) -> None:
+        """
+        Configure prepare deps for TS_PROTO_AUTO
+        """
+
 
 TS_TEST_FIELDS_BASE = (
     df.BinaryPath.normalized,
@@ -205,6 +210,7 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestDataDirsRename.value,
         df.TsResources.value,
         df.TsTestForPath.value,
+        df.DockerImage.value,
     ),
     TsTestType.PLAYWRIGHT_LARGE: (
         df.ConfigPath.value,
@@ -223,6 +229,7 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.Requirements.from_unit,
     ),
     TsTestType.TS_STYLELINT: (
+        df.Size.from_unit,
         df.TsStylelintConfig.value,
         df.TestFiles.stylesheets,
         df.NodeModulesBundleFilename.value,
@@ -273,6 +280,10 @@ class PluginLogger(object):
 logger = PluginLogger()
 
 
+def _parse_list_var(unit: UnitType, var_name: str, sep: str) -> list[str]:
+    return [x.strip() for x in unit.get(var_name).removeprefix(f"${var_name}").split(sep) if x.strip()]
+
+
 def _with_report_configure_error(fn):
     """
     Handle exceptions, report them as ymake configure error
@@ -309,6 +320,10 @@ def _get_var_name(s: str) -> tuple[bool, str]:
     if re.match(WRAPPED_VAR_PATTERN, s):
         return True, s[2:-1]
     return False, ""
+
+
+def _is_real_file(path: str) -> bool:
+    return os.path.isfile(path) and not os.path.islink(path)
 
 
 def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
@@ -428,7 +443,7 @@ def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
 def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
     from lib.nots.package_manager import BasePackageManager
 
-    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
     erm_json = _create_erm_json(unit)
     dirs = []
 
@@ -524,20 +539,33 @@ def on_ts_configure(unit: NotsUnitType) -> None:
 @_with_report_configure_error
 def on_setup_build_env(unit: NotsUnitType) -> None:
     build_env_var = unit.get("TS_BUILD_ENV")
-    if not build_env_var:
-        return
+    build_env_defaults_list = _parse_list_var(
+        unit, "TS_BUILD_ENV_DEFAULTS_LIST", unit.get("TS_BUILD_ENV_DEFAULTS_LIST_SEP")
+    )
 
     options = []
-    for name in build_env_var.split(","):
-        options.append("--env")
-        value = unit.get(f"TS_ENV_{name}")
-        if value is None:
-            ymake.report_configure_error(f"Env var '{name}' is provided in a list, but var value is not provided")
+    names = set()
+    if build_env_var:
+        for name in build_env_var.split(","):
+            value = unit.get(f"TS_ENV_{name}")
+            if value is None:
+                ymake.report_configure_error(f"Env var '{name}' is provided in a list, but var value is not provided")
+                continue
+            double_quote_escaped_value = value.replace('"', '\\"')
+            options.append("--env")
+            options.append(f'"{name}={double_quote_escaped_value}"')
+            names.add(name)
+
+    for env_default in build_env_defaults_list:
+        name, value = env_default.split("=", 1)
+        if name in names:
             continue
         double_quote_escaped_value = value.replace('"', '\\"')
+        options.append("--env")
         options.append(f'"{name}={double_quote_escaped_value}"')
 
     unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
+    logger.print_vars("NOTS_TOOL_BUILD_ENV")
 
 
 def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs, delimiter: str = " ") -> None:
@@ -594,7 +622,7 @@ def _setup_eslint(unit: NotsUnitType) -> None:
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
@@ -659,7 +687,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
@@ -709,7 +737,7 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     test_type = TsTestType.TS_STYLELINT
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
 
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
     if deps:
@@ -785,10 +813,19 @@ def _select_matching_version(
 
 @_with_report_configure_error
 def on_prepare_deps_configure(unit: NotsUnitType) -> None:
+    from lib.nots.package_manager.base.utils import build_pj_path
+
     pm = _create_pm(unit)
+
+    if not _is_real_file(build_pj_path(pm.sources_path)) and unit.get("TS_PROTO_PREPARE_DEPS") == "yes":
+        # if this is a PREPARE_DEPS for TS_PROTO and there is no package.json - this is TS_PROTO_AUTO
+        unit.on_ts_proto_auto_prepare_deps_configure()
+        return
+
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
-    ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps)
+    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
 
     if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
@@ -802,10 +839,19 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
         unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
 
 
-def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
-    if unit.get("TS_LOCAL_CLI") == "yes":
-        return False
+@_with_report_configure_error
+def on_ts_proto_auto_prepare_deps_configure(unit: NotsUnitType) -> None:
+    deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
+    unit.onpeerdir([deps_path])
 
+    pm = _create_pm(unit)
+    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    _, outs, _ = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
+    unit.set(["_PREPARE_DEPS_TS_PROTO_AUTO_FLAG", f"--ts-proto-auto-deps-path {deps_path}"])
+
+
+def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
     if unit.get("_WITH_NODE_MODULES") == "yes":
         return True
 
@@ -909,12 +955,12 @@ def on_ts_test_for_configure(
 
     test_files = df.TestFiles.ts_test_srcs(unit, (), {})[df.TestFiles.KEY]
     if not test_files:
-        ymake.report_configure_error("No tests found")
+        ymake.report_configure_error(f"No tests found for {test_runner}")
         return
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
 
     if deps:
@@ -947,7 +993,10 @@ def on_ts_test_for_configure(
 # noinspection PyUnusedLocal
 @_with_report_configure_error
 def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) -> None:
-    # FBP-1085
+    if for_mod == "." or for_mod == "./":
+        ymake.report_configure_error(f"Tests should be for parent module but got path '{for_mod}'")
+        return
+
     is_arc_root = root == "${ARCADIA_ROOT}"
     is_rel_for_mod = for_mod.startswith(".")
 
@@ -975,6 +1024,7 @@ def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str])
             )
 
     new_items = _build_cmd_input_paths(paths=files_in, hide=True, disable_include_processor=True)
+    new_items += " "
     new_items += _build_cmd_output_paths(paths=files_out, hide=True)
     __set_append(unit, "_TS_FILES_INOUTS", new_items)
 

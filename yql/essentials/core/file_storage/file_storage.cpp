@@ -8,10 +8,11 @@
 #include <yql/essentials/core/file_storage/http_download/http_download.h>
 #include <yql/essentials/core/file_storage/defs/provider.h>
 
+#include <yql/essentials/public/issue/yql_issue.h>
+
 #include <yql/essentials/utils/fetch/fetch.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/context.h>
-#include <yql/essentials/utils/multi_resource_lock.h>
 #include <yql/essentials/utils/md5_stream.h>
 #include <yql/essentials/utils/retry.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -28,6 +29,7 @@
 #include <util/string/builder.h>
 #include <util/stream/str.h>
 #include <util/stream/file.h>
+#include <util/system/file_lock.h>
 #include <util/stream/null.h>
 #include <util/system/env.h>
 #include <util/system/fs.h>
@@ -41,15 +43,34 @@
 
 namespace NYql {
 
+namespace {
+
+constexpr char ComponentName[] = "file_storage";
+
+class TFileLockGuard {
+public:
+    explicit TFileLockGuard(const TFsPath& lockFilePath)
+        : Lock_(lockFilePath)
+        , Guard_(Lock_)
+    {
+    }
+
+private:
+    TFileLock Lock_;
+    TGuard<TFileLock> Guard_;
+};
+
+}
+
 class TFileStorageImpl: public IFileStorage {
 public:
     explicit TFileStorageImpl(const TFileStorageConfig& params, const std::vector<NFS::IDownloaderPtr>& downloaders)
-        : Storage(params.GetMaxFiles(), ui64(params.GetMaxSizeMb()) << 20ull, params.GetPath())
-        , Config(params)
-        , UseFakeChecksums(GetEnv("YQL_LOCAL") == "1")
+        : Storage_(params.GetMaxFiles(), ui64(params.GetMaxSizeMb()) << 20ull, params.GetPath())
+        , Config_(params)
+        , UseFakeChecksums_(GetEnv("YQL_LOCAL") == "1")
     {
-        Downloaders.push_back(MakeHttpDownloader(params));
-        Downloaders.insert(Downloaders.begin(), downloaders.begin(), downloaders.end());
+        Downloaders_.push_back(MakeHttpDownloader(params));
+        Downloaders_.insert(Downloaders_.begin(), downloaders.begin(), downloaders.end());
     }
 
     ~TFileStorageImpl() {
@@ -59,8 +80,8 @@ public:
         YQL_LOG(INFO) << "PutFile to cache: " << file;
         const auto md5 = FileChecksum(file);
         const TString storageFileName = md5 + ".file";
-        auto lock = MultiResourceLock.Acquire(storageFileName);
-        return Storage.Put(storageFileName, outFileName, md5, [&file, &md5](const TFsPath& dstFile) {
+        TFileLockGuard lockGuard(GetLockFilePath(storageFileName));
+        return Storage_.Put(storageFileName, outFileName, md5, [&file, &md5](const TFsPath& dstFile) {
             NFs::HardLinkOrCopy(file, dstFile);
             i64 length = GetFileLength(dstFile.c_str());
             if (length == -1) {
@@ -83,19 +104,19 @@ public:
         }
         const auto md5 = originalMd5.empty() ? MD5::File(file) : originalMd5;
         const auto strippedMetaFile = md5 + ".stripped_meta";
-        auto lock = MultiResourceLock.Acquire(strippedMetaFile);
+        TFileLockGuard lockGuard(GetLockFilePath(strippedMetaFile));
 
         TUrlMeta strippedMeta;
         strippedMeta.TryReadFrom(GetRoot() / strippedMetaFile);
         if (strippedMeta.ContentFile) {
-            if (auto result = Storage.HardlinkFromStorage(strippedMeta.ContentFile, strippedMeta.Md5, "")) {
+            if (auto result = Storage_.HardlinkFromStorage(strippedMeta.ContentFile, strippedMeta.Md5, "")) {
                 return result;
             }
         }
 
         strippedMeta = TUrlMeta();
         const TString storageFileName = md5 + ".file.stripped";
-        TFileLinkPtr result = Storage.Put(storageFileName, "", "", [&file](const TFsPath& dstPath) {
+        TFileLinkPtr result = Storage_.Put(storageFileName, "", "", [&file](const TFsPath& dstPath) {
             ui64 size;
             TString md5;
             TShellCommand cmd("strip", {file, "-o", dstPath.GetPath()});
@@ -111,9 +132,9 @@ public:
 
         strippedMeta.ContentFile = result->GetStorageFileName();
         strippedMeta.Md5 = result->GetMd5();
-        auto metaTmpFile = Storage.GetTemp() / Storage.GetTempName();
+        auto metaTmpFile = Storage_.GetTemp() / Storage_.GetTempName();
         strippedMeta.SaveTo(metaTmpFile);
-        Storage.MoveToStorage(metaTmpFile, strippedMetaFile);
+        Storage_.MoveToStorage(metaTmpFile, strippedMetaFile);
         return result;
     }
 
@@ -121,8 +142,8 @@ public:
         const auto md5 = MD5::Calc(data);
         const TString storageFileName = md5 + ".file";
         YQL_LOG(INFO) << "PutInline to cache. md5=" << md5;
-        auto lock = MultiResourceLock.Acquire(storageFileName);
-        return Storage.Put(storageFileName, TString(), md5, [&data, &md5](const TFsPath& dstFile) {
+        TFileLockGuard lockGuard(GetLockFilePath(storageFileName));
+        return Storage_.Put(storageFileName, TString(), md5, [&data, &md5](const TFsPath& dstFile) {
             TStringInput in(data);
             TFile outFile(dstFile, CreateAlways | ARW | AX);
             TUnbufferedFileOutput out(outFile);
@@ -143,7 +164,7 @@ public:
         try {
             YQL_LOG(INFO) << "PutUrl to cache: " << urlStr;
             THttpURL url = ParseURL(urlStr);
-            for (const auto& d: Downloaders) {
+            for (const auto& d: Downloaders_) {
                 if (d->Accept(url)) {
                     return PutUrl(url, token, d);
                 }
@@ -153,7 +174,7 @@ public:
         } catch (const std::exception& e) {
             const TString msg = TStringBuilder() << "FileStorage: Failed to download file by URL \"" << urlStr << "\", details: " << e.what();
             YQL_LOG(ERROR) << msg;
-            YQL_LOG_CTX_THROW yexception() << msg;
+            YQL_LOG_CTX_THROW TErrorException(UNEXPECTED_ERROR) << msg;
         }
     }
 
@@ -170,37 +191,40 @@ public:
     }
 
     TFsPath GetRoot() const final {
-        return Storage.GetRoot();
+        return Storage_.GetRoot();
     }
 
     TFsPath GetTemp() const final {
-        return Storage.GetTemp();
+        return Storage_.GetTemp();
+    }
+
+    TFsPath GetLockFilePath(const TString& lockName) const final {
+        return Storage_.GetLockFilePath(ComponentName, lockName);
     }
 
     const TFileStorageConfig& GetConfig() const final {
-        return Config;
+        return Config_;
     }
 
 private:
     TFileLinkPtr PutUrl(const THttpURL& url, const TString& token, const NFS::IDownloaderPtr& downloader) {
-        return WithRetry<TDownloadError>(Config.GetRetryCount(), [&, this]() {
+        return WithRetry<TDownloadError>(Config_.GetRetryCount(), [&, this]() {
             return this->DoPutUrl(url, token, downloader);
         }, [&](const auto& e, int attempt, int attemptCount) {
             YQL_LOG(WARN) << "Error while downloading url " << url.PrintS() << ", attempt " << attempt << "/" << attemptCount << ", details: " << e.what();
-            Sleep(TDuration::MilliSeconds(Config.GetRetryDelayMs()));
+            Sleep(TDuration::MilliSeconds(Config_.GetRetryDelayMs()));
         });
     }
 
     TFileLinkPtr DoPutUrl(const THttpURL& url, const TString& token, const NFS::IDownloaderPtr& downloader) {
         const auto urlMetaFile = BuildUrlMetaFileName(url, token);
-        auto lock = MultiResourceLock.Acquire(urlMetaFile); // let's use meta file as lock name
-
+        TFileLockGuard lockGuard(GetLockFilePath(urlMetaFile));
         TUrlMeta urlMeta;
         urlMeta.TryReadFrom(GetRoot() / urlMetaFile);
 
         TFileLinkPtr oldContentLink = nullptr;
         if (urlMeta.ContentFile) {
-            oldContentLink = Storage.HardlinkFromStorage(urlMeta.ContentFile, urlMeta.Md5, "");
+            oldContentLink = Storage_.HardlinkFromStorage(urlMeta.ContentFile, urlMeta.Md5, "");
         }
 
         if (!oldContentLink) {
@@ -236,23 +260,23 @@ private:
         // todo: remove oldContentLink ?
         const auto urlChecksum = BuildUrlChecksum(url, token, etag, lastModified);
         const auto urlContentFile = BuildUrlContentFileName(urlChecksum);
-        TFileLinkPtr result = Storage.Put(urlContentFile, TString(), UseFakeChecksums ? urlChecksum : TString(), puller);
+        TFileLinkPtr result = Storage_.Put(urlContentFile, TString(), UseFakeChecksums_ ? urlChecksum : TString(), puller);
 
         // save meta using rename for atomicity
         urlMeta.ETag = etag;
         urlMeta.LastModified = lastModified;
         urlMeta.ContentFile = result->GetStorageFileName();
         urlMeta.Md5 = result->GetMd5();
-        auto metaTmpFile = Storage.GetTemp() / Storage.GetTempName();
+        auto metaTmpFile = Storage_.GetTemp() / Storage_.GetTempName();
         urlMeta.SaveTo(metaTmpFile);
 
-        Storage.MoveToStorage(metaTmpFile, urlMetaFile);
+        Storage_.MoveToStorage(metaTmpFile, urlMetaFile);
 
         return result;
     }
 
     TString FileChecksum(const TString& file) const {
-        if (UseFakeChecksums) {
+        if (UseFakeChecksums_) {
             // Avoid heavy binaries recalculation in local mode (YQL-15353):
             // calculate MD5 sum of file name instead of file contents
             return MD5::Calc(file);
@@ -275,31 +299,30 @@ private:
     }
 
 private:
-    TStorage Storage;
-    const TFileStorageConfig Config;
-    std::vector<NFS::IDownloaderPtr> Downloaders;
-    TMultiResourceLock MultiResourceLock;
-    const bool UseFakeChecksums;   // YQL-15353
+    TStorage Storage_;
+    const TFileStorageConfig Config_;
+    std::vector<NFS::IDownloaderPtr> Downloaders_;
+    const bool UseFakeChecksums_;   // YQL-15353
 };
 
 class TFileStorageWithAsync: public TFileStorageDecorator {
 public:
     TFileStorageWithAsync(TFileStoragePtr fs)
         : TFileStorageDecorator(std::move(fs))
-        , QueueStarted(0)
+        , QueueStarted_(0)
     {
         auto numThreads = Inner_->GetConfig().GetThreads();
         if (1 == numThreads) {
-            MtpQueue.Reset(new TFakeThreadPool());
+            MtpQueue_.Reset(new TFakeThreadPool());
         } else {
-            MtpQueue.Reset(new TSimpleThreadPool(TThreadPoolParams{"FileStorage"}));
+            MtpQueue_.Reset(new TSimpleThreadPool(TThreadPoolParams{"FileStorage"}));
         }
 
         // do not call MtpQueue->Start here as we have to do it _after_ fork
     }
 
     ~TFileStorageWithAsync() {
-        MtpQueue->Stop();
+        MtpQueue_->Stop();
     }
 
     NThreading::TFuture<TFileLinkPtr> PutFileAsync(const TString& file, const TString& outFileName) final {
@@ -320,19 +343,19 @@ public:
 
 private:
     NThreading::TFuture<TFileLinkPtr> DoAsync(std::function<TFileLinkPtr(const TFileStoragePtr&)> action) {
-        if (AtomicTryLock(&QueueStarted)) {
-            MtpQueue->Start(Inner_->GetConfig().GetThreads());
+        if (AtomicTryLock(&QueueStarted_)) {
+            MtpQueue_->Start(Inner_->GetConfig().GetThreads());
         }
         auto logCtx = NLog::CurrentLogContextPath();
         return NThreading::Async([logCtx, fs = Inner_, action]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
             return action(fs);
-        }, *MtpQueue);
+        }, *MtpQueue_);
     }
 
 private:
-    TAtomic QueueStarted;
-    THolder<IThreadPool> MtpQueue;
+    TAtomic QueueStarted_;
+    THolder<IThreadPool> MtpQueue_;
 };
 
 

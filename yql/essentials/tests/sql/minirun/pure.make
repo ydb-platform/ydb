@@ -45,10 +45,6 @@ PEERDIR(
 
 NO_CHECK_IMPORTS()
 
-IF (SANITIZER_TYPE == "memory")
-    TAG(ya:not_autocheck) # YQL-15385
-ENDIF()
-
 END()
 
 ENDIF()

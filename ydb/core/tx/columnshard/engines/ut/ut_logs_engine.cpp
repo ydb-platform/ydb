@@ -2,16 +2,15 @@
 
 #include <ydb/core/tx/columnshard/background_controller.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -63,46 +62,6 @@ public:
         return result;
     }
 
-    void Insert(const TInsertedData& data) override {
-        Inserted.emplace(data.GetInsertWriteId(), data);
-    }
-
-    void Commit(const TCommittedData& data) override {
-        Committed[data.GetPathId()].emplace(data);
-    }
-
-    void Abort(const TInsertedData& data) override {
-        Aborted.emplace(data.GetInsertWriteId(), data);
-    }
-
-    void EraseInserted(const TInsertedData& data) override {
-        Inserted.erase(data.GetInsertWriteId());
-    }
-
-    void EraseCommitted(const TCommittedData& data) override {
-        Committed[data.GetPathId()].erase(data);
-    }
-
-    void EraseAborted(const TInsertedData& data) override {
-        Aborted.erase(data.GetInsertWriteId());
-    }
-
-    bool Load(TInsertTableAccessor& accessor, const TInstant&) override {
-        for (auto&& i : Inserted) {
-            accessor.AddInserted(std::move(i.second), true);
-        }
-        for (auto&& i : Aborted) {
-            accessor.AddAborted(std::move(i.second), true);
-        }
-        for (auto&& i : Committed) {
-            for (auto&& c : i.second) {
-                auto copy = c;
-                accessor.AddCommitted(std::move(copy), true);
-            }
-        }
-        return true;
-    }
-
     virtual void WritePortion(const NOlap::TPortionInfo& portion) override {
         auto it = Portions.find(portion.GetPortionId());
         if (it == Portions.end()) {
@@ -118,7 +77,10 @@ public:
         const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
         for (auto&& i : Portions) {
             if (!pathId || *pathId == i.second->GetPathId()) {
-                callback(i.second->BuildConstructor(false, false), i.second->GetMeta().SerializeToProto());
+                callback(i.second->BuildConstructor(false, false),
+                    i.second->GetMeta().SerializeToProto(i.second->GetPortionType() == NOlap::EPortionType::Compacted
+                                                             ? NPortion::EProduced::SPLIT_COMPACTED
+                                                             : NPortion::EProduced::INSERTED));
             }
         }
         return true;
@@ -127,7 +89,9 @@ public:
     void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override {
         auto rowProto = row.GetMeta().SerializeToProto();
         if (firstPKColumnId == row.GetColumnId() && row.GetChunkIdx() == 0) {
-            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto();
+            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto(portion.GetPortionType() == NOlap::EPortionType::Compacted
+                                                                                    ? NPortion::EProduced::SPLIT_COMPACTED
+                                                                                    : NPortion::EProduced::INSERTED);
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];
@@ -216,9 +180,6 @@ public:
     }
 
 private:
-    THashMap<TInsertWriteId, TInsertedData> Inserted;
-    THashMap<TInternalPathId, TSet<TCommittedData>> Committed;
-    THashMap<TInsertWriteId, TInsertedData> Aborted;
     THashMap<ui64, std::shared_ptr<NOlap::TPortionInfo>> Portions;
     THashMap<ui32, TIndex> Indices;
 };
@@ -385,7 +346,10 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     //    UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->StartEmergency();
     {
-        auto request = changes->ExtractDataAccessorsRequest();
+        auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::GENERAL_COMPACTION);
+        for (const auto& portion : changes->GetPortionsToAccess()) {
+            request->AddPortion(portion);
+        }
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
         engine.FetchDataAccessors(request);
@@ -475,7 +439,10 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInter
 
     changes->StartEmergency();
     {
-        auto request = changes->ExtractDataAccessorsRequest();
+        auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::GENERAL_COMPACTION);
+        for (const auto& portion : changes->GetPortionsToAccess()) {
+            request->AddPortion(portion);
+        }
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
         engine.FetchDataAccessors(request);

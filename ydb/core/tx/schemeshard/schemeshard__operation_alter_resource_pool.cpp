@@ -1,5 +1,5 @@
-#include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard_impl.h"
 
 
@@ -82,17 +82,14 @@ class TAlterResourcePool : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl) {
+    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
+            .NotUnderOperation()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeResourcePool)
-            .IsValidLeafName()
-            .DepthLimit()
-            .PathsLimit()
-            .DirChildrenLimit()
-            .IsValidACL(acl);
+            ;
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
@@ -140,8 +137,7 @@ public:
         RETURN_RESULT_UNLESS(NResourcePool::IsParentPathValid(result, parentPath));
 
         const TPath& dstPath = parentPath.Child(name);
-        const TString& acl = Transaction.GetModifyACL().GetDiffACL();
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath));
         RETURN_RESULT_UNLESS(NResourcePool::IsApplyIfChecksPassed(Transaction, result, context));
         RETURN_RESULT_UNLESS(NResourcePool::IsDescriptionValid(result, resourcePoolDescription));
 
@@ -158,7 +154,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
         NResourcePool::AdvanceTransactionStateToPropose(OperationId, context, db);
-        NResourcePool::PersistResourcePool(OperationId, context, db, resourcePool, resourcePoolInfo, acl);
+        NResourcePool::PersistResourcePool(OperationId, context, db, resourcePool, resourcePoolInfo, /* acl */ TString());
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 

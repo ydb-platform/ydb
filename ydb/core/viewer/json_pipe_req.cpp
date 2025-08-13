@@ -376,6 +376,14 @@ TString TViewerPipeClient::GetError(const TEvTxUserProxy::TEvProposeTransactionS
     return TStringBuilder() << ev.Record.GetStatus();
 }
 
+bool TViewerPipeClient::IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev) {
+    return ev.Status == Ydb::StatusIds::SUCCESS;
+}
+
+TString TViewerPipeClient::GetError(const NKqp::TEvGetScriptExecutionOperationResponse& ev) {
+    return Ydb::StatusIds_StatusCode_Name(ev.Status);
+}
+
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
@@ -881,6 +889,7 @@ void TViewerPipeClient::RequestTxProxyDescribe(const TString& path, const NKikim
     if (HttpEvent && !HttpEvent->Get()->UserToken.empty()) {
         request->Record.SetUserToken(HttpEvent->Get()->UserToken);
     }
+    request->Record.MutableDescribePath()->MutableOptions()->CopyFrom(options);
     SendRequest(MakeTxProxyID(), request.Release());
 }
 
@@ -929,6 +938,19 @@ std::vector<TNodeId> TViewerPipeClient::GetNodesFromBoardReply(const TEvStateSto
 
 std::vector<TNodeId> TViewerPipeClient::GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
     return GetNodesFromBoardReply(*ev->Get());
+}
+
+std::vector<TNodeId> TViewerPipeClient::GetDatabaseNodes() {
+    if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) {
+        return GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef());
+    } else if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk()) {
+        return GetNodesFromBoardReply(ResourceBoardInfoResponse->GetRef());
+    }
+    return {0};
+}
+
+bool TViewerPipeClient::IsDatabaseRequest() {
+    return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
 }
 
 void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
@@ -1207,6 +1229,10 @@ bool TViewerPipeClient::NeedToRedirect() {
         Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
         if (Database) {
             RedirectToDatabase(Database); // to find some dynamic node and redirect query there
+            return true;
+        }
+        if (!Viewer->CheckAccessViewer(request)) {
+            ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
             return true;
         }
     }

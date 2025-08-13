@@ -16,6 +16,8 @@ DEFINE_ENUM(EOrderByDirection,
 DEFINE_ENUM(ETableJoinType,
     (Inner)
     (Left)
+    (ArrayInner)
+    (ArrayLeft)
 );
 
 DEFINE_ENUM(EWithTotalsMode,
@@ -29,8 +31,9 @@ DEFINE_ENUM(EWithTotalsMode,
 class TQueryBuilder
 {
 public:
-    void SetSource(std::string source);
-    void SetSource(std::string source, std::string alias);
+
+    void SetSource(std::string source, int syntaxVersion = 1, bool subquerySource = false);
+    void SetSource(std::string source, std::string alias, int syntaxVersion = 1, bool subquerySource = false);
 
     int AddSelectExpression(std::string expression);
     int AddSelectExpression(std::string expression, std::string alias);
@@ -51,6 +54,7 @@ public:
     void AddOrderByDescendingExpression(std::string expression);
 
     void AddJoinExpression(std::string table, std::string alias, std::string onExpression, ETableJoinType type);
+    void AddArrayJoinExpression(const std::vector<std::string>& expressions,  const std::vector<std::string>& aliases, ETableJoinType type);
 
     void SetOffset(i64 offset);
     void SetLimit(i64 limit);
@@ -76,10 +80,13 @@ private:
         std::string Alias;
         std::string OnExpression;
         ETableJoinType Type;
+        std::vector<TEntryWithAlias> ArrayJoinFields;
     };
 
 private:
     std::optional<std::string> Source_;
+    bool SourceIsQuery_ = false;
+    int SyntaxVersion_ = 1;
     std::optional<std::string> SourceAlias_;
     std::vector<TEntryWithAlias> SelectEntries_;
     std::vector<std::string> WhereConjuncts_;
@@ -90,6 +97,8 @@ private:
     std::vector<TJoinEntry> JoinEntries_;
     std::optional<i64> Offset_;
     std::optional<i64> Limit_;
+
+    std::string WrapTableName(const std::string& source);
 
     static void FormatEntryWithAlias(TStringBuilderBase* builder, const TEntryWithAlias& entry);
     static void FormatOrderByEntry(TStringBuilderBase* builder, const TOrderByEntry& entry);

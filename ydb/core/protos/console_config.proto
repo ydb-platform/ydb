@@ -138,16 +138,23 @@ message TConfigItem {
         AllowEditYamlInUiItem = 75;
         S3ProxyResolverConfigItem = 76;
         BackgroundCleaningConfigItem = 77;
+        BlobCacheConfigItem = 78;
         MetadataCacheConfigItem = 80;
         MemoryControllerConfigItem = 81;
-        GroupedMemoryLimiterConfig = 82;
+        ScanGroupedMemoryLimiterConfig = 82;
         ReplicationConfigItem = 83;
         CompPrioritiesConfig = 85;
         HealthCheckConfigItem = 89;
         WorkloadManagerConfigItem = 90;
+        CompGroupedMemoryLimiterConfig = 92;
+        BlockstoreConfigItem = 93;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
+
+        CompositeConveyorConfigItem = 109;
+        PortionsMetadataCacheItem = 110;
+        DeduGroupedMemoryLimiterConfig = 112;
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;

@@ -17,15 +17,15 @@ namespace NMiniKQL {
 
 namespace {
 
-class TCompressWithScalarBitmap : public TStatefulWideFlowCodegeneratorNode<TCompressWithScalarBitmap> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TCompressWithScalarBitmap>;
+class TCompressWithScalarBitmapFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TCompressWithScalarBitmapFlowWrapper> {
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TCompressWithScalarBitmapFlowWrapper>;
 public:
-    TCompressWithScalarBitmap(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 bitmapIndex, ui32 width)
+    TCompressWithScalarBitmapFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 bitmapIndex, ui32 inputWidth)
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
         , Flow_(flow)
         , BitmapIndex_(bitmapIndex)
-        , Width_(width)
-        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Width_))
+        , InputWidth_(inputWidth)
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(InputWidth_))
     {
     }
 
@@ -35,7 +35,7 @@ public:
 
         const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
         NUdf::TUnboxedValue bitmap;
-        for (ui32 i = 0, outIndex = 0; i < Width_; ++i) {
+        for (ui32 i = 0, outIndex = 0; i < InputWidth_; ++i) {
             fields[i] = i == BitmapIndex_ ? &bitmap : output[outIndex++];
         }
 
@@ -113,26 +113,26 @@ private:
 
     IComputationWideFlowNode *const Flow_;
     const ui32 BitmapIndex_;
-    const ui32 Width_;
+    const ui32 InputWidth_;
     const ui32 WideFieldsIndex_;
 };
 
-class TCompressScalars : public TStatelessWideFlowCodegeneratorNode<TCompressScalars> {
-using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TCompressScalars>;
+class TCompressScalarsFlowWrapper : public TStatelessWideFlowCodegeneratorNode<TCompressScalarsFlowWrapper> {
+using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TCompressScalarsFlowWrapper>;
 public:
-    TCompressScalars(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 bitmapIndex, ui32 width)
+    TCompressScalarsFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 bitmapIndex, ui32 inputWidth)
         : TBaseComputation(flow)
         , Flow_(flow)
         , BitmapIndex_(bitmapIndex)
-        , Width_(width)
-        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Width_))
+        , InputWidth_(inputWidth)
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(InputWidth_))
     {
     }
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
         NUdf::TUnboxedValue bitmap;
-        for (ui32 i = 0, outIndex = 0; i < Width_; ++i) {
+        for (ui32 i = 0, outIndex = 0; i < InputWidth_; ++i) {
             fields[i] = i == BitmapIndex_ ? &bitmap : output[outIndex++];
         }
 
@@ -141,7 +141,7 @@ public:
                 return result;
 
             if (const auto popCount = GetBitmapPopCountCount(bitmap)) {
-                if (const auto out = output[Width_ - 2])
+                if (const auto out = output[InputWidth_ - 2])
                     *out = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(popCount)));
                 break;
             }
@@ -225,7 +225,7 @@ private:
 
     IComputationWideFlowNode *const Flow_;
     const ui32 BitmapIndex_;
-    const ui32 Width_;
+    const ui32 InputWidth_;
     const ui32 WideFieldsIndex_;
 };
 
@@ -236,10 +236,120 @@ size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
     return GetSparseBitmapPopCount(src, len);
 }
 
-class TCompressBlocks : public TStatefulWideFlowCodegeneratorNode<TCompressBlocks> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TCompressBlocks>;
+struct TCompressBlocksState: public TBlockState {
+    size_t InputSize_ = 0;
+    size_t OutputPos_ = 0;
+    bool IsFinished_ = false;
+
+    const size_t MaxLength_;
+
+    std::vector<std::shared_ptr<arrow::ArrayData>> Arrays_;
+    std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
+
+    NYql::NUdf::TCounter CounterOutputRows_;
+
+    TCompressBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TBlockType*>& types)
+        : TBlockState(memInfo, types.size() + 1U)
+        , MaxLength_(CalcBlockLen(std::accumulate(types.cbegin(), types.cend(), 0ULL, [](size_t max, const TBlockType* type) { return std::max(max, CalcMaxBlockItemSize(type->GetItemType())); })))
+        , Arrays_(types.size() + 1U)
+        , Builders_(types.size())
+    {
+        for (ui32 i = 0; i < types.size(); ++i) {
+            if (types[i]->GetShape() != TBlockType::EShape::Scalar) {
+                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i]->GetItemType(), ctx.ArrowMemoryPool, MaxLength_, &ctx.Builder->GetPgBuilder());
+            }
+        }
+        if (ctx.CountersProvider) {
+            // id will be assigned externally in future versions
+            TString id = TString(Operator_Filter) + "0";
+            CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+        }
+    }
+
+    enum class EStep: i8 {
+        Copy = -1,
+        Skip = 0,
+        Pass = 1
+    };
+
+    EStep Check(const NUdf::TUnboxedValuePod bitmapValue) {
+        Y_ABORT_UNLESS(!IsFinished_);
+        Y_ABORT_UNLESS(!InputSize_);
+        auto& bitmap = Arrays_.back();
+        bitmap = TArrowBlock::From(bitmapValue).GetDatum().array();
+
+        if (!bitmap->length) {
+            return EStep::Skip;
+        }
+
+        const auto popCount = GetBitmapPopCount(bitmap);
+
+        CounterOutputRows_.Add(popCount);
+
+        if (!popCount) {
+            return EStep::Skip;
+        }
+
+        if (!OutputPos_ && ui64(bitmap->length) == popCount) {
+            return EStep::Copy;
+        }
+
+        return EStep::Pass;
+    }
+
+    bool Sparse() {
+        auto& bitmap = Arrays_.back();
+        if (!InputSize_) {
+            InputSize_ = bitmap->length;
+            for (size_t i = 0; i < Builders_.size(); ++i) {
+                if (Builders_[i]) {
+                    Arrays_[i] = TArrowBlock::From(Values[i]).GetDatum().array();
+                    Y_ABORT_UNLESS(ui64(Arrays_[i]->length) == InputSize_);
+                }
+            }
+        }
+
+        size_t outputAvail = MaxLength_ - OutputPos_;
+        size_t takeInputLen = 0;
+        size_t takeInputPopcnt = 0;
+
+        const auto bitmapData = bitmap->GetValues<ui8>(1);
+        while (takeInputPopcnt < outputAvail && takeInputLen < InputSize_) {
+            takeInputPopcnt += bitmapData[takeInputLen++];
+        }
+        Y_ABORT_UNLESS(takeInputLen > 0);
+        for (size_t i = 0; i < Builders_.size(); ++i) {
+            if (Builders_[i]) {
+                auto& arr = Arrays_[i];
+                auto& builder = Builders_[i];
+                auto slice = Chop(arr, takeInputLen);
+                builder->AddMany(*slice, takeInputPopcnt, bitmapData, takeInputLen);
+            }
+        }
+
+        Chop(bitmap, takeInputLen);
+        OutputPos_ += takeInputPopcnt;
+        InputSize_ -= takeInputLen;
+        return MaxLength_ > OutputPos_;
+    }
+
+    void FlushBuffers(const THolderFactory& holderFactory) {
+        for (ui32 i = 0; i < Builders_.size(); ++i) {
+            if (Builders_[i]) {
+                Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
+            }
+        }
+
+        Values.back() = MakeBlockCount(holderFactory, OutputPos_);
+        OutputPos_ = 0;
+        FillArrays();
+    }
+};
+
+class TCompressBlocksFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TCompressBlocksFlowWrapper> {
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TCompressBlocksFlowWrapper>;
 public:
-    TCompressBlocks(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 bitmapIndex, TVector<TBlockType*>&& types)
+    TCompressBlocksFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, ui32 bitmapIndex, TVector<TBlockType*>&& types)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow_(flow)
         , BitmapIndex_(bitmapIndex)
@@ -271,16 +381,16 @@ public:
                         break;
                     case EFetchResult::One:
                         switch (s.Check(bitmap)) {
-                            case TState::EStep::Copy:
+                            case TCompressBlocksState::EStep::Copy:
                                 for (ui32 i = 0; i < s.Values.size(); ++i) {
                                     if (const auto out = output[i]) {
                                         *out = s.Values[i];
                                     }
                                 }
                                 return EFetchResult::One;
-                            case TState::EStep::Skip:
+                            case TCompressBlocksState::EStep::Skip:
                                 continue;
-                            case TState::EStep::Pass:
+                            case TCompressBlocksState::EStep::Pass:
                                 break;
                         }
                         break;
@@ -320,7 +430,7 @@ public:
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
-        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Get>());
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::Get>());
         const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);
         const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", atTop);
 
@@ -349,7 +459,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocks::MakeState>());
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksFlowWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -383,7 +493,7 @@ public:
 
         block = read;
 
-        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::ClearValues>());
+        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::ClearValues>());
         const auto clearType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
         const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
         CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
@@ -410,7 +520,7 @@ public:
         const auto bitmapArg = bitmap;
 
         const auto stepType = Type::getInt8Ty(context);
-        const auto checkFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Check>());
+        const auto checkFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::Check>());
         const auto checkType = FunctionType::get(stepType, {statePtrType, bitmapArg->getType()}, false);
         const auto checkPtr = CastInst::Create(Instruction::IntToPtr, checkFunc, PointerType::getUnqual(checkType), "check_func", block);
         const auto check = CallInst::Create(checkType, checkPtr, {stateArg, bitmapArg}, "check", block);
@@ -420,8 +530,8 @@ public:
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
 
         const auto step = SwitchInst::Create(check, save, 2U, block);
-        step->addCase(ConstantInt::get(stepType, i8(TState::EStep::Skip)), read);
-        step->addCase(ConstantInt::get(stepType, i8(TState::EStep::Copy)), over);
+        step->addCase(ConstantInt::get(stepType, i8(TCompressBlocksState::EStep::Skip)), read);
+        step->addCase(ConstantInt::get(stepType, i8(TCompressBlocksState::EStep::Copy)), over);
 
         block = save;
 
@@ -438,7 +548,7 @@ public:
 
         block = work;
 
-        const auto sparseFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Sparse>());
+        const auto sparseFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::Sparse>());
         const auto sparseType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
         const auto sparsePtr = CastInst::Create(Instruction::IntToPtr, sparseFunc, PointerType::getUnqual(sparseType), "sparse_func", block);
         const auto sparse = CallInst::Create(sparseType, sparsePtr, {stateArg}, "sparse", block);
@@ -457,7 +567,7 @@ public:
 
         block = done;
 
-        const auto flushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::FlushBuffers>());
+        const auto flushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::FlushBuffers>());
         const auto flushType = FunctionType::get(Type::getVoidTy(context), {statePtrType, ctx.GetFactory()->getType()}, false);
         const auto flushPtr = CastInst::Create(Instruction::IntToPtr, flushFunc, PointerType::getUnqual(flushType), "flush_func", block);
         CallInst::Create(flushType, flushPtr, {stateArg, ctx.GetFactory()}, "", block);
@@ -466,7 +576,7 @@ public:
 
         block = fill;
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Slice>());
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::Slice>());
         const auto sliceType = FunctionType::get(indexType, {statePtrType}, false);
         const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice_func", block);
         const auto slice = CallInst::Create(sliceType, slicePtr, {stateArg}, "slice", block);
@@ -515,111 +625,6 @@ public:
     }
 #endif
 private:
-    struct TState : public TBlockState {
-        size_t InputSize_ = 0;
-        size_t OutputPos_ = 0;
-        bool IsFinished_ = false;
-
-        const size_t MaxLength_;
-
-        std::vector<std::shared_ptr<arrow::ArrayData>> Arrays_;
-        std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
-
-        NYql::NUdf::TCounter CounterOutputRows_;
-
-        TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TBlockType*>& types)
-            : TBlockState(memInfo, types.size() + 1U)
-            , MaxLength_(CalcBlockLen(std::accumulate(types.cbegin(), types.cend(), 0ULL, [](size_t max, const TBlockType* type){ return std::max(max, CalcMaxBlockItemSize(type->GetItemType())); })))
-            , Arrays_(types.size() + 1U)
-            , Builders_(types.size())
-        {
-            for (ui32 i = 0; i < types.size(); ++i) {
-                if (types[i]->GetShape() != TBlockType::EShape::Scalar) {
-                    Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i]->GetItemType(), ctx.ArrowMemoryPool, MaxLength_, &ctx.Builder->GetPgBuilder());
-                }
-            }
-            if (ctx.CountersProvider) {
-                // id will be assigned externally in future versions
-                TString id = TString(Operator_Filter) + "0";
-                CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
-            }
-        }
-
-        enum class EStep : i8 {
-            Copy = -1,
-            Skip = 0,
-            Pass = 1
-        };
-
-        EStep Check(const NUdf::TUnboxedValuePod bitmapValue) {
-            Y_ABORT_UNLESS(!IsFinished_);
-            Y_ABORT_UNLESS(!InputSize_);
-            auto& bitmap = Arrays_.back();
-            bitmap = TArrowBlock::From(bitmapValue).GetDatum().array();
-
-            if (!bitmap->length)
-                return EStep::Skip;
-
-            const auto popCount = GetBitmapPopCount(bitmap);
-
-            CounterOutputRows_.Add(popCount);
-
-            if (!popCount)
-                return EStep::Skip;
-
-            if (!OutputPos_ && ui64(bitmap->length) == popCount)
-                return EStep::Copy;
-
-            return EStep::Pass;
-        }
-
-        bool Sparse() {
-            auto& bitmap = Arrays_.back();
-            if (!InputSize_) {
-                InputSize_ = bitmap->length;
-                for (size_t i = 0; i < Builders_.size(); ++i) {
-                    if (Builders_[i]) {
-                        Arrays_[i] = TArrowBlock::From(Values[i]).GetDatum().array();
-                        Y_ABORT_UNLESS(ui64(Arrays_[i]->length) == InputSize_);
-                    }
-                }
-            }
-
-            size_t outputAvail = MaxLength_ - OutputPos_;
-            size_t takeInputLen = 0;
-            size_t takeInputPopcnt = 0;
-
-            const auto bitmapData = bitmap->GetValues<ui8>(1);
-            while (takeInputPopcnt < outputAvail && takeInputLen < InputSize_) {
-                takeInputPopcnt += bitmapData[takeInputLen++];
-            }
-            Y_ABORT_UNLESS(takeInputLen > 0);
-            for (size_t i = 0; i < Builders_.size(); ++i) {
-                if (Builders_[i]) {
-                    auto& arr = Arrays_[i];
-                    auto& builder = Builders_[i];
-                    auto slice = Chop(arr, takeInputLen);
-                    builder->AddMany(*slice, takeInputPopcnt, bitmapData, takeInputLen);
-                }
-            }
-
-            Chop(bitmap, takeInputLen);
-            OutputPos_ += takeInputPopcnt;
-            InputSize_ -= takeInputLen;
-            return MaxLength_ > OutputPos_;
-        }
-
-        void FlushBuffers(const THolderFactory& holderFactory) {
-            for (ui32 i = 0; i < Builders_.size(); ++i) {
-                if (Builders_[i])
-                    Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
-            }
-
-            Values.back() = MakeBlockCount(holderFactory, OutputPos_);
-            OutputPos_ = 0;
-            FillArrays();
-        }
-    };
 #ifndef MKQL_DISABLE_CODEGEN
     class TLLVMFieldsStructureState: public TLLVMFieldsStructureBlockState {
     private:
@@ -663,13 +668,13 @@ private:
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(ctx, Types_);
+        state = ctx.HolderFactory.Create<TCompressBlocksState>(ctx, Types_);
     }
 
-    TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
+    TCompressBlocksState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid())
             MakeState(ctx, state);
-        return *static_cast<TState*>(state.AsBoxed().Get());
+        return *static_cast<TCompressBlocksState*>(state.AsBoxed().Get());
     }
 
 
@@ -679,35 +684,249 @@ private:
     const size_t WideFieldsIndex_;
 };
 
+enum class ECompressType {
+    BitmapIsScalar,
+    AllScalars,
+    Blocks
+};
+
+template <ECompressType CompressType>
+class TCompressStreamWrapper: public TMutableComputationNode<TCompressStreamWrapper<CompressType>> {
+    using TBaseComputation = TMutableComputationNode<TCompressStreamWrapper<CompressType>>;
+
+public:
+    TCompressStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, ui32 bitmapIndex, ui32 inputWidth, TVector<TBlockType*>&& types)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , Stream_(stream)
+        , BitmapIndex_(bitmapIndex)
+        , InputWidth_(inputWidth)
+        , Types_(std::move(types))
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Types_.size() + 2U))
+    {
+    }
+
+    NYql::NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        NYql::NUdf::TUnboxedValue state;
+        if constexpr (CompressType == ECompressType::Blocks) {
+            state = ctx.HolderFactory.Create<TCompressBlocksState>(ctx, Types_);
+        } else {
+            state = NYql::NUdf::TUnboxedValuePod();
+        }
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      std::move(Stream_->GetValue(ctx)),
+                                                      std::move(state),
+                                                      BitmapIndex_,
+                                                      Types_,
+                                                      InputWidth_);
+    }
+
+private:
+    class TStreamValue: public TComputationValue<TStreamValue> {
+        using TBase = TComputationValue<TStreamValue>;
+
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, NYql::NUdf::TUnboxedValue state, ui32 bitmapIndex, const TVector<TBlockType*>& types, ui32 inputWidth)
+            : TBase(memInfo)
+            , HolderFactory_(holderFactory)
+            , Stream_(std::move(stream))
+            , State_(std::move(state))
+            , BitmapIndex_(bitmapIndex)
+            , Types_(types)
+            , Input_(inputWidth, NYql::NUdf::TUnboxedValuePod())
+        {
+        }
+
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) final {
+            if constexpr (CompressType == ECompressType::BitmapIsScalar) {
+                return BitmapIsScalar(output, width);
+            } else if constexpr(CompressType == ECompressType::AllScalars) {
+                return AllScalars(output, width);
+            } else if constexpr (CompressType == ECompressType::Blocks) {
+                return Blocks(output, width);
+            } else {
+                static_assert(0, "Unhandled case");
+            }
+        }
+
+    private:
+        void MoveAllExceptBitmap(NYql::NUdf::TUnboxedValue* output) {
+            for (ui32 i = 0, outIndex = 0; i < Input_.size(); ++i) {
+                if (i == BitmapIndex_) {
+                    continue;
+                }
+                output[outIndex++] = std::move(Input_[i]);
+            }
+        }
+
+        NUdf::EFetchStatus BitmapIsScalar(NUdf::TUnboxedValue* output, ui32 width) {
+            MKQL_ENSURE(width == OutputWidth(), "Width must be the same as output width.");
+            if (State_.IsFinish()) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            if (const auto result = Stream_.WideFetch(Input_.data(), Input_.size()); NUdf::EFetchStatus::Ok != result) {
+                return result;
+            }
+            MoveAllExceptBitmap(output);
+
+            auto& bitmap = Input_[BitmapIndex_];
+            const bool bitmapValue = GetBitmapScalarValue(bitmap) & 1;
+            State_ = bitmapValue ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod::MakeFinish();
+
+            return bitmapValue ? NUdf::EFetchStatus::Ok : NUdf::EFetchStatus::Finish;
+        }
+
+        NUdf::EFetchStatus AllScalars(NUdf::TUnboxedValue* output, ui32 width) {
+            MKQL_ENSURE(width == OutputWidth(), "Width must be the same as output width.");
+
+            auto& bitmap = Input_[BitmapIndex_];
+            for (;;) {
+                if (const auto result = Stream_.WideFetch(Input_.data(), Input_.size()); NUdf::EFetchStatus::Ok != result) {
+                    return result;
+                }
+                MoveAllExceptBitmap(output);
+
+                if (const auto popCount = GetBitmapPopCountCount(bitmap)) {
+                    output[Input_.size() - 2] = HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(popCount)));
+                    break;
+                }
+            }
+            return NUdf::EFetchStatus::Ok;
+        }
+
+        NUdf::EFetchStatus Blocks(NUdf::TUnboxedValue* output, ui32 width) {
+            MKQL_ENSURE(width == OutputWidth(), "Width must be the same as output width.");
+            Y_DEBUG_ABORT_UNLESS(OutputWidth() == Input_.size() - 1);
+            Y_DEBUG_ABORT_UNLESS(OutputWidth() == Types_.size() + 1);
+
+            auto& state = *static_cast<TCompressBlocksState*>(State_.AsBoxed().Get());
+            Y_DEBUG_ABORT_UNLESS(state.Values.size() == OutputWidth());
+
+            auto& bitmap = Input_[BitmapIndex_];
+
+            if (!state.Count) {
+                do {
+                    if (!state.InputSize_) {
+                        state.ClearValues();
+                        auto wideFetchResult = Stream_.WideFetch(Input_.data(), Input_.size());
+                        MoveAllExceptBitmap(state.Values.data());
+
+                        switch (wideFetchResult) {
+                            case NUdf::EFetchStatus::Yield:
+                                return NUdf::EFetchStatus::Yield;
+                            case NUdf::EFetchStatus::Finish:
+                                state.IsFinished_ = true;
+                                break;
+                            case NUdf::EFetchStatus::Ok:
+                                switch (state.Check(bitmap)) {
+                                    case TCompressBlocksState::EStep::Copy:
+                                        for (ui32 i = 0; i < state.Values.size(); ++i) {
+                                            output[i] = state.Values[i];
+                                        }
+                                        return NUdf::EFetchStatus::Ok;
+                                    case TCompressBlocksState::EStep::Skip:
+                                        continue;
+                                    case TCompressBlocksState::EStep::Pass:
+                                        break;
+                                }
+                                break;
+                        }
+                    }
+                } while (!state.IsFinished_ && state.Sparse());
+
+                if (state.OutputPos_) {
+                    state.FlushBuffers(HolderFactory_);
+                } else {
+                    return NUdf::EFetchStatus::Finish;
+                }
+            }
+
+            const auto sliceSize = state.Slice();
+            for (size_t i = 0; i < OutputWidth(); ++i) {
+                output[i] = state.Get(sliceSize, HolderFactory_, i);
+            }
+
+            return NUdf::EFetchStatus::Ok;
+        }
+
+        ui32 OutputWidth() {
+            return Input_.size() - 1;
+        }
+
+        const THolderFactory& HolderFactory_;
+        NYql::NUdf::TUnboxedValue Stream_;
+        NUdf::TUnboxedValue State_;
+        ui32 BitmapIndex_;
+        const TVector<TBlockType*>& Types_;
+        TUnboxedValueVector Input_;
+    };
+
+    void RegisterDependencies() const final {
+        this->DependsOn(Stream_);
+    }
+
+    IComputationNode* const Stream_;
+    const ui32 BitmapIndex_;
+    const ui32 InputWidth_;
+    const TVector<TBlockType*> Types_;
+    const size_t WideFieldsIndex_;
+};
+
+IComputationNode* WrapCompressWithScalarBitmap(TComputationMutables& mutables, IComputationNode* compressArg, ui32 bitmapIndex, ui32 inputWidth, TVector<TBlockType*>&& types) {
+    if (auto* flowCompressArg = dynamic_cast<IComputationWideFlowNode*>(compressArg)) {
+        return new TCompressWithScalarBitmapFlowWrapper(mutables, flowCompressArg, bitmapIndex, inputWidth);
+    } else {
+        return new TCompressStreamWrapper<ECompressType::BitmapIsScalar>(mutables, compressArg, bitmapIndex, inputWidth, std::move(types));
+    }
+}
+
+IComputationNode* WrapCompressScalars(TComputationMutables& mutables, IComputationNode* compressArg, ui32 bitmapIndex, ui32 inputWidth, TVector<TBlockType*>&& types) {
+    if (auto* flowCompressArg = dynamic_cast<IComputationWideFlowNode*>(compressArg)) {
+        return new TCompressScalarsFlowWrapper(mutables, flowCompressArg, bitmapIndex, inputWidth);
+    } else {
+        return new TCompressStreamWrapper<ECompressType::AllScalars>(mutables, compressArg, bitmapIndex, inputWidth, std::move(types));
+    }
+}
+
+IComputationNode* WrapCompressBlocks(TComputationMutables& mutables, IComputationNode* compressArg, ui32 bitmapIndex, ui32 inputWidth, TVector<TBlockType*>&& types) {
+    if (auto* flowCompressArg = dynamic_cast<IComputationWideFlowNode*>(compressArg)) {
+        return new TCompressBlocksFlowWrapper(mutables, flowCompressArg, bitmapIndex, std::move(types));
+    } else {
+        return new TCompressStreamWrapper<ECompressType::Blocks>(mutables, compressArg, bitmapIndex, inputWidth, std::move(types));
+    }
+}
+
 } // namespace
 
 IComputationNode* WrapBlockCompress(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args, got " << callable.GetInputsCount());
 
-    const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto wideComponents = GetWideComponents(flowType);
-    const ui32 width = wideComponents.size();
-    MKQL_ENSURE(width > 1, "Expected at least two columns");
+    const auto streamOrFlowType = callable.GetInput(0).GetStaticType();
+    MKQL_ENSURE(streamOrFlowType->IsStream() || streamOrFlowType->IsFlow(), "Expected stream or flow type.");
+
+    const auto wideComponents = GetWideComponents(streamOrFlowType);
+    const ui32 inputWidth = wideComponents.size();
+    MKQL_ENSURE(inputWidth > 1, "Expected at least two columns");
 
     const auto indexData = AS_VALUE(TDataLiteral, callable.GetInput(1U));
-    const auto index = indexData->AsValue().Get<ui32>();
-    MKQL_ENSURE(index < width - 1, "Bad bitmap index");
+    const auto bitmapIndex = indexData->AsValue().Get<ui32>();
+    MKQL_ENSURE(bitmapIndex < inputWidth - 1, "Bad bitmap index");
 
     TVector<TBlockType*> types;
-    types.reserve(width - 2U);
+    types.reserve(inputWidth - 2U);
     bool bitmapIsScalar = false;
     bool allScalars = true;
-    for (ui32 i = 0; i < width; ++i) {
+    for (ui32 i = 0; i < inputWidth; ++i) {
         types.push_back(AS_TYPE(TBlockType, wideComponents[i]));
         const bool isScalar = types.back()->GetShape() == TBlockType::EShape::Scalar;
-        if (i == width - 1) {
+        if (i == inputWidth - 1) {
             MKQL_ENSURE(isScalar, "Expecting scalar block size as last column");
             bool isOptional;
             TDataType* unpacked = UnpackOptionalData(types.back()->GetItemType(), isOptional);
             auto slot = *unpacked->GetDataSlot();
             MKQL_ENSURE(!isOptional && slot == NUdf::EDataSlot::Uint64, "Expecting Uint64 as last column");
             types.pop_back();
-        } else if (i == index) {
+        } else if (i == bitmapIndex) {
             bool isOptional;
             TDataType* unpacked = UnpackOptionalData(types.back()->GetItemType(), isOptional);
             auto slot = *unpacked->GetDataSlot();
@@ -719,16 +938,13 @@ IComputationNode* WrapBlockCompress(TCallable& callable, const TComputationNodeF
         }
     }
 
-    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
-    MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
-
+    const auto compressArg = LocateNode(ctx.NodeLocator, callable, 0);
     if (bitmapIsScalar) {
-        return new TCompressWithScalarBitmap(ctx.Mutables, wideFlow, index, width);
+        return WrapCompressWithScalarBitmap(ctx.Mutables, compressArg, bitmapIndex, inputWidth, std::move(types));
     } else if (allScalars) {
-        return new TCompressScalars(ctx.Mutables, wideFlow, index, width);
+        return WrapCompressScalars(ctx.Mutables, compressArg, bitmapIndex, inputWidth, std::move(types));
     }
-
-    return new TCompressBlocks(ctx.Mutables, wideFlow, index, std::move(types));
+    return WrapCompressBlocks(ctx.Mutables, compressArg, bitmapIndex, inputWidth, std::move(types));
 }
 
 } // namespace NMiniKQL

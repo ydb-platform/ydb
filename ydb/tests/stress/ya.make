@@ -1,10 +1,18 @@
 RECURSE(
+    cdc
+    common
+    ctas
     kv
     log
     mixedpy
+    node_broker
     olap_workload
     oltp_workload
+    reconfig_state_storage_workload
+    s3_backups
+    show_create/view
     simple_queue
     statistics_workload
+    topic
     transfer
 )

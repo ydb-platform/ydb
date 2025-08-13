@@ -131,6 +131,7 @@ public:
     TActorId CutLogId;
     TActorId WhiteboardProxyId;
     ui32 SlotId;
+    ui32 GroupSizeInUnits;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
@@ -139,6 +140,7 @@ public:
         , CutLogId(ev.CutLogID)
         , WhiteboardProxyId(ev.WhiteboardProxyId)
         , SlotId(ev.SlotId)
+        , GroupSizeInUnits(ev.GroupSizeInUnits)
     {}
 
     ERequestType GetType() const override {
@@ -157,8 +159,26 @@ public:
         str << "VDisk# " << VDisk.ToString();
         str << " PDiskGuid# " << PDiskGuid;
         str << " SlotId# " << SlotId;
+        str << " GroupSizeInUnits# " << GroupSizeInUnits;
         str << "}";
         return str.Str();
+    }
+};
+
+//
+// TYardResize
+//
+class TYardResize : public TRequestBase {
+public:
+    ui32 GroupSizeInUnits;
+
+    TYardResize(const NPDisk::TEvYardResize &ev, const TActorId &sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::YardResize, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , GroupSizeInUnits(ev.GroupSizeInUnits)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestYardResize;
     }
 };
 

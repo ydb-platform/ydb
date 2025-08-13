@@ -212,6 +212,7 @@ namespace NMonitoring {
 
         void Accept(TInstant time, IMetricConsumer* consumer) const override;
         void Append(TInstant time, IMetricConsumer* consumer) const override;
+        void Took(TInstant time, IMetricConsumer* consumer) const;
 
         const TLabels& CommonLabels() const noexcept override {
             return CommonLabels_;

@@ -36,6 +36,7 @@ public:
     friend class TOptionsParseResult;
 
 public:
+    TClientCommandOptions();
     TClientCommandOptions(NLastGetopt::TOpts opts);
 
     // Current command title
@@ -128,6 +129,8 @@ public:
 
     TClientCommandOption& AddLongName(const TString& name);
 
+    TClientCommandOption& IfPresentDisableCompletion();
+
     const NLastGetopt::EHasArg& GetHasArg() const;
 
     // Store result. If option is file name, stores the contents of file in result.
@@ -197,6 +200,7 @@ public:
 
     TClientCommandOption& Handler(THandler);
     TClientCommandOption& Validator(TValidator);
+    TClientCommandOption& Handler(void (*f)(const NLastGetopt::TOptsParser*));
 
     // YDB CLI specific options
 
@@ -209,7 +213,7 @@ public:
     TClientCommandOption& Env(const TString& envName, bool isFileName, const TString& humanReadableFileName = {});
 
     // Parse option from profile
-    TClientCommandOption& ProfileParam(const TString& profileParamName);
+    TClientCommandOption& ProfileParam(const TString& profileParamName, bool isFileName = false);
 
     TClientCommandOption& SetSupportsProfile(bool supports = true);
 
@@ -220,6 +224,8 @@ public:
     TClientCommandOption& DocLink(const TString& link);
 
     TClientCommandOption& DefaultValue(const TString& defaultValue);
+
+    TClientCommandOption& ManualDefaultValueDescription(const TString& description);
 
     template <class TValue>
     TClientCommandOption& DefaultValue(const TValue& defaultValue) {
@@ -238,10 +244,11 @@ protected:
     TClientCommandOption& SetHandler();
     bool HandlerImpl(TString value, bool isFileName, const TString& humanReadableFileName, EOptionValueSource valueSource);
     void RebuildHelpMessage();
+    bool NeedPrintDefinitionsPriority() const;
 
     // Try parse from profile.
     // if parsedValue is not null, set it with parsed value, if actual
-    virtual bool TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, std::vector<TString>* errors, bool parseOnly) const;
+    virtual bool TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, bool* isFileName, std::vector<TString>* errors, bool parseOnly) const;
 
 protected:
     struct TEnvInfo {
@@ -263,7 +270,9 @@ protected:
     TString* FilePath = nullptr;
     std::vector<TEnvInfo> EnvInfo;
     TString DefaultOptionValue;
+    TString ManualDefaultOptionValueDescription;
     TString ProfileParamName;
+    bool ProfileParamIsFileName = false;
     bool CanParseFromProfile = false;
     TString ConnectionParamName;
     TString Documentation;
@@ -272,7 +281,7 @@ protected:
 
 class TAuthMethodOption : public TClientCommandOption {
 public:
-    using TProfileParser = std::function<bool(const YAML::Node& authData, TString* value, std::vector<TString>* errors, bool parseOnly)>;
+    using TProfileParser = std::function<bool(const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly)>;
 public:
     TAuthMethodOption(NLastGetopt::TOpt& opt, TClientCommandOptions* clientOptions);
 
@@ -293,7 +302,7 @@ public:
     }
 
 protected:
-    bool TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, std::vector<TString>* errors, bool parseOnly) const override;
+    bool TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, bool* isFileName, std::vector<TString>* errors, bool parseOnly) const override;
 
 protected:
     TString AuthMethodName;
@@ -353,21 +362,16 @@ private:
 
 class TCommandOptsParseResult: public NLastGetopt::TOptsParseResult {
 public:
-    TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, const char* argv[], bool throwOnParseError = false)
-        : ThrowOnParseError(throwOnParseError) {
+    TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, const char* argv[]) {
         Init(options, argc, argv);
     }
 
     virtual ~TCommandOptsParseResult() = default;
 
     void HandleError() const override {
-        if (ThrowOnParseError) {
-            throw;
-        }
-        NLastGetopt::TOptsParseResult::HandleError();
+        // Throwing exception to override default behaviour (exit with error code) to be able to handle error in a custom way
+        throw;
     }
-private:
-    bool ThrowOnParseError;
 };
 
 class TOptionsParseResult {
@@ -377,7 +381,7 @@ public:
     using TConnectionParamsLogger = std::function<void(const TString& /*paramName*/, const TString& /*value*/, const TString& /*sourceText*/)>;
 
 public:
-    TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv, bool throwOnParseError = false);
+    TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv);
 
     // Parses from profile and env. Returns erros if they occur during parsing
     std::vector<TString> ParseFromProfilesAndEnv(std::shared_ptr<IProfile> explicitProfile, std::shared_ptr<IProfile> activeProfile);

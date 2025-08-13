@@ -121,7 +121,7 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
 
 ui32 TStagePredictor::GetUsableThreads() {
     std::optional<ui32> userPoolSize;
-    if (TlsActivationContext && TlsActivationContext->ActorSystem()) {
+    if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
         userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount(AppData()->UserPoolId);
     }
     if (!userPoolSize) {
@@ -131,16 +131,26 @@ ui32 TStagePredictor::GetUsableThreads() {
     return Max<ui32>(1, *userPoolSize);
 }
 
-ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const {
+ui32 TStagePredictor::CalcTasksOptimalCount(
+    const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount,
+    TVector<TString>& intros) const
+{
     ui32 result = 0;
     if (!LevelDataPrediction || *LevelDataPrediction == 0) {
-        ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "level difficult not defined for correct calculation";
+        ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "level difficulty not defined for correct calculation";
         result = availableThreadsCount;
+        intros.push_back("Level difficulty not defined for correct calculation");
     } else {
         result = (availableThreadsCount - previousStageTasksCount.value_or(0) * 0.25) * (InputDataPrediction / *LevelDataPrediction);
+        intros.push_back("Using level data prediction: (availableThreadsCount - previousStageTasksCount * 0.25) * (InputDataPrediction / LevelDataPrediction) = " + ToString(result));
+        intros.push_back("(availableThreadsCount = " + ToString(availableThreadsCount) + ")");
+        intros.push_back("(previousStageTasksCount = " + ToString(previousStageTasksCount.value_or(0)) + ")");
+        intros.push_back("(InputDataPrediction = " + ToString(InputDataPrediction) + ")");
+        intros.push_back("(LevelDataPrediction = " + ToString(*LevelDataPrediction) + ")");
     }
     if (previousStageTasksCount) {
         result = std::min<ui32>(result, *previousStageTasksCount);
+        intros.push_back("Shrinking result to previous stage tasks count - " + ToString(result));
     }
     return std::max<ui32>(1, result);
 }

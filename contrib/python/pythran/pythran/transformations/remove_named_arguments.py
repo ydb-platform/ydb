@@ -15,7 +15,7 @@ def handle_special_calls(func_alias, node):
             node.args.insert(0, ast.Constant(0, None))
 
 
-class RemoveNamedArguments(Transformation):
+class RemoveNamedArguments(Transformation[Aliases]):
     '''
     Replace call with named arguments to regular calls
 
@@ -31,9 +31,6 @@ class RemoveNamedArguments(Transformation):
     def bar(z):
         return foo(0, z)
     '''
-
-    def __init__(self):
-        super(RemoveNamedArguments, self).__init__(Aliases)
 
     def handle_keywords(self, func, node, offset=0):
         '''

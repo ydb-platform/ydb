@@ -19,6 +19,7 @@ from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
+import ydb.tests.olap.lib.remote_execution as re
 
 
 class LoadSuiteBase:
@@ -37,6 +38,7 @@ class LoadSuiteBase:
     scale: Optional[int] = None
     query_prefix: str = get_external_param('query-prefix', '')
     verify_data: bool = True
+    float_mode: str = ''
     __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
 
     @classmethod
@@ -84,9 +86,8 @@ class LoadSuiteBase:
     def check_tables_size(cls, folder: Optional[str], tables: dict[str, int]):
         wait_error = YdbCluster.wait_ydb_alive(
             int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), (
-                f'{YdbCluster.tables_path}/{folder}'
-                if folder is not None
-                else [f'{YdbCluster.tables_path}/{t}' for t in tables.keys()]
+                folder if folder is not None
+                else [t for t in tables.keys()]
             ))
         if wait_error is not None:
             pytest.fail(f'Cluster is dead: {wait_error}')
@@ -107,15 +108,20 @@ class LoadSuiteBase:
             pytest.fail(f'Unexpected tables size in `{folder}`:\n {msg}')
 
     @staticmethod
-    def __execute_ssh(host: str, cmd: str):
-        ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-        ssh_user = os.getenv('SSH_USER')
-        if ssh_user is not None:
-            ssh_cmd += ['-l', ssh_user]
-        ssh_key_file = os.getenv('SSH_KEY_FILE')
-        if ssh_key_file is not None:
-            ssh_cmd += ['-i', ssh_key_file]
-        return yatest.common.execute(ssh_cmd + [host, cmd], wait=False, text=True)
+    def execute_ssh(host: str, cmd: str):
+        local = re.is_localhost(host)
+        if local:
+            ssh_cmd = cmd
+        else:
+            ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+            ssh_user = os.getenv('SSH_USER')
+            if ssh_user is not None:
+                ssh_cmd += ['-l', ssh_user]
+            ssh_key_file = os.getenv('SSH_KEY_FILE')
+            if ssh_key_file is not None:
+                ssh_cmd += ['-i', ssh_key_file]
+            ssh_cmd += [host, cmd]
+        return yatest.common.execute(ssh_cmd, wait=False, text=True, shell=local)
 
     @classmethod
     def __hide_query_text(cls, text, query_text):
@@ -124,8 +130,14 @@ class LoadSuiteBase:
         return text.replace(query_text, '<Query text hided by sequrity reasons>')
 
     @classmethod
-    def __attach_logs(cls, start_time, attach_name, query_text):
-        hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
+    def __attach_logs(cls, start_time, attach_name, query_text, ignore_roles=False):
+        if ignore_roles:
+            # Получаем уникальные хосты кластера без фильтрации по роли
+            hosts = sorted(set(node.host for node in YdbCluster.get_cluster_nodes()))
+        else:
+            # Оригинальная логика - только STORAGE ноды
+            hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
+
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}}{{container}}"
@@ -136,7 +148,7 @@ class LoadSuiteBase:
         for host in hosts:
             for c in exec_kikimr.keys():
                 try:
-                    exec_kikimr[c][host] = cls.__execute_ssh(host, cmd.format(
+                    exec_kikimr[c][host] = cls.execute_ssh(host, cmd.format(
                         storage='kikimr',
                         container=f' -m k8s_container:{c}' if c else ''
                     ))
@@ -144,11 +156,19 @@ class LoadSuiteBase:
                     logging.error(e)
             for c in exec_start.keys():
                 try:
-                    exec_start[c][host] = cls.__execute_ssh(host, cmd.format(
+                    exec_start[c][host] = cls.execute_ssh(host, cmd.format(
                         storage='kikimr-start',
                         container=f' -m k8s_container:{c}' if c else ''))
                 except BaseException as e:
                     logging.error(e)
+
+        if not hosts:
+            allure.attach(
+                "No cluster hosts found, no kikimr logs collected.",
+                f"{attach_name} logs info",
+                allure.attachment_type.TEXT
+            )
+            return
 
         error_log = ''
         for c, execs in exec_start.items():
@@ -175,7 +195,7 @@ class LoadSuiteBase:
     @classmethod
     def __get_core_hashes_by_pod(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, list[tuple[str, str]]]:
         core_processes = {
-            h: cls.__execute_ssh(h, 'sudo flock /tmp/brk_pad /Berkanavt/breakpad/bin/kikimr_breakpad_analizer.sh')
+            h: cls.execute_ssh(h, 'sudo flock /tmp/brk_pad /Berkanavt/breakpad/bin/kikimr_breakpad_analizer.sh')
             for h in hosts
         }
 
@@ -184,9 +204,9 @@ class LoadSuiteBase:
             exec.wait(check_exit_code=False)
             if exec.returncode != 0:
                 logging.error(f'Error while process coredumps on host {h}: {exec.stderr}')
-            exec = cls.__execute_ssh(h, ('find /coredumps/ -name "sended_*.json" '
-                                         f'-mmin -{(10 + time() - start_time) / 60} -mmin +{(-10 + time() - end_time) / 60}'
-                                         ' | while read FILE; do cat $FILE; echo -n ","; done'))
+            exec = cls.execute_ssh(h, ('find /coredumps/ -name "sended_*.json" '
+                                       f'-mmin -{(10 + time() - start_time) / 60} -mmin +{(-10 + time() - end_time) / 60}'
+                                       ' | while read FILE; do cat $FILE; echo -n ","; done'))
             exec.wait(check_exit_code=False)
             if exec.returncode == 0:
                 for core in json.loads(f'[{exec.stdout.strip(",")}]'):
@@ -205,7 +225,7 @@ class LoadSuiteBase:
         oom_cmd = f'sudo journalctl -k -q --no-pager -S "{start}" -U "{end}" --grep "Out of memory: Kill" --case-sensitive=false'
         ooms = set()
         for h in hosts:
-            exec = cls.__execute_ssh(h, oom_cmd)
+            exec = cls.execute_ssh(h, oom_cmd)
             exec.wait(check_exit_code=False)
             if exec.returncode == 0:
                 if exec.stdout:
@@ -309,7 +329,8 @@ class LoadSuiteBase:
         end_time = time()
         allure_test_description(
             cls.suite(), query_name,
-            start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time)
+            start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time),
+            workload_result=result, workload_params=None
         )
         stats = result.get_stats(query_name)
         for p in ['Mean']:
@@ -341,7 +362,7 @@ class LoadSuiteBase:
 
     @classmethod
     def setup_class(cls) -> None:
-        start_time = time()
+        cls._setup_start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
         result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))))
@@ -352,12 +373,12 @@ class LoadSuiteBase:
             except BaseException as e:
                 result.add_error(str(e))
                 result.traceback = e.__traceback__
-        result.iterations[0].time = time() - start_time
+        result.iterations[0].time = time() - cls._setup_start_time
         query_name = '_Verification'
         result.add_stat(query_name, 'Mean', 1000 * result.iterations[0].time)
         nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
-        result.start_time = max(start_time - 600, first_node_start_time)
+        result.start_time = max(cls._setup_start_time - 600, first_node_start_time)
         cls.process_query_result(result, query_name, True)
 
     @classmethod
@@ -445,17 +466,352 @@ class LoadSuiteBase:
             scale=self.scale,
             query_prefix=qparams.query_prefix,
             external_path=self.get_external_path(),
+            float_mode=self.float_mode,
         )[query_name]
         self.process_query_result(result, query_name, True)
+
+    @classmethod
+    def check_nodes_diagnostics(cls, result: YdbCliHelper.WorkloadRunResult, end_time: float) -> list[NodeErrors]:
+        """
+        Собирает диагностическую информацию о нодах без проверки перезапусков/падений.
+        Проверяет coredump'ы и OOM для всех нод из сохраненного состояния.
+        """
+        return cls.check_nodes_diagnostics_with_timing(result, result.start_time, end_time)
+
+    @classmethod
+    def check_nodes_diagnostics_with_timing(cls, result: YdbCliHelper.WorkloadRunResult, start_time: float, end_time: float) -> list[NodeErrors]:
+        """
+        Собирает диагностическую информацию о нодах с кастомным временным интервалом.
+        Проверяет coredump'ы и OOM для всех нод из сохраненного состояния.
+
+        Args:
+            result: результат выполнения workload
+            start_time: время начала интервала для диагностики
+            end_time: время окончания интервала для диагностики
+        """
+        if cls.__nodes_state is None:
+            return []
+
+        # Получаем все хосты из сохраненного состояния
+        all_hosts = {node.host for node in cls.__nodes_state.values()}
+
+        # Собираем диагностическую информацию для всех хостов
+        core_hashes = cls.__get_core_hashes_by_pod(all_hosts, start_time, end_time)
+        ooms = cls.__get_hosts_with_omms(all_hosts, start_time, end_time)
+
+        # Создаем NodeErrors для каждой ноды с диагностической информацией
+        node_errors = []
+        for node in cls.__nodes_state.values():
+            # Создаем NodeErrors только если есть coredump'ы или OOM
+            has_cores = bool(core_hashes.get(node.slot, []))
+            has_oom = node.host in ooms
+
+            if has_cores or has_oom:
+                node_error = NodeErrors(node, 'diagnostic info collected')
+                node_error.core_hashes = core_hashes.get(node.slot, [])
+                node_error.was_oom = has_oom
+                node_errors.append(node_error)
+
+                # Добавляем ошибки в результат (cores и OOM - это errors)
+                if has_cores:
+                    result.add_error(f'Node {node.slot} has {len(node_error.core_hashes)} coredump(s)')
+                if has_oom:
+                    result.add_error(f'Node {node.slot} experienced OOM')
+
+        cls.__nodes_state = None
+        return node_errors
+
+    def _collect_workload_params(self, result, workload_name):
+        """
+        Собирает параметры workload для отчёта.
+        1. Сначала добавляет ключевые параметры из params_to_include (гарантированно попадут в отчёт).
+        2. Затем добавляет все остальные параметры из статистики workload, кроме исключённых (служебных), чтобы не потерять новые или специфичные метрики.
+        """
+        workload_params = {}
+        workload_stats = result.get_stats(workload_name)
+        if workload_stats:
+            # 1. Добавляем только самые важные параметры (гарантированно попадут в отчёт)
+            params_to_include = [
+                'total_runs', 'planned_duration', 'actual_duration',
+                'use_iterations', 'workload_type', 'table_type',
+                'total_iterations', 'total_threads'
+            ]
+            for param in params_to_include:
+                if param in workload_stats:
+                    workload_params[param] = workload_stats[param]
+            # 2. Добавляем все остальные параметры, кроме исключённых служебных
+            # Это позволяет автоматически включать новые/дополнительные метрики
+            for key, value in workload_stats.items():
+                if key not in workload_params and key not in ['success_rate', 'successful_runs', 'failed_runs']:
+                    workload_params[key] = value
+        return workload_params
+
+    def _diagnose_nodes(self, result, workload_name):
+        """Проводит диагностику нод (cores/oom) и возвращает список ошибок"""
+        try:
+            end_time = time()
+            diagnostics_start_time = getattr(result, 'workload_start_time', result.start_time)
+            node_errors = type(self).check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
+        except Exception as e:
+            logging.error(f"Error getting nodes state: {e}")
+            result.add_warning(f"Error getting nodes state: {e}")
+            node_errors = []
+        return node_errors
+
+    def _update_summary_flags(self, result, workload_name):
+        """Обновляет summary-флаги для warning/error по всем итерациям"""
+        has_warning = False
+        has_error = False
+
+        # Проверяем ошибки и предупреждения в итерациях
+        for iteration in getattr(result, "iterations", {}).values():
+            if hasattr(iteration, "warning_message") and iteration.warning_message:
+                has_warning = True
+            if hasattr(iteration, "error_message") and iteration.error_message:
+                has_error = True
+
+        # Проверяем ошибки и предупреждения в основном результате
+        if result.warnings:
+            has_warning = True
+        if result.errors:
+            has_error = True
+
+        # Для обратной совместимости также проверяем старые поля
+        if hasattr(result, "warning_message") and result.warning_message:
+            has_warning = True
+        if hasattr(result, "error_message") and result.error_message:
+            has_error = True
+
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            stats["with_warnings"] = has_warning
+            stats["with_errors"] = has_error
+
+    def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols):
+        """Формирует allure-отчёт по результатам workload"""
+        end_time = time()
+        start_time = result.start_time if result.start_time else end_time - 1
+        additional_table_strings = {}
+        if workload_params.get('actual_duration') is not None:
+            actual_duration = workload_params['actual_duration']
+            planned_duration = workload_params.get('planned_duration', getattr(self, 'timeout', 0))
+            actual_minutes = int(actual_duration) // 60
+            actual_seconds = int(actual_duration) % 60
+            planned_minutes = int(planned_duration) // 60
+            planned_seconds = int(planned_duration) % 60
+            additional_table_strings['execution_time'] = f"Actual: {actual_minutes}m {actual_seconds}s (Planned: {planned_minutes}m {planned_seconds}s)"
+        if 'total_iterations' in workload_params and 'total_threads' in workload_params:
+            total_iterations = workload_params['total_iterations']
+            total_threads = workload_params['total_threads']
+            if total_iterations == 1 and total_threads > 1:
+                additional_table_strings['execution_mode'] = f"Single iteration with {total_threads} parallel threads"
+            elif total_iterations > 1:
+                avg_threads = workload_params.get('avg_threads_per_iteration', 1)
+                additional_table_strings['execution_mode'] = f"{total_iterations} iterations with avg {avg_threads:.1f} threads per iteration"
+        allure_test_description(
+            suite=type(self).suite(),
+            test=workload_name,
+            start_time=start_time,
+            end_time=end_time,
+            addition_table_strings=additional_table_strings,
+            node_errors=node_errors,
+            workload_result=result,
+            workload_params=workload_params,
+            use_node_subcols=use_node_subcols
+        )
+
+    def _handle_final_status(self, result, workload_name, node_errors):
+        """Обрабатывает финальный статус теста: fail, broken, etc."""
+        stats = result.get_stats(workload_name)
+        node_issues = stats.get("nodes_with_issues", 0) if stats else 0
+        workload_errors = []
+        if result.errors:
+            for err in result.errors:
+                if "coredump" not in err.lower() and "oom" not in err.lower():
+                    workload_errors.append(err)
+
+        # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
+        cluster_log_mode = get_external_param('cluster_log', 'default')
+        attach_logs_method = getattr(type(self), "_LoadSuiteBase__attach_logs", None)
+        if attach_logs_method:
+            try:
+                if cluster_log_mode == 'all' or node_issues > 0 or workload_errors:
+                    attach_logs_method(
+                        start_time=getattr(result, "start_time", None),
+                        attach_name="kikimr",
+                        query_text="",
+                        ignore_roles=True  # Собираем логи со всех уникальных хостов
+                    )
+            except Exception as e:
+                logging.warning(f"Failed to attach kikimr logs: {e}")
+
+        # --- FAIL TEST IF CORES OR OOM FOUND ---
+        if node_issues > 0:
+            error_msg = f"Test failed: found {node_issues} node(s) with coredump(s) or OOM(s)"
+            pytest.fail(error_msg)
+        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
+        if workload_errors:
+            allure.dynamic.label("severity", "critical")
+            raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
+
+        # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
+        if not result.success and result.error_message:
+            # Создаем детальное сообщение об ошибке с контекстом
+            error_details = []
+            error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
+            error_details.append(f"Main error: {result.error_message}")
+            if result.iterations:
+                error_details.append("\nExecution details:")
+                error_details.append(f"Total iterations attempted: {len(result.iterations)}")
+                failed_iterations = []
+                successful_iterations = []
+                for iter_num, iteration in result.iterations.items():
+                    if iteration.error_message:
+                        failed_iterations.append({
+                            'iteration': iter_num,
+                            'error': iteration.error_message,
+                            'time': iteration.time
+                        })
+                    else:
+                        successful_iterations.append({
+                            'iteration': iter_num,
+                            'time': iteration.time
+                        })
+                if failed_iterations:
+                    error_details.append(f"\nFAILED ITERATIONS ({len(failed_iterations)}):")
+                    for fail_info in failed_iterations:
+                        error_details.append(f"  - Iteration {fail_info['iteration']}: {fail_info['error']} (time: {fail_info['time']:.1f}s)")
+                if successful_iterations:
+                    error_details.append(f"\nSuccessful iterations ({len(successful_iterations)}):")
+                    for success_info in successful_iterations:
+                        error_details.append(f"  - Iteration {success_info['iteration']}: OK (time: {success_info['time']:.1f}s)")
+            if result.stderr and result.stderr.strip():
+                stderr_preview = result.stderr.strip()
+                if len(stderr_preview) > 500:
+                    stderr_preview = "..." + stderr_preview[-500:]
+                error_details.append(f"\nSTDERR (last 500 chars):\n{stderr_preview}")
+            if result.stdout and "error" in result.stdout.lower():
+                stdout_lines = result.stdout.split('\n')
+                error_lines = [line for line in stdout_lines if 'error' in line.lower()]
+                if error_lines:
+                    error_details.append("\nError lines from STDOUT:")
+                    for line in error_lines[:5]:
+                        error_details.append(f"  {line.strip()}")
+            stats = result.get_stats(workload_name)
+            if stats:
+                if 'successful_runs' in stats and 'total_runs' in stats:
+                    error_details.append("\nRUN STATISTICS:")
+                    error_details.append(f"  Successful runs: {stats['successful_runs']}/{stats['total_runs']}")
+                    if 'failed_runs' in stats:
+                        error_details.append(f"  Failed runs: {stats['failed_runs']}")
+                    if 'success_rate' in stats:
+                        error_details.append(f"  Success rate: {stats['success_rate']:.1%}")
+                if any(key.startswith('deployment_') for key in stats.keys()):
+                    deployment_info = {k: v for k, v in stats.items() if k.startswith('deployment_')}
+                    if deployment_info:
+                        error_details.append("\nDEPLOYMENT INFO:")
+                        for key, value in deployment_info.items():
+                            error_details.append(f"  {key}: {value}")
+            detailed_error_message = "\n".join(error_details)
+            exc = pytest.fail.Exception(detailed_error_message)
+            if result.traceback is not None:
+                exc = exc.with_traceback(result.traceback)
+            raise exc
+        if result.warning_message:
+            logging.warning(f"Workload completed with warnings: {result.warning_message}")
+
+    def _upload_results(self, result, workload_name):
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            stats["aggregation_level"] = "aggregate"
+            stats["run_id"] = ResultsProcessor.get_run_id()
+        end_time = time()
+        ResultsProcessor.upload_results(
+            kind='Load',
+            suite=type(self).suite(),
+            test=workload_name,
+            timestamp=end_time,
+            is_successful=result.success,
+            statistics=stats,
+        )
+
+    def _upload_results_per_workload_run(self, result, workload_name):
+        suite = type(self).suite()
+        agg_stats = result.get_stats(workload_name)
+        nemesis_enabled = agg_stats.get("nemesis_enabled") if agg_stats else None
+        run_id = ResultsProcessor.get_run_id()
+        for iter_num, iteration in result.iterations.items():
+            runs = getattr(iteration, "runs", None) or [iteration]
+            for run_idx, run in enumerate(runs):
+                if getattr(run, "error_message", None):
+                    resolution = "error"
+                elif getattr(run, "warning_message", None):
+                    resolution = "warning"
+                elif hasattr(run, "timeout") and run.timeout:
+                    resolution = "timeout"
+                else:
+                    resolution = "ok"
+
+                stats = {
+                    "iteration": iter_num,
+                    "run_index": run_idx,
+                    "duration": getattr(run, "time", None),
+                    "resolution": resolution,
+                    "error_message": getattr(run, "error_message", None),
+                    "warning_message": getattr(run, "warning_message", None),
+                    "nemesis_enabled": nemesis_enabled,
+                    "aggregation_level": "per_run",
+                    "run_id": run_id,
+                }
+                ResultsProcessor.upload_results(
+                    kind='Stress',
+                    suite=suite,
+                    test=f"{workload_name}__iter_{iter_num}__run_{run_idx}",
+                    timestamp=time(),
+                    is_successful=(resolution == "ok"),
+                    duration=stats["duration"],
+                    statistics=stats,
+                )
+
+    def process_workload_result_with_diagnostics(self, result, workload_name, check_scheme=True, use_node_subcols=False):
+        """
+        Обрабатывает результат workload с добавлением диагностической информации
+        """
+        # 1. Сбор параметров workload
+        workload_params = self._collect_workload_params(result, workload_name)
+
+        # 2. Диагностика нод (cores/oom)
+        node_errors = self._diagnose_nodes(result, workload_name)
+
+        # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
+        stats = result.get_stats(workload_name)
+        if stats is not None:
+            result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
+
+        # 3. Формирование summary/статистики
+        self._update_summary_flags(result, workload_name)
+
+        # 4. Формирование allure-отчёта
+        self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
+
+        # 5. Обработка ошибок/статусов (fail, broken, etc)
+        self._handle_final_status(result, workload_name, node_errors)
+
+        # 6. Загрузка агрегированных результатов
+        self._upload_results(result, workload_name)
+        # 7. Загрузка результатов по каждому запуску workload
+        self._upload_results_per_workload_run(result, workload_name)
 
 
 class LoadSuiteParallel(LoadSuiteBase):
     threads: int = 0
 
-    def get_query_list() -> list[str]:
+    @classmethod
+    def get_query_list(cls) -> list[str]:
         return []
 
-    def get_path() -> str:
+    @classmethod
+    def get_path(cls) -> str:
         return ''
 
     __results: dict[str, YdbCliHelper.WorkloadRunResult] = {}
@@ -475,7 +831,8 @@ class LoadSuiteParallel(LoadSuiteBase):
             scale=cls.scale,
             query_prefix=qparams.query_prefix,
             external_path=cls.get_external_path(),
-            threads=cls.threads
+            threads=cls.threads,
+            float_mode=cls.float_mode,
         )
 
     def test(self, query_name):

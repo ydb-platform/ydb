@@ -4,6 +4,8 @@
 
 namespace NYT::NApi {
 
+using namespace NYTree;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TTableMountCacheConfig::Register(TRegistrar registrar)
@@ -131,6 +133,28 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void TDynamicJournalWriterConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("validate_erasure_coding", &TThis::ValidateErasureCoding)
+        .Optional();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TJournalWriterConfigPtr TJournalWriterConfig::ApplyDynamic(
+    const TDynamicJournalWriterConfigPtr& dynamicConfig) const
+{
+    auto config = CloneYsonStruct(MakeStrong(this));
+    config->ApplyDynamicInplace(dynamicConfig);
+    config->Postprocess();
+    return config;
+}
+
+void TJournalWriterConfig::ApplyDynamicInplace(const TDynamicJournalWriterConfigPtr& dynamicConfig)
+{
+    UpdateYsonStructField(ValidateErasureCoding, dynamicConfig->ValidateErasureCoding);
+}
 
 void TJournalWriterConfig::Register(TRegistrar registrar)
 {

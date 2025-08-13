@@ -4,27 +4,26 @@ from moto.core.exceptions import JsonRESTError
 class RepositoryNameExistsException(JsonRESTError):
     code = 400
 
-    def __init__(self, repository_name):
+    def __init__(self, repository_name: str):
         super().__init__(
             "RepositoryNameExistsException",
-            "Repository named {0} already exists".format(repository_name),
+            f"Repository named {repository_name} already exists",
         )
 
 
 class RepositoryDoesNotExistException(JsonRESTError):
     code = 400
 
-    def __init__(self, repository_name):
+    def __init__(self, repository_name: str):
         super().__init__(
-            "RepositoryDoesNotExistException",
-            "{0} does not exist".format(repository_name),
+            "RepositoryDoesNotExistException", f"{repository_name} does not exist"
         )
 
 
 class InvalidRepositoryNameException(JsonRESTError):
     code = 400
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             "InvalidRepositoryNameException",
             "The repository name is not valid. Repository names can be any valid "

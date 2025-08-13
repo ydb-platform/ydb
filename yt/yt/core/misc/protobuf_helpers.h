@@ -357,7 +357,7 @@ struct TProtobufExtensionDescriptor
 {
     const google::protobuf::Descriptor* MessageDescriptor;
     const int Tag;
-    const TString Name;
+    const std::string Name;
 };
 
 struct IProtobufExtensionRegistry
@@ -378,7 +378,7 @@ struct IProtobufExtensionRegistry
     virtual const TProtobufExtensionDescriptor* FindDescriptorByTag(int tag) = 0;
 
     //! Finds a descriptor by name.
-    virtual const TProtobufExtensionDescriptor* FindDescriptorByName(const TString& name) = 0;
+    virtual const TProtobufExtensionDescriptor* FindDescriptorByName(const std::string& name) = 0;
 
     //! Returns the singleton instance.
     static IProtobufExtensionRegistry* Get();
@@ -437,7 +437,7 @@ NYT::NProto::TExtensionSet FilterProtoExtensions(
 ////////////////////////////////////////////////////////////////////////////////
 
 THashSet<int> GetExtensionTagSet(const NYT::NProto::TExtensionSet& source);
-std::optional<TString> FindExtensionName(int tag);
+std::optional<std::string> FindExtensionName(int tag);
 
 ////////////////////////////////////////////////////////////////////////////////
 

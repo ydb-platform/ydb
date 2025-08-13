@@ -38,11 +38,13 @@ namespace NKafka {
             };
 
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
-            TTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath) : 
+            TTransactionActor(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const TString& databasePath, ui64 txnTimeoutMs) : 
                 TBase(&TTransactionActor::StateFunc),
                 TransactionalId(transactionalId),
-                ProducerInstanceId({producerId, producerEpoch}),
-                DatabasePath(DatabasePath) {};
+                ProducerInstanceId(producerInstanceId),
+                DatabasePath(databasePath),
+                TxnTimeoutMs(txnTimeoutMs),
+                CreatedAt(TAppData::TimeProvider->Now()) {};
 
             TStringBuilder LogPrefix() const {
                 return TStringBuilder() << "KafkaTransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerInstanceId.Id << "; ProducerEpoch=" << ProducerInstanceId.Epoch << "}: ";
@@ -94,10 +96,11 @@ namespace NKafka {
 
             // helper methods
             void Die(const TActorContext &ctx);
+            bool TxnExpired();
             template<class EventType>
             bool ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest);
             TString GetFullTopicPath(const TString& topicName);
-            TString GetYqlWithTablesNames(const TString& templateStr);
+            TString GetYqlWithTablesNames();
             NYdb::TParams BuildSelectParams();
             THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildAddKafkaOperationsRequest(const TString& kqpTransactionId);
             void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);
@@ -122,6 +125,8 @@ namespace NKafka {
             // In case something goes off road, we can always send error back to client
             TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
             bool CommitStarted = false;
+            ui64 TxnTimeoutMs;
+            TInstant CreatedAt;
 
             // communication with KQP
             std::unique_ptr<TKqpTxHelper> Kqp;

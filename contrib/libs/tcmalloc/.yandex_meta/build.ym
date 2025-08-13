@@ -17,6 +17,7 @@ no_percpu_cache/ya.make
 no_percpu_cache/aligned_alloc.c
 numa_256k/ya.make
 numa_large_pages/ya.make
+profile_marshaller/ya.make
 small_but_slow/ya.make
 tcmalloc/internal/ya.make
 {% endblock %}
@@ -24,8 +25,6 @@ tcmalloc/internal/ya.make
 {% block ya_make %}
 SUBSCRIBER(
     g:cpp-contrib
-    ayles
-    mikailbag
 )
 
 SRCS(
@@ -49,10 +48,19 @@ IF (NOT DLL_FOR)
         no_percpu_cache
         numa_256k
         numa_large_pages
+        profile_marshaller
         small_but_slow
         tcmalloc/internal
     )
 ENDIF()
+{% endblock %}
+
+{% block patch_source %}
+{{super()}}
+find . -type f -name "ya.make" | while read -r file; do
+    sed -i -e 's/VERSION(.*)/VERSION({{self.date()}})/g' "$file"
+    sed -i -e 's|ORIGINAL_SOURCE(.*)|ORIGINAL_SOURCE({{self.current_url().strip()}})|g' "$file"
+done
 {% endblock %}
 
 {% block move_to_output %}

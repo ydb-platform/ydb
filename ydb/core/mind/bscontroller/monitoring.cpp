@@ -1,4 +1,5 @@
 #include "impl.h"
+#include "cluster_balancing.h"
 
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/util/json_util.h>
@@ -1058,6 +1059,41 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
                         }
                     }
                 }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Cluster Balancing Settings";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Parameter"; }
+                                    TABLEH() { out << "Value"; }
+                                }
+                            }
+
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() { out << "Status"; }
+                                    TABLED() { out << (ClusterBalancingSettings.Enable ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Iteration interval (ms)"; }
+                                    TABLED() { out << ClusterBalancingSettings.IterationIntervalMs; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Max replicating PDisks"; }
+                                    TABLED() { out << ClusterBalancingSettings.MaxReplicatingPDisks; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Max replicating VDisks"; }
+                                    TABLED() { out << ClusterBalancingSettings.MaxReplicatingVDisks; }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1392,6 +1428,7 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
                     TABLEH() { out << "Donors"; }
+                    TABLEH() { out << "Bridge"; }
                 }
             }
             TABLEBODY() {
@@ -1423,6 +1460,8 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             }
         };
 
+        TGroupInfo::TGroupFinder finder = [this](TGroupId groupId) { return FindGroup(groupId); };
+
         TABLER() {
             TString storagePool = "<strong>none</strong>";
             if (auto it = StoragePools.find(group.StoragePoolId); it != StoragePools.end()) {
@@ -1449,9 +1488,9 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             renderLatency(group.LatencyStats.PutUserData);
             renderLatency(group.LatencyStats.GetFast);
             TABLED() { out << (group.SeenOperational ? "YES" : ""); }
-            TABLED() { out << (group.LayoutCorrect ? "" : "NO"); }
+            TABLED() { out << (group.IsLayoutCorrect(finder) ? "" : "NO"); }
 
-            const auto& status = group.Status;
+            const auto& status = group.GetStatus(finder);
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); }
             TABLED() {
@@ -1460,6 +1499,21 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
                     numDonors += vdisk->Donors.size();
                 }
                 out << numDonors;
+            }
+
+            TStringBuilder bridge;
+            if (group.BridgeGroupInfo) {
+                for (const auto& pile : group.BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    if (bridge) {
+                        bridge << ' ';
+                    }
+                    bridge << pile.GetGroupId() << ':' << pile.GetGroupGeneration()
+                        << '#' << NKikimrBridge::TGroupState::EStage_Name(pile.GetStage())
+                        << '@' << pile.GetBecameUnsyncedGeneration();
+                }
+            }
+            TABLED() {
+                out << bridge;
             }
         }
     }

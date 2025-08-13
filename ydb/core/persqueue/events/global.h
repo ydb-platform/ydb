@@ -34,14 +34,14 @@ namespace TEvPersQueue {
         EvLockPartition,
         EvReleasePartition,
         EvPartitionReleased,
-        EvDescribe,
-        EvDescribeResponse,
+        EvDescribe, // deprecated
+        EvDescribeResponse, // deprecated
         EvGetReadSessionsInfo,
         EvReadSessionsInfoResponse,
         EvWakeupClient, // deprecated
-        EvUpdateACL,
-        EvCheckACL,
-        EvCheckACLResponse,
+        EvUpdateACL, // deprecated
+        EvCheckACL, // deprecated
+        EvCheckACLResponse, // deprecated
         EvError,
         EvGetPartitionIdForWrite,
         EvGetPartitionIdForWriteResponse,
@@ -54,6 +54,7 @@ namespace TEvPersQueue {
         EvGetPartitionsLocationResponse,
         EvReadingPartitionFinished,
         EvReadingPartitionStarted,
+        EvOffloadStatus,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -204,31 +205,6 @@ namespace TEvPersQueue {
         TEvPartitionClientInfoResponse() = default;
     };
 
-    struct TEvDescribe : public TEventPB<TEvDescribe, NKikimrPQ::TDescribe, EvDescribe> {
-        TEvDescribe()
-        {}
-    };
-
-    struct TEvDescribeResponse : public TEventPB<TEvDescribeResponse, NKikimrPQ::TDescribeResponse, EvDescribeResponse> {
-        TEvDescribeResponse()
-        {}
-    };
-
-    struct TEvUpdateACL : public TEventLocal<TEvUpdateACL, EvUpdateACL> {
-        TEvUpdateACL()
-        {}
-    };
-
-    struct TEvCheckACL : public TEventPB<TEvCheckACL, NKikimrPQ::TCheckACL, EvCheckACL> {
-        TEvCheckACL()
-        {}
-    };
-
-    struct TEvCheckACLResponse : public TEventPB<TEvCheckACLResponse, NKikimrPQ::TCheckACLResponse, EvCheckACLResponse> {
-        TEvCheckACLResponse()
-        {};
-    };
-
     struct TEvError : public TEventPB<TEvError,
             NPersQueueCommon::TError, EvError> {
             TEvError() {}
@@ -291,6 +267,8 @@ namespace TEvPersQueue {
             Record.SetPartitionId(partitionId);
         }
     };
+
+    struct TEvOffloadStatus : TEventPB<TEvOffloadStatus, NKikimrPQ::TEvOffloadStatus, EvOffloadStatus> {};
 
 };
 } //NKikimr

@@ -1,0 +1,27 @@
+name: Regression-run_stress
+
+on:
+  schedule:
+    - cron: "0 23 * * *"  # At 23:00 every day
+  workflow_dispatch:
+    inputs:
+      use_default_branches:
+        description: 'If true, start main and all current stable branches. If false, start only the selected branch.'
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  main:
+    name: Regression-run_stress
+    uses: ./.github/workflows/run_tests.yml
+    secrets: inherit
+    strategy:
+      fail-fast: false
+      matrix: 
+        build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
+    with:
+      test_targets: ydb/tests/stress/
+      branches: ''
+      branches_config_path: '.github/config/stable_tests_branches.json'
+      build_preset: ${{ matrix.build_preset }}

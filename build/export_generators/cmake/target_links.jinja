@@ -51,11 +51,7 @@ target_link_libraries({{ name }} INTERFACE
 
 {%- if publics|length %}
 target_link_libraries({{ name }} PUBLIC
-{%-     for public in publics -%}
-{#-         OpenSSL recipe under Conan2 uses another target name, patch it manually here, or else build fails -#}
-{%-         if (use_conan2) and (public == "OpenSSL::OpenSSL") -%}
-{%-            set public = "openssl::openssl" -%}
-{%-         endif %}
+{%-     for public in publics %}
   {{ public }}
 {%-     endfor %}
 )

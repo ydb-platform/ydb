@@ -23,41 +23,41 @@ public:
     };
 
     TVectorSpillerAdapter(ISpiller::TPtr spiller, size_t sizeLimit)
-        : Spiller(spiller)
-        , SizeLimit(sizeLimit)
+        : Spiller_(spiller)
+        , SizeLimit_(sizeLimit)
     {
     }
 
     ///Returns current stete of the adapter
     EState GetState() const {
-        return State;
+        return State_;
     }
 
     ///Is adapter ready to spill next vector via AddData method.
     ///Returns false in case when there are async operations in progress.
     bool IsAcceptingData() {
-        return State == EState::AcceptingData;
+        return State_ == EState::AcceptingData;
     }
 
     ///When data is ready ExtractVector() is expected to be called.
     bool IsDataReady() {
-        return State == EState::DataReady;
+        return State_ == EState::DataReady;
     }
 
     ///Adapter is ready to accept requests for vectors.
     bool IsAcceptingDataRequests() {
-        return State == EState::AcceptingDataRequests;
+        return State_ == EState::AcceptingDataRequests;
     }
 
     ///Adds new vector to storage. Will not launch real disk operation if case of small vectors
     ///(if inner buffer is not full).
     void AddData(std::vector<T, Alloc>&& vec) {
-        MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
-        MKQL_ENSURE(State == EState::AcceptingData, "Internal logic error");
+        MKQL_ENSURE(CurrentVector_.empty(), "Internal logic error");
+        MKQL_ENSURE(State_ == EState::AcceptingData, "Internal logic error");
 
-        StoredChunksElementsCount.push(vec.size());
-        CurrentVector = std::move(vec);
-        NextVectorPositionToSave = 0;
+        StoredChunksElementsCount_.push(vec.size());
+        CurrentVector_ = std::move(vec);
+        NextVectorPositionToSave_ = 0;
 
         SaveNextPartOfVector();
     }
@@ -66,31 +66,31 @@ public:
     ///For SpillingData state it will try to spill more content of inner buffer.
     ///ForRestoringData state it will try to load more content of requested vector.
     void Update() {
-        switch (State) {
+        switch (State_) {
             case EState::SpillingData:
-                MKQL_ENSURE(WriteOperation.has_value(), "Internal logic error");
-                if (!WriteOperation->HasValue()) return;
+                MKQL_ENSURE(WriteOperation_.has_value(), "Internal logic error");
+                if (!WriteOperation_->HasValue()) return;
 
-                StoredChunks.push(WriteOperation->ExtractValue());
-                WriteOperation = std::nullopt;
-                if (IsFinalizing) {
-                    State = EState::AcceptingDataRequests;
+                StoredChunks_.push(WriteOperation_->ExtractValue());
+                WriteOperation_ = std::nullopt;
+                if (IsFinalizing_) {
+                    State_ = EState::AcceptingDataRequests;
                     return;
                 }
 
-                if (CurrentVector.empty()) {
-                    State = EState::AcceptingData;
+                if (CurrentVector_.empty()) {
+                    State_ = EState::AcceptingData;
                     return;
                 }
 
                 SaveNextPartOfVector();
                 return;
             case EState::RestoringData:
-                MKQL_ENSURE(ReadOperation.has_value(), "Internal logic error");
-                if (!ReadOperation->HasValue()) return;
-                Buffer = std::move(ReadOperation->ExtractValue().value());
-                ReadOperation = std::nullopt;
-                StoredChunks.pop();
+                MKQL_ENSURE(ReadOperation_.has_value(), "Internal logic error");
+                if (!ReadOperation_->HasValue()) return;
+                Buffer_ = std::move(ReadOperation_->ExtractValue().value());
+                ReadOperation_ = std::nullopt;
+                StoredChunks_.pop();
 
                 LoadNextVector();
                 return;
@@ -101,21 +101,21 @@ public:
 
     ///Get requested vector.
     std::vector<T, Alloc>&& ExtractVector() {
-        StoredChunksElementsCount.pop();
-        State = EState::AcceptingDataRequests;
-        return std::move(CurrentVector);
+        StoredChunksElementsCount_.pop();
+        State_ = EState::AcceptingDataRequests;
+        return std::move(CurrentVector_);
     }
 
     ///Start restoring next vector. If th eentire contents of the vector are in memory
     ///State will be changed to DataREady without any async read operation. ExtractVector is expected
     ///to be called immediately.
     void RequestNextVector() {
-        MKQL_ENSURE(State == EState::AcceptingDataRequests, "Internal logic error");
-        MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
-        MKQL_ENSURE(!StoredChunksElementsCount.empty(), "Internal logic error");
+        MKQL_ENSURE(State_ == EState::AcceptingDataRequests, "Internal logic error");
+        MKQL_ENSURE(CurrentVector_.empty(), "Internal logic error");
+        MKQL_ENSURE(!StoredChunksElementsCount_.empty(), "Internal logic error");
 
-        CurrentVector.reserve(StoredChunksElementsCount.front());
-        State = EState::RestoringData;
+        CurrentVector_.reserve(StoredChunksElementsCount_.front());
+        State_ = EState::RestoringData;
 
         LoadNextVector();
     }
@@ -123,14 +123,14 @@ public:
     ///Finalize will spill all the contents of inner buffer if any.
     ///Is case if buffer is not ready async write operation will be started.
     void Finalize() {
-        MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
-        if (Buffer.Empty()) {
-            State = EState::AcceptingDataRequests;
+        MKQL_ENSURE(CurrentVector_.empty(), "Internal logic error");
+        if (Buffer_.Empty()) {
+            State_ = EState::AcceptingDataRequests;
             return;
         }
 
         SaveBuffer();
-        IsFinalizing = true;
+        IsFinalizing_ = true;
     }
 
 private:
@@ -155,71 +155,71 @@ private:
     }
 
     void LoadNextVector() {
-        auto requestedVectorSize= StoredChunksElementsCount.front();
-        MKQL_ENSURE(requestedVectorSize >= CurrentVector.size(), "Internal logic error");
-        size_t sizeToLoad = (requestedVectorSize - CurrentVector.size()) * sizeof(T);
+        auto requestedVectorSize= StoredChunksElementsCount_.front();
+        MKQL_ENSURE(requestedVectorSize >= CurrentVector_.size(), "Internal logic error");
+        size_t sizeToLoad = (requestedVectorSize - CurrentVector_.size()) * sizeof(T);
 
-        if (Buffer.Size() >= sizeToLoad) {
+        if (Buffer_.Size() >= sizeToLoad) {
             // if all the data for requested vector is ready
-            CopyRopeToTheEndOfVector(CurrentVector, Buffer, sizeToLoad);
-            Buffer.Erase(sizeToLoad);
-            State = EState::DataReady;
+            CopyRopeToTheEndOfVector(CurrentVector_, Buffer_, sizeToLoad);
+            Buffer_.Erase(sizeToLoad);
+            State_ = EState::DataReady;
         } else {
-            CopyRopeToTheEndOfVector(CurrentVector, Buffer);
-            ReadOperation = Spiller->Extract(StoredChunks.front());
+            CopyRopeToTheEndOfVector(CurrentVector_, Buffer_);
+            ReadOperation_ = Spiller_->Extract(StoredChunks_.front());
         }
     }
 
     void SaveBuffer() {
-        State = EState::SpillingData;
-        WriteOperation = Spiller->Put(std::move(Buffer));
+        State_ = EState::SpillingData;
+        WriteOperation_ = Spiller_->Put(std::move(Buffer_));
     }
 
     void AddDataToRope(const T* data, size_t count) {
         auto owner = std::make_shared<std::vector<T>>(data, data + count);
         TStringBuf buf(reinterpret_cast<const char *>(owner->data()), count * sizeof(T));
-        Buffer.Append(buf, owner);
+        Buffer_.Append(buf, owner);
     }
 
     void SaveNextPartOfVector() {
-        size_t maxFittingElemets = (SizeLimit - Buffer.Size()) / sizeof(T);
-        size_t remainingElementsInVector = CurrentVector.size() - NextVectorPositionToSave;
+        size_t maxFittingElemets = (SizeLimit_ - Buffer_.Size()) / sizeof(T);
+        size_t remainingElementsInVector = CurrentVector_.size() - NextVectorPositionToSave_;
         size_t elementsToCopyFromVector = std::min(maxFittingElemets, remainingElementsInVector);
 
-        AddDataToRope(CurrentVector.data() + NextVectorPositionToSave, elementsToCopyFromVector);
+        AddDataToRope(CurrentVector_.data() + NextVectorPositionToSave_, elementsToCopyFromVector);
 
-        NextVectorPositionToSave += elementsToCopyFromVector;
-        if (NextVectorPositionToSave >= CurrentVector.size()) {
-            CurrentVector.resize(0);
-            NextVectorPositionToSave = 0;
+        NextVectorPositionToSave_ += elementsToCopyFromVector;
+        if (NextVectorPositionToSave_ >= CurrentVector_.size()) {
+            CurrentVector_.resize(0);
+            NextVectorPositionToSave_ = 0;
         }
 
-        if (SizeLimit - Buffer.Size() < sizeof(T)) {
+        if (SizeLimit_ - Buffer_.Size() < sizeof(T)) {
             SaveBuffer();
             return;
         }
 
-        State = EState::AcceptingData;
+        State_ = EState::AcceptingData;
     }
 
 private:
-    EState State = EState::AcceptingData;
+    EState State_ = EState::AcceptingData;
 
-    ISpiller::TPtr Spiller;
-    const size_t SizeLimit;
-    NYql::TChunkedBuffer Buffer;
+    ISpiller::TPtr Spiller_;
+    const size_t SizeLimit_;
+    NYql::TChunkedBuffer Buffer_;
 
     // Used to store vector while spilling and also used while restoring the data
-    std::vector<T, Alloc> CurrentVector;
-    size_t NextVectorPositionToSave = 0;
+    std::vector<T, Alloc> CurrentVector_;
+    size_t NextVectorPositionToSave_ = 0;
 
-    std::queue<ISpiller::TKey> StoredChunks;
-    std::queue<size_t> StoredChunksElementsCount;
+    std::queue<ISpiller::TKey> StoredChunks_;
+    std::queue<size_t> StoredChunksElementsCount_;
 
-    std::optional<NThreading::TFuture<ISpiller::TKey>> WriteOperation = std::nullopt;
-    std::optional<NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>> ReadOperation = std::nullopt;
+    std::optional<NThreading::TFuture<ISpiller::TKey>> WriteOperation_ = std::nullopt;
+    std::optional<NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>> ReadOperation_ = std::nullopt;
 
-    bool IsFinalizing = false;
+    bool IsFinalizing_ = false;
 };
 
 }//namespace NKikimr::NMiniKQL

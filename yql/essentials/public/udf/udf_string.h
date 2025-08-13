@@ -219,6 +219,7 @@ public:
 #endif
     }
 
+private:
     TData* Data_;
 };
 

@@ -56,8 +56,6 @@ void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
     AFL_VERIFY(!WaitWakeUp);
     const TMonotonic now = TMonotonic::Now();
     ForwardDuration = now - ev->Get()->GetConstructInstant();
-    SendFwdHistogram->Collect(ForwardDuration->MicroSeconds());
-    SendFwdDuration->Add(ForwardDuration->MicroSeconds());
     ExecuteTask(ev->Get()->ExtractTasks());
 }
 

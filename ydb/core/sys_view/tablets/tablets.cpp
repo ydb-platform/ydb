@@ -1,7 +1,7 @@
 #include "tablets.h"
 
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -23,9 +23,10 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TTabletsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TTabletsScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
     {
     }
 
@@ -352,10 +353,11 @@ private:
     bool BatchRequested = false;
 };
 
-THolder<NActors::IActor> CreateTabletsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+THolder<NActors::IActor> CreateTabletsScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TTabletsScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TTabletsScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

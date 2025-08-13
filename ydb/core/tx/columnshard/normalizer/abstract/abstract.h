@@ -2,6 +2,7 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -60,7 +61,7 @@ enum class ENormalizerSequentialId : ui32 {
     DeprecatedPortionsMetadata,
     CleanGranuleId,
     DeprecatedEmptyPortionsCleaner,
-    CleanInsertionDedup,
+    DeprecatedCleanInsertionDedup,
     GCCountersNormalizer,
     DeprecatedRestorePortionFromChunks,
     SyncPortionFromChunks,
@@ -71,6 +72,8 @@ enum class ENormalizerSequentialId : ui32 {
     RestoreV2Chunks,
     CleanDeprecatedSnapshot,
     RestoreV0ChunksMeta,
+    CopyBlobIdsToV2,
+    RestoreAppearanceSnapshot,
 
     MAX
 };
@@ -268,6 +271,7 @@ public:
 
 private:
     std::shared_ptr<IStoragesManager> StoragesManager;
+    NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TaskSubscription;
 
     std::deque<INormalizerComponent::TPtr> Normalizers;
@@ -284,6 +288,17 @@ public:
         const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
         : StoragesManager(storagesManager)
         , TaskSubscription("CS::NORMALIZER", counters) {
+        AFL_VERIFY(StoragesManager);
+    }
+
+    void SetDataAccessorsManager(const NDataAccessorControl::TDataAccessorsManagerContainer& dataAccessorsManager) {
+        AFL_VERIFY(!DataAccessorsManager);
+        AFL_VERIFY(!!dataAccessorsManager);
+        DataAccessorsManager = dataAccessorsManager;
+    }
+
+    std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> GetDataAccessorsManager() const {
+        return DataAccessorsManager.GetObjectPtrVerified();
     }
 
     const NOlap::NResourceBroker::NSubscribe::TTaskContext& GetTaskSubscription() const {

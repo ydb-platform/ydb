@@ -67,7 +67,7 @@ static bool IsSkiffSpecialColumn(
     return specialColumns.contains(columnName) || columnName == rangeIndexColumnName || columnName == rowIndexColumnName;
 }
 
-static std::pair<std::shared_ptr<TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<TSkiffSchema> skiffSchema)
+std::pair<std::shared_ptr<TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<TSkiffSchema> skiffSchema)
 {
     if (skiffSchema->GetWireType() != EWireType::Variant8) {
         return std::pair(skiffSchema, true);
@@ -329,9 +329,9 @@ TFieldDescription::TFieldDescription(TString name, std::shared_ptr<TSkiffSchema>
     , Schema_(std::move(schema))
 { }
 
-EWireType TFieldDescription::ValidatedSimplify() const
+EWireType TFieldDescription::ValidatedGetDeoptionalizeType(bool simplify) const
 {
-    auto result = Simplify();
+    auto result = GetDeoptionalizeType(simplify);
     if (!result) {
         THROW_ERROR_EXCEPTION("Column %Qv cannot be represented with Skiff schema %Qv",
             Name_,
@@ -350,12 +350,12 @@ bool TFieldDescription::IsRequired() const
     return DeoptionalizeSchema(Schema_).second;
 }
 
-std::optional<EWireType> TFieldDescription::Simplify() const
+std::optional<EWireType> TFieldDescription::GetDeoptionalizeType(bool simplify) const
 {
     const auto& [deoptionalized, required] = DeoptionalizeSchema(Schema_);
     auto wireType = deoptionalized->GetWireType();
-    if (IsSimpleType(wireType)) {
-        if (wireType != EWireType::Nothing || required) {
+    if (wireType != EWireType::Nothing || required) {
+        if (!simplify || IsSimpleType(wireType)) {
             return wireType;
         }
     }

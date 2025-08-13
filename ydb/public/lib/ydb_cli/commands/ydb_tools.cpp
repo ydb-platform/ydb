@@ -1,4 +1,5 @@
 #include "ydb_tools.h"
+#include "ydb_tools_infer.h"
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
@@ -26,6 +27,7 @@ TCommandTools::TCommandTools()
     AddCommand(std::make_unique<TCommandCopy>());
     AddCommand(std::make_unique<TCommandRename>());
     AddCommand(std::make_unique<TCommandPgConvert>());
+    AddCommand(std::make_unique<TCommandToolsInfer>());
 }
 
 TToolsCommand::TToolsCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
@@ -309,11 +311,7 @@ void TCommandCopy::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 }
 
@@ -371,11 +369,7 @@ void TCommandRename::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    TStringBuilder itemHelp;
-    itemHelp << "[At least one] Item specification" << Endl
-        << "  Possible property names:" << Endl
-        << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp)
+    config.Opts->AddLongOption("item", TItem::FormatHelp("[At least one] Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
     AddCommandExamples(

@@ -8,7 +8,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/mind/node_broker.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
@@ -106,9 +108,11 @@ public:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
+        EvNodesInfo = ev;
+
         auto config = AppData()->DynamicNameserviceConfig;
 
-        for (const auto &node : ev->Get()->Nodes) {
+        for (const auto &node : EvNodesInfo->Get()->Nodes) {
             // Copy static nodes only.
             if (!config || node.NodeId <= config->MaxStaticNodeId) {
                 auto &info = *Result.add_nodes();
@@ -205,6 +209,9 @@ private:
         if (src.has_body()) {
             dst->SetBody(src.body());
         }
+        if (src.has_bridge_pile_name()) {
+            dst->SetBridgePileName(src.bridge_pile_name());
+        }
         if (src.has_data_center()) {
             dst->SetDataCenter(src.data_center());
         }
@@ -235,6 +242,9 @@ private:
         if (src.HasBody()) {
             dst->set_body(src.GetBody());
         }
+        if (src.HasBridgePileName()) {
+            dst->set_bridge_pile_name(src.GetBridgePileName());
+        }
         if (src.HasDataCenter()) {
             dst->set_data_center(src.GetDataCenter());
         }
@@ -254,6 +264,7 @@ private:
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
     TActorId NodeBrokerPipe;
     bool IsNodeAuthorizedByCertificate = false;
+    TEvInterconnect::TEvNodesInfo::TPtr EvNodesInfo;
 };
 
 void DoNodeRegistrationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

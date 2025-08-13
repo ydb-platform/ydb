@@ -3,11 +3,12 @@
 #include "written.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 
 namespace NKikimr::NOlap {
 
-void TWrittenPortionInfo::DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const {
-    auto metaProto = GetMeta().SerializeToProto();
+void TWrittenPortionInfo::DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const {
+    auto metaProto = GetMeta().SerializeToProto(blobIds, NPortion::EProduced::INSERTED);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     const auto removeSnapshot = GetRemoveSnapshotOptional();
     AFL_VERIFY(InsertWriteId);
@@ -20,13 +21,12 @@ void TWrittenPortionInfo::DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const {
             NIceDb::TUpdate<IndexPortions::InsertWriteId>((ui64)*InsertWriteId),
             NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
             NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
-            NIceDb::TUpdate<IndexPortions::MinSnapshotPlanStep>(1),
-            NIceDb::TUpdate<IndexPortions::MinSnapshotTxId>(1),
+            NIceDb::TUpdate<IndexPortions::MinSnapshotPlanStep>(1), NIceDb::TUpdate<IndexPortions::MinSnapshotTxId>(1),
             NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
 }
 
-std::unique_ptr<TPortionInfoConstructor> TWrittenPortionInfo::BuildConstructor(const bool withMetadata, const bool withMetadataBlobs) const {
-    return std::make_unique<TWrittenPortionInfoConstructor>(*this, withMetadata, withMetadataBlobs);
+std::unique_ptr<TPortionInfoConstructor> TWrittenPortionInfo::BuildConstructor(const bool withMetadata) const {
+    return std::make_unique<TWrittenPortionInfoConstructor>(*this, withMetadata);
 }
 
 void TWrittenPortionInfo::FillDefaultColumn(NAssembling::TColumnAssemblingInfo& column, const std::optional<TSnapshot>& defaultSnapshot) const {
@@ -68,6 +68,11 @@ bool TWrittenPortionInfo::DoIsVisible(const TSnapshot& snapshot, const bool chec
     } else {
         return false;
     }
+}
+
+void TWrittenPortionInfo::CommitToDatabase(IDbWrapper& wrapper) {
+    AFL_VERIFY(CommitSnapshot);
+    wrapper.CommitPortion(*this, *CommitSnapshot);
 }
 
 }   // namespace NKikimr::NOlap

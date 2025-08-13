@@ -1,14 +1,13 @@
 #pragma once
 
-#include <numeric>
-#include <list>
-#include <unordered_set>
-
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/string/builder.h>
 
 #include "bitset.h"
+
+
+#include "dq_opt_join_tree_node.h"
 
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/core/yql_cost_function.h>
@@ -16,8 +15,6 @@
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 #include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 #include <yql/essentials/utils/log/log.h>
-
-#include "dq_opt_conflict_rules_collector.h"
 
 
 namespace NYql::NDq {
@@ -68,8 +65,8 @@ public:
 
         // for interesting orderings framework
         TOrderingsStateMachine::TFDSet FDs;
-        std::int64_t LeftJoinKeysShuffleOrderingIdx = -1;
-        std::int64_t RightJoinKeysShuffleOrderingIdx = -1;
+        std::int64_t LeftJoinKeysShuffleOrderingIdx = TJoinOptimizerNodeInternal::NoOrdering;
+        std::int64_t RightJoinKeysShuffleOrderingIdx = TJoinOptimizerNodeInternal::NoOrdering;
 
         // JoinKind may not be commutative, so we need to know which edge is original and which is reversed.
         bool IsReversed;
@@ -561,7 +558,7 @@ public:
             shuffleOrderingIdxByNodeIdx[i] = fdStorage.AddInterestingOrdering(shuffledBy, TOrdering::EShuffle, nullptr);
         }
 
-        TOrderingsStateMachine orderingsFSM(std::move(fdStorage));
+        TOrderingsStateMachine orderingsFSM(std::move(fdStorage), TOrdering::EShuffle);
 
         for (std::size_t i = 0; i < edges.size(); ++i) {
             edges[i].FDs = orderingsFSM.GetFDSet(fdsByEdgeIdx[i]);
@@ -601,15 +598,6 @@ public:
         auto& edges = Graph_.GetEdges();
         auto& fdStorage = fsm.FDStorage;
 
-        auto toVectorStr = [](std::vector<TJoinColumn> joinColumns){
-            TVector<TString> strColumns;
-            strColumns.reserve(joinColumns.size());
-            for (const auto& column: joinColumns) {
-                strColumns.push_back(column.RelName + "." + column.AttributeName);
-            }
-            return strColumns;
-        };
-
         for (auto& e: edges) {
             if (e.JoinKind == EJoinKind::Cross) {
                 continue;
@@ -617,17 +605,9 @@ public:
 
             e.LeftJoinKeysShuffleOrderingIdx =
                 fdStorage.FindInterestingOrderingIdx(e.LeftJoinKeys, TOrdering::EShuffle, TableAliases_);
-            Y_ENSURE(
-                e.LeftJoinKeysShuffleOrderingIdx >= 0,
-                TStringBuilder{} << "Ordering " << JoinSeq(", ", toVectorStr(e.LeftJoinKeys)) << " wasn't set, smthing went wrong during FSM building"
-            );
 
             e.RightJoinKeysShuffleOrderingIdx =
                 fdStorage.FindInterestingOrderingIdx(e.RightJoinKeys, TOrdering::EShuffle, TableAliases_);
-            Y_ENSURE(
-                e.RightJoinKeysShuffleOrderingIdx >= 0,
-                TStringBuilder{} << "Ordering " << JoinSeq(", ", toVectorStr(e.RightJoinKeys)) << " wasn't set, smthing went wrong during FSM building"
-            );
 
             for (const auto& [lhs, rhs]: Zip(e.LeftJoinKeys, e.RightJoinKeys)) {
                 auto fdIdx = fdStorage.FindFDIdx(lhs, rhs, TFunctionalDependency::EEquivalence, TableAliases_);

@@ -17,11 +17,10 @@ SRCS(
     ownerinfo.cpp
     offload_actor.cpp
     partition_blob_encoder.cpp
+    partition_compaction.cpp
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
-    partition_scale_request.cpp
-    partition_scale_manager.cpp
     partition_sourcemanager.cpp
     partition_write.cpp
     partition.cpp
@@ -29,14 +28,11 @@ SRCS(
     pq.cpp
     pq_database.cpp
     pq_impl_app.cpp
+    pq_impl_app_sendreadset.cpp
     pq_impl.cpp
     pq_l2_cache.cpp
     pq_rl_helpers.cpp
     quota_tracker.cpp
-    read_balancer__balancing_app.cpp
-    read_balancer__balancing.cpp
-    read_balancer_app.cpp
-    read_balancer.cpp
     account_read_quoter.cpp
     read_quoter.cpp
     sourceid.cpp
@@ -52,10 +48,10 @@ SRCS(
     write_id.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)
 GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/library/actors/core
     library/cpp/html/pcdata
     library/cpp/json
@@ -69,6 +65,7 @@ PEERDIR(
     ydb/core/persqueue/config
     ydb/core/persqueue/events
     ydb/core/persqueue/partition_key_range
+    ydb/core/persqueue/pqrb
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/library/logger
@@ -77,6 +74,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/public/lib/base
     ydb/public/sdk/cpp/src/client/persqueue_public
+    #ydb/library/dbgtrace
 )
 
 END()
@@ -86,7 +84,7 @@ RECURSE(
     config
     events
     partition_key_range
-    purecalc
+    pqrb
     writer
 )
 

@@ -2974,6 +2974,28 @@ typedef int (*ngtcp2_update_key)(
 /**
  * @functypedef
  *
+ * :type:`ngtcp2_begin_path_validation` is a callback function which
+ * is called when the path validation has started.  |flags| is zero or
+ * more of :macro:`NGTCP2_PATH_VALIDATION_FLAG_*
+ * <NGTCP2_PATH_VALIDATION_FLAG_NONE>`.  |path| is the path that is
+ * being validated.  |fallback_path|, if not NULL, is the path that is
+ * used when this validation fails.
+ *
+ * Currently, the flags may only contain
+ * :macro:`NGTCP2_PATH_VALIDATION_FLAG_PREFERRED_ADDR`.
+ *
+ * The callback function must return 0 if it succeeds.  Returning
+ * :macro:`NGTCP2_ERR_CALLBACK_FAILURE` makes the library call return
+ * immediately.
+ */
+typedef int (*ngtcp2_begin_path_validation)(ngtcp2_conn *conn, uint32_t flags,
+                                            const ngtcp2_path *path,
+                                            const ngtcp2_path *fallback_path,
+                                            void *user_data);
+
+/**
+ * @functypedef
+ *
  * :type:`ngtcp2_path_validation` is a callback function which tells
  * an application the outcome of path validation.  |flags| is zero or
  * more of :macro:`NGTCP2_PATH_VALIDATION_FLAG_*
@@ -3262,7 +3284,8 @@ typedef int (*ngtcp2_tls_early_data_rejected)(ngtcp2_conn *conn,
                                               void *user_data);
 
 #define NGTCP2_CALLBACKS_V1 1
-#define NGTCP2_CALLBACKS_VERSION NGTCP2_CALLBACKS_V1
+#define NGTCP2_CALLBACKS_V2 2
+#define NGTCP2_CALLBACKS_VERSION NGTCP2_CALLBACKS_V2
 
 /**
  * @struct
@@ -3527,6 +3550,13 @@ typedef struct ngtcp2_callbacks {
    * is only used by client.
    */
   ngtcp2_tls_early_data_rejected tls_early_data_rejected;
+  /* The following fields have been added since NGTCP2_CALLBACKS_V2. */
+  /**
+   * :member:`begin_path_validation` is a callback function which is
+   * invoked when a path validation has started.  This field is
+   * available since v1.14.0.
+   */
+  ngtcp2_begin_path_validation begin_path_validation;
 } ngtcp2_callbacks;
 
 /**
@@ -4411,10 +4441,10 @@ NGTCP2_EXTERN int ngtcp2_conn_shutdown_stream_read(ngtcp2_conn *conn,
  * @macro
  *
  * :macro:`NGTCP2_WRITE_STREAM_FLAG_PADDING` indicates that a
- * non-empty 0 RTT or 1 RTT packet is padded to the minimum length of
- * a sending path MTU or a given packet buffer when finalizing it.
- * ACK, PATH_CHALLENGE, PATH_RESPONSE, CONNECTION_CLOSE only packets
- * and PMTUD packets are excluded.
+ * non-empty 0 RTT or 1 RTT ack-eliciting packet is padded to the
+ * minimum length of a sending path MTU or a given packet buffer when
+ * finalizing it.  PATH_CHALLENGE, PATH_RESPONSE, CONNECTION_CLOSE
+ * only packets and PMTUD packets are excluded.
  */
 #define NGTCP2_WRITE_STREAM_FLAG_PADDING 0x04u
 
@@ -4543,9 +4573,9 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
  * coalescing and write a packet.
  *
  * If :macro:`NGTCP2_WRITE_STREAM_FLAG_PADDING` is set in |flags| when
- * finalizing a non-empty 0 RTT or 1 RTT packet, the packet is padded
- * to the minimum length of a sending path MTU or a given packet
- * buffer.
+ * finalizing a non-empty 0 RTT or 1 RTT ack-eliciting packet, the
+ * packet is padded to the minimum length of a sending path MTU or a
+ * given packet buffer.
  *
  * This function returns 0 if it cannot write any frame because buffer
  * is too small, or packet is congestion limited.  Application should
@@ -4615,10 +4645,10 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
  * @macro
  *
  * :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_PADDING` indicates that a
- * non-empty 0 RTT or 1 RTT packet is padded to the minimum length of
- * a sending path MTU or a given packet buffer when finalizing it.
- * ACK, PATH_CHALLENGE, PATH_RESPONSE, CONNECTION_CLOSE only packets
- * and PMTUD packets are excluded.
+ * non-empty 0 RTT or 1 RTT ack-eliciting packet is padded to the
+ * minimum length of a sending path MTU or a given packet buffer when
+ * finalizing it.  PATH_CHALLENGE, PATH_RESPONSE, CONNECTION_CLOSE
+ * only packets and PMTUD packets are excluded.
  */
 #define NGTCP2_WRITE_DATAGRAM_FLAG_PADDING 0x02u
 
@@ -4704,9 +4734,9 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_datagram_versioned(
  * (which indicates a complete packet is ready).
  *
  * If :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_PADDING` is set in |flags|
- * when finalizing a non-empty 0 RTT or 1 RTT packet, the packet is
- * padded to the minimum length of a sending path MTU or a given
- * packet buffer.
+ * when finalizing a non-empty 0 RTT or 1 RTT ack-eliciting packet,
+ * the packet is padded to the minimum length of a sending path MTU or
+ * a given packet buffer.
  *
  * This function returns the number of bytes written in |dest| if it
  * succeeds, or one of the following negative error codes:

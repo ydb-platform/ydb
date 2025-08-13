@@ -5,6 +5,7 @@
 namespace NKikimr::NKqp::NScanPrivate {
 
 TShardState::TPtr TInFlightShards::Put(TShardState&& state) {
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "put_inflight")("tablet_id", state.TabletId)("state", state.State)("gen", state.Generation);
     TScanShardsStatistics::OnScansDiff(Shards.size(), GetScansCount());
     MutableStatistics(state.TabletId).MutableStatistics(0).SetStartInstant(Now());
 
@@ -25,16 +26,16 @@ std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(
     std::vector<std::unique_ptr<TComputeTaskData>> result;
     if (data.IsEmpty()) {
         AFL_ENSURE(data.Finished);
-        result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data.LocksInfo)));
+        result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data)));
     } else if (data.SplittedBatches.size() > 1) {
         AFL_ENSURE(data.ArrowBatch);
         for (auto&& i : data.SplittedBatches) {
-            result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(data.ArrowBatch, TabletId, std::move(i), data.LocksInfo)));
+            result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data, data.ArrowBatch, std::move(i))));
         }
     } else if (data.ArrowBatch) {
-        result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(data.ArrowBatch, TabletId, data.LocksInfo)));
+        result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data, data.ArrowBatch)));
     } else {
-        result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(std::move(data.Rows), TabletId, data.LocksInfo)));
+        result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data, std::move(data.Rows))));
     }
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "receive_data")("actor_id", ActorId)("count_chunks", result.size());
     DataChunksInFlightCount = result.size();

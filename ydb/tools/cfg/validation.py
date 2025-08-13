@@ -904,6 +904,11 @@ TEMPLATE_SCHEMA = {
             "minLength": 1,
             "enum": Erasure.all_erasure_type_names(),
         },
+        "erasure": {
+            "type": "string",
+            "minLength": 1,
+            "enum": Erasure.all_erasure_type_names(),
+        },
         "fail_domain_type": {
             "type": "string",
             "minLength": 1,
@@ -952,7 +957,10 @@ TEMPLATE_SCHEMA = {
         "yql_analytics": copy.deepcopy(YQL_SCHEMA),
         "yq": copy.deepcopy(YQ_SCHEMA),
     },
-    "required": ["static_erasure", "hosts"],
+    "anyOf": [
+        {"required": ["static_erasure", "hosts"]},
+        {"required": ["erasure", "hosts"]},
+    ],
 }
 
 

@@ -12,7 +12,7 @@ namespace NYT::NApi {
 
 struct TQueryTrackerOptions
 {
-    TString QueryTrackerStage = "production";
+    std::string QueryTrackerStage = NQueryTrackerClient::ProductionStage;
 };
 
 DEFINE_ENUM(EContentType,
@@ -166,15 +166,17 @@ struct TGetQueryTrackerInfoOptions
     , public TQueryTrackerOptions
 {
     NYTree::TAttributeFilter Attributes;
+    NYTree::INodePtr Settings;
 };
 
 struct TGetQueryTrackerInfoResult
 {
-    TString QueryTrackerStage;
+    std::string QueryTrackerStage;
     std::string ClusterName;
     NYson::TYsonString SupportedFeatures;
     std::vector<std::string> AccessControlObjects;
     std::vector<std::string> Clusters;
+    NYson::TYsonString EnginesInfo;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

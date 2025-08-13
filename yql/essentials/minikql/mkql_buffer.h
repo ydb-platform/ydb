@@ -23,10 +23,10 @@ class TPagedBuffer;
 
 class TBufferPage : private TNonCopyable {
     friend class TPagedBuffer;
-    static const size_t PageCapacity;
+    static const size_t DefaultPageCapacity;
 
 public:
-    static const size_t PageAllocSize = 128 * 1024;
+    static const size_t DefaultPageAllocSize = 128 * 1024;
 
     TBufferPage() = default;
     ~TBufferPage() = default;
@@ -55,16 +55,12 @@ public:
         Size_ = 0;
     }
 
-    inline size_t Wasted() const {
-        return PageCapacity - Size_;
-    }
-
 private:
     TBufferPage* Next_ = nullptr;
     size_t Size_ = 0;
 
-    static TBufferPage* Allocate();
-    static void Free(TBufferPage* page);
+    static TBufferPage* Allocate(size_t pageAllocSize = DefaultPageAllocSize);
+    static void Free(TBufferPage* page, size_t pageAllocSize = DefaultPageAllocSize);
 
     static inline const TBufferPage* GetPage(const char* data) {
         Y_DEBUG_ABORT_UNLESS(data);
@@ -77,12 +73,23 @@ private:
     }
 };
 
+static constexpr bool IsValidPageAllocSize(size_t size) {
+    return size <= std::numeric_limits<ui32>::max() && sizeof(TBufferPage) < size;
+}
+
 class TPagedBuffer : private TNonCopyable {
   public:
     using TPtr = std::shared_ptr<TPagedBuffer>;
     using TConstPtr = std::shared_ptr<const TPagedBuffer>;
 
     TPagedBuffer() = default;
+
+    explicit TPagedBuffer(size_t pageAllocSize)
+        : PageAllocSize_(pageAllocSize)
+        , PageCapacity_(pageAllocSize - sizeof(TBufferPage))
+    {
+        Y_ENSURE(IsValidPageAllocSize(pageAllocSize));
+    }
 
     ~TPagedBuffer() {
         if (Head_) {
@@ -93,7 +100,7 @@ class TPagedBuffer : private TNonCopyable {
             while (curr) {
                 auto drop = curr;
                 curr = curr->Next_;
-                TBufferPage::Free(drop);
+                TBufferPage::Free(drop, PageAllocSize_);
             }
         }
     }
@@ -187,7 +194,7 @@ class TPagedBuffer : private TNonCopyable {
         // TODO: not wasted or never called?
         Tail_ = Head_;
         ClosedPagesSize_ = HeadReserve_ = 0;
-        TailSize_ = (-size_t(Tail_ == nullptr)) & TBufferPage::PageCapacity;
+        TailSize_ = (-size_t(Tail_ == nullptr)) & PageCapacity_;
     }
 
     inline void EraseBack(size_t len) {
@@ -199,7 +206,7 @@ class TPagedBuffer : private TNonCopyable {
     }
 
     inline void Advance(size_t len) {
-        if (Y_LIKELY(TailSize_ + len <= TBufferPage::PageCapacity)) {
+        if (Y_LIKELY(TailSize_ + len <= PageCapacity_)) {
             TailSize_ += len;
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
             TotalBytesWastedCounter->Sub(len);
@@ -207,7 +214,7 @@ class TPagedBuffer : private TNonCopyable {
             return;
         }
 
-        MKQL_ENSURE(len <= TBufferPage::PageCapacity, "Advance() size too big");
+        MKQL_ENSURE(len <= PageCapacity_, "Advance() size too big");
         AppendPage();
         TailSize_ = len;
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
@@ -222,12 +229,12 @@ class TPagedBuffer : private TNonCopyable {
 
     inline void Append(const char* data, size_t size) {
         while (size) {
-            if (TailSize_ == TBufferPage::PageCapacity) {
+            if (TailSize_ == PageCapacity_) {
                 AppendPage();
             }
-            Y_DEBUG_ABORT_UNLESS(TailSize_ < TBufferPage::PageCapacity);
+            Y_DEBUG_ABORT_UNLESS(TailSize_ < PageCapacity_);
 
-            size_t avail = TBufferPage::PageCapacity - TailSize_;
+            size_t avail = PageCapacity_ - TailSize_;
             size_t chunk = std::min(avail, size);
             std::memcpy(Pos(), data, chunk);
             TailSize_ += chunk;
@@ -243,11 +250,14 @@ class TPagedBuffer : private TNonCopyable {
 private:
     void AppendPage();
 
+    const size_t PageAllocSize_ = TBufferPage::DefaultPageAllocSize;
+    const size_t PageCapacity_ = TBufferPage::DefaultPageCapacity;
+
     char* Head_ = nullptr;
     char* Tail_ = nullptr;
 
     // TailSize_ is initialized as if last page is full, this way we can simplifiy check in Advance()
-    size_t TailSize_ = TBufferPage::PageCapacity;
+    size_t TailSize_ = PageCapacity_;
     size_t HeadReserve_ = 0;
     size_t ClosedPagesSize_ = 0;
 };

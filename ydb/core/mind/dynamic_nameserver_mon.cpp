@@ -21,6 +21,19 @@ TString ToString(TInstant t)
     return t.FormatLocalTime("%d %b %Y %H:%M:%S %Z");
 }
 
+TString ToString(EProtocolState s)
+{
+    switch (s) {
+        case EProtocolState::Connecting:
+            return "Connecting";
+        case EProtocolState::UseEpochProtocol:
+            return "EpochProtocol";
+        case EProtocolState::UseDeltaProtocol:
+            return "DeltaProtocol";
+    }
+    return "Unknown";
+}
+
 void OutputStaticContent(IOutputStream &str)
 {
     str << R"__(
@@ -193,6 +206,10 @@ void TDynamicNameserver::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext
                 << "    <tr>" << Endl
                 << "      <td class='right-align'>Max dynamic node ID:</td>" << Endl
                 << "      <td>" << config->MaxDynamicNodeId << "</td>" << Endl
+                << "    </tr>" << Endl
+                << "    <tr>" << Endl
+                << "      <td class='right-align'>Protocol state:</td>" << Endl
+                << "      <td>" << ToString(ProtocolState) << "</td>" << Endl
                 << "    </tr>" << Endl
                 << "  </tbody>" << Endl
                 << "</table></div>" << Endl;

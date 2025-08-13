@@ -68,9 +68,9 @@ class TDomCallbacks : public TJsonCallbacks {
 public:
     TDomCallbacks(const IValueBuilder* valueBuilder, bool throwException)
         : TJsonCallbacks(throwException)
-        , ValueBuilder(valueBuilder)
+        , ValueBuilder_(valueBuilder)
     {
-        Result.push({});
+        Result_.push({});
     }
 
     bool OnNull() override {
@@ -100,10 +100,10 @@ public:
     bool OnString(const TStringBuf& value) override {
         if constexpr (DecodeUtf8) {
             if (const auto from = AsciiSize(value); from < value.size()) {
-                return PushToCurrentCollection(MakeString(DecodeUtf(value, from), ValueBuilder));
+                return PushToCurrentCollection(MakeString(DecodeUtf(value, from), ValueBuilder_));
             }
         }
-        return PushToCurrentCollection(MakeString(value, ValueBuilder));
+        return PushToCurrentCollection(MakeString(value, ValueBuilder_));
     }
 
     bool OnOpenMap() override {
@@ -115,8 +115,8 @@ public:
     }
 
     bool OnCloseMap() override {
-        Y_DEBUG_ABORT_UNLESS(!Result.empty());
-        auto& items = Result.top();
+        Y_DEBUG_ABORT_UNLESS(!Result_.empty());
+        auto& items = Result_.top();
         Y_DEBUG_ABORT_UNLESS(items.size() % 2 == 0);
 
         TSmallVec<TPair, TStdAllocatorForUdf<TPair>> pairs;
@@ -124,7 +124,7 @@ public:
             pairs.emplace_back(std::move(items[i]), std::move(items[i + 1]));
         }
 
-        Result.pop();
+        Result_.pop();
         return PushToCurrentCollection(MakeDict(pairs.data(), pairs.size()));
     }
 
@@ -133,10 +133,10 @@ public:
     }
 
     bool OnCloseArray() override {
-        Y_DEBUG_ABORT_UNLESS(!Result.empty());
-        auto& items = Result.top();
-        TUnboxedValue list = MakeList(items.data(), items.size(), ValueBuilder);
-        Result.pop();
+        Y_DEBUG_ABORT_UNLESS(!Result_.empty());
+        auto& items = Result_.top();
+        TUnboxedValue list = MakeList(items.data(), items.size(), ValueBuilder_);
+        Result_.pop();
         return PushToCurrentCollection(std::move(list));
     }
 
@@ -146,29 +146,29 @@ public:
 
     TUnboxedValue GetResult() && {
         Y_DEBUG_ABORT_UNLESS(IsResultSingle());
-        return std::move(Result.top()[0]);
+        return std::move(Result_.top()[0]);
     }
 
 private:
     bool OnCollectionOpen() {
-        Result.emplace();
+        Result_.emplace();
         return true;
     }
 
     bool PushToCurrentCollection(TUnboxedValue&& value) {
-        Y_DEBUG_ABORT_UNLESS(!Result.empty());
-        Result.top().emplace_back(std::move(value));
+        Y_DEBUG_ABORT_UNLESS(!Result_.empty());
+        Result_.top().emplace_back(std::move(value));
         return true;
     }
 
     bool IsResultSingle() {
-        return Result.size() == 1 && Result.top().size() == 1;
+        return Result_.size() == 1 && Result_.top().size() == 1;
     }
 
-    const IValueBuilder* ValueBuilder;
+    const IValueBuilder* ValueBuilder_;
 
     using TUnboxedValues = TSmallVec<TUnboxedValue, TStdAllocatorForUdf<TUnboxedValue>>;
-    std::stack<TUnboxedValues, TSmallVec<TUnboxedValues, TStdAllocatorForUdf<TUnboxedValues>>> Result;
+    std::stack<TUnboxedValues, TSmallVec<TUnboxedValues, TStdAllocatorForUdf<TUnboxedValues>>> Result_;
 };
 
 class TTestCallbacks : public TJsonCallbacks {
@@ -200,14 +200,14 @@ public:
     bool OnCloseArray() final { return true; }
 
     bool OnEnd() final {
-        if (HasResult)
+        if (HasResult_)
             return false;
 
-        return HasResult = true;
+        return HasResult_ = true;
     }
 
  private:
-     bool HasResult = false;
+     bool HasResult_ = false;
 };
 
 bool IsEntity(const TUnboxedValuePod value) {
@@ -251,11 +251,11 @@ void WriteMap(const TUnboxedValuePod value, TJsonWriter& writer) {
             const TStringBuf str = key.AsStringRef();
             if constexpr (EncodeUtf8)
                 if (const auto from = AsciiSize(str); from < str.size())
-                    writer.WriteKey(EncodeUtf(str, from));
+                    writer.Write(EncodeUtf(str, from));
                 else
-                    writer.WriteKey(str);
+                    writer.Write(str);
             else
-                writer.WriteKey(str);
+                writer.Write(str);
             WriteValue<SkipMapEntity, EncodeUtf8>(payload, writer);
         }
     }
@@ -329,7 +329,7 @@ TString SerializeJsonDom(const NUdf::TUnboxedValuePod dom, bool skipMapEntity, b
 
     config.SetFormatOutput(false);
     config.WriteNanAsString = writeNanAsString;
-    
+
     config.FloatToStringMode = EFloatToStringMode::PREC_AUTO;
     TJsonWriter writer(&output, config);
     if (skipMapEntity)

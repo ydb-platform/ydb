@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
 
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, rows.front().Columns());
 
-        scanData.AddData(batch, {}, factory);
+        scanData.AddData(batch, {}, factory, 0, 0, 0, false);
 
         std::vector<NUdf::TUnboxedValue> container;
         container.resize(TDataRow::MakeArrowSchema()->num_fields());
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         resultCols.push_back(resCol);
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, resultCols);
 
-        scanData.AddData(batch, {}, factory);
+        scanData.AddData(batch, {}, factory, 0, 0, 0, false);
 
         std::vector<NUdf::TUnboxedValue> container;
         container.resize(1);
@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
 
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), {}, {}, {});
         TVector<TOwnedCellVec> emptyBatch(1000);
-        auto bytes = scanData.AddData(emptyBatch, {}, factory);
+        auto bytes = scanData.AddData(emptyBatch, {}, factory, 0, 0, 0, false);
         UNIT_ASSERT(bytes > 0);
 
         std::vector<NUdf::TUnboxedValue*> containerPtr;
@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         TVector<TDataRow> rows = TestRows();
         std::shared_ptr<arrow::RecordBatch> anotherEmptyBatch = VectorToBatch(rows, rows.front().MakeArrowSchema());
 
-        auto bytes = scanData.AddData(anotherEmptyBatch, {}, factory);
+        auto bytes = scanData.AddData(anotherEmptyBatch, {}, factory, 0, 0, 0, false);
         UNIT_ASSERT(bytes > 0);
         std::vector<NUdf::TUnboxedValue*> containerPtr;
         for (const auto& row: rows) {
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         auto flushResult = batchBuilder->Flush(&batch);
         UNIT_ASSERT(flushResult.ok());
 
-        UNIT_ASSERT_EXCEPTION(scanData.AddData(batch, {}, factory), NYql::TYqlPanic);
+        UNIT_ASSERT_EXCEPTION(scanData.AddData(batch, {}, factory, 0, 0, 0, false), NYql::TYqlPanic);
     }
 }
 

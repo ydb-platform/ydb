@@ -129,9 +129,9 @@
                                                                 "Columns": [
                                                                     "id"
                                                                 ],
-                                                                "E-Cost": "No estimate",
-                                                                "E-Rows": "No estimate",
-                                                                "E-Size": "No estimate",
+                                                                "E-Cost": "0",
+                                                                "E-Rows": "0",
+                                                                "E-Size": "0",
                                                                 "LookupKeyColumns": [
                                                                     "id"
                                                                 ],
@@ -214,12 +214,9 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join4.test_plan/nt2",
                                                         "ReadColumns": [
+                                                            "id (-\u221e, +\u221e)",
                                                             "b1",
-                                                            "id",
                                                             "nt1_id"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "id (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",

@@ -50,13 +50,15 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     }
 
     static bool IsItemSupportedInExport(NSchemeCache::TSchemeCacheNavigate::EKind kind) {
-        if (kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
-            return true;
+        switch (kind) {
+            case NSchemeCache::TSchemeCacheNavigate::KindTable:
+            case NSchemeCache::TSchemeCacheNavigate::KindTopic:
+                return true;
+            case NSchemeCache::TSchemeCacheNavigate::KindView:
+                return AppData()->FeatureFlags.GetEnableViewExport();
+            default:
+                return false;
         }
-        if (kind == NSchemeCache::TSchemeCacheNavigate::KindView) {
-            return AppData()->FeatureFlags.GetEnableViewExport();
-        }
-        return false;
     }
 
     static bool IsLikeDirectory(NSchemeCache::TSchemeCacheNavigate::EKind kind) {

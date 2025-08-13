@@ -90,6 +90,7 @@ DEFINE_REFCOUNTED_TYPE(TTcpDispatcherDynamicConfig)
 
 struct TBusConfig
     : public NNet::TDialerConfig
+    , public NCrypto::TSslContextConfig
 {
     bool EnableQuickAck;
 
@@ -110,9 +111,6 @@ struct TBusConfig
     // Ssl options.
     EEncryptionMode EncryptionMode;
     EVerificationMode VerificationMode;
-    NCrypto::TPemBlobConfigPtr CA;
-    NCrypto::TPemBlobConfigPtr CertificateChain;
-    NCrypto::TPemBlobConfigPtr PrivateKey;
     std::optional<TString> CipherList;
     bool LoadCertsFromBusCertsDirectory;
     std::optional<TString> PeerAlternativeHostName;
@@ -129,7 +127,7 @@ DEFINE_REFCOUNTED_TYPE(TBusConfig)
 struct TBusDynamicConfig
     : public NYTree::TYsonStruct
 {
-    bool NeedRejectConnectionOnMemoryOvercommit;
+    bool RejectConnectionOnMemoryOvercommit;
 
     REGISTER_YSON_STRUCT(TBusDynamicConfig);
 

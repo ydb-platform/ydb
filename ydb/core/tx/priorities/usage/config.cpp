@@ -1,4 +1,5 @@
 #include "config.h"
+
 #include <util/string/builder.h>
 
 namespace NKikimr::NPrioritiesQueue {
@@ -22,4 +23,4 @@ TString TConfig::DebugString() const {
     return sb;
 }
 
-}
+}   // namespace NKikimr::NPrioritiesQueue

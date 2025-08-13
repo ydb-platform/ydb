@@ -1,7 +1,7 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
@@ -87,6 +87,14 @@ struct TTransferStrategy : public IStrategy {
             return true;
         }
 
+        if (target.HasDirectoryPath()) {
+            auto directoryPath = TPath::Resolve(target.GetDirectoryPath(), context.SS);
+            if (!directoryPath.IsResolved() || directoryPath.IsUnderDeleting() || directoryPath->IsUnderMoving() || directoryPath.IsDeleted()) {
+                result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination directory path '" << target.GetDirectoryPath() << "' not found");
+                return true;
+            }
+        }
+
         if (!AppData()->TransferWriterFactory) {
             result.SetError(NKikimrScheme::StatusNotAvailable, "The transfer is only available in the Enterprise version");
             return true;
@@ -149,6 +157,7 @@ public:
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
+                ev->Record.SetDatabase(TPath::Init(context.SS->RootPathId(), context.SS).PathString());
 
                 LOG_D(DebugHint() << "Send TEvCreateReplication to controller"
                     << ": tabletId# " << tabletId
@@ -373,7 +382,7 @@ public:
             return result;
         }
 
-        auto path = parentPath.Child(name);
+        auto path = parentPath.Child(name, TPath::TSplitChildTag{});
         {
             const auto checks = path.Check();
             checks
@@ -392,7 +401,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -423,6 +432,12 @@ public:
                 "Unable to construct channel binding for replication controller with the storage pool");
             return result;
         }
+ 
+        const auto& connectionParams = desc.GetConfig().GetSrcConnectionParams();
+        if (connectionParams.HasCaCert() && !connectionParams.GetEnableSsl()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "CA_CERT has no effect in non-secure mode");
+            return result;
+        }
 
         path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();
@@ -435,7 +450,7 @@ public:
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
         parentPath.DomainInfo()->IncPathsInside(context.SS);
 
-        if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
+        if (connectionParams.GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
             desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
         }
 

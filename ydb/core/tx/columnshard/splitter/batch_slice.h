@@ -103,6 +103,15 @@ public:
         return arrow::RecordBatch::Make(pkSchema, 2, pkColumns);
     }
 
+    ui64 GetPackedSize() const {
+        ui64 result = 0;
+        for (auto&& i : Data) {
+            result += i.GetPackedSize();
+        }
+        AFL_VERIFY(Size == result)("size", Size)("result", result);
+        return result;
+    }
+
     ui64 GetSize() const {
         return Size;
     }

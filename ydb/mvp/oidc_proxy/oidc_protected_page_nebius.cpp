@@ -1,11 +1,14 @@
-#include <library/cpp/json/json_reader.h>
-#include <ydb/library/actors/http/http.h>
+#include "oidc_protected_page_nebius.h"
+
+#include "context.h"
+#include "openid_connect.h"
+
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/mvp_log.h>
-#include "openid_connect.h"
-#include "context.h"
-#include "oidc_protected_page_nebius.h"
+
+#include <ydb/library/actors/http/http.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NMVP::NOIDC {
 
@@ -135,7 +138,7 @@ void THandlerSessionServiceCheckNebius::ForwardUserRequest(TStringBuf authHeader
 }
 
 bool THandlerSessionServiceCheckNebius::NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const {
-    if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
+    if ((response->Status == "400" || response->Status.empty()) && ProtectedPage.Scheme.empty()) {
         return !response->GetRequest()->Secure;
     }
     return false;

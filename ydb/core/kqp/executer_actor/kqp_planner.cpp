@@ -105,7 +105,9 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , CaFactory_(args.CaFactory_)
     , BlockTrackingMode(args.BlockTrackingMode)
     , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
+    , BufferPageAllocSize(args.BufferPageAllocSize)
     , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
+    , Query(args.Query)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -252,19 +254,12 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetSerializedGUCSettings(SerializedGUCSettings);
     }
 
-
-    request.SetSchedulerGroup(UserRequestContext->PoolId);
     request.SetDatabase(Database);
     request.SetDatabaseId(UserRequestContext->DatabaseId);
+    request.SetPoolId(UserRequestContext->PoolId);
+
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
-        request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
-        if (UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode >= 0) {
-            request.SetQueryCpuShare(UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode / 100.0);
-        }
-        if (UserRequestContext->PoolConfig->ResourceWeight >= 0) {
-            request.SetResourceWeight(UserRequestContext->PoolConfig->ResourceWeight);
-        }
     }
 
     if (UserToken) {
@@ -484,6 +479,10 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         taskDesc->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
     }
 
+    if (BufferPageAllocSize) {
+        taskDesc->SetBufferPageAllocSize(*BufferPageAllocSize);
+    }
+
     auto startResult = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,
@@ -507,7 +506,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,
         .UserToken = UserToken,
-        .Database = Database
+        .Database = Database,
+        .Query = Query,
     });
 
     if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {

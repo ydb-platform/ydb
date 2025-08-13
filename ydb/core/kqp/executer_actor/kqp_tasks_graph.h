@@ -86,6 +86,16 @@ struct TStageInfoMeta {
     THolder<TKeyDesc> ShardKey;
     NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
 
+    struct TIndexMeta {
+        TTableId TableId;
+        TString TablePath;
+        TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
+
+        THolder<TKeyDesc> ShardKey;
+    };
+
+    TVector<TIndexMeta> IndexMetas;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     TColumnShardHashV1Params ColumnShardHashV1Params;
@@ -344,6 +354,8 @@ void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTx
 void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
 
 NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task, bool serializeAsyncIoSettings);
+void PersistTasksGraphInfo(const TKqpTasksGraph& tasksGraph, NKikimrKqp::TQueryPhysicalGraph& result);
+void RestoreTasksGraphInfo(TKqpTasksGraph& tasksGraph, const NKikimrKqp::TQueryPhysicalGraph& graphInfo);
 void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);
 void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling);

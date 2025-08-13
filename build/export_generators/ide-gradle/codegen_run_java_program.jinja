@@ -1,4 +1,5 @@
 {%- if current_target.runs|length -%}
+{%-     set current_target_object_indexes = current_target_object_indexes + current_target.runs|map(attribute='_object_index') -%}
 {%-     for run in current_target.runs %}
 
 val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{{ run['_object_index'] }}") {
@@ -15,9 +16,9 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
 {%-        set classpaths = run.classpath|reject('eq', '@.cplst') -%}
 {%-        if classpaths|length -%}
 {%             for classpath in classpaths -%}
-{%-                set rel_file_classpath = classpath|replace('@', '')|replace(export_root, '')|replace(arcadia_root, '') %}
+{%-                set rel_file_classpath = classpath|replace('@', '')|replace(export_root, '')|replace(arcadia_root, '')|replace(output_root, '') %}
 
-    val classpaths = "$arcadia_root/" + File("$arcadia_root{{ rel_file_classpath }}").readText().trim().replace(":", ":$arcadia_root/")
+    val classpaths = "$output_root/" + File("$output_root{{ rel_file_classpath }}").readText().trim().replace(":", ":$output_root/")
     classpath = files(classpaths.split(":"))
 {%-            endfor -%}
 {%-        endif %}
@@ -28,7 +29,7 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
     args = listOf(
 {%-            for arg in run.args -%}
 {%-                if not loop.first %}
-{%-                    if run.out_dir|select("eq", arg)|length or run.out|select("eq", arg)|length -%}
+{%-                    if (run.out_dir|select("eq", arg)|length) or (run.out_dir[0] == '/' and run.out_dir|select("in", arg)|length) or (run.out|select("eq", arg)|length) or (run.out[0] == '/' and run.out|select("in", arg)|length) -%}
 {%-                        if proto_template %}
         {{ PatchGeneratedProto(arg) }},
 {%-                        else %}
@@ -84,7 +85,6 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
 
 {#-
     Не использованы атрибуты
-    run-in_dirs_inputs="list"
     run-tool="list"
 #}
 }

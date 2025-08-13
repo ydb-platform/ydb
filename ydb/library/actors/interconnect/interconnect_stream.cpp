@@ -2,7 +2,6 @@
 #include "interconnect_common.h"
 #include "logging.h"
 #include "poller_actor.h"
-#include <library/cpp/openssl/init/init.h>
 #include <util/network/socket.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -311,7 +310,6 @@ namespace NInterconnect {
             : Common(std::move(common))
         {
             int ret;
-            InitOpenSSL();
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
             Ctx.reset(SSL_CTX_new(TLSv1_2_method()));
             Y_ABORT_UNLESS(Ctx, "SSL_CTX_new() failed");

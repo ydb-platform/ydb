@@ -2471,6 +2471,36 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    Y_UNIT_TEST(SkipEmptyDirsOnRestore) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        pathToBackup.Child("empty").MkDir();
+        auto dir = pathToBackup.Child("with_one_file");
+        dir.MkDir();
+        dir.Child("file").Touch();
+        pathToBackup.Child("with_one_dir").Child("empty").MkDirs();
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Restore(pathToBackup, "/Root");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TSchemeClient schemeClient(driver);
+        {
+            auto [entries, status] = NConsoleClient::RecursiveList(schemeClient, "/Root", {}, false);
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(entries.size(), 2, JoinSeq(", ", entries));
+            Sort(entries, [](const auto& lhs, const auto& rhs) {
+                return lhs.Name < rhs.Name;
+            });
+            UNIT_ASSERT_STRINGS_EQUAL_C(entries[0].Name, "/Root/with_one_dir", entries[0]);
+            UNIT_ASSERT_STRINGS_EQUAL_C(entries[1].Name, "/Root/with_one_file", entries[1]);
+        }
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {

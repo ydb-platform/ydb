@@ -7,6 +7,7 @@
 #include <yt/yt/client/formats/config.h>
 
 #include <yt/yt/client/signature/signature.h>
+#include <yt/yt/client/signature/validator.h>
 
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/table_output.h>
@@ -14,6 +15,7 @@
 
 namespace NYT::NDriver {
 
+using namespace NApi;
 using namespace NConcurrency;
 using namespace NFormats;
 using namespace NTableClient;
@@ -80,7 +82,16 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
 
-    std::optional<std::pair<int, int>> writerIndexRange;
+    const auto& signatureValidator = context->GetDriver()->GetSignatureValidator();
+    auto validationSuccessful = WaitFor(signatureValidator->Validate(SignedShuffleHandle.Underlying()))
+        .ValueOrThrow();
+    if (!validationSuccessful) {
+        auto shuffleHandle = ConvertTo<TShuffleHandlePtr>(TYsonStringBuf(SignedShuffleHandle.Underlying()->Payload()));
+        THROW_ERROR_EXCEPTION("Signature validation failed for shuffle handle")
+            << TErrorAttribute("shuffle_handle", shuffleHandle);
+    }
+
+    std::optional<IShuffleClient::TIndexRange> writerIndexRange;
     if (WriterIndexBegin.has_value()) {
         writerIndexRange = std::pair(*WriterIndexBegin, *WriterIndexEnd);
     }
@@ -139,6 +150,15 @@ void TWriteShuffleDataCommand::Register(TRegistrar registrar)
 void TWriteShuffleDataCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
+
+    const auto& signatureValidator = context->GetDriver()->GetSignatureValidator();
+    auto validationSuccessful = WaitFor(signatureValidator->Validate(SignedShuffleHandle.Underlying()))
+        .ValueOrThrow();
+    if (!validationSuccessful) {
+        auto shuffleHandle = ConvertTo<TShuffleHandlePtr>(TYsonStringBuf(SignedShuffleHandle.Underlying()->Payload()));
+        THROW_ERROR_EXCEPTION("Signature validation failed for shuffle handle")
+            << TErrorAttribute("shuffle_handle", shuffleHandle);
+    }
 
     Options.OverwriteExistingWriterData = OverwriteExistingWriterData;
 

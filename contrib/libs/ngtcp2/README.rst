@@ -61,9 +61,9 @@ directory require at least one of the following TLS backends:
 - `quictls
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
 - GnuTLS >= 3.7.5
-- BoringSSL (commit 23018360710de333b3343e63cbb3bd2dceb3287d);
+- BoringSSL (commit 0697c880516634fb1430868d99b4028b5e407465);
   or aws-lc >= 1.39.0
-- Picotls (commit bbcdbe6dc31ec5d4b72a7beece4daf58098bad42)
+- Picotls (commit f350eab60742138ac62b42ee444adf04c7898b0d)
 - wolfSSL >= 5.5.0
 - LibreSSL >= v3.9.2
 - OpenSSL >= 3.5.0 (experimental)
@@ -82,13 +82,13 @@ Build with wolfSSL
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v5.7.6-stable https://github.com/wolfSSL/wolfssl
+   $ git clone --depth 1 -b v5.8.2-stable https://github.com/wolfSSL/wolfssl
    $ cd wolfssl
    $ autoreconf -i
    $ # For wolfSSL < v5.6.6, append --enable-quic.
    $ ./configure --prefix=$PWD/build \
        --enable-all --enable-aesni --enable-harden --enable-keylog-export \
-       --disable-ech
+       --disable-ech --enable-mlkem
    $ make -j$(nproc)
    $ make install
    $ cd ..
@@ -115,7 +115,7 @@ Build with BoringSSL
 
    $ git clone https://boringssl.googlesource.com/boringssl
    $ cd boringssl
-   $ git checkout 23018360710de333b3343e63cbb3bd2dceb3287d
+   $ git checkout 0697c880516634fb1430868d99b4028b5e407465
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
@@ -132,7 +132,7 @@ Build with BoringSSL
    $ # For Mac users who have installed libev with MacPorts, append
    $ # LIBEV_CFLAGS="-I/opt/local/include" LIBEV_LIBS="-L/opt/local/lib -lev"
    $ ./configure PKG_CONFIG_PATH=$PWD/../nghttp3/build/lib/pkgconfig \
-       BORINGSSL_LIBS="-L$PWD/../boringssl/build/ssl -lssl -L$PWD/../boringssl/build/crypto -lcrypto" \
+       BORINGSSL_LIBS="-L$PWD/../boringssl/build -lssl -lcrypto" \
        BORINGSSL_CFLAGS="-I$PWD/../boringssl/include" \
        --with-boringssl
    $ make -j$(nproc) check
@@ -142,7 +142,7 @@ Build with aws-lc
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v1.49.1 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v1.56.0 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
@@ -170,10 +170,10 @@ Build with libressl
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v4.0.0 https://github.com/libressl/portable.git libressl
+   $ git clone --depth 1 -b v4.1.0 https://github.com/libressl/portable.git libressl
    $ cd libressl
    $ # Workaround autogen.sh failure
-   $ export LIBRESSL_GIT_OPTIONS="-b libressl-v4.0.0"
+   $ export LIBRESSL_GIT_OPTIONS="-b libressl-v4.1.0"
    $ ./autogen.sh
    $ ./configure --prefix=$PWD/build
    $ make -j$(nproc) install

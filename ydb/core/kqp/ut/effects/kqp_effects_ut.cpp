@@ -525,6 +525,49 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
     }
 
+    Y_UNIT_TEST_TWIN(EmptyUpdate, UseSink) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        {
+            auto schemeResult = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE T1 (
+                    Key Uint32,
+                    Value Uint32,
+                    Timestamp Timestamp,
+                    PRIMARY KEY (Key)
+                );
+                CREATE TABLE T2 (
+                    Key Uint32,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToString());
+        }
+        Cerr << "!!!UPDATE TABLE" << Endl;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                $data = SELECT 1u AS Key, 1u AS Value;
+                UPDATE T1 ON SELECT Key, Value FROM $data;
+                DELETE FROM T2 WHERE Key = 1;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        Cerr << "!!!DROP TABLE" << Endl;
+        {
+            auto schemeResult = session.DropTable("/Root/T1").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToString());
+        }
+    }
+    
     Y_UNIT_TEST_TWIN(AlterDuringUpsertTransaction, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);

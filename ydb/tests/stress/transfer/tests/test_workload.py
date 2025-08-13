@@ -3,33 +3,33 @@ import os
 import pytest
 import yatest
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.stress.fixtures import StressFixture
 
 
-class TestYdbTransferWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(
+class TestYdbWorkload(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
             erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_topic_transfer": True,
             }
-        ))
-        cls.cluster.start()
+        )
 
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
-
-    @pytest.mark.parametrize("store_type", ["row", "column"])
-    def test(self, store_type):
+    @pytest.mark.parametrize("store_type, topic", [
+        ("row", "local"),
+        ("row", "remote"),
+        ("column", "local"),
+        ("column", "remote")
+    ])
+    def test(self, store_type, topic):
         cmd = [
             yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
-            "--endpoint", f'grpc://localhost:{self.cluster.nodes[1].grpc_port}',
-            "--database", "/Root",
+            "--endpoint", self.endpoint,
+            "--database", self.database,
             "--duration", "60",
-            "--mode", store_type
+            "--mode", store_type,
+            "--topic", topic
         ]
         yatest.common.execute(cmd, wait=True)

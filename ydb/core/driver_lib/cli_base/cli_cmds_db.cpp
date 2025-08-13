@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
 #include <ydb/core/protos/bind_channel_storage_pool.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
 
@@ -283,6 +284,9 @@ public:
         case NKikimrSchemeOp::EPathTypeBackupCollection:
             type = "<backup collection>";
             break;
+        case NKikimrSchemeOp::EPathTypeSysView:
+            type = "<system view>";
+            break;
         default:
             type = "<unknown>";
             break;
@@ -313,6 +317,15 @@ public:
         Cout << id << type << name << owner << acl << Endl;
         if (Details) {
             switch(entry.GetPathType()) {
+            case NKikimrSchemeOp::EPathTypeSysView: {
+                const NKikimrSchemeOp::TSysViewDescription& sysView(path.GetSysViewDescription());
+                TString typeNumValue(Sprintf("%lu", sysView.GetType()));
+                TString typeStringValue(NKikimrSysView::ESysViewType_Name(sysView.GetType()));
+                PadString(typeNumValue, 10);
+                PadString(typeStringValue, 50);
+                Cout << typeNumValue << typeStringValue << Endl;
+                // there is no 'break' statement because the sys view also has TableDescription like all tables
+            }
             case NKikimrSchemeOp::EPathTypeTable: {
                 const NKikimrSchemeOp::TTableDescription& table(path.GetTable());
                 size_t szWidth = id.size() + type.size() + entry.GetName().size();
@@ -497,6 +510,9 @@ public:
             break;
         case NKikimrSchemeOp::EPathTypeBackupCollection:
             type = "<backup collection>";
+            break;
+        case NKikimrSchemeOp::EPathTypeSysView:
+            type = "<system view>";
             break;
         default:
             type = "<unknown>";

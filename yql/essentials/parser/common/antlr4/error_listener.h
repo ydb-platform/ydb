@@ -7,8 +7,8 @@
 namespace antlr4 {
 
     class ANTLR4CPP_PUBLIC YqlErrorListener: public BaseErrorListener {
-        NAST::IErrorCollector* errors;
-        bool* error;
+        NAST::IErrorCollector* Errors_;
+        bool* Error_;
 
     public:
         YqlErrorListener(NAST::IErrorCollector* errors, bool* error);

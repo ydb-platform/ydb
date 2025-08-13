@@ -1,28 +1,28 @@
 # -*- coding: utf-8 -*-
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+import os
+import pytest
+import yatest
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.stress.common.common import YdbClient
-from ydb.tests.stress.olap_workload.workload import WorkloadRunner
+
+from ydb.tests.library.stress.fixtures import StressFixture
 
 
-class TestYdbWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(
+class TestYdbWorkload(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
             erasure=Erasure.MIRROR_3_DC,
             column_shard_config={
                 "allow_nullable_columns_in_pk": True,
-            }
-        ))
-        cls.cluster.start()
+                "generate_internal_path_id": True
 
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
+            }
+        )
 
     def test(self):
-        client = YdbClient(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', True)
-        client.wait_connection()
-        with WorkloadRunner(client, 'olap_workload', 120, True) as runner:
-            runner.run()
+        yatest.common.execute([
+            yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
+            "--endpoint", self.endpoint,
+            "--database", self.database,
+            "--duration", "120",
+        ])

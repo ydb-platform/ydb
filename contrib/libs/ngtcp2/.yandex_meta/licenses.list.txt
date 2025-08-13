@@ -40,6 +40,10 @@ Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
+ * Copyright (c) 2020 ngtcp2 contributors
+
+
+====================COPYRIGHT====================
  * Copyright (c) 2021 ngtcp2 contributors
 
 
@@ -98,6 +102,7 @@ Javier Blazquez
 Jay Satiro
 Jean-Philippe Boivin
 Jiawen Geng
+Jixinqi
 Junqi Wang
 Karthikdasari0423
 Kazu Yamamoto
@@ -112,10 +117,12 @@ Michael White
 Moritz Buhl
 NKTelnet
 Natris
+Niek Bouman
 Nishant Nori
 Patrick Griffis
 Pavel Otchertsov
 Peter Wu
+Petr Menšík
 Samuel Henrique
 Stefan Eissing
 Tal Regev
@@ -134,6 +141,7 @@ hyunjic
 junqiw
 msoxzw
 nickfajones
+niekbouman
 rhoxn
 scw00
 shibin k v

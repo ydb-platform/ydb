@@ -261,7 +261,7 @@ TStatus RemovePathRecursive(
         case NYdb::NScheme::ESchemeEntryType::Directory:
             return RemoveDirectoryRecursive(driver, path, settings);
         default:
-            return RemovePathRecursive(driver, entity.GetEntry(), settings);
+            return RemovePathRecursive(driver, entry, settings);
     }
 }
 

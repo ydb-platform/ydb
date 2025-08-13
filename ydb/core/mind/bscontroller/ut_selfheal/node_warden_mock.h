@@ -192,5 +192,8 @@ public:
         cFunc(EvUpdateDriveStatus, UpdateDriveStatus);
         cFunc(TEvents::TSystem::Wakeup, Connect);
         hFunc(TEvNodeWardenQueryStorageConfig, Handle);
+        IgnoreFunc(NStorage::TEvNodeWardenUpdateCache);
+        IgnoreFunc(NStorage::TEvNodeWardenQueryCache);
+        IgnoreFunc(NStorage::TEvNodeWardenUnsubscribeFromCache);
     })
 };

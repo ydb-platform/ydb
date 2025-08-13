@@ -5,12 +5,13 @@ namespace NKikimr::NOlap {
 
 class TCompactedPortionInfo: public TPortionInfo {
 private:
+    TSnapshot AppearanceSnapshot = TSnapshot::Zero();
     using TBase = TPortionInfo;
-    friend class TPortionInfoConstructor;
-    virtual void DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const override;
+    friend class TCompactedPortionInfoConstructor;
+    virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const override;
 
     virtual bool DoIsVisible(const TSnapshot& snapshot, const bool /*checkCommitSnapshot*/) const override {
-        return RecordSnapshotMin(std::nullopt) <= snapshot;
+        return RecordSnapshotMin(std::nullopt) <= snapshot && AppearanceSnapshot <= snapshot;
     }
 
     virtual EPortionType GetPortionType() const override {
@@ -37,7 +38,7 @@ public:
     virtual const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const override;
     virtual const TString& GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const override;
     virtual const TString& GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const override;
-    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata, const bool withMetadataBlobs) const override;
+    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const override;
     virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& /*snapshotDefault*/) const override;
     virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& /*snapshotDefault*/) const override;
 };

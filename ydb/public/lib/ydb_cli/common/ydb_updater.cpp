@@ -11,6 +11,7 @@
 #include <util/system/env.h>
 #include <util/system/execpath.h>
 #include <util/system/shellcommand.h>
+#include <library/cpp/colorizer/output.h>
 
 #ifndef _win32_
 #include <sys/utsname.h>
@@ -65,34 +66,14 @@ TYdbUpdater::~TYdbUpdater() {
     }
 }
 
-bool TYdbUpdater::CheckIfUpdateNeeded(bool forceRequest) {
-    if (!forceRequest && !IsCheckEnabled()) {
-        return false;
-    }
-    if (!forceRequest && Config.Has("outdated") && Config["outdated"].GetBoolean()) {
-        return true;
-    }
-    if (!forceRequest && !IsTimeToCheckForUpdate()) {
-        return false;
-    }
-
-    SetConfigValue("last_check", TInstant::Now().Seconds());
-
-    if (GetLatestVersion()) {
-        bool isOutdated = MyVersion != LatestVersion;
-        SetConfigValue("outdated", isOutdated);
-        return isOutdated;
-    }
-    return false;
-}
-
 int TYdbUpdater::Update(bool forceUpdate) {
-    if (!GetLatestVersion()) {
-        return EXIT_FAILURE;
-    }
-    if (!CheckIfUpdateNeeded(/*forceRequest*/ true) && !forceUpdate) {
-        Cerr << "Current version: \"" << MyVersion << "\". Latest version Available: \"" << LatestVersion
-            << "\". No need to update. Use '--force' option to update anyway." << Endl;
+    if (GetLatestVersion()) {
+        if (MyVersion == LatestVersion && !forceUpdate) {
+            Cerr << "Current version: \"" << MyVersion << "\". Latest version available: \"" << LatestVersion
+                << "\". No need to update. Use '--force' option to update anyway." << Endl;
+            return EXIT_FAILURE;
+        }
+    } else {
         return EXIT_FAILURE;
     }
 
@@ -127,6 +108,7 @@ int TYdbUpdater::Update(bool forceUpdate) {
     checkCmd.Run().Wait();
     if (checkCmd.GetExitCode() != 0) {
         Cerr << "Failed to check downloaded binary. " << checkCmd.GetError() << Endl;
+        tmpPathToBinary.DeleteIfExists();
         return EXIT_FAILURE;
     }
     Cout << checkCmd.GetOutput();
@@ -145,7 +127,6 @@ int TYdbUpdater::Update(bool forceUpdate) {
     tmpPathToBinary.RenameTo(fsPathToBinary);
     Cout << "New binary renamed to " << fsPathToBinary.GetPath() << Endl;
 
-    SetConfigValue("outdated", false);
     return EXIT_SUCCESS;
 }
 
@@ -223,10 +204,33 @@ bool TYdbUpdater::GetLatestVersion() {
 
     if (curlCmd.GetExitCode() == 0) {
         LatestVersion = StripString(curlCmd.GetOutput());
+        SetConfigValue("last_check", TInstant::Now().Seconds());
         return true;
     }
     Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl;
     return false;
+}
+
+void TYdbUpdater::PrintUpdateMessageIfNeeded(bool forceVersionCheck) {
+    if (forceVersionCheck) {
+        Cerr << "Force checking if there is a newer version..." << Endl;
+    } else if (!IsCheckEnabled() || !IsTimeToCheckForUpdate()) {
+        return;
+    }
+    if (!GetLatestVersion()) {
+        return;
+    }
+    if (MyVersion != LatestVersion) {
+        NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+        Cerr << colors.Green() << "(!) New version of YDB CLI is available. Current version: \"" << MyVersion
+            << "\", Latest recommended version available: \"" << LatestVersion << "\". Run 'ydb update' command for update. "
+            << "You can also disable further version checks with 'ydb version --disable-checks' command."
+            << colors.OldColor() << Endl;
+    } else if (forceVersionCheck) {
+        NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+        Cerr << colors.GreenColor() << "Current version is up to date"
+            << colors.OldColor() << Endl;
+    }
 }
 
 }

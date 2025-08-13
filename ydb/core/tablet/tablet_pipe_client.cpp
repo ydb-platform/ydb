@@ -9,7 +9,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/actors/util/queue_oneone_inplace.h>
+#include <ydb/core/util/queue_inplace.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 
@@ -40,7 +40,6 @@ namespace NTabletPipe {
             , TabletId(tabletId)
             , Config(config)
             , IsShutdown(false)
-            , PayloadQueue(new TPayloadQueue())
             , Leader(true)
         {
             Y_ABORT_UNLESS(tabletId != 0);
@@ -148,7 +147,7 @@ namespace NTabletPipe {
         void HandleSendQueued(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
             BLOG_D("queue send");
             Y_ABORT_UNLESS(!IsShutdown);
-            PayloadQueue->Push(ev.Release());
+            PayloadQueue.Push(std::move(ev));
         }
 
         void HandleSend(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
@@ -159,9 +158,8 @@ namespace NTabletPipe {
 
         ui32 GenerateConnectFeatures() const {
             ui32 features = 0;
-            if (Config.ExpectShutdown) {
-                features |= NKikimrTabletPipe::FEATURE_GRACEFUL_SHUTDOWN;
-            }
+            // Note: we want to be notified on graceful shutdown for cache invalidation
+            features |= NKikimrTabletPipe::FEATURE_GRACEFUL_SHUTDOWN;
             return features;
         }
 
@@ -323,10 +321,11 @@ namespace NTabletPipe {
                                                                   Leader, false, Generation, std::move(versionInfo)));
 
             BLOG_D("send queued");
-            while (TAutoPtr<IEventHandle> x = PayloadQueue->Pop())
+            while (TAutoPtr<IEventHandle> x = PayloadQueue.PopDefault())
                 Push(ctx, x);
 
-            PayloadQueue.Destroy();
+            // Free buffer memory
+            PayloadQueue.Clear();
 
             if (IsShutdown) {
                 BLOG_D("shutdown pipe due to pending shutdown request");
@@ -358,6 +357,9 @@ namespace NTabletPipe {
                 return;
             }
 
+            // Server usually closes pipes because there's a problem or a restart
+            NotifyTabletProblem(ctx);
+
             BLOG_D("pipe event not delivered, drop pipe");
             return NotifyDisconnect(ctx);
         }
@@ -369,6 +371,9 @@ namespace NTabletPipe {
                 return;
             }
 
+            // Server usually closes pipes because there's a problem or a restart
+            NotifyTabletProblem(ctx);
+
             Y_ABORT_UNLESS(ev->Get()->Record.GetTabletId() == TabletId);
             BLOG_D("peer closed");
             return NotifyDisconnect(ctx);
@@ -376,6 +381,10 @@ namespace NTabletPipe {
 
         void Handle(TEvTabletPipe::TEvPeerShutdown::TPtr& ev, const TActorContext& ctx) {
             Y_ABORT_UNLESS(ev->Get()->Record.GetTabletId() == TabletId);
+
+            // Server usually closes pipes because there's a problem or a restart
+            NotifyTabletProblem(ctx);
+
             BLOG_D("peer shutdown");
             if (Y_LIKELY(Config.ExpectShutdown)) {
                 ctx.Send(Owner, new TEvTabletPipe::TEvClientShuttingDown(
@@ -542,9 +551,7 @@ namespace NTabletPipe {
         }
 
         void TryToReconnect(const TActorContext& ctx) {
-            if (auto actor = GetTabletLeader()) {
-                ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvTabletProblem(TabletId, actor));
-            } else if (LastKnownLeader) {
+            if (!NotifyTabletProblem(ctx) && LastKnownLeader) {
                 // Connecting to user tablet that is not running yet
                 // Invalidate current resolve cache so we can resolve again
                 ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvTabletProblem(TabletId, LastKnownLeader));
@@ -565,6 +572,15 @@ namespace NTabletPipe {
                 }
             } else {
                 return NotifyConnectFail(ctx);
+            }
+        }
+
+        bool NotifyTabletProblem(const TActorContext& ctx) {
+            if (auto actor = GetTabletLeader()) {
+                ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvTabletProblem(TabletId, actor));
+                return true;
+            } else {
+                return false;
             }
         }
 
@@ -703,8 +719,7 @@ namespace NTabletPipe {
         TActorId InterconnectProxyId;
         TActorId InterconnectSessionId;
         TActorId ServerId;
-        typedef TOneOneQueueInplace<IEventHandle*, 32> TPayloadQueue;
-        TAutoPtr<TPayloadQueue, TPayloadQueue::TPtrCleanDestructor> PayloadQueue;
+        TQueueInplace<TAutoPtr<IEventHandle>, 32> PayloadQueue;
         TClientRetryState RetryState;
         bool Leader;
         ui64 Generation = 0;

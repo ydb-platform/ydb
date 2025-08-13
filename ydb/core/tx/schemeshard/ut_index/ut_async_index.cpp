@@ -1,10 +1,11 @@
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -31,11 +32,12 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),
-            {NLs::PathExist,
-             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
-             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-             NLs::IndexKeys({"indexed"})});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),{
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"indexed"}),
+        });
     }
 
     Y_UNIT_TEST(OnlineBuild) {
@@ -525,10 +527,10 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"), {
-      NLs::PathExist,
-      NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
-      NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-      NLs::IndexKeys({"indexed"}),
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"indexed"}),
         });
     }
 }

@@ -4,6 +4,7 @@ import pytest
 import time
 import copy
 from threading import Thread
+from typing import List
 
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import TestContext, ScenarioTestHelper
@@ -12,6 +13,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.common.types import Erasure
 
 
 LOGGER = logging.getLogger()
@@ -78,26 +80,50 @@ class BaseTestSet:
     def teardown_class(cls):
         cls._ydb_instance.stop()
 
+    def worker(self, local_ctx: TestContext, suffix: str, codes: list, idx: int, errors: List[BaseException]):
+        try:
+            self._test_suffix(local_ctx, suffix, codes, idx)
+        except BaseException as e:
+            import sys
+            print(f"Thread {idx} failed", file=sys.stderr)
+            codes[idx] = 1
+            errors.append(e)
+
     def test_multi(self, ctx: TestContext):
         if self.__class__.__name__ != 'TestInsert':
             return
         self.def_inserts_count = 50
         num_threads = int(get_external_param("num_threads", "5"))
-        threads = []
+        threads: List[Thread] = []
         exit_codes = [None] * num_threads
+        errors: List[BaseException] = []
+
         for p in range(num_threads):
-            threads.append(Thread(target=self._test_suffix, args=(copy.deepcopy(ctx), str(p), exit_codes, p)))
-        for t in threads:
-            t.start()
+            suffix = str(p)
+            t = Thread(target=self.worker, args=(copy.deepcopy(ctx), suffix, exit_codes, p, errors))
+
+            try:
+                t.start()
+            except BaseException as e:
+                exit_codes[p] = 1
+                errors.append(e)
+            else:
+                threads.append(t)
+
         for t in threads:
             t.join()
-        LOGGER.info(f'Thread exit codes: {exit_codes}')
-        assert exit_codes == [0] * num_threads, exit_codes
+
+        if errors:
+            raise errors[0]
 
     def test(self, ctx: TestContext):
         self.def_inserts_count = 50
         exit_codes = [None]
-        self._test_suffix(ctx, get_external_param("table_suffix", ""), exit_codes, 0)
+        errors: List[BaseException] = []
+        self.worker(ctx, get_external_param("table_suffix", ""), exit_codes, 0, errors)
+
+        if errors:
+            raise errors[0]
 
     def _test_suffix(self, ctx: TestContext, table_suffix: str, exit_codes, num: int):
         start_time = time.time()
@@ -140,10 +166,14 @@ class BaseTestSet:
     @classmethod
     def _get_cluster_config(cls):
         return KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_column_store": True,
                 "enable_external_data_sources": True,
                 "enable_tiering_in_column_shard": True,
+            },
+            column_shard_config={
+                "generate_internal_path_id": True
             },
             query_service_config=dict(
                 available_external_data_sources=["ObjectStorage"]

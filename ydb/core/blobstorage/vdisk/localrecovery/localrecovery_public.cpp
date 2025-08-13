@@ -84,6 +84,7 @@ namespace NKikimr {
         ui64 SyncLogMaxLsnStored = 0;
         NKikimrVDiskData::TScrubEntrypoint ScrubEntrypoint;
         ui64 ScrubEntrypointLsn = 0;
+        bool IsTinyDisk = false;
 
         TActiveActors ActiveActors;
 
@@ -256,23 +257,32 @@ namespace NKikimr {
         bool InitMetabase(const TStartingPoints &startingPoints, TIntrusivePtr<TMetaBase> &metabase,
                           bool &initFlag, NMonitoring::TDeprecatedCounter &counter, bool &emptyDb,
                           ui64 freshBufSize, ui64 compThreshold, const TActorContext &ctx) {
-            TStartingPoints::const_iterator it;
-            // Settings
-            TLevelIndexSettings settings(LocRecCtx->HullCtx,
-                                         Config->HullCompLevel0MaxSstsAtOnce,
-                                         freshBufSize,
-                                         compThreshold,
-                                         Config->FreshHistoryWindow,
-                                         Config->FreshHistoryBuckets,
-                                         Config->FreshUseDreg,
-                                         Config->Level0UseDreg);
+            ui32 hullCompLevel0MaxSstsAtOnce = Config->HullCompLevel0MaxSstsAtOnce;
+            ui32 hullCompSortedPartsNum = Config->HullCompSortedPartsNum;
 
+            TStartingPoints::const_iterator it;
             it = startingPoints.find(signature);
             if (it == startingPoints.end()) {
                 // create an empty DB
                 emptyDb = true;
                 counter = 1;
+
+                if (IsTinyDisk) {
+                    hullCompLevel0MaxSstsAtOnce = TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce;
+                    hullCompSortedPartsNum = TVDiskConfig::TinyDiskHullCompSortedPartsNum;
+                }
+
+                TLevelIndexSettings settings(LocRecCtx->HullCtx,
+                    hullCompLevel0MaxSstsAtOnce,
+                    freshBufSize,
+                    compThreshold,
+                    Config->FreshHistoryWindow,
+                    Config->FreshHistoryBuckets,
+                    Config->FreshUseDreg,
+                    Config->Level0UseDreg);
+
                 auto mb = MakeIntrusive<TMetaBase>(settings, Arena);
+
                 metabase.Swap(mb);
                 initFlag = true;
                 metabase->LoadCompleted();
@@ -280,6 +290,7 @@ namespace NKikimr {
                 // read existing one
                 emptyDb = false;
                 counter = 0;
+
                 const TRcBuf &data = it->second.Data;
                 TString explanation;
                 NKikimrVDiskData::THullDbEntryPoint pb;
@@ -290,6 +301,23 @@ namespace NKikimr {
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, explanation);
                     return false;
                 }
+
+                if (pb.HasHullCompLevel0MaxSstsAtOnce()) {
+                    hullCompLevel0MaxSstsAtOnce = pb.GetHullCompLevel0MaxSstsAtOnce();
+                }
+                if (pb.HasHullCompSortedPartsNum()) {
+                    hullCompSortedPartsNum = pb.GetHullCompSortedPartsNum();
+                }
+
+                TLevelIndexSettings settings(LocRecCtx->HullCtx,
+                    hullCompLevel0MaxSstsAtOnce,
+                    freshBufSize,
+                    compThreshold,
+                    Config->FreshHistoryWindow,
+                    Config->FreshHistoryBuckets,
+                    Config->FreshUseDreg,
+                    Config->Level0UseDreg);
+
                 auto mb = MakeIntrusive<TMetaBase>(settings, pb.GetLevelIndex(), it->second.Lsn, Arena);
                 metabase.Swap(mb);
                 initFlag = false;
@@ -297,6 +325,10 @@ namespace NKikimr {
                 auto aid = ctx.Register(new TLoader(LocRecCtx->VCtx, LocRecCtx->PDiskCtx, metabase.Get(), ctx.SelfID));
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
+
+            LocRecCtx->HullCtx->HullCompLevel0MaxSstsAtOnce = hullCompLevel0MaxSstsAtOnce;
+            LocRecCtx->HullCtx->HullCompSortedPartsNum = hullCompSortedPartsNum;
+
             return true;
         }
 
@@ -497,6 +529,7 @@ namespace NKikimr {
             } else {
                 VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::LoadDb;
                 const auto &m = ev->Get();
+                IsTinyDisk = m->PDiskParams->IsTinyDisk;
                 LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
 
                 LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
@@ -506,6 +539,7 @@ namespace NKikimr {
                 Y_VERIFY_S(LocRecCtx->VCtx && LocRecCtx->VCtx->Top, LocRecCtx->VCtx->VDiskLogPrefix);
                 auto hullCtx = MakeIntrusive<THullCtx>(
                         LocRecCtx->VCtx,
+                        Config,
                         ui32(LocRecCtx->PDiskCtx->Dsk->ChunkSize),
                         ui32(LocRecCtx->PDiskCtx->Dsk->PrefetchSizeBytes),
                         Config->FreshCompaction && !Config->BaseInfo.ReadOnly,
@@ -515,14 +549,12 @@ namespace NKikimr {
                         Config->HullSstSizeInChunksFresh,
                         Config->HullSstSizeInChunksLevel,
                         Config->HullCompFreeSpaceThreshold,
-                        Config->FreshCompMaxInFlightWrites,
-                        Config->FreshCompMaxInFlightReads,
-                        Config->HullCompMaxInFlightWrites,
-                        Config->HullCompMaxInFlightReads,
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,
-                        Config->AddHeader);
+                        Config->AddHeader,
+                        Config->HullCompLevel0MaxSstsAtOnce,
+                        Config->HullCompSortedPartsNum);
 
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);
@@ -600,7 +632,8 @@ namespace NKikimr {
 
         void SendYardInit(const TActorContext &ctx, TDuration yardInitDelay) {
             auto ev = std::make_unique<NPDisk::TEvYardInit>(Config->BaseInfo.InitOwnerRound, SelfVDiskId,
-                Config->BaseInfo.PDiskGuid, SkeletonId, SkeletonFrontId, Config->BaseInfo.VDiskSlotId);
+                Config->BaseInfo.PDiskGuid, SkeletonId, SkeletonFrontId,
+                Config->BaseInfo.VDiskSlotId, Config->GroupSizeInUnits);
             auto handle = std::make_unique<IEventHandle>(Config->BaseInfo.PDiskActorID, SelfId(), ev.release(),
                 IEventHandle::FlagTrackDelivery);
             if (yardInitDelay != TDuration::Zero()) {

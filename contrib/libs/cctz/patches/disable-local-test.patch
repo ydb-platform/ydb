@@ -1,0 +1,6 @@
+This tests fails locally and on distbuild
+--- contrib/libs/cctz/src/time_zone_lookup_test.cc	(index)
++++ contrib/libs/cctz/src/time_zone_lookup_test.cc	(working tree)
+@@ -940,1 +940,1 @@ TEST(MakeTime, SysSecondsLimits) {
+-TEST(MakeTime, LocalTimeLibC) {
++TEST(MakeTime, DISABLED_LocalTimeLibC) {

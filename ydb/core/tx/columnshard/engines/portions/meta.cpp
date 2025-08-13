@@ -10,7 +10,8 @@
 
 namespace NKikimr::NOlap {
 
-NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
+NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, const NPortion::EProduced produced) const {
+    AFL_VERIFY(blobIds.size());
     FullValidation();
     NKikimrTxColumnShard::TIndexPortionMeta portionMeta;
     portionMeta.SetTierName(TierName);
@@ -21,22 +22,22 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
     portionMeta.SetColumnBlobBytes(ColumnBlobBytes);
     portionMeta.SetIndexRawBytes(IndexRawBytes);
     portionMeta.SetIndexBlobBytes(IndexBlobBytes);
-    switch (Produced) {
-        case TPortionMeta::EProduced::UNSPECIFIED:
+    switch (produced) {
+        case NPortion::EProduced::UNSPECIFIED:
             Y_ABORT_UNLESS(false);
-        case TPortionMeta::EProduced::INSERTED:
+        case NPortion::EProduced::INSERTED:
             portionMeta.SetIsInserted(true);
             break;
-        case TPortionMeta::EProduced::COMPACTED:
+        case NPortion::EProduced::COMPACTED:
             portionMeta.SetIsCompacted(true);
             break;
-        case TPortionMeta::EProduced::SPLIT_COMPACTED:
+        case NPortion::EProduced::SPLIT_COMPACTED:
             portionMeta.SetIsSplitCompacted(true);
             break;
-        case TPortionMeta::EProduced::EVICTED:
+        case NPortion::EProduced::EVICTED:
             portionMeta.SetIsEvicted(true);
             break;
-        case TPortionMeta::EProduced::INACTIVE:
+        case NPortion::EProduced::INACTIVE:
             Y_ABORT("Unexpected inactive case");
             //portionMeta->SetInactive(true);
             break;
@@ -51,7 +52,7 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
     RecordSnapshotMax.SerializeToProto(*portionMeta.MutableRecordSnapshotMax());
-    for (auto&& i : GetBlobIds()) {
+    for (auto&& i : blobIds) {
         *portionMeta.AddBlobIds() = i.GetLogoBlobId().AsBinaryString();
     }
     return portionMeta;
@@ -59,7 +60,7 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
 
 TString TPortionMeta::DebugString() const {
     TStringBuilder sb;
-    sb << "(produced=" << Produced << ";";
+    sb << "(";
     if (TierName) {
         sb << "tier_name=" << TierName << ";";
     }

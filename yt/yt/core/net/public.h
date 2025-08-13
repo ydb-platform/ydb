@@ -22,13 +22,12 @@ class TIP6Network;
 
 using TConnectionId = TGuid;
 
-enum class EDeliveryFencedMode
-{
-    None,
+DEFINE_ENUM(EDeliveryFencedMode,
+    (None)
+    (New)
     // COMPAT(pogorelov)
-    Old,
-    New,
-};
+    (Old)
+);
 
 #ifdef _linux_
 static inline const auto DeliveryFencedWriteSignal = SIGRTMIN;

@@ -20,7 +20,10 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenReadMetadata;
     struct TEvNodeConfigInvokeOnRootResult;
     struct TEvNodeWardenQueryBaseConfig;
+    struct TEvNodeWardenNotifyConfigMismatch;
     struct TEvNodeWardenWriteMetadata;
+    struct TEvNodeWardenQueryCacheResult;
+    struct TEvNodeWardenNotifySyncerFinished;
 
     constexpr ui32 ProxyConfigurationTimeoutMilliseconds = 200;
     constexpr TDuration BackoffMin = TDuration::MilliSeconds(20);
@@ -142,6 +145,7 @@ namespace NKikimr::NStorage {
 
         ui64 NextConfigCookie = 1;
         std::unordered_map<ui64, std::function<void(TEvBlobStorage::TEvControllerConfigResponse*)>> ConfigInFlight;
+        std::unordered_map<ui64, NKikimrBlobStorage::TEvControllerConfigRequest> UnfinishedRequests;
 
         TBackoffTimer ConfigSaveTimer{BackoffMin.MilliSeconds(), BackoffMax.MilliSeconds()};
         std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
@@ -203,6 +207,10 @@ namespace NKikimr::NStorage {
         TControlWrapper DefaultHugeGarbagePerMille;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         TControlWrapper MaxChunksToDefragInflight;
+        TControlWrapper FreshCompMaxInFlightWrites;
+        TControlWrapper FreshCompMaxInFlightReads;
+        TControlWrapper HullCompMaxInFlightWrites;
+        TControlWrapper HullCompMaxInFlightReads;
 
         TControlWrapper ThrottlingDryRun;
         TControlWrapper ThrottlingMinLevel0SstCount;
@@ -245,6 +253,8 @@ namespace NKikimr::NStorage {
         TControlWrapper ReportingControllerLeakDurationMs;
         TControlWrapper ReportingControllerLeakRate;
 
+        TControlWrapper EnableDeepScrubbing;
+
     public:
         struct TGroupRecord;
 
@@ -261,6 +271,7 @@ namespace NKikimr::NStorage {
         }
 
         TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
+        static void InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes);
         void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
         void AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);
@@ -556,6 +567,8 @@ namespace NKikimr::NStorage {
         // process group information obtained by one of managed entities
         void Handle(TEvBlobStorage::TEvUpdateGroupInfo::TPtr ev);
 
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenQueryCacheResult>> ev);
+
         void HandleGetGroup(TAutoPtr<IEventHandle> ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -611,7 +624,9 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvAskRestartVDisk::TPtr ev);
         void Handle(TEvBlobStorage::TEvAskWardenRestartPDisk::TPtr ev);
         void Handle(TEvBlobStorage::TEvNotifyWardenPDiskRestarted::TPtr ev);
+        void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
+        void SendUnfinishedRequests();
 
         void FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus> *pb, bool initial);
 
@@ -625,6 +640,30 @@ namespace NKikimr::NStorage {
         void SendScrubRequests();
 
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Bridge syncer operation
+
+        struct TWorkingSyncer {
+            const TGroupId BridgeProxyGroupId;
+            ui32 BridgeProxyGroupGeneration;
+            const TGroupId SourceGroupId;
+            const TGroupId TargetGroupId;
+            TActorId ActorId;
+            bool Finished = false;
+            std::optional<TString> ErrorReason;
+
+            friend std::strong_ordering operator <=>(const TWorkingSyncer& x, const TWorkingSyncer& y) {
+                return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId) <=>
+                    std::tie(y.BridgeProxyGroupId, y.SourceGroupId, y.TargetGroupId);
+            }
+        };
+
+        std::set<TWorkingSyncer> WorkingSyncers;
+
+        void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);
+        void FillInWorkingSyncers(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -641,6 +680,7 @@ namespace NKikimr::NStorage {
         bool SelfManagementEnabled = false;
         TBridgeInfo::TPtr BridgeInfo;
         THashSet<TActorId> StorageConfigSubscribers;
+        std::deque<TEvNodeWardenQueryStorageConfig::TPtr> PendingQueryStorageConfigQ;
 
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
@@ -651,6 +691,8 @@ namespace NKikimr::NStorage {
         void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
 
         void Handle(TEventHandle<TEvNodeWardenQueryBaseConfig>::TPtr ev);
+
+        void Handle(TEventHandle<TEvNodeWardenNotifyConfigMismatch>::TPtr ev);
 
         void Handle(TEventHandle<TEvNodeWardenReadMetadata>::TPtr ev);
         void Handle(TEventHandle<TEvNodeWardenWriteMetadata>::TPtr ev);

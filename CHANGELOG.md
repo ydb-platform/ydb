@@ -68,7 +68,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16423:Changed behavior — `SHOW CREATE TABLE` now fails on views instead of producing wrong output. [#16423](https://github.com/ydb-platform/ydb/pull/16423) ([Daniil Demin](https://github.com/jepett0))
 * 16764:Fixed redirects from cluster endpoints (storage nodes) to database nodes, resolving inconsistent behavior where some system tables were not visible. #16763 [#16764](https://github.com/ydb-platform/ydb/pull/16764) ([Alexey Efimov](https://github.com/adameat))
 * 18698:Fixed an issue where checks for enabled encryption were missing during the zero copy routine. This issue resulted in attempts to send unencrypted data via an XDC socket. https://github.com/ydb-platform/ydb/issues/18546 [#18698](https://github.com/ydb-platform/ydb/pull/18698) ([Daniil Cherednik](https://github.com/dcherednik))
-* 17157:Fixed an issue with filters for tablets on nodes. Resolves issue #17103. [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 * 17230:Added more information to the error message that occurs during Generic::TPartition parsing. [#17230](https://github.com/ydb-platform/ydb/pull/17230) ([Vitaly Isaev](https://github.com/vitalyisaev2))
 * 17009:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/16938) with compiling a `JOIN` operation, in which one side was an empty constant. [#17009](https://github.com/ydb-platform/ydb/pull/17009) ([Nikita Vasilev](https://github.com/nikvas0))
 * 16901:Changed the error response in the RateLimiter service from INTERNAL_ERROR to SCHEME_ERROR when using non-existent coordination nodes or resources. https://github.com/ydb-platform/ydb/issues/16914 [#16901](https://github.com/ydb-platform/ydb/pull/16901) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
@@ -100,6 +99,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 
 * 17942:Changed authentication mechanisms for `whoami` and `capabilities` handlers in the viewer. [#17942](https://github.com/ydb-platform/ydb/pull/17942) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 18056:Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) to keep precision of double values on serialization. [#18056](https://github.com/ydb-platform/ydb/pull/18056) ([Alexey Efimov](https://github.com/adameat))
+* 17157:Viewer API: Fixed an [issue](https://github.com/ydb-platform/ydb/issues/17103) with retrieval of tablet list for tables implementing secondary indexes. [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 
 ### Performance
 

@@ -12,7 +12,7 @@
 namespace NYql::NFmr {
 
 TDownloadOperationParams downloadOperationParams{
-    .Input = TYtTableRef{.Path = "Path", .Cluster = "Cluster", .FilePath = "File_path"},
+    .Input = TYtTableRef{.RichPath = NYT::TRichYPath().Path("Path").Cluster("Cluster"), .FilePath = "File_path"},
     .Output = TFmrTableRef{{"TestCluster", "TestPath"}}
 };
 
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
             downloadOperationIds.emplace_back(startOperationResponse.OperationId);
         }
         auto badDownloadRequest = CreateOperationRequest(ETaskType::Download, TDownloadOperationParams{
-            .Input = TYtTableRef{.Path = "bad_path", .Cluster = "bad_cluster", .FilePath = "bad_file_path"},
+            .Input = TYtTableRef{.RichPath = NYT::TRichYPath().Path("BadPath").Cluster("BadCluster"), .FilePath = "bad_file_path"},
             .Output = TFmrTableRef{{"bad_cluster", "bad_path"}}
         });
         auto badDownloadOperationResponse = coordinator->StartOperation(badDownloadRequest).GetValueSync();
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
                 Sleep(TDuration::Seconds(1));
                 TDownloadTaskParams downloadTaskParams = std::get<TDownloadTaskParams>(task->TaskParams);
                 TString partId = downloadTaskParams.Output.PartId;
-                TFmrTableOutputRef fmrTableOutputRef{.TableId = tableId, .PartId = partId};
+                TFmrTableOutputRef fmrTableOutputRef(tableId, partId);
                 TTableChunkStats tableChunkStats{
                     .PartId = partId,
                     .PartIdChunkStats = std::vector<TChunkStats>(totalChunkCount, TChunkStats{.Rows = chunkRowCount, .DataWeight = chunkDataWeight})

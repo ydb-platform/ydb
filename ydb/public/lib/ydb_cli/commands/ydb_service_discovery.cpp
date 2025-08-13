@@ -42,6 +42,9 @@ void TCommandListEndpoints::PrintResponse(NDiscovery::TListEndpointsResult& resu
             if (!endpoint.Location.empty()) {
                 Cout << " [" << endpoint.Location << "]";
             }
+            if (!endpoint.BridgePileName.empty()) {
+                Cout << " (" << endpoint.BridgePileName << ")";
+            }
             for (const auto& service : endpoint.Services) {
                 Cout << " #" << service;
             }
@@ -49,6 +52,14 @@ void TCommandListEndpoints::PrintResponse(NDiscovery::TListEndpointsResult& resu
         }
     } else {
         Cout << "Endpoint list Is empty." << Endl;
+    }
+
+    const auto& pileStates = result.GetPileStates();
+    if (pileStates.size()) {
+        Cout << Endl;
+        for (const auto& pileState : pileStates) {
+            Cout << "Pile \"" << pileState.PileName << "\": " << pileState.State << Endl;
+        }
     }
 }
 

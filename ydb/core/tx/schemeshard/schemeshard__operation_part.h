@@ -385,6 +385,7 @@ ISubOperation::TPtr CreateSplitMerge(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state);
+bool CreateDropTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 
 TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
@@ -444,6 +445,7 @@ ISubOperation::TPtr CreateAlterCdcStreamAtTable(TOperationId id, const TTxTransa
 ISubOperation::TPtr CreateAlterCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot);
 // Drop
 TVector<ISubOperation::TPtr> CreateDropCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+bool CreateDropCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot);
@@ -460,6 +462,7 @@ ISubOperation::TPtr CreateRotateCdcStreamAtTable(TOperationId id, TTxState::ETxS
 TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 bool CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
+bool CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result, TPathId& outStream);
 TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateBackup(TOperationId id, const TTxTransaction& tx);
@@ -521,6 +524,7 @@ ISubOperation::TPtr CreateAlterPQ(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state);
+bool CreateDropPQ(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 
 ISubOperation::TPtr CreateAllocatePQ(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAllocatePQ(TOperationId id, TTxState::ETxState state);
@@ -673,7 +677,7 @@ ISubOperation::TPtr CreateDropResourcePool(TOperationId id, const TTxTransaction
 ISubOperation::TPtr CreateDropResourcePool(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state, TOperationContext& context);
 
 // returns Reject in case of error, nullptr otherwise
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
@@ -689,6 +693,7 @@ ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, TTxState::ETxStat
 // Drop
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
+TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 // Restore
 TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, const TTxTransaction& tx);
@@ -699,8 +704,14 @@ TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxT
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
 
+// Incremental Restore Finalization
+ISubOperation::TPtr CreateIncrementalRestoreFinalize(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateIncrementalRestoreFinalize(TOperationId opId, TTxState::ETxState state);
+
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateLongIncrementalBackupOp(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateLongIncrementalBackupOp(TOperationId opId, TTxState::ETxState state);
 
 // SysView
 // Create

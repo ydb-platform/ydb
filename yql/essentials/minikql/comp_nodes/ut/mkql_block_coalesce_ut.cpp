@@ -270,7 +270,7 @@ void BlockCoalesceGraphTest(size_t length, size_t offset) {
         };
     });
 
-    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
+    node = pb.WideToBlocks(pb.FromFlow(node));
     if (offset > 0) {
         node = pb.WideSkipBlocks(node, pb.NewDataLiteral<ui64>(offset));
     }
@@ -281,7 +281,7 @@ void BlockCoalesceGraphTest(size_t length, size_t offset) {
             items[2]};
     });
 
-    node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
+    node = pb.ToFlow(pb.WideFromBlocks(node));
     node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.NewTuple(outputTupleType, {items[0]});
     });

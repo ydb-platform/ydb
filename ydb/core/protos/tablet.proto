@@ -1,5 +1,6 @@
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/tablet_counters.proto";
+import "ydb/library/actors/protos/actors.proto";
 
 package NKikimrTabletBase;
 option java_package = "ru.yandex.kikimr.proto";
@@ -255,4 +256,29 @@ message TEvDropLease {
 
 message TEvLeaseDropped {
     optional uint64 TabletID = 1;
+}
+
+message TEvTabletStateSubscribe {
+    optional fixed64 TabletId = 1;
+    optional uint64 SeqNo = 2;
+}
+
+message TEvTabletStateUnsubscribe {
+    optional fixed64 TabletId = 1;
+    optional uint64 SeqNo = 2;
+}
+
+message TEvTabletStateUpdate {
+    enum EState {
+        StateUnknown = 0;
+        StateBooting = 1;
+        StateActive = 2;
+        StateTerminating = 3;
+        StateDead = 4;
+    }
+
+    optional fixed64 TabletId = 1;
+    optional uint64 SeqNo = 2;
+    optional EState State = 3;
+    optional NActorsProto.TActorId UserActorId = 4;
 }

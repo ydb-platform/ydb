@@ -1,6 +1,8 @@
 #include "dq_output_channel.h"
 #include "dq_arrow_helpers.h"
 
+#include <ydb/library/yql/dq/runtime/dq_packer_version_helper.h>
+
 #include <util/generic/buffer.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/buffer.h>
@@ -32,9 +34,9 @@ public:
 
     TDqOutputChannel(ui64 channelId, ui32 dstStageId, NMiniKQL::TType* outputType,
         const NMiniKQL::THolderFactory& holderFactory, const TDqOutputChannelSettings& settings, const TLogFunc& logFunc,
-        NDqProto::EDataTransportVersion transportVersion)
+        NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
         : OutputType(outputType)
-        , Packer(OutputType, settings.BufferPageAllocSize)
+        , Packer(OutputType, packerVersion, settings.BufferPageAllocSize)
         , Width(OutputType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(OutputType)->GetElementsCount() : 1u)
         , Storage(settings.ChannelStorage)
         , HolderFactory(holderFactory)
@@ -113,7 +115,7 @@ public:
 
     // Try to split data before push to fulfill ChunkSizeLimit
     void DoPushSafe(NUdf::TUnboxedValue* values, ui32 width) {
-        YQL_ENSURE(GetFillLevel() != HardLimit);
+        // We allow to push after HardLimit. Client (TR) should check FillLevel and do not push if there is no space
 
         if (Finished) {
             return;
@@ -497,10 +499,10 @@ IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, ui32 dstStageId, NK
             [[fallthrough]];
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0:
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0:
-            return new TDqOutputChannel<false>(channelId, dstStageId, outputType, holderFactory, settings, logFunc, transportVersion);
+            return new TDqOutputChannel<false>(channelId, dstStageId, outputType, holderFactory, settings, logFunc, transportVersion, FromProto(settings.ValuePackerVersion));
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0:
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0:
-            return new TDqOutputChannel<true>(channelId, dstStageId, outputType, holderFactory, settings, logFunc, transportVersion);
+            return new TDqOutputChannel<true>(channelId, dstStageId, outputType, holderFactory, settings, logFunc, transportVersion, FromProto(settings.ValuePackerVersion));
         default:
             YQL_ENSURE(false, "Unsupported transport version " << (ui32)transportVersion);
     }

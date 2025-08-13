@@ -17,7 +17,7 @@ class TPortionInfo;
 namespace NKikimr::NOlap::NDataAccessorControl {
 class IAccessorCallback {
 public:
-    virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) = 0;
+    virtual void OnAccessorsFetched(std::vector<std::shared_ptr<TPortionDataAccessor>>&& accessors) = 0;
     virtual ~IAccessorCallback() = default;
 };
 

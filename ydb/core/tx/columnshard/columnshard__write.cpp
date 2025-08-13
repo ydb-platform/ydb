@@ -69,31 +69,6 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalP
     return EOverloadStatus::None;
 }
 
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInternalPathId /* pathId */) const {
-    if (IsAnyChannelYellowStop()) {
-        return EOverloadStatus::Disk;
-    }
-    ui64 txLimit = Settings.OverloadTxInFlight;
-    const ui64 writesLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() : 1000000;
-    const ui64 writesSizeLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() : (((ui64)1) << 30);
-    if (txLimit && Executor()->GetStats().TxInFly > txLimit) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "tx_in_fly")("sum", Executor()->GetStats().TxInFly)(
-            "limit", txLimit);
-        return EOverloadStatus::ShardTxInFly;
-    }
-    if (writesLimit && Counters.GetWritesMonitor()->GetWritesInFlight() > writesLimit) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "writes_in_fly")(
-            "sum", Counters.GetWritesMonitor()->GetWritesInFlight())("limit", writesLimit);
-        return EOverloadStatus::ShardWritesInFly;
-    }
-    if (writesSizeLimit && Counters.GetWritesMonitor()->GetWritesSizeInFlight() > writesSizeLimit) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "writes_size_in_fly")(
-            "sum", Counters.GetWritesMonitor()->GetWritesSizeInFlight())("limit", writesSizeLimit);
-        return EOverloadStatus::ShardWritesSizeInFly;
-    }
-    return EOverloadStatus::None;
-}
-
 void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& ev, const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TEvWritePortionResult");
     NActors::TLogContextGuard gLogging =
@@ -130,6 +105,8 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
 
         Execute(new TTxBlobsWritingFailed(this, std::move(writtenData)), ctx);
     }
+
+    UpdateOverloadsStatus();
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx) {
@@ -162,6 +139,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
     }
     AFL_VERIFY(wBuffer.IsEmpty());
+
+    UpdateOverloadsStatus();
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx) {
@@ -437,7 +416,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(operation.GetTableId());
-    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
     const auto& pathId = TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId);
     if (!TablesManager.IsReadyForStartWrite(*internalPathId, false)) {
@@ -464,8 +443,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
     auto overloadStatus = outOfSpace ? EOverloadStatus::Disk : CheckOverloadedImmediate(*internalPathId);
     if (overloadStatus != EOverloadStatus::None) {
-        std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
+
+        const auto rejectReasons = NOverload::MakeRejectReasons(overloadStatus);
+        OverloadSubscribers.SetOverloadSubscribed(record.GetOverloadSubscribe(), ev->Recipient, ev->Sender, rejectReasons, result->Record);
         OverloadWriteFail(overloadStatus,
             NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
                 Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()),

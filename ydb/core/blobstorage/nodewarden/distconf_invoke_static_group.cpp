@@ -53,6 +53,7 @@ namespace NKikimr::NStorage {
             Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), flags);
             if (actorId.NodeId() != SelfId().NodeId()) {
                 NodeToVDisk.emplace(actorId.NodeId(), vdiskId);
+                Subscriptions.try_emplace(actorId.NodeId());
             }
             ActorToVDisk.emplace(actorId, vdiskId);
             PendingVDiskIds.emplace(vdiskId);
@@ -102,7 +103,9 @@ namespace NKikimr::NStorage {
             throw TExError() << "Self-management is not enabled";
         }
 
-        const auto& record = Event->Get()->Record;
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& record = op->Command;
         const auto& cmd = record.GetReassignGroupDisk();
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC75, "ReassignGroupDiskExecute", (SelfId, SelfId()));
@@ -189,13 +192,17 @@ namespace NKikimr::NStorage {
         for (const auto& group : ss.GetGroups()) {
             if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
                 try {
+                    const auto bridgePileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+                    std::optional<TGroupId> bridgeProxyGroupId = group.HasBridgeProxyGroupId()
+                        ? std::make_optional(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId))
+                        : std::nullopt;
                     Self->AllocateStaticGroup(&config, vdiskId.GroupID, vdiskId.GroupGeneration + 1,
                         TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
                         smConfig.GetGeometry(), smConfig.GetPDiskFilter(),
                         smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt,
                         replacedDisks, forbid, maxSlotSize,
                         &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
-                        cmd.GetIsSelfHealReasonDecommit(), std::nullopt);
+                        cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId);
                 } catch (const TExConfigError& ex) {
                     STLOG(PRI_NOTICE, BS_NODE, NWDC76, "ReassignGroupDisk failed to allocate group", (SelfId, SelfId()),
                         (Config, config),
@@ -314,7 +321,7 @@ namespace NKikimr::NStorage {
         }
 
         if (!changes) {
-            return FinishWithSuccess();
+            return Finish(TResult::OK, std::nullopt);
         }
 
         StartProposition(&config);

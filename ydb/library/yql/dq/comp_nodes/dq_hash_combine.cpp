@@ -5,12 +5,14 @@
 
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/defs.h>
 
+#include <util/system/mutex.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -94,7 +96,27 @@ struct TStorageWrapper
     }
 };
 
-// Calculate static memory size bounds from TType*s and dynamic sizes from UVs
+std::optional<size_t> EstimateUvPackSize(const TUnboxedValuePod* items, size_t width) {
+    constexpr const size_t uvSize = sizeof(TUnboxedValuePod);
+
+    size_t sizeSum = 0;
+
+    const TUnboxedValuePod* itemPtr = items;
+    for (size_t i = 0; i < width; ++i, ++itemPtr) {
+        const TUnboxedValuePod& item = *itemPtr;
+        if (!item.HasValue() || item.IsEmbedded() || item.IsInvalid()) {
+            sizeSum += uvSize;
+        } else if (item.IsString()) {
+            sizeSum += uvSize + item.AsStringRef().Size();
+        } else {
+            return {};
+        }
+    }
+
+    return sizeSum;
+}
+
+// Calculate static memory size bounds from TType*s
 class TMemoryEstimationHelper
 {
 private:
@@ -135,9 +157,9 @@ private:
     }
 
 public:
-    const size_t KeyWidth;
     std::optional<size_t> StateSizeBound;
     std::optional<size_t> KeySizeBound;
+    const size_t KeyWidth;
 
     TMemoryEstimationHelper(std::vector<TType*> keyItemTypes, std::vector<TType*> stateItemTypes)
         : KeyWidth(keyItemTypes.size())
@@ -146,24 +168,9 @@ public:
         StateSizeBound = GetMultiUVSizeBound(stateItemTypes);
     }
 
-    std::optional<size_t> EstimateKeySize(const TUnboxedValuePod* items) const {
-        constexpr const size_t uvSize = sizeof(TUnboxedValuePod);
-
-        size_t sizeSum = 0;
-
-        const TUnboxedValuePod* itemPtr = items;
-        for (size_t i = 0; i < KeyWidth; ++i, ++itemPtr) {
-            const TUnboxedValuePod& item = *itemPtr;
-            if (!item.HasValue() || item.IsEmbedded() || item.IsInvalid()) {
-                sizeSum += uvSize;
-            } else if (item.IsString()) {
-                sizeSum += uvSize + item.AsStringRef().Size();
-            } else {
-                return {};
-            }
-        }
-
-        return sizeSum;
+    std::optional<size_t> EstimateKeySize(const TUnboxedValuePod* keyPack) const
+    {
+        return EstimateUvPackSize(keyPack, KeyWidth);
     }
 };
 
@@ -184,6 +191,7 @@ class IAggregation
 {
 public:
     virtual size_t GetStateSize() const = 0; // in bytes
+    virtual std::optional<size_t> GetStateMemoryUsage(void* rawState) const = 0; // best estimate, in bytes, or empty if impossible to estimate
     virtual void InitState(void* rawState, TUnboxedValue* const* row) = 0;
     virtual void UpdateState(void* rawState, TUnboxedValue* const* row) = 0;
     virtual void ExtractState(void* rawState, TUnboxedValue* const* output) = 0;
@@ -219,6 +227,10 @@ public:
 
     size_t GetStateSize() const override {
         return StateSize;
+    }
+
+    std::optional<size_t> GetStateMemoryUsage(void* rawState) const override {
+        return EstimateUvPackSize(static_cast<const TUnboxedValuePod*>(rawState), StateWidth);
     }
 
     // Assumes the input row and extracted keys have already been copied into the input nodes, so row isn't even used here
@@ -280,79 +292,71 @@ enum class EFillState
     SourceEmpty,
 };
 
-// The current draft memory strategy uses a compile-time target memory limit and attempts to statically compute the HashMap capacity
-constexpr const size_t TargetMemoryLimit = 128ull << 20; // TODO: use memLimit from ProgramBuilder
-constexpr const float ExtraMapCapacity = 1.25; // hashmap size is target row count increased by this factor
-constexpr const size_t DefaultMapLimit = static_cast<size_t>(1024 * ExtraMapCapacity); // some minimum value if we can't estimate the row size
+constexpr const size_t DefaultMemoryLimit = 128ull << 20; // if the runtime limit is zero
+constexpr const float ExtraMapCapacity = 2.0; // hashmap size is target row count increased by this factor then adjusted up to a power of 2
+constexpr const size_t MemorySampleRowCount = 16384ULL; // sample size for row weight estimation, in rows
+constexpr const size_t LowerFixedRowCount = 1024ULL; // minimum viable hash table size
 
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
 {
 protected:
     using TMap = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
 
-    static std::optional<size_t> GetMaxRowCount(const TMemoryEstimationHelper& memoryHelper) {
-        if (!memoryHelper.KeySizeBound.has_value() || !memoryHelper.StateSizeBound.has_value()) {
-            return {};
-        }
-
-        size_t memoryPerRow = memoryHelper.KeySizeBound.value() + memoryHelper.StateSizeBound.value() + static_cast<size_t>(TMap::GetCellSize() * ExtraMapCapacity);
-        if (memoryPerRow >= TargetMemoryLimit) {
+    static size_t GetStaticMaxRowCount(size_t entryPayloadSizeBytes, size_t memoryLimit) {
+        size_t memoryPerRow = entryPayloadSizeBytes + static_cast<size_t>(TMap::GetCellSize() * ExtraMapCapacity);
+        if (memoryPerRow >= memoryLimit) {
             return 1;
         }
-
-        return TargetMemoryLimit / memoryPerRow;
+        return memoryLimit / memoryPerRow;
     }
 
-    static size_t GetInitialMapCapacity(std::optional<size_t> rowCount) {
-        if (!rowCount.has_value()) {
-            return DefaultMapLimit;
-        }
-        return static_cast<size_t>(rowCount.value() * ExtraMapCapacity);
-    }
-
-    void ResetMemoryUsage() {
-        if (!MemoryHelper.StateSizeBound) {
-            CurrentMemoryUsage = {};
-        }
-        CurrentMemoryUsage = Map.GetCellSize() * Map.GetCapacity();
+    static size_t GetMapCapacity(size_t rowCount) {
+        // Alternative is CalculateRHHashTableCapacity but it tends to overshoot
+        auto preciseCapacity = static_cast<size_t>(rowCount * ExtraMapCapacity);
+        auto pow2Capacity = FastClp2(preciseCapacity);
+        return pow2Capacity;
     }
 
     virtual void OpenDrain() = 0;
+
+    void LoadItem(TUnboxedValue* const* input)
+    {
+        for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
+            // TODO: precalc unused nodes; this is too expensive to do for every row
+            // if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i]) {
+            Nodes.ItemNodes[i]->RefValue(Ctx) = *input[i];
+            // }
+        }
+    }
+
+    void ExtractKey(TUnboxedValuePod* keyBuffer)
+    {
+        auto keys = keyBuffer;
+        for (ui32 i = 0U; i < Nodes.KeyNodes.size(); ++i) {
+            auto& keyField = Nodes.KeyNodes[i]->RefValue(Ctx);
+            *keys = keyField = Nodes.KeyResultNodes[i]->GetValue(Ctx);
+            keys->Ref();
+            keys++;
+        }
+    }
 
     EFillState ProcessFetchedRow(TUnboxedValue* const* input) {
         TUnboxedValuePod* keyBuffer = static_cast<TUnboxedValuePod*>(KeyStateBuffer);
 
         if (HasGenericAggregation) {
-            for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
-                if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i]) {
-                    Nodes.ItemNodes[i]->RefValue(Ctx) = *input[i];
-                }
-            }
-            TUnboxedValue* const* source = input;
-            std::for_each(Nodes.ItemNodes.cbegin(), Nodes.ItemNodes.cend(), [&](IComputationExternalNode* item) {
-                if (const auto fieldPtr = *source++) {
-                    auto& itemValue = item->RefValue(Ctx);
-                    itemValue = *fieldPtr;
-                }
-            });
-            auto keys = keyBuffer;
-            for (ui32 i = 0U; i < Nodes.KeyNodes.size(); ++i) {
-                auto& keyField = Nodes.KeyNodes[i]->RefValue(Ctx);
-                *keys = keyField = Nodes.KeyResultNodes[i]->GetValue(Ctx);
-                keys->Ref();
-                keys++;
-            }
+            LoadItem(input);
+            ExtractKey(keyBuffer);
         } else {
             MKQL_ENSURE(false, "Not implemented yet");
         }
 
         bool isNew = false;
-        auto mapIt = Map.Insert(keyBuffer, isNew);
+        auto mapIt = Map->Insert(keyBuffer, isNew);
         char* statePtr = nullptr;
         if (isNew) {
             statePtr = static_cast<char *>(KeyStateBuffer) + StatesOffset;
         } else {
-            TUnboxedValuePod* mapKeyPtr = Map.GetKey(mapIt);
+            TUnboxedValuePod* mapKeyPtr = Map->GetKey(mapIt);
             statePtr = reinterpret_cast<char *>(mapKeyPtr) + StatesOffset;
         }
 
@@ -374,35 +378,17 @@ protected:
         }
 
         if (isNew) {
-            if (MaxRowCount.has_value() && Map.GetSize() >= MaxRowCount.value()) {
-                OpenDrain();
-                return EFillState::Drain;
-            }
-            else if (CurrentMemoryUsage.has_value()) {
-                std::optional<size_t> keySize = MemoryHelper.KeySizeBound;
-                if (!keySize.has_value()) {
-                    keySize = MemoryHelper.EstimateKeySize(keyBuffer);
-                }
-
-                if (!keySize) {
-                    CurrentMemoryUsage.reset();
-                } else {
-                    MKQL_ENSURE(MemoryHelper.StateSizeBound.has_value(), "State size must be known in memory estimation mode");
-                    CurrentMemoryUsage.value() += (keySize.value() + MemoryHelper.StateSizeBound.value());
-                }
-            }
-
-            if (CurrentMemoryUsage.has_value() && CurrentMemoryUsage.value() >= TargetMemoryLimit) {
+            if (Map->GetSize() >= MaxRowCount) {
                 OpenDrain();
                 return EFillState::Drain;
             }
 
-            Map.CheckGrow(); // TODO: must handle TMemoryLimitExceededException here
-            KeyStateBuffer = Store->Alloc();
-        }
-
-        if (!CurrentMemoryUsage.has_value()) {
-            // TODO: this means we can't prove state+key size is bounded; fall back to some row limit & yellow zone, as per the old implementation
+            try {
+                KeyStateBuffer = Store->Alloc();
+            } catch (TMemoryLimitExceededException) {
+                OpenDrain();
+                return EFillState::Drain;
+            }
         }
 
         return EFillState::ContinueFilling;
@@ -412,14 +398,13 @@ public:
     using TBase = TComputationValue<TBaseAggregationState>;
 
     TBaseAggregationState(
-        TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t inputWidth,
+        TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, size_t inputWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes
     )
         : TBase(memInfo)
         , Ctx(ctx)
         , MemoryHelper(memoryHelper)
-        , MaxRowCount(GetMaxRowCount(memoryHelper))
-        , InitialMapCapacity(GetInitialMapCapacity(MaxRowCount))
+        , MemoryLimit(memoryLimit)
         , InputWidth(inputWidth)
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
@@ -427,11 +412,18 @@ public:
         , Hasher(TWideUnboxedHasher(KeyTypes))
         , Equals(TWideUnboxedEqual(KeyTypes))
         , HasGenericAggregation(nodes.StateNodes.size() > 0)
-        , Map(Hasher, Equals, 128u)
         , KeyStateBuffer(nullptr)
         , Draining(false)
         , SourceEmpty(false)
     {
+        IsEstimating = !(MemoryHelper.KeySizeBound && MemoryHelper.StateSizeBound);
+        if (IsEstimating) {
+            MaxRowCount = MemorySampleRowCount;
+        } else {
+            MaxRowCount = GetStaticMaxRowCount(memoryHelper.KeySizeBound.value() + memoryHelper.StateSizeBound.value(), MemoryLimit);
+        }
+        MaxRowCount = TryAllocMapForRowCount(MaxRowCount);
+
         if (HasGenericAggregation) {
             Aggs.push_back(std::make_unique<TGenericAggregation>(Ctx, Nodes));
         }
@@ -443,8 +435,8 @@ public:
         }
         StatesOffset = sizeof(TUnboxedValuePod) * KeyTypes.size();
         Store = std::make_unique<TStore>(StatesOffset + allAggsSize);
-        ResetMemoryUsage();
-        KeyStateBuffer = Store->Alloc();
+
+        PrepareForNewBatch();
     }
 
     virtual ~TBaseAggregationState() {
@@ -457,13 +449,94 @@ public:
     virtual bool IsSourceEmpty() = 0;
 
 protected:
+    size_t TryAllocMapForRowCount(size_t rowCount)
+    {
+        Map.Reset(nullptr);
+
+        auto tryAlloc = [this](size_t rows) -> bool {
+            size_t newCapacity = GetMapCapacity(rows);
+            try {
+                Map.Reset(new TMap(Hasher, Equals, newCapacity));
+                return true;
+            }
+            catch (TMemoryLimitExceededException) {
+            }
+            return false;
+        };
+
+        while (rowCount > LowerFixedRowCount) {
+            if (tryAlloc(rowCount)) {
+                return rowCount;
+            }
+            rowCount = rowCount / 2;
+        }
+
+        size_t smallCapacity = GetMapCapacity(LowerFixedRowCount);
+        Map.Reset(new TMap(Hasher, Equals, smallCapacity));
+        return LowerFixedRowCount;
+    }
+
+    void UpdateRowLimitFromSample()
+    {
+        size_t totalMem = 0;
+        bool unbounded = false;
+
+        for (auto mapIter = Map->Begin(); mapIter != Map->End() && !unbounded; Map->Advance(mapIter)) {
+            if (!Map->IsValid(mapIter)) {
+                continue;
+            }
+            auto* entry = Map->GetKey(mapIter);
+            auto entryMem = MemoryHelper.EstimateKeySize(entry);
+            if (!entryMem.has_value()) {
+                unbounded = true;
+                break;
+            }
+            totalMem += entryMem.value();
+            char* statePtr = static_cast<char *>(static_cast<void *>(entry)) + StatesOffset;
+            for (const auto& agg : Aggs) {
+                auto stateSize = agg->GetStateMemoryUsage(statePtr);
+                if (!stateSize.has_value()) {
+                    unbounded = true;
+                    break;
+                }
+                totalMem += stateSize.value();
+                statePtr += agg->GetStateSize();
+            }
+        }
+
+        if (unbounded || totalMem == 0) {
+            // Use a small fixed-size map if we could not estimate memory usage for some of the key/state columns
+            MaxRowCount = LowerFixedRowCount;
+        } else {
+            MaxRowCount = GetStaticMaxRowCount(totalMem / Map->GetSize(), MemoryLimit);
+        }
+    }
+
+    void PrepareForNewBatch()
+    {
+        if (Map->GetSize() != 0) {
+            if (IsEstimating) {
+                IsEstimating = false;
+                UpdateRowLimitFromSample();
+                MaxRowCount = TryAllocMapForRowCount(MaxRowCount);
+            } else {
+                Map->Clear();
+            }
+        }
+        Store->Clear();
+        KeyStateBuffer = Store->Alloc();
+    }
+
     TComputationContext& Ctx;
 
     const TMemoryEstimationHelper& MemoryHelper;
-    std::optional<size_t> MaxRowCount;
-    size_t InitialMapCapacity;
+    size_t MemoryLimit;
+    bool IsEstimating = false;
+    size_t EstimateBatchSize = 0;
+    size_t MaxRowCount = 0;
+    size_t InitialMapCapacity = 0;
 
-    [[maybe_unused]] size_t InputWidth;
+    size_t InputWidth;
     TUnboxedValueVector InputBuffer;
     const NDqHashOperatorCommon::TCombinerNodes& Nodes;
     const ui32 WideFieldsIndex;
@@ -473,11 +546,9 @@ protected:
     TEqualsFunc const Equals;
     const bool HasGenericAggregation;
 
-    std::optional<size_t> CurrentMemoryUsage;
-
     using TStore = TStorageWrapper<char>;
     std::unique_ptr<TStore> Store;
-    TMap Map;
+    THolder<TMap> Map;
     void* KeyStateBuffer;
     size_t StatesOffset;
     bool Draining;
@@ -489,21 +560,24 @@ class TWideAggregationState: public TBaseAggregationState
 private:
     void OpenDrain() override {
         Draining = true;
-        DrainMapIterator = Map.Begin();
+        DrainMapIterator = Map->Begin();
     }
+
+    size_t OutputRowCounter = 0;
 
 public:
     TWideAggregationState(
         TMemoryUsageInfo* memInfo,
         TComputationContext& ctx,
         const TMemoryEstimationHelper& memoryHelper,
+        size_t memoryLimit,
         size_t inputWidth,
         size_t outputWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes,
         ui32 wideFieldsIndex,
         const TKeyTypes& keyTypes
     )
-        : TBaseAggregationState(memInfo, ctx, memoryHelper, inputWidth, nodes, wideFieldsIndex, keyTypes)
+        : TBaseAggregationState(memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes)
         , OutputWidth(outputWidth)
         , DrainMapIterator(nullptr)
     {
@@ -545,22 +619,20 @@ public:
             return &val;
         });
 
-        for (; DrainMapIterator != Map.End(); Map.Advance(DrainMapIterator)) {
-            if (Map.IsValid(DrainMapIterator)) {
+        for (; DrainMapIterator != Map->End(); Map->Advance(DrainMapIterator)) {
+            if (Map->IsValid(DrainMapIterator)) {
                 break;
             }
         }
 
-        if (DrainMapIterator == Map.End()) {
+        if (DrainMapIterator == Map->End()) {
+            PrepareForNewBatch();
             Draining = false;
             DrainMapIterator = nullptr;
-            Map.Clear();
-            Store->Clear();
-            ResetMemoryUsage();
             return false;
         }
 
-        const auto key = Map.GetKey(DrainMapIterator);
+        const auto key = Map->GetKey(DrainMapIterator);
 
         if (HasGenericAggregation) {
             auto keyIter = key;
@@ -576,6 +648,8 @@ public:
             statePtr += agg->GetStateSize();
         }
 
+        ++OutputRowCounter;
+
         if (HasGenericAggregation) {
             auto keyIter = key;
             for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
@@ -583,20 +657,20 @@ public:
             }
         }
 
-        Map.Advance(DrainMapIterator);
+        Map->Advance(DrainMapIterator);
 
         return true;
     }
 
     ~TWideAggregationState() {
         if (!Draining) {
-            DrainMapIterator = Map.Begin();
+            DrainMapIterator = Map->Begin();
         }
-        for (; DrainMapIterator != Map.End(); Map.Advance(DrainMapIterator)) {
-            if (!Map.IsValid(DrainMapIterator)) {
+        for (; DrainMapIterator != Map->End(); Map->Advance(DrainMapIterator)) {
+            if (!Map->IsValid(DrainMapIterator)) {
                 continue;
             }
-            const auto key = Map.GetKey(DrainMapIterator);
+            const auto key = Map->GetKey(DrainMapIterator);
             char* statePtr = static_cast<char *>(static_cast<void *>(key)) + StatesOffset;
             for (auto& agg : Aggs) {
                 agg->ForgetState(statePtr);
@@ -609,7 +683,7 @@ public:
                 }
             }
         }
-        Map.Clear();
+        Map->Clear();
         Store->Clear();
 
         // TODO: CleanupCurrentContext for the allocator?
@@ -626,7 +700,7 @@ class TBlockAggregationState: public TBaseAggregationState
 private:
     void OpenDrain() override {
         Draining = true;
-        DrainMapIterator = Map.Begin();
+        DrainMapIterator = Map->Begin();
     }
 
     bool OpenBlock() {
@@ -648,6 +722,7 @@ public:
         TMemoryUsageInfo* memInfo,
         TComputationContext& ctx,
         const TMemoryEstimationHelper& memoryHelper,
+        size_t memoryLimit,
         const std::vector<TType*>& inputTypes,
         const std::vector<TType*>& outputTypes,
         size_t inputWidth,
@@ -655,7 +730,7 @@ public:
         ui32 wideFieldsIndex,
         const TKeyTypes& keyTypes
     )
-        : TBaseAggregationState(memInfo, ctx, memoryHelper, inputWidth, nodes, wideFieldsIndex, keyTypes)
+        : TBaseAggregationState(memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes)
         , InputTypes(inputTypes)
         , OutputTypes(outputTypes)
         , InputColumns(inputTypes.size() - 1)
@@ -707,7 +782,7 @@ public:
             } else if (fetchResult == NUdf::EFetchStatus::Finish) {
                 Draining = true;
                 SourceEmpty = true;
-                DrainMapIterator = Map.Begin();
+                DrainMapIterator = Map->Begin();
                 return EFillState::SourceEmpty;
             }
 
@@ -750,12 +825,12 @@ public:
         }
 
         size_t currentBlockSize = 0;
-        for (; DrainMapIterator != Map.End() && currentBlockSize < OutputBlockSize; Map.Advance(DrainMapIterator)) {
-            if (!Map.IsValid(DrainMapIterator)) {
+        for (; DrainMapIterator != Map->End() && currentBlockSize < OutputBlockSize; Map->Advance(DrainMapIterator)) {
+            if (!Map->IsValid(DrainMapIterator)) {
                 continue;
             }
 
-            const auto key = Map.GetKey(DrainMapIterator);
+            const auto key = Map->GetKey(DrainMapIterator);
             if (HasGenericAggregation) {
                 auto keyIter = key;
                 for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
@@ -788,11 +863,11 @@ public:
             ++currentBlockSize;
         }
 
-        while (DrainMapIterator != Map.End()) {
-            if (Map.IsValid(DrainMapIterator)) {
+        while (DrainMapIterator != Map->End()) {
+            if (Map->IsValid(DrainMapIterator)) {
                 break;
             }
-            Map.Advance(DrainMapIterator);
+            Map->Advance(DrainMapIterator);
         }
 
         if (currentBlockSize) {
@@ -804,12 +879,10 @@ public:
             output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(currentBlockSize)));
         }
 
-        if (DrainMapIterator == Map.End()) {
+        if (DrainMapIterator == Map->End()) {
             Draining = false;
             DrainMapIterator = nullptr;
-            Map.Clear();
-            Store->Clear();
-            ResetMemoryUsage();
+            PrepareForNewBatch();
             return currentBlockSize > 0;
         }
         return true;
@@ -820,7 +893,7 @@ public:
     }
 
 private:
-    [[maybe_unused]] static constexpr const size_t OutputBlockSize = 8192;
+    static constexpr const size_t OutputBlockSize = 8192;
 
     std::vector<TType*> InputTypes;
     std::vector<TType*> OutputTypes;
@@ -904,7 +977,7 @@ public:
         const bool blockMode,
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
         size_t inputWidth, const std::vector<TType*>& keyItemTypes, const std::vector<TType*>& stateItemTypes,
-        NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memLimit
+        NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit
     )
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , BlockMode(blockMode)
@@ -914,7 +987,7 @@ public:
         , InputWidth(inputWidth)
         , Nodes(std::move(nodes))
         , KeyTypes(std::move(keyTypes))
-        , MemLimit(memLimit)
+        , MemoryLimit(memoryLimit)
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(InputWidth)) // Need to reserve this here, can't do it later after the Context is built
         , MemoryHelper(keyItemTypes, stateItemTypes)
     {
@@ -937,10 +1010,11 @@ private:
         UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 
         if (!BlockMode) {
-            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes);
+            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes);
         } else {
-            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes);
+            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes);
         }
+
     }
 
     void RegisterDependencies() const final {
@@ -958,7 +1032,7 @@ private:
     size_t InputWidth;
     const NDqHashOperatorCommon::TCombinerNodes Nodes;
     const TKeyTypes KeyTypes;
-    [[maybe_unused]] const ui64 MemLimit;
+    const ui64 MemoryLimit;
     const ui32 WideFieldsIndex;
     const TMemoryEstimationHelper MemoryHelper;
 };
@@ -979,9 +1053,9 @@ IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeF
     const auto input = LocateNode(ctx.NodeLocator, callable, NDqHashOperatorParams::Input);
 
     const TTupleLiteral* operatorParams = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::OperatorParams));
-    const auto memLimit = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::CombineParamMemLimit))->AsValue().Get<ui64>();
+    const ui64 memLimit = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::CombineParamMemLimit))->AsValue().Get<ui64>();
 
-    return new TDqHashCombine(
+    auto result = new TDqHashCombine(
         ctx.Mutables,
         input,
         inputIsBlocks,
@@ -992,7 +1066,9 @@ IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeF
         params.StateItemTypes,
         std::move(params.Nodes),
         std::move(params.KeyTypes),
-        ui64(memLimit));
+        memLimit > 0 ? memLimit : DefaultMemoryLimit);
+
+    return result;
 }
 
 }

@@ -618,6 +618,7 @@ message TRspMultiLookup
 
 message TQueryStatistics
 {
+    // COMPAT(sabdenovch)
     optional int64 rows_read = 1;
     optional int64 data_weight_read = 2;
     optional int64 rows_written = 3;
@@ -628,10 +629,32 @@ message TQueryStatistics
     optional uint64 write_time = 8; // TDuration
     optional uint64 codegen_time = 9; // TDuration
     optional uint64 wait_on_ready_event_time = 10; // TDuration
+    optional int64 grouped_row_count = 16;
+    optional uint64 memory_usage = 15;
+
     optional bool incomplete_input = 11;
     optional bool incomplete_output = 12;
-    optional uint64 memory_usage = 15;
-    optional int64 total_grouped_row_count = 16;
+    optional int64 query_count = 17 [default = 1];
+
+    message TAggregate
+    {
+        optional int64 total = 1;
+        optional int64 max = 2;
+        optional string argmax_node = 3;
+    };
+
+    optional TAggregate rows_read_aggr = 21;
+    optional TAggregate data_weight_read_aggr = 22;
+    optional TAggregate rows_written_aggr = 23;
+    optional TAggregate sync_time_aggr = 24;
+    optional TAggregate async_time_aggr = 25;
+    optional TAggregate execute_time_aggr = 26;
+    optional TAggregate read_time_aggr = 27;
+    optional TAggregate write_time_aggr = 28;
+    optional TAggregate codegen_time_aggr = 29;
+    optional TAggregate wait_on_ready_event_time_aggr = 30;
+    optional TAggregate memory_usage_aggr = 31;
+    optional TAggregate grouped_row_count_aggr = 32;
 
     repeated TQueryStatistics inner_statistics = 14;
 }
@@ -667,6 +690,11 @@ message TReqSelectRows
     optional bool use_lookup_cache = 26;
     optional int64 min_row_count_per_subquery = 27;
     optional int32 expression_builder_version = 28 [default = 1];
+    optional int64 rowset_processing_batch_size = 29;
+    optional int64 write_rowset_size = 30;
+    optional int64 max_join_batch_size = 31;
+    optional bool use_order_by_in_join_subqueries = 32;
+    optional int32 statistics_aggregation = 33; // EStatisticsAggregation
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 
@@ -3580,6 +3608,7 @@ message TReqGetQueryTrackerInfo
 {
     required string query_tracker_stage = 1;
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 2;
+    optional bytes settings = 3; // YSON
 }
 
 message TRspGetQueryTrackerInfo
@@ -3589,6 +3618,7 @@ message TRspGetQueryTrackerInfo
     repeated string access_control_objects = 3;
     optional string query_tracker_stage = 4;
     repeated string clusters = 5;
+    optional bytes engines_info = 6; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3599,6 +3629,7 @@ message TReqStartDistributedWriteSession
 {
     required bytes path = 1; // RichYPath
     required int32 cookie_count = 2;
+    optional int64 timeout = 3;
 
     optional TTransactionalOptions transactional_options = 100;
 }

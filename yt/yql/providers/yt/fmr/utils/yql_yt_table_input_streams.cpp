@@ -9,22 +9,30 @@ std::vector<NYT::TRawTableReaderPtr> GetYtTableReaders(
     const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections
 ) {
     std::vector<NYT::TRawTableReaderPtr> ytTableReaders;
-    if (!ytTableTaskRef.FilePaths.empty()) {
-        // underlying gateway is file, so create readers from filepaths.
-        for (auto& filePath: ytTableTaskRef.FilePaths) {
-            ytTableReaders.emplace_back(jobService->MakeReader(filePath));
-        }
-    } else {
-        for (auto& richPath: ytTableTaskRef.RichPaths) {
-            YQL_ENSURE(richPath.Cluster_);
 
-            // TODO - вместо этого написать нормальные хелперы из RichPath в структуры и назад
-            TStringBuf choppedPath;
-            YQL_ENSURE(TStringBuf(richPath.Path_).AfterPrefix("//", choppedPath));
-            auto fmrTableId = TFmrTableId(*richPath.Cluster_, TString(choppedPath));
-            auto clusterConnection = clusterConnections.at(fmrTableId);
-            ytTableReaders.emplace_back(jobService->MakeReader(richPath, clusterConnection)); // TODO - reader Settings
+    std::vector<NYT::TRichYPath> richPaths = ytTableTaskRef.RichPaths;
+    std::vector<TString> filePaths = ytTableTaskRef.FilePaths;
+    bool hasFilePaths = false;
+
+    if (!filePaths.empty()) {
+        YQL_ENSURE(filePaths.size() == richPaths.size());
+        hasFilePaths = true;
+    }
+
+    for (ui64 i = 0; i < richPaths.size(); ++i) {
+        auto& richPath = richPaths[i];
+
+        auto fmrTableId = TFmrTableId(richPath);
+        auto clusterConnection = TClusterConnection();
+
+        TYtTableRef ytTablePart{.RichPath = richPath};
+        if (hasFilePaths) {
+            ytTablePart.FilePath = filePaths[i];
+        } else {
+            clusterConnection = clusterConnections.at(fmrTableId);
         }
+
+        ytTableReaders.emplace_back(jobService->MakeReader(ytTablePart, clusterConnection)); // TODO - reader Settings
     }
     return ytTableReaders;
 }
@@ -37,12 +45,11 @@ std::vector<NYT::TRawTableReaderPtr> GetTableInputStreams(
 ) {
     auto ytTableTaskRef = std::get_if<TYtTableTaskRef>(&tableRef);
     auto fmrTable = std::get_if<TFmrTableInputRef>(&tableRef);
+
     if (ytTableTaskRef) {
         return GetYtTableReaders(jobService, *ytTableTaskRef, clusterConnections);
-    } else if (fmrTable) {
-        return {MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, tableDataService)}; // TODO - fmr reader settings
     } else {
-        ythrow yexception() << "Unsupported table type";
+        return {MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, tableDataService, fmrTable->Columns, fmrTable->SerializedColumnGroups)}; // TODO - fmr reader settings
     }
 }
 

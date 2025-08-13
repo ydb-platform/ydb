@@ -13,12 +13,15 @@ import os
 import re
 import subprocess
 import sys
+import sysconfig
 import types
 from collections import defaultdict
+from collections.abc import Iterable
+from enum import IntEnum
 from functools import lru_cache, reduce
 from os import sep
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Optional
 
 from hypothesis._settings import Phase, Verbosity
 from hypothesis.internal.compat import PYPY
@@ -26,12 +29,10 @@ from hypothesis.internal.escalation import is_hypothesis_file
 
 if TYPE_CHECKING:
     from typing import TypeAlias
-else:
-    TypeAlias = object
 
-Location: TypeAlias = Tuple[str, int]
-Branch: TypeAlias = Tuple[Optional[Location], Location]
-Trace: TypeAlias = Set[Branch]
+Location: "TypeAlias" = tuple[str, int]
+Branch: "TypeAlias" = tuple[Optional[Location], Location]
+Trace: "TypeAlias" = set[Branch]
 
 
 @lru_cache(maxsize=None)
@@ -53,11 +54,12 @@ if sys.version_info[:2] >= (3, 12):
 class Tracer:
     """A super-simple branch coverage tracer."""
 
-    __slots__ = ("branches", "_previous_location")
+    __slots__ = ("_previous_location", "_should_trace", "branches")
 
-    def __init__(self) -> None:
+    def __init__(self, *, should_trace: bool) -> None:
         self.branches: Trace = set()
         self._previous_location: Optional[Location] = None
+        self._should_trace = should_trace and self.can_trace()
 
     @staticmethod
     def can_trace() -> bool:
@@ -74,7 +76,6 @@ class Tracer:
             if event == "call":
                 return self.trace
             elif event == "line":
-                # manual inlining of self.trace_line for performance.
                 fname = frame.f_code.co_filename
                 if should_trace_file(fname):
                     current_location = (fname, frame.f_lineno)
@@ -85,13 +86,18 @@ class Tracer:
 
     def trace_line(self, code: types.CodeType, line_number: int) -> None:
         fname = code.co_filename
-        if should_trace_file(fname):
-            current_location = (fname, line_number)
-            self.branches.add((self._previous_location, current_location))
-            self._previous_location = current_location
+        if not should_trace_file(fname):
+            # this function is only called on 3.12+, but we want to avoid an
+            # assertion to that effect for performance.
+            return sys.monitoring.DISABLE  # type: ignore
+
+        current_location = (fname, line_number)
+        self.branches.add((self._previous_location, current_location))
+        self._previous_location = current_location
 
     def __enter__(self):
-        assert self.can_trace()  # caller checks in core.py
+        if not self._should_trace:
+            return self
 
         if sys.version_info[:2] < (3, 12):
             sys.settrace(self.trace)
@@ -106,6 +112,9 @@ class Tracer:
         return self
 
     def __exit__(self, *args, **kwargs):
+        if not self._should_trace:
+            return
+
         if sys.version_info[:2] < (3, 12):
             sys.settrace(None)
             return
@@ -128,10 +137,15 @@ UNHELPFUL_LOCATIONS = (
     "/warnings.py",
     # Quite rarely, the first AFNP line is in Pytest's internals.
     "/_pytest/_io/saferepr.py",
+    "/_pytest/_io/terminalwriter.py",
     "/_pytest/assertion/*.py",
     "/_pytest/config/__init__.py",
     "/_pytest/pytester.py",
     "/pluggy/_*.py",
+    # used by pytest for failure formatting in the terminal
+    "/pygments/lexer.py",
+    # used by pytest for failure formatting
+    "/difflib.py",
     "/reprlib.py",
     "/typing.py",
     "/conftest.py",
@@ -201,18 +215,52 @@ def get_explaining_locations(traces):
     }
 
 
-LIB_DIR = str(Path(sys.executable).parent / "lib")
+# see e.g. https://docs.python.org/3/library/sysconfig.html#posix-user
+# for examples of these path schemes
+STDLIB_DIRS = {
+    Path(sysconfig.get_path("platstdlib")).resolve(),
+    Path(sysconfig.get_path("stdlib")).resolve(),
+}
+SITE_PACKAGES_DIRS = {
+    Path(sysconfig.get_path("purelib")).resolve(),
+    Path(sysconfig.get_path("platlib")).resolve(),
+}
+
 EXPLANATION_STUB = (
     "Explanation:",
     "    These lines were always and only run by failing examples:",
 )
 
 
-def make_report(explanations, cap_lines_at=5):
+class ModuleLocation(IntEnum):
+    LOCAL = 0
+    SITE_PACKAGES = 1
+    STDLIB = 2
+
+    @classmethod
+    @lru_cache(1024)
+    def from_path(cls, path: str) -> "ModuleLocation":
+        path = Path(path).resolve()
+        # site-packages may be a subdir of stdlib or platlib, so it's important to
+        # check is_relative_to for this before the stdlib.
+        if any(path.is_relative_to(p) for p in SITE_PACKAGES_DIRS):
+            return cls.SITE_PACKAGES
+        if any(path.is_relative_to(p) for p in STDLIB_DIRS):
+            return cls.STDLIB
+        return cls.LOCAL
+
+
+# show local files first, then site-packages, then stdlib
+def _sort_key(path: str, lineno: int) -> tuple[int, str, int]:
+    return (ModuleLocation.from_path(path), path, lineno)
+
+
+def make_report(explanations, *, cap_lines_at=5):
     report = defaultdict(list)
     for origin, locations in explanations.items():
+        locations = list(locations)
+        locations.sort(key=lambda v: _sort_key(v[0], v[1]))
         report_lines = [f"        {fname}:{lineno}" for fname, lineno in locations]
-        report_lines.sort(key=lambda line: (line.startswith(LIB_DIR), line))
         if len(report_lines) > cap_lines_at + 1:
             msg = "        (and {} more with settings.verbosity >= verbose)"
             report_lines[cap_lines_at:] = [msg.format(len(report_lines[cap_lines_at:]))]
@@ -250,16 +298,7 @@ def _get_git_repo_root() -> Path:
         return Path(where)
 
 
-if sys.version_info[:2] <= (3, 8):
-
-    def is_relative_to(self, other):
-        return other == self or other in self.parents
-
-else:
-    is_relative_to = Path.is_relative_to
-
-
-def tractable_coverage_report(trace: Trace) -> Dict[str, List[int]]:
+def tractable_coverage_report(trace: Trace) -> dict[str, list[int]]:
     """Report a simple coverage map which is (probably most) of the user's code."""
     coverage: dict = {}
     t = dict(trace)
@@ -272,6 +311,6 @@ def tractable_coverage_report(trace: Trace) -> Dict[str, List[int]]:
         k: sorted(v)
         for k, v in coverage.items()
         if stdlib_fragment not in k
-        and is_relative_to(p := Path(k), _get_git_repo_root())
+        and (p := Path(k)).is_relative_to(_get_git_repo_root())
         and "site-packages" not in p.parts
     }

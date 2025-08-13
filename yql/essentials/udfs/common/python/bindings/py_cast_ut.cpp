@@ -124,4 +124,29 @@ Y_UNIT_TEST_SUITE(TPyCastTest) {
     Y_UNIT_TEST(BadFromPythonJson) {
         TestBadUtf8Encode<NUdf::TJson>();
     }
+
+    Y_UNIT_TEST(BadToPythonJson) {
+        TPythonTestEngine engine;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            engine.UnsafeCall<void(NUdf::TJson)>(
+                [](const TType*, const NUdf::IValueBuilder& builder) {
+                    // XXX: The value below is built with the
+                    // following expression:
+                    // $query = "a=1&t%EDb=2";
+                    // $qdict = Url::QueryStringToDict($query);
+                    // $qyson = Yson::From($qdict);
+                    // $badJson = Yson::SerializeJson($qyson);
+                    //
+                    // For more info, see YQL-20231 and YQL-20220.
+                    constexpr TStringBuf badJson = "\x7b\x22\x61\x22\x3a\x5b\x22\x31\x22\x5d\x2c\x22\x74\xed\x62\x22\x3a\x5b\x22\x32\x22\x5d\x7d";
+                    return builder.NewString(badJson);
+                },
+                "def Test(arg):\n"
+                "   pass",
+                [](const NUdf::TUnboxedValuePod&) {
+                    Y_UNREACHABLE();
+                }
+            ),
+            yexception, "Failed to export Json given as args[0]");
+    }
 } // Y_UNIT_TEST_SUITE(TPyCastTest)

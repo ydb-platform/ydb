@@ -108,7 +108,7 @@ namespace NKikimr {
                         false, /* down */
                         false, /* seenOperational */
                         0, /* groupSizeInUnits */
-                        std::nullopt, /* bridgePileId */
+                        TBridgePileId(), /* bridgePileId */
                         StoragePoolId, /* storagePoolId */
                         0, /* numFailRealms */
                         0, /* numFailDomainsPerFailRealm */
@@ -122,18 +122,22 @@ namespace NKikimr {
                     index[species].push_back(mainGroupId);
 
                     NKikimrBlobStorage::TGroupInfo& mainGroup = groupInfo->BridgeGroupInfo.emplace();
+                    NKikimrBridge::TGroupState *mainGroupState = mainGroup.MutableBridgeGroupState();
                     const auto& bridgeInfo = State.BridgeInfo;
                     Y_ABORT_UNLESS(bridgeInfo);
                     bridgeInfo->ForEachPile([&](TBridgePileId bridgePileId) {
                         const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
-                        groupId.CopyToProto(&mainGroup, &NKikimrBlobStorage::TGroupInfo::AddBridgeGroupIds);
+                        NKikimrBridge::TGroupState::TPile *pile = mainGroupState->AddPile();
+                        groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
+                        pile->SetGroupGeneration(1);
+                        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
                     });
                 } else {
-                    CreateGroup(std::nullopt, std::nullopt); // regular single group
+                    CreateGroup(TBridgePileId(), std::nullopt); // regular single group
                 }
             }
 
-            TGroupId CreateGroup(std::optional<TBridgePileId> bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
+            TGroupId CreateGroup(TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
                 ////////////////////////////////////////////////////////////////////////////////////////////
                 // ALLOCATE GROUP ID FOR THE NEW GROUP
                 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -523,7 +527,7 @@ namespace NKikimr {
                 TGroupMapper::TForbiddenPDisks,
                 ui32,
                 i64,
-                std::optional<TBridgePileId>>;
+                TBridgePileId>;
 
             template<typename T>
             TAllocateOrSanitizeGroupResult<T> AllocateOrSanitizeGroup(
@@ -535,7 +539,7 @@ namespace NKikimr {
                     ui32 groupSizeInUnits,
                     i64 requiredSpace,
                     bool addExistingDisks,
-                    std::optional<TBridgePileId> bridgePileId,
+                    TBridgePileId bridgePileId,
                     T&& func) {
                 if (!Mapper) {
                     Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
@@ -577,7 +581,7 @@ namespace NKikimr {
                     ui32 groupSizeInUnits,
                     i64 requiredSpace,
                     bool addExistingDisks,
-                    std::optional<TBridgePileId> bridgePileId,
+                    TBridgePileId bridgePileId,
                     T&& func) {
                 TGroupMapper::TGroupConstraintsDefinition emptyConstraints;
                 return AllocateOrSanitizeGroup(groupId, group, emptyConstraints, replacedDisks, forbid, groupSizeInUnits, requiredSpace,
@@ -661,7 +665,7 @@ namespace NKikimr {
                     whyUnusable.append('D');
                 }
 
-                std::optional<TBridgePileId> bridgePileId;
+                TBridgePileId bridgePileId;
                 if (const auto& bridgeInfo = State.BridgeInfo) {
                     if (const TBridgeInfo::TPile *pile = bridgeInfo->GetPileForNode(id.NodeId)) {
                         bridgePileId = pile->BridgePileId;
@@ -672,17 +676,7 @@ namespace NKikimr {
 
                 ui32 maxSlots = 0;
                 ui32 slotSizeInUnits = 0;
-                if (info.Metrics.HasSlotCount()) {
-                    maxSlots = info.Metrics.GetSlotCount();
-                    slotSizeInUnits = info.Metrics.GetSlotSizeInUnits();
-                } else if (info.InferPDiskSlotCountFromUnitSize != 0) {
-                    // inferred values are unknown yet
-                    maxSlots = 0;
-                    slotSizeInUnits = 0;
-                } else {
-                    maxSlots = info.ExpectedSlotCount;
-                    slotSizeInUnits = info.SlotSizeInUnits;
-                }
+                info.ExtractInferredPDiskSettings(maxSlots, slotSizeInUnits);
 
                 // register PDisk in the mapper
                 return Mapper->RegisterPDisk({

@@ -16,8 +16,7 @@
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_scheduler_service.h>
-#include <ydb/core/kqp/runtime/scheduler/old/kqp_compute_scheduler.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -25,6 +24,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/async/wait_for_event.h>
 
 #include <util/string/join.h>
 
@@ -77,6 +77,7 @@ public:
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FederatedQuerySetup(federatedQuerySetup)
         , State_(std::make_shared<TNodeServiceState>())
+        , AccountDefaultPoolInScheduler(config.GetComputeSchedulerSettings().GetAccountDefaultPool())
     {
         if (config.HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(config.GetIteratorReadsRetrySettings());
@@ -87,15 +88,6 @@ public:
         if (config.HasWriteActorSettings()) {
             SetWriteActorSettings(config.GetWriteActorSettings());
         }
-
-#if !defined(USE_HDRF_SCHEDULER)
-        SchedulerOptions = {
-            .AdvanceTimeInterval = TDuration::MicroSeconds(config.GetComputeSchedulerSettings().GetAdvanceTimeIntervalUsec()),
-            .ForgetOverflowTimeout = TDuration::MicroSeconds(config.GetComputeSchedulerSettings().GetForgetOverflowTimeoutUsec()),
-            .ActivePoolPollingTimeout = TDuration::Seconds(config.GetComputeSchedulerSettings().GetActivePoolPollingSec()),
-            .Counters = counters,
-        };
-#endif
     }
 
     void Bootstrap() {
@@ -116,12 +108,6 @@ public:
 
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
         Become(&TKqpNodeService::WorkState);
-
-#if !defined(USE_HDRF_SCHEDULER)
-        Scheduler = std::make_shared<NSchedulerOld::TComputeScheduler>();
-        SchedulerOptions.Scheduler = Scheduler;
-        SchedulerActorId = RegisterWithSameMailbox(CreateSchedulerActor(SchedulerOptions));
-#endif
     }
 
 private:
@@ -145,7 +131,7 @@ private:
 
     static constexpr double SecToUsec = 1e6;
 
-    void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
+    void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
         NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
 
         NHPTimer::STime workHandlerStart = ev->SendTime;
@@ -168,24 +154,18 @@ private:
         LOG_D("TxId: " << txId << ", new compute tasks request from " << requester
             << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
 
-#if defined(USE_HDRF_SCHEDULER)
-        Y_ASSERT(!msg.GetPoolId().empty());
-
+        const auto& poolId = msg.GetPoolId().empty() ? NResourcePool::DEFAULT_POOL_ID : msg.GetPoolId();
         const auto& databaseId = msg.GetDatabaseId();
-        const auto& poolId = msg.GetPoolId();
 
-        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
-        addDatabaseEvent->Id = databaseId;
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
-
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
-
-        auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
-        addQueryEvent->DatabaseId = msg.GetDatabase();
-        addQueryEvent->PoolId = msg.GetPoolId();
-        addQueryEvent->QueryId = txId;
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release());
-#endif
+        NScheduler::NHdrf::NDynamic::TQueryPtr query;
+        if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
+            auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
+            addQueryEvent->DatabaseId = msg.GetDatabase();
+            addQueryEvent->PoolId = poolId;
+            addQueryEvent->QueryId = txId;
+            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, txId);
+            query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(txId))->Get()->Query;
+        }
 
         auto now = TAppData::TimeProvider->Now();
         NKqpNode::TTasksRequest request(txId, ev->Sender, now);
@@ -200,7 +180,7 @@ private:
 
         if (bucket.Exists(txId, requester)) {
             LOG_E("TxId: " << txId << ", requester: " << requester << ", request already exists");
-            return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
+            co_return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
         }
 
         NRm::EKqpMemoryPool memoryPool;
@@ -225,35 +205,6 @@ private:
         const TString& serializedGUCSettings = ev->Get()->Record.HasSerializedGUCSettings() ?
             ev->Get()->Record.GetSerializedGUCSettings() : "";
 
-#if !defined(USE_HDRF_SCHEDULER)
-        auto schedulerNow = TlsActivationContext->Monotonic();
-
-        TString schedulerGroup = msg.GetPoolId();
-
-        if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
-            auto share = msg.GetPoolMaxCpuShare();
-            if (share <= 0 && (msg.HasQueryCpuShare() || msg.HasResourceWeight())) {
-                share = 1.0;
-            }
-            std::optional<double> resourceWeight;
-            if (msg.HasResourceWeight() && msg.GetResourceWeight() >= 0) {
-                resourceWeight = msg.GetResourceWeight();
-            }
-
-            if (share > 0) {
-                Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow, resourceWeight);
-                Send(SchedulerActorId, new NSchedulerOld::TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
-            } else {
-                schedulerGroup = "";
-            }
-        }
-
-        std::optional<ui64> querySchedulerGroup;
-        if (msg.HasQueryCpuShare() && schedulerGroup) {
-            querySchedulerGroup = Scheduler->MakePerQueryGroup(schedulerNow, msg.GetQueryCpuShare(), schedulerGroup);
-        }
-#endif
-
         // start compute actors
         TMaybe<NYql::NDqProto::TRlPath> rlPath = Nothing();
         if (msgRtSettings.HasRlPath()) {
@@ -262,30 +213,11 @@ private:
 
         TIntrusivePtr<NRm::TTxState> txInfo = MakeIntrusive<NRm::TTxState>(
             txId, TInstant::Now(), ResourceManager_->GetCounters(),
-            msg.GetPoolId(), msg.GetMemoryPoolPercent(),
+            poolId, msg.GetMemoryPoolPercent(),
             msg.GetDatabase(), Config.GetVerboseMemoryLimitException());
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
-#if !defined(USE_HDRF_SCHEDULER)
-            NSchedulerOld::TComputeActorSchedulingOptions schedulingTaskOptions {
-                .Now = schedulerNow,
-                .SchedulerActorId = SchedulerActorId,
-                .Scheduler = Scheduler.get(),
-                .Group = schedulerGroup,
-                .Weight = 1,
-                .NoThrottle = schedulerGroup.empty(),
-                .Counters = Counters
-            };
-
-            if (!schedulingTaskOptions.NoThrottle) {
-                schedulingTaskOptions.Handle = SchedulerOptions.Scheduler->Enroll(schedulingTaskOptions.Group, schedulingTaskOptions.Weight, schedulingTaskOptions.Now);
-                if (querySchedulerGroup) {
-                    Scheduler->AddToGroup(schedulerNow, *querySchedulerGroup, schedulingTaskOptions.Handle);
-                }
-            }
-#endif
-
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = request.Executer,
                 .TxId = txId,
@@ -309,9 +241,7 @@ private:
                 .RlPath = rlPath,
                 .ComputesByStages = &computesByStage,
                 .State = State_,
-#if !defined(USE_HDRF_SCHEDULER)
-                .SchedulableOptions = std::move(schedulingTaskOptions),
-#endif
+                .Query = query,
                 // TODO: block tracking mode is not set!
             };
             if (msg.HasUserToken() && msg.GetUserToken()) {
@@ -326,7 +256,7 @@ private:
                 ReplyError(txId, request.Executer, msg, rmResult->GetStatus(), rmResult->GetFailReason());
                 bucket.NewRequest(std::move(request));
                 TerminateTx(txId, rmResult->GetFailReason());
-                return;
+                co_return;
             }
 
             auto& taskCtx = request.InFlyTasks[dqTask.GetId()];
@@ -344,12 +274,6 @@ private:
             startedTask->SetTaskId(taskCtx.TaskId);
             ActorIdToProto(taskCtx.ComputeActorId, startedTask->MutableActorId());
         }
-
-#if !defined(USE_HDRF_SCHEDULER)
-        if (!schedulerGroup.empty()) {
-            Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
-        }
-#endif
 
         TCPULimits cpuLimits;
         if (msg.GetPoolMaxCpuShare() > 0) {
@@ -581,14 +505,10 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
-#if !defined(USE_HDRF_SCHEDULER)
-    std::shared_ptr<NSchedulerOld::TComputeScheduler> Scheduler;
-    NSchedulerOld::TSchedulerActorOptions SchedulerOptions;
-    TActorId SchedulerActorId;
-#endif
-
-    //state sharded by TxId
+    // state sharded by TxId
     std::shared_ptr<TNodeServiceState> State_;
+
+    bool AccountDefaultPoolInScheduler = false;
 };
 
 

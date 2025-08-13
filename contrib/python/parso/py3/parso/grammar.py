@@ -253,9 +253,13 @@ def load_grammar(*, version: str = None, path: str = None):
         return _loaded_grammars[path]
     except KeyError:
         try:
-            bnf_text = pkgutil.get_data("parso", file).decode("utf-8")
-            if bnf_text is None:
-                raise FileNotFoundError
+            if os.getenv("Y_PYTHON_SOURCE_ROOT"):
+                with open(path) as f:
+                    bnf_text = f.read()
+            else:
+                bnf_text = pkgutil.get_data("parso", file).decode("utf-8")
+                if bnf_text is None:
+                    raise FileNotFoundError
 
             grammar = PythonGrammar(version_info, bnf_text)
             return _loaded_grammars.setdefault(path, grammar)

@@ -242,11 +242,11 @@ enum ESimpleCounters {
     COUNTER_SHARDS_QUOTA = 190 [(CounterOpts) = {Name: "ShardsQuota"}];
     COUNTER_SHARDS = 191       [(CounterOpts) = {Name: "Shards"}];
 
-    COUNTER_DATA_ERASURE_QUEUE_SIZE = 192          [(CounterOpts) = {Name: "DataErasureQueueSize"}];
-    COUNTER_DATA_ERASURE_QUEUE_RUNNING = 193       [(CounterOpts) = {Name: "DataErasureQueueRunning"}];
+    COUNTER_SHRED_QUEUE_SIZE = 192          [(CounterOpts) = {Name: "ShredQueueSize"}];
+    COUNTER_SHRED_QUEUE_RUNNING = 193       [(CounterOpts) = {Name: "ShredQueueRunning"}];
 
-    COUNTER_TENANT_DATA_ERASURE_QUEUE_SIZE = 194          [(CounterOpts) = {Name: "TenantDataErasureQueueSize"}];
-    COUNTER_TENANT_DATA_ERASURE_QUEUE_RUNNING = 195       [(CounterOpts) = {Name: "TenantDataErasureQueueRunning"}];
+    COUNTER_TENANT_SHRED_QUEUE_SIZE = 194          [(CounterOpts) = {Name: "TenantShredQueueSize"}];
+    COUNTER_TENANT_SHRED_QUEUE_RUNNING = 195       [(CounterOpts) = {Name: "TenantShredQueueRunning"}];
 
     COUNTER_SYS_VIEW_COUNT = 196                    [(CounterOpts) = {Name: "SysViewCount"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateSysView = 197     [(CounterOpts) = {Name: "InFlightOps/CreateSysView"}];
@@ -257,6 +257,9 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxRotateCdcStream = 201        [(CounterOpts) = {Name: "InFlightOps/RotateCdcStream"}];
     COUNTER_IN_FLIGHT_OPS_TxRotateCdcStreamAtTable = 202 [(CounterOpts) = {Name: "InFlightOps/RotateCdcStreamAtTable"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxIncrementalRestoreFinalize = 203 [(CounterOpts) = {Name: "InFlightOps/IncrementalRestoreFinalize"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateLongIncrementalBackupOp = 204 [(CounterOpts) = {Name: "InFlightOps/CreateLongIncrementalBackupOp"}];
 }
 
 enum ECumulativeCounters {
@@ -402,11 +405,11 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxDropTransfer = 113           [(CounterOpts) = {Name: "FinishedOps/DropTransfer"}];
     COUNTER_FINISHED_OPS_TxDropTransferCascade = 114    [(CounterOpts) = {Name: "FinishedOps/DropTransferCascade"}];
 
-    COUNTER_DATA_ERASURE_OK = 115                   [(CounterOpts) = {Name: "DataErasureOK"}];
-    COUNTER_DATA_ERASURE_TIMEOUT = 116              [(CounterOpts) = {Name: "DataErasureTimeout"}];
+    COUNTER_SHRED_OK = 115                   [(CounterOpts) = {Name: "ShredOK"}];
+    COUNTER_SHRED_TIMEOUT = 116              [(CounterOpts) = {Name: "ShredTimeout"}];
 
-    COUNTER_TENANT_DATA_ERASURE_OK = 117                   [(CounterOpts) = {Name: "TenantDataErasureOK"}];
-    COUNTER_TENANT_DATA_ERASURE_TIMEOUT = 118              [(CounterOpts) = {Name: "TenantDataErasureTimeout"}];
+    COUNTER_TENANT_SHRED_OK = 117                   [(CounterOpts) = {Name: "TenantShredOK"}];
+    COUNTER_TENANT_SHRED_TIMEOUT = 118              [(CounterOpts) = {Name: "TenantShredTimeout"}];
 
     COUNTER_FINISHED_OPS_TxCreateSysView = 119              [(CounterOpts) = {Name: "FinishedOps/CreateSysView"}];
     COUNTER_FINISHED_OPS_TxDropSysView = 120                [(CounterOpts) = {Name: "FinishedOps/DropSysView"}];
@@ -416,6 +419,9 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxRotateCdcStream = 123        [(CounterOpts) = {Name: "FinishedOps/RotateCdcStream"}];
     COUNTER_FINISHED_OPS_TxRotateCdcStreamAtTable = 124 [(CounterOpts) = {Name: "FinishedOps/RotateCdcStreamAtTable"}];
+
+    COUNTER_FINISHED_OPS_TxIncrementalRestoreFinalize = 125 [(CounterOpts) = {Name: "FinishedOps/IncrementalRestoreFinalize"}];
+    COUNTER_FINISHED_OPS_TxCreateLongIncrementalBackupOp = 126 [(CounterOpts) = {Name: "FinishedOps/CreateLongIncrementalBackupOp"}];
 }
 
 enum EPercentileCounters {
@@ -647,19 +653,24 @@ enum ETxTypes {
     TXTYPE_LIST_USERS = 90                                       [(TxTypeOpts) = {Name: "TxListUsers"}];
     TXTYPE_UNMARK_RESTORE_TABLES = 91                     [(TxTypeOpts) = {Name: "TxUnmarkRestoreTables"}];
 
-    TXTYPE_DATA_ERASURE_INIT = 92 [(TxTypeOpts) = {Name: "TxDataErasureInit"}];
-    TXTYPE_RUN_DATA_ERASURE = 93 [(TxTypeOpts) = {Name: "TxRunDataErasure"}];
-    TXTYPE_RUN_DATA_ERASURE_TENANT = 94 [(TxTypeOpts) = {Name: "TxRunTenantDataErasure"}];
+    TXTYPE_SHRED_INIT = 92 [(TxTypeOpts) = {Name: "TxShredInit"}];
+    TXTYPE_RUN_SHRED = 93 [(TxTypeOpts) = {Name: "TxRunShred"}];
+    TXTYPE_RUN_SHRED_TENANT = 94 [(TxTypeOpts) = {Name: "TxRunTenantShred"}];
 
-    TXTYPE_COMPLETE_DATA_ERASURE_SHARD = 95 [(TxTypeOpts) = {Name: "TxCompleteDataErasureShard"}];
-    TXTYPE_COMPLETE_DATA_ERASURE_TENANT = 96 [(TxTypeOpts) = {Name: "TxCompleteDataErasureTenant"}];
-    TXTYPE_COMPLETE_DATA_ERASURE_BSC = 97 [(TxTypeOpts) = {Name: "TxCompleteDataErasureBSC"}];
+    TXTYPE_COMPLETE_SHRED_SHARD = 95 [(TxTypeOpts) = {Name: "TxCompleteShredShard"}];
+    TXTYPE_COMPLETE_SHRED_TENANT = 96 [(TxTypeOpts) = {Name: "TxCompleteShredTenant"}];
+    TXTYPE_COMPLETE_SHRED_BSC = 97 [(TxTypeOpts) = {Name: "TxCompleteShredBSC"}];
 
-    TXTYPE_ADD_SHARDS_DATA_ERASURE = 98 [(TxTypeOpts) = {Name: "TxAddShardsDataErasure"}];
-    TXTYPE_CANCEL_SHARDS_DATA_ERASURE = 99 [(TxTypeOpts) = {Name: "TxCancelShardsDataErasure"}];
+    TXTYPE_ADD_SHARDS_SHRED = 98 [(TxTypeOpts) = {Name: "TxAddShardsShred"}];
+    TXTYPE_CANCEL_SHARDS_SHRED = 99 [(TxTypeOpts) = {Name: "TxCancelShardsShred"}];
 
     TXTYPE_LOGIN_FINALIZE = 100 [(TxTypeOpts) = {Name: "TxLoginFinalize"}];
 
     TXTYPE_PROGRESS_INCREMENTAL_RESTORE = 101 [(TxTypeOpts) = {Name: "TxProgressIncrementalRestore"}];
     TXTYPE_INCREMENTAL_RESTORE_SHARD_RESPONSE = 102 [(TxTypeOpts) = {Name: "TxIncrementalRestoreShardResponse"}];
+
+    TXTYPE_GET_INCREMENTAL_BACKUP = 103 [(TxTypeOpts) = {Name: "TxGetIncrementalBackup"}];
+    TXTYPE_LIST_INCREMENTAL_BACKUP = 104 [(TxTypeOpts) = {Name: "TxListIncrementalBackup"}];
+    TXTYPE_FORGET_INCREMENTAL_BACKUP = 105 [(TxTypeOpts) = {Name: "TxForgetIncrementalBackup"}];
+    TXTYPE_PROGRESS_INCREMENTAL_BACKUP = 106 [(TxTypeOpts) = {Name: "TxProgressIncrementalBackup"}];
 }

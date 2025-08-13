@@ -20,8 +20,6 @@ SRCS(
     mem_limit.cpp
     method_index.cpp
     method_index.h
-    multi_resource_lock.cpp
-    multi_resource_lock.h
     parse_double.cpp
     parse_double.h
     proc_alive.cpp
@@ -66,6 +64,7 @@ RECURSE_FOR_TESTS(
 IF (OPENSOURCE_PROJECT != "yt")
     RECURSE(
         backtrace
+        docs
         failure_injector
         fetch
         log

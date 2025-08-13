@@ -883,6 +883,14 @@ namespace {
 
                 Types_.UseBlocks = (name == "UseBlocks");
             }
+            else if (name == "DebugPositions" || name == "DisableDebugPositions") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+
+                Types_.DebugPositions = (name == "DebugPositions");
+            }
             else if (name == "PgEmitAggApply" || name == "DisablePgEmitAggApply") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -1020,6 +1028,17 @@ namespace {
                     return false;
                 }
                 Types_.MaxAggPushdownPredicates = value;
+            } else if (name == "AndOverOrExpansionLimit") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected single numeric argument, but got " << args.size()));
+                    return false;
+                }
+                ui32 value;
+                if (!TryFromString(args[0], value)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected non-negative integer, but got: " << args[0]));
+                    return false;
+                }
+                Types_.AndOverOrExpansionLimit = value;
             } else if (name == "Engine") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
@@ -1056,6 +1075,21 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `default|dq|ytflow', but got: " << arg));
                     return false;
                 }
+            } else if (name == "NormalizeDependsOn") {
+                if (args.size() > 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                    return false;
+                }
+
+                bool res = true;
+                if (!args.empty()) {
+                    if (!TryFromString(args[0], res)) {
+                        ctx.AddError(TIssue(pos, TStringBuilder() << "Expected bool, but got: " << args[0]));
+                        return false;
+                    }
+                }
+
+                Types_.NormalizeDependsOn = res;
             } else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;
@@ -1263,64 +1297,34 @@ namespace {
                 return false;
             }
 
-            TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
-            if (token) {
-                if (auto cred = Types_.Credentials->FindCredential(token)) {
-                    token = cred->Content;
-                } else {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << token << "' for folder."));
-                    return false;
-                }
-            } else if (auto cred = Types_.Credentials->FindCredential("default_sandbox")) {
-                token = cred->Content;
+            TStringBuf prefix = args[0];
+            TStringBuf url = args[1];
+            TStringBuf tokenName = args.size() == 3 ? args[2] : TStringBuf();
+
+            if (!Types_.UrlListerManager) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "UrlListerManager is not initialized, unable to add folder by url"));
+                return false;
             }
 
-            std::vector<std::pair<TString, TString>> queue;
-            queue.emplace_back(args[0], args[1]);
+            TString separator = "/";
+            TVector<TUrlListEntry> entries;
+            try {
+                entries = Types_.UrlListerManager->ListUrlRecursive(TString(url), TString(tokenName), separator, Types_.FolderSubDirsLimit);
+            } catch (const std::exception& e) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "failed to list URL '" << url << "', details: " << e.what()));
+                return false;
+            }
 
-            size_t count = 0;
-            while (!queue.empty()) {
-                auto [prefix, url] = queue.back();
-                queue.pop_back();
-
-                YQL_CLOG(DEBUG, ProviderConfig) << "Listing sandbox folder " << prefix << ": " << url;
-                NJson::TJsonValue content;
-                if (!ListSandboxFolder(url, token, pos, ctx, content)) {
+            for (const auto& entry : entries) {
+                if (!AddFileByUrlImpl(
+                            TStringBuilder() << prefix << entry.Name,
+                            entry.Url, tokenName, pos, ctx))
+                {
                     return false;
-                }
-
-                for (const auto& file : content.GetMap()) {
-                    const auto& fileAttrs = file.second.GetMap();
-                    auto fileUrl = fileAttrs.FindPtr("url");
-                    if (fileUrl) {
-                        TString type = "REGULAR";
-                        if (auto t = fileAttrs.FindPtr("type")) {
-                            type = t->GetString();
-                        }
-                        TStringBuilder alias;
-                        if (!prefix.empty()) {
-                            alias << prefix << "/";
-                        }
-                        alias << file.first;
-                        if (type == "REGULAR") {
-                            if (!AddFileByUrlImpl(alias, TStringBuf(MakeHttps(fileUrl->GetString())), token, pos, ctx)) {
-                                return false;
-                            }
-                        } else if (type == "DIRECTORY") {
-                            queue.emplace_back(alias, fileUrl->GetString());
-                            if (++count > Types_.FolderSubDirsLimit) {
-                                ctx.AddError(TIssue(pos, TStringBuilder() << "Sandbox resource has too many subfolders. Limit is " << Types_.FolderSubDirsLimit));
-                                return false;
-                            }
-                        } else {
-                            YQL_CLOG(WARN, ProviderConfig) << "Got unknown sandbox item type: " << type << ", name=" << alias;
-                        }
-                    }
                 }
             }
 
             return true;
-
         }
 
         bool SetWarningRule(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {

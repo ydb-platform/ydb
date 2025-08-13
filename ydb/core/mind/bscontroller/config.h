@@ -92,7 +92,22 @@ namespace NKikimr {
             THashSet<TPDiskId> PDisksToRemove;
 
             // outgoing messages
-            std::deque<std::tuple<TNodeId, std::unique_ptr<IEventBase>, ui64>> Outbox;
+            struct TOutgoingMessage {
+                TNodeId NodeId;
+                std::unique_ptr<IEventBase> Event;
+                ui64 Cookie;
+                bool ToLocalWarden;
+
+                TOutgoingMessage(TNodeId nodeId, std::unique_ptr<IEventBase>&& event,
+                        ui64 cookie, bool toLocalWarden = false)
+                    : NodeId(nodeId)
+                    , Event(std::forward<std::unique_ptr<IEventBase>>(event))
+                    , Cookie(cookie)
+                    , ToLocalWarden(toLocalWarden)
+                {}
+            };
+
+            std::deque<TOutgoingMessage> Outbox;
             std::deque<std::unique_ptr<IEventBase>> StatProcessorOutbox;
             std::deque<std::unique_ptr<IEventBase>> NodeWhiteboardOutbox;
             THolder<TEvControllerUpdateSelfHealInfo> UpdateSelfHealInfoMsg;
@@ -326,6 +341,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TStopPDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMovePDisk& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TUpdateBridgeGroupInfo& cmd, TStatus& status);
         };
 
     } // NBsController

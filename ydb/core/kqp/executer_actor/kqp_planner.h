@@ -67,6 +67,7 @@ public:
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
         const TMaybe<size_t> BufferPageAllocSize;
         const bool VerboseMemoryLimitException;
+        NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -143,6 +144,7 @@ private:
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     const TMaybe<size_t> BufferPageAllocSize;
     const bool VerboseMemoryLimitException;
+    NScheduler::NHdrf::NDynamic::TQueryPtr Query;
 
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

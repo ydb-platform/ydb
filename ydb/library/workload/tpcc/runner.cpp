@@ -35,7 +35,7 @@ namespace {
 
 //-----------------------------------------------------------------------------
 
-constexpr auto GracefulShutdownTimeout = std::chrono::seconds(5);
+constexpr auto GracefulShutdownTimeout = std::chrono::seconds(10);
 constexpr auto MinWarmupPerTerminal = std::chrono::milliseconds(1);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
@@ -259,7 +259,7 @@ void TPCCRunner::Join() {
             auto now = Clock::now();
             auto delta = now - shutdownTs;
             if (delta >= GracefulShutdownTimeout) {
-                LOG_E("Graceful shutdown timeout on terminal " << terminal->GetID());
+                LOG_W("Graceful shutdown timeout on terminal " << terminal->GetID());
                 break;
             }
         }
@@ -312,7 +312,7 @@ void TPCCRunner::RunSync() {
     // produced after this point and before the first screen update
     if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
         LogBackend->StartCapture(); // start earlier?
-        Tui = std::make_unique<TRunnerTui>(*LogBackend, DataToDisplay);
+        Tui = std::make_unique<TRunnerTui>(Log, *LogBackend, DataToDisplay);
     }
 
     if (forcedWarmup) {
@@ -347,7 +347,13 @@ void TPCCRunner::RunSync() {
 
     StopWarmup.store(true, std::memory_order_relaxed);
 
-    LOG_I("Measuring during " << Config.RunDuration);
+    // If warmup was interrupted we don't want to print INFO log about measurements.
+    // However, we still initialize all displayed variables on the screen and used in
+    // final calculations
+
+    if (!GetGlobalInterruptSource().stop_requested()) {
+        LOG_I("Measuring during " << Config.RunDuration);
+    }
 
     MeasurementsStartTs = Clock::now();
     MeasurementsStartTsWall = TInstant::Now();
@@ -650,14 +656,13 @@ void TPCCRunner::PrintFinalResultPretty() {
 
     if (minutesPassed >= 1) {
         std::cout << "warehouses: " << Config.WarehouseCount << std::endl;
-        std::cout << "tpmC*: " << DataToDisplay->StatusData.Tpmc << std::endl;
-        std::cout << "efficiency: " << std::setprecision(2) << DataToDisplay->StatusData.Efficiency << "%" << std::endl;
+        std::cout << "tpmC: " << DataToDisplay->StatusData.Tpmc << "*" << std::endl;
+        std::cout << "efficiency: " << std::fixed << std::setprecision(2) << DataToDisplay->StatusData.Efficiency << "%" << std::endl;
+        std::cout << "* These results are not officially recognized TPC results "
+                  << "and are not comparable with other TPC-C test results published on the TPC website" << std::endl;
     } else {
         std::cout << "Less than minute passed, tpmC calculation skipped" << std::endl;
     }
-
-    std::cout << "* These results are not officially recognized TPC results "
-              << "and are not comparable with other TPC-C test results published on the TPC website" << std::endl;
 }
 
 void TPCCRunner::PrintFinalResultJson() {
@@ -755,8 +760,13 @@ void TRunConfig::SetDisplay() {
 //-----------------------------------------------------------------------------
 
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
-    TPCCRunner runner(connectionConfig, runConfig);
-    runner.RunSync();
+    try {
+        TPCCRunner runner(connectionConfig, runConfig);
+        runner.RunSync();
+    } catch (const std::exception& ex) {
+        std::cerr << "Exception while execution: " << ex.what() << std::endl;
+        throw NConsoleClient::TNeedToExitWithCode(EXIT_FAILURE);
+    }
 }
 
 } // namespace NYdb::NTPCC

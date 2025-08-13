@@ -18,7 +18,7 @@ select  a.ca_state state, count(*) cnt
      cross join {{store_sales}} s
      cross join {{date_dim}} d
      cross join {{item}} i
-     left join $sub2 as j on i.i_category = j.i_category
+     inner join $sub2 as j on i.i_category = j.i_category
  where       a.ca_address_sk = c.c_current_addr_sk
  	and c.c_customer_sk = s.ss_customer_sk
  	and s.ss_sold_date_sk = d.d_date_sk

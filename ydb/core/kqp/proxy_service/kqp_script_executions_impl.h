@@ -1,8 +1,11 @@
 #pragma once
 
-#include "kqp_script_executions.h"
+#include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <ydb/library/actors/core/event_local.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NKqp::NPrivate {
 
@@ -41,15 +44,12 @@ struct TEvPrivate {
             : Status(statusCode)
             , Issues(std::move(issues))
             , LeaseExpired(false)
-        {
-        }
+            , RetryRequired(false)
+        {}
 
-        TEvLeaseCheckResult(TMaybe<Ydb::StatusIds::StatusCode> operationStatus,
-            TMaybe<Ydb::Query::ExecStatus> executionStatus,
-            TMaybe<NYql::TIssues> operationIssues,
-            const NActors::TActorId& runScriptActorId,
-            bool leaseExpired,
-            TMaybe<EFinalizationStatus> finalizationStatus)
+        TEvLeaseCheckResult(TMaybe<Ydb::StatusIds::StatusCode> operationStatus, TMaybe<Ydb::Query::ExecStatus> executionStatus,
+            TMaybe<NYql::TIssues> operationIssues, const NActors::TActorId& runScriptActorId, bool leaseExpired,
+            TMaybe<EFinalizationStatus> finalizationStatus, bool retryRequired, i64 leaseGeneration)
             : Status(Ydb::StatusIds::SUCCESS)
             , OperationStatus(operationStatus)
             , ExecutionStatus(executionStatus)
@@ -57,6 +57,8 @@ struct TEvPrivate {
             , RunScriptActorId(runScriptActorId)
             , LeaseExpired(leaseExpired)
             , FinalizationStatus(finalizationStatus)
+            , RetryRequired(retryRequired)
+            , LeaseGeneration(leaseGeneration)
         {}
 
         const Ydb::StatusIds::StatusCode Status;
@@ -65,15 +67,24 @@ struct TEvPrivate {
         TMaybe<Ydb::Query::ExecStatus> ExecutionStatus;
         TMaybe<NYql::TIssues> OperationIssues;
         const NActors::TActorId RunScriptActorId;
-        const bool LeaseExpired;
+        const bool LeaseExpired = false;
         const TMaybe<EFinalizationStatus> FinalizationStatus;
+        const bool RetryRequired = false;
+        const i64 LeaseGeneration = 0;
     };
+};
+
+// stored in column "lease_state" of .metadata/script_execution_leases table
+enum class ELeaseState {
+    ScriptRunning = 0,
+    ScriptFinalizing = 1,
+    WaitRetry = 2
 };
 
 // Writes new script into db.
 // If lease duration is zero, default one will be taken.
 NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& record,
-                                                       TDuration operationTtl, TDuration resultsTtl, TDuration leaseDuration = TDuration::Zero());
+                                                       const NKikimrKqp::TScriptExecutionOperationMeta& meta);
 
 // Checks lease of execution, finishes execution if its lease is off, returns current status
 NActors::IActor* CreateCheckLeaseStatusActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, ui64 cookie = 0);

@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "ydb/core/protos/config.proto";
+import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/bridge.proto";
 import "ydb/library/actors/protos/interconnect.proto";
@@ -12,7 +13,6 @@ message TNodeIdentifier {
     uint32 Port = 2;
     uint32 NodeId = 3;
     NActorsInterconnect.TNodeLocation Location = 4;
-    optional uint32 BridgePileId = 5;
 }
 
 message TStorageConfigMeta {
@@ -36,7 +36,7 @@ message TStorageConfig { // contents of storage metadata
     optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
     optional uint64 ExpectedStorageYamlVersion = 15;
     NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
-    NKikimrBridge.TClusterStateHistory ClusterStateHistory = 17; // history of unsynced state changes
+    NKikimrBridge.TClusterStateDetails ClusterStateDetails = 17; // history of unsynced state changes
 }
 
 message TPDiskMetadataRecord {
@@ -93,12 +93,6 @@ message TEvNodeConfigReversePush {
 message TEvNodeConfigUnbind {
 }
 
-message TStorageSyncerInfo {
-    uint32 NodeId = 1; // a node that contains running blobstorage syncer actor
-    uint32 GroupId = 2; // bridged group id
-    uint32 TargetBridgePileId = 3; // a target bridge pile sync goes for
-}
-
 // Propagate query to the tree bottom and collect replies.
 message TEvNodeConfigScatter {
     message TCollectConfigs {
@@ -108,17 +102,12 @@ message TEvNodeConfigScatter {
         TStorageConfig Config = 1;
     }
 
-    message TManageSyncers {
-        repeated TStorageSyncerInfo RunSyncers = 1; // syncers expected to be running (suggests stopping the same ones on other nodes)
-    }
-
     optional uint64 Cookie = 1;
     optional fixed64 TaskId = 4; // random (and not necessarily unique) identifier
 
     oneof Request {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
-        TManageSyncers ManageSyncers = 5;
     }
 }
 
@@ -169,21 +158,12 @@ message TEvNodeConfigGather {
         repeated TStatus Status = 1;
     }
 
-    message TManageSyncers {
-        message TNode {
-            uint32 NodeId = 1;
-            repeated TStorageSyncerInfo Syncers = 2;
-        }
-        repeated TNode Nodes = 1;
-    }
-
     optional uint64 Cookie = 1;
     optional bool Aborted = 4;
 
     oneof Response {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
-        TManageSyncers ManageSyncers = 5;
     }
 }
 
@@ -230,14 +210,29 @@ message TEvNodeConfigInvokeOnRoot {
         bool StateStorage = 3;
         bool StateStorageBoard = 4;
         bool SchemeBoard = 5;
+        optional bool DisableRing = 6;
     }
 
     message TGetStateStorageConfig {
         optional bool Recommended = 1;
+        optional bool PileupReplicas = 2;
     }
 
     message TSelfHealStateStorage {
         optional uint32 WaitForConfigStep = 1;
+        optional bool ForceHeal = 2;
+        optional bool PileupReplicas = 3;
+    }
+
+    message TSelfHealNodesStateUpdate {
+        message TNodeState {
+            optional uint32 NodeId = 1;
+            optional uint32 State = 2;
+        }
+        optional bool EnableSelfHealStateStorage = 1;
+        optional uint32 WaitForConfigStep = 2;
+        repeated TNodeState NodesState = 3;
+        optional bool PileupReplicas = 4;
     }
 
     message TAdvanceGeneration
@@ -271,33 +266,17 @@ message TEvNodeConfigInvokeOnRoot {
     }
 
     message TNotifyBridgeSyncFinished {
-        enum EStatus {
-            Success = 0;
-            TransientError = 1;
-            PermanentError = 2;
-        }
         uint64 Generation = 1; // generation matching ClusterState's one
         uint32 BridgePileId = 2; // which bridge pile is marked synchronized
-        EStatus Status = 3; // status of this synchronization
-        optional string ErrorReason = 4; // textual description of an error
         oneof Entity {
-            uint32 GroupId = 5;
-            bool BSC = 6;
+            bool BSC = 3;
         }
-        repeated uint32 UnsyncedGroupIdsToAdd = 7;
     }
 
-    message TMergeUnsyncedPileConfig {
-        // the config of the pile that we are merging in right now
-        TStorageConfig PileConfig = 1;
-    }
-
-    message TNegotiateUnsyncedConnection {
-        uint32 NodeId = 1;
-    }
-
-    message TAdvanceClusterStateGeneration {
-        uint64 Generation = 1;
+    message TUpdateBridgeGroupInfo {
+        uint32 GroupId = 1;
+        uint32 GroupGeneration = 2;
+        NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3;
     }
 
     oneof Request {
@@ -316,9 +295,8 @@ message TEvNodeConfigInvokeOnRoot {
         TGetStateStorageConfig GetStateStorageConfig = 13;
         TNotifyBridgeSyncFinished NotifyBridgeSyncFinished = 14;
         TSelfHealStateStorage SelfHealStateStorage = 15;
-        TMergeUnsyncedPileConfig MergeUnsyncedPileConfig = 16;
-        TNegotiateUnsyncedConnection NegotiateUnsyncedConnection = 17;
-        TAdvanceClusterStateGeneration AdvanceClusterStateGeneration = 18;
+        TSelfHealNodesStateUpdate SelfHealNodesStateUpdate = 19;
+        TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 20;
     }
 }
 
@@ -339,7 +317,6 @@ message TEvNodeConfigInvokeOnRootResult {
 
     message TQueryConfig {
         TStorageConfig Config = 1;
-        TStorageConfig CurrentProposedStorageConfig = 2;
     }
 
     message TFetchStorageConfig {
@@ -349,10 +326,6 @@ message TEvNodeConfigInvokeOnRootResult {
 
     message TReplaceStorageConfig {
         optional bool AllowEnablingDistconf = 1;
-    }
-
-    message TMergeUnsyncedPileConfig {
-        TStorageConfig MergedConfig = 1;
     }
 
     EStatus Status = 1;
@@ -366,7 +339,6 @@ message TEvNodeConfigInvokeOnRootResult {
         TFetchStorageConfig FetchStorageConfig = 10;
         TReplaceStorageConfig ReplaceStorageConfig = 11;
         TStateStorageConfig StateStorageConfig = 12;
-        TMergeUnsyncedPileConfig MergeUnsyncedPileConfig = 13;
     }
 }
 
@@ -379,7 +351,4 @@ message TEvNodeWardenDynamicConfigPush {
 message TConnectivityPayload {
     TStorageConfig StorageConfig = 1; // storage config of a sender
     optional uint32 BridgePileId = 2; // bridge pile id of a sender
-    optional uint32 RootNodeId = 3; // root node id of a sender (if set and zero, then this is the root)
-    optional bool HasQuorumInPile = 4; // does the sender have quorum inside his pile? (when root)
-    TEvNodeConfigInvokeOnRoot InvokeOnRoot = 5; // instruct the recipient to execute this command
 }

@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
@@ -579,6 +580,12 @@ message TSetVDiskReadOnly {
 message TGetInterfaceVersion
 {}
 
+message TUpdateBridgeGroupInfo {
+    uint32 GroupId = 1; // group we are updating (must be the bridge proxy group)
+    uint32 GroupGeneration = 2; // its generation
+    NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3; // new value for bridge group info
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -628,6 +635,7 @@ message TConfigRequest {
             TGetInterfaceVersion GetInterfaceVersion = 51;
             TChangeGroupSizeInUnits ChangeGroupSizeInUnits = 52;
             TMovePDisk MovePDisk = 53;
+            TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 54;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -827,6 +835,7 @@ message TConfigResponse {
             kMayGetDegraded = 10;
             kGroupNotFound = 11;
             kReassignNotViable = 12;
+            kGroupGenerationMismatch = 13;
         }
 
         message TFailParam {
@@ -846,6 +855,8 @@ message TConfigResponse {
                 NKikimrBlobStorage.TVSlotId VSlotId = 13;
                 string StoragePoolName = 14;
                 string DiskSerialNumber = 15;
+                uint32 GroupGenerationProvided = 16;
+                uint32 GroupGenerationExpected = 17;
             }
         }
 
@@ -877,4 +888,5 @@ message TConfigResponse {
     repeated uint32 GroupsGetDegraded = 5;
     repeated uint32 GroupsGetDisintegrated = 6;
     repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7;
+    bool RollbackSuccess = 8;
 }

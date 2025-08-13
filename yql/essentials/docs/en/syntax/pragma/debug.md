@@ -16,3 +16,7 @@ Validating whether UDF results match the declared signature. The Greedy mode enf
 
 Getting diagnostic information from YQL as an additional result of a query.
 
+## `DebugPositions`
+
+Disable deduplication of expression evaluation that may lead to errors (`Ensure`/`Unwrap` or UDF call).
+This may result in slower query at the cost of increasing the precision of the position that will be tied to a runtime error.

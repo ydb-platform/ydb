@@ -157,6 +157,12 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             TAutoPtr<IEventHandle> temp(ev.Release());
             Receive(temp);
         }
+
+        using TEvBridgeInfoUpdate = NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoUpdate;
+        std::unique_ptr<TEvBridgeInfoUpdate> update(new TEvBridgeInfoUpdate);
+        update->Record.MutableClusterState()->CopyFrom(StorageConfig->GetClusterState());
+
+        Send(WhiteboardId, update.release());
     }
 }
 
@@ -251,6 +257,9 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
 
         for (const auto& ringGroup : info->RingGroups) {
             for (const auto& ring : ringGroup.Rings) {
+                if (ring.IsDisabled) {
+                    continue;
+                }
                 for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
                     if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
                         if (!localActorIds.contains(replicaId) && !newActorIds.contains(replicaId)) {

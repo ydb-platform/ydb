@@ -4,7 +4,7 @@
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
-#include <ydb/core/blobstorage/dsproxy/bridge/bridge.h>
+#include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 #include <ydb/core/blob_depot/agent/agent.h>
 
 using namespace NKikimr;
@@ -215,6 +215,8 @@ void TNodeWarden::Handle(TEvNodeWardenQueryCacheResult::TPtr ev) {
         if (success) {
             Y_DEBUG_ABORT_UNLESS(groupInfo.GetGroupGeneration() == generation);
             ApplyGroupInfo(groupId, generation, &groupInfo, false, false);
+        } else {
+            Y_DEBUG_ABORT("failed to parse group configuration");
         }
     }
 }

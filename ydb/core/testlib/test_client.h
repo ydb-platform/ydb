@@ -121,6 +121,7 @@ namespace Tests {
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
         NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
+        NKikimrConfig::TBridgeConfig BridgeConfig;
         ui32 Domain = TestDomain;
         bool SupportsRedirect = true;
         TString TracePath;
@@ -149,6 +150,7 @@ namespace Tests {
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
         bool EnableYqGrpc = false;
+        bool EnableScriptExecutionBackgroundChecks = true;
         TDuration KeepSnapshotTimeout = TDuration::Zero();
         ui64 ChangesQueueItemsLimit = 0;
         ui64 ChangesQueueBytesLimit = 0;
@@ -178,6 +180,7 @@ namespace Tests {
         bool Verbose = true;
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
+        bool EnableStorage = true;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -233,10 +236,12 @@ namespace Tests {
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
         TServerSettings& SetSolomonGateway(NYql::ISolomonGateway::TPtr solomonGateway) { SolomonGateway = std::move(solomonGateway); return *this; }
+        TServerSettings& SetPqGateway(NYql::IPqGateway::TPtr pqGateway) { PqGateway = std::move(pqGateway); return *this; }
         TServerSettings& SetDqTaskTransformFactory(NYql::TTaskTransformFactory value) { DqTaskTransformFactory = std::move(value); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
         TServerSettings& SetUseSectorMap(bool value) { UseSectorMap = value; return *this; }
+        TServerSettings& SetEnableScriptExecutionBackgroundChecks(bool value) { EnableScriptExecutionBackgroundChecks = value; return *this; }
         TServerSettings& SetScanReaskToResolve(const ui32 count) {
             AppConfig->MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetReaskShardRetriesCount(count);
             return *this;
@@ -284,6 +289,11 @@ namespace Tests {
             return *this;
         }
 
+        TServerSettings& SetEnableStorage(bool enable) {
+            EnableStorage = enable;
+            return *this;
+        }
+
         template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(
             const TString& name,
@@ -297,10 +307,11 @@ namespace Tests {
             return *this;
         }
 
-        explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {})
+        explicit TServerSettings(ui16 port, const NKikimrProto::TAuthConfig authConfig = {}, const NKikimrPQ::TPQConfig pqConfig = {}, const NKikimrConfig::TBridgeConfig& bridgeConfig = {})
             : Port(port)
             , AuthConfig(authConfig)
             , PQConfig(pqConfig)
+            , BridgeConfig(bridgeConfig)
         {
             AddStoragePool("test", "/" + DomainName + ":test");
             AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
@@ -484,12 +495,72 @@ namespace Tests {
                 request->Record.SetSecurityToken(SecurityToken);
         }
 
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusSchemeOperationStatus>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
         void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusSchemeInitRoot>& request) {
             if (!SecurityToken.empty())
                 request->Record.SetSecurityToken(SecurityToken);
         }
 
         void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusSchemeDescribe>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusCmsRequest>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusConsoleRequest>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusResolveNode>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusFillNode>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusDrainNode>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusChooseProxy>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusHiveCreateTablet>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusTestShardControlRequest>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusInterconnectDebug>& request) {
+            if (!SecurityToken.empty())
+                request->Record.SetSecurityToken(SecurityToken);
+        }
+
+        void PrepareRequest(TAutoPtr<NMsgBusProxy::TBusTabletStateRequest>& request) {
             if (!SecurityToken.empty())
                 request->Record.SetSecurityToken(SecurityToken);
         }
@@ -588,7 +659,7 @@ namespace Tests {
         ui32 FlatQueryRaw(TTestActorRuntime* runtime, const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
 
         bool Compile(const TString &mkql, TString &compiled);
-        NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId = SchemeRoot);
+        NKikimrScheme::TEvDescribeSchemeResult Describe(TTestActorRuntime* runtime, const TString& path, ui64 tabletId = SchemeRoot, bool showPrivateTable = false);
         TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1);
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);
@@ -695,7 +766,7 @@ namespace Tests {
         // Waits for scheme operation to complete
         NBus::EMessageStatus WaitCompletion(ui64 txId, ui64 schemeshard, ui64 pathId,
                                             TAutoPtr<NBus::TBusMessage>& reply,
-                                            TDuration timeout = TDuration::Seconds(1000));
+                                            TDuration timeout = TDuration::Seconds(1000), const TString& securityToken = {});
         NBus::EMessageStatus SendAndWaitCompletion(TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request,
                                                    TAutoPtr<NBus::TBusMessage>& reply,
                                                    TDuration timeout = TDuration::Seconds(1000));

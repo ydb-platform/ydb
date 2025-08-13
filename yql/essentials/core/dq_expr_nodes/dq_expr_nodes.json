@@ -59,6 +59,11 @@
         ]
     },
     {
+        "Name": "TDqPhyBlockHashJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyBlockHashJoin"}
+    },
+    {
         "Name": "TDqPhyMapJoin",
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"}
@@ -182,6 +187,11 @@
         "Name": "TDqCnUnionAll",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnUnionAll"}
+    },
+    {
+        "Name": "TDqCnParallelUnionAll",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnParallelUnionAll"}
     },
     {
         "Name": "TDqCnMap",
@@ -317,6 +327,19 @@
       "Name": "TDqReadBlockWideWrap",
       "Base": "TDqReadWrapBase",
       "Match": {"Type": "Callable", "Name": "DqReadBlockWideWrap"}
+    },
+    {
+      "Name": "TDqPhyHashCombine",
+      "Base": "TCallable",
+      "Match": {"Type": "Callable", "Name": "DqPhyHashCombine"},
+      "Children": [
+        {"Index": 0, "Name": "Input",         "Type": "TExprBase"},
+        {"Index": 1, "Name": "MemLimit",      "Type": "TCoAtom"},
+        {"Index": 2, "Name": "KeyExtractor",  "Type": "TCoLambda"},
+        {"Index": 3, "Name": "InitHandler",   "Type": "TCoLambda"},
+        {"Index": 4, "Name": "UpdateHandler", "Type": "TCoLambda"},
+        {"Index": 5, "Name": "FinishHandler", "Type": "TCoLambda"}
+      ]
     }
     ]
 }

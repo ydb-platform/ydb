@@ -14,7 +14,7 @@ YQL позволяет задавать параметры с помощью [DE
 
 ## Числовые типы
 
-### Int, Uint, Float, Double, Decimal {#numbers}
+### Int, Uint, Float, Double, Decimal, DyNumber {#numbers}
 
 * Тип в JSON — `string`.
 * Числа передаются в строковом представлении.

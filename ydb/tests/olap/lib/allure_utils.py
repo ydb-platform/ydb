@@ -3,6 +3,7 @@ import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.utils import get_ci_version, get_self_version
 from urllib.parse import urlencode
 from datetime import datetime
 from copy import deepcopy
@@ -768,6 +769,8 @@ def allure_test_description(
         allure.attach(body, name, type)
 
     test_info = deepcopy(YdbCluster.get_cluster_info())
+    test_info['ci_version'] = get_ci_version()
+    test_info['test_tools_version'] = get_self_version()
     test_info.update(addition_table_strings)
 
     _set_monitoring(test_info, start_time, end_time)

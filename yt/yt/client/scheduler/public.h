@@ -161,7 +161,7 @@ DEFINE_ENUM(EAbortReason,
     ((AddressResolveFailed)            ( 57))
     ((UnexpectedNodeJobPhase)          ( 58))
     ((JobCountChangedByUserRequest)    ( 59))
-    ((NbdErrors)                       ( 60))
+    ((NbdError)                        ( 60))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

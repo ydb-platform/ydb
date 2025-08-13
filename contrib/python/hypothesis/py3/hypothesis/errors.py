@@ -8,6 +8,9 @@
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at https://mozilla.org/MPL/2.0/.
 
+from datetime import timedelta
+from typing import Any, Literal, Optional
+
 from hypothesis.internal.compat import ExceptionGroup
 
 
@@ -25,7 +28,7 @@ class UnsatisfiedAssumption(HypothesisException):
     If you're seeing this error something has gone wrong.
     """
 
-    def __init__(self, reason=None):
+    def __init__(self, reason: Optional[str] = None) -> None:
         self.reason = reason
 
 
@@ -36,7 +39,7 @@ class NoSuchExample(HypothesisException):
     unable to find one.
     """
 
-    def __init__(self, condition_string, extra=""):
+    def __init__(self, condition_string: str, extra: str = "") -> None:
         super().__init__(f"No examples found of condition {condition_string}{extra}")
 
 
@@ -51,6 +54,10 @@ class Unsatisfiable(_Trimmable):
     a list has unique values you could instead filter out all duplicate
     values from the list)
     """
+
+
+class ChoiceTooLarge(HypothesisException):
+    """An internal error raised by choice_from_index."""
 
 
 class Flaky(_Trimmable):
@@ -177,7 +184,7 @@ class Frozen(HypothesisException):
     after freeze() has been called."""
 
 
-def __getattr__(name):
+def __getattr__(name: str) -> Any:
     if name == "MultipleFailures":
         from hypothesis._settings import note_deprecation
         from hypothesis.internal.compat import BaseExceptionGroup
@@ -197,7 +204,7 @@ def __getattr__(name):
 class DeadlineExceeded(_Trimmable):
     """Raised when an individual test body has taken too long to run."""
 
-    def __init__(self, runtime, deadline):
+    def __init__(self, runtime: timedelta, deadline: timedelta) -> None:
         super().__init__(
             "Test took %.2fms, which exceeds the deadline of %.2fms"
             % (runtime.total_seconds() * 1000, deadline.total_seconds() * 1000)
@@ -205,7 +212,9 @@ class DeadlineExceeded(_Trimmable):
         self.runtime = runtime
         self.deadline = deadline
 
-    def __reduce__(self):
+    def __reduce__(
+        self,
+    ) -> tuple[type["DeadlineExceeded"], tuple[timedelta, timedelta]]:
         return (type(self), (self.runtime, self.deadline))
 
 
@@ -237,3 +246,35 @@ class RewindRecursive(Exception):
 class SmallSearchSpaceWarning(HypothesisWarning):
     """Indicates that an inferred strategy does not span the search space
     in a meaningful way, for example by only creating default instances."""
+
+
+CannotProceedScopeT = Literal["verified", "exhausted", "discard_test_case", "other"]
+
+
+class BackendCannotProceed(HypothesisException):
+    """UNSTABLE API
+
+    Raised by alternative backends when the PrimitiveProvider cannot proceed.
+    This is expected to occur inside one of the `.draw_*()` methods, or for
+    symbolic execution perhaps in `.realize(...)`.
+
+    The optional `scope` argument can enable smarter integration:
+
+        verified:
+            Do not request further test cases from this backend.  We _may_
+            generate more test cases with other backends; if one fails then
+            Hypothesis will report unsound verification in the backend too.
+
+        exhausted:
+            Do not request further test cases from this backend; finish testing
+            with test cases generated with the default backend.  Common if e.g.
+            native code blocks symbolic reasoning very early.
+
+        discard_test_case:
+            This particular test case could not be converted to concrete values;
+            skip any further processing and continue with another test case from
+            this backend.
+    """
+
+    def __init__(self, scope: CannotProceedScopeT = "other", /) -> None:
+        self.scope = scope

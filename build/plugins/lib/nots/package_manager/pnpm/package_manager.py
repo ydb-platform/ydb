@@ -2,7 +2,6 @@ import hashlib
 import json
 import os
 import shutil
-import sys
 
 from .constants import (
     PNPM_PRE_LOCKFILE_FILENAME,
@@ -10,7 +9,7 @@ from .constants import (
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
 )
 from .lockfile import PnpmLockfile
-from .utils import build_lockfile_path, build_pre_lockfile_path, build_ws_config_path
+from .utils import build_lockfile_path, build_build_backup_lockfile_path, build_pre_lockfile_path, build_ws_config_path
 from .workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
 from ..base.constants import (
@@ -112,7 +111,6 @@ def hashed_by_files(files_to_hash, paths_to_exist, hash_storage_filename):
             all_paths_exist = True
             for p in paths_to_exist:
                 if not os.path.exists(p):
-                    sys.stderr.write(f"Path {p} does not exist\n")
                     all_paths_exist = False
                     break
 
@@ -125,9 +123,6 @@ def hashed_by_files(files_to_hash, paths_to_exist, hash_storage_filename):
             if saved_hash == current_state_hash:
                 return None
             else:
-                sys.stderr.write(
-                    f"Saved hash {saved_hash} != current hash {current_state_hash} for {hash_storage_filename}\n"
-                )
                 result = function(*args, **kwargs)
                 with open(hash_storage_filename, "w+") as f:
                     f.write(current_state_hash)
@@ -164,11 +159,7 @@ class PnpmPackageManager(BasePackageManager):
 
     @staticmethod
     def get_local_pnpm_store():
-        return os.path.join(home_dir(), ".cache", "pnpm-9-store")
-
-    @staticmethod
-    def get_local_old_pnpm_store():
-        return os.path.join(home_dir(), ".cache", "pnpm-store")
+        return os.path.join(os.getenv("NOTS_STORE_PATH", home_dir()), ".cache", "pnpm-9-store")
 
     @timeit
     def _get_file_hash(self, path: str):
@@ -221,11 +212,11 @@ class PnpmPackageManager(BasePackageManager):
             json.dump({PNPM_PRE_LOCKFILE_FILENAME: {"hash": pre_pnpm_lockfile_hash}}, f)
 
     @timeit
-    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, nm_bundle=False):
+    def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, nm_bundle=False, original_lf_path=None):
         """
         Creates node_modules directory according to the lockfile.
         """
-        ws = self._prepare_workspace()
+        ws = self._prepare_workspace(local_cli)
 
         self._copy_pnpm_patches()
 
@@ -247,7 +238,7 @@ class PnpmPackageManager(BasePackageManager):
         self._run_pnpm_install(store_dir, virtual_store_dir, self.build_path, local_cli)
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
-        self._replace_internal_lockfile_with_original(virtual_store_dir)
+        self._restore_original_lockfile(virtual_store_dir, original_lf_path)
 
         if nm_bundle:
             bundle_node_modules(
@@ -285,7 +276,7 @@ class PnpmPackageManager(BasePackageManager):
                 "--ignore-pnpmfile",
                 "--ignore-scripts",
                 "--no-verify-store-integrity",
-                "--offline",
+                "--prefer-offline" if local_cli else "--offline",
                 "--config.confirmModulesPurge=false",  # hack for https://st.yandex-team.ru/FBP-1295
                 "--package-import-method",
                 "hardlink",
@@ -330,7 +321,7 @@ class PnpmPackageManager(BasePackageManager):
 
     @timeit
     def calc_prepare_deps_inouts_and_resources(
-        self, store_path: str, has_deps: bool
+        self, store_path: str, has_deps: bool, local_cli: bool
     ) -> tuple[list[str], list[str], list[str]]:
         ins = [
             s_rooted(build_pj_path(self.module_path)),
@@ -342,7 +333,7 @@ class PnpmPackageManager(BasePackageManager):
         ]
         resources = []
 
-        if has_deps:
+        if has_deps and not local_cli:
             for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
                 resources.append(pkg.to_uri())
                 outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
@@ -389,15 +380,19 @@ class PnpmPackageManager(BasePackageManager):
             raise PackageManagerError("Unable to process some lockfiles:\n{}".format("\n".join(errors)))
 
     @timeit
-    def _prepare_workspace(self):
-        lf = self.load_lockfile(build_pre_lockfile_path(self.build_path))
-        lf.update_tarball_resolutions(lambda p: "file:" + os.path.join(self.build_root, p.tarball_url))
-        lf.write(build_lockfile_path(self.build_path))
+    def _prepare_workspace(self, local_cli: bool):
+        if local_cli:
+            shutil.copy(build_pre_lockfile_path(self.build_path), build_lockfile_path(self.build_path))
+        else:
+            lf = self.load_lockfile(build_pre_lockfile_path(self.build_path))
+
+            lf.update_tarball_resolutions(lambda p: "file:" + os.path.join(self.build_root, p.tarball_url))
+            lf.write(build_lockfile_path(self.build_path))
 
         return PnpmWorkspace.load(build_ws_config_path(self.build_path))
 
     @timeit
-    def build_workspace(self, tarballs_store: str):
+    def build_workspace(self, tarballs_store: str, local_cli: bool):
         """
         :rtype: PnpmWorkspace
         """
@@ -408,12 +403,28 @@ class PnpmPackageManager(BasePackageManager):
 
         dep_paths = ws.get_paths(ignore_self=True)
         self._build_merged_workspace_config(ws, dep_paths)
-        self._build_merged_pre_lockfile(tarballs_store, dep_paths)
+        self._build_merged_pre_lockfile(tarballs_store, dep_paths, local_cli)
 
         return ws
 
     @timeit
-    def _build_merged_pre_lockfile(self, tarballs_store, dep_paths):
+    def build_ts_proto_auto_workspace(self, deps_mod: str):
+        """
+        :rtype: PnpmWorkspace
+        """
+
+        ws = PnpmWorkspace(build_ws_config_path(self.build_path))
+        ws.packages.add(".")
+        ws.write()
+
+        deps_pre_lockfile_path = build_pre_lockfile_path(os.path.join(self.build_root, deps_mod))
+        pre_lockfile_path = build_pre_lockfile_path(self.build_path)
+        shutil.copyfile(deps_pre_lockfile_path, pre_lockfile_path)
+
+        return ws
+
+    @timeit
+    def _build_merged_pre_lockfile(self, tarballs_store, dep_paths, local_cli: bool):
         """
         :type dep_paths: list of str
         :rtype: PnpmLockfile
@@ -421,7 +432,8 @@ class PnpmPackageManager(BasePackageManager):
         lf = self.load_lockfile_from_dir(self.sources_path)
         # Change to the output path for correct path calcs on merging.
         lf.path = build_pre_lockfile_path(self.build_path)
-        lf.update_tarball_resolutions(lambda p: self._tarballs_store_path(p, tarballs_store))
+        if not local_cli:
+            lf.update_tarball_resolutions(lambda p: self._tarballs_store_path(p, tarballs_store))
 
         for dep_path in dep_paths:
             pre_lf_path = build_pre_lockfile_path(dep_path)
@@ -461,15 +473,19 @@ class PnpmPackageManager(BasePackageManager):
         )
 
     @timeit
-    def _replace_internal_lockfile_with_original(self, virtual_store_dir):
-        original_lf_path = build_lockfile_path(self.sources_path)
+    def _restore_original_lockfile(self, virtual_store_dir: str, original_lf_path: str = None):
+        original_lf_path = original_lf_path or build_lockfile_path(self.sources_path)
         vs_lf_path = os.path.join(virtual_store_dir, "lock.yaml")
+        build_lf_path = build_lockfile_path(self.build_path)
+        build_bkp_lf_path = build_build_backup_lockfile_path(self.build_path)
 
         shutil.copyfile(original_lf_path, vs_lf_path)
+        shutil.copyfile(build_lf_path, build_bkp_lf_path)
+        shutil.copyfile(original_lf_path, build_lf_path)
 
     @timeit
     def _copy_pnpm_patches(self):
-        pj = self.load_package_json_from_dir(self.sources_path)
+        pj = self.load_package_json_from_dir(self.build_path)
         patched_dependencies: dict[str, str] = pj.data.get("pnpm", {}).get("patchedDependencies", {})
 
         for p in patched_dependencies.values():

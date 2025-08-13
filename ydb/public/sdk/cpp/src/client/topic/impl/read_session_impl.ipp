@@ -2073,12 +2073,16 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMappin
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RegisterParentPartition(ui32 partitionId, ui32 parentPartitionId, ui64 parentPartitionSessionId) {
+    std::lock_guard guard(HierarchyDataLock);
+
     auto& values = HierarchyData[partitionId];
     values.push_back({parentPartitionId, parentPartitionSessionId});
 }
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui32 partitionId, ui64 partitionSessionId) {
+    std::lock_guard guard(HierarchyDataLock);
+
     for (auto it = HierarchyData.begin(); it != HierarchyData.end();) {
         auto& values = it->second;
         for (auto v = values.begin(); v != values.end();) {
@@ -2098,6 +2102,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui
 
 template<bool UseMigrationProtocol>
 std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId) {
+    std::lock_guard guard(HierarchyDataLock);
+
     auto it = HierarchyData.find(partitionId);
     if (it == HierarchyData.end()) {
         return {};

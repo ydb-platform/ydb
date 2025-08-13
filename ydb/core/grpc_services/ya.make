@@ -36,6 +36,7 @@ SRCS(
     rpc_describe_external_data_source.cpp
     rpc_describe_external_table.cpp
     rpc_describe_path.cpp
+    rpc_describe_system_view.cpp
     rpc_describe_table.cpp
     rpc_describe_table_options.cpp
     rpc_discovery.cpp
@@ -90,6 +91,8 @@ SRCS(
     table_settings.cpp
 
     rpc_common/rpc_common_kqp_session.cpp
+
+    legacy/rpc_legacy.cpp
 
     query/rpc_execute_query.cpp
     query/rpc_execute_script.cpp
@@ -146,6 +149,7 @@ PEERDIR(
     yql/essentials/types/dynumber
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/types

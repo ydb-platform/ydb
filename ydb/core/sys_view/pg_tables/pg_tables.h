@@ -4,7 +4,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 
 namespace NKikimr {

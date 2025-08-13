@@ -426,11 +426,9 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 Server = providedServer;
             } else {
                 TKikimrSettings settings;
-                NKikimrConfig::TAppConfig appConfig;
-                appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(testActorType == ETestActorType::SorceRead);
-                appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+                settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(testActorType == ETestActorType::SorceRead);
+                settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
                 settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-                settings.SetAppConfig(appConfig);
 
                 Kikimr.ConstructInPlace(settings);
                 Server = &Kikimr->GetTestServer();

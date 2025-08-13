@@ -316,6 +316,10 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             groupShift = nodeIndex * groupsPerNode;
         }
 
+        if (nodeIndex < options.NodesWithoutPDisksCount) {
+            continue;
+        }
+
         for (ui32 pdiskIndex = 0; pdiskIndex < pdisks; ++pdiskIndex) {
             auto pdiskId = nodeId * pdisks + pdiskIndex;
             auto &pdisk = node.PDiskStateInfo[pdiskId];
@@ -586,10 +590,12 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     runtime.GetAppData().BootstrapConfig = TFakeNodeWhiteboardService::BootstrapConfig;
     
     if (options.IsBridgeMode) {
-        for (ui32 pileId = 0; pileId < options.PileCount; ++pileId) {
-            runtime.GetAppData().BridgeConfig.AddPiles()->SetName("r" + ToString(pileId));
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            for (ui32 pileId = 0; pileId < options.PileCount; ++pileId) {
+                runtime.GetAppData(nodeIndex).BridgeConfig.AddPiles()->SetName("r" + ToString(pileId));
+            }
+            runtime.GetAppData(nodeIndex).BridgeModeEnabled = true;
         }
-        runtime.GetAppData().BridgeModeEnabled = true;
     }
 
     NKikimrCms::TCmsConfig cmsConfig;
@@ -679,6 +685,9 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     Sender = AllocateEdgeActor();
     ClientId = TActorId();
+
+    // Make sure default empty configs are handled first
+    SimulateSleep(TDuration::MilliSeconds(100));
 
     NKikimrCms::TCmsConfig cmsConfig;
     cmsConfig.MutableTenantLimits()->SetDisabledNodesRatioLimit(0);
@@ -961,6 +970,16 @@ TCmsTestEnv::CheckListRequests(const TString &user,
     auto rec = CheckManageRequestRequest(req, TStatus::OK);
     UNIT_ASSERT_VALUES_EQUAL(rec.RequestsSize(), count);
     return rec;
+}
+
+NKikimrCms::TManageRequestResponse
+TCmsTestEnv::CheckApproveRequest(const TString &user,
+                                 const TString &id,
+                                 bool dry,
+                                 NKikimrCms::TStatus::ECode code)
+{
+    auto req = MakeManageRequestRequest(user, TManageRequestRequest::APPROVE, id, dry);
+    return CheckManageRequestRequest(req, code);
 }
 
 NKikimrCms::TPermissionResponse

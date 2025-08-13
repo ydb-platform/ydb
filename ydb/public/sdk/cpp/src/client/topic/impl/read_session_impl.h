@@ -1427,7 +1427,7 @@ private:
     NYdbGrpc::IQueueClientContextPtr ConnectTimeoutContext;
     NYdbGrpc::IQueueClientContextPtr ConnectDelayContext;
     size_t ConnectionGeneration = 0;
-    TAdaptiveLock Lock;
+    TSpinLock Lock;
     typename IProcessor::TPtr Processor;
     typename IARetryPolicy<UseMigrationProtocol>::IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting).
     size_t ConnectionAttemptsDone = 0;
@@ -1459,6 +1459,7 @@ private:
         ui64 PartitionSessionId;
     };
 
+    TSpinLock HierarchyDataLock;
     std::unordered_map<ui32, std::vector<TParentInfo>> HierarchyData;
     std::unordered_set<ui64> ReadingFinishedData;
 

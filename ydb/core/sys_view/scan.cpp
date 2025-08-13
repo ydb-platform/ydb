@@ -7,7 +7,8 @@
 #include <ydb/core/sys_view/auth/owners.h>
 #include <ydb/core/sys_view/auth/permissions.h>
 #include <ydb/core/sys_view/auth/users.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
+#include <ydb/core/sys_view/compile_cache/compile_cache.h>
 #include <ydb/core/sys_view/nodes/nodes.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/sys_view/partition_stats/top_partitions.h>
@@ -33,56 +34,7 @@
 namespace NKikimr {
 namespace NSysView {
 
-namespace {
-    using NKikimrSysView::ESysViewType;
-
-    const THashMap<TStringBuf, ESysViewType> SYS_VIEW_TYPES_MAP = {
-        {PartitionStatsName, ESysViewType::EPartitionStats},
-        {NodesName, ESysViewType::ENodes},
-
-        {TopQueriesByDuration1MinuteName, ESysViewType::ETopQueriesByDurationOneMinute},
-        {TopQueriesByDuration1HourName, ESysViewType::ETopQueriesByDurationOneHour},
-        {TopQueriesByReadBytes1MinuteName, ESysViewType::ETopQueriesByReadBytesOneMinute},
-        {TopQueriesByReadBytes1HourName, ESysViewType::ETopQueriesByReadBytesOneHour},
-        {TopQueriesByCpuTime1MinuteName, ESysViewType::ETopQueriesByCpuTimeOneMinute},
-        {TopQueriesByCpuTime1HourName, ESysViewType::ETopQueriesByCpuTimeOneHour},
-        {TopQueriesByRequestUnits1MinuteName, ESysViewType::ETopQueriesByRequestUnitsOneMinute},
-        {TopQueriesByRequestUnits1HourName, ESysViewType::ETopQueriesByRequestUnitsOneHour},
-
-        {QuerySessions, ESysViewType::EQuerySessions},
-
-        {PDisksName, ESysViewType::EPDisks},
-        {VSlotsName, ESysViewType::EVSlots},
-        {GroupsName, ESysViewType::EGroups},
-        {StoragePoolsName, ESysViewType::EStoragePools},
-        {StorageStatsName, ESysViewType::EStorageStats},
-
-        {TabletsName, ESysViewType::ETablets},
-
-        {QueryMetricsName, ESysViewType::EQueryMetricsOneMinute},
-
-        {TopPartitionsByCpu1MinuteName, ESysViewType::ETopPartitionsByCpuOneMinute},
-        {TopPartitionsByCpu1HourName, ESysViewType::ETopPartitionsByCpuOneHour},
-        {TopPartitionsByTli1MinuteName, ESysViewType::ETopPartitionsByTliOneMinute},
-        {TopPartitionsByTli1HourName, ESysViewType::ETopPartitionsByTliOneHour},
-
-        {PgTablesName, ESysViewType::EPgTables},
-        {InformationSchemaTablesName, ESysViewType::EInformationSchemaTables},
-        {PgClassName, ESysViewType::EPgClass},
-
-        {ResourcePoolClassifiersName, ESysViewType::EResourcePoolClassifiers},
-        {ResourcePoolsName, ESysViewType::EResourcePools},
-
-        {NAuth::UsersName, ESysViewType::EAuthUsers},
-        {NAuth::GroupsName, ESysViewType::EAuthGroups},
-        {NAuth::GroupMembersName, ESysViewType::EAuthGroupMembers},
-        {NAuth::OwnersName, ESysViewType::EAuthOwners},
-        {NAuth::PermissionsName, ESysViewType::EAuthPermissions},
-        {NAuth::EffectivePermissionsName, ESysViewType::EAuthEffectivePermissions},
-
-        {ShowCreateName, ESysViewType::EShowCreate}
-    };
-}
+using NKikimrSysView::ESysViewType;
 
 class TSysViewRangesReader : public TActor<TSysViewRangesReader> {
 public:
@@ -253,8 +205,8 @@ THolder<NActors::IActor> CreateSystemViewScan(
     if (sysViewInfo) {
         sysViewDescription = *sysViewInfo;
     } else {
-        auto typesIt = SYS_VIEW_TYPES_MAP.find(tableId.SysViewInfo);
-        Y_ABORT_UNLESS(typesIt != SYS_VIEW_TYPES_MAP.end());
+        auto typesIt = Registry.SysViewTypesMap.find(tableId.SysViewInfo);
+        Y_ABORT_UNLESS(typesIt != Registry.SysViewTypesMap.end());
         sysViewDescription.SetType(typesIt->second);
         *sysViewDescription.MutableSourceObject() = tableId.PathId.ToProto();
     }
@@ -266,6 +218,8 @@ THolder<NActors::IActor> CreateSystemViewScan(
         return CreateNodesScan(ownerId, scanId, sysViewDescription, tableRange, columns);
     case ESysViewType::EQuerySessions:
         return CreateSessionsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::ECompileCacheQueries:
+        return CreateCompileCacheQueriesScan(ownerId, scanId, sysViewDescription, tableRange, columns);
     case ESysViewType::ETopQueriesByDurationOneMinute:
     case ESysViewType::ETopQueriesByDurationOneHour:
     case ESysViewType::ETopQueriesByReadBytesOneMinute:

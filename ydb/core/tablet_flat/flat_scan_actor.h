@@ -162,9 +162,9 @@ namespace NOps {
                 Y_ENSURE(!PageCollections[slot]);
                 auto& loader = PageCollectionLoaders[slot];
                 if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
-                    TIntrusiveConstPtr<NPageCollection::IPageCollection> pack =
+                    TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection =
                         new NPageCollection::TPageCollection(Part->LargeGlobIds[slot], loader.ExtractSharedData());
-                    PageCollections[slot] = new TPrivatePageCache::TInfo(std::move(pack));
+                    PageCollections[slot] = new TPrivatePageCache::TPageCollection(std::move(pageCollection));
                     Y_ENSURE(PageCollectionsLeft > 0);
                     if (0 == --PageCollectionsLeft) {
                         PageCollectionLoaders.clear();
@@ -188,8 +188,8 @@ namespace NOps {
             }
 
             void RunLoader() {
-                for (auto req : Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, req));
+                if (auto fetch = Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, std::move(fetch.PageCollection), std::move(fetch.Pages)));
                     ++ReadsLeft;
                 }
 
@@ -217,7 +217,8 @@ namespace NOps {
                 --ReadsLeft;
 
                 Y_ENSURE(Loader);
-                Loader->Save(msg->Cookie, msg->Pages);
+                Y_ENSURE(msg->Cookie == 0);
+                Loader->Save(std::move(msg->Pages));
 
                 if (ReadsLeft == 0) {
                     RunLoader();
@@ -238,7 +239,7 @@ namespace NOps {
             TActorId Owner;
             TIntrusiveConstPtr<TColdPartStore> Part;
             EPriority ReadPriority;
-            TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCollections;
+            TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
             TVector<NPageCollection::TLargeGlobIdRestoreState> PageCollectionLoaders;
             size_t PageCollectionsLeft = 0;
             std::optional<NTable::TLoader> Loader;
@@ -485,11 +486,14 @@ namespace NOps {
                     return;
                 }
 
-                while (auto req = Cache->GrabFetches()) {
-                    if (auto logl = Logger->Log(ELnLev::Debug))
-                        logl << NFmt::Do(*this) << " Fetches " << req->DebugString();
+                while (auto fetch = Cache->GetFetch()) {
+                    if (auto logl = Logger->Log(ELnLev::Debug)) {
+                        logl << NFmt::Do(*this) << " Fetches page collection " << fetch.PageCollection->Label()
+                            << " pages " << fetch.Pages.size()
+                            << " cookie " << fetch.Cookie;
+                    }
 
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req));
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, std::move(fetch.PageCollection), std::move(fetch.Pages), fetch.Cookie));
                 }
 
                 if (ready == NTable::EReady::Page)
@@ -619,7 +623,7 @@ namespace NOps {
                 return Terminate(EStatus::StorageError);
             }
 
-            Cache->DoSave(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
+            Cache->Save(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);

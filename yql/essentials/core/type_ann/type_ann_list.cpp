@@ -2070,7 +2070,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus IteratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus IteratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -2083,10 +2083,9 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-            if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         auto originalType = input->Head().GetTypeAnn();
@@ -2106,15 +2105,15 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus EmptyIteratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus EmptyIteratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-            if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -2145,7 +2144,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ToStreamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ToStreamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2170,10 +2169,9 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-            if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(itemType));
@@ -6927,12 +6925,14 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr))
-        {
+        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (!lambdaTimeExtractor->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
+        }
+        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, true)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, true)) {
@@ -7079,8 +7079,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!UpdateLambdaAllArgumentsTypes(lambdaKeyExtractor, {itemType}, ctx.Expr))
-        {
+        if (!UpdateLambdaAllArgumentsTypes(lambdaKeyExtractor, {itemType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         auto keyType = lambdaKeyExtractor->GetTypeAnn();
@@ -7088,12 +7087,14 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr))
-        {
+        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (!lambdaTimeExtractor->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
+        }
+        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, true)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, true)) {

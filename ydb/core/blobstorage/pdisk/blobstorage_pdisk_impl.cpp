@@ -34,7 +34,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             cfg->DriveModelSpeedBpsMin,
             cfg->DriveModelSpeedBpsMax,
             cfg->DeviceInFlight)
-    , ReqCreator(PCtx, &Mon, &DriveModel, &EstimatedLogChunkIdx)
+    , ReqCreator(PCtx, &Mon, &DriveModel, &EstimatedLogChunkIdx, cfg->SeparateHugePriorities)
     , ReorderingMs(cfg->ReorderingMs)
     , LogSeekCostLoop(2)
     , ExpectedDiskGuid(cfg->PDiskGuid)
@@ -557,7 +557,7 @@ ui32 TPDisk::GetTotalChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) 
 ui32 TPDisk::GetFreeChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const {
     Y_UNUSED(ownerGroupType);
     // TODO(cthulhu): use ownerGroupType for logs
-    return Max<i64>(0, Keeper.GetOwnerFree(ownerId));
+    return Max<i64>(0, Keeper.GetOwnerFree(ownerId, false));
 }
 
 ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const {
@@ -1109,7 +1109,7 @@ TVector<TChunkIdx> TPDisk::LockChunksForOwner(TOwner owner, const ui32 count, TS
     TGuard<TMutex> guard(StateMutex);
 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
-    i64 ownerFree = Keeper.GetOwnerFree(owner);
+    i64 ownerFree = Keeper.GetOwnerFree(owner, false);
     double occupancy;
     auto color = Keeper.EstimateSpaceColor(owner, count, &occupancy);
 
@@ -1351,7 +1351,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
     Y_VERIFY_DEBUG_S(IsOwnerUser(req->Owner), PCtx->PDiskLogPrefix);
 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
-    i64 ownerFree = Keeper.GetOwnerFree(req->Owner);
+    i64 ownerFree = Keeper.GetOwnerFree(req->Owner, false);
     double occupancy;
     auto color = Keeper.EstimateSpaceColor(req->Owner, count, &occupancy);
 
@@ -1576,7 +1576,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         const auto& state = static_cast<NKikimrBlobStorage::TPDiskState::E>(Mon.PDiskState->Val());
         pdiskState.SetState(state);
         pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
-        pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog)));
+        pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog, {})));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
         pdiskState.SetNumActiveSlots(GetNumActiveSlots());
         pdiskState.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
@@ -1585,16 +1585,12 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         }
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
-        i64 minSlotSize = Max<i64>();
-        for (const auto& [_, owner] : VDiskOwners) {
-            minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) * Format.ChunkSize);
-        }
 
         for (const auto& [vdiskId, owner] : VDiskOwners) {
             const TOwnerData &data = OwnerData[owner];
             // May be less than 0 if owner exceeded his quota
             i64 ownerAllocated = (i64)Keeper.GetOwnerUsed(owner) * Format.ChunkSize;
-            i64 ownerFree = Max<i64>(0, minSlotSize - ownerAllocated);
+            i64 ownerFree = Max<i64>(0, Keeper.GetOwnerFree(owner, true) * Format.ChunkSize);
 
             reportResult->VDiskStateVect.emplace_back(data.WhiteboardProxyId, NKikimrWhiteboard::TVDiskStateInfo());
             auto& vdiskInfo = std::get<1>(reportResult->VDiskStateVect.back());
@@ -1625,6 +1621,11 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
         pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
         pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
+
+        i64 minSlotSize = Max<i64>();
+        for (const auto& [_, owner] : VDiskOwners) {
+            minSlotSize = Min(minSlotSize, Keeper.GetOwnerHardLimit(owner) / Keeper.GetOwnerWeight(owner) * Format.ChunkSize);
+        }
         if (minSlotSize != Max<i64>()) {
             pDiskMetrics.SetEnforcedDynamicSlotSize(minSlotSize);
             pdiskState.SetEnforcedDynamicSlotSize(minSlotSize);
@@ -1836,14 +1837,15 @@ void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str,
     P_LOG(PRI_ERROR, BPD01, error.Str());
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
     PCtx->ActorSystem->Send(evYardInit.Sender, new NPDisk::TEvYardInitResult(status,
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(),
         Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), OwnerSystem, 0,
-        0, Cfg->SlotSizeInUnits,
+        Cfg->SlotSizeInUnits,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), TVector<TChunkIdx>(),
-        Cfg->RetrieveDeviceType(), error.Str()));
+        Cfg->RetrieveDeviceType(), isTinyDisk, error.Str()));
     Mon.YardInit.CountResponse();
 }
 
@@ -1891,13 +1893,16 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
     ui32 ownerWeight = Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits);
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
+
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(NKikimrProto::OK,
                 DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
                 DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
                 DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner,
-                ownerRound, ownerWeight, Cfg->SlotSizeInUnits,
+                ownerRound, Cfg->SlotSizeInUnits,
                 GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), ownedChunks,
-                Cfg->RetrieveDeviceType(), ""));
+                Cfg->RetrieveDeviceType(), isTinyDisk, ""));
+
     GetStartingPoints(owner, result->StartingPoints);
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
@@ -2052,15 +2057,17 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
 
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(
         NKikimrProto::OK,
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner, ownerRound,
-        Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits), Cfg->SlotSizeInUnits,
+        Cfg->SlotSizeInUnits,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType) | ui32(NKikimrBlobStorage::StatusNewOwner), TVector<TChunkIdx>(),
-        Cfg->RetrieveDeviceType(), ""));
+        Cfg->RetrieveDeviceType(), isTinyDisk, ""));
+
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});
@@ -2075,6 +2082,7 @@ void TPDisk::YardResize(TYardResize &ev) {
     TStringStream errorReason;
     NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(&ev, errorReason);
     if (errStatus != NKikimrProto::OK) {
+        Mon.YardResize.CountResponse();
         PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvYardResizeResult(errStatus, {}, errorReason.Str()));
         return;
     }
@@ -2087,9 +2095,10 @@ void TPDisk::YardResize(TYardResize &ev) {
 
     auto result = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
     if (Cfg->ReadOnly) {
+        Mon.YardResize.CountResponse();
         PCtx->ActorSystem->Send(ev.Sender, result.release());
     } else {
-        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release()),
+        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release(), Mon.YardResize.Results),
             TReqId(TReqId::YardResize, 0), {});
     }
 }
@@ -2114,7 +2123,8 @@ void TPDisk::SchedulerConfigure(const TConfigureScheduler &reqCfg) {
     ConfigureCbs(ownerId, GateFastRead, cfg.FastReadWeight * bytesTotalWeight);
     ConfigureCbs(ownerId, GateOtherRead, cfg.OtherReadWeight * bytesTotalWeight);
     ConfigureCbs(ownerId, GateLoad, cfg.LoadWeight * bytesTotalWeight);
-    ConfigureCbs(ownerId, GateHuge, cfg.HugeWeight * bytesTotalWeight);
+    ConfigureCbs(ownerId, GateHugeAsync, cfg.HugeWeight * bytesTotalWeight);
+    ConfigureCbs(ownerId, GateHugeUser, cfg.HugeWeight * bytesTotalWeight);
     ConfigureCbs(ownerId, GateSyncLog, cfg.SyncLogWeight * bytesTotalWeight);
     ConfigureCbs(ownerId, GateLow, cfg.LowReadWeight);
     ForsetiScheduler.UpdateTotalWeight();
@@ -4084,7 +4094,8 @@ void TPDisk::AddCbsSet(ui32 ownerId) {
     AddCbs(ownerId, GateFastRead, "FastRead", 0ull);
     AddCbs(ownerId, GateOtherRead, "OtherRead", 0ull);
     AddCbs(ownerId, GateLoad, "Load", 0ull);
-    AddCbs(ownerId, GateHuge, "Huge", 0ull);
+    AddCbs(ownerId, GateHugeAsync, "HugeAsync", 0ull);
+    AddCbs(ownerId, GateHugeUser, "HugeUser", 0ull);
     AddCbs(ownerId, GateSyncLog, "SyncLog", 0ull);
     AddCbs(ownerId, GateLow, "LowRead", 0ull);
 

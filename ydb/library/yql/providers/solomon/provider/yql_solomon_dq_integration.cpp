@@ -104,9 +104,15 @@ public:
         return Nothing();
     }
 
-    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
         if (const auto& maybeSoReadObject = TMaybeNode<TSoReadObject>(read)) {
             const auto& soReadObject = maybeSoReadObject.Cast();
+
+            if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
+                ctx.AddError(TIssue(ctx.GetPosition(soReadObject.Pos()), "Cannot use watermarks in Solomon"));
+                return {};
+            }
+
             YQL_ENSURE(soReadObject.Ref().GetTypeAnn(), "No type annotation for node " << soReadObject.Ref().Content());
 
             const auto& clusterName = soReadObject.DataSource().Cluster().StringValue();
@@ -224,7 +230,7 @@ public:
 
             if (downsamplingDisabled.has_value() && *downsamplingDisabled) {
                 if (downsamplingAggregation || downsamplingFill || downsamplingGridSec) {
-                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsamplig.grid_interval is specified"));
+                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified"));
                     return {};
                 }
             } else {
@@ -286,21 +292,17 @@ public:
         YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
 
         NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, settings.Project().StringValue());
-        
+
         source.SetFrom(TInstant::ParseIso8601(settings.From().StringValue()).Seconds());
         source.SetTo(TInstant::ParseIso8601(settings.To().StringValue()).Seconds());
-        
+
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
-            auto labelValues = NSo::ExtractSelectorValues(selectors);
-            if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-                labelValues.insert({ "service", settings.Project().StringValue() });
-                labelValues.insert({ "cluster", source.GetCluster() });
-            } else {
-                labelValues.insert({ "project", source.GetProject() });
+            std::map<TString, TString> selectorValues;
+            if (auto error = NSo::BuildSelectorValues(source, selectors, selectorValues)) {
+                throw yexception() << *error;
             }
-
-            source.MutableSelectors()->insert(labelValues.begin(), labelValues.end());
+            source.MutableSelectors()->insert(selectorValues.begin(), selectorValues.end());
         }
 
         auto program = settings.Program().StringValue();
@@ -358,6 +360,9 @@ public:
         auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
         sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
 
+        auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(301);
+        sourceSettings.insert({"truePointsFindRange", ToString(truePointsFindRange)});
+
         auto maxApiInflight = solomonConfig->MaxApiInflight.Get().OrElse(40);
         sourceSettings.insert({"maxApiInflight", ToString(maxApiInflight)});
 
@@ -367,7 +372,7 @@ public:
 
             auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster));
             auto credentialsProvider = providerFactory->CreateProvider();
-            
+
             NDq::TDqSolomonReadParams readParams{ .Source = source };
 
             YQL_ENSURE(NActors::TlsActivationContext);

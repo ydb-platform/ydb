@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/yson/public.h>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,6 +40,12 @@ public:
 private:
     TUnderlying Underlying_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TSize& value, NYson::IYsonConsumer* consumer);
+void Deserialize(TSize& value, INodePtr node);
+void Deserialize(TSize& value, NYson::TYsonPullParserCursor* cursor);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -550,6 +550,22 @@ struct TTypeAnnotationContext: public TThrRefBase {
         DataSinks.push_back(std::move(provider));
     }
 
+    void RemoveDataSource(TStringBuf name) {
+        DataSourceMap.erase(name);
+        DataSources.erase(std::remove_if(DataSources.begin(), DataSources.end(),
+            [&name](const TIntrusivePtr<IDataProvider>& provider) {
+                return provider->GetName() == name;
+            }), DataSources.end());
+    }
+
+    void RemoveDataSink(TStringBuf name) {
+        DataSinkMap.erase(name);
+        DataSinks.erase(std::remove_if(DataSinks.begin(), DataSinks.end(),
+            [&name](const TIntrusivePtr<IDataProvider>& provider) {
+                return provider->GetName() == name;
+            }), DataSinks.end());
+    }
+
     bool Initialize(TExprContext& ctx);
     bool DoInitialize(TExprContext& ctx);
 

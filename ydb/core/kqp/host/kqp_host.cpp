@@ -1791,6 +1791,13 @@ private:
         TypesCtx->AddDataSink(NYql::S3ProviderName, std::move(dataSink));
     }
 
+    ~TKqpHost() {
+        if (TypesCtx) {
+            TypesCtx->RemoveDataSource(NYql::YtProviderName);
+            TypesCtx->RemoveDataSink(NYql::YtProviderName);
+        }
+    }
+
     void InitGenericProvider() {
         if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::GenericProviderName))) {
             return;

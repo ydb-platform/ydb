@@ -567,6 +567,7 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
     auto counters = runtime.GetAppData().Counters;
     auto compactionCounters = counters->GetSubgroup("module_id", "grouped_memory_limiter")->GetSubgroup("limiter_name", "Comp_0")->GetSubgroup("stage", "general");
     auto scanCounters = counters->GetSubgroup("module_id", "grouped_memory_limiter")->GetSubgroup("limiter_name", "Scan_0")->GetSubgroup("stage", "general");
+    auto dedupCounters = counters->GetSubgroup("module_id", "grouped_memory_limiter")->GetSubgroup("limiter_name", "Dedu_0")->GetSubgroup("stage", "general");
 
     InitRoot(server, sender);
 
@@ -574,22 +575,39 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
         using OlapLimits = NKikimr::NOlap::TGlobalLimits;
         UNIT_ASSERT_DOUBLES_EQUAL(
             static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient *
-                (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
+                (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100 *
+                NOlap::NGroupedMemoryManager::TScanMemoryLimiterPolicy::HardLimitMultiplier),
             static_cast<double>(scanCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
+            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100 *
+                NOlap::NGroupedMemoryManager::TScanMemoryLimiterPolicy::HardLimitMultiplier),
             static_cast<double>(scanCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100 * ColumnTablesCompGroupedMemoryHardLimitMultiplier),
+            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient *
+                (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100 *
+                NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterPolicy::HardLimitMultiplier),
+            static_cast<double>(dedupCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
+            1_KB);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100 *
+                NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterPolicy::HardLimitMultiplier),
+            static_cast<double>(dedupCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
+            1_KB);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100 *
+                NOlap::NGroupedMemoryManager::TCompMemoryLimiterPolicy::HardLimitMultiplier),
             static_cast<double>(compactionCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100.0 * ColumnTablesCompGroupedMemoryHardLimitMultiplier),
+            static_cast<double>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100.0 *
+                NOlap::NGroupedMemoryManager::TCompMemoryLimiterPolicy::HardLimitMultiplier),
             static_cast<double>(compactionCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
             1_KB);
     };

@@ -121,10 +121,9 @@ static_assert(ColumnTablesCompactionIndexationQueueFraction
     + ColumnTablesTtlQueueFraction
     + ColumnTablesGeneralQueueFraction
     + ColumnTablesNormalizerQueueFraction == 1);
-static constexpr float ColumnTablesCompGroupedMemoryHardLimitMultiplier = 4.0f;
 
 inline ui64 GetColumnTablesCompGroupedMemoryLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {
-    return GetCompactionLimitBytes(config, hardLimitBytes) * static_cast<double>(ColumnTablesCompGroupedMemoryHardLimitMultiplier);
+    return GetCompactionLimitBytes(config, hardLimitBytes);
 }
 
 inline ui64 GetColumnTablesCompactionIndexationQueueLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const ui64 hardLimitBytes) {

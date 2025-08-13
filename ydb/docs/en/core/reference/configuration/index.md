@@ -25,6 +25,19 @@ The following top-level configuration sections are available, listed in alphabet
 - [{#T}](security_config.md) — Security configuration settings
 - [{#T}](tls.md) — TLS configuration for secure connections
 
+## Practical Guidelines
+
+While this documentation section focuses on complete reference documentation for available settings, practical recommendations on what to tune and when can be found in the following places:
+
+- As part of the initial {{ ydb-short-name }} cluster deployment:
+
+    - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
+    - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
+    - [Manual](../../devops/deployment-options/manual/initial-deployment.md)
+
+- As part of [troubleshooting](../../troubleshooting/index.md)
+- As part of [security hardening](../../security/index.md)
+
 ## Sample Cluster Configurations
 
 You can find model cluster configurations for deployment in the [repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/). Check them out before deploying a cluster.

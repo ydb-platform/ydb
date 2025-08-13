@@ -76,6 +76,7 @@ struct TTestCtx : public TTestCtxBase {
 
         std::set<ui32> nodesWithVDisks = GetNodesWithVDisks();
         NodesWithConfig.insert(nodesWithVDisks.begin(), nodesWithVDisks.end());
+        Env->Sim(TDuration::Seconds(1));
     }
 
     const TDuration WaitTime = TDuration::Seconds(1);

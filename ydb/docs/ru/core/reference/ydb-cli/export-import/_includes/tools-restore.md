@@ -8,11 +8,7 @@
 {{ ydb-cli }} [connection options] admin cluster restore -i <PATH> [options]
 ```
 
-{% note warning %}
-
-В текущей версии {{ ydb-short-name }} команда `admin cluster restore` не восстанавливает метаданные колоночных таблиц (эти данные не выгружаются в резервную копию).
-
-{% endnote %}
+{% include [limitation](./limitation-restore-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
@@ -45,11 +41,7 @@
 {{ ydb-cli }} [connection options] admin database restore -i <PATH> [options]
 ```
 
-{% note warning %}
-
-В текущей версии {{ ydb-short-name }} команда `admin database restore` не восстанавливает данные колоночных таблиц (эти данные не выгружаются в резервную копию). Для импорта данных из колоночных таблиц можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/import_and_export.md#import).
-
-{% endnote %}
+{% include [limitation](./limitation-restore-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
@@ -80,11 +72,7 @@
 {{ ydb-cli }} [connection options] tools restore -p <PATH> -i <PATH> [options]
 ```
 
-{% note warning %}
-
-В текущей версии {{ ydb-short-name }} команда `tools restore` не восстанавливает данные колоночных таблиц (эти данные не выгружаются в резервную копию). Для импорта данных из колоночных таблиц можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/import_and_export.md#import).
-
-{% endnote %}
+{% include [limitation](./limitation-restore-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 

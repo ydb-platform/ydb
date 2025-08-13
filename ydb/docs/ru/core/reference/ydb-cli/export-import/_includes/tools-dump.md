@@ -8,11 +8,7 @@
 {{ ydb-cli }} [connection options] admin cluster dump [options]
 ```
 
-{% note warning %}
-
-В текущей версии {{ ydb-short-name }} команда `admin сluster dump` не обрабатывает колоночные таблицы.
-
-{% endnote %}
+{% include [limitation](./limitation-dump-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
@@ -28,11 +24,7 @@
 {{ ydb-cli }} [connection options] admin database dump [options]
 ```
 
-{% note warning %}
-
-В текущей версии {{ ydb-short-name }} команда `admin database dump` не обрабатывает колоночные таблицы. Для экспорта данных из колоночных таблиц можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/write_data.md#export-to-s3).
-
-{% endnote %}
+{% include [limitation](./limitation-dump-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
@@ -48,11 +40,7 @@
 {{ ydb-cli }} [connection options] tools dump [options]
 ```
 
-{% note warning %}
-
-В текущей версии {{ ydb-short-name }} команда `tools dump` не обрабатывает колоночные таблицы. Для экспорта данных из колоночных таблиц можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/write_data.md#export-to-s3).
-
-{% endnote %}
+{% include [limitation](./limitation-dump-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 

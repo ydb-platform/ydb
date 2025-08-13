@@ -102,7 +102,7 @@ See the command description:
 | Name                         | Description                                                    | Default value |
 |------------------------------|----------------------------------------------------------------|---------------|
 | `--warehouses` or `-w`       | A number of TPC-C warehouses.                                  | 10            |
-| `--warmup`                   | Warmup time. Example: 10s, 5m, 1h.                             | 30m           |
+| `--warmup`                   | Warmup time. Example: 10s, 5m, 1h.                             | auto          |
 | `--time` or `-t`             | Execution time. Example: 10s, 5m, 1h.                          | 2h            |
 | `--max-sessions` or `-m`     | A soft limit on the number of DB sessions.                     | 100           |
 | `--threads`                  | A number of threads executing queries                          | auto          |

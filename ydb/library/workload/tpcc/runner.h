@@ -9,7 +9,6 @@
 namespace NYdb::NTPCC {
 
 constexpr int DEFAULT_WAREHOUSE_COUNT = 10;
-constexpr TDuration DEFAULT_WARMUP_DURATION = TDuration::Minutes(30);
 constexpr TDuration DEFAULT_RUN_DURATION = TDuration::Minutes(120);
 
 constexpr int DEFAULT_MAX_SESSIONS = 100; // TODO
@@ -48,7 +47,7 @@ struct TRunConfig {
     void SetDisplay();
 
     int WarehouseCount = DEFAULT_WAREHOUSE_COUNT;
-    TDuration WarmupDuration = DEFAULT_WARMUP_DURATION;
+    TDuration WarmupDuration = {};
     TDuration RunDuration = DEFAULT_RUN_DURATION;
 
     int MaxInflight = DEFAULT_MAX_SESSIONS;

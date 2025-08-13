@@ -1373,6 +1373,7 @@ struct Schema : NIceDb::Schema {
         struct IndexType : Column<8, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; };
 
         struct State : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct SubState : Column<46, NScheme::NTypeIds::Uint32> {};
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
 
         struct InitiateTxId : Column<11, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1475,7 +1476,8 @@ struct Schema : NIceDb::Schema {
             EndTime,
             UserSID,
             CpuTimeUsBilled,
-            CpuTimeUsProcessed
+            CpuTimeUsProcessed,
+            SubState
         >;
     };
 
@@ -2167,7 +2169,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<ShardIdx>;
         using TColumns = TableColumns<ShardIdx>;
     };
-  
+
     struct IncrementalBackups : Table<125> {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
         struct State : Column<2, NScheme::NTypeIds::Uint8> {};

@@ -89,20 +89,19 @@ struct TPageTraits {
     }
 
     static ES3FIFOPageLocation GetLocation(const TPage* page) {
-        return page->S3FIFOLocation;
+        return page->Location;
     }
 
     static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
-        page->S3FIFOLocation = location;
+        page->Location = location;
     }
 
     static ui32 GetFrequency(const TPage* page) {
-        return page->S3FIFOFrequency;
+        return page->GetFrequency();
     }
 
     static void SetFrequency(TPage* page, ui32 frequency) {
-        Y_ENSURE(frequency < (1 << 4));
-        page->S3FIFOFrequency = frequency;
+        page->SetFrequency(frequency);
     }
 
     static ui32 GetTier(TPage* page) {

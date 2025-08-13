@@ -98,6 +98,7 @@ namespace NTabletFlatExecutor {
                 return nullptr;
             }
 
+            // sharedBody.IncrementFrequency();
             auto emplaced = pinnedCollection.emplace(pageId, TPrivatePageCache::TPinnedPage(std::move(sharedBody)));
             Y_ENSURE(emplaced.second);
             auto& pinnedBody = emplaced.first->second.PinnedBody;

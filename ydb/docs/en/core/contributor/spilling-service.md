@@ -59,18 +59,18 @@ When data recovery is needed, the component sends a read request with the blob i
 sequenceDiagram
     participant CN as Compute node
     participant SS as Spilling Service
-    participant FS as External storage
+    participant ES as External storage
 
     Note over CN: Memory full
     CN->>SS: Send data (asynchronously)
     Note over CN: Continues working with other data
-    SS->>FS: Save data
+    SS->>ES: Save data
     SS-->>CN: Write confirmation (asynchronously)
     
     Note over CN: Need saved data
     CN->>SS: Request data (asynchronously)
     Note over CN: Continues working with other data
-    SS->>FS: Read data
+    SS->>ES: Read data
     SS-->>CN: Return data (asynchronously)
 ```
 

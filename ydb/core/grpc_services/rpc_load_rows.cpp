@@ -35,10 +35,7 @@ bool CheckNoDecimalTypes(const std::shared_ptr<arrow::RecordBatch>& batch, TStri
     for (i32 i = 0; i < batch->num_columns(); ++i) {
         auto column = batch->column(i);
         if (column->type()->id() == arrow::Type::DECIMAL128 || column->type()->id() == arrow::Type::DECIMAL256) {
-            errorMessage = TString::Join("Decimal types are not supported. Column '", 
-                                       batch->schema()->field(i)->name(), 
-                                       "' has type ", column->type()->ToString(), 
-                                       ". Use fixed_size_binary(16) for decimal128 or fixed_size_binary(32) for decimal256 instead.");
+            errorMessage = "Decimal types are not supported";
             return false;
         }
     }

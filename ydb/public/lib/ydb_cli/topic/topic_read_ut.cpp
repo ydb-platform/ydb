@@ -15,6 +15,7 @@ namespace NYdb::NConsoleClient {
         UNIT_TEST(TestRun_ReadMoreMessagesThanLimit_Without_Wait_NoDelimiter);
         UNIT_TEST(TestRun_ReadMessages_Output_Base64);
         UNIT_TEST(TestRun_Read_Less_Messages_Than_Sent);
+        UNIT_TEST(TestRun_ReadMessages_With_Offset);
         UNIT_TEST_SUITE_END();
 
         void TestRun_ReadOneMessage() {
@@ -24,7 +25,7 @@ namespace NYdb::NConsoleClient {
                     {
                         "some simple message",
                     },
-                    "", TTopicReaderSettings(Nothing(), false, false, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
+                    "", TTopicReaderSettings(Nothing(), false, false, {}, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
         void TestRun_ReadTwoMessages_With_Limit_1() {
@@ -35,7 +36,7 @@ namespace NYdb::NConsoleClient {
                     {
                         "message1",
                     },
-                    "", TTopicReaderSettings(1, false, false, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
+                    "", TTopicReaderSettings(1, false, false, {}, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
         void TestRun_ReadMoreMessagesThanLimit_Without_Wait_NewlineDelimited() {
@@ -51,7 +52,7 @@ namespace NYdb::NConsoleClient {
                     "message2",
                     "message3",
                 },
-                "\n", TTopicReaderSettings(limit, false, false, EMessagingFormat::NewlineDelimited, {}, ETransformBody::None, TDuration::Seconds(1)));
+                "\n", TTopicReaderSettings(limit, false, false, {}, EMessagingFormat::NewlineDelimited, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
         void TestRun_ReadMoreMessagesThanLimit_Without_Wait_NoDelimiter() {
@@ -64,7 +65,7 @@ namespace NYdb::NConsoleClient {
                 {
                     "message1message2message3message4",
                 },
-                "", TTopicReaderSettings(limit, false, false, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
+                "", TTopicReaderSettings(limit, false, false, {}, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
         void TestRun_ReadMessages_Output_Base64() {
@@ -80,7 +81,7 @@ namespace NYdb::NConsoleClient {
                     "bWVzc2FnZTI=",
                     "bWVzc2FnZTM=",
                 },
-                "\n", TTopicReaderSettings(limit, false, false, EMessagingFormat::NewlineDelimited, {}, ETransformBody::Base64, TDuration::Seconds(1)));
+                "\n", TTopicReaderSettings(limit, false, false, {}, EMessagingFormat::NewlineDelimited, {}, ETransformBody::Base64, TDuration::Seconds(1)));
         }
 
         void TestRun_Read_Less_Messages_Than_Sent() {
@@ -94,7 +95,25 @@ namespace NYdb::NConsoleClient {
                 {
                     "message1message2",
                 },
-                "", TTopicReaderSettings(limit, false, false, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
+                "", TTopicReaderSettings(limit, false, false, {}, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
+        }
+
+        void TestRun_ReadMessages_With_Offset() {
+            RunTest({
+                        "message1",
+                        "message2",
+                        "message3",
+                        "message4",
+                        "message5",
+                        "message6",
+                    },
+                    {
+                        "message4",
+                        "message5",
+                        "message6",
+
+                    },
+                    "\n", TTopicReaderSettings({}, false, false, {{0, 3}}, EMessagingFormat::NewlineDelimited, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
     private:
@@ -136,10 +155,11 @@ namespace NYdb::NConsoleClient {
             TVector<TString> split;
             Split(output.Str(), delimiter, split);
 
-            UNIT_ASSERT_VALUES_EQUAL(split.size(), expected.size());
-            for (size_t i = 0; i < split.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(split[i], expected[i]);
+
+            for (size_t i = 0; i < Min(split.size(), expected.size()); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL_C(split[i], expected[i], LabeledOutput(i));
             }
+            UNIT_ASSERT_VALUES_EQUAL(split.size(), expected.size());
         }
 
         NTopic::TReadSessionSettings PrepareReadSessionSettings(const std::string& topicPath) {

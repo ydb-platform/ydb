@@ -16,10 +16,13 @@ namespace NYdb::NConsoleClient {
 
     class TTopicReaderSettings {
     public:
+        using TPartitionReadOffsetMap = THashMap<ui32, ui64>;
+
         TTopicReaderSettings(
             TMaybe<i64> limit,
             bool commit,
             bool wait,
+            TPartitionReadOffsetMap partitionReadOffset,
             EMessagingFormat format,
             TVector<ETopicMetadataField> metadataFields,
             ETransformBody transform,
@@ -33,6 +36,7 @@ namespace NYdb::NConsoleClient {
         GETTER(bool, Commit);
         GETTER(TMaybe<i64>, Limit);
         GETTER(bool, Wait);
+        GETTER(TPartitionReadOffsetMap, PartitionReadOffset);
         GETTER(EMessagingFormat, MessagingFormat);
         GETTER(ETransformBody, Transform);
         GETTER(TDuration, IdleTimeout);
@@ -48,6 +52,7 @@ namespace NYdb::NConsoleClient {
         EMessagingFormat MessagingFormat_ = EMessagingFormat::SingleMessage;
         ETransformBody Transform_ = ETransformBody::None;
         TMaybe<i64> Limit_ = Nothing();
+        TPartitionReadOffsetMap PartitionReadOffset_;
         bool Commit_ = false;
         bool Wait_ = false;
     };
@@ -104,5 +109,6 @@ namespace NYdb::NConsoleClient {
         friend class TTopicReaderTests;
 
         THashMap<ui64, std::pair<NTopic::TPartitionSession::TPtr, EReadingStatus>> ActivePartitionSessions_;
+        TTopicReaderSettings::TPartitionReadOffsetMap PartitionReadOffset_;
     };
 } // namespace NYdb::NConsoleClient

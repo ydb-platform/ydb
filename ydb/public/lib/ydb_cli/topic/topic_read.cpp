@@ -26,6 +26,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<i64> limit,
         bool commit,
         bool wait,
+        TPartitionReadOffsetMap partitionReadOffset,
         EMessagingFormat format,
         TVector<ETopicMetadataField> metadataFields,
         ETransformBody transform,
@@ -35,6 +36,7 @@ namespace NYdb::NConsoleClient {
         , MessagingFormat_(format)
         , Transform_(transform)
         , Limit_(limit)
+        , PartitionReadOffset_(std::move(partitionReadOffset))
         , Commit_(commit)
         , Wait_(wait) {
     }
@@ -43,7 +45,8 @@ namespace NYdb::NConsoleClient {
         std::shared_ptr<NTopic::IReadSession> readSession,
         TTopicReaderSettings params)
         : ReadSession_(readSession)
-        , ReaderParams_(params) {
+        , ReaderParams_(params)
+        , PartitionReadOffset_(ReaderParams_.PartitionReadOffset()) {
     }
 
     void TTopicReader::Init() {
@@ -211,7 +214,11 @@ namespace NYdb::NConsoleClient {
     }
 
     int TTopicReader::HandleStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent* event) {
-        event->Confirm();
+        std::optional<uint64_t> readOffset;
+        if (const ui64* offset = PartitionReadOffset_.FindPtr(event->GetPartitionSession()->GetPartitionId())) {
+            readOffset = *offset;
+        }
+        event->Confirm(readOffset);
 
         EReadingStatus readingStatus = EReadingStatus::PartitionWithData;
         if (event->GetCommittedOffset() == event->GetEndOffset()) {

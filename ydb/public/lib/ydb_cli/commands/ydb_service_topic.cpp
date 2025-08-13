@@ -810,6 +810,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\"")
             .Optional()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
+        config.Opts->AddLongOption("offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer. Exactly one partition id should be specified ('--partition-ids P').")
+            .Optional()
+            .StoreResult(&Offset_);
 
         AddAllowedMetadataFields(config);
         AddTransform(config);
@@ -897,6 +900,28 @@ namespace NYdb::NConsoleClient {
         if (!Consumer_ && !PartitionIds_) {
             throw TMisuseException() << "Please specify either --consumer or --partition-ids to read without consumer";
         }
+
+        if (Offset_) {
+            Y_ENSURE_EX(PartitionIds_.size() == 1,
+                        TMisuseException() << "Please specify exactly one partition id ('--partition-ids P') from which reading will be performed, starting from the specified offset.");
+        }
+    }
+
+    TTopicReaderSettings TCommandTopicRead::PrepareReaderSettings() const {
+        TTopicReaderSettings::TPartitionReadOffsetMap readOffsets;
+        if (Offset_) {
+            Y_ENSURE(PartitionIds_.size() == 1, "Precondition failed: read with offset requires exactly one partition id; " << LabeledOutput(PartitionIds_.size()));
+            readOffsets[PartitionIds_.at(0)] = *Offset_;
+        }
+        return TTopicReaderSettings(
+            Limit_,
+            Commit_,
+            Wait_,
+            std::move(readOffsets),
+            MessagingFormat,
+            MetadataFields_,
+            GetTransform(),
+            IdleTimeout_);
     }
 
     int TCommandTopicRead::Run(TConfig& config) {
@@ -909,14 +934,7 @@ namespace NYdb::NConsoleClient {
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
 
         {
-            TTopicReader reader = TTopicReader(std::move(readSession), TTopicReaderSettings(
-                                                                           Limit_,
-                                                                           Commit_,
-                                                                           Wait_,
-                                                                           MessagingFormat,
-                                                                           MetadataFields_,
-                                                                           GetTransform(),
-                                                                           IdleTimeout_));
+            TTopicReader reader = TTopicReader(std::move(readSession), PrepareReaderSettings());
 
             reader.Init();
 

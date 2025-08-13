@@ -150,7 +150,7 @@ class TestSimpleReaderMixedCluster(MixedClusterFixture):
         assert consistency["is_consistent"], f"Data consistency check failed: {consistency}"
         query_results = workload.test_simple_reader_queries()
         failed_queries = [(q, r) for q, r, success in query_results if not success]
-        assert len(failed_queries) == 0
+        assert len(failed_queries) == 0, f"Failed queries: {failed_queries}"
 
 
 class TestSimpleReaderRestartToAnotherVersion(RestartToAnotherVersionFixture):
@@ -215,4 +215,4 @@ class TestSimpleReaderTabletTransfer(RollingUpgradeAndDowngradeFixture):
         assert final_consistency["is_consistent"], f"Final data consistency check failed: {final_consistency}"
         query_results = workload.test_simple_reader_queries()
         failed_queries = [(q, r) for q, r, success in query_results if not success]
-        assert len(failed_queries) == 0
+        assert len(failed_queries) == 0, f"Failed queries: {failed_queries}"

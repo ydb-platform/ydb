@@ -266,6 +266,7 @@ public:
                     .DownsamplingFill<TCoAtom>().Build(downsamplingFill ? *downsamplingFill : "")
                     .DownsamplingGridSec<TCoUint32>().Literal().Build(ToString(downsamplingGridSec ? *downsamplingGridSec : 0)).Build()
                     .TotalMetricsCount(soReadObject.TotalMetricsCount())
+                    .LabelNameAliases(soReadObject.LabelNameAliases())
                     .Build()
                 .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
                 .RowType(soReadObject.RowType())
@@ -329,10 +330,15 @@ public:
 
         for (const auto& c : settings.LabelNames()) {
             const auto& columnAsString = c.StringValue();
+            source.AddLabelNames(columnAsString);
+        }
+
+        for (const auto& c : settings.LabelNameAliases()) {
+            const auto& columnAsString = c.StringValue();
             if (!uniqueColumns.insert(columnAsString).second) {
                 throw yexception() << "Column " << columnAsString << " already registered";
             }
-            source.AddLabelNames(columnAsString);
+            source.AddLabelNameAliases(columnAsString);
         }
 
         for (const auto& c : settings.RequiredLabelNames()) {

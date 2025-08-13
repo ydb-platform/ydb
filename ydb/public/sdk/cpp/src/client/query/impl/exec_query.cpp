@@ -10,7 +10,6 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
@@ -151,7 +150,8 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     std::vector<Ydb::ResultSet> ResultSets_;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Tx_;
-    std::unordered_map<size_t, TCollectedArrowResult> ResultsArrow_;
+    std::vector<std::string> ArrowSchemas_;
+    std::vector<std::vector<std::string>> BytesData_;
 
     void Next() {
         TPtr self(this);
@@ -171,20 +171,18 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     std::vector<NYdb::NIssue::TIssue> issues;
                     std::vector<Ydb::ResultSet> resultProtos;
                     std::optional<TTransaction> tx;
-                    std::unordered_map<size_t, TCollectedArrowResult> resultsArrow;
+                    std::vector<std::string> arrowSchemas;
+                    std::vector<std::vector<std::string>> bytesData;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
                     std::swap(self->Tx_, tx);
-                    std::swap(self->ResultsArrow_, resultsArrow);
+                    std::swap(self->ArrowSchemas_, arrowSchemas);
+                    std::swap(self->BytesData_, bytesData);
 
                     std::vector<TResultSet> resultSets;
-                    for (auto& proto : resultProtos) {
-                        resultSets.emplace_back(std::move(proto));
-                    }
-
-                    for (auto& [index, arrowResult] : resultsArrow) {
-                        TArrowAccessor::SetCollectedArrowResult(resultSets[index], std::move(arrowResult));
+                    for (size_t i = 0; i < resultProtos.size(); ++i) {
+                        resultSets.emplace_back(std::move(resultProtos[i]), std::move(arrowSchemas[i]), std::move(bytesData[i]));
                     }
 
                     self->Promise_.SetValue(TExecuteQueryResult(
@@ -209,6 +207,8 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 // TODO: Use result sets metadata
                 if (self->ResultSets_.size() <= part.GetResultSetIndex()) {
                     self->ResultSets_.resize(part.GetResultSetIndex() + 1);
+                    self->ArrowSchemas_.resize(part.GetResultSetIndex() + 1);
+                    self->BytesData_.resize(part.GetResultSetIndex() + 1);
                 }
 
                 auto& resultSet = self->ResultSets_[part.GetResultSetIndex()];
@@ -217,7 +217,8 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 }
 
                 resultSet.set_format(inRsProto.format());
-                switch (inRsProto.format()) {
+
+                switch (resultSet.format()) {
                     case Ydb::ResultSet::FORMAT_VALUE: {
                         resultSet.mutable_rows()->Reserve(resultSet.mutable_rows()->size() + inRsProto.rows_size());
                         for (const auto& row : inRsProto.rows()) {
@@ -226,12 +227,21 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                         break;
                     }
                     case Ydb::ResultSet::FORMAT_ARROW: {
-                        auto& arrowResult = self->ResultsArrow_[part.GetResultSetIndex()];
-                        if (arrowResult.Schema.empty()) {
-                            arrowResult.Schema = inRsProto.arrow_format_meta().schema();
+                        if (self->ArrowSchemas_.size() <= part.GetResultSetIndex()) {
+                            self->ArrowSchemas_.resize(part.GetResultSetIndex() + 1);
+                            self->BytesData_.resize(part.GetResultSetIndex() + 1);
                         }
-                        if (!inRsProto.data().empty()) {
-                            arrowResult.Data.push_back(inRsProto.data());
+
+                        auto& arrowSchema = self->ArrowSchemas_[part.GetResultSetIndex()];
+                        auto& bytesData = self->BytesData_[part.GetResultSetIndex()];
+
+                        auto& mutableProto = inRs.MutableProto();
+                        if (arrowSchema.empty()) {
+                            arrowSchema = std::move(*mutableProto.mutable_arrow_format_meta()->mutable_schema());
+                        }
+
+                        if (auto* data = mutableProto.mutable_data(); data && !data->empty()) {
+                            bytesData.emplace_back(std::move(*data));
                         }
                         break;
                     }

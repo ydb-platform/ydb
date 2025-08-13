@@ -2,24 +2,16 @@
 
 namespace NYdb::inline Dev {
 
-    void TArrowAccessor::SetCollectedArrowResult(TResultSet& resultSet, TCollectedArrowResult&& resultArrow) {
-        resultSet.SetCollectedArrowResult(std::move(resultArrow));
-    }
-
 TResultSet::EFormat TArrowAccessor::Format(const TResultSet& resultSet) {
     return resultSet.Format();
-}
-
-const TCollectedArrowResult& TArrowAccessor::GetCollectedArrowResult(const TResultSet& resultSet) {
-    return resultSet.GetCollectedArrowResult();
 }
 
 const std::string& TArrowAccessor::GetArrowSchema(const TResultSet& resultSet) {
     return resultSet.GetArrowSchema();
 }
 
-const std::string& TArrowAccessor::GetArrowData(const TResultSet& resultSet) {
-    return resultSet.GetArrowData();
+const std::vector<std::string>& TArrowAccessor::GetArrowBatches(const TResultSet& resultSet) {
+    return resultSet.GetBytesData();
 }
 
 } // namespace NYdb

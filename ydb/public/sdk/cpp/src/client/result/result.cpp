@@ -40,26 +40,55 @@ public:
     TImpl(const Ydb::ResultSet& proto)
         : ProtoResultSet_(proto)
     {
-        Init();
+        Init(true);
     }
 
     TImpl(Ydb::ResultSet&& proto)
         : ProtoResultSet_(std::move(proto))
     {
-        Init();
+        Init(true);
     }
 
-    void Init() {
+    TImpl(const Ydb::ResultSet& proto, const std::string& arrowSchema, const std::vector<std::string>& bytesData)
+        : ProtoResultSet_(proto)
+        , ArrowSchema_(arrowSchema)
+        , BytesData_(bytesData)
+    {
+        Init(false);
+    }
+
+    TImpl(Ydb::ResultSet&& proto, std::string&& arrowSchema, std::vector<std::string>&& bytesData)
+        : ProtoResultSet_(std::move(proto))
+        , ArrowSchema_(std::move(arrowSchema))
+        , BytesData_(std::move(bytesData))
+    {
+        Init(false);
+    }
+
+    void Init(bool extractArrowResult) {
         ColumnsMeta_.reserve(ProtoResultSet_.columns_size());
         for (auto& meta : ProtoResultSet_.columns()) {
             ColumnsMeta_.push_back(TColumn(meta.name(), TType(meta.type())));
         }
+
+        auto format = static_cast<EFormat>(ProtoResultSet_.format());
+        if (format == EFormat::Arrow && extractArrowResult) {
+            if (ProtoResultSet_.has_arrow_format_meta() && ArrowSchema_.empty()) {
+                ArrowSchema_ = std::move(*ProtoResultSet_.mutable_arrow_format_meta()->mutable_schema());
+            }
+
+            if (auto* data = ProtoResultSet_.mutable_data(); data && !data->empty()) {
+                BytesData_.push_back(std::move(*data));
+            }
+        }
     }
 
 public:
-    const Ydb::ResultSet ProtoResultSet_;
+    Ydb::ResultSet ProtoResultSet_;
     std::vector<TColumn> ColumnsMeta_;
-    TCollectedArrowResult ResultArrow_;
+
+    std::string ArrowSchema_;
+    std::vector<std::string> BytesData_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,6 +98,12 @@ TResultSet::TResultSet(const Ydb::ResultSet& proto)
 
 TResultSet::TResultSet(Ydb::ResultSet&& proto)
     : Impl_(new TResultSet::TImpl(std::move(proto))) {}
+
+TResultSet::TResultSet(const Ydb::ResultSet& proto, const std::string& arrowSchema, const std::vector<std::string>& bytesData)
+    : Impl_(new TResultSet::TImpl(proto, arrowSchema, bytesData)) {}
+
+TResultSet::TResultSet(Ydb::ResultSet&& proto, std::string&& arrowSchema, std::vector<std::string>&& bytesData)
+    : Impl_(new TResultSet::TImpl(std::move(proto), std::move(arrowSchema), std::move(bytesData))) {}
 
 size_t TResultSet::ColumnsCount() const {
     return Impl_->ColumnsMeta_.size();
@@ -82,10 +117,6 @@ bool TResultSet::Truncated() const {
     return Impl_->ProtoResultSet_.truncated();
 }
 
-TResultSet::EFormat TResultSet::Format() const {
-    return static_cast<EFormat>(Impl_->ProtoResultSet_.format());
-}
-
 const std::vector<TColumn>& TResultSet::GetColumnsMeta() const {
     return Impl_->ColumnsMeta_;
 }
@@ -94,20 +125,20 @@ const Ydb::ResultSet& TResultSet::GetProto() const {
     return Impl_->ProtoResultSet_;
 }
 
+Ydb::ResultSet& TResultSet::MutableProto() {
+    return Impl_->ProtoResultSet_;
+}
+
+TResultSet::EFormat TResultSet::Format() const {
+    return static_cast<EFormat>(Impl_->ProtoResultSet_.format());
+}
+
 const std::string& TResultSet::GetArrowSchema() const {
-    return Impl_->ProtoResultSet_.arrow_format_meta().schema();
+    return Impl_->ArrowSchema_;
 }
 
-const std::string& TResultSet::GetArrowData() const {
-    return Impl_->ProtoResultSet_.data();
-}
-
-void TResultSet::SetCollectedArrowResult(TCollectedArrowResult&& resultArrow) {
-    Impl_->ResultArrow_ = std::move(resultArrow);
-}
-
-const TCollectedArrowResult& TResultSet::GetCollectedArrowResult() const {
-    return Impl_->ResultArrow_;
+const std::vector<std::string>& TResultSet::GetBytesData() const {
+    return Impl_->BytesData_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -213,23 +244,6 @@ private:
 
     size_t RowIndex_ = 0;
 };
-
-IOutputStream& operator<<(IOutputStream& out, const TResultSet::EFormat& format) {
-    out << "TResultSet::EFormat::";
-    switch (format) {
-        case TResultSet::EFormat::Unspecified:
-            out << "Unspecified";
-            break;
-        case TResultSet::EFormat::Value:
-            out << "Value";
-            break;
-        case TResultSet::EFormat::Arrow:
-            out << "Arrow";
-            break;
-    }
-
-    return out;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

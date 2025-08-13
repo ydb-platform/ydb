@@ -12,8 +12,6 @@
 
 #include <library/cpp/threading/future/future.h>
 
-#include <ydb/public/api/protos/ydb_formats.pb.h>
-
 namespace NYdb::inline Dev::NQuery {
 
 enum class ESyntax {

@@ -12,9 +12,12 @@ namespace Ydb {
 
 namespace NYdb::inline Dev {
 
+namespace NQuery {
+    struct TExecuteQueryBuffer;
+}
+
 class TProtoAccessor;
 class TArrowAccessor;
-struct TCollectedArrowResult;
 
 struct TColumn {
     std::string Name;
@@ -36,6 +39,7 @@ class TResultSet {
     friend class TResultSetParser;
     friend class NYdb::TProtoAccessor;
     friend class NYdb::TArrowAccessor;
+    friend struct NQuery::TExecuteQueryBuffer;
 
 public:
     enum class EFormat {
@@ -47,6 +51,9 @@ public:
 public:
     TResultSet(const Ydb::ResultSet& proto);
     TResultSet(Ydb::ResultSet&& proto);
+
+    TResultSet(const Ydb::ResultSet& proto, const std::string& arrowSchema, const std::vector<std::string>& bytesData);
+    TResultSet(Ydb::ResultSet&& proto, std::string&& arrowSchema, std::vector<std::string>&& bytesData);
 
     //! Returns number of columns
     size_t ColumnsCount() const;
@@ -63,20 +70,18 @@ public:
 private:
     const Ydb::ResultSet& GetProto() const;
 
+    Ydb::ResultSet& MutableProto();
+
     EFormat Format() const;
 
     const std::string& GetArrowSchema() const;
-    const std::string& GetArrowData() const;
 
-    void SetCollectedArrowResult(TCollectedArrowResult&& resultArrow);
-    const TCollectedArrowResult& GetCollectedArrowResult() const;
+    const std::vector<std::string>& GetBytesData() const;
 
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 };
-
-IOutputStream& operator<<(IOutputStream& out, const TResultSet::EFormat& format);
 
 //! Note: TResultSetParser - mutable object, iteration thougth it changes internal state
 class TResultSetParser : public TMoveOnly {

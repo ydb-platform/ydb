@@ -121,13 +121,14 @@ void AssertArrowValueResultsSize(const std::vector<TResultSet>& arrowResultSets,
 
         size_t arrowRowsCount = 0;
 
-        const auto& [schema, recordBatches] = TArrowAccessor::GetCollectedArrowResult(arrowResultSet);
+        const auto& schema = TArrowAccessor::GetArrowSchema(arrowResultSet);
+        const auto& batches = TArrowAccessor::GetArrowBatches(arrowResultSet);
         UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty");
 
         std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
 
-        for (const auto& recordBatch : recordBatches) {
-            auto batch = NArrow::DeserializeBatch(TString(recordBatch), arrowSchema);
+        for (const auto& batch : batches) {
+            auto batch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
             UNIT_ASSERT_C(batch, "Batch must be deserialized");
             UNIT_ASSERT_C(batch->ValidateFull().ok(), "Batch validation failed");
 
@@ -155,12 +156,13 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ExecuteAndCombineBatches(TQuery
     std::vector<std::shared_ptr<arrow::RecordBatch>> resultBatches;
 
     for (const auto& resultSet : arrowResponse.GetResultSets()) {
-        const auto& [schema, batches] = TArrowAccessor::GetCollectedArrowResult(resultSet);
+        const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+        const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
         UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty");
         UNIT_ASSERT_GE_C(batches.size(), minBatchesCount, "Batches count must be greater than or equal to " + ToString(minBatchesCount));
 
-        std::vector<std::shared_ptr<arrow::RecordBatch>> recordBatches;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
 
         for (const auto& batch : batches) {
@@ -168,10 +170,10 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ExecuteAndCombineBatches(TQuery
             UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
             UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
 
-            recordBatches.push_back(std::move(arrowBatch));
+            batches.push_back(std::move(arrowBatch));
         }
 
-        auto resultBatch = NArrow::CombineBatches(recordBatches);
+        auto resultBatch = NArrow::CombineBatches(batches);
         UNIT_ASSERT_C(resultBatch->ValidateFull().ok(), "Batch combine validation failed");
 
         resultBatches.push_back(std::move(resultBatch));
@@ -204,10 +206,11 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, std::optional<TArr
         )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        auto [schema, recordBatches] = TArrowAccessor::GetCollectedArrowResult(result.GetResultSet(0));
+        const auto& schema = TArrowAccessor::GetArrowSchema(result.GetResultSet(0));
+        const auto& batches = TArrowAccessor::GetArrowBatches(result.GetResultSet(0));
 
         schemaCompressedBatch = NArrow::DeserializeSchema(TString(schema));
-        compressedBatch = std::move(recordBatches[0]);
+        compressedBatch = std::move(batches[0]);
     }
     {
         auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
@@ -217,10 +220,11 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, std::optional<TArr
         )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        auto [schema, recordBatches] = TArrowAccessor::GetCollectedArrowResult(result.GetResultSet(0));
+        const auto& schema = TArrowAccessor::GetArrowSchema(result.GetResultSet(0));
+        const auto& batches = TArrowAccessor::GetArrowBatches(result.GetResultSet(0));
 
         schemaDefaultBatch = NArrow::DeserializeSchema(TString(schema));
-        defaultBatch = std::move(recordBatches[0]);
+        defaultBatch = std::move(batches[0]);
     }
 
     UNIT_ASSERT_VALUES_EQUAL(schemaCompressedBatch->ToString(), schemaDefaultBatch->ToString());
@@ -496,7 +500,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         auto resultSet = result.GetResultSet(0);
         UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
 
-        const auto& [schema, batches] = TArrowAccessor::GetCollectedArrowResult(resultSet);
+        const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+        const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
         std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
         std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
@@ -533,7 +538,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         auto resultSet = result.GetResultSet(0);
         UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
 
-        const auto& [schema, batches] = TArrowAccessor::GetCollectedArrowResult(resultSet);
+        const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+        const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
         std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
         std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
@@ -1009,7 +1015,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             auto resultSet = result.GetResultSet(0);
             UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
 
-            const auto& [schema, batches] = TArrowAccessor::GetCollectedArrowResult(resultSet);
+            const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+            const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
             std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
             std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
@@ -1035,7 +1042,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             auto resultSet = result.GetResultSet(1);
             UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
 
-            const auto& [schema, batches] = TArrowAccessor::GetCollectedArrowResult(resultSet);
+            const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+            const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
             std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
             std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
@@ -1088,9 +1096,9 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
 
                 const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
-                const auto& batch = TArrowAccessor::GetArrowData(resultSet);
+                const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
-                UNIT_ASSERT_C(!batch.empty(), "Batch must not be empty");
+                UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
                 // With Arrow format, the result set contains a YQL schema and an Arrow record batch schema
                 UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty");
@@ -1105,7 +1113,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                     arrowSchema = curSchema;
                 }
 
-                auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
+                auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
                 UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
@@ -1148,9 +1156,9 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
 
                 const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
-                const auto& batch = TArrowAccessor::GetArrowData(resultSet);
+                const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
-                UNIT_ASSERT_C(!batch.empty(), "Batch must not be empty");
+                UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
                 // With Arrow format, the result set contains a YQL schema and an Arrow record batch schema
                 UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty");
@@ -1165,7 +1173,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                     arrowSchema = curSchema;
                 }
 
-                auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
+                auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
                 UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
@@ -1208,9 +1216,9 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
 
                 const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
-                const auto& batch = TArrowAccessor::GetArrowData(resultSet);
+                const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
-                UNIT_ASSERT_C(!batch.empty(), "Batch must not be empty");
+                UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
                 if (count == 0) {
                     // With Arrow format, the result set contains a YQL schema and an Arrow record batch schema
@@ -1225,7 +1233,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                     UNIT_ASSERT_C(schema.empty(), "Schema must be empty for the rest result sets");
                 }
 
-                auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
+                auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
                 UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
@@ -1269,9 +1277,9 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
 
                 const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
-                const auto& batch = TArrowAccessor::GetArrowData(resultSet);
+                const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
-                UNIT_ASSERT_C(!batch.empty(), "Batch must not be empty");
+                UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
                 auto idx = part.GetResultSetIndex();
 
@@ -1288,7 +1296,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                     UNIT_ASSERT_C(schema.empty(), "Schema must be empty for the rest result sets of the statement");
                 }
 
-                auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchemas[idx]);
+                auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchemas[idx]);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
                 UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
@@ -1348,9 +1356,9 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
 
                 const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
-                const auto& batch = TArrowAccessor::GetArrowData(resultSet);
+                const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
-                UNIT_ASSERT_C(!batch.empty(), "Batch must not be empty");
+                UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
                 auto idx = part.GetResultSetIndex();
 
@@ -1367,7 +1375,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                     UNIT_ASSERT_C(schema.empty(), "Schema must be empty for the rest result sets of the statement");
                 }
 
-                auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchemas[idx]);
+                auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchemas[idx]);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
                 UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");

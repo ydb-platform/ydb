@@ -1,6 +1,6 @@
 # Вставка данных с помощью INSERT
 
-Добавьте данные в строковую таблицу с помощью конструкции [INSERT INTO](../../yql/reference/syntax/insert_into.md).
+Добавьте данные в таблицу с помощью конструкции [INSERT INTO](../../yql/reference/syntax/insert_into.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 

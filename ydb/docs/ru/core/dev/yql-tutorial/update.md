@@ -1,6 +1,6 @@
 # Обновление данных с помощью UPDATE
 
-Обновите данные в строковой таблице с помощью оператора [UPDATE](../../yql/reference/syntax/update.md).
+Обновите данные в таблице с помощью оператора [UPDATE](../../yql/reference/syntax/update.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 

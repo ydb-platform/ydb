@@ -1,6 +1,6 @@
 # Удаление данных
 
-Удалите данные из строковой таблицы с помощью оператора [DELETE](../../yql/reference/syntax/delete.md).
+Удалите данные из таблицы с помощью оператора [DELETE](../../yql/reference/syntax/delete.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 

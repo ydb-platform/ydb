@@ -1,6 +1,6 @@
 # Вставка и модификация данных с помощью UPSERT
 
-Добавьте данные в строковую таблицу с помощью конструкции [UPSERT INTO](../../yql/reference/syntax/upsert_into.md).
+Добавьте данные в таблицу с помощью конструкции [UPSERT INTO](../../yql/reference/syntax/upsert_into.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 

@@ -1,6 +1,6 @@
 # Вставка и модификация данных с помощью REPLACE
 
-Добавьте данные в строковые таблицы с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
+Добавьте новые данные в таблицы с одновременным обновлением уже существующих данных с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 

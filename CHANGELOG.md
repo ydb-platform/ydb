@@ -12,11 +12,9 @@
 * 20633:Fix for Arrow arena when allocating zero-sized region. [#20633](https://github.com/ydb-platform/ydb/pull/20633) ([Ivan](https://github.com/abyss7))
 * 20997:Fix for GROUP BY emitting multiple NULL keys when block processing is enabled. [#20997](https://github.com/ydb-platform/ydb/pull/20997) ([Pavel Zuev](https://github.com/pzuev))
 * 21356:Added gettxtype in txwrite. [#21356](https://github.com/ydb-platform/ydb/pull/21356) ([r314-git](https://github.com/r314-git))
-* 22189:Temporary fix for: https://github.com/ydb-platform/ydb/issues/21207 [#22189](https://github.com/ydb-platform/ydb/pull/22189) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
-* 22127:Fix for SEGV under tsan: https://github.com/ydb-platform/ydb/issues/21240 [#22127](https://github.com/ydb-platform/ydb/pull/22127) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 21918:Support in asynchronous replication new kind of change record — `reset` record (in addition to `update` & `erase` records). [#21918](https://github.com/ydb-platform/ydb/pull/21918) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 * 21836:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/21814) where a replication instance with an unspecified `COMMIT_INTERVAL` option caused the process to crash. [#21836](https://github.com/ydb-platform/ydb/pull/21836) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
-* 21652:Редко могли случаться verify при чтении по протоколу pqv0 во время балансировки партиции [#21652](https://github.com/ydb-platform/ydb/pull/21652) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 21652:Fixed rare errors when reading using the pqv0 protocol from a topic during partition balancing. [#21652](https://github.com/ydb-platform/ydb/pull/21652) ([Nikolay Shestakov](https://github.com/nshestakov))
 
 ### YDB UI
 

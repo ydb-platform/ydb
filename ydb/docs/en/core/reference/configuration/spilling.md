@@ -59,9 +59,9 @@ Example of a complete spilling directory path:
 - Preferably use fast storage devices (SSD/NVMe)
 - Ensure sufficient free space is available
 
-**Possible errors:**
+##### Possible errors
 
-- **Permission denied** — insufficient directory access permissions. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#permission-denied)
+- `Permission denied` — insufficient directory access permissions. See [{#T}](../../troubleshooting/spilling.md#permission-denied)
 
 #### max_total_size
 
@@ -73,7 +73,7 @@ Example of a complete spilling directory path:
 
 - Set the value based on available disk space
 
-**Possible errors:**
+##### Possible errors
 
 - `Total size limit exceeded: X/YMb` — maximum total size of spilling files exceeded. See [{#T}](../../troubleshooting/spilling.md#total-size-limit-exceeded)
 
@@ -96,9 +96,9 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 - Increase for high-load systems
 - Consider the number of CPU cores on the server
 
-**Possible errors:**
+##### Possible errors
 
-- **Can not run operation** — I/O thread pool operation queue overflow. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#can-not-run-operation)
+- `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling.md#can-not-run-operation)
 
 #### QueueSize
 
@@ -106,9 +106,9 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 **Default:** `1000`  
 **Description:** Size of the spilling operations queue. Each task sends only one data block to spilling at a time, so large values are usually not required.
 
-**Possible errors:**
+##### Possible errors
 
-- **Can not run operation** — I/O thread pool operation queue overflow. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#can-not-run-operation)
+- `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling.md#can-not-run-operation)
 
 ## Memory Management
 
@@ -118,7 +118,7 @@ Spilling activation is closely related to memory controller settings. Detailed `
 
 The key parameter for spilling is **`activities_limit_percent`**, which determines the amount of memory allocated for query processing activities. This parameter affects the available memory for user queries and, accordingly, the frequency of spilling activation.
 
-**Impact on spilling:**
+### Impact on spilling
 
 - When increasing `activities_limit_percent`, less memory remains for query execution → spilling activates more frequently
 - When decreasing `activities_limit_percent`, more memory is available for queries → spilling activates less frequently
@@ -189,9 +189,9 @@ The following parameters control the enabling and disabling of various spilling 
 **Default:** `true`  
 **Description:** Enables or disables the spilling service. When disabled (`false`), [spilling](../../concepts/spilling.md) does not function, which may lead to errors when processing large data volumes.
 
-**Possible errors:**
+##### Possible errors
 
-- **Spilling Service not started** / **Service not started** — attempt to use spilling when Spilling Service is disabled. See [Spilling Troubleshooting](../../troubleshooting/spilling.md#spilling-service-not-started)
+- `Spilling Service not started` / `Service not started` — attempt to use spilling when Spilling Service is disabled. See [{#T}](../../troubleshooting/spilling.md#spilling-service-not-started)
 
 ```yaml
 table_service_config:
@@ -243,13 +243,10 @@ table_service_config:
         queue_size: 1000
 ```
 
-## Troubleshooting
-
-Detailed information about diagnosing and resolving spilling issues is available in the [Spilling Troubleshooting](../../troubleshooting/spilling.md) section.
-
 ## See Also
 
 - [Spilling Concept](../../concepts/spilling.md)
 - [Memory Controller Configuration](../../reference/configuration/index.html#memory-controller)
 - [{{ ydb-short-name }} Monitoring](../../devops/observability/monitoring.md)
 - [Performance Diagnostics](../../troubleshooting/performance/index.md)
+- [Spilling Troubleshooting](../../troubleshooting/spilling.md)

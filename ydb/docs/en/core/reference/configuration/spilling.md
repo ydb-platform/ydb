@@ -225,7 +225,11 @@ table_service_config:
   enable_query_service_spilling: true
 ```
 
-**Important:** This setting works in conjunction with the local spilling service configuration. When disabled (`false`), channel spilling does not function even with enabled `spilling_service_config`.
+{% note info %}
+
+This setting works in conjunction with the local spilling service configuration. When disabled (`false`), channel spilling does not function even with enabled `spilling_service_config`.
+
+{% endnote %}
 
 ## Complete Example
 

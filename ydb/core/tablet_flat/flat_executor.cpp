@@ -1309,9 +1309,9 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
     }
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {
-        if (auto fetch = stage->Loader.Run({.PreloadIndex = true, .PreloadData = PreloadTablesData.contains(partSwitch.TableId)})) {            
+        if (auto fetch = stage->Loader.Run({.PreloadIndex = true, .PreloadData = PreloadTablesData.contains(partSwitch.TableId)})) {
             stage->Fetching = fetch.PageCollection.Get();
-            
+
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
                 NBlockIO::EPriority::Fast, std::move(fetch.PageCollection), std::move(fetch.Pages)),
                 0, ui64(ESharedCacheRequestType::PendingInit));
@@ -4386,12 +4386,12 @@ void TExecutor::RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
             str << "</style>";
             if (Counters) {
                 TAG(TH3) {str << "Executor counters";}
-                Counters->OutputHtml(str);
+                Counters->OutputHtml(str, "col-md-3");
             }
 
             if (AppCounters) {
                 TAG(TH3) {str << "App counters";}
-                AppCounters->OutputHtml(str);
+                AppCounters->OutputHtml(str, "col-md-6");
             }
 
             if (ResourceMetrics) {

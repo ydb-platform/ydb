@@ -173,7 +173,6 @@ class TestSimpleReaderRestartToAnotherVersion(RestartToAnotherVersionFixture):
         workload.write_data_with_overlaps()
         final_consistency = workload.verify_data_consistency()
         assert final_consistency["is_consistent"]
-
         query_results = workload.test_simple_reader_queries()
         failed_queries = [(q, r) for q, r, success in query_results if not success]
         assert len(failed_queries) == 0, f"Failed queries: {failed_queries}"

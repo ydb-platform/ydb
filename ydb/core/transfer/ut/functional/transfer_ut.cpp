@@ -1597,7 +1597,5 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.CheckTransferStateError("unwrap error");
 
     }
-
-
 }
 

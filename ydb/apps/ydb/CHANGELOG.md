@@ -3,6 +3,7 @@
 * Fixed a bug where the `ydb workload topic write` command could crash with an `Unknown AckedMessageId` error due to an internal race condition.
 * Fixed decimal type comparison in `ydb workload * run` commands.
 * Changed the default logging level from `EMERGENCY` to `ERROR` for commands that support multiple verbosity levels.
+* Added the `--offset` option to the [ydb topic read](reference/ydb-cli/topic-read.md) command, which specifies a starting position for reading from the selected partition.
 * Added a new paths approach in the `ydb export s3` and `ydb import s3` commands with the new `--include` option instead of the `--item` option. 
 * Added support for encryption features in the `ydb export s3` and `ydb import s3` commands.
 

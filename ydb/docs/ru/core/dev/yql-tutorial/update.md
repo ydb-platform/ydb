@@ -1,5 +1,11 @@
 # Обновление данных с помощью UPDATE
 
+{% note warning %}
+
+{% include [column-and-row-tables-in-read-only-tx](../../concepts/_includes/limitation-column-row-in-read-only-tx.md) %}
+
+{% endnote %}
+
 Обновите данные в таблице с помощью оператора [UPDATE](../../yql/reference/syntax/update.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}

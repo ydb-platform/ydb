@@ -1,5 +1,11 @@
 # REPLACE INTO
 
+{% note warning %}
+
+{% include [column-and-row-tables-in-read-only-tx](../../../concepts/_includes/limitation-column-row-in-read-only-tx.md) %}
+
+{% endnote %}
+
 В отличие от [`INSERT INTO`](insert_into.md) и [`UPDATE`](update.md), запросы [`UPSERT INTO`](upsert_into.md) и `REPLACE INTO` не требуют предварительного чтения данных, поэтому выполняются быстрее. `REPLACE INTO` сохраняет данные в таблицу с перезаписью строк по первичному ключу.{% if feature_mapreduce %} Таблица ищется по имени в базе данных, заданной оператором [USE](use.md).{% endif %} Если заданный первичный ключ отсутствует, в таблицу будет добавлена новая строка. Если задан существующий первичный ключ, строка будет перезаписана. При этом значения столбцов, не определенных в операции `REPLACE INTO`, заменяются на значения по умолчанию.
 
 ## Примеры

@@ -1,6 +1,12 @@
 
 # DELETE FROM
 
+{% note warning %}
+
+{% include [column-and-row-tables-in-read-only-tx](../../../concepts/_includes/limitation-column-row-in-read-only-tx.md) %}
+
+{% endnote %}
+
 Удаляет строки из таблицы, подходящие под условия, заданные в `WHERE`.{% if feature_mapreduce %} Таблица ищется по имени в базе данных, заданной оператором [USE](use.md).{% endif %}
 
 ## Пример

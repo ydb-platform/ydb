@@ -1,5 +1,11 @@
 # Добавление данных в таблицы
 
+{% note warning %}
+
+{% include [column-and-row-tables-in-read-only-tx](../../concepts/_includes/limitation-column-row-in-read-only-tx.md) %}
+
+{% endnote %}
+
 Наполните данными [созданные ранее](create_demo_tables.md) таблицы с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
 
 ```yql

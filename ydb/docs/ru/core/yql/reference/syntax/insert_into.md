@@ -1,6 +1,12 @@
 
 # INSERT INTO
 
+{% note warning %}
+
+{% include [column-and-row-tables-in-read-only-tx](../../../concepts/_includes/limitation-column-row-in-read-only-tx.md) %}
+
+{% endnote %}
+
 {% if select_command != "SELECT STREAM" %}
 Добавляет строки в таблицу.{% if feature_bulk_tables %} Если целевая таблица уже существует и не является сортированной, операция `INSERT INTO` дописывает строки в конец таблицы. В случае сортированной таблицы, YQL пытается сохранить сортированность путем запуска сортированного слияния. {% endif %}{% if feature_map_tables %} При попытке вставить в таблицу строку с уже существующим значением первичного ключа операция завершится ошибкой с кодом `PRECONDITION_FAILED` и текстом `Operation aborted due to constraint violation: insert_pk`.{% endif %}
 

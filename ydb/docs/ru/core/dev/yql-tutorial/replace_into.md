@@ -1,5 +1,11 @@
 # Вставка и модификация данных с помощью REPLACE
 
+{% note warning %}
+
+{% include [column-and-row-tables-in-read-only-tx](../../concepts/_includes/limitation-column-row-in-read-only-tx.md) %}
+
+{% endnote %}
+
 Добавьте новые данные в таблицы с одновременным обновлением уже существующих данных с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}

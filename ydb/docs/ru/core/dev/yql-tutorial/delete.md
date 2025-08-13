@@ -1,5 +1,11 @@
 # Удаление данных
 
+{% note warning %}
+
+{% include [column-and-row-tables-in-read-only-tx](../../concepts/_includes/limitation-column-row-in-read-only-tx.md) %}
+
+{% endnote %}
+
 Удалите данные из таблицы с помощью оператора [DELETE](../../yql/reference/syntax/delete.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}

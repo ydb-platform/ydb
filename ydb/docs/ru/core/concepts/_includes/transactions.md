@@ -67,6 +67,4 @@
 
 ## Транзакции с участием строковых и столбцовых таблиц {#mixed-transactions}
 
-В настоящее время одновременное использование [колоночных](../glossary.md#column-oriented-table) и [строковых](../glossary.md#row-oriented-table) таблиц возможно только в Read-Only транзакциях. Поддержка пишущих транзакций с одновременным участием строковых и колоночных таблиц находится в разработке.
-
-При попытке выполнить запись в транзакции с одновременным участием колоночных и строковых таблиц, транзакция завершится с ошибкой: `Write transactions between column and row tables are disabled at current time`.
+{% include [limitation](./limitation-column-row-in-read-only-tx.md) %}

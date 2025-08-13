@@ -1,6 +1,12 @@
 
 # UPSERT INTO
 
+{% note warning %}
+
+{% include [column-and-row-tables-in-read-only-tx](../../../concepts/_includes/limitation-column-row-in-read-only-tx.md) %}
+
+{% endnote %}
+
 UPSERT (расшифровывается как UPDATE or INSERT) обновляет или добавляет множество строк в таблице на основании сравнения по первичному ключу. Отсутствующие строки добавляются. В присутствующих строках обновляются значения заданных столбцов, значения остальных столбцов остаются неизменными.
 
 {% if feature_mapreduce %}

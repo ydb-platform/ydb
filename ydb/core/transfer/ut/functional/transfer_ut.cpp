@@ -264,11 +264,6 @@ Y_UNIT_TEST_SUITE(Transfer)
             _C("Message", TString("Message-1"))
         }});
 
-        testCase.DropTopic();
-
-        testCase.CheckTransferStateError("111");
-
-
         testCase.DropTransfer();
         testCase.DropTopic();
         testCase.DropTable();

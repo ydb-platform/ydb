@@ -1,5 +1,28 @@
 # Changelog
 
+## [11.6.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.5.0...v11.6.0) (2025-08-08)
+
+
+### Features
+
+* add new role IsDatabaseAllowed and shrink breadcrumbs ([#2672](https://github.com/ydb-platform/ydb-embedded-ui/issues/2672)) ([66b45ee](https://github.com/ydb-platform/ydb-embedded-ui/commit/66b45ee81ad4f4088746dc4fef878d249706f4f4))
+* **Diagnostics:** hide AccessRights is not configured ([#2691](https://github.com/ydb-platform/ydb-embedded-ui/issues/2691)) ([76275c4](https://github.com/ydb-platform/ydb-embedded-ui/commit/76275c4cf0ecf2f893c14350f311a8d401f81f6c))
+* **Header:** add manage DB dropdown ([#2680](https://github.com/ydb-platform/ydb-embedded-ui/issues/2680)) ([d123263](https://github.com/ydb-platform/ydb-embedded-ui/commit/d1232631a271fa1b26e953935707b46134b8534d))
+* **HealthcheckPreview:** do not show preview for green status ([#2687](https://github.com/ydb-platform/ydb-embedded-ui/issues/2687)) ([09fd897](https://github.com/ydb-platform/ydb-embedded-ui/commit/09fd897bc9145abcbd8e11ce3c8672b673e31e10))
+* improve guidelines basing on reviews ([#2662](https://github.com/ydb-platform/ydb-embedded-ui/issues/2662)) ([932917b](https://github.com/ydb-platform/ydb-embedded-ui/commit/932917b9d8ce0a5b8eb563280eaf59cd1c093b7e))
+* **ObjectSummary:** remove Acl ([#2664](https://github.com/ydb-platform/ydb-embedded-ui/issues/2664)) ([a49edb0](https://github.com/ydb-platform/ydb-embedded-ui/commit/a49edb0ba501d505580f69af84ccf9a1bcb3bbe1))
+* restrictions for not IsViewerUser ([#2684](https://github.com/ydb-platform/ydb-embedded-ui/issues/2684)) ([a458c8f](https://github.com/ydb-platform/ydb-embedded-ui/commit/a458c8f802646b38b75a5f6742d2d00ddd1a1d5e))
+* restrictions for users without IsViewerAllowed role ([#2675](https://github.com/ydb-platform/ydb-embedded-ui/issues/2675)) ([fae206e](https://github.com/ydb-platform/ydb-embedded-ui/commit/fae206ef240adfbd302a5e0fc76aa9b34ace7d40))
+
+
+### Bug Fixes
+
+* conditionally show threads tab based on API response data ([#2666](https://github.com/ydb-platform/ydb-embedded-ui/issues/2666)) ([d73717a](https://github.com/ydb-platform/ydb-embedded-ui/commit/d73717a0d28663aa63ca5cf4eaaef81505674962))
+* do not remove build from versions ([#2688](https://github.com/ydb-platform/ydb-embedded-ui/issues/2688)) ([91c3844](https://github.com/ydb-platform/ydb-embedded-ui/commit/91c38446d2fd1ae47515dea34691b9fac008d2da))
+* fixed transfer page ([#2683](https://github.com/ydb-platform/ydb-embedded-ui/issues/2683)) ([0c05cc3](https://github.com/ydb-platform/ydb-embedded-ui/commit/0c05cc3081e947f4cad2eb41309068e4b9921ce4))
+* **PaginatedTable:** no bottom border for last row ([#2676](https://github.com/ydb-platform/ydb-embedded-ui/issues/2676)) ([4ad88f9](https://github.com/ydb-platform/ydb-embedded-ui/commit/4ad88f9c5a9ec5c7dce11980ab7ae87ea432c0bc))
+* **Tenant:** remove falsy query params from address ([#2690](https://github.com/ydb-platform/ydb-embedded-ui/issues/2690)) ([633b184](https://github.com/ydb-platform/ydb-embedded-ui/commit/633b18472e28f73eea73b778aac36cff527feeb4))
+
 ## [11.5.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.4.0...v11.5.0) (2025-08-01)
 
 

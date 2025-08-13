@@ -547,6 +547,89 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         NDataShard::gCancelTxFailPoint.Disable();
     }
 
+    Y_UNIT_TEST(QuerySkipHasNoColumns) {
+        return; // https://github.com/ydb-platform/ydb/issues/22493
+
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Tmp` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync().IsSuccess());
+
+        auto explainResult = session.ExplainDataQuery(Q_(R"(
+            SELECT
+                1 as c1
+            FROM
+                `/Root/Tmp` t1
+            LIMIT 1, 1
+        )")).ExtractValueSync();
+
+        Cerr << explainResult.GetAst() << Endl;
+
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            SELECT
+                1 as c1
+            FROM
+                `/Root/Tmp` t1
+            LIMIT 1, 1
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto replaceQuery = Q1_(R"(
+            DECLARE $rows AS
+                List<Struct<
+                    Key: Uint64?,
+                    Value: String?
+                >>;
+
+            REPLACE INTO `/Root/Tmp`
+            SELECT * FROM AS_TABLE($rows);
+        )");
+
+        const ui32 RowsCount = 100;
+
+        {
+            auto paramsBuilder = session.GetParamsBuilder();
+            auto& rowsParam = paramsBuilder.AddParam("$rows");
+
+            rowsParam.BeginList();
+            for (ui32 i = 0; i < RowsCount; ++i) {
+                rowsParam.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key")
+                        .OptionalUint64(i)
+                    .AddMember("Value")
+                        .OptionalString(ToString(i))
+                    .EndStruct();
+            }
+            rowsParam.EndList();
+            rowsParam.Build();
+
+            auto result = session.ExecuteDataQuery(replaceQuery, TTxControl::BeginTx().CommitTx(),
+                paramsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT
+                    1 as c1
+                FROM
+                    `/Root/Tmp` t1
+                LIMIT 1, 100;
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            Cerr << result.GetResultSet(0).RowsCount() << Endl;
+            UNIT_ASSERT(result.GetResultSet(0).RowsCount() == 99);
+        }
+    }
+
     Y_UNIT_TEST(QueryResultsTruncated) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -2281,7 +2364,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto writeSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        
+
         kikimr.RunCall([&]{ CreateSampleTablesWithIndex(session, false /* no need in table data */); return true; });
 
         {
@@ -2501,7 +2584,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             )", IsOlap ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
-            
+
         {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2802,7 +2885,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                         `l_source`
                 );
 
-                CREATE VIEW `r` 
+                CREATE VIEW `r`
                 with (security_invoker = TRUE)
                 AS (
                     SELECT

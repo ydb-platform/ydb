@@ -22,7 +22,7 @@ table_service_config:
         queue_size: 1000
 ```
 
-#### root
+#### local_file_config.root
 
 **Type:** `string`  
 **Default:** `""` (automatic detection)  
@@ -63,7 +63,7 @@ Example of a complete spilling directory path:
 
 - `Permission denied` — insufficient directory access permissions. See [{#T}](../../troubleshooting/spilling.md#permission-denied)
 
-#### max_total_size
+#### local_file_config.max_total_size
 
 **Type:** `uint64`  
 **Default:** `21474836480` (20 GiB)  
@@ -85,7 +85,7 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 
 {% endnote %}
 
-#### workers_count
+#### local_file_config.io_thread_pool.workers_count
 
 **Type:** `uint32`  
 **Default:** `2`  
@@ -100,7 +100,7 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 
 - `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling.md#can-not-run-operation)
 
-#### queue_size
+#### local_file_config.io_thread_pool.queue_size
 
 **Type:** `uint32`  
 **Default:** `1000`  

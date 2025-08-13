@@ -21,7 +21,7 @@ table_service_config:
         queue_size: 1000
 ```
 
-#### root
+#### local_file_config.root
 
 **Тип:** `string`  
 **По умолчанию:** `""` (автоматическое определение)  
@@ -63,7 +63,7 @@ table_service_config:
 
 - `Permission denied` — недостаточные права доступа к директории. См. [{#T}](../../troubleshooting/spilling.md#permission-denied)
 
-#### max_total_size
+#### local_file_config.max_total_size
 
 **Тип:** `uint64`  
 **По умолчанию:** `21474836480` (20 GiB)  
@@ -85,7 +85,7 @@ table_service_config:
 
 {% endnote %}
 
-#### workers_count
+#### local_file_config.io_thread_pool.workers_count
 
 **Тип:** `uint32`  
 **По умолчанию:** `2`  
@@ -100,7 +100,7 @@ table_service_config:
 
 - `Can not run operation` — переполнение очереди операций в пуле потоков I/O. См. [{#T}](../../troubleshooting/spilling.md#can-not-run-operation)
 
-#### queue_size
+#### local_file_config.io_thread_pool.queue_size
 
 **Тип:** `uint32`  
 **По умолчанию:** `1000`  

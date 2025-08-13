@@ -1519,7 +1519,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
-    Y_UNIT_TEST(TestCheckSubHiveMigration) {
+    void TestMigration(TSubDomainKey objectDomain, NKikimrHive::TEvInitMigration event) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
 
@@ -1587,6 +1587,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createTablet1->Record.AddAllowedDomains();
         createTablet1->Record.MutableAllowedDomains(0)->SetSchemeShard(subdomainKey.first);
         createTablet1->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
+        if (objectDomain) {
+            createTablet1->Record.MutableObjectDomain()->CopyFrom(objectDomain);
+        }
         ui64 tabletId1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet1), 0, true);
 
         MakeSureTabletIsUp(runtime, tabletId1, 0); // tablet up in root hive
@@ -1605,6 +1608,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
             if (queryMigrationReply->Record.GetMigrationState() == NKikimrHive::EMigrationState::MIGRATION_READY) {
                 THolder<TEvHive::TEvInitMigration> migration = MakeHolder<TEvHive::TEvInitMigration>();
+                migration->Record.CopyFrom(event);
                 runtime.SendToPipe(subHiveTablet, sender, migration.Release(), 0, GetPipeConfigWithRetries());
                 auto initMigrationReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvInitMigrationReply>(handle);
                 UNIT_ASSERT(initMigrationReply);
@@ -1628,6 +1632,18 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(createTabletReply->Record.GetForwardRequest().GetHiveTabletId(), subHiveTablet);
 
         runtime.SetObserverFunc(prevObserverFunc);
+    }
+
+    Y_UNIT_TEST(TestCheckSubHiveMigration) {
+        TestMigration({}, {});
+    }
+
+    Y_UNIT_TEST(TestServerlessMigration) {
+        // Just use a different object domain to model a serverless db
+        TSubDomainKey objectDomain(999999, 23);
+        NKikimrHive::TEvInitMigration event;
+        event.MutableMigrationFilter()->MutableFilterDomain()->CopyFrom(objectDomain);
+        TestMigration(objectDomain, event);
     }
 
     Y_UNIT_TEST(TestNoMigrationToSelf) {

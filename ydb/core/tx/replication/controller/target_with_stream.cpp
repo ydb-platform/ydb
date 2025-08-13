@@ -153,6 +153,8 @@ void TTargetWithStream::Shutdown(const TActorContext& ctx) {
         }
     }
 
+    NameAssignmentInProcess = false;
+
     TTargetBase::Shutdown(ctx);
 }
 

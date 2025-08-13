@@ -1,5 +1,13 @@
 ## Unreleased
 
+### Bug fixes
+
+* 21917:Support in asynchronous replication new kind of change record — `reset` record (in addition to `update` & `erase` records). [#21917](https://github.com/ydb-platform/ydb/pull/21917) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 21835:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/21814) where a replication instance with an unspecified `COMMIT_INTERVAL` option caused the process to crash. [#21835](https://github.com/ydb-platform/ydb/pull/21835) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 21651:Fixed rare errors when reading using the pqv0 protocol from a topic during partition balancing. [#21651](https://github.com/ydb-platform/ydb/pull/21651) ([Nikolay Shestakov](https://github.com/nshestakov))
+
+## 25.1.2
+
 ### Functionality
 
 * 17114:Improved audit logging for user management operations. The audit logs now include details about user modification actions such as password changes, user blocking, and unblocking, making it easier to troubleshoot login issues. [#17114](https://github.com/ydb-platform/ydb/pull/17114) ([flown4qqqq](https://github.com/flown4qqqq))
@@ -13,7 +21,7 @@
 * 19310:Added ability to enable followers (read replicas) for covered secondary indexes. [#19310](https://github.com/ydb-platform/ydb/pull/19310) ([azevaykin](https://github.com/azevaykin))
 * 19504:Implemented a [vector index](./dev/vector-indexes.md) for approximate vector search. [#19504](https://github.com/ydb-platform/ydb/pull/19504) ([kungurtsev](https://github.com/kunga))
 * 20705:YMQ: Do not send x-amz-crc32 HTTP header (AWS does not do it) [#20705](https://github.com/ydb-platform/ydb/pull/20705) ([qyryq](https://github.com/qyryq))
-  
+
 ### Bug fixes
 
 * 16797:Fixed an issue with topic auto-partitioning when the `max_active_partition` configuration parameter was set via the `ALTER TOPIC` statement. [#16797](https://github.com/ydb-platform/ydb/pull/16797) ([Nikolay Shestakov](https://github.com/nshestakov))
@@ -23,7 +31,6 @@
 * 18296:Fixed replication continuing to consume disk space when storage was low, which caused VDisks to become read-only. [#18296](https://github.com/ydb-platform/ydb/pull/18296) ([Sergey Belyakov](https://github.com/serbel324))
 * 18362:Table auto partitioning: Fixed crash when selecting split key from access samples containing a mix of full key and key prefix operations (e.g. exact/range reads). [#18362](https://github.com/ydb-platform/ydb/pull/18362) ([ijon](https://github.com/ijon))
 * 18301:Optimized memory usage in transactions with a large number of participants by changing the storage and resending mechanism for TEvReadSet messages. [#18302](https://github.com/ydb-platform/ydb/pull/18301) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* 18296:Fixed replication continuing to consume disk space when storage was low, which caused VDisks to become read-only. [#18296](https://github.com/ydb-platform/ydb/pull/18296) ([Sergey Belyakov](https://github.com/serbel324))
 * 18271:Fixed replication bug #10650 [#18271](https://github.com/ydb-platform/ydb/pull/18271) ([Alexander Rutkovsky](https://github.com/alexvru))
 * 18231:Fixed segfault that could happen while retrying Whiteboard requests. [#18231](https://github.com/ydb-platform/ydb/pull/18231) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 18647:[Fixed](https://github.com/ydb-platform/ydb/pull/18647) an [issue](https://github.com/ydb-platform/ydb/issues/17885) where the index type was incorrectly defaulting to GLOBAL SYNC when UNIQUE was explicitly specified in the query. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
@@ -70,3 +77,4 @@
 * 19916:When transaction duration exceeds the topic's message retention period, writing to the topic may result in inconsistent data in the partition. [#19916](https://github.com/ydb-platform/ydb/pull/19916) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20848:Significantly improved performance for single-core, dual-core, and triple-core configurations. [#20848](https://github.com/ydb-platform/ydb/pull/20848) ([kruall](https://github.com/kruall))
 * 20704:Enhanced pool scaling when using shared threads and available CPU resources. [#20704](https://github.com/ydb-platform/ydb/pull/20704) ([kruall](https://github.com/kruall))
+

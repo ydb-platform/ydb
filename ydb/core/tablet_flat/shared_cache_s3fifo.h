@@ -184,9 +184,9 @@ public:
 
         result << "SmallQueue: ";
         dump(SmallQueue);
-        result << Endl << "MainQueue: ";
+        result << " MainQueue: ";
         dump(MainQueue);
-        result << Endl << "GhostQueue: ";
+        result << " GhostQueue: ";
         result << GhostQueue.Dump();
 
         return result;

@@ -317,9 +317,15 @@ message TTableServiceConfig {
     optional string EnableSpillingNodes = 67 [ default = "All" ];
 
     message TComputeSchedulerSettings {
-        optional uint64 AdvanceTimeIntervalUsec = 1 [default = 500000];
-        optional uint64 ForgetOverflowTimeoutUsec = 2 [default = 2000000];
-        optional uint64 ActivePoolPollingSec = 3 [default = 10];
+        reserved 1; // Old scheduler param
+        reserved 2; // Old scheduler param
+        reserved 3; // Old scheduler param
+        optional bool   AccountDefaultPool = 4 [ default = false ];
+        optional uint64 UpdateFairShareMs = 5 [ default = 500 ];  // 0.5 sec
+        optional uint64 MaxTaskDelayUs = 6 [ default = 3000000 ]; // 3.0 sec
+        optional uint64 MinTaskDelayUs = 7 [ default = 10 ];
+        optional uint64 AttemptTaskBonusUs = 8 [ default = 5 ];
+        optional uint64 MaxTaskRandomDelayUs = 9 [ default = 100 ];
     }
 
     reserved 68;
@@ -405,4 +411,8 @@ message TTableServiceConfig {
     optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V2 ];
 
     optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = false ];
+
+    optional bool EnableTempTablesForUser = 95 [default = false];
+
+    optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = true];
 };

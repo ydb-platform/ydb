@@ -86,6 +86,9 @@ namespace NPDisk {
         IActor* tabletResolver = CreateTabletResolver(tabletResolverConfig);
         runtime.AddLocalService(MakeTabletResolverID(),
             TActorSetupCmd(tabletResolver, TMailboxType::Revolving, 0), nodeIndex);
+
+        // TabletResolver needs timers for retries
+        runtime.EnableScheduleForActor(MakeTabletResolverID());
     }
 
     void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers)

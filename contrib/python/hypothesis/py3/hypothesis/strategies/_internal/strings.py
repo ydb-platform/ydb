@@ -16,7 +16,8 @@ from typing import Optional
 
 from hypothesis.errors import HypothesisWarning, InvalidArgument
 from hypothesis.internal import charmap
-from hypothesis.internal.conjecture.data import COLLECTION_DEFAULT_MAX_SIZE
+from hypothesis.internal.conjecture.data import ConjectureData
+from hypothesis.internal.conjecture.providers import COLLECTION_DEFAULT_MAX_SIZE
 from hypothesis.internal.filtering import max_len, min_len
 from hypothesis.internal.intervalsets import IntervalSet
 from hypothesis.internal.reflection import get_pretty_function_description
@@ -43,10 +44,12 @@ def _check_is_single_character(c):
     return c
 
 
-class OneCharStringStrategy(SearchStrategy):
+class OneCharStringStrategy(SearchStrategy[str]):
     """A strategy which generates single character strings of text type."""
 
-    def __init__(self, intervals, force_repr=None):
+    def __init__(
+        self, intervals: IntervalSet, force_repr: Optional[str] = None
+    ) -> None:
         assert isinstance(intervals, IntervalSet)
         self.intervals = intervals
         self._force_repr = force_repr
@@ -116,10 +119,10 @@ class OneCharStringStrategy(SearchStrategy):
             f"{alphabet=} must be a sampled_from() or characters() strategy"
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self._force_repr or f"OneCharStringStrategy({self.intervals!r})"
 
-    def do_draw(self, data):
+    def do_draw(self, data: ConjectureData) -> str:
         return data.draw_string(self.intervals, min_size=1, max_size=1)
 
 
@@ -150,7 +153,7 @@ _nonempty_and_content_names = (
 )
 
 
-class TextStrategy(ListStrategy):
+class TextStrategy(ListStrategy[str]):
     def do_draw(self, data):
         # if our element strategy is OneCharStringStrategy, we can skip the
         # ListStrategy draw and jump right to our nice IR string draw.
@@ -169,7 +172,7 @@ class TextStrategy(ListStrategy):
             )
         return "".join(super().do_draw(data))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         args = []
         if repr(self.element_strategy) != "characters()":
             args.append(repr(self.element_strategy))

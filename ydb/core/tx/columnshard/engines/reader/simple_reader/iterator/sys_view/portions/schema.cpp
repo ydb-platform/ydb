@@ -1,6 +1,8 @@
 #include "metadata.h"
 #include "schema.h"
 
+#include <ydb/core/sys_view/common/registry.h>
+
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions {
 
 NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TUnifiedPathId pathId, const ui64 tabletId, const ui64 portionId) {
@@ -12,7 +14,7 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TUnifiedPa
     return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
 }
 
-std::shared_ptr<arrow::Schema> TSchemaAdapter::GetPKSchema() {
+const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {
     static std::shared_ptr<arrow::Schema> schema = []() {
         arrow::FieldVector fields = { std::make_shared<arrow::Field>("PathId", arrow::uint64()),
             std::make_shared<arrow::Field>("TabletId", arrow::uint64()), std::make_shared<arrow::Field>("PortionId", arrow::uint64()) };

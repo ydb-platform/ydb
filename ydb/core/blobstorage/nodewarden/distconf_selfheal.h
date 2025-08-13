@@ -21,6 +21,7 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStateStorageConfig CurrentConfig;
         NKikimrBlobStorage::TStateStorageConfig TargetConfig;
         bool AllowNextStep = true;
+        ui32 PilesCount;
 
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
@@ -33,7 +34,35 @@ namespace NKikimr::NStorage {
 
     public:
         TStateStorageSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
-            , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig);
+            , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig, ui32 pilesCount);
+
+        void Bootstrap(TActorId parentId);
+
+        STFUNC(StateFunc);
+    };
+
+    class TStateStorageReassignNodeSelfhealActor : public TActorBootstrapped<TStateStorageReassignNodeSelfhealActor> {
+        const TDuration WaitForConfigStep;
+        const TActorId Sender;
+        const ui64 Cookie;
+        bool AllowNextStep = false;
+        bool FinishReassign = false;
+        ui32 NodeFrom;
+        ui32 NodeTo;
+        bool NeedReconfigSS;
+        bool NeedReconfigSSB;
+        bool NeedReconfigSB;
+
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+
+        void HandleWakeup();
+        void Finish(TResult::EStatus result, const TString& errorReason = "");
+        void RequestChangeStateStorage(bool disable);
+        void HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev);
+
+    public:
+        TStateStorageReassignNodeSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
+            , ui32 nodeFrom, ui32 nodeTo, bool needReconfigSS, bool needReconfigSSB, bool needReconfigSB);
 
         void Bootstrap(TActorId parentId);
 

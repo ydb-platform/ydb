@@ -360,4 +360,12 @@ void TYamlFormatConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TArrowFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("enable_tz_index", &TThis::EnableTzIndex)
+        .Default(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NFormats

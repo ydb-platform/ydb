@@ -16,7 +16,8 @@ namespace NKikimr {
                 && std::ranges::equal(x.GetPerPileState(), y.GetPerPileState())
                 && x.GetPrimaryPile() == y.GetPrimaryPile()
                 && x.GetPromotedPile() == y.GetPromotedPile()
-                && x.GetGeneration() == y.GetGeneration();
+                && x.GetGeneration() == y.GetGeneration()
+                && x.GetGuid() == y.GetGuid();
         }
 
     } // NBridge

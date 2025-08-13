@@ -2,6 +2,8 @@
 
 #include "json.h"
 
+#include <contrib/libs/re2/re2/re2.h>
+
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/on_disk/tar_archive/archive_writer.h>
@@ -30,7 +32,7 @@ namespace NSQLHighlight {
         struct TLanguage {
             TString Name;
             TString ScopeName;
-            TVector<TString> FileTypes;
+            TString FileType;
             TVector<TMatcher> Matchers;
         };
 
@@ -47,6 +49,10 @@ namespace NSQLHighlight {
 
             if (unit.IsPlain) {
                 regex << R"re(\b)re";
+            }
+
+            if (!pattern.Before.empty()) {
+                regex << "(?<=" << pattern.Before << ")";
             }
 
             regex << "(" << pattern.Body << ")";
@@ -105,8 +111,8 @@ namespace NSQLHighlight {
                 .Name = ToTextMateName(unit.Kind),
                 .Group = ToTextMateGroup(unit.Kind),
                 .Pattern = NTextMate::TRange{
-                    .Begin = range->Begin,
-                    .End = range->End,
+                    .Begin = RE2::QuoteMeta(range->Begin),
+                    .End = RE2::QuoteMeta(range->End),
                 },
             };
         }
@@ -123,9 +129,9 @@ namespace NSQLHighlight {
 
     NTextMate::TLanguage ToTextMateLanguage(const THighlighting& highlighting) {
         NTextMate::TLanguage language = {
-            .Name = "YQL",
-            .ScopeName = "source.yql",
-            .FileTypes = {"yql"},
+            .Name = highlighting.Name,
+            .ScopeName = "source." + highlighting.Extension,
+            .FileType = highlighting.Extension,
         };
 
         for (const TUnit& unit : highlighting.Units) {
@@ -164,12 +170,22 @@ namespace NSQLHighlight {
     NJson::TJsonValue ToJson(const NTextMate::TLanguage& language) {
         NJson::TJsonMap root;
         root["$schema"] = "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json";
-        root["name"] = language.Name;
+        root["name"] = language.FileType;
         root["scopeName"] = language.ScopeName;
+        root["scope"] = language.ScopeName;
+        root["fileTypes"] = NJson::TJsonArray({language.FileType});
 
-        for (const TString& type : language.FileTypes) {
-            root["fileTypes"].AppendValue(type);
-        }
+        root["patterns"].AppendValue(NJson::TJsonMap({
+            {"begin", "@@#py"},
+            {"end", "@@"},
+            {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.python"}}})},
+        }));
+
+        root["patterns"].AppendValue(NJson::TJsonMap({
+            {"begin", "@@//js"},
+            {"end", "@@"},
+            {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.js"}}})},
+        }));
 
         THashSet<TString> visited;
         for (const NTextMate::TMatcher& matcher : language.Matchers) {
@@ -219,14 +235,15 @@ namespace NSQLHighlight {
         Print(out, ToJson(ToTextMateLanguage(highlighting)));
     }
 
+    static const THashMap<TString, TString> UUID = {
+        {"InfoYQL", "059de4a7-ff49-4dbd-8a9d-a8114b77c4b9"},
+        {"SyntaxYQL", "bb7a80e5-733c-4ea6-9654-40db0675950c"},
+        {"InfoYQLs", "7f536d44-2667-430e-b145-540992400cb3"},
+        {"SyntaxYQLs", "6e62e13a-487b-4333-bbb2-9453d0783f8f"},
+    };
+
     class TTextMateBundleGenerator: public IGenerator {
     private:
-        static constexpr TStringBuf InfoUUID = "9BB0DBAF-E65C-4E14-A6A7-467D4AA535E0";
-        static constexpr TStringBuf SyntaxUUID = "1C3868E4-F96B-4E55-B204-1DCB5A20748B";
-        static constexpr TStringBuf BundleDir = "YQL.tmbundle";
-        static constexpr TStringBuf InfoFile = "info.plist";
-        static constexpr TStringBuf SyntaxFile = "Syntaxes/YQL.tmLanguage";
-
         template <class TWriter>
         void Write(
             NTar::TArchiveWriter& acrhive,
@@ -242,28 +259,40 @@ namespace NSQLHighlight {
 
     public:
         void Write(IOutputStream& out, const THighlighting& highlighting) final {
-            out << "File " << BundleDir << "/" << InfoFile << ":" << '\n';
+            const auto [bundle, info, syntax] = Paths(highlighting);
+
+            out << "File " << bundle << "/" << info << ":" << '\n';
             WriteInfo(out, ToTextMateLanguage(highlighting));
-            out << "File " << BundleDir << "/" << SyntaxFile << ":" << '\n';
+            out << "File " << bundle << "/" << syntax << ":" << '\n';
             WriteSyntax(out, ToTextMateLanguage(highlighting));
         }
 
         void Write(const TFsPath& path, const THighlighting& highlighting) final {
-            if (TString name = path.GetName(); !name.StartsWith(BundleDir)) {
+            const auto [bundle, info, syntax] = Paths(highlighting);
+
+            if (TString name = path.GetName(); !name.StartsWith(bundle)) {
                 ythrow yexception()
                     << "Invalid path '" << name
-                    << "', expected '" << BundleDir << "' "
+                    << "', expected '" << bundle << "' "
                     << "as an archive name";
             }
 
             NTextMate::TLanguage language = ToTextMateLanguage(highlighting);
 
             NTar::TArchiveWriter archive(path);
-            Write(archive, InfoFile, WriteInfo, language);
-            Write(archive, SyntaxFile, WriteSyntax, language);
+            Write(archive, info, WriteInfo, language);
+            Write(archive, syntax, WriteSyntax, language);
         }
 
     private:
+        static std::tuple<TString, TString, TString> Paths(const THighlighting& h) {
+            return {
+                TStringBuilder() << h.Name << ".tmbundle",
+                TStringBuilder() << "info.plist",
+                TStringBuilder() << "Syntaxes/" << h.Name << ".tmLanguage",
+            };
+        }
+
         static void WriteInfo(IOutputStream& out, const NTextMate::TLanguage& language) {
             out << R"(<?xml version="1.0" encoding="UTF-8"?>)" << '\n';
             out << R"(<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">)" << '\n';
@@ -272,7 +301,7 @@ namespace NSQLHighlight {
             out << R"(    <key>name</key>)" << '\n';
             out << R"(    <string>)" << language.Name << R"(</string>)" << '\n';
             out << R"(    <key>uuid</key>)" << '\n';
-            out << R"(    <string>)" << InfoUUID << R"(</string>)" << '\n';
+            out << R"(    <string>)" << UUID.at("Info" + language.Name) << R"(</string>)" << '\n';
             out << R"(</dict>)" << '\n';
             out << R"(</plist>)" << '\n';
         }
@@ -280,7 +309,7 @@ namespace NSQLHighlight {
         static void WriteSyntax(IOutputStream& out, const NTextMate::TLanguage& language) {
             NJson::TJsonValue json = ToJson(language);
             json.EraseValue("$schema");
-            json["uuid"] = SyntaxUUID;
+            json["uuid"] = UUID.at("Syntax" + language.Name);
 
             out << R"(<?xml version="1.0" encoding="UTF-8"?>)" << '\n';
             out << R"(<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">)" << '\n';

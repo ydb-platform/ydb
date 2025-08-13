@@ -6,6 +6,7 @@
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/interface/yql_yt_table_data_service.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_column_group_helpers.h>
 
 namespace NYql::NFmr {
 
@@ -19,6 +20,8 @@ public:
         const TString& tableId,
         const std::vector<TTableRange>& tableRanges,
         ITableDataService::TPtr tableDataService,
+        const std::vector<TString>& neededColumns = {},
+        const TString& columnGroupSpec = TString(),
         const TFmrReaderSettings& settings = TFmrReaderSettings{}
     );
 
@@ -47,6 +50,8 @@ private:
 
     void SetMinChunkInNewRange();
 
+    NThreading::TFuture<TMaybe<TString>> GetTableDataServiceValueFuture(const TString& partId, ui64 chunkNum);
+
     const TString TableId_;
     std::vector<TTableRange> TableRanges_;
     ITableDataService::TPtr TableDataService_;
@@ -57,6 +62,8 @@ private:
     ui64 CurrentPosition_ = 0;
     TBuffer DataBuffer_;
     std::queue<TPendingFmrChunk> PendingChunks_;
+    const std::vector<TString> NeededColumns_;
+    const TParsedColumnGroupSpec ColumnGroupSpec_;
 };
 
 } // namespace NYql::NFmr

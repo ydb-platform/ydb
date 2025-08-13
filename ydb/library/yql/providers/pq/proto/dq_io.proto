@@ -88,6 +88,7 @@ message TDqPqTopicSource {
     repeated TDqPqFederatedCluster FederatedClusters = 21;
     StreamingDisposition Disposition = 22;
     repeated TTaskSensorLabel TaskSensorLabel = 23;
+    string WatermarkExpr = 24;
 }
 
 message TDqPqTopicSink {

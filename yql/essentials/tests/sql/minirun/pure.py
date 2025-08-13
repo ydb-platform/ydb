@@ -12,7 +12,7 @@ from yql_utils import execute, get_tables, get_files, get_http_files, \
     normalize_result, get_langver
 from yqlrun import YQLRun
 
-from test_utils import get_config, get_parameters_json
+from test_utils import get_config, get_parameters_json, get_case_file
 from test_file_common import run_file, run_file_no_cache, get_gateways_config, get_sql_query
 
 DEFAULT_LANG_VER = '2025.01'
@@ -48,7 +48,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if xfail and what != 'Results':
         pytest.skip('xfail is not supported in this mode')
 
-    program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
+    program_sql = get_case_file(DATA_PATH, suite, case, {'.sql', '.yql'})
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
 

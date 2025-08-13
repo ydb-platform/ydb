@@ -16,15 +16,9 @@ class TServiceOperatorImpl {
 private:
     TAtomicCounter LastProcessId = 0;
     TConfig ServiceConfig = TConfig::BuildDisabledConfig();
-    std::shared_ptr<TCounters> Counters;
-    std::shared_ptr<TStageFeatures> DefaultStageFeatures =
-        std::make_shared<TStageFeatures>("DEFAULT", ((ui64)3) << 30, ((ui64)10) << 30, nullptr, nullptr);
     using TSelf = TServiceOperatorImpl<TMemoryLimiterPolicy>;
-    static void Register(const TConfig& serviceConfig, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-        Singleton<TSelf>()->Counters = std::make_shared<TCounters>(counters, TMemoryLimiterPolicy::Name);
+    static void Register(const TConfig& serviceConfig) {
         Singleton<TSelf>()->ServiceConfig = serviceConfig;
-        Singleton<TSelf>()->DefaultStageFeatures = std::make_shared<TStageFeatures>("GLOBAL", serviceConfig.GetMemoryLimit(),
-            serviceConfig.GetHardMemoryLimit(), nullptr, Singleton<TSelf>()->Counters->BuildStageCounters("general"));
     }
     static const TString& GetMemoryLimiterName() {
         Y_ABORT_UNLESS(TMemoryLimiterPolicy::Name.size() == 4);
@@ -38,17 +32,11 @@ private:
 public:
     static std::shared_ptr<TStageFeatures> BuildStageFeatures(const TString& name, const ui64 limit) {
         if (!IsEnabled()) {
-            return Singleton<TSelf>()->DefaultStageFeatures;
+            return nullptr;
         } else {
-            AFL_VERIFY(Singleton<TSelf>()->DefaultStageFeatures);
             return std::make_shared<TStageFeatures>(
-                name, limit / (GetCountBuckets() ? GetCountBuckets() : 1), std::nullopt, Singleton<TSelf>()->DefaultStageFeatures, Singleton<TSelf>()->Counters->BuildStageCounters(name));
+                name, limit / (GetCountBuckets() ? GetCountBuckets() : 1), std::nullopt, nullptr, nullptr);
         }
-    }
-
-    static std::shared_ptr<TStageFeatures> GetDefaultStageFeatures() {
-        AFL_VERIFY(Singleton<TSelf>()->DefaultStageFeatures);
-        return Singleton<TSelf>()->DefaultStageFeatures;
     }
 
     static std::shared_ptr<TProcessGuard> BuildProcessGuard(const std::vector<std::shared_ptr<TStageFeatures>>& stages)
@@ -97,8 +85,8 @@ public:
         return NActors::TActorId(nodeId, "SrvcMlmt" + GetMemoryLimiterName());
     }
     static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals) {
-        Register(config, signals);
-        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), Singleton<TSelf>()->Counters, Singleton<TSelf>()->DefaultStageFeatures, GetConsumerKind());
+        Register(config);
+        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), signals, GetConsumerKind());
     }
 };
 

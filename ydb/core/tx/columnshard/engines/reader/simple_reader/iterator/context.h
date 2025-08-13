@@ -35,6 +35,11 @@ private:
     mutable std::optional<std::shared_ptr<TFetchingScript>> SourcesAggregationScript;
     mutable std::optional<std::shared_ptr<TFetchingScript>> RestoreResultScript;
 
+    bool NeedDuplicateFiltering() const {
+        return GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES &&
+               GetReadMetadata()->TableMetadataAccessor->NeedDuplicateFiltering();
+    }
+
 public:
     std::shared_ptr<TFetchingScript> GetSourcesAggregationScript() const {
         if (!SourcesAggregationScript) {
@@ -42,11 +47,13 @@ public:
             if (!aggrProc) {
                 SourcesAggregationScript = nullptr;
             } else {
-                NCommon::TFetchingScriptBuilder builder(*this);
-                builder.AddStep(std::make_shared<TInitializeSourceStep>());
-                builder.AddStep(std::make_shared<TStepAggregationSources>(aggrProc));
-                builder.AddStep(std::make_shared<TCleanAggregationSources>(aggrProc));
-                SourcesAggregationScript = std::move(builder).Build();
+                // TODO: fix me, temporary disabled
+                SourcesAggregationScript = nullptr;
+                // NCommon::TFetchingScriptBuilder builder(*this);
+                // builder.AddStep(std::make_shared<TInitializeSourceStep>());
+                // builder.AddStep(std::make_shared<TStepAggregationSources>(aggrProc));
+                // builder.AddStep(std::make_shared<TCleanAggregationSources>(aggrProc));
+                // SourcesAggregationScript = std::move(builder).Build();
             }
         }
         return *SourcesAggregationScript;
@@ -64,7 +71,7 @@ public:
 
     virtual TString ProfileDebugString() const override;
 
-    void RegisterActors();
+    void RegisterActors(const NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
 
     const TActorId& GetDuplicatesManagerVerified() const {

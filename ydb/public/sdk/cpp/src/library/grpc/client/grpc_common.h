@@ -22,12 +22,13 @@ struct TGRpcClientConfig {
     ui32 MaxInFlight = 0;
     bool EnableSsl = false;
     grpc::SslCredentialsOptions SslCredentials;
-    grpc_compression_algorithm CompressionAlgoritm = GRPC_COMPRESS_NONE;
+    grpc_compression_algorithm CompressionAlgorithm = GRPC_COMPRESS_NONE;
     ui64 MemQuota = 0;
     std::unordered_map<std::string, std::string> StringChannelParams;
     std::unordered_map<std::string, int> IntChannelParams;
     std::string LoadBalancingPolicy = { };
     std::string SslTargetNameOverride = { };
+    bool UseXds = false;
 
     TGRpcClientConfig() = default;
     TGRpcClientConfig(const TGRpcClientConfig&) = default;
@@ -46,7 +47,8 @@ struct TGRpcClientConfig {
         , SslCredentials{.pem_root_certs = NYdb::TStringType{caCert},
                          .pem_private_key = NYdb::TStringType{clientPrivateKey},
                          .pem_cert_chain = NYdb::TStringType{clientCert}}
-        , CompressionAlgoritm(compressionAlgorithm)
+        , CompressionAlgorithm(compressionAlgorithm)
+        , UseXds((Locator.starts_with("xds:///")))
     {}
 };
 
@@ -54,7 +56,7 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     grpc::ChannelArguments args;
     args.SetMaxReceiveMessageSize(config.MaxInboundMessageSize ? config.MaxInboundMessageSize : config.MaxMessageSize);
     args.SetMaxSendMessageSize(config.MaxOutboundMessageSize ? config.MaxOutboundMessageSize : config.MaxMessageSize);
-    args.SetCompressionAlgorithm(config.CompressionAlgoritm);
+    args.SetCompressionAlgorithm(config.CompressionAlgorithm);
 
     for (const auto& kvp: config.StringChannelParams) {
         args.SetString(NYdb::TStringType{kvp.first}, NYdb::TStringType{kvp.second});
@@ -78,11 +80,16 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     if (!config.SslTargetNameOverride.empty()) {
         args.SetSslTargetNameOverride(NYdb::TStringType{config.SslTargetNameOverride});
     }
+    std::shared_ptr<grpc::ChannelCredentials> channelCredentials = nullptr;
     if (config.EnableSsl || !config.SslCredentials.pem_root_certs.empty()) {
-        return grpc::CreateCustomChannel(grpc::string(config.Locator), grpc::SslCredentials(config.SslCredentials), args);
+        channelCredentials = grpc::SslCredentials(config.SslCredentials);
     } else {
-        return grpc::CreateCustomChannel(grpc::string(config.Locator), grpc::InsecureChannelCredentials(), args);
+        channelCredentials = grpc::InsecureChannelCredentials();
     }
+    if (config.UseXds) {
+        channelCredentials = grpc::XdsCredentials(channelCredentials);
+    }
+    return grpc::CreateCustomChannel(grpc::string(config.Locator), channelCredentials, args);
 }
 
 }

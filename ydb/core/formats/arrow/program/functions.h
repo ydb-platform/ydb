@@ -44,8 +44,7 @@ public:
     }
 
     virtual ~IStepFunction() = default;
-    virtual TConclusion<arrow::Datum> Call(
-        const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
+    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const = 0;
     virtual TConclusionStatus CheckIO(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output) const = 0;
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = DoDebugJson();
@@ -72,8 +71,7 @@ public:
         : TBase(needConcatenation)
         , FunctionOptions(functionOptions) {
     }
-    virtual TConclusion<arrow::Datum> Call(
-        const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const override;
+    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
 };
 
 class TSimpleFunction: public TInternalFunction {
@@ -354,12 +352,12 @@ public:
         AFL_VERIFY(Function);
     }
 
-    TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const override {
-        auto argumentsReader = resources->GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation);
+    TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override {
+        auto argumentsReader = resources.GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation);
         TAccessorsCollection::TChunksMerger merger;
         while (auto args = argumentsReader.ReadNext()) {
             try {
-                for (auto& arg: *args) {
+                for (auto& arg : *args) {
                     if (arg.kind() == arrow::Datum::ARRAY && arg.descr().type->id() == arrow::Type::TIMESTAMP) {
                         auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(arg.descr().type);
                         arrow::TimeUnit::type unit = timestamp_type->unit();

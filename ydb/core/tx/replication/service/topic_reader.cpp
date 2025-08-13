@@ -122,7 +122,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         case NYdb::EStatus::SCHEME_ERROR:
             return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         default:
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
         }
     }
 

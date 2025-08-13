@@ -1115,7 +1115,6 @@ private:
             ContinueRunEvent = std::make_unique<NTaskRunnerActor::TEvContinueRun>();
         }
         ContinueRunEvent->CheckpointOnly = checkpointOnly;
-
         if (checkpointRequest) {
             if (!ContinueRunEvent->CheckpointRequest) {
                 ContinueRunEvent->CheckpointRequest.ConstructInPlace(*checkpointRequest);
@@ -1124,7 +1123,6 @@ private:
                 Y_ABORT_UNLESS(ContinueRunEvent->CheckpointRequest->Checkpoint.GetId() == checkpointRequest->GetId());
             }
         }
-
         if (auto watermarkRequest = WatermarksTracker.GetPendingWatermark()) {
             Y_ENSURE(*watermarkRequest >= ContinueRunEvent->WatermarkRequest);
             ContinueRunEvent->WatermarkRequest = *watermarkRequest;

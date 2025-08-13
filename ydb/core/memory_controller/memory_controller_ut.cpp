@@ -512,7 +512,7 @@ Y_UNIT_TEST(ResourceBroker_ConfigCS) {
     TAutoPtr<IEventHandle> handle;
     auto sender = runtime.AllocateEdgeActor();
     InitRoot(server, sender);
-    
+
     ui64 currentHardMemoryLimit = 1000_MB;
     server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
     runtime.SimulateSleep(TDuration::Seconds(2));
@@ -563,33 +563,33 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
     TAutoPtr<IEventHandle> handle;
     auto sender = runtime.AllocateEdgeActor();
 
-    auto scanLimits = NKikimr::NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::GetDefaultStageFeatures();
-    auto compactionLimits = NKikimr::NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::GetDefaultStageFeatures();
+    auto counters = runtime.GetAppData().Counters;
+    auto compactionCounters = counters->GetSubgroup("module_id", "grouped_memory_limiter")->GetSubgroup("limiter_name", "Comp_0")->GetSubgroup("stage", "general");
+    auto scanCounters = counters->GetSubgroup("module_id", "grouped_memory_limiter")->GetSubgroup("limiter_name", "Scan_0")->GetSubgroup("stage", "general");
 
     InitRoot(server, sender);
 
     auto checkMemoryLimits = [&]() {
         using OlapLimits = NKikimr::NOlap::TGlobalLimits;
-
         UNIT_ASSERT_DOUBLES_EQUAL(
             static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient *
                 (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
-            static_cast<double>(scanLimits->GetLimit()),
+            static_cast<double>(scanCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100), 
-            static_cast<double>(scanLimits->GetHardLimit().value()),
+            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
+            static_cast<double>(scanCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * ColumnTablesCompGroupedMemoryFraction * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100),
-            static_cast<double>(compactionLimits->GetLimit()),
+            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100),
+            static_cast<double>(compactionCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
             1_KB);
-        
+
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * ColumnTablesCompGroupedMemoryFraction * compactionMemoryLimitPercent / 100),
-            static_cast<double>(compactionLimits->GetHardLimit().value()),
+            static_cast<double>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100.0),
+            static_cast<double>(compactionCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
             1_KB);
     };
 

@@ -18,6 +18,8 @@ private:
     std::shared_ptr<TStageFeatures> Owner;
     std::shared_ptr<TStageCounters> Counters;
     std::function<void(ui64)> MemoryConsumptionUpdate;
+    const bool UseLimitFromConfig;
+    static constexpr ui64 DEFAULT_LIMIT = ui64(3) << 30;
 
     void UpdateConsumption(const TStageFeatures* current) const;
 
@@ -28,7 +30,7 @@ public:
         return Usage.Val() + Waiting.Val();
     }
 
-    TStageFeatures(const TString& name, const ui64 limit, const std::optional<ui64>& hardLimit, const std::shared_ptr<TStageFeatures>& owner,
+    TStageFeatures(const TString& name, const std::optional<ui64>& limit, const std::optional<ui64>& hardLimit, const std::shared_ptr<TStageFeatures>& owner,
         const std::shared_ptr<TStageCounters>& counters);
 
     [[nodiscard]] TConclusionStatus Allocate(const ui64 volume);
@@ -39,6 +41,10 @@ public:
     void Add(const ui64 volume, const bool allocated);
 
     void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);
+
+    void AttachOwner(const std::shared_ptr<TStageFeatures>& owner);
+    void AttachCounters(const std::shared_ptr<TStageCounters>& counters);
+
     void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased);
 };
 

@@ -966,6 +966,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UpdateDataSourceCluster
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushPruneKeysIntoYtOperation(TExprBase node, TExprContext& ctx) const {
+    if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
+        return node;
+    }
+
     auto op = node.Cast<TCoPruneKeysBase>();
     auto extractorLambda = op.Extractor();
 

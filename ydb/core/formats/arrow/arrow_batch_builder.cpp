@@ -217,7 +217,7 @@ void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
     NumBytes += cell.Size();
     auto ydbType = YdbSchema[colNum].second;
     auto status = NKikimr::NArrow::AppendCell(*BatchBuilder, cell, colNum, ydbType);
-    Y_ABORT_UNLESS(status.ok(), "Faield to append cell: %s", status.ToString().c_str());
+    Y_ABORT_UNLESS(status.ok(), "Failed to append cell: %s", status.ToString().c_str());
 }
 
 void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value) {

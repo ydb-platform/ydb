@@ -90,6 +90,9 @@ namespace TEvColumnShard {
         EvApplyLinksModificationFinished,
         EvInternalScan,
 
+        EvOverloadReady,
+        EvOverloadUnsubscribe,
+
         EvEnd
     };
 
@@ -236,6 +239,31 @@ namespace TEvColumnShard {
         TEvNotifyTxCompletionResult(ui64 origin, ui64 txId) {
             Record.SetOrigin(origin);
             Record.SetTxId(txId);
+        }
+    };
+
+    struct TEvOverloadReady
+        : public TEventPB<
+              TEvOverloadReady,
+              NKikimrTxColumnShard::TEvOverloadReady,
+              EvOverloadReady> {
+        TEvOverloadReady() = default;
+
+        explicit TEvOverloadReady(ui64 tabletId, ui64 seqNo) {
+            Record.SetTabletID(tabletId);
+            Record.SetSeqNo(seqNo);
+        }
+    };
+
+    struct TEvOverloadUnsubscribe
+        : public TEventPB<
+              TEvOverloadUnsubscribe,
+              NKikimrTxColumnShard::TEvOverloadUnsubscribe,
+              EvOverloadUnsubscribe> {
+        TEvOverloadUnsubscribe() = default;
+
+        explicit TEvOverloadUnsubscribe(ui64 seqNo) {
+            Record.SetSeqNo(seqNo);
         }
     };
 };

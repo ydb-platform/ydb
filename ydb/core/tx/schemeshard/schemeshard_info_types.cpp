@@ -463,10 +463,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                         2. Set NotNull back to false if there is at least one Null in the column.
                     */
 
-                    // column.NotNull = true;
+                    column.NotNull = true;
                 } else { // DROP NOT NULL
                     column.NotNull = false;
                 }
+
             }
 
             if (columnFamily) {

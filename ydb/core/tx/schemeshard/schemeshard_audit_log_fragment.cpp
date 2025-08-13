@@ -1,6 +1,7 @@
 #include "schemeshard_audit_log_fragment.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/set_constraint.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -672,7 +673,7 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         // since it operates on paths determined at runtime
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint:
-        // result.emplace_back(NKikimr::JoinPath({}); TODO flown4qqqq
+        result.emplace_back(tx.GetSetConstraintRequest().GetTablePath());
         break;
     }
 

@@ -643,7 +643,7 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<NKikimrSchemeOpConstraint::TSetColumnConstraintSettings>&& settings) override {
+    TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
         try {
             auto dirname = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath).first;
             if (!dirname.empty() && !IsStartWithSlash(dirname)) {
@@ -651,8 +651,9 @@ public:
             }
 
             NKikimrSchemeOpConstraint::TSetColumnConstraintsRequest setConstraintRequestSettings;
-            for (auto&& setting : settings) {
-                setConstraintRequestSettings.AddConstraintSettings()->CopyFrom(std::move(setting));
+            for (auto& setting : settings) {
+                auto* add = setConstraintRequestSettings.AddConstraintSettings();
+                add->Swap(&setting);
             }
 
             setConstraintRequestSettings.SetTablePath(tablePath);

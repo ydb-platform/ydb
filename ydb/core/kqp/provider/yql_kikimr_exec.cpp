@@ -1551,7 +1551,7 @@ public:
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
-            TVector<TSetConstraintSettings> constraintSetObjects;
+            TVector<TSetColumnConstraintSettings> constraintSetObjects;
 
             for (auto action : maybeAlter.Cast().Actions()) {
                 auto name = action.Name().Value();
@@ -1733,9 +1733,9 @@ public:
                                 } else {
                                     alterTableRequest.mutable_alter_columns()->RemoveLast();
 
-                                    TSetConstraintSettings value;
+                                    TSetColumnConstraintSettings value;
                                     value.SetColumnName(TString(columnName));
-                                    value.SetConstraint(TSetConstraintSettings::NOT_NULL);
+                                    value.SetConstraint(TSetColumnConstraintSettings::NOT_NULL);
 
                                     constraintSetObjects.push_back(std::move(value));
                                 }

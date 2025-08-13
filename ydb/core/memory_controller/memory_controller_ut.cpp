@@ -2,6 +2,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <memory_controller_config.h>
 #include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/tablet_flat/shared_cache_counters.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/columnshard/common/limits.h>

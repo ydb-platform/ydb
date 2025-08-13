@@ -53,7 +53,6 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
     CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
     ControlId = ev->Sender;
-    NeedSendRunToCA = ev->Get()->NeedSendRunToCA;
 
     for (const auto& task : ev->Get()->Tasks) {
         Y_ABORT_UNLESS(task.ActorId);
@@ -423,11 +422,12 @@ void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId,
 }
 
 void TCheckpointCoordinator::StartAllTasks() {
-    if (!GraphIsRunning && NeedSendRunToCA) {
+    if (!GraphIsRunning) {
         CC_LOG_I("Send TEvRun to all actors");
         for (const auto& [actor, transport] : AllActors) {
             transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
         }
+        GraphIsRunning = true;
     }
 }
 

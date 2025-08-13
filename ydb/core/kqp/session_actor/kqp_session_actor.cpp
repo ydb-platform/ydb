@@ -1691,8 +1691,8 @@ public:
 
             ui64 dqGraphIndex = 0;
             ui64 generation = 0;
-            if (QueryState && QueryState->QueryPhysicalGraph) {     // TODO 
-                generation = 1;
+            if (QueryState) {
+                generation = QueryState->Generation;
             }
             auto stateLoadMode = FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT;//FederatedQuery::StateLoadMode::EMPTY;
             FederatedQuery::StreamingDisposition streamingDisposition;
@@ -1708,7 +1708,7 @@ public:
                 dqGraphParams,
                 stateLoadMode,
                 streamingDisposition).Release());
-                LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId);
+                LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId << ", generation " << generation);
         }
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,

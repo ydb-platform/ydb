@@ -182,7 +182,6 @@ private:
     bool InitingZeroCheckpoint = false;
     bool FailedZeroCheckpoint = false;
     bool RestoringFromForeignCheckpoint = false;
-    bool NeedSendRunToCA = true;
 
     TCheckpointCoordinatorMetrics Metrics;
 

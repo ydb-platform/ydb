@@ -29,10 +29,13 @@ struct TMockPqGatewaySettings {
 class IMockPqGateway : public NYql::IPqGateway {
 public:
     using TEvGen = std::function<NYdb::NTopic::TReadSessionEvent::TEvent(TMockPqSession)>;
+    using TWriteResult = std::vector<TString>;
 
     virtual void AddEvent(const TString& topic, NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size = 0) = 0;
 
     virtual void AddEventProvider(const TString& topic, TEvGen evGen) = 0;
+
+    virtual TWriteResult GetWriteSessionData(const TString& topic)  = 0;
 };
 
 NYdb::NTopic::TPartitionSession::TPtr CreatePartitionSession(const TString& path = "fake/path");

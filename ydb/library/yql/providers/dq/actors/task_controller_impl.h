@@ -537,7 +537,6 @@ public:
             YQL_CLOG(DEBUG, ProviderDq) << "Forward: " << SelfId() << " to " << CheckpointCoordinatorId;
 
             auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
-            event->NeedSendRunToCA = true;
             for (const auto& [settings, actorId] : Tasks) {
                 auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
                     settings.GetId(),

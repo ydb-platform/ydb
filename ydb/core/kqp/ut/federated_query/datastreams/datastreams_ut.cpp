@@ -744,7 +744,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
        // constexpr char topicName[] = "restoreScriptTopicOnRetry";
         TString inputTopicName = "inputTopicName";
         TString outputTopicName = "outputTopicName";
-        size_t numberEvents = 0;
 
         auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory(), {
             .PqGateway = pqGateway
@@ -815,48 +814,34 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
         Sleep(TDuration::MilliSeconds(3000));
 
-        // Sleep(TDuration::MilliSeconds(100));
-        pqGateway->AddEvent(inputTopicName, MakePqMessage(numberEvents, R"({"key":"key1", "value": "value1"})", {.Session = CreatePartitionSession()}));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(1, R"({"key":"key1", "value": "value1"})", {.Session = CreatePartitionSession()}));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(2, R"({"key":"key2", "value": "value2"})", {.Session = CreatePartitionSession()}));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(3, R"({"key":"key3", "value": "value3"})", {.Session = CreatePartitionSession()}));
         Sleep(TDuration::MilliSeconds(1000));
-        Cerr << "Sleep end5" << Endl;
         pqGateway->AddEvent(inputTopicName, NTopic::TSessionClosedEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")}));
-        Sleep(TDuration::MilliSeconds(1000));
-        pqGateway->AddEvent(inputTopicName, MakePqMessage(numberEvents, R"({"key":"key2", "value": "value2"})", {.Session = CreatePartitionSession()}));
-        Sleep(TDuration::MilliSeconds(1000));
-        // NOperation::TOperationClient opClient(kikimr->GetDriver());
 
-        // const auto timeout = TInstant::Now() + TDuration::Seconds(10);
-        // while (true) {
-        //     const auto op = opClient.Get<TScriptExecutionOperation>(operationId).ExtractValueSync();
-        //     UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::SUCCESS, op.Status().GetIssues().ToString());
-        //     UNIT_ASSERT_C(!op.Ready(), "Operation unexpectedly finished");
-        //     if (op.Metadata().ExecStatus == EExecStatus::Failed) {
-        //         break;
-        //     }
+        Sleep(TDuration::MilliSeconds(10000));
+        pqGateway->AddEvent(inputTopicName, MakePqMessage(4, R"({"key":"key4", "value": "value4"})", {.Session = CreatePartitionSession()}));
+        //Sleep(TDuration::MilliSeconds(1000));
 
-        //     if (TInstant::Now() > timeout) {
-        //         UNIT_FAIL("Failed to wait for query to finish (before retry)");
-        //     }
-
-        //     Sleep(TDuration::MilliSeconds(100));
-        // }
-
-        // {
-        //     const auto query = fmt::format(R"(
-        //         DROP EXTERNAL DATA SOURCE `{s3_sink}`;
-        //         DROP EXTERNAL DATA SOURCE `{pq_source}`;)",
-        //         "s3_sink"_a = s3SinkName,
-        //         "pq_source"_a = pqSourceName
-        //     );
-        //     const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-        //     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        // }
-
-        // const auto readyOp = WaitScriptExecutionOperation(operationId, kikimr->GetDriver());
-        // UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Status().GetStatus(), EStatus::SUCCESS, readyOp.Status().GetIssues().ToString());
-        // UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
-        // UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), "{\"key\":\"key1\",\"value\":\"value1\"}\n");
-        // UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(writeBucket), 0);
+        bool success = false;
+        while (true) {
+            auto writeResult = pqGateway->GetWriteSessionData(outputTopicName);
+            Cerr << "GetWriteSessionData7 ok" << Endl;
+            for (auto& w : writeResult) {
+                if (w == "key4value4") {
+                    success = true;
+                    break;
+                }
+            }
+            if (success) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        NYdb::NOperation::TOperationClient client(kikimr->GetDriver());
+        auto status = client.Cancel(operationId).ExtractValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     }
 }
 

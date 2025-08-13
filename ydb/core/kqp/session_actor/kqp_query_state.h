@@ -62,6 +62,7 @@ public:
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
         , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
+        , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , StartTime(TInstant::Now())
@@ -128,6 +129,7 @@ public:
     NKikimrKqp::EQueryType QueryType;
     bool SaveQueryPhysicalGraph = false;
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
+    const i64 Generation = 0;
 
     TActorId RequestActorId;
 

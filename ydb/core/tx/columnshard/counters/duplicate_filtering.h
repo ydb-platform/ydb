@@ -14,6 +14,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsRejected;
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsBulkAccepted;
 
+    NMonitoring::THistogramPtr IntersectingPortionsPerRequest;
+
 public:
     TDuplicateFilteringCounters();
 
@@ -21,6 +23,10 @@ public:
         MergeRowsAccepted->Add(accepted);
         MergeRowsRejected->Add(rejected);
         MergeRowsBulkAccepted->Add(bulkAccepted);
+    }
+
+    void OnFilterRequest(const ui64 intersectingPortions) const {
+        IntersectingPortionsPerRequest->Collect(intersectingPortions);
     }
 };
 }   // namespace NKikimr::NColumnShard

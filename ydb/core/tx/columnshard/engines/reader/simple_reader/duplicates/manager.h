@@ -34,15 +34,18 @@ private:
 
     inline static TAtomicCounter NextRequestId = 0;
 
+    const std::shared_ptr<ISnapshotSchema> LastSchema;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
     const std::shared_ptr<arrow::Schema> PKSchema;
-    std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
+    const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
     const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
-    TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
-    THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
+
+    TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
+    THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
+    ui64 ExpectedIntersectionCount = 0;
 
 private:
     static TPortionIntervalTree MakeIntervalTree(const std::deque<NSimple::TSourceConstructor>& portions) {

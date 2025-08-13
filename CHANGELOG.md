@@ -43,7 +43,7 @@
 * 20355:Eliminated remove data cleanup freezes in case of counter discrepancies. [#20355](https://github.com/ydb-platform/ydb/pull/20355) ([Andrey Molotkov](https://github.com/molotkov-and))
 * 20759:Fixed the [KesusQuoterService freeze](https://github.com/ydb-platform/ydb/issues/20747) in case of several unsuccessful attempts to connect to the Kesus tablet. [#20759](https://github.com/ydb-platform/ydb/pull/20759) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 * 20707:[Fixed](https://github.com/ydb-platform/ydb/pull/20707) an [issue](https://github.com/ydb-platform/ydb/issues/20709) where distributed reads could occasionally be processed without a snapshot. Need to acquire snapshot for dependant reads even in RW transaction. ([Nikita Vasilev](https://github.com/nikvas0))
-* 22202:ensure tablets are launched after nodes stop being overloaded, fixes https://github.com/ydb-platform/ydb/issues/22030 [#22202](https://github.com/ydb-platform/ydb/pull/22202) ([vporyadke](https://github.com/vporyadke))
+* 22202:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/22030) that caused tablets to hang when nodes experienced critical memory shortage. Now tablets will automatically start as soon as any of the nodes frees up sufficient resources. [#22202](https://github.com/ydb-platform/ydb/pull/22202) ([vporyadke](https://github.com/vporyadke))
 
 ### YDB UI
 

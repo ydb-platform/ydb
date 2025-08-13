@@ -13,11 +13,11 @@ rectangle "Total Process Memory\n(HardLimit / 100%)" as hard {
 
         rectangle "Activities\n(% limit)" as act {
             rectangle "KQP (Query Execution)" as kqp #DAE8FC
+            rectangle "Compaction" as cc #DAE8FC
         }
 
         rectangle "SharedCache\n(min/max limit)" as shared {
             rectangle "Tables Caches" as ds #DAE8FC
-            rectangle "Compaction Caches" as cc #DAE8FC
         }
         rectangle "MemTable\n(min/max limit)" as mem {
             rectangle "Local DB" #DAE8FC

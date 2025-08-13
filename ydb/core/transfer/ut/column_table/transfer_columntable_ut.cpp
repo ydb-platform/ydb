@@ -139,6 +139,12 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
         ProcessingTargetTableOtherType(TableType);
     }
 
+
+    Y_UNIT_TEST(DropColumn)
+    {
+        DropColumn(TableType);
+    }
+
     void BigBatchSize(bool local) {
         MainTestCase testCase(std::nullopt, TableType);
 

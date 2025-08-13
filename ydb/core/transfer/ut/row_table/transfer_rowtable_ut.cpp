@@ -149,6 +149,12 @@ Y_UNIT_TEST_SUITE(Transfer_RowTable)
         ProcessingTargetTableOtherType(TableType);
     }
 
+
+    Y_UNIT_TEST(DropColumn)
+    {
+        DropColumn(TableType);
+    }
+
     Y_UNIT_TEST(TableWithSyncIndex) {
         MainTestCase testCase(std::nullopt, TableType);
 

@@ -496,9 +496,11 @@ protected:
             /* TODO */ \
             /* if (DoRecovery) { */ \
             /*     DoRecovery(); */ \
-            /*     Buffer.Clear(); */ \
-            /*     if (!Buffer.IsReady()) { return TStatus::Success(); } */ \
-            /* } else */ \
+            /* } */ \
+            Buffer.Clear(); \
+            if (!Buffer.IsReady()) { \
+                return TStatus::Success(); \
+            } \
             return status; \
         } else { \
             Buffer.StartRecovery(); \
@@ -574,6 +576,9 @@ retry:
                 if (!Buffer.Recovery.IsActive()) {
                     Counters->GetCounter("ReparseOnError")->Inc();
                     Buffer.StartRecovery();
+                    if (!Buffer.IsReady()) {
+                        return TStatus::Success();
+                    }
                     goto retry;
                 }
                 Counters->GetCounter("ColumnErrors")->Inc();

@@ -190,6 +190,10 @@ protected:
 
     NWilson::TSpan Span;
 
+    NSchemeCache::TSchemeCacheNavigate::EKind GetTableKind() const {
+        return TableKind;
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return DerivedActivityType;
@@ -309,6 +313,10 @@ private:
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
     virtual void SendResult(const NActors::TActorContext& ctx, const ::Ydb::StatusIds::StatusCode& status) = 0;
     virtual void AuditContextStart() {}
+    virtual bool ValidateTable(TString& errorMessage) {
+        Y_UNUSED(errorMessage);
+        return true;
+    }
 
     virtual EUploadSource GetSourceType() const {
         return EUploadSource::ProtoValues;
@@ -666,6 +674,11 @@ private:
 
         ResolveNamesResult.reset(ev->Get()->Request.Release());
 
+        TString errorMessage;
+        if (!ValidateTable(errorMessage)) {
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage, ctx);
+        }
+
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
         {
             auto conclusion = BuildSchema(ctx, makeYdbSchema);
@@ -674,7 +687,6 @@ private:
             }
         }
 
-        TString errorMessage;
         switch (GetSourceType()) {
             case EUploadSource::ProtoValues:
             {

@@ -543,6 +543,8 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
+    tableDesc.SetTemporary(metadata->Temporary);
+
     return true;
 }
 
@@ -2634,6 +2636,9 @@ public:
                 if (settings.Settings.ConsumerName) {
                     target.SetConsumerName(*settings.Settings.ConsumerName);
                 }
+                if (settings.Settings.DirectoryPath) {
+                    target.SetDirectoryPath(*settings.Settings.DirectoryPath);
+                }
             }
 
             if (IsPrepare()) {
@@ -2686,6 +2691,10 @@ public:
                 if (batching->BatchSizeBytes) {
                     op.MutableAlterTransfer()->SetBatchSizeBytes(batching->BatchSizeBytes.value());
                 }
+            }
+
+            if (settings.Settings.DirectoryPath) {
+                op.MutableAlterTransfer()->SetDirectoryPath(*settings.Settings.DirectoryPath);
             }
 
             if (const auto& done = settings.Settings.StateDone) {

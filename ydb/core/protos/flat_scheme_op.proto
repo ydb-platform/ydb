@@ -328,6 +328,7 @@ message TTableDescription {
         TTableIncrementalBackupConfig IncrementalBackupConfig = 43;
     }
 
+    // For kqp internal use only
     optional bool Temporary = 41;
 
     // This flag is create-only, and has to be set up
@@ -910,6 +911,9 @@ message TColumnTableDescription {
 
     // Channels for standalone column table
     optional TColumnStorageConfig StorageConfig = 13;
+
+    // For kqp internal use only
+    optional bool Temporary = 14;
 }
 
 message TAlterColumnTable {
@@ -1562,6 +1566,7 @@ message TReplicationDescription {
         optional string TransformLambda = 1;
         optional uint64 FlushIntervalMilliSeconds = 2 [default = 60000];
         optional uint64 BatchSizeBytes = 3 [default = 8388608];
+        optional string DirectoryPath = 4;
     }
 
     optional TAlterTransfer AlterTransfer = 10;

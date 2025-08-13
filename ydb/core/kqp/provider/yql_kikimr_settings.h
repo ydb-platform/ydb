@@ -75,6 +75,9 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, false> UseBlockReader;
 
+    // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
+    NCommon::TConfSetting<TString, false> CostBasedOptimization;
+
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , false> HashShuffleFuncType;
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , false> ColumnShardHashShuffleFuncType;
 

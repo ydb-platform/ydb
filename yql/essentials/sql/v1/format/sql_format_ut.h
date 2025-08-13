@@ -406,14 +406,14 @@ Y_UNIT_TEST(AsyncReplication) {
 
 Y_UNIT_TEST(Transfer) {
     TCases cases = {
-        {"create transfer user from topic1 to table1 with (user='foo')",
-            "CREATE TRANSFER user FROM topic1 TO table1 WITH (user = 'foo');\n"},
         {"alter transfer user set (user='foo')",
             "ALTER TRANSFER user SET (user = 'foo');\n"},
         {"drop transfer user",
             "DROP TRANSFER user;\n"},
         {"drop transfer user cascade",
             "DROP TRANSFER user CASCADE;\n"},
+        {"create transfer user from topic1 to table1 using ($x) -> { $y = cast($x as String); return $y ; }",
+            "CREATE TRANSFER user FROM topic1 TO table1 USING ($x) -> {\n    $y = CAST($x AS String);\n    RETURN $y;\n};\n"},
         {"create transfer user from topic1 to table1 using ($x) -> { $y = cast($x as String); return $y ; } with (user='foo')",
             "CREATE TRANSFER user FROM topic1 TO table1 USING ($x) -> {\n    $y = CAST($x AS String);\n    RETURN $y;\n} WITH (user = 'foo');\n"},
         {"create transfer user from topic1 to table1 using $xxx with (user='foo')",

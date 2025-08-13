@@ -151,7 +151,7 @@ public:
             return true;
         }
 
-        if (record.GetIncludeStats()) {
+        if (record.GetIncludeStats() && !Replication->GetConfig().HasTransferSpecific()) {
             for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
                 auto* target = Replication->FindTarget(tid);
                 if (!target) {
@@ -197,10 +197,29 @@ public:
             totalScanProgress = std::make_optional<TInitialScanProgress>();
         }
 
+        bool isTransfer = replication->GetConfig().HasTransferSpecific();
+        if (isTransfer) {
+            auto& specific = replication->GetConfig().GetTransferSpecific();
+
+            auto& transferSpecific = *Result->Record.MutableTransferSpecific();
+            transferSpecific.MutableTarget()->SetSrcPath(specific.GetTarget().GetSrcPath());
+            transferSpecific.MutableTarget()->SetDstPath(specific.GetTarget().GetDstPath());
+            transferSpecific.MutableTarget()->SetTransformLambda(specific.GetTarget().GetTransformLambda());
+            transferSpecific.MutableBatching()->CopyFrom(specific.GetBatching());
+        }
+
         for (ui64 tid = 0; tid < replication->GetNextTargetId(); ++tid) {
             auto* target = replication->FindTarget(tid);
             if (!target) {
                 continue;
+            }
+
+            if (isTransfer) {
+                // transfer always has one target
+                auto& specific = replication->GetConfig().GetTransferSpecific();
+
+                auto& transferSpecific = *Result->Record.MutableTransferSpecific();
+                transferSpecific.MutableTarget()->SetConsumerName(target->GetStreamConsumerName() ? target->GetStreamConsumerName() : specific.GetTarget().GetConsumerName());
             }
 
             auto& item = *Result->Record.AddTargets();

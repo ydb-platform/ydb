@@ -34,10 +34,11 @@ public:
         AddHandler({TSoReadObject::CallableName()}, Hndl(&TSelf::HandleRead));
         AddHandler({TSoObject::CallableName()}, Hndl(&TSelf::HandleSoObject));
         AddHandler({TSoSourceSettings::CallableName()}, Hndl(&TSelf::HandleSoSourceSettings));
+        AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfig));
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 16, ctx)) {
+        if (!EnsureArgsCount(*input, 17, ctx)) {
             return TStatus::Error;
         }
 
@@ -70,6 +71,11 @@ public:
             return TStatus::Error;
         }
 
+        auto& labelNameAliases = *input->Child(TSoSourceSettings::idx_LabelNameAliases);
+        if (!EnsureTupleOfAtoms(labelNameAliases, ctx)) {
+            return TStatus::Error;
+        }
+
         auto& requiredLabelNames = *input->Child(TSoSourceSettings::idx_RequiredLabelNames);
         if (!EnsureTupleOfAtoms(requiredLabelNames, ctx)) {
             return TStatus::Error;
@@ -91,6 +97,11 @@ public:
         }
         bool hasSelectors = !selectors.Content().empty();
 
+        if (hasSelectors && !State_->Configuration->_EnableRuntimeListing.Get().GetOrElse(false)) {
+            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "runtime listing is disabled, use `program` parameter"));
+            return TStatus::Error;
+        }
+
         auto& program = *input->Child(TSoSourceSettings::idx_Program);
         if (!EnsureAtom(program, ctx)) {
             return TStatus::Error;
@@ -99,11 +110,6 @@ public:
 
         if (hasSelectors && hasProgram) {
             ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "either program or selectors must be specified"));
-            return TStatus::Error;
-        }
-
-        if (!hasSelectors && !hasProgram) {
-            ctx.AddError(TIssue(ctx.GetPosition(selectors.Pos()), "specify either program or selectors"));
             return TStatus::Error;
         }
 
@@ -154,7 +160,7 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 8U, 9U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 9U, 10U, ctx)) {
             return TStatus::Error;
         }
 
@@ -173,6 +179,11 @@ public:
 
         auto& labelNames = *input->Child(TSoReadObject::idx_LabelNames);
         if (!EnsureTupleOfAtoms(labelNames, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& labelNameAliases = *input->Child(TSoReadObject::idx_LabelNameAliases);
+        if (!EnsureTupleOfAtoms(labelNameAliases, ctx)) {
             return TStatus::Error;
         }
 
@@ -218,6 +229,23 @@ public:
             ctx.MakeType<TListExprType>(type)
         }));
 
+        return TStatus::Ok;
+    }
+
+    TStatus HandleConfig(const TExprNode::TPtr& input, TExprContext& ctx) {
+        if (!EnsureMinArgsCount(*input, 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input->Child(TCoConfigure::idx_World), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataSource(*input->Child(TCoConfigure::idx_DataSource), SolomonProviderName, ctx)) {
+            return TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Child(TCoConfigure::idx_World)->GetTypeAnn());
         return TStatus::Ok;
     }
 

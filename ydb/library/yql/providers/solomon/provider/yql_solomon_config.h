@@ -11,11 +11,14 @@ struct TSolomonSettings {
     using TConstPtr = std::shared_ptr<const TSolomonSettings>;
 
     NCommon::TConfSetting<bool, false> _EnableReading;
+    NCommon::TConfSetting<bool, false> _EnableRuntimeListing;
+    NCommon::TConfSetting<ui64, false> _TruePointsFindRange;
     NCommon::TConfSetting<ui64, false> MetricsQueuePageSize;
     NCommon::TConfSetting<ui64, false> MetricsQueuePrefetchSize;
     NCommon::TConfSetting<ui64, false> MetricsQueueBatchCountLimit;
     NCommon::TConfSetting<TString, false> SolomonClientDefaultReplica;
     NCommon::TConfSetting<ui64, false> ComputeActorBatchSize;
+    NCommon::TConfSetting<ui64, false> MaxApiInflight;
 };
 
 struct TSolomonConfiguration

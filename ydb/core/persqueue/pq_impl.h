@@ -8,6 +8,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -291,6 +292,15 @@ private:
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
     TMaybe<NKikimrPQ::TPartitions> PartitionsDataConfigTx;
+    /**
+    Requests are placed in this queue when there is a GetOwnership request with writeId that is being deleted.
+    In kafka transactions (kafka api prior to 4.0.0 version) all transactional writes in same session will have
+    same producerId+producerEpoch pairs. Thus we can't distinguish write to one transaction from the write to the next one.
+    
+    But we know for sure that all writes coming after the commit of the kafka transaction refer to the next transaction. 
+    That's why we queue them here till previous transaction is completely deleted (all supportive partitions are deleted and writeId is erased from TxWrites).
+     */
+    THashMap<NKafka::TProducerInstanceId, TEvPersQueue::TEvRequest::TPtr, NKafka::TProducerInstanceIdHashFn> KafkaNextTransactionRequests;
 
     // PLANNED -> CALCULATING -> CALCULATED -> WAIT_RS -> EXECUTING -> EXECUTED
     THashMap<TDistributedTransaction::EState, TDeque<ui64>> TxsOrder;
@@ -456,6 +466,7 @@ private:
 
     void DeleteExpiredTransactions(const TActorContext& ctx);
     void ScheduleDeleteExpiredKafkaTransactions();
+    void TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
     void SetTxCounters();
@@ -583,6 +594,15 @@ private:
     void ProcessPendingEvents();
 
     void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
+
+    TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
+    NWilson::TSpan WriteTxsSpan;
+
+    void InitPipeClientCache();
+
+    bool HasTxPersistSpan = false;
+    bool HasTxDeleteSpan = false;
+    ui8 WriteTxsSpanVerbosity = 0;
 };
 
 

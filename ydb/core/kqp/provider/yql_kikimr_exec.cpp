@@ -870,6 +870,14 @@ namespace {
                 }
 
                 dstSettings.ConsumerName = value;
+            } else if (name == "directory") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+                dstSettings.DirectoryPath = value;
             }
         }
 
@@ -2435,7 +2443,7 @@ public:
                 return SyncError();
             }
 
-            if (!settings.Settings.ConnectionString && (!settings.Settings.Endpoint || !settings.Settings.Database)) {
+            if (!settings.Settings.Endpoint ^ !settings.Settings.Database) {
                 ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
                     "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided"));
                 return SyncError();

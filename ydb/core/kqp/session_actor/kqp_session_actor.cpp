@@ -533,6 +533,17 @@ public:
     bool AreAllTheTopicsAndPartitionsKnown() const {
         if (QueryState->HasTopicOperations()) {
             const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
+
+            if (operations.HasTabletId()) {
+                for (const auto& topic : operations.GetTopics()) {
+                    auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
+                    for (const auto& partition : topic.partitions()) {
+                        QueryState->TxCtx->TopicOperations.SetTabletId(path, partition.partition_id(), operations.GetTabletId());
+                    }
+                }
+                return true;
+            }
+
             for (const auto& topic : operations.GetTopics()) {
                 auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
 
@@ -554,6 +565,7 @@ public:
                 }
             }
         }
+
         return true;
     }
 
@@ -1781,6 +1793,8 @@ public:
             return;
         }
         if (QueryState->IsCreateTableAs()) {
+            TempTablesState.HasCreateTableAs = true;
+            QueryState->UpdateTempTablesState(TempTablesState);
             return;
         }
 

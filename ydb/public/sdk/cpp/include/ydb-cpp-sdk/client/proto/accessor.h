@@ -50,6 +50,7 @@ public:
     static const Ydb::Monitoring::SelfCheckResult& GetProto(const NYdb::NMonitoring::TSelfCheckResult& selfCheckResult);
     static const Ydb::Coordination::DescribeNodeResult& GetProto(const NYdb::NCoordination::TNodeDescription &describeNodeResult);
     static const Ydb::Replication::DescribeReplicationResult& GetProto(const NYdb::NReplication::TDescribeReplicationResult& desc);
+    static const Ydb::Replication::DescribeTransferResult& GetProto(const NYdb::NReplication::TDescribeTransferResult& desc);
     static const Ydb::View::DescribeViewResult& GetProto(const NYdb::NView::TDescribeViewResult& desc);
 
     static NTable::TQueryStats FromProto(const Ydb::TableStats::QueryStats& queryStats);

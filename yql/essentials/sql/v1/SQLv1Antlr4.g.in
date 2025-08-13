@@ -923,8 +923,8 @@ lambda_or_parameter:
 ;
 
 create_transfer_stmt: CREATE TRANSFER object_ref
-    FROM object_ref TO object_ref (USING lambda_or_parameter)?
-    WITH LPAREN transfer_settings RPAREN
+    FROM object_ref TO object_ref USING lambda_or_parameter
+    (WITH LPAREN transfer_settings RPAREN)?
 ;
 
 transfer_settings: transfer_settings_entry (COMMA transfer_settings_entry)*;

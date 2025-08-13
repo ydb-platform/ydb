@@ -447,9 +447,11 @@ public:
     TColumnDataBatcher(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         std::vector<ui32> writeIndex,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        std::vector<ui32> readIndex)
             : Columns(BuildColumns(inputColumns))
             , WriteIndex(std::move(writeIndex))
+            , ReadIndex(std::move(readIndex))
             , BatchBuilder(std::make_unique<NArrow::TArrowBatchBuilder>(
                 arrow::Compression::UNCOMPRESSED,
                 BuildNotNullColumns(inputColumns),
@@ -471,10 +473,11 @@ public:
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
+                auto readIndex = ReadIndex.empty() ? index : ReadIndex[index];
                 rowBuilder.AddCell(
                     WriteIndex[index],
                     Columns[index].PType,
-                    row.GetElement(index),
+                    row.GetElement(readIndex),
                     Columns[index].PTypeMod);
             }
             BatchBuilder->AddRow(rowBuilder.BuildCells());
@@ -494,6 +497,7 @@ public:
 private:
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
+    const std::vector<ui32> ReadIndex;
     std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
@@ -821,9 +825,11 @@ public:
     TRowDataBatcher(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         std::vector<ui32> writeIndex,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        std::vector<ui32> readIndex)
             : Columns(BuildColumns(inputColumns))
             , WriteIndex(std::move(writeIndex))
+            , ReadIndex(std::move(readIndex))
             , RowBatcher(Columns.size(), std::nullopt, alloc)
             , Alloc(alloc) {
     }
@@ -832,10 +838,11 @@ public:
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
+                auto readIndex = ReadIndex.empty() ? index : ReadIndex[index];
                 rowBuilder.AddCell(
                     WriteIndex[index],
                     Columns[index].PType,
-                    row.GetElement(index),
+                    row.GetElement(readIndex),
                     Columns[index].PTypeMod);
             }
             auto cells = rowBuilder.BuildCells();
@@ -854,6 +861,7 @@ public:
 private:
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
+    const std::vector<ui32> ReadIndex;
     TRowsBatcher RowBatcher;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
@@ -1018,13 +1026,19 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
-    return MakeIntrusive<TColumnDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc));
+        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        std::vector<ui32> readIndex) {
+    Y_ABORT_UNLESS(writeIndex.size() == inputColumns.size());
+    Y_ABORT_UNLESS(readIndex.empty() || readIndex.size() == inputColumns.size());
+    return MakeIntrusive<TColumnDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc), std::move(readIndex));
 }
 
 IDataBatcherPtr CreateRowDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
-    return MakeIntrusive<TRowDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc));
+        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        std::vector<ui32> readIndex) {
+    Y_ABORT_UNLESS(writeIndex.size() == inputColumns.size());
+    Y_ABORT_UNLESS(readIndex.empty() || readIndex.size() == inputColumns.size());
+    return MakeIntrusive<TRowDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc), std::move(readIndex));
 }
 
 bool IDataBatch::IsEmpty() const {

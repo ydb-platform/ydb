@@ -43,6 +43,7 @@ enum EObjectType {
     ExternalDataSource = 25;
     View = 26;
     ResourcePool = 27;
+    SysView = 28;
 }
 
 message TBrowseInfo {
@@ -775,6 +776,7 @@ enum EAutocompleteType {
     view = 20;
     column = 21;
     index = 22;
+    sys_view = 23;
 }
 
 message TQueryAutocomplete {

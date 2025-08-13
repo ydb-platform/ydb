@@ -504,66 +504,6 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             }
         }
     }
-
-    Y_UNIT_TEST(MaintenanceStatus) {
-        TTestEnv env(8, 4);
-
-        auto cmsConfig = env.GetCmsConfig();
-        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE);
-        env.SetCmsConfig(cmsConfig);
-
-        const TPDiskID id = env.RandomPDiskID();
-
-        bool maintenanceStatusSeen = false;
-        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
-            const auto& request = event->Get()->Record;
-            for (const auto& command : request.GetRequest().GetCommand()) {
-                if (command.HasUpdateDriveStatus()) {
-                    const auto& update = command.GetUpdateDriveStatus();
-                    ui32 nodeId = update.GetHostKey().GetNodeId();
-                    ui32 pdiskId = update.GetPDiskId();
-
-                    if (id.NodeId == nodeId && id.DiskId == pdiskId) {
-                        if (update.GetMaintenanceStatus() == NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED) {
-                            maintenanceStatusSeen = true;
-                        }
-                    }
-                }
-            }
-        });
-
-        // Set node as faulty which should trigger LONG_TERM_MAINTENANCE_PLANNED status
-        env.SetNodeFaulty(id.NodeId, true);
-        env.SimulateSleep(TDuration::Minutes(1));
-
-        observerHolder.Remove();
-        UNIT_ASSERT_C(maintenanceStatusSeen, "Maintenance status LONG_TERM_MAINTENANCE_PLANNED should have been sent");
-
-        maintenanceStatusSeen = false;
-        observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
-            const auto& request = event->Get()->Record;
-            for (const auto& command : request.GetRequest().GetCommand()) {
-                if (command.HasUpdateDriveStatus()) {
-                    const auto& update = command.GetUpdateDriveStatus();
-                    ui32 nodeId = update.GetHostKey().GetNodeId();
-                    ui32 pdiskId = update.GetPDiskId();
-
-                    if (id.NodeId == nodeId && id.DiskId == pdiskId) {
-                        if (update.GetMaintenanceStatus() == NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST) {
-                            maintenanceStatusSeen = true;
-                        }
-                    }
-                }
-            }
-        });
-
-        // Reset faulty marker on the node
-        env.SetNodeFaulty(id.NodeId, false);
-        env.SimulateSleep(TDuration::Minutes(1));
-
-        observerHolder.Remove();
-        UNIT_ASSERT_C(maintenanceStatusSeen, "Maintenance status NO_REQUEST should have been sent after removing faulty marker");
-    }
 } // TSentinelBaseTests
 
 Y_UNIT_TEST_SUITE(TSentinelTests) {
@@ -770,6 +710,64 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             env.SetPDiskState({id1, id2, id3}, state, EPDiskStatus::FAULTY);
             env.SetPDiskState({id1, id2, id3}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
         }
+    }
+
+    Y_UNIT_TEST(MaintenanceStatus) {
+        NKikimrCms::TCmsConfig cmsConfig;
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE);
+        TTestEnv env(8, 4, cmsConfig);
+
+        const TPDiskID id = env.RandomPDiskID();
+
+        bool maintenanceStatusSeen = false;
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            const auto& request = event->Get()->Record;
+            for (const auto& command : request.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    const auto& update = command.GetUpdateDriveStatus();
+                    ui32 nodeId = update.GetHostKey().GetNodeId();
+                    ui32 pdiskId = update.GetPDiskId();
+
+                    if (id.NodeId == nodeId && id.DiskId == pdiskId) {
+                        if (update.GetMaintenanceStatus() == NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED) {
+                            maintenanceStatusSeen = true;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Set node as faulty which should trigger LONG_TERM_MAINTENANCE_PLANNED status
+        env.SetNodeFaulty(id.NodeId, true);
+        env.SimulateSleep(TDuration::Minutes(1));
+
+        observerHolder.Remove();
+        UNIT_ASSERT_C(maintenanceStatusSeen, "Maintenance status LONG_TERM_MAINTENANCE_PLANNED should have been sent");
+
+        maintenanceStatusSeen = false;
+        observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            const auto& request = event->Get()->Record;
+            for (const auto& command : request.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    const auto& update = command.GetUpdateDriveStatus();
+                    ui32 nodeId = update.GetHostKey().GetNodeId();
+                    ui32 pdiskId = update.GetPDiskId();
+
+                    if (id.NodeId == nodeId && id.DiskId == pdiskId) {
+                        if (update.GetMaintenanceStatus() == NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST) {
+                            maintenanceStatusSeen = true;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Reset faulty marker on the node
+        env.SetNodeFaulty(id.NodeId, false);
+        env.SimulateSleep(TDuration::Minutes(1));
+
+        observerHolder.Remove();
+        UNIT_ASSERT_C(maintenanceStatusSeen, "Maintenance status NO_REQUEST should have been sent after removing faulty marker");
     }
 } // TSentinelTests
 

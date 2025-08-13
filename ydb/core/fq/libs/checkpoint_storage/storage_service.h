@@ -14,7 +14,7 @@ namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewCheckpointStorageService(
     const NConfig::TCheckpointCoordinatorConfig& config,
-    const NConfig::TCommonConfig& commonConfig,
+    const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const ::NMonitoring::TDynamicCounterPtr& counters);

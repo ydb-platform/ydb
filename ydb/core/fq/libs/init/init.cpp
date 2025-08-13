@@ -176,7 +176,7 @@ void Init(
     if (protoConfig.GetCheckpointCoordinator().GetEnabled()) {
         auto checkpointStorage = NFq::NewCheckpointStorageService(
             protoConfig.GetCheckpointCoordinator(),
-            protoConfig.GetCommon(),
+            protoConfig.GetCommon().GetIdsPrefix(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources,
             yqCounters->GetSubgroup("subsystem", "checkpoint_storage"));

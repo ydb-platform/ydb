@@ -1485,8 +1485,6 @@ namespace Tests {
         if (Settings->EnableStorageProxy) {
             const auto& config = Settings->AppConfig->GetQueryServiceConfig().GetCheckpointsConfig();
             NFq::NConfig::TConfig protoConfig;
-            NFq::NConfig::TCommonConfig commonConfig;
-            commonConfig.SetIdsPrefix("ut");
             const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             auto yqSharedResources = NFq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
@@ -1515,7 +1513,7 @@ namespace Tests {
 
             auto actor = NFq::NewCheckpointStorageService(
                 tmpConfig,
-                commonConfig,
+                "ut",
                 ydbCredFactory,
                 NFq::TYqSharedResources::Cast(yqSharedResources),
                 counters);

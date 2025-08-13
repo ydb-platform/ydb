@@ -2219,8 +2219,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         const auto& checkpointConfig = Config.GetQueryServiceConfig().GetCheckpointsConfig();
         if (checkpointConfig.GetEnabled()) {
             const auto& config = Config.GetQueryServiceConfig().GetCheckpointsConfig();
-            NFq::NConfig::TCommonConfig commonConfig;
-            commonConfig.SetIdsPrefix("cs");
+
             NFq::NConfig::TCheckpointCoordinatorConfig tmpConfig;
             tmpConfig.SetEnabled(checkpointConfig.GetEnabled());
             auto& storageConfig = *tmpConfig.MutableStorage();
@@ -2244,7 +2243,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
             auto service = NFq::NewCheckpointStorageService(
                 tmpConfig,
-                commonConfig,
+                "cs",
                 NKikimr::CreateYdbCredentialsProviderFactory,
                 NFq::TYqSharedResources::Cast(YqSharedResources),
                 appData->Counters);

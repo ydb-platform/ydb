@@ -67,7 +67,7 @@ struct TRequestContext : public TThrRefBase {
 
 class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
     NConfig::TCheckpointCoordinatorConfig Config;
-    NConfig::TCommonConfig CommonConfig;
+    TString IdsPrefix;
     NConfig::TYdbStorageConfig StorageConfig;
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
@@ -80,7 +80,7 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
 public:
     explicit TStorageProxy(
         const NConfig::TCheckpointCoordinatorConfig& config,
-        const NConfig::TCommonConfig& commonConfig,
+        const TString& idsPrefix,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
         const ::NMonitoring::TDynamicCounterPtr& counters);
@@ -141,12 +141,12 @@ static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpo
 
 TStorageProxy::TStorageProxy(
     const NConfig::TCheckpointCoordinatorConfig& config,
-    const NConfig::TCommonConfig& commonConfig,
+    const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
-    , CommonConfig(commonConfig)
+    , IdsPrefix(idsPrefix)
     , StorageConfig(Config.GetStorage())
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
@@ -157,7 +157,7 @@ TStorageProxy::TStorageProxy(
 void TStorageProxy::Bootstrap() {
     LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
     auto ydbConnectionPtr = NewYdbConnection(Config.GetStorage(), CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver);
-    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(CommonConfig.GetIdsPrefix()), ydbConnectionPtr);
+    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr);
     StateStorage = NewYdbStateStorage(Config, ydbConnectionPtr);
     if (Config.GetCheckpointGarbageConfig().GetEnabled()) {
         const auto& gcConfig = Config.GetCheckpointGarbageConfig();
@@ -453,12 +453,12 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
 
 std::unique_ptr<NActors::IActor> NewStorageProxy(
     const NConfig::TCheckpointCoordinatorConfig& config,
-    const NConfig::TCommonConfig& commonConfig,
+    const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return std::unique_ptr<NActors::IActor>(new TStorageProxy(config, commonConfig, credentialsProviderFactory, yqSharedResources, counters));
+    return std::unique_ptr<NActors::IActor>(new TStorageProxy(config, idsPrefix, credentialsProviderFactory, yqSharedResources, counters));
 }
 
 } // namespace NFq

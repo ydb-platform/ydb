@@ -49,8 +49,8 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         auto evicted = cache.Touch(&page);
         TVector<ui32> result;
         for (auto& p : evicted) {
-            UNIT_ASSERT_VALUES_EQUAL(p.S3FIFOLocation, ES3FIFOPageLocation::None);
-            UNIT_ASSERT_VALUES_EQUAL(p.S3FIFOFrequency, 0);
+            UNIT_ASSERT_VALUES_EQUAL(p.Location, ES3FIFOPageLocation::None);
+            UNIT_ASSERT_VALUES_EQUAL(p.Frequency.load(), 0);
             result.push_back(p.Id);
         }
         return result;
@@ -60,8 +60,8 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         auto evicted = cache.EvictNext();
         TVector<ui32> result;
         for (auto& p : evicted) {
-            UNIT_ASSERT_VALUES_EQUAL(p.S3FIFOLocation, ES3FIFOPageLocation::None);
-            UNIT_ASSERT_VALUES_EQUAL(p.S3FIFOFrequency, 0);
+            UNIT_ASSERT_VALUES_EQUAL(p.Location, ES3FIFOPageLocation::None);
+            UNIT_ASSERT_VALUES_EQUAL(p.Frequency.load(), 0);
             result.push_back(p.Id);
         }
         return result;
@@ -69,8 +69,8 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
 
     void Erase(auto& cache, NTest::TPage& page) {
         cache.Erase(&page);
-        UNIT_ASSERT_VALUES_EQUAL(page.S3FIFOLocation, ES3FIFOPageLocation::None);
-        UNIT_ASSERT_VALUES_EQUAL(page.S3FIFOFrequency, 0);
+        UNIT_ASSERT_VALUES_EQUAL(page.Location, ES3FIFOPageLocation::None);
+        UNIT_ASSERT_VALUES_EQUAL(page.Frequency.load(), 0);
     }
 
     Y_UNIT_TEST(Touch) {

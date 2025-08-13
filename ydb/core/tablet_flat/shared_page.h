@@ -28,8 +28,7 @@ struct TPage
     ui32 State : 4 = PageStateNo;
     ECacheMode CacheMode : 2 = ECacheMode::Regular;
 
-    ES3FIFOPageLocation S3FIFOLocation : 4 = ES3FIFOPageLocation::None;
-    ui32 S3FIFOFrequency : 4 = 0;
+    ES3FIFOPageLocation Location : 4 = ES3FIFOPageLocation::None;
 
     const TPageId PageId;
     const size_t Size;
@@ -62,11 +61,10 @@ struct TPage
     }
 
     void EnsureNoCacheFlags() {
-        Y_ENSURE(S3FIFOLocation == ES3FIFOPageLocation::None, "Unexpected page " << S3FIFOLocation << " Location");
-        Y_ENSURE(S3FIFOFrequency == 0, "Unexpected page " << S3FIFOFrequency << " Frequency");
+        Y_ENSURE(Location == ES3FIFOPageLocation::None, "Unexpected page " << Location << " Location");
     }
 };
 
-static_assert(sizeof(TPage) == 104);
+static_assert(sizeof(TPage) == 112);
 
 }

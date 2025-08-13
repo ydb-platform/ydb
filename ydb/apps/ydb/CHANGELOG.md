@@ -1,3 +1,4 @@
+* Fixed a bug where the `ydb import file csv command` with the `--newline-delimited` option could get stuck if the input had incorrect data.
 * Fixed a bug with the progress bar display in the `ydb workload clickbench import files` command — incorrect percentage value and excessive line breaks causing duplicated progress lines.
 * Fixed a bug where the `ydb workload topic write` command could crash with an `Unknown AckedMessageId` error due to an internal race condition.
 * Fixed decimal type comparison in `ydb workload * run` commands.

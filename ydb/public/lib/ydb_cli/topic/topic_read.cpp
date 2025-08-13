@@ -191,6 +191,12 @@ namespace NYdb::NConsoleClient {
                 defCommit.Add(message);
             }
 
+            if (!PartitionReadOffset_.empty()) {
+                if (ui64* nextOffset = PartitionReadOffset_.FindPtr(event->GetPartitionSession()->GetPartitionId())) {
+                    *nextOffset = message.GetOffset() + 1; // memorize next offset for the case of session soft restart
+                }
+            }
+
             if (MessagesLeft_ == MessagesLimitUnlimited) {
                 continue;
             }

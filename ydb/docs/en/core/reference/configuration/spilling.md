@@ -53,7 +53,7 @@ Example of a complete spilling directory path:
 - At process startup, all existing spilling directories in the specified directory are automatically deleted. Spilling directories have a special name format that includes an instance identifier, which is generated once when the ydbd process starts. When a new process starts, all directories in the spilling directory that match the name format but have a different `spilling_service_id` from the current one are deleted.
 - The directory must have sufficient write and read permissions for the user under which ydbd is running
 
-**Recommendations:**
+##### Recommendations
 
 - Use a separate disk or partition for spilling
 - Preferably use fast storage devices (SSD/NVMe)
@@ -91,7 +91,7 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 **Default:** `2`  
 **Description:** Number of worker threads for processing spilling I/O operations.
 
-**Recommendations:**
+##### Recommendations
 
 - Increase for high-load systems
 - Consider the number of CPU cores on the server

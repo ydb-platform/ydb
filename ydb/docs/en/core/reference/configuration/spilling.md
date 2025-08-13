@@ -77,7 +77,7 @@ Example of a complete spilling directory path:
 
 - `Total size limit exceeded: X/YMb` — maximum total size of spilling files exceeded. See [{#T}](../../troubleshooting/spilling.md#total-size-limit-exceeded)
 
-### Thread Pool Configuration (TIoThreadPoolConfig)
+### Thread Pool Configuration
 
 {% note info %}
 
@@ -85,7 +85,7 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 
 {% endnote %}
 
-#### WorkersCount
+#### workers_count
 
 **Type:** `uint32`  
 **Default:** `2`  
@@ -100,7 +100,7 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 
 - `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling.md#can-not-run-operation)
 
-#### QueueSize
+#### queue_size
 
 **Type:** `uint32`  
 **Default:** `1000`  

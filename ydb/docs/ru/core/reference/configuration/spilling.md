@@ -77,7 +77,7 @@ table_service_config:
 
 - `Total size limit exceeded: X/YMb` — превышен максимальный суммарный размер файлов спиллинга. См. [{#T}](../../troubleshooting/spilling.md#total-size-limit-exceeded)
 
-### Конфигурация пула потоков (TIoThreadPoolConfig)
+### Конфигурация пула потоков
 
 {% note info %}
 
@@ -85,7 +85,7 @@ table_service_config:
 
 {% endnote %}
 
-#### WorkersCount
+#### workers_count
 
 **Тип:** `uint32`  
 **По умолчанию:** `2`  
@@ -100,7 +100,7 @@ table_service_config:
 
 - `Can not run operation` — переполнение очереди операций в пуле потоков I/O. См. [{#T}](../../troubleshooting/spilling.md#can-not-run-operation)
 
-#### QueueSize
+#### queue_size
 
 **Тип:** `uint32`  
 **По умолчанию:** `1000`  

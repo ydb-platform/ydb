@@ -12,9 +12,12 @@
 * 20633:Fix for Arrow arena when allocating zero-sized region. [#20633](https://github.com/ydb-platform/ydb/pull/20633) ([Ivan](https://github.com/abyss7))
 * 20997:Fix for GROUP BY emitting multiple NULL keys when block processing is enabled. [#20997](https://github.com/ydb-platform/ydb/pull/20997) ([Pavel Zuev](https://github.com/pzuev))
 * 21356:Added gettxtype in txwrite. [#21356](https://github.com/ydb-platform/ydb/pull/21356) ([r314-git](https://github.com/r314-git))
+* 21918:Support in asynchronous replication new kind of change record — `reset` record (in addition to `update` & `erase` records). [#21918](https://github.com/ydb-platform/ydb/pull/21918) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 21836:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/21814) where a replication instance with an unspecified `COMMIT_INTERVAL` option caused the process to crash. [#21836](https://github.com/ydb-platform/ydb/pull/21836) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 21652:Fixed rare errors when reading using the pqv0 protocol from a topic during partition balancing. [#21652](https://github.com/ydb-platform/ydb/pull/21652) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 22520:Fix default values for Kafka protocol [#22520](https://github.com/ydb-platform/ydb/pull/22520) ([qyryq](https://github.com/qyryq))
 * 22455:Fix issue where dedicated database deletion may leave database system tablets improperly cleaned. [#22455](https://github.com/ydb-platform/ydb/pull/22455) ([ijon](https://github.com/ijon))
-* 22203:ensure tablets are launched after nodes stop being overloaded, fixes https://github.com/ydb-platform/ydb/issues/22030 [#22203](https://github.com/ydb-platform/ydb/pull/22203) ([vporyadke](https://github.com/vporyadke))
+* 22203:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/22030) that caused tablets to hang when nodes experienced critical memory shortage. Now tablets will automatically start as soon as any of the nodes frees up sufficient resources. [#22203](https://github.com/ydb-platform/ydb/pull/22203) ([vporyadke](https://github.com/vporyadke))
 * 21106:Cherry-pick from main fix for KIKIMR-23489 [#21106](https://github.com/ydb-platform/ydb/pull/21106) ([Denis Khalikov](https://github.com/denis0x0D))
 
 ### YDB UI

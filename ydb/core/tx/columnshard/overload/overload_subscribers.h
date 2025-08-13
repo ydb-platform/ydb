@@ -27,7 +27,7 @@ public:
         }
 
         TSeqNo seqNo = overloadSubscribe.value();
-        auto allowed = ERejectReasons::YellowChannels;
+        auto allowed = ERejectReasons::YellowChannels | ERejectReasons::OverloadByShardWritesInFly | ERejectReasons::OverloadByShardWritesSizeInFly;
         if ((rejectReasons & allowed) != ERejectReasons::None &&
             (rejectReasons - allowed) == ERejectReasons::None) {
             if (AddOverloadSubscriber(recipient, sender, seqNo, rejectReasons)) {

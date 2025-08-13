@@ -31,16 +31,18 @@ table_service_config:
 - `{TMP}` — system temporary directory, determined from the `TMPDIR` environment variable or standard system paths
 - `<username>` — username under which the `ydbd` process is running
 
-Spilling files have the following name format:
+For each `ydbd` process, a separate directory is created with a unique name. Spilling directories have the following name format:
 
-`node_<node_id>_<session_id>`
+`node_<node_id>_<spilling_service_id>`
 
 Where:
 
 - `node_id` — [node](../../concepts/glossary.md#node) identifier
-- `session_id` — unique session identifier that is created when initializing the [Spilling Service](../../contributor/spilling-service.md) once when the ydbd process starts
+- `spilling_service_id` — unique instance identifier that is created when initializing the [Spilling Service](../../contributor/spilling-service.md) once when the ydbd process starts
 
-Example of a complete spilling file path:
+Spilling files are stored inside each such directory.
+
+Example of a complete spilling directory path:
 
 ```bash
 /tmp/spilling-tmp-user/node_1_32860791-037c-42b4-b201-82a0a337ac80
@@ -48,7 +50,7 @@ Example of a complete spilling file path:
 
 **Important notes:**
 
-- At process startup, all existing spilling files in the specified directory are automatically deleted. Spilling files have a special name format that includes a session identifier, which is generated once when the ydbd process starts. When a new process starts, all files in the spilling directory that match the name format but have a different session identifier from the current one are deleted.
+- At process startup, all existing spilling directories in the specified directory are automatically deleted. Spilling directories have a special name format that includes an instance identifier, which is generated once when the ydbd process starts. When a new process starts, all directories in the spilling directory that match the name format but have a different `spilling_service_id` from the current one are deleted.
 - The directory must have sufficient write and read permissions for the user under which ydbd is running
 
 **Recommendations:**

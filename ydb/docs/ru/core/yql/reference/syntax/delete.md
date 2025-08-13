@@ -62,7 +62,7 @@ WHERE Key1 = 1
 RETURNING *;
 ```
 
-Результат:
+Результат
 
 |Key1|Key2|Value|
 |-|-|-|
@@ -76,7 +76,7 @@ WHERE status = 'cancelled'
 RETURNING order_id, order_date;
 ```
 
-Результат:
+Результат
 
 |order_id|order_date|
 |-|-|

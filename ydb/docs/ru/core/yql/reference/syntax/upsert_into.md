@@ -63,7 +63,7 @@ VALUES (1001, 'shipped', 500)
 RETURNING *;
 ```
 
-Результат:
+Результат
 
 |order_id|status|amount|
 |-|-|-|
@@ -77,7 +77,7 @@ VALUES (42, 'John Doe', 'john@example.com')
 RETURNING user_id, email;
 ```
 
-Результат:
+Результат
 
 |user_id|email|
 |-|-|

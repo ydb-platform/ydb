@@ -68,7 +68,7 @@ WHERE order_date < '2023-01-01'
 RETURNING *;
 ```
 
-Результат:
+Результат
 
 |order_id|order_date|status|amount|
 |-|-|-|-|
@@ -84,7 +84,7 @@ WHERE category = 'Electronics'
 RETURNING product_id, name, price AS new_price;
 ```
 
-Результат:
+Результат
 
 |product_id|name|new_price|
 |-|-|-|

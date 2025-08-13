@@ -60,11 +60,11 @@ SELECT * FROM $to_update;
 
 ## RETURNING
 
-`RETURNING` returns values of modified rows (inserted, updated, or deleted). This allows getting operation results immediately without a separate SELECT query.
+`RETURNING` returns the values of the updated rows. This allows you to get the results of the operation immediately without a separate `SELECT` query.
 
 ## Examples
 
-Return all columns of updated rows:
+Returning all columns of updated rows
 
 ```
 UPDATE orders
@@ -73,23 +73,23 @@ WHERE order_date < '2023-01-01'
 RETURNING *;
 ```
 
-Result:
+Result
 
 |order_id|order_date|status|amount|
 |-|-|-|-|
 |1001|2022-12-15|shipped|200|
 |1002|2022-11-20|shipped|350|
 
-Return specific columns:
+Returning specific columns
 
 ```
 UPDATE products
-SET price = price * 0.9 
+SET price = price * 0.9
 WHERE category = 'Electronics'
 RETURNING product_id, name, price AS new_price;
 ```
 
-Result:
+Result
 
 |product_id|name|new_price|
 |-|-|-|

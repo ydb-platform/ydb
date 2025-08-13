@@ -129,7 +129,7 @@ VALUES
 RETURNING id, price;
 ```
 
-Результат:
+Результат
 
 |id|price|
 |-|-|
@@ -144,7 +144,7 @@ VALUES (1103, 2023, 'blue', 400)
 RETURNING *;
 ```
 
-Результат:
+Результат
 
 |id|year|color|price|
 |-|-|-|-|

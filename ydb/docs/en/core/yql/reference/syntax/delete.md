@@ -48,11 +48,11 @@ SELECT * FROM $to_delete;
 
 ## RETURNING
 
-`RETURNING` returns values of deleted rows. This allows getting operation results immediately without a separate SELECT query.
+`RETURNING` returns the values of the deleted rows. This allows you to get the results of the operation immediately without a separate `SELECT` query.
 
 ## Examples
 
-Return all columns of deleted rows
+Returning all columns of deleted rows
 
 ```
 DELETE FROM my_table
@@ -60,13 +60,14 @@ WHERE Key1 = 1
 RETURNING *;
 ```
 
-Result:
+Result
 
 |Key1|Key2|Value|
 |-|-|-|
 |1|A|100|
 
-Return specific columns
+Returning specific columns
+
 
 ```
 DELETE FROM orders
@@ -74,7 +75,7 @@ WHERE status = 'cancelled'
 RETURNING order_id, order_date;
 ```
 
-Result:
+Result
 
 |order_id|order_date|
 |-|-|

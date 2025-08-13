@@ -54,13 +54,13 @@ VALUES ( 1, 10, 'Some text', Date('2021-10-07')),
 ## RETURNING
 
 `RETURNING` returns values:
-* For new rows - all inserted values
-* For updated rows - new values after update
-This allows getting operation results immediately without a separate SELECT query.
+* For new rows – all inserted values
+* For updated rows – new values after the update  
+This allows you to get the results of the operation immediately without a separate `SELECT` query.
 
 ## Examples
 
-Return all columns of modified row
+Returning all columns of the modified row
 
 ```
 UPSERT INTO orders (order_id, status, amount)
@@ -68,13 +68,13 @@ VALUES (1001, 'shipped', 500)
 RETURNING *;
 ```
 
-Result:
+Result
 
 |order_id|status|amount|
 |-|-|-|
 |1001|shipped|500|
 
-Return specific columns
+Returning specific columns
 
 ```
 UPSERT INTO users (user_id, name, email)
@@ -82,7 +82,7 @@ VALUES (42, 'John Doe', 'john@example.com')
 RETURNING user_id, email;
 ```
 
-Result:
+Result
 
 |user_id|email|
 |-|-|

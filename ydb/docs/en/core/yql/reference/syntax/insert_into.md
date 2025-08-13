@@ -89,35 +89,37 @@ SELECT key FROM my_table_source;
 
 ## RETURNING
 
-`RETURNING` returns values of modified rows (inserted, updated or deleted). This allows getting operation results immediately without a separate SELECT query.
+`RETURNING` returns the values of the inserted rows. This allows you to get the results of the operation immediately without a separate `SELECT` query.
 
-## Examples
+## Example
 
-Return all columns of deleted rows:
+Returning specific columns
 
 ```
-DELETE FROM my_table
-WHERE Key1 = 1
+INSERT INTO some_table (id, color, price)
+VALUES
+(1101, 'red', 200),
+(1102, 'green', 300)
+RETURNING id, price;
+```
+
+Result
+
+|id|price|
+|-|-|
+|1101|200|
+|1102|300|
+
+Returning all columns
+
+```
+INSERT INTO some_table (id, year, color, price)
+VALUES (1103, 2023, 'blue', 400)
 RETURNING *;
 ```
 
-Result:
+Result
 
-|Key1|Key2|Value|
-|-|-|-|
-|1|A|100|
-
-Return specific columns:
-
-```
-DELETE FROM orders
-WHERE status = 'cancelled'
-RETURNING order_id, order_date;
-```
-
-Result:
-
-|order_id|order_date|
-|-|-|
-|1005|2023-03-10|
-|1008|2023-02-28|
+|id|year|color|price|
+|-|-|-|-|
+|1103|2023|blue|400|

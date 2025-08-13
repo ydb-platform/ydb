@@ -369,8 +369,12 @@ namespace NActors {
     void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize)
     {
         // check marker
-        if (!iter.Valid() || (*iter.ContiguousData() != PayloadMarker && *iter.ContiguousData() != ExtendedPayloadMarker)) {
-            Y_ENSURE(false, "invalid event");
+        if (!iter.Valid()) {
+            Y_ABORT_UNLESS(false, "invalid event");
+        }
+
+        if (*iter.ContiguousData() != PayloadMarker && *iter.ContiguousData() != ExtendedPayloadMarker) {
+            Y_ABORT_UNLESS(false, "invalid event");
         }
 
         const bool dataIsSeparate = *iter.ContiguousData() == ExtendedPayloadMarker; // ropes go after sizes
@@ -389,7 +393,7 @@ namespace NActors {
         // parse number of payload ropes
         size_t numRopes = DeserializeNumber(iter, size);
         if (numRopes == Max<size_t>()) {
-            Y_ENSURE(false, "invalid event");
+            Y_ABORT_UNLESS(false, "invalid event");
         }
         TStackVec<size_t, 16> ropeLens;
         if (dataIsSeparate) {
@@ -400,7 +404,7 @@ namespace NActors {
             // parse length of the rope
             const size_t len = DeserializeNumber(iter, size);
             if (len == Max<size_t>() || size < len) {
-                Y_ENSURE(false, "invalid event len# " << len << " size# " << size);
+                Y_ABORT_UNLESS(false, "invalid event len %d size %d ", len, size);
             }
             // extract the rope
             if (dataIsSeparate) {

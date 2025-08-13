@@ -218,8 +218,13 @@ namespace NActors {
             THolder<TEv> holder(new TEv());
             TEventPBBase* ev = holder.Get();
             if (!input->GetSize()) {
-                Y_ENSURE(ev->Record.ParseFromString(TString()),
-                    "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record));
+                TStringBuilder sb;
+                for (const auto& si : input->GetSerializationInfo().Sections) {
+                    sb << "serializationInfo: " << si.Alignment << " " << si.Headroom << " " << si.IsRdma << " " << si.Size << Endl;
+                }
+                Y_ABORT_UNLESS(ev->Record.ParseFromString(TString()),
+                    "Failed to parse protobuf event (1) type %d, class %s, si: %s ",  TEventType, TypeName(ev->Record).data(), sb.data());
+                
             } else {
                 TRope::TConstIterator iter = input->GetBeginIter();
                 ui64 size = input->GetSize();
@@ -228,10 +233,16 @@ namespace NActors {
                     ParseExtendedFormatPayload(iter, size, ev->Payload, ev->TotalPayloadSize);
                 }
 
+                TStringBuilder sb;
+                for (const auto& si : input->GetSerializationInfo().Sections) {
+                    sb << "serializationInfo: " << si.Alignment << " " << si.Headroom << " " << si.IsRdma << " " << si.Size << Endl;
+                }
+
                 // parse the protobuf
                 TRopeStream stream(iter, size);
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-                    Y_ENSURE(false, "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record));
+                    Y_ABORT_UNLESS(false,
+                        "Failed to parse protobuf event (2) type %d, class %s, size: %d, si: %s ",  TEventType, TypeName(ev->Record).data(), size, sb.data());
                 }
             }
             ev->CachedByteSize = input->GetSize();

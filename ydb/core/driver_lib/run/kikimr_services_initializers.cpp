@@ -256,6 +256,7 @@
 using NInterconnect::NRdma::CreateCqActor;
 using NInterconnect::NRdma::MakeCqActorId;
 using NInterconnect::NRdma::CreateIncrementalMemPool;
+using NInterconnect::NRdma::CreateSlotMemPool;
 
 namespace NKikimr::NKikimrServicesInitializers {
 
@@ -621,6 +622,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             if (Config.GetInterconnectConfig().GetUseRdma()) {
                 // Interconnect uses rdma mem pool directly
                 icCommon->RdmaMemPool = CreateIncrementalMemPool();
+                //icCommon->RdmaMemPool = CreateSlotMemPool();
                 // Clients via wrapper to handle allocation fail
                 setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(icCommon->RdmaMemPool);
             }

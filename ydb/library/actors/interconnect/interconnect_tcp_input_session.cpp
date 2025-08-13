@@ -144,7 +144,7 @@ namespace NActors {
 
         if (err) {
             wr->Release();
-            Y_ABORT("Unable to post rdma READ work request, error %d\n", err);
+            //Y_ABORT("Unable to post rdma READ work request, error %d\n", err);
         }
 
         return TReceiveContext::TPerChannelContext::TRdmaReadReqOk{};
@@ -302,6 +302,11 @@ namespace NActors {
         }
 
         if (termEv) {
+            if (RdmaQp) {
+                Cerr << "input session move to reset state" << Endl;
+                RdmaQp->ToResetState();
+                Sleep(TDuration::MilliSeconds(1000));
+            }
             --Context->NumInputSessions;
             Send(SessionId, termEv.release());
             PassAway();
@@ -512,6 +517,15 @@ namespace NActors {
                 throw TExDestroySession{TDisconnectReason::FormatError()};
             }
             IgnorePayload = serial != expectedMax;
+            if (IgnorePayload) {
+                LOG_ERROR_IC_SESSION("ICIS06", "%s", TString(TStringBuilder()
+                        << "Set IgnorePayload"
+                        << " Serial# " << serial
+                        << " ExpectedMin# " << expectedMin
+                        << " ExpectedMax# " << expectedMax
+                        << " CurrentSerial# " << CurrentSerial
+                    ).data()); 
+            }
             CurrentSerial = serial;
             State = EState::PAYLOAD;
             Y_DEBUG_ABORT_UNLESS(!Payload);

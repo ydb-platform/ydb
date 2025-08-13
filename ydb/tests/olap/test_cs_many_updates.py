@@ -225,22 +225,30 @@ class TestCSManyUpdates(object):
             (10, [{"mod_type": ModType.UPDATE, "mods_num": 2}]),
             (10, [{"mod_type": ModType.UPSERT, "mods_num": 100}]),
             (30, [{"mod_type": ModType.BULK_UPSERT, "mods_num": 500}]),
-
             # Sequential combinations
-            (15, [
-                {"mod_type": ModType.UPDATE, "mods_num": 3},
-                {"mod_type": ModType.BULK_UPSERT, "mods_num": 10}
-            ]),
-            (20, [
-                {"mod_type": ModType.UPDATE, "mods_num": 3},
-                {"mod_type": ModType.UPSERT, "mods_num": 7},
-                {"mod_type": ModType.BULK_UPSERT, "mods_num": 15}
-            ]),
-            (10, [
-                {"mod_type": ModType.BULK_UPSERT, "mods_num": 5},
-                {"mod_type": ModType.UPDATE, "mods_num": 2},
-                {"mod_type": ModType.UPSERT, "mods_num": 8}
-            ]),
+            (
+                15,
+                [
+                    {"mod_type": ModType.UPDATE, "mods_num": 3},
+                    {"mod_type": ModType.BULK_UPSERT, "mods_num": 10},
+                ],
+            ),
+            (
+                20,
+                [
+                    {"mod_type": ModType.UPDATE, "mods_num": 3},
+                    {"mod_type": ModType.UPSERT, "mods_num": 7},
+                    {"mod_type": ModType.BULK_UPSERT, "mods_num": 15},
+                ],
+            ),
+            (
+                10,
+                [
+                    {"mod_type": ModType.BULK_UPSERT, "mods_num": 5},
+                    {"mod_type": ModType.UPDATE, "mods_num": 2},
+                    {"mod_type": ModType.UPSERT, "mods_num": 8},
+                ],
+            ),
         ],
         ids=[
             "update",
@@ -248,8 +256,8 @@ class TestCSManyUpdates(object):
             "bulk_upsert",
             "update_bulk_upsert",
             "update_upsert_bulk_upsert",
-            "bulk_upsert_update_upsert"
-        ]
+            "bulk_upsert_update_upsert",
+        ],
     )
     def test_many_updates(self, rows_num, operation_sequence):
         """Test sequences of different database modification operations."""
@@ -275,7 +283,7 @@ class TestCSManyUpdates(object):
         # Print the generated operation sequence for debugging
         print("Generated operation sequence:")
         for i, op in enumerate(operation_sequence):
-            print(f"  {i}. {op["mod_type"].name}: {op["mods_num"]} operations")
+            print(f"  {i}. {op['mod_type'].name}: {op['mods_num']} operations")
 
         self._test_many_updates_impl(
             rows_num=rows_num, operation_sequence=operation_sequence

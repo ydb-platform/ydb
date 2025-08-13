@@ -69,6 +69,6 @@ For more information about transactions with tables and topics in {{ ydb-short-n
 
 ## Transactions with Column and Row Tables {#mixed-transactions}
 
-The simultaneous use of [column-oriented tables](../glossary.md#column-oriented-table)  and [row-oriented tables](../glossary.md#row-oriented-table) is possible only in Read-Only transactions. Support for write transactions is under development.
+The simultaneous use of [column-oriented tables](../glossary.md#column-oriented-table) and [row-oriented tables](../glossary.md#row-oriented-table) is possible only in Read-Only transactions. Support for write transactions is under development.
 
 If a write transaction includes both types of tables, it will fail with the following error: `Write transactions between column and row tables are disabled at current time`.

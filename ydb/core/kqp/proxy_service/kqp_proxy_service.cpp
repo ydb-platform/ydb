@@ -1460,6 +1460,8 @@ private:
         const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
 
         if (!poolInfo) {
+            Y_ASSERT(!poolId.empty());
+            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
             return true;
         }
 

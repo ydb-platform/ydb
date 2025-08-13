@@ -5,6 +5,7 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_log.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/core/util/bits.h>
 #include <util/generic/set.h>
 #include <util/ysaveload.h>
@@ -102,6 +103,7 @@ namespace NKikimr {
             static constexpr ui32 MaxNumberOfSlots = 32768; // it's not a good idea to have more slots than this
             TString VDiskLogPrefix;
             TMask ConstMask; // mask of 'all slots are free'
+            TControlWrapper ChunksSoftLocking;
             TFreeSpace FreeSpace;
             TFreeSpace LockedChunks;
             ui32 AllocatedSlots = 0;
@@ -115,9 +117,10 @@ namespace NKikimr {
             static TMask BuildConstMask(const TString &prefix, ui32 slotsInChunk);
 
         public:
-            TChain(TString vdiskLogPrefix, ui32 slotsInChunk, ui32 slotSize)
+            TChain(TString vdiskLogPrefix, ui32 slotsInChunk, ui32 slotSize, bool chunksSoftLocking)
                 : VDiskLogPrefix(std::move(vdiskLogPrefix))
                 , ConstMask(BuildConstMask(vdiskLogPrefix, slotsInChunk))
+                , ChunksSoftLocking(chunksSoftLocking)
                 , SlotsInChunk(slotsInChunk)
                 , SlotSize(slotSize)
             {}
@@ -138,7 +141,7 @@ namespace NKikimr {
             void Allocate(NPrivate::TChunkSlot *id, TChunkID chunkId);
             // returns freed ChunkID if any
             TFreeRes Free(const NPrivate::TChunkSlot &id);
-            bool LockChunkForAllocation(TChunkID chunkId);
+            void LockChunkForAllocation(TChunkID chunkId);
             THeapStat GetStat() const;
             // returns true is allocated, false otherwise
             bool RecoveryModeAllocate(const NPrivate::TChunkSlot &id);
@@ -152,7 +155,7 @@ namespace NKikimr {
             void ShredNotify(const std::vector<ui32>& chunksToShred);
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
-            static TChain Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk);
+            static TChain Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk, bool chunksSoftLocking);
 
             template<typename T>
             void ForEachFreeSpaceChunk(T&& callback) const {
@@ -185,7 +188,9 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxBlobInBytes,
-                ui32 overhead);
+                ui32 overhead,
+                TControlWrapper chunksSoftLocking
+            );
             // return a pointer to corresponding chain delegator by object byte size
             TChain *GetChain(ui32 size);
             const TChain *GetChain(ui32 size) const;
@@ -218,6 +223,7 @@ namespace NKikimr {
             const ui32 Overhead;
             const ui32 MinHugeBlobInBlocks;
             const ui32 MaxHugeBlobInBlocks;
+            TControlWrapper ChunksSoftLocking;
             TDynBitMap DeserializedChains; // a bit mask of chains that were deserialized from the origin stream
             std::vector<TChain> Chains;
             std::vector<ui16> SearchTable; // (NumFullBlocks - 1) -> Chain index
@@ -252,7 +258,8 @@ namespace NKikimr {
                 ui32 maxBlobInBytes,
                 // difference between buckets is 1/overhead
                 ui32 overhead,
-                ui32 freeChunksReservation);
+                ui32 freeChunksReservation,
+                TControlWrapper chunksSoftLocking);
 
 
             ui32 SlotNumberOfThisSize(ui32 size) const {
@@ -279,7 +286,7 @@ namespace NKikimr {
             void AddChunk(ui32 chunkId);
             ui32 RemoveChunk();
             // make chunk not available for allocations, it is used for heap defragmentation
-            bool LockChunkForAllocation(ui32 chunkId, ui32 slotSize);
+            void LockChunkForAllocation(ui32 chunkId, ui32 slotSize);
             THeapStat GetStat() const;
             void ShredNotify(const std::vector<ui32>& chunksToShred);
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);

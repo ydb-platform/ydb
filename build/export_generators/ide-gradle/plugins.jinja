@@ -29,11 +29,11 @@ plugins {
 {%- endif -%}
 
 {%- if with_errorprone or with_test_errorprone %}
-    id("net.ltgt.errorprone") version "4.1.0"
+    id("net.ltgt.errorprone") version "{{ ver_errorprone }}"
 {%- endif -%}
 
 {%- if with_lombok_plugin %}
-    id("io.freefair.lombok") version "8.14"
+    id("io.freefair.lombok") version "{{ ver_lombok_plugin }}"
 {%- endif %}
 }
 

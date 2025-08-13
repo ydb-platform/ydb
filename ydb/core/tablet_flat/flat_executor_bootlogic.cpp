@@ -133,7 +133,7 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
 
     State_ = new NBoot::TBack(follower, Info->TabletID, gen);
     State().Scheme = new NTable::TScheme;
-    State().PageCaches = std::move(caches.PageCaches);
+    State().PageCollections = std::move(caches.PageCollections);
     State().TxStatusCaches = std::move(caches.TxStatusCaches);
 
     Steps = new NBoot::TRoot(this, State_.Get(), logger);
@@ -321,11 +321,11 @@ void TExecutorBootLogic::FollowersSyncComplete() {
 
 TExecutorCaches TExecutorBootLogic::DetachCaches() {
     if (Result_) {
-        for (auto &x : Result().PageCaches)
-            State().PageCaches[x->Id] = x;
+        for (auto &x : Result().PageCollections)
+            State().PageCollections[x->Id] = x;
     }
     return TExecutorCaches{
-        .PageCaches = std::move(State().PageCaches),
+        .PageCollections = std::move(State().PageCollections),
         .TxStatusCaches = std::move(State().TxStatusCaches),
     };
 }

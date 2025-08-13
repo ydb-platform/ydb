@@ -28,15 +28,35 @@ namespace NSQLComplete {
                     return {};
                 }
 
+                TMaybe<TClusterContext> cluster = ParseClusterContext(expr, *Nodes_);
+                if (!cluster) {
+                    return {};
+                }
+
+                return *cluster;
+            }
+
+        private:
+            const TNamedNodes* Nodes_;
+        };
+
+        class TClusterVisitor: public TSQLv1BaseVisitor {
+        public:
+            explicit TClusterVisitor(const TNamedNodes* nodes)
+                : Nodes_(nodes)
+            {
+            }
+
+            std::any visitCluster_expr(SQLv1::Cluster_exprContext* ctx) {
                 std::string provider;
                 std::string cluster;
 
-                if (SQLv1::An_idContext* ctx = expr->an_id()) {
-                    provider = ctx->getText();
+                if (SQLv1::An_idContext* id = ctx->an_id()) {
+                    provider = id->getText();
                 }
 
-                if (SQLv1::Pure_column_or_namedContext* ctx = expr->pure_column_or_named()) {
-                    if (auto id = GetId(ctx)) {
+                if (SQLv1::Pure_column_or_namedContext* named = ctx->pure_column_or_named()) {
+                    if (auto id = GetId(named)) {
                         cluster = std::move(*id);
                     }
                 }
@@ -45,9 +65,9 @@ namespace NSQLComplete {
                     return {};
                 }
 
-                return TUseContext{
+                return TClusterContext{
                     .Provider = std::move(provider),
-                    .Cluster = std::move(cluster),
+                    .Name = std::move(cluster),
                 };
             }
 
@@ -75,13 +95,21 @@ namespace NSQLComplete {
 
     } // namespace
 
+    TMaybe<TClusterContext> ParseClusterContext(SQLv1::Cluster_exprContext* ctx, const TNamedNodes& nodes) {
+        std::any result = TClusterVisitor(&nodes).visit(ctx);
+        if (!result.has_value()) {
+            return Nothing();
+        }
+        return std::any_cast<TClusterContext>(result);
+    }
+
     // TODO(YQL-19747): Use any to maybe conversion function
-    TMaybe<TUseContext> FindUseStatement(TParsedInput input, const TNamedNodes& nodes) {
+    TMaybe<TClusterContext> FindUseStatement(TParsedInput input, const TNamedNodes& nodes) {
         std::any result = TVisitor(input, &nodes).visit(input.SqlQuery);
         if (!result.has_value()) {
             return Nothing();
         }
-        return std::any_cast<TUseContext>(result);
+        return std::any_cast<TClusterContext>(result);
     }
 
 } // namespace NSQLComplete

@@ -22,6 +22,7 @@ TTopicWorkloadWriterProducer::TTopicWorkloadWriterProducer(
 
 void TTopicWorkloadWriterProducer::SetWriteSession(std::shared_ptr<NYdb::NTopic::IWriteSession> writeSession) {
     WriteSession_ = writeSession;
+    InflightMessagesCount_.store(0);
 }
 
 void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
@@ -29,8 +30,9 @@ void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
     Y_ASSERT(WriteSession_);
 
     TString data = GetGeneratedMessage();
-    InflightMessagesCreateTs_[MessageId_] = createTimestamp;
     NTopic::TWriteMessage::TMessageMeta meta = GenerateMessageMeta();
+    InflightMessagesCreateTs_.Insert(MessageId_, createTimestamp);
+    InflightMessagesCount_.fetch_add(1, std::memory_order_relaxed);
 
     NTopic::TWriteMessage writeMessage(data);
     writeMessage.SeqNo(MessageId_);
@@ -162,18 +164,19 @@ void TTopicWorkloadWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessionEve
         ui64 AckedMessageId = ack.SeqNo;
         WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got ack for write " << AckedMessageId);
 
-        auto inflightMessageIter = InflightMessagesCreateTs_.find(AckedMessageId);
-        if (inflightMessageIter == InflightMessagesCreateTs_.end()) {
+        TInstant createTimestamp = now;
+        if (InflightMessagesCreateTs_.TryRemove(AckedMessageId, createTimestamp)) {
+            InflightMessagesCount_.fetch_sub(1, std::memory_order_relaxed);
+        } else {
             *Params_.ErrorFlag = 1;
             WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR,
                       TStringBuilder() << "Unknown AckedMessageId " << AckedMessageId);
         }
 
-        auto inflightTime = (now - inflightMessageIter->second);
-        InflightMessagesCreateTs_.erase(inflightMessageIter);
+        auto inflightTime = (now - createTimestamp);
 
         StatsCollector_->AddWriterEvent(Params_.WriterIdx, {Params_.MessageSize, inflightTime.MilliSeconds(),
-                                                          InflightMessagesCreateTs_.size()});
+                                                          InflightMessagesCnt()});
 
         WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
                   TStringBuilder() << "Ack PartitionId " << ack.Details->PartitionId << " Offset "
@@ -205,5 +208,5 @@ ui64 TTopicWorkloadWriterProducer::GetPartitionId() {
 }
 
 size_t TTopicWorkloadWriterProducer::InflightMessagesCnt() {
-    return InflightMessagesCreateTs_.size();
+    return InflightMessagesCount_.load(std::memory_order_relaxed);
 }

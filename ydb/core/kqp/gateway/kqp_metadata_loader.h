@@ -68,8 +68,7 @@ private:
     void OnLoadedTableMetadata(NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult);
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadSysViewRewrittenMetadata(
-        const NSysView::ISystemViewResolver::TSystemViewPath& sysViewPath, const TString& cluster, const TString& table
-    );
+        const TString& cluster, const TString& table, const NSysView::ISystemViewResolver::TSystemViewPath& sysViewPath);
 
     const TString Cluster;
     TVector<NKikimrKqp::TKqpTableMetadataProto> CollectedSchemeData;

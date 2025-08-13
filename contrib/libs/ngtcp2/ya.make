@@ -14,16 +14,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-PEERDIR(
-    contrib/libs/openssl
-)
-
 ADDINCL(
     GLOBAL contrib/libs/ngtcp2/lib/includes
     contrib/libs/ngtcp2
-    contrib/libs/ngtcp2/crypto
-    contrib/libs/ngtcp2/crypto/includes
-    contrib/libs/ngtcp2/lib
 )
 
 NO_COMPILER_WARNINGS()
@@ -33,11 +26,10 @@ NO_RUNTIME()
 CFLAGS(
     -DBUILDING_NGTCP2
     -DHAVE_CONFIG_H
+    -DNGTCP2_STATICLIB
 )
 
 SRCS(
-    crypto/quictls/quictls.c
-    crypto/shared.c
     lib/ngtcp2_acktr.c
     lib/ngtcp2_addr.c
     lib/ngtcp2_balloc.c
@@ -83,3 +75,8 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    crypto/boringssl
+    crypto/quictls
+)

@@ -21,7 +21,7 @@ namespace NTabletFlatExecutor {
             , Seat(seat)
         { }
 
-        using TInfo = TPrivatePageCache::TInfo;
+        using TPageCollection = TPrivatePageCache::TPageCollection;
 
         struct TStats {
             size_t NewlyPinnedPages = 0;
@@ -74,27 +74,27 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        void ToLoadPage(TPageId pageId, TInfo *info) {
-            if (ToLoad[info->Id].insert(pageId).second) {
+        void ToLoadPage(TPageId pageId, TPageCollection *pageCollection) {
+            if (ToLoad[pageCollection->Id].insert(pageId).second) {
                 Stats.ToLoadPages++;
-                Y_ASSERT(!info->IsStickyPage(pageId));
-                Stats.ToLoadBytes += info->GetPageSize(pageId);
+                Y_ASSERT(!pageCollection->IsStickyPage(pageId));
+                Stats.ToLoadBytes += pageCollection->GetPageSize(pageId);
             }
         }
 
-        const TSharedData* Lookup(TPageId pageId, TInfo *info)
+        const TSharedData* Lookup(TPageId pageId, TPageCollection *pageCollection)
         {
-            auto& pinnedCollection = Seat.Pinned[info->Id];
+            auto& pinnedCollection = Seat.Pinned[pageCollection->Id];
             auto* pinnedPage = pinnedCollection.FindPtr(pageId);
             if (pinnedPage) {
                 // pinned pages do not need to be counted again
                 return &pinnedPage->PinnedBody;
             }
 
-            auto sharedBody = Cache.TryGetPage(pageId, info);
+            auto sharedBody = Cache.TryGetPage(pageId, pageCollection);
 
             if (!sharedBody) {
-                ToLoadPage(pageId, info);
+                ToLoadPage(pageId, pageCollection);
                 return nullptr;
             }
 
@@ -103,7 +103,7 @@ namespace NTabletFlatExecutor {
             auto& pinnedBody = emplaced.first->second.PinnedBody;
 
             Stats.NewlyPinnedPages++;
-            if (!info->IsStickyPage(pageId)) {
+            if (!pageCollection->IsStickyPage(pageId)) {
                 Stats.NewlyPinnedBytes += pinnedBody.size();
             }
             

@@ -249,6 +249,7 @@ public:
     TPlan(const TString& nodeType, TPlanViewConfig& config, TPlanVisualizer& viz)
         : NodeType(nodeType), Config(config), Viz(viz) {
         CpuTime = std::make_shared<TSummaryMetric>();
+        ExternalCpuTime = std::make_shared<TSummaryMetric>();
         WaitInputTime = std::make_shared<TSummaryMetric>();
         WaitOutputTime = std::make_shared<TSummaryMetric>();
         MaxMemoryUsage = std::make_shared<TSummaryMetric>();
@@ -274,6 +275,7 @@ public:
     }
 
     void Load(const NJson::TJsonValue& node);
+    void MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime);
     void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, TConnection* outputConnection);
     void LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>& stageOperators, const NJson::TJsonValue* ingressRowsNode);
     void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);
@@ -291,6 +293,7 @@ public:
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;
     std::shared_ptr<TSummaryMetric> CpuTime;
+    std::shared_ptr<TSummaryMetric> ExternalCpuTime;
     std::shared_ptr<TSummaryMetric> WaitInputTime;
     std::shared_ptr<TSummaryMetric> WaitOutputTime;
     std::shared_ptr<TSummaryMetric> MaxMemoryUsage;

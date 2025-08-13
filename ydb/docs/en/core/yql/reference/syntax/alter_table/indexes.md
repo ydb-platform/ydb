@@ -10,20 +10,57 @@
 
 ## Adding an index {#add-index}
 
-`ADD INDEX`: Adds an index with the specified name and type for a given set of columns. The code below adds a global index named `title_index` for the `title` column.
+`ADD INDEX` — adds an index with the specified name and type for a given set of columns. Grammar:
 
 ```yql
-ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
+ALTER TABLE `<table_name>`
+  ADD INDEX `<index_name>`
+    [GLOBAL|LOCAL]
+    [UNIQUE]
+    [SYNC|ASYNC]
+    [USING <index_type>]
+    ON ( <index_columns> )
+    [COVER ( <cover_columns> )]
+    [WITH ( <parameter_name> = <parameter_value>[, ...])]
+  [,   ...]
 ```
 
-You can specify any [secondary index](../../../../concepts/glossary.md#secondary-index) parameters from the `CREATE TABLE` [command](../create_table/secondary_index.md).
-You can specify any [vector index](../../../../concepts/glossary.md#vector-index) parameters from the `CREATE TABLE` [command](../create_table/vector_index.md).
+{% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
+
+Parameters specific to vector indexes:
+
+{% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
 
 {% if backend_name == "YDB" %}
 
 You can also add a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) command.
 
 {% endif %}
+
+### Examples
+
+A regular secondary index:
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX `title_index`
+  GLOBAL ON (`title`);
+```
+
+A vector index:
+
+```yql
+ALTER TABLE `series`
+  INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
+  ON (embedding) COVER (title)
+  WITH (
+    distance="cosine",
+    vector_type="float",
+    vector_dimension=512,
+    clusters=128,
+    levels=2
+  );
+```
 
 ## Altering an index {#alter-index}
 
@@ -78,7 +115,6 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 ```
 
 ## Deleting an index {#drop-index}
-
 
 `DROP INDEX`: Deletes the index with the specified name. The code below deletes the index named `title_index`.
 

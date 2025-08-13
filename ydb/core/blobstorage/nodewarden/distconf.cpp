@@ -299,16 +299,11 @@ namespace NKikimr::NStorage {
             Y_VERIFY_S(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT, "RootState# " << RootState);
             Y_ABORT_UNLESS(!Binding);
         } else {
-            Y_VERIFY_S(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ||
-                RootState == ERootState::LOCAL_QUORUM_OP, "RootState# " << RootState);
+            Y_VERIFY_S(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT, "RootState# " << RootState);
 
             // we can't have connection to the Console without being the root node
             Y_ABORT_UNLESS(!ConsolePipeId);
             Y_ABORT_UNLESS(!ConsoleConnected);
-        }
-
-        if (RootState == ERootState::LOCAL_QUORUM_OP) {
-            Y_ABORT_UNLESS(!InvokeQ.empty());
         }
     }
 #endif
@@ -548,11 +543,10 @@ template<>
 void Out<NKikimr::NStorage::TDistributedConfigKeeper::ERootState>(IOutputStream& s, NKikimr::NStorage::TDistributedConfigKeeper::ERootState state) {
     using E = decltype(state);
     switch (state) {
-        case E::INITIAL:         s << "INITIAL";         return;
-        case E::ERROR_TIMEOUT:   s << "ERROR_TIMEOUT";   return;
-        case E::IN_PROGRESS:     s << "IN_PROGRESS";     return;
-        case E::RELAX:           s << "RELAX";           return;
-        case E::LOCAL_QUORUM_OP: s << "LOCAL_QUORUM_OP"; return;
+        case E::INITIAL:       s << "INITIAL";         return;
+        case E::ERROR_TIMEOUT: s << "ERROR_TIMEOUT";   return;
+        case E::IN_PROGRESS:   s << "IN_PROGRESS";     return;
+        case E::RELAX:         s << "RELAX";           return;
     }
     Y_ABORT();
 }

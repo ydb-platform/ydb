@@ -269,15 +269,13 @@ namespace NKikimr::NStorage {
 
         // root node operation
         enum class ERootState {
-            INITIAL,         // possible binding, no scepter, no operation in progress
-            ERROR_TIMEOUT,   // possible binding, no scepter, no operation in progress
-            IN_PROGRESS,     // no binding, scepter, global quorum operation in progress
-            RELAX,           // no binding, scepter, no operation in progress
-            LOCAL_QUORUM_OP, // no binding, no scepter, local pile quorum operation in progress
+            INITIAL,       // possible binding, no scepter, no operation in progress
+            ERROR_TIMEOUT, // possible binding, no scepter, no operation in progress
+            IN_PROGRESS,   // no binding, scepter, global quorum operation in progress
+            RELAX,         // no binding, scepter, no operation in progress
         };
         static constexpr TDuration ErrorTimeout = TDuration::Seconds(3);
         ERootState RootState = ERootState::INITIAL;
-        ui64 CollectConfigsRelevanceMarker = 0;
         TBackoffTimer CollectConfigsBackoffTimer{10, 1000};
 
         struct TProposition {
@@ -294,7 +292,6 @@ namespace NKikimr::NStorage {
         bool LocalPileQuorum = false;
         bool GlobalQuorum = false;
         bool QuorumValid = false;
-        bool LocalQuorumObtained = false;
 
         // subscribed IC sessions
         struct TSessionSubscription {
@@ -410,7 +407,6 @@ namespace NKikimr::NStorage {
         void CheckRootNodeStatus();
         void HandleRetryCollectConfigsAndPropose(STATEFN_SIG);
         void BecomeRoot();
-        void ObtainedLocalQuorum();
         void UnbecomeRoot();
         void HandleErrorTimeout();
         void ProcessGather(TEvGather *res);
@@ -423,7 +419,7 @@ namespace NKikimr::NStorage {
             std::optional<NKikimrBlobStorage::TStorageConfig> ConfigToPropose;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
-            std::optional<TStringBuf> selfAssemblyUUID, TBridgePileId singleBridgePileId);
+            std::optional<TStringBuf> selfAssemblyUUID);
 
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
@@ -449,7 +445,7 @@ namespace NKikimr::NStorage {
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
 
-        void SwitchToError(const TString& reason, bool timeout = true);
+        void SwitchToError(const TString& reason);
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev);
@@ -505,7 +501,6 @@ namespace NKikimr::NStorage {
         };
 
         struct TCollectConfigsAndPropose {
-            ui64 CollectConfigsRelevanceMarker;
         };
 
         struct TProposeConfig {

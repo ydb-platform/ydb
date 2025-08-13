@@ -404,7 +404,7 @@ bool CompareValueImplDecimal(const NYdb::TDecimalValue& valResult, TStringBuf vE
         auto precInt = NYql::NDecimal::FromString(precesionStr, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
         return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
     }
-    NYql::NDecimal::TInt128 precInt = expectedInt * relativePrecision;
+    NYql::NDecimal::TInt128 precInt = i64(double(expectedInt) * relativePrecision);
     if (precInt < 0) {
         precInt = -precInt;
     }

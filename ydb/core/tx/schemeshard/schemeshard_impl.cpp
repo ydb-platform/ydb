@@ -4961,6 +4961,9 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
     MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
 
+    SendStatsIntervalSecondsDedicated = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsDedicated();
+    SendStatsIntervalSecondsServerless = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsServerless();
+
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
     ConfigureShredManager(appData->ShredConfig);
     ConfigureExternalSources(appData->QueryServiceConfig, ctx);
@@ -8264,8 +8267,17 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         << ", path count: " << count
         << ", at schemeshard: " << TabletID());
 
-    return TDuration::Seconds(SendStatsIntervalMinSeconds
-        + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds));
+    if (IsServerlessDomain(SubDomains.at(RootPathId()))) {
+        // In serverless subdomains several schemeshards send stats to a single SA
+        // so we use a bigger interval with jitter.
+        const auto max = TDuration::Seconds(SendStatsIntervalSecondsServerless);
+        const auto min = max * 3 / 4;
+        return min + TDuration::MilliSeconds(
+            RandomNumber<ui64>(max.MilliSeconds() - min.MilliSeconds()));
+    } else {
+        // Dedicated subdomains can use a smaller interval.
+        return TDuration::Seconds(SendStatsIntervalSecondsDedicated);
+    }
 }
 
 THolder<TShredManager> TSchemeShard::CreateShredManager(const NKikimrConfig::TDataErasureConfig& config) {

@@ -257,7 +257,7 @@ Events:
     kubectl run -it --image=cr.yandex/crptqonuodf51kdj7a7d/ydb:24.4.4.2 --rm ydb-cli bash
     ```
 
-3. Выполните запрос к базе данных {{ ydb-short-name }} (можете получить Endpoint из вывода `kubectl describe database.ydb.tech`):
+3. Выполните запрос к базе данных {{ ydb-short-name }} (endpoint можно получить из вывода `kubectl describe database.ydb.tech`):
 
     ```bash
     /opt/ydb/bin/ydb \

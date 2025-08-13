@@ -3,12 +3,21 @@ import os
 import logging
 import time
 import random
+from enum import Enum
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.olap.common.ydb_client import YdbClient
 
 logger = logging.getLogger(__name__)
+
+
+class ModType(Enum):
+    """Enum to define different types of database modification operations."""
+
+    UPDATE = "update"
+    UPSERT = "upsert"
+    BULK_UPSERT = "bulk_upsert"
 
 
 class Timer:
@@ -70,7 +79,55 @@ class TestCsSimpleReaderManyModifications(object):
         ].rows[0]["cnt"]
         assert count == expected_rows_num
 
-    def test_many_modifications(self):
+    def _do_update(self, table_path, pks, mods):
+        """Apply modifications using individual UPDATE statements."""
+        updates_num = 0
+        for pk in pks:
+            for value in mods[pk]:
+                update_query = f"""
+                UPDATE `{table_path}`
+                SET value = {value}
+                WHERE id = {pk};
+                """
+                self.ydb_client.query(update_query)
+                updates_num += 1
+        return updates_num
+
+    def _do_upsert(self, table_path, pks, mods):
+        """Apply modifications using individual UPSERT statements."""
+        updates_num = 0
+        for pk in pks:
+            for value in mods[pk]:
+                upsert_query = f"""
+                UPSERT INTO `{table_path}` (id, value)
+                VALUES ({pk}, {value});
+                """
+                self.ydb_client.query(upsert_query)
+                updates_num += 1
+        return updates_num
+
+    def _do_bulk_upsert(self, table_path, pks, mods):
+        """Apply modifications using batch UPSERT statements."""
+        updates_num = 0
+        mods_num = len(mods[0])
+        for mod_idx in range(mods_num):
+            # Collect all updates for this round
+            update_values = []
+            for pk in pks:
+                value = mods[pk][mod_idx]
+                update_values.append(f"({pk}, {value})")
+
+            # Execute single batch UPSERT for all PKs in this round
+            values_clause = ", ".join(update_values)
+            batch_upsert_query = f"""
+            UPSERT INTO `{table_path}` (id, value)
+            VALUES {values_clause};
+            """
+            self.ydb_client.query(batch_upsert_query)
+            updates_num += 1
+        return updates_num
+
+    def _test_many_modifications(self, rows_num, mods_num, mod_type: ModType):
         table_path = f"{self.test_dir}/test_many_modifications"
         with Timer("drop table"):
             self.ydb_client.query(f"DROP TABLE IF EXISTS `{table_path}`")
@@ -88,57 +145,77 @@ class TestCsSimpleReaderManyModifications(object):
                 """
             )
 
-        rows_num = 10
-        mods_num = 5
         # Generate a list of primary keys
         pks = list(range(rows_num))
 
-        # Generate a series of modifications for each key
-        modifications = {}
-        for pk in pks:
-            modifications[pk] = []
-            for _ in range(mods_num):
-                modifications[pk].append(random.randint(0, 1000000))
+        # Generate a series of initial values and modifications for each key
+        inits = [random.randint(0, 1000000) for _ in range(rows_num)]
+        mods = [
+            [random.randint(0, 1000000) for _ in range(mods_num)]
+            for _ in range(rows_num)
+        ]
 
         # Insert the initial rows
         with Timer("initial inserts"):
             for pk in pks:
-                initial_value = modifications[pk][0]
+                initial_value = inits[pk]
                 self.ydb_client.query(
                     f"INSERT INTO `{table_path}` (id, value) VALUES ({pk}, {initial_value});"
                 )
 
-        self._check_rows_num(table_path, rows_num)
+        with Timer("select count(*) after initial inserts"):
+            self._check_rows_num(table_path, rows_num)
 
-        # Apply the subsequent modifications using UPDATE
-        updates_num = 0
-        updates_timer = Timer("updates")
+        # Apply the subsequent modifications based on modification type
+        operation_name = mod_type.value
+        updates_timer = Timer(f"{operation_name}s")
         with updates_timer:
-            for pk in pks:
-                for value in modifications[pk][1:]:
-                    self.ydb_client.query(
-                        f"UPDATE `{table_path}` SET value = {value} WHERE id = {pk};"
-                    )
-                    updates_num += 1
+            if mod_type == ModType.UPDATE:
+                updates_num = self._do_update(table_path, pks, mods)
+            elif mod_type == ModType.UPSERT:
+                updates_num = self._do_upsert(table_path, pks, mods)
+            elif mod_type == ModType.BULK_UPSERT:
+                updates_num = self._do_bulk_upsert(table_path, pks, mods)
+            else:
+                raise ValueError(f"Unsupported modification type: {mod_type}")
+
         print(
-            f"updates_num: {updates_num}, avg_time: {updates_timer.get_time_ms() / updates_num} ms"
+            f"{operation_name}s num: {updates_num}, avg_time: {updates_timer.get_time_ms() / updates_num} ms"
         )
 
         # Verify the final state
-        self._check_rows_num(table_path, rows_num)
+        with Timer("select count(*) after modifications"):
+            self._check_rows_num(table_path, rows_num)
 
-        expected_data = {}
-        for pk in pks:
-            expected_data[pk] = modifications[pk][-1]
+        # it is easier to compare with a dict in this case
+        expected_data = {pk: mods[pk][-1] for pk in pks}
 
         # Select all rows in bulk
-        with Timer("bulk select"):
+        with Timer("select all"):
             result_sets = self.ydb_client.query(
                 f"SELECT id, value FROM `{table_path}`;"
             )
-            rows = [row for result_set in result_sets for row in result_set.rows]
+
+        # flatten the result sets, len(result_sets) may be greater than 1 (and usually is)
+        rows = [row for result_set in result_sets for row in result_set.rows]
 
         assert len(rows) == rows_num
         actual_data = {row["id"]: row["value"] for row in rows}
 
         assert actual_data == expected_data
+
+    def test_many_modifications_with_update(self):
+        """Test using individual UPDATE statements."""
+        self._test_many_modifications(rows_num=10, mods_num=2, mod_type=ModType.UPDATE)
+
+    def test_many_modifications_with_upsert(self):
+        """Test using individual UPSERT statements."""
+        self._test_many_modifications(
+            rows_num=10, mods_num=100, mod_type=ModType.UPSERT
+        )
+
+    def test_many_modifications_with_bulk_upsert(self):
+        """Test using batch UPSERT statements."""
+        self._test_many_modifications(
+            rows_num=30, mods_num=500, mod_type=ModType.BULK_UPSERT
+        )

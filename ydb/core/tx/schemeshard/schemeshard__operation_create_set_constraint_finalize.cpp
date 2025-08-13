@@ -8,7 +8,7 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
-    ISubOperation::TPtr CreateSetConstraintLock(TOperationId opId, const TTxTransaction& tx) {
+    ISubOperation::TPtr CreateSetConstraintFinalize(TOperationId opId, const TTxTransaction& tx) {
         // Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
         Y_UNUSED(opId);
         Y_UNUSED(tx);

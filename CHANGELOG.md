@@ -60,7 +60,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20040:Enabled verbose memory limit by default in recipe [#20040](https://github.com/ydb-platform/ydb/pull/20040). ([Ivan](https://github.com/abyss7))
 * 20272:Enabled the following feature flags by default: EnableTopicAutopartitioningForCDC, EnableTopicAutopartitioningForReplication, EnableTopicTransfer. [#20272](https://github.com/ydb-platform/ydb/pull/20272) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20253:Separated bulk statistics operations from non-bulk. [#20253](https://github.com/ydb-platform/ydb/pull/20253) ([Vladilen](https://github.com/Vladilen))
-* 21007:Added support for enable default allocator for Arrow in config. (https://github.com/ydb-platform/ydb/pull/21007) ([Ivan](https://github.com/abyss7))
 * 20738:Added statistics for grouped limiter and caches. [#20738](https://github.com/ydb-platform/ydb/pull/20738) ([Vladilen](https://github.com/Vladilen))
 
 ### Bug fixes

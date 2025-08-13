@@ -427,8 +427,9 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             )
             pools[p['name']] = p['kind']
 
+        root_token = self.__configurator.default_clusteradmin
         if len(pools) > 0:
-            self.client.bind_storage_pools(self.domain_name, pools)
+            self.client.bind_storage_pools(self.domain_name, pools, token=root_token)
             default_pool_name = list(pools.keys())[0]
         else:
             default_pool_name = ""

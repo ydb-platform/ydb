@@ -24,6 +24,19 @@
 - [{#T}](security_config.md) — настройки конфигурации безопасности
 - [{#T}](tls.md) — конфигурация TLS для безопасных соединений
 
+## Практические рекомендации
+
+Этот раздел документации посвящён полному описанию доступных настроек, а практические рекомендации по тому, что и когда настраивать, можно найти в следующих местах:
+
+- В рамках первоначального развёртывания кластера {{ ydb-short-name }}:
+
+    - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
+    - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
+    - [Вручную](../../devops/deployment-options/manual/initial-deployment.md)
+
+- В рамках [поиска и устранения неисправностей](../../troubleshooting/index.md)
+- В рамках [усиления безопасности](../../security/index.md)
+
 ## Примеры конфигураций кластеров
 
 Модельные конфигурации кластера для развертывания можно найти в [репозитории](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/). Изучите их перед развертыванием кластера.

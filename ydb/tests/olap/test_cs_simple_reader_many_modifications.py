@@ -31,11 +31,11 @@ class Timer:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.dt = time.perf_counter() - self._t0
-        print(f"{self.label}: {self.dt*1000:.1f} ms", flush=True)
+        self._dt = time.perf_counter() - self._t0
+        print(f"{self.label}: {self._dt*1000:.1f} ms", flush=True)
 
     def get_time_ms(self):
-        return self.dt * 1000
+        return self._dt * 1000
 
 
 class TestCsSimpleReaderManyModifications(object):

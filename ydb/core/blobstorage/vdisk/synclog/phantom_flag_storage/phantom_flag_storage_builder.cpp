@@ -100,6 +100,7 @@ private:
                     SlCtx->PDiskCtx->Dsk->OwnerRound, chunkIdx, offset, size, NPriRead::SyncLog, nullptr));
         } else {
             ProcessMemSnapshot();
+            Finish();
         }
     }
 

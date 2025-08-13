@@ -37,10 +37,7 @@ private:
         void AddBlob(const TLogoBlobID& blob);
         void AddHardBarrier(ui64 tabletId, ui8 channel, TGenStep barrier);
         bool IsBehindThreshold(const TLogoBlobID& blob) const;
-    
-    private:
-        using TGenStep = std::pair<ui32, ui32>;
-    
+
     private:
         class TTabletThresholds {
         public:

@@ -371,9 +371,7 @@ namespace NKikimr {
                     break;
                 }
 
-                if (true) { // TODO: borders
-                    Serialize(data, *PhantomFlagIterator);
-                }
+                Serialize(data, *PhantomFlagIterator);
             }
 
             // key points to the last seen key

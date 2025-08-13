@@ -87,7 +87,7 @@ bool TPhantomFlagThresholds::IsBehindThreshold(const TLogoBlobID& blob) const {
 
 TPhantomFlags TPhantomFlagThresholds::Sift(const TPhantomFlags& flags) {
     TPhantomFlags res;
-    std::copy_if(flags.begin(), flags.end(), res.begin(),
+    std::copy_if(flags.begin(), flags.end(), std::back_inserter(res),
             [&](const TLogoBlobRec& rec) { return IsBehindThreshold(rec.LogoBlobID()); });
     return res;
 }

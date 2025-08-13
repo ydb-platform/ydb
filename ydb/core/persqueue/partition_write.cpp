@@ -492,7 +492,6 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
     }
     BytesWrittenGrpc.Inc(WriteNewSizeInternal);
     BytesWrittenTotal.Inc(WriteNewSize);
-    BytesWrittenPerPartition.Inc(WriteNewSize);
     BytesWrittenUncompressed.Inc(WriteNewSizeUncompressed);
     if (BytesWrittenComp)
         BytesWrittenComp.Inc(WriteCycleSize);

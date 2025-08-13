@@ -16,7 +16,7 @@ namespace NYdb::NConsoleClient {
 
     class TTopicReaderSettings {
     public:
-        using TPartitionReadOffsetMap = THashMap<ui32, ui64>;
+        using TPartitionReadOffsetMap = THashMap<ui64, ui64>;
 
         TTopicReaderSettings(
             TMaybe<i64> limit,
@@ -92,6 +92,7 @@ namespace NYdb::NConsoleClient {
         };
 
         bool HasSession(ui64 sessionId) const;
+        std::optional<uint64_t> GetNextReadOffset(ui64 partitionId) const;
 
     private:
         std::shared_ptr<NTopic::IReadSession> ReadSession_;

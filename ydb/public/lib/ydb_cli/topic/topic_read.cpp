@@ -220,14 +220,11 @@ namespace NYdb::NConsoleClient {
     }
 
     int TTopicReader::HandleStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent* event) {
-        std::optional<uint64_t> readOffset;
-        if (const ui64* offset = PartitionReadOffset_.FindPtr(event->GetPartitionSession()->GetPartitionId())) {
-            readOffset = *offset;
-        }
+        const std::optional<uint64_t> readOffset = GetNextReadOffset(event->GetPartitionSession()->GetPartitionId());
         event->Confirm(readOffset);
 
         EReadingStatus readingStatus = EReadingStatus::PartitionWithData;
-        if (event->GetCommittedOffset() == event->GetEndOffset()) {
+        if (event->GetCommittedOffset() == event->GetEndOffset() || (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
             readingStatus = EReadingStatus::PartitionWithoutData;
         } else {
             ++PartitionsBeingRead_;
@@ -244,6 +241,15 @@ namespace NYdb::NConsoleClient {
         return EXIT_SUCCESS;
     }
 
+    std::optional<uint64_t> TTopicReader::GetNextReadOffset(ui64 partitionId) const {
+        if (!PartitionReadOffset_.empty()) {
+            if (const ui64* offset = PartitionReadOffset_.FindPtr(partitionId)) {
+                return *offset;
+            }
+        }
+        return std::nullopt;
+    }
+
     int TTopicReader::HandlePartitionSessionStatusEvent(NTopic::TReadSessionEvent::TPartitionSessionStatusEvent* event) {
         ui64 sessionId = event->GetPartitionSession()->GetPartitionSessionId();
         if (!HasSession(sessionId)) {
@@ -252,7 +258,8 @@ namespace NYdb::NConsoleClient {
 
         auto status = ActivePartitionSessions_.find(sessionId);
         EReadingStatus currentPartitionStatus = status->second.second;
-        if (event->GetEndOffset() == event->GetCommittedOffset()) {
+        const std::optional<uint64_t> readOffset = GetNextReadOffset(event->GetPartitionSession()->GetPartitionId());
+        if (event->GetEndOffset() == event->GetCommittedOffset() || (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
             if (currentPartitionStatus == EReadingStatus::PartitionWithData) {
                 --PartitionsBeingRead_;
             }

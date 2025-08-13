@@ -16,6 +16,7 @@ namespace NYdb::NConsoleClient {
         UNIT_TEST(TestRun_ReadMessages_Output_Base64);
         UNIT_TEST(TestRun_Read_Less_Messages_Than_Sent);
         UNIT_TEST(TestRun_ReadMessages_With_Offset);
+        UNIT_TEST(TestRun_ReadMessages_With_Future_Offset);
         UNIT_TEST_SUITE_END();
 
         void TestRun_ReadOneMessage() {
@@ -114,6 +115,20 @@ namespace NYdb::NConsoleClient {
 
                     },
                     "\n", TTopicReaderSettings({}, false, false, {{0, 3}}, EMessagingFormat::NewlineDelimited, {}, ETransformBody::None, TDuration::Seconds(1)));
+        }
+
+         void TestRun_ReadMessages_With_Future_Offset() {
+            RunTest({
+                        "message1",
+                        "message2",
+                        "message3",
+                        "message4",
+                        "message5",
+                        "message6",
+                    },
+                    {
+                    },
+                    "\n", TTopicReaderSettings({}, false, false, {{0, 10}}, EMessagingFormat::NewlineDelimited, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
     private:

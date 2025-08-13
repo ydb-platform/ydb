@@ -27,7 +27,7 @@ When memory usage approaches the limit, the system:
 
 ## Spilling in {{ ydb-short-name }}
 
-{{ ydb-short-name }} implements the spilling mechanism through the **Spilling Service**, an [actor service](glossary.md#actor-service) that provides temporary storage for data blobs. Detailed technical information about it is available in [{#T}](../contributor/spilling-service.md).
+{{ ydb-short-name }} implements the spilling mechanism through the **Spilling Service**, an [actor service](glossary.md#actor-service) that provides temporary storage for data blobs. Spilling is only performed on [database nodes](glossary.md#database-node). Detailed technical information about it is available in [{#T}](../contributor/spilling-service.md).
 
 ### Types of Spilling in {{ ydb-short-name }}
 

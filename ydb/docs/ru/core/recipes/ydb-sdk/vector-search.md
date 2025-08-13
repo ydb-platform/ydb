@@ -144,9 +144,9 @@
 
         UPSERT INTO `{table_name}`
         (
-        id,
-        document,
-        embedding
+            id,
+            document,
+            embedding
         )
         SELECT
             id,
@@ -186,9 +186,9 @@
             >>;
             UPSERT INTO `{0}`
             (
-            id,
-            document,
-            embedding
+                id,
+                document,
+                embedding
             )
             SELECT
                 id,
@@ -480,8 +480,7 @@
             document,
             Knn::{strategy}(embedding, $embedding) as score
         FROM {table_name} {view_index}
-        ORDER BY score
-        {sort_order}
+        ORDER BY score {sort_order}
         LIMIT {limit};
         """
 
@@ -531,8 +530,7 @@
                 document,
                 Knn::{2}(embedding, $embedding) as score
             FROM {0} {1}
-            ORDER BY score
-            {3}
+            ORDER BY score {3}
             LIMIT {4};
         )", tableName, viewIndex, strategy, sortOrder, limit);
 

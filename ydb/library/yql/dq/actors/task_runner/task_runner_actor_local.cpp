@@ -191,23 +191,15 @@ private:
         THashMap<ui32, i64> inputChannelFreeSpace;
         THashMap<ui32, i64> sourcesFreeSpace;
 
-        if (LastWatermark < ev->Get()->WatermarkRequest) {
-            LastWatermark = ev->Get()->WatermarkRequest;
-            Y_ENSURE(LastWatermark);
-            if (WatermarkRequest) {
-                if (*WatermarkRequest < *LastWatermark) {
-                    Y_ENSURE(NextWatermarkRequest <= *LastWatermark);
-                    NextWatermarkRequest = *LastWatermark;
-                    LOG_T("Task runner. Delayed PauseByWatermark " << *LastWatermark);
-                }
-            } else {
-                WatermarkRequest = *LastWatermark;
-                LOG_T("Task runner. PauseByWatermark " << *LastWatermark);
-                PauseInputs(*LastWatermark);
+        const auto& nextWatermark = ev->Get()->WatermarkRequest;
+        if (LastWatermark < nextWatermark) {
+            LastWatermark = nextWatermark;
+            if (!WatermarkRequest) {
+                PauseInputs(*nextWatermark);
             }
         }
 
-        const bool shouldHandleWatermark = WatermarkRequest && *WatermarkRequest > TaskRunner->GetWatermark().WatermarkIn && ReadyToWatermark();
+        const bool shouldHandleWatermark = WatermarkRequest && TaskRunner->GetWatermark().WatermarkIn < *WatermarkRequest && ReadyToWatermark();
 
         if (!ev->Get()->CheckpointOnly) {
             if (shouldHandleWatermark) {
@@ -240,11 +232,9 @@ private:
                 }
                 ResumeByWatermark(*WatermarkRequest);
                 watermarkInjectedToOutputs = std::move(WatermarkRequest);
-                if (NextWatermarkRequest) {
-                    WatermarkRequest = std::move(NextWatermarkRequest);
-                    NextWatermarkRequest.Clear();
-                    LOG_T("Task runner. Re-pause on watermark " << *WatermarkRequest);
-                    PauseInputs(*WatermarkRequest);
+                if (WatermarkRequest < LastWatermark) {
+                    LOG_T("Task runner. Re-pause on watermark " << *LastWatermark);
+                    PauseInputs(*LastWatermark);
                 } else {
                     WatermarkRequest.Clear();
                 }
@@ -449,6 +439,7 @@ private:
     }
 
     void PauseInputs(TInstant watermark) {
+        WatermarkRequest = watermark;
         for (const auto& inputId : InputsWithWatermarks) {
             TaskRunner->GetInputChannel(inputId)->PauseByWatermark(watermark);
         }
@@ -626,7 +617,6 @@ private:
     ui64 ActorElapsedTicks = 0;
     TMaybe<TInstant> LastWatermark;
     TMaybe<TInstant> WatermarkRequest;
-    TMaybe<TInstant> NextWatermarkRequest;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

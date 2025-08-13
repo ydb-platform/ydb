@@ -421,7 +421,7 @@ void TTopicSession::SubscribeOnNextEvent() {
 
     LOG_ROW_DISPATCHER_TRACE("SubscribeOnNextEvent");
     IsWaitingEvents = true;
-    Metrics.InFlySubscribe->Inc();
+    Metrics.InFlySubscribe->Set(1);
     TActorSystem* actorSystem = TActivationContext::ActorSystem();
     WaitEventStartedAt = TInstant::Now();
     ReadSession->WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
@@ -503,7 +503,7 @@ void TTopicSession::CreateTopicSession() {
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
     LOG_ROW_DISPATCHER_TRACE("TEvPqEventsReady");
-    Metrics.InFlySubscribe->Dec();
+    Metrics.InFlySubscribe->Set(0);
     IsWaitingEvents = false;
     auto waitEventDurationMs = (TInstant::Now() - WaitEventStartedAt).MilliSeconds();
     Metrics.WaitEventTimeMs->Collect(waitEventDurationMs);

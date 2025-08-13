@@ -71,7 +71,7 @@ struct Timestamp64Checker : public Checker<TInstant> {
     }
 
     TInstant Get(const ::Ydb::Value& value) override {
-        return TInstant::MilliSeconds(value.int64_value());
+        return TInstant::MicroSeconds(value.uint64_value());
     }
 
     void Assert(const std::string& msg, const ::Ydb::Value& value) override {

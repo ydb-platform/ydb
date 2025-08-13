@@ -1,107 +1,63 @@
 #pragma once
 
-#include "../fwd.h"
 #include "common.h"
 
 #include <library/cpp/time_provider/monotonic.h>
 
-#include <util/datetime/base.h>
-#include <util/generic/hash.h>
-
-#include <vector>
-
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
-    struct TTreeElementBase : public TStaticAttributes {
+    struct TTreeElement : public virtual TTreeElementBase<ETreeType::SNAPSHOT> {
         ui64 TotalLimit = Infinity();
         ui64 FairShare = 0;
 
         ui64 Demand = 0;
+        ui64 Usage = 0;
+        std::optional<float> Satisfaction;
 
-        TTreeElementBase* Parent = nullptr;
-        std::vector<TTreeElementPtr> Children;
+        const TMonotonic Timestamp = TMonotonic::Now();
 
-        virtual ~TTreeElementBase() = default;
+        explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
 
-        void AddChild(const TTreeElementPtr& element);
-        void RemoveChild(const TTreeElementPtr& element);
+        TPool* GetParent() const;
 
-        bool IsRoot() const {
-            return !Parent;
-        }
-
-        bool IsLeaf() const {
-            return Children.empty();
-        }
-
-        virtual void AccountFairShare(const TDuration& period);
+        virtual void AccountSnapshotDuration(const TDuration& period);
         virtual void UpdateBottomUp(ui64 totalLimit);
         void UpdateTopDown();
     };
 
-    class TQuery : public TTreeElementBase {
+    class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::SNAPSHOT>, public std::enable_shared_from_this<TQuery> {
     public:
-        TQuery(const TQueryId& queryId, NDynamic::TQuery* origQuery);
+        TQuery(const TQueryId& queryId, NDynamic::TQuery* query);
 
-        const TQueryId& GetId() const {
-            return Id;
-        }
-
-        const TMonotonic Timestamp = TMonotonic::Now();
-        NDynamic::TQuery* Origin;
-
-    private:
-        const TQueryId Id;
+        NDynamic::TQuery* Origin; // TODO: why public?
     };
 
-    class TPool : public TTreeElementBase {
+    class TPool : public TTreeElement, public NHdrf::TPool<ETreeType::SNAPSHOT> {
     public:
-        TPool(const TString& id, const TPoolCounters& counters, const TStaticAttributes& attrs = {});
+        TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const TStaticAttributes& attrs = {});
 
-        const TString& GetId() const {
-            return Id;
-        }
-
-        void AccountFairShare(const TDuration& period) override;
+        void AccountSnapshotDuration(const TDuration& period) override;
         void UpdateBottomUp(ui64 totalLimit) override;
-
-        void AddQuery(const TQueryPtr& query);
-        void RemoveQuery(const TQueryId& queryId);
-        TQueryPtr GetQuery(const TQueryId& queryId) const;
-
-    private:
-        const TString Id;
-        THashMap<TQueryId, TQueryPtr> Queries;
-        TPoolCounters Counters;
     };
 
-    class TDatabase : public TTreeElementBase {
+    class TDatabase : public TPool {
     public:
-        explicit TDatabase(const TString& id, const TStaticAttributes& attrs = {});
+        explicit TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs = {});
+    };
 
-        void AddPool(const TPoolPtr& pool);
-        TPoolPtr GetPool(const TString& poolId) const;
+    class TRoot : public TPool {
+    public:
+        TRoot();
 
-        const TString& GetId() const {
-            return Id;
+        inline bool IsRoot() const final {
+            return true;
         }
 
-    private:
-        const TString Id;
-        THashMap<TString /* poolId */, TPoolPtr> Pools;
-    };
-
-    class TRoot : public TTreeElementBase {
-    public:
         void AddDatabase(const TDatabasePtr& database);
-        TDatabasePtr GetDatabase(const TString& id) const;
+        void RemoveDatabase(const TDatabaseId& databaseId);
+        TDatabasePtr GetDatabase(const TDatabaseId& databaseId) const;
 
-        void AccountFairShare(const TRootPtr& previous);
-        using TTreeElementBase::AccountFairShare;
-
-    private:
-        const TMonotonic Timestamp = TMonotonic::Now();
-        THashMap<TString /* databaseId */, TDatabasePtr> Databases;
+        void AccountPreviousSnapshot(const TRootPtr& snapshot);
     };
 
 }

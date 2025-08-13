@@ -62,7 +62,21 @@ message TLoggingConfig {
         optional string Target = 2;
     }
 
+    message TFormat {
+        message TLegacyFormat {
+        };
+
+        message TJsonFormat {
+        };
+
+        oneof Format {
+            TLegacyFormat LegacyFormat = 1;
+            TJsonFormat JsonFormat = 2;
+        };
+    }
+
     repeated TLogDestination LogDest = 2; // If none is passed InitLogger sets default STDERR backend
     repeated TComponentLevel Levels = 3;
     optional ELevel AllComponentsLevel = 4 [default = INFO];
+    optional TFormat Format = 5;
 }

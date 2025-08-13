@@ -25,6 +25,7 @@ void ColumnType_Double(const std::string& tableType);
 void ColumnType_Utf8_LongValue(const std::string& tableType);
 void ColumnType_Uuid(const std::string& tableType);
 
+void MessageField_Attributes(const std::string& tableType);
 void MessageField_CreateTimestamp(const std::string& tableType);
 void MessageField_MessageGroupId(const std::string& tableType);
 void MessageField_Partition(const std::string& tableType);
@@ -37,3 +38,5 @@ void ProcessingCDCMessage(const std::string& tableType);
 
 void ProcessingTargetTable(const std::string& tableType);
 void ProcessingTargetTableOtherType(const std::string& tableType);
+
+void DropColumn(const std::string& tableType);

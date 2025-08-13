@@ -236,6 +236,7 @@ public:
     TAlter& SetFamilyCompression(ui32 table, ui32 family, ECodec codec);
     TAlter& SetFamilyCacheMode(ui32 table, ui32 family, ECacheMode cacheMode);
     TAlter& SetFamilyCache(ui32 table, ui32 family, ECache cache);
+    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec); // legacy
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
     TAlter& SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);

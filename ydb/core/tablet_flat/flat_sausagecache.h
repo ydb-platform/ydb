@@ -23,38 +23,32 @@ public:
         {}
     };
 
-    using TPinned = THashMap<TLogoBlobID, THashMap<TPageId, TPinnedPage>>;
-
-    struct TInfo;
+    struct TPageCollection;
 
     struct TStats {
-        ui64 TotalCollections = 0;
-        ui64 TotalSharedBody = 0;
-
-        size_t NewlyPinnedCount = 0;
-        ui64 NewlyPinnedSize = 0;
-
-        size_t ToLoadCount = 0;
-        ui64 ToLoadSize = 0;
+        ui64 PageCollections = 0;
+        ui64 SharedBodyBytes = 0;
+        ui64 StickyBytes = 0;
+        ui64 TryKeepInMemoryBytes = 0;
     };
 
     struct TPage : TNonCopyable {
         const TPageId Id;
         const size_t Size;
         const TSharedPageRef SharedBody;
-        const TInfo* const Info;
+        const TPageCollection* const PageCollection;
 
-        TPage(TPageId id, size_t size, TSharedPageRef sharedBody, TInfo* info);
+        TPage(TPageId id, size_t size, TSharedPageRef sharedBody, TPageCollection* pageCollection);
 
         bool IsSticky() const noexcept {
             // Note: because this method doesn't use TPage flags
             // it may be called from multiple threads later
             // also it doesn't affect offloading, only touched memory counting
-            return Info->IsStickyPage(Id);
+            return PageCollection->IsStickyPage(Id);
         }
     };
 
-    struct TInfo : public TThrRefBase {
+    struct TPageCollection : public TThrRefBase {
         TPage* FindPage(TPageId pageId) const noexcept {
             return PageMap[pageId].Get();
         }
@@ -75,9 +69,12 @@ public:
             return StickyPages.contains(pageId);
         }
 
-        ui64 GetStickySize() const noexcept {
-            return StickyPagesSize;
+        ECacheMode GetCacheMode() const noexcept {
+            return CacheMode;
         }
+
+        // Mutable methods can be only called on a construction stage or from a Private Cache
+        // Otherwise stat counters would be out of sync
 
         bool AddPage(TPageId pageId, TSharedPageRef sharedBody) {
             return PageMap.emplace(pageId, MakeHolder<TPage>(
@@ -87,12 +84,10 @@ public:
                 this));
         }
 
-        void AddStickyPage(TPageId pageId, TSharedPageRef sharedBody) {
+        bool AddStickyPage(TPageId pageId, TSharedPageRef sharedBody) {
             Y_ENSURE(sharedBody.IsUsed());
-            if (StickyPages.emplace(pageId, sharedBody).second) {
-                StickyPagesSize += GetPageSize(pageId);
-            }
-            AddPage(pageId, std::move(sharedBody));
+            AddPage(pageId, sharedBody);
+            return StickyPages.emplace(pageId, std::move(sharedBody)).second;
         }
 
         bool DropPage(TPageId pageId) {
@@ -102,30 +97,17 @@ public:
         void Clear() {
             PageMap.clear();
             StickyPages.clear();
-            StickyPagesSize = 0;
         }
 
-        bool UpdateCacheMode(ECacheMode newCacheMode) {
-            if (CacheMode == newCacheMode) {
-                return false;
-            }
-            CacheMode = newCacheMode;
-            return true;
-        }
-
-        ECacheMode GetCacheMode() const noexcept {
-            return CacheMode;
-        }
-
-        ui64 GetTryKeepInMemorySize() const noexcept {
-            return CacheMode == ECacheMode::TryKeepInMemory ? PageCollection->BackingSize() : 0;
+        void SetCacheMode(ECacheMode cacheMode) {
+            CacheMode = cacheMode;
         }
 
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
 
-        explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection);
-        TInfo(const TInfo &info);
+        explicit TPageCollection(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection);
+        TPageCollection(const TPageCollection &pageCollection);
 
     private:
         // all pages in PageMap have valid unused shared body
@@ -133,45 +115,30 @@ public:
 
         // storing sticky pages used refs guarantees that they won't be offload from Shared Cache
         THashMap<TPageId, TSharedPageRef> StickyPages;
-        ui64 StickyPagesSize = 0;
         ECacheMode CacheMode = ECacheMode::Regular;
     };
 
 public:
-    TInfo* FindPageCollection(const TLogoBlobID &id) const;
-    TInfo* GetPageCollection(const TLogoBlobID &id) const;
-    void AddPageCollection(TIntrusivePtr<TInfo> info);
-    void DropPageCollection(TInfo *info);
+    TPageCollection* FindPageCollection(const TLogoBlobID &id) const;
+    TPageCollection* GetPageCollection(const TLogoBlobID &id) const;
+    THashMap<TLogoBlobID, THashSet<TPageId>> AddPageCollection(TIntrusivePtr<TPageCollection> pageCollection);
+    void DropPageCollection(TPageCollection *pageCollection);
 
     const TStats& GetStats() const { return Stats; }
 
-    const TSharedData* Lookup(TPageId pageId, TInfo *info);
+    TSharedPageRef TryGetPage(TPageId pageId, TPageCollection *pageCollection);
 
-    // TODO: move this methods somewhere else (probably to TPageCollectionTxEnv)
-    // and keep page states and counters there
-    void BeginTransaction(TPinned* pinned);
-    void EndTransaction();
+    void DropPage(TPageId pageId, TPageCollection *pageCollection);
+    void AddPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection);
+    void AddStickyPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection);
+    bool UpdateCacheMode(ECacheMode newCacheMode, TPageCollection *pageCollection);
 
-    void DropPage(TPageId pageId, TInfo *info);
-    void AddPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info);
-
-    THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
-
-    THashMap<TLogoBlobID, TVector<TPageId>> GetToLoad();
-    void TranslatePinnedToSharedCacheTouches();
-    THashMap<TLogoBlobID, THashSet<TPageId>> GetSharedCacheTouches();
+    THashMap<TLogoBlobID, TIntrusivePtr<TPageCollection>> DetachPrivatePageCache();
 
 private:
-    void ToLoadPage(TPageId pageId, TInfo *info);
-
-private:
-    THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> PageCollections;
-    THashMap<TLogoBlobID, THashSet<TPageId>> SharedCacheTouches;
+    THashMap<TLogoBlobID, TIntrusivePtr<TPageCollection>> PageCollections;
 
     TStats Stats;
-
-    TPinned* Pinned;
-    THashMap<TLogoBlobID, THashSet<TPageId>> ToLoad;
 };
 
 }}

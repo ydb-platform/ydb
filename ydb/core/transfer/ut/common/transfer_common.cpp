@@ -17,7 +17,7 @@ void KeyColumnFirst(const std::string& tableType) {
                 return [
                     <|
                         Key:CAST($x._offset AS Uint64),
-                        Message:CAST($x._data AS Utf8)
+                        Message:Unwrap(CAST($x._data AS Utf8))
                     |>
                 ];
             };
@@ -49,7 +49,7 @@ void KeyColumnLast(const std::string& tableType) {
                 return [
                     <|
                         Key:CAST($x._offset AS Uint64),
-                        Message:CAST($x._data AS Utf8)
+                        Message:Unwrap(CAST($x._data AS Utf8))
                     |>
                 ];
             };
@@ -85,11 +85,11 @@ void ComplexKey(const std::string& tableType) {
             $l = ($x) -> {
                 return [
                     <|
-                        Key1:CAST(1 AS Uint64),
-                        Key2:CAST(2 AS Uint64),
+                        Key1:Unwrap(CAST(1 AS Uint64)),
+                        Key2:Unwrap(CAST(2 AS Uint64)),
                         Value2:CAST("value-2" AS Utf8),
-                        Key4:CAST(4 AS Uint64),
-                        Key3:CAST(3 AS Uint64),
+                        Key4:Unwrap(CAST(4 AS Uint64)),
+                        Key3:Unwrap(CAST(3 AS Uint64)),
                         Value1:CAST("value-1" AS Utf8),
                         ___Value3:CAST("value-3" AS Utf8)
                     |>
@@ -131,10 +131,10 @@ void ProcessingJsonMessage(const std::string& tableType) {
 
                 return [
                     <|
-                        Id:        Yson::ConvertToUint64($input.id),
-                        FirstName: CAST(Yson::ConvertToString($input.first_name) AS Utf8),
-                        LastName:  CAST(Yson::ConvertToString($input.last_name) AS Utf8),
-                        Salary:    CAST(Yson::ConvertToString($input.salary) AS UInt64)
+                        Id:        Unwrap(Yson::ConvertToUint64($input.id)),
+                        FirstName: Unwrap(CAST(Yson::ConvertToString($input.first_name) AS Utf8)),
+                        LastName:  Unwrap(CAST(Yson::ConvertToString($input.last_name) AS Utf8)),
+                        Salary:    Unwrap(CAST(Yson::ConvertToString($input.salary) AS UInt64))
                     |>
                 ];
             };
@@ -269,7 +269,7 @@ void ColumnType_Utf8_LongValue(const std::string& tableType) {
                 return [
                     <|
                         Key:CAST($x._offset AS Uint64),
-                        Message:CAST($x._data AS Utf8)
+                        Message:Unwrap(CAST($x._data AS Utf8))
                     |>
                 ];
             };
@@ -524,7 +524,7 @@ void MessageField_SeqNo(const std::string& tableType) {
             $l = ($x) -> {
                 return [
                     <|
-                        SeqNo:CAST($x._seq_no AS Uint32),
+                        SeqNo:$x._seq_no,
                         Message:CAST($x._data AS Utf8)
                     |>
                 ];
@@ -601,6 +601,37 @@ void MessageField_MessageGroupId(const std::string& tableType) {
     });
 }
 
+void MessageField_Attributes(const std::string& tableType) {
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Offset Uint64 NOT NULL,
+                Value Utf8,
+                PRIMARY KEY (Offset)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Offset:CAST($x._offset AS Uint64),
+                        Value:CAST($x._attributes['attribute_key'] AS Utf8)
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {_withAttributes({ {"attribute_key", "attribute_value"} })},
+
+        .Expectations = {{
+            _C("Value", TString("attribute_value")),
+        }}
+    });
+}
+
 void MessageField_CreateTimestamp(const std::string& tableType) {
     TInstant timestamp = TInstant::Now() - TDuration::Minutes(1);
 
@@ -608,7 +639,7 @@ void MessageField_CreateTimestamp(const std::string& tableType) {
         .TableDDL = R"(
             CREATE TABLE `%s` (
                 Offset Uint64 NOT NULL,
-                CreateTimestamp Timestamp64,
+                CreateTimestamp Timestamp,
                 PRIMARY KEY (Offset)
             )  WITH (
                 STORE = %s
@@ -641,7 +672,7 @@ void MessageField_WriteTimestamp(const std::string& tableType) {
         .TableDDL = R"(
             CREATE TABLE `%s` (
                 Offset Uint64 NOT NULL,
-                WriteTimestamp Timestamp64,
+                WriteTimestamp Timestamp,
                 PRIMARY KEY (Offset)
             )  WITH (
                 STORE = %s
@@ -684,7 +715,7 @@ void WriteNullToKeyColumn(const std::string& tableType) {
             $l = ($x) -> {
                 return [
                     <|
-                        Key:NULL,
+                        Key:Unwrap(Nothing(Uint64?), "The value of the 'Key' column must be non-NULL"),
                         Message:CAST($x._data AS Utf8)
                     |>
                 ];
@@ -693,7 +724,7 @@ void WriteNullToKeyColumn(const std::string& tableType) {
 
     testCase.Write({"Message-1"});
 
-    testCase.CheckTransferStateError("Error transform message partition 0 offset 0: The value of the 'Key' column must be non-NULL");
+    testCase.CheckTransferStateError("The value of the 'Key' column must be non-NULL");
 
     testCase.DropTransfer();
     testCase.DropTable();
@@ -718,7 +749,7 @@ void WriteNullToColumn(const std::string& tableType) {
                 return [
                     <|
                         Key:$x._offset,
-                        Message:NULL
+                        Message:Unwrap(Nothing(Utf8?), "The value of the 'Message' column must be non-NULL")
                     |>
                 ];
             };
@@ -726,7 +757,7 @@ void WriteNullToColumn(const std::string& tableType) {
 
     testCase.Write({"Message-1"});
 
-    testCase.CheckTransferStateError("Error transform message partition 0 offset 0: The value of the 'Message' column must be non-NULL");
+    testCase.CheckTransferStateError("The value of the 'Message' column must be non-NULL");
 
     testCase.DropTransfer();
     testCase.DropTable();
@@ -770,8 +801,8 @@ void ProcessingCDCMessage(const std::string& tableType) {
             $d = CAST($x._data AS JSON);
             return [
                 <|
-                    timestamp: DateTime::MakeDatetime(DateTime::ParseIso8601(CAST(Yson::ConvertToString($d.key[1]) AS Utf8))),
-                    object_id: CAST(Yson::ConvertToString($d.key[0]) AS Utf8),
+                    timestamp: Unwrap(DateTime::MakeDatetime(DateTime::ParseIso8601(CAST(Yson::ConvertToString($d.key[1]) AS Utf8)))),
+                    object_id: Unwrap(CAST(Yson::ConvertToString($d.key[0]) AS Utf8)),
                     operation: CAST(Yson::ConvertToString($d.update.operation) AS Utf8)
                 |>
             ];
@@ -1007,4 +1038,42 @@ void Upsert_OneBatch(const std::string& tableType) {
 
     testCase.DropTransfer();
     testCase.DropTable();
+}
+
+void DropColumn(const std::string& tableType)
+{
+    MainTestCase testCase(std::nullopt, tableType);
+    testCase.CreateTable(R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Utf8,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )");
+    testCase.CreateTopic(1);
+    testCase.CreateTransfer(R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key:CAST($x._offset AS Uint64),
+                        Message:CAST($x._data AS Utf8)
+                    |>
+                ];
+            };
+        )");
+    
+    testCase.Write({"Message-1"});
+    testCase.CheckResult({{
+        _C("Message", TString("Message-1"))
+    }});
+
+    testCase.ExecuteDDL(Sprintf(R"(
+        ALTER TABLE %s DROP COLUMN Message
+        )", testCase.TableName.data()));
+
+    testCase.Write({"Message-2"});
+
+    testCase.CheckTransferStateError("Unknown column: Message");
 }

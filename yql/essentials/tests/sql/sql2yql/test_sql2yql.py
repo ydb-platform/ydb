@@ -2,7 +2,7 @@ import os
 
 import yatest.common
 
-from test_utils import get_config, pytest_generate_tests_by_template, SQLRUN_PATH, SQL_FLAGS
+from test_utils import get_config, pytest_generate_tests_by_template, SQLRUN_PATH, SQL_FLAGS, get_case_file
 
 from yql_utils import get_langver
 
@@ -11,7 +11,7 @@ DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 
 
 def pytest_generate_tests(metafunc):
-    return pytest_generate_tests_by_template('.sql', metafunc, data_path=DATA_PATH)
+    return pytest_generate_tests_by_template({'.sql', '.yql'}, metafunc, data_path=DATA_PATH)
 
 
 def _get_cfg_path(suite, case, data_path):
@@ -81,7 +81,7 @@ def test(suite, case, tmpdir):
     files = []
     # case can contain slash because of nested suites
     out_dir = tmpdir.mkdir(suite).mkdir(case.replace('/', '_')).dirname
-    case_file = os.path.join(DATA_PATH, suite, '%s.sql' % case)
+    case_file = get_case_file(DATA_PATH, suite, case, {'.sql', '.yql'})
     with open(case_file, 'r') as f:
         content = f.read()
         ansi_lexer = 'ansi_lexer' in content

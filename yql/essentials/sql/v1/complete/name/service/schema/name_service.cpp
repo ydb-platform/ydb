@@ -45,11 +45,19 @@ namespace NSQLComplete {
                 }
 
                 THashMap<TTableId, NThreading::TFuture<TDescribeTableResponse>> futuresByTable;
-                for (const auto& [table, _] : aliasesByTable) {
+                for (const auto& [table, aliases] : aliasesByTable) {
+                    TString columnPrefix = prefix;
+                    for (const auto& alias : aliases) {
+                        if (alias.StartsWith(prefix)) {
+                            columnPrefix = "";
+                            break;
+                        }
+                    }
+
                     TDescribeTableRequest request = {
                         .TableCluster = table.Cluster,
                         .TablePath = table.Path,
-                        .ColumnPrefix = prefix,
+                        .ColumnPrefix = columnPrefix,
                         .ColumnsLimit = limit,
                     };
 

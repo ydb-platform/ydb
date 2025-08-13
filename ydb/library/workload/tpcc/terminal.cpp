@@ -210,6 +210,10 @@ TTerminalTask TTerminal::Run() {
 }
 
 bool TTerminal::IsDone() const {
+    if (!Started) {
+        return true;
+    }
+
     if (!Task.Handle) {
         return true;
     }

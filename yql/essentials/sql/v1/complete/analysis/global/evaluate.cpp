@@ -78,6 +78,38 @@ namespace NSQLComplete {
                 return TPartialValue(std::move(result));
             }
 
+            std::any visitKeyword_compat(SQLv1::Keyword_compatContext* ctx) override {
+                return TPartialValue(GetText(ctx));
+            }
+
+            std::any visitKeyword_expr_uncompat(SQLv1::Keyword_expr_uncompatContext* ctx) override {
+                return TPartialValue(GetText(ctx));
+            }
+
+            std::any visitKeyword_table_uncompat(SQLv1::Keyword_table_uncompatContext* ctx) override {
+                return TPartialValue(GetText(ctx));
+            }
+
+            std::any visitKeyword_select_uncompat(SQLv1::Keyword_select_uncompatContext* ctx) override {
+                return TPartialValue(GetText(ctx));
+            }
+
+            std::any visitKeyword_alter_uncompat(SQLv1::Keyword_alter_uncompatContext* ctx) override {
+                return TPartialValue(GetText(ctx));
+            }
+
+            std::any visitKeyword_in_uncompat(SQLv1::Keyword_in_uncompatContext* ctx) override {
+                return TPartialValue(GetText(ctx));
+            }
+
+            std::any visitKeyword_window_uncompat(SQLv1::Keyword_window_uncompatContext* ctx) override {
+                return TPartialValue(GetText(ctx));
+            }
+
+            std::any visitKeyword_hint_uncompat(SQLv1::Keyword_hint_uncompatContext* ctx) override {
+                return TPartialValue(GetText(ctx));
+            }
+
             std::any visitTerminal(antlr4::tree::TerminalNode* node) override {
                 switch (node->getSymbol()->getType()) {
                     case SQLv1::TOKEN_ID_QUOTED:

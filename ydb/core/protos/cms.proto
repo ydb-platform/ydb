@@ -429,12 +429,13 @@ message TCmsConfig {
 
     message TSentinelConfig {
         message TStateStorageSelfHealConfig {
-            optional bool Enable = 19 [default = true];
-            optional uint32 NodeGoodStateLimit = 20 [default = 10];
-            optional uint32 NodePrettyGoodStateLimit = 21 [default = 7];
-            optional uint32 NodeBadStateLimit = 22 [default = 10];
-            optional uint32 WaitForConfigStep = 23 [default = 60000000];
-            optional uint32 RelaxTime = 24 [default = 600000000];
+            optional bool Enable = 1 [default = true];
+            optional uint32 NodeGoodStateLimit = 2 [default = 10];
+            optional uint32 NodePrettyGoodStateLimit = 3 [default = 7];
+            optional uint32 NodeBadStateLimit = 4 [default = 10];
+            optional uint32 WaitForConfigStep = 5 [default = 60000000];
+            optional uint32 RelaxTime = 6 [default = 600000000];
+            optional bool PileupReplicas = 7 [default = false];
         }
 
         message TStateLimit {

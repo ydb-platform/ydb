@@ -81,6 +81,7 @@ namespace NKikimr::NStorage {
                EvAbortQuery,
                EvQueryFinished,
                EvConfigProposed,
+               EvRetryCollectConfigsAndPropose,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -276,6 +277,8 @@ namespace NKikimr::NStorage {
         };
         static constexpr TDuration ErrorTimeout = TDuration::Seconds(3);
         ERootState RootState = ERootState::INITIAL;
+        ui64 CollectConfigsRelevanceMarker = 0;
+        TBackoffTimer CollectConfigsBackoffTimer{10, 1000};
 
         struct TProposition {
             NKikimrBlobStorage::TStorageConfig StorageConfig; // storage config being proposed
@@ -403,7 +406,9 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Root node operation
 
+        void UpdateQuorums();
         void CheckRootNodeStatus();
+        void HandleRetryCollectConfigsAndPropose(STATEFN_SIG);
         void BecomeRoot();
         void ObtainedLocalQuorum();
         void UnbecomeRoot();
@@ -500,7 +505,7 @@ namespace NKikimr::NStorage {
         };
 
         struct TCollectConfigsAndPropose {
-            TBridgePileId SingleBridgePileId;
+            ui64 CollectConfigsRelevanceMarker;
         };
 
         struct TProposeConfig {

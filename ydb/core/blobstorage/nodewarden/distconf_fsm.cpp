@@ -4,14 +4,7 @@
 
 namespace NKikimr::NStorage {
 
-    void TDistributedConfigKeeper::CheckRootNodeStatus() {
-        Y_VERIFY_S(Binding ? (RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT) && !Scepter :
-            RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ? !Scepter :
-            static_cast<bool>(Scepter) || RootState == ERootState::LOCAL_QUORUM_OP,
-            "Binding# " << (Binding ? Binding->ToString() : "<null>")
-            << " RootState# " << RootState
-            << " Scepter# " << (Scepter ? ToString(Scepter->Id) : "<null>"));
-
+    void TDistributedConfigKeeper::UpdateQuorums() {
         // update quorum flags, if something has changed
         if (!std::exchange(QuorumValid, true)) {
             // create a list of connected nodes
@@ -42,6 +35,15 @@ namespace NKikimr::NStorage {
                 }
             }
         }
+    }
+
+    void TDistributedConfigKeeper::CheckRootNodeStatus() {
+        Y_VERIFY_S(Binding ? (RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT) && !Scepter :
+            RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ? !Scepter :
+            static_cast<bool>(Scepter) || RootState == ERootState::LOCAL_QUORUM_OP,
+            "Binding# " << (Binding ? Binding->ToString() : "<null>")
+            << " RootState# " << RootState
+            << " Scepter# " << (Scepter ? ToString(Scepter->Id) : "<null>"));
 
         // check if we can't start any root activities right now
         if (Binding || RootState == ERootState::ERROR_TIMEOUT) {
@@ -56,14 +58,34 @@ namespace NKikimr::NStorage {
             SwitchToError("quorum lost", !LocalPileQuorum);
         }
 
-        if (!LocalPileQuorum) {
-            UnbindNodesFromOtherPiles("local pile quorum lost");
-        } else if (!Scepter && RootState == ERootState::INITIAL && !std::exchange(LocalQuorumObtained, true)) {
-            ObtainedLocalQuorum();
+        if (!Scepter) {
+            if (!LocalPileQuorum) {
+                UnbindNodesFromOtherPiles("local pile quorum lost");
+                SwitchToError("local pile quorum lost", true);
+            } else if (RootState == ERootState::INITIAL && !LocalQuorumObtained && InvokeQ.empty()) {
+                ObtainedLocalQuorum();
+            }
+        }
+    }
+
+    void TDistributedConfigKeeper::HandleRetryCollectConfigsAndPropose(STATEFN_SIG) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC84, "HandleRetryCollectConfigsAndPropose", (Cookie, ev->Cookie),
+            (CollectConfigsRelevanceMarker, CollectConfigsRelevanceMarker));
+        if (ev->Cookie == CollectConfigsRelevanceMarker &&
+                !Binding &&
+                (RootState == ERootState::INITIAL || RootState == ERootState::RELAX) &&
+                InvokeQ.empty() &&
+                (Scepter || LocalPileQuorum)) {
+            Invoke(TCollectConfigsAndPropose{
+                .CollectConfigsRelevanceMarker = CollectConfigsRelevanceMarker,
+            });
         }
     }
 
     void TDistributedConfigKeeper::BecomeRoot() {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC85, "BecomeRoot", (RootState, RootState), (InvokeQ.size, InvokeQ.size()),
+            (LocalQuorumObtained, LocalQuorumObtained));
+
         // establish connection to console tablet (if we have means to do it)
         Y_ABORT_UNLESS(!ConsolePipeId);
         ConnectToConsole();
@@ -73,7 +95,7 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(RootState == ERootState::INITIAL);
         } else {
             // this is upgrade from local quorum config collection, it is in flight right now
-            Y_VERIFY_S(LocalQuorumObtained && (RootState == ERootState::INITIAL || RootState == ERootState::LOCAL_QUORUM_OP),
+            Y_VERIFY_S(RootState == ERootState::INITIAL || RootState == ERootState::LOCAL_QUORUM_OP,
                 "LocalQuorumObtained# " << LocalQuorumObtained
                 << " RootState# " << RootState
                 << " InvokeQ.size# " << InvokeQ.size());
@@ -84,7 +106,10 @@ namespace NKikimr::NStorage {
             RootState = ERootState::RELAX;
         }
         if (InvokeQ.empty() || RootState == ERootState::LOCAL_QUORUM_OP) {
-            Invoke(TCollectConfigsAndPropose{});
+            Invoke(TCollectConfigsAndPropose{
+                .CollectConfigsRelevanceMarker = ++CollectConfigsRelevanceMarker,
+            });
+            CollectConfigsBackoffTimer.Reset();
         }
     }
 
@@ -93,8 +118,10 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(RootState == ERootState::INITIAL);
         Y_ABORT_UNLESS(InvokeQ.empty());
         Invoke(TCollectConfigsAndPropose{
-            .SingleBridgePileId = BridgeInfo->SelfNodePile->BridgePileId
+            .CollectConfigsRelevanceMarker = ++CollectConfigsRelevanceMarker,
         });
+        CollectConfigsBackoffTimer.Reset();
+        LocalQuorumObtained = true;
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
@@ -129,7 +156,6 @@ namespace NKikimr::NStorage {
             const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
             TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
         }
-        LocalQuorumObtained = false; // we can obtain this quorum again
     }
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {
@@ -427,6 +453,8 @@ namespace NKikimr::NStorage {
                 propositionBase.emplace(*persistedConfig);
             }
             configToPropose = proposedConfig;
+        } else if (singleBridgePileId) {
+            // do not do anything else as this is strictly local quorum
         } else if (persistedConfig) { // we have committed config, check if we need to update it
             propositionBase.emplace(*persistedConfig);
             if (UpdateConfig(persistedConfig)) {

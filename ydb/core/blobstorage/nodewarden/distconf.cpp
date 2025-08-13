@@ -309,7 +309,6 @@ namespace NKikimr::NStorage {
 
         if (RootState == ERootState::LOCAL_QUORUM_OP) {
             Y_ABORT_UNLESS(!InvokeQ.empty());
-            Y_ABORT_UNLESS(LocalQuorumObtained);
         }
     }
 #endif
@@ -358,6 +357,7 @@ namespace NKikimr::NStorage {
         if (change && NodeListObtained && StorageConfigLoaded) {
             if (IsSelfStatic) {
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
+                UpdateQuorums();
                 IssueNextBindRequest();
             }
             processPendingEvents();
@@ -422,11 +422,13 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenQueryCache, Handle);
             hFunc(TEvNodeWardenUnsubscribeFromCache, Handle);
             hFunc(TEvNodeWardenUpdateConfigFromPeer, [this](auto ev) { ApplyStorageConfig(ev->Get()->Config); });
+            fFunc(TEvPrivate::EvRetryCollectConfigsAndPropose, HandleRetryCollectConfigsAndPropose);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
         }
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
+            UpdateQuorums();
             IssueNextBindRequest();
             CheckRootNodeStatus();
         }

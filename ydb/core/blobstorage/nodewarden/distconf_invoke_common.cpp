@@ -176,12 +176,16 @@ namespace NKikimr::NStorage {
 
                 throw TExError() << "Unhandled request";
             },
-            [&](TCollectConfigsAndPropose& op) {
+            [&](TCollectConfigsAndPropose&) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection");
+
+                TBridgePileId singleBridgePileId = Self->Scepter
+                    ? TBridgePileId()
+                    : Self->BridgeInfo->SelfNodePile->BridgePileId;
 
                 TEvScatter task;
                 task.MutableCollectConfigs();
-                IssueScatterTask(std::move(task), [this, singleBridgePileId = op.SingleBridgePileId](TEvGather *res) {
+                IssueScatterTask(std::move(task), [this, singleBridgePileId](TEvGather *res) {
                     Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
                     Y_ABORT_UNLESS(!Self->CurrentProposition);
 
@@ -367,9 +371,13 @@ namespace NKikimr::NStorage {
                 }
                 TActivationContext::Send(handle.release());
             },
-            [&](TCollectConfigsAndPropose&) {
-                // this is just temporary failure
-                // TODO(alexvru): backoff?
+            [&](TCollectConfigsAndPropose& op) {
+                if (status != TResult::OK && op.CollectConfigsRelevanceMarker == Self->CollectConfigsRelevanceMarker) {
+                    // reschedule operation
+                    TActivationContext::Schedule(TDuration::MilliSeconds(Self->CollectConfigsBackoffTimer.NextBackoffMs()),
+                        new IEventHandle(TEvPrivate::EvRetryCollectConfigsAndPropose, 0, Self->SelfId(), {}, nullptr,
+                            Self->CollectConfigsRelevanceMarker));
+                }
             },
             [&](TProposeConfig&) {
                 Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
@@ -505,6 +513,8 @@ namespace NKikimr::NStorage {
         }
         DeadActorWaitingForProposition = false;
         ++InvokePipelineGeneration;
+        ++CollectConfigsRelevanceMarker;
+        LocalQuorumObtained = false; // we can reobtain this quorum
     }
 
 } // NKikimr::NStorage

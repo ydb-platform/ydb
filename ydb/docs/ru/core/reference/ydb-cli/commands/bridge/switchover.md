@@ -29,7 +29,6 @@ ydb admin cluster bridge switchover --help
 ## Требования {#requirements}
 
 - Целевой пайл должен быть в состоянии `SYNCHRONIZED`.
-- Текущая пара пайлов должна быть в одном из состояний: `PRIMARY/SYNCHRONIZED` или `SYNCHRONIZED/PRIMARY`.
 
 ## Примеры {#examples}
 

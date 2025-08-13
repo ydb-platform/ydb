@@ -128,13 +128,13 @@ void AssertArrowValueResultsSize(const std::vector<TResultSet>& arrowResultSets,
         std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
 
         for (const auto& batch : batches) {
-            auto batch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
-            UNIT_ASSERT_C(batch, "Batch must be deserialized");
-            UNIT_ASSERT_C(batch->ValidateFull().ok(), "Batch validation failed");
+            auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
+            UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
+            UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
 
-            arrowRowsCount += batch->num_rows();
+            arrowRowsCount += arrowBatch->num_rows();
 
-            UNIT_ASSERT_VALUES_EQUAL_C(batch->num_columns(), valueResultSet.ColumnsCount(), "Columns count mismatch");
+            UNIT_ASSERT_VALUES_EQUAL_C(arrowBatch->num_columns(), valueResultSet.ColumnsCount(), "Columns count mismatch");
         }
 
         UNIT_ASSERT_VALUES_EQUAL_C(arrowRowsCount, valueResultSet.RowsCount(), "Rows count mismatch");
@@ -163,7 +163,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ExecuteAndCombineBatches(TQuery
         UNIT_ASSERT_GE_C(batches.size(), minBatchesCount, "Batches count must be greater than or equal to " + ToString(minBatchesCount));
 
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
+        auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
 
         for (const auto& batch : batches) {
             auto arrowBatch = NArrow::DeserializeBatch(TString(batch), arrowSchema);
@@ -503,8 +503,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
         const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
-        std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
-        std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+        auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+        auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
 
         UNIT_ASSERT_C(arrowSchema, "Schema must be deserialized");
         UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
@@ -541,8 +541,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
         const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
-        std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
-        std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+        auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+        auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
 
         UNIT_ASSERT_C(arrowSchema, "Schema must be deserialized");
         UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
@@ -1018,8 +1018,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
             const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
-            std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
-            std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
 
             UNIT_ASSERT_C(arrowSchema, "Schema must be deserialized");
             UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
@@ -1045,8 +1045,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
             const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
-            std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
-            std::shared_ptr<arrow::RecordBatch> arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
 
             UNIT_ASSERT_C(arrowSchema, "Schema must be deserialized");
             UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");

@@ -19,7 +19,7 @@ private:
     const TTokenProviderSettings& Settings;
 
 public:
-    TVmMetadataTokenProviderHandler(const NActors::TActorId& Sender,
+    TVmMetadataTokenProviderHandler(const NActors::TActorId& sender,
                                     const NActors::TActorId& httpProxyId,
                                     const NKikimrProto::TTokenManager::TVmMetadataProvider::TVmMetadataInfo& providerInfo,
                                     const TTokenProviderSettings& settings);

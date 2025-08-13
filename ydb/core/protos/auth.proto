@@ -163,11 +163,16 @@ message TTokenManager {
     message TTokenAgentProvider {
         message TTokenAgentInfo {
             optional string Id = 1;
+            optional string Tag = 2;
+        }
+
+        message TSettings {
+            optional TTokenProviderSettings CommonSettings = 1;
             optional string Endpoint = 2;
         }
 
         repeated TTokenAgentInfo ProvidersInfo = 1;
-        optional TTokenProviderSettings Settings = 2;
+        optional TSettings Settings = 2;
     }
 
     optional bool Enable = 1 [default = false];

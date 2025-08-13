@@ -2,7 +2,13 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/protos/auth.pb.h>
+
+#include <util/generic/queue.h>
+
+#include "token_provider_settings.h"
 
 namespace NKikimrProto {
 
@@ -13,7 +19,7 @@ class TTokenManager;
 
 namespace NKikimr {
 
-struct TEvTokenManager {
+namespace TEvTokenManager {
     enum EEv {
         EvSubscribeUpdateToken = EventSpaceBegin(TKikimrEvents::ES_TOKEN_MANAGER),
         EvUpdateToken,
@@ -53,6 +59,69 @@ struct TEvTokenManager {
         {}
     };
 };
+
+namespace NTokenManager {
+
+struct TTokenProvider;
+
+namespace TEvPrivate {
+
+struct TEvUpdateToken;
+using TEvUpdateToken_HandlePtr = TAutoPtr<NActors::TEventHandle<TEvUpdateToken>>;
+
+} // TEvPrivate
+} // NTokenManager
+
+class TTokenManager : public NActors::TActorBootstrapped<TTokenManager> {
+    using TBase = NActors::TActorBootstrapped<TTokenManager>;
+
+public:
+    struct TInitializer {
+        NKikimrProto::TTokenManager Config;
+        NActors::TActorId HttpProxyId;
+    };
+
+private:
+    struct TRefreshRecord {
+        TInstant RefreshTime;
+        std::shared_ptr<NTokenManager::TTokenProvider> Provider;
+
+        bool operator <(const TRefreshRecord& other) const {
+            return RefreshTime > other.RefreshTime;
+        }
+    };
+
+private:
+    TDuration RefreshCheckPeriod = TDuration::Seconds(30);
+    NTokenManager::TTokenProviderSettings VmMetadataProviderSettings;
+    TPriorityQueue<TRefreshRecord> RefreshQueue;
+    NActors::TActorId HttpProxyId;
+    THashMap<TString, THashSet<NActors::TActorId>> Subscribers;
+
+    protected:
+    NKikimrProto::TTokenManager Config;
+    THashMap<TString, std::shared_ptr<NTokenManager::TTokenProvider>> TokenProviders;
+
+public:
+    TTokenManager(const TInitializer& initializer);
+    TTokenManager(const NKikimrProto::TTokenManager& config);
+
+    void Bootstrap();
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev);
+
+protected:
+    virtual void BootstrapTokenProviders();
+    void PassAway() override;
+
+private:
+    void HandleRefreshCheck();
+    void RefreshAllTokens();
+    void NotifySubscribers(const std::shared_ptr<NTokenManager::TTokenProvider>& provider) const;
+
+    void Handle(NTokenManager::TEvPrivate::TEvUpdateToken_HandlePtr& ev);
+    void Handle(TEvTokenManager::TEvSubscribeUpdateToken::TPtr& ev);
+};
+
 
 inline NActors::TActorId MakeTokenManagerID() {
     static const char name[12] = "srvtokmngr";

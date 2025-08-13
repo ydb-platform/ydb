@@ -8,7 +8,7 @@
 
 namespace NKikimr::NTokenManager {
 
-struct TEvPrivate {
+namespace TEvPrivate {
     enum EEv {
         EvUpdateToken = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvErrorUpdateToken,
@@ -23,13 +23,13 @@ struct TEvPrivate {
         TString Token;
         TDuration RefreshPeriod;
 
-        TEvUpdateToken(const TString& id, TEvTokenManager::TStatus status, const TString& token, const TDuration& refreshPeriod)
+        TEvUpdateToken(const TString& id, const TEvTokenManager::TStatus& status, const TString& token, const TDuration& refreshPeriod)
             : Id(id)
             , Status(status)
             , Token(token)
             , RefreshPeriod(refreshPeriod)
         {}
     };
-};
+}
 
 } // NKikimr::NTokenManager

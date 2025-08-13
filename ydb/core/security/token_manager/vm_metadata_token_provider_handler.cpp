@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
 

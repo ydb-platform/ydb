@@ -52,6 +52,7 @@
 
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
+
 LWTRACE_USING(KQP_PROVIDER);
 
 namespace NKikimr {

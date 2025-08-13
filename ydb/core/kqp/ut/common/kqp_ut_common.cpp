@@ -131,7 +131,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     if (settings.EnableStorageProxy) {
         appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetEnabled(true);
-        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetCheckpointingPeriodMillis(1000);
+        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetCheckpointingPeriodMillis(200);
         appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetMaxInflight(1);
     }
     ServerSettings->SetAppConfig(appConfig);

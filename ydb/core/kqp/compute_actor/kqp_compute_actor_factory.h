@@ -132,6 +132,7 @@ public:
         TString Database;
 
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
+
         bool StartCA = true;
     };
 

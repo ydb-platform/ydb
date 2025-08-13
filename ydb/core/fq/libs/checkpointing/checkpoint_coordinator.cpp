@@ -45,9 +45,6 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
     , StateLoadMode(stateLoadMode)
     , StreamingDisposition(streamingDisposition)
 {
-        CC_LOG_D("CC created, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
-
-
 }
 
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
@@ -533,7 +530,6 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvStateCommi
 void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
     auto& state = ev->Get()->Record;
     ui64 taskId = state.GetTaskId();
-
     CC_LOG_D("Got TEvState from " << ev->Sender << ", task id " << taskId << ". State:" << state.GetState());
 
     if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED) {

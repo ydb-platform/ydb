@@ -530,7 +530,6 @@ protected:
         ui64 taskId = state.GetTaskId();
 
         bool populateChannels = HandleComputeStats(ev);
-        LOG_D("HandleComputeState task " << taskId << ", state " << state.GetState());
 
         switch (state.GetState()) {
             case NYql::NDqProto::COMPUTE_STATE_UNKNOWN: {
@@ -2423,6 +2422,7 @@ protected:
     TMaybe<NBatchOperations::TSettings> BatchOperationSettings;
 
     bool EnableParallelPointReadConsolidation = false;
+
     bool AccountDefaultPoolInScheduler = false;
     TActorId CheckpointCoordinatorId;
 

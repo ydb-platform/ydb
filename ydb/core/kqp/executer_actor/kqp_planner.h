@@ -105,6 +105,7 @@ private:
 
     void LogMemoryStatistics(const TLogFunc& logFunc);
     void PrepareCheckpoints();
+    void SendReadyStateToCheckpointCoordinator();
 
 private:
     const ui64 TxId;
@@ -148,6 +149,7 @@ private:
     const bool VerboseMemoryLimitException;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     TActorId CheckpointCoordinatorId;
+    bool CheckpointsReadyStateSended = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
 };

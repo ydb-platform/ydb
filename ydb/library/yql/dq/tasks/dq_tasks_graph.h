@@ -419,7 +419,6 @@ public:
             }
 
             // Apply mode to task and its outputs.
-           // Cerr << "task " << task.Id << " mode " << (checkpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED) << Endl;
             task.CheckpointingMode = checkpointingMode;
             task.WatermarksMode = watermarksMode;
             for (const auto& output : task.Outputs) {

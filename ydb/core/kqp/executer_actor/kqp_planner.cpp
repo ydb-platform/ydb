@@ -203,7 +203,6 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
     auto& request = result->Record;
     request.SetTxId(TxId);
-
     const auto& lockTxId = TasksGraph.GetMeta().LockTxId;
     if (lockTxId) {
         request.SetLockTxId(*lockTxId);
@@ -629,7 +628,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         }
     }
 
-    
     return nullptr;
 }
 
@@ -656,7 +654,6 @@ void TKqpPlanner::PrepareCheckpoints() {
         CheckpointCoordinatorId = TActorId{};
         return;
     }
-    //CoordinatorReadyEvent = std::move(event);
     TasksGraph.GetMeta().CreateSuspended = hasStreamingIngress;
 }
 
@@ -679,8 +676,6 @@ void TKqpPlanner::Unsubscribe() {
 }
 
 bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state) {
-    LOG_I("AcknowledgeCA taskId " << taskId << " id " << computeActor);
-
     auto& task = TasksGraph.GetTask(taskId);
     if (!task.ComputeActorId) {
         task.ComputeActorId = computeActor;
@@ -690,27 +685,9 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
         if (state && state->HasStats()) {
             it->second.Set(state->GetStats());
         }
-        if (PendingComputeTasks.empty() && CheckpointCoordinatorId) {
-            LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
 
-            auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
-            for (const auto& dqTask : TasksGraph.GetTasks()) {
-                NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, dqTask, true);
-                auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-                bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-                bool isIngress = TasksGraph.IsIngress(dqTask);
-                auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
-                    dqTask.Id,
-                    enabledCheckpoints,
-                    isIngress,
-                    TasksGraph.IsEgressTask(dqTask),
-                    true, //NYql::NDq::HasState(settings),
-                    dqTask.ComputeActorId
-                };
-                event->Tasks.emplace_back(std::move(task));
-            }
-            
-            TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
+        if (PendingComputeTasks.empty() && CheckpointCoordinatorId) {
+            SendReadyStateToCheckpointCoordinator();
         }
         return true;
     }
@@ -886,6 +863,31 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
             }
         }
     }
+}
+
+void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
+    if (CheckpointsReadyStateSended) {
+        return;
+    }
+    auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+    for (const auto& dqTask : TasksGraph.GetTasks()) {
+        NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, dqTask, true);
+        auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
+        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
+        bool isIngress = TasksGraph.IsIngress(dqTask);
+        auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
+            dqTask.Id,
+            enabledCheckpoints,
+            isIngress,
+            TasksGraph.IsEgressTask(dqTask),
+            NYql::NDq::HasState(settings),
+            dqTask.ComputeActorId
+        };
+        event->Tasks.emplace_back(std::move(task));
+    }
+    LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
+    TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
+    CheckpointsReadyStateSended = true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

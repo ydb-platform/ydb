@@ -4115,7 +4115,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT(NJson::ReadJsonTree(explainResult.GetPlan(), &plan));
         plan.Scan(extractor);
 
-        UNIT_ASSERT_VALUES_EQUAL(extractor.LimitsPerTable["/Root/my_table/idx_my_table_table_a_b/indexImplTable"], "11");
+        UNIT_ASSERT_VALUES_EQUAL(extractor.LimitsPerTable["/Root/my_table/idx_my_table_table_a_b/indexImplTable"], "10");
     }
 
     Y_UNIT_TEST(AutoChooseIndex) {

@@ -25,8 +25,7 @@ class TestTpchSpillingS10(tpch.TestTpch10, FunctionalTestBase):
     memory_controller_config = {
         'activities_limit_percent': 60,
         'query_execution_limit_percent': 50,
-        'hard_limit_bytes': 6 * 1073741824,
-        'column_tables_read_execution_limit_bytes': 10 * 1073741824,
+        'hard_limit_bytes': 6 * 1073741824
     }
 
     @classmethod

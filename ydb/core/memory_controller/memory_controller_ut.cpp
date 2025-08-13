@@ -5,6 +5,7 @@
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
@@ -505,7 +506,7 @@ Y_UNIT_TEST(ResourceBroker_ConfigCS) {
 
     const ui64 compactionMemoryLimitPercent = 36;
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
-    memoryControllerConfig->SetColumnTablesCompactionLimitPercent(compactionMemoryLimitPercent);
+    memoryControllerConfig->SetCompactionLimitPercent(compactionMemoryLimitPercent);
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
     auto& runtime = *server->GetRuntime();
@@ -553,8 +554,8 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
     const ui64 compactionMemoryLimitPercent = 36;
     const ui64 readExecutionMemoryLimitPercent = 20;
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
-    memoryControllerConfig->SetColumnTablesCompactionLimitPercent(compactionMemoryLimitPercent);
-    memoryControllerConfig->SetColumnTablesReadExecutionLimitPercent(readExecutionMemoryLimitPercent);
+    memoryControllerConfig->SetCompactionLimitPercent(compactionMemoryLimitPercent);
+    memoryControllerConfig->SetQueryExecutionLimitPercent(readExecutionMemoryLimitPercent);
 
     ui64 currentHardMemoryLimit = 1000_MB;
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
@@ -566,6 +567,7 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
     auto counters = runtime.GetAppData().Counters;
     auto compactionCounters = counters->GetSubgroup("module_id", "grouped_memory_limiter")->GetSubgroup("limiter_name", "Comp_0")->GetSubgroup("stage", "general");
     auto scanCounters = counters->GetSubgroup("module_id", "grouped_memory_limiter")->GetSubgroup("limiter_name", "Scan_0")->GetSubgroup("stage", "general");
+    auto dedupCounters = counters->GetSubgroup("module_id", "grouped_memory_limiter")->GetSubgroup("limiter_name", "Dedu_0")->GetSubgroup("stage", "general");
 
     InitRoot(server, sender);
 
@@ -573,23 +575,102 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
         using OlapLimits = NKikimr::NOlap::TGlobalLimits;
         UNIT_ASSERT_DOUBLES_EQUAL(
             static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient *
-                (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
+                (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100 *
+                NOlap::NGroupedMemoryManager::TScanMemoryLimiterPolicy::HardLimitMultiplier),
             static_cast<double>(scanCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100),
+            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100 *
+                NOlap::NGroupedMemoryManager::TScanMemoryLimiterPolicy::HardLimitMultiplier),
             static_cast<double>(scanCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100),
+            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient *
+                (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100 *
+                NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterPolicy::HardLimitMultiplier),
+            static_cast<double>(dedupCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
+            1_KB);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * (1.0 - ColumnTablesDeduplicationGroupedMemoryFraction) * readExecutionMemoryLimitPercent / 100 *
+                NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterPolicy::HardLimitMultiplier),
+            static_cast<double>(dedupCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
+            1_KB);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100 *
+                NOlap::NGroupedMemoryManager::TCompMemoryLimiterPolicy::HardLimitMultiplier),
             static_cast<double>(compactionCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100.0),
+            static_cast<double>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100.0 *
+                NOlap::NGroupedMemoryManager::TCompMemoryLimiterPolicy::HardLimitMultiplier),
             static_cast<double>(compactionCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
+            1_KB);
+    };
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    checkMemoryLimits();
+
+    // Check memory decrease
+    currentHardMemoryLimit = 500_MB;
+    server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    checkMemoryLimits();
+
+    // Check memory increase
+    currentHardMemoryLimit = 2000_MB;
+    server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    checkMemoryLimits();
+}
+
+Y_UNIT_TEST(ColumnShardCaches_Config) {
+    using namespace NResourceBroker;
+
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+    const ui64 sharedCacheMaxPercent = 50;
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetSharedCacheMaxPercent(sharedCacheMaxPercent);
+
+    ui64 currentHardMemoryLimit = 1000_MB;
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
+    auto& runtime = *server->GetRuntime();
+    TAutoPtr<IEventHandle> handle;
+    auto sender = runtime.AllocateEdgeActor();
+
+    InitRoot(server, sender);
+    auto counters = runtime.GetAppData().Counters;
+    auto dataAccessorCache = counters->GetSubgroup("module_id", "general_cache")->GetSubgroup("cache_name", "portions_metadata")->GetSubgroup("signals_owner", "manager");
+    auto columnDataCache = counters->GetSubgroup("module_id", "general_cache")->GetSubgroup("cache_name", "column_data")->GetSubgroup("signals_owner", "manager");
+    auto blobCache = counters->GetSubgroup("type", "BLOB_CACHE");
+
+    auto checkMemoryLimits = [&]() {
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * ColumnTablesPortionsMetaDataCacheFraction * sharedCacheMaxPercent / 100.0 * ColumnTablesCachesPercentFromShared / 100.0),
+            static_cast<double>(NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::GetPortionsCacheLimit()),
+            1_KB);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * ColumnTablesColumnTablesDataAccessorCacheFraction * sharedCacheMaxPercent / 100.0 * ColumnTablesCachesPercentFromShared / 100.0),
+            static_cast<double>(dataAccessorCache->GetCounter("Value/Cache/SizeLimit/Bytes")->Val()),
+            1_KB);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * ColumnTablesColumnDataCacheFraction * sharedCacheMaxPercent / 100.0 * ColumnTablesCachesPercentFromShared / 100.0),
+            static_cast<double>(columnDataCache->GetCounter("Value/Cache/SizeLimit/Bytes")->Val()),
+            1_KB);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(
+            static_cast<double>(currentHardMemoryLimit * ColumnTablesBlobCacheFraction * sharedCacheMaxPercent / 100.0 * ColumnTablesCachesPercentFromShared / 100.0),
+            static_cast<double>(blobCache->GetCounter("MaxSizeBytes")->Val()),
             1_KB);
     };
 

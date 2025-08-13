@@ -84,17 +84,7 @@ GET_MIN_LIMIT(SharedCache)
 GET_MAX_LIMIT(SharedCache)
 
 GET_LIMIT(QueryExecutionLimit)
-
-inline ui64 GetCompactionLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, ui64 hardLimitBytes) {
-    ui64 maxSharedCacheLimit = GetSharedCacheMaxBytes(config, hardLimitBytes);
-    if (config.HasCompactionLimitPercent() && config.GetCompactionLimitBytes()) {
-        return Min(GetPercent(config.GetCompactionLimitPercent(), maxSharedCacheLimit), config.GetCompactionLimitBytes());
-    }
-    if (config.HasCompactionLimitBytes()) {
-        return config.GetCompactionLimitBytes();
-    }
-    return GetPercent(config.GetCompactionLimitPercent(), maxSharedCacheLimit);
-}
+GET_LIMIT(CompactionLimit)
 
 // ColumnTablesReadExecution memory is split into:
 // - ColumnTablesScanGroupedMemory

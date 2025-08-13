@@ -505,10 +505,8 @@ Y_UNIT_TEST(ResourceBroker_ConfigCS) {
     serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
     const ui64 compactionMemoryLimitPercent = 36;
-    const ui64 sharedCacheMaxPercent = 50;
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetCompactionLimitPercent(compactionMemoryLimitPercent);
-    memoryControllerConfig->SetSharedCacheMaxPercent(sharedCacheMaxPercent);
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
     auto& runtime = *server->GetRuntime();
@@ -525,7 +523,7 @@ Y_UNIT_TEST(ResourceBroker_ConfigCS) {
         auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
         UNIT_ASSERT_DOUBLES_EQUAL_C(
             static_cast<double>(config->QueueConfig->GetLimit().GetMemory()),
-            static_cast<double>(currentHardMemoryLimit * coeff * compactionMemoryLimitPercent / 100 * sharedCacheMaxPercent / 100),
+            static_cast<double>(currentHardMemoryLimit * coeff * compactionMemoryLimitPercent / 100),
             1_KB,
             queueName << " " << coeff);
     };
@@ -555,11 +553,9 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
 
     const ui64 compactionMemoryLimitPercent = 36;
     const ui64 readExecutionMemoryLimitPercent = 20;
-    const ui64 sharedCacheMaxPercent = 50;
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetCompactionLimitPercent(compactionMemoryLimitPercent);
     memoryControllerConfig->SetQueryExecutionLimitPercent(readExecutionMemoryLimitPercent);
-    memoryControllerConfig->SetSharedCacheMaxPercent(sharedCacheMaxPercent);
 
     ui64 currentHardMemoryLimit = 1000_MB;
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
@@ -588,12 +584,12 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100 * sharedCacheMaxPercent / 100 * ColumnTablesCompGroupedMemoryHardLimitMultiplier),
+            static_cast<double>(currentHardMemoryLimit * OlapLimits::GroupedMemoryLimiterSoftLimitCoefficient * compactionMemoryLimitPercent / 100 * ColumnTablesCompGroupedMemoryHardLimitMultiplier),
             static_cast<double>(compactionCounters->GetCounter("Value/Limit/Soft/Bytes")->Val()),
             1_KB);
 
         UNIT_ASSERT_DOUBLES_EQUAL(
-            static_cast<double>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100.0 * sharedCacheMaxPercent / 100 * ColumnTablesCompGroupedMemoryHardLimitMultiplier),
+            static_cast<double>(currentHardMemoryLimit * compactionMemoryLimitPercent / 100.0 * ColumnTablesCompGroupedMemoryHardLimitMultiplier),
             static_cast<double>(compactionCounters->GetCounter("Value/Limit/Hard/Bytes")->Val()),
             1_KB);
     };

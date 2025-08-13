@@ -142,7 +142,6 @@ message TComputeRuntimeSettings {
     optional uint32 TasksOnNodeCount = 5; // approx
     optional TRlPath RlPath = 7;
     optional bool WithProgressStats = 9 [default = false];
-    optional bool StartCA = 10 [default = true];
 }
 
 message TEvNewCheckpointCoordinator {

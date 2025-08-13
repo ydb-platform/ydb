@@ -1681,30 +1681,22 @@ public:
         }
 
         bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig();
-        if (!CheckpointCoordinatorId && enableCheckpointCoordinator) {
-            const NKikimrConfig::TCheckpointsConfig& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
+        if (!CheckpointCoordinatorId && enableCheckpointCoordinator && QueryServiceConfig.GetCheckpointsConfig().GetEnabled()) {
+            const NKikimrConfig::TCheckpointsConfig& checkpointsConfig = QueryServiceConfig.GetCheckpointsConfig();
 
-            NFq::NConfig::TCheckpointCoordinatorConfig config;
-            config.SetEnabled(checkpointConfig.GetEnabled());
-            config.SetCheckpointingPeriodMillis(checkpointConfig.GetCheckpointingPeriodMillis());
-            config.SetMaxInflight(checkpointConfig.GetMaxInflight());
-            config.SetCheckpointingSnapshotRotationPeriod(checkpointConfig.GetCheckpointingSnapshotRotationPeriod());   
-
-            ui64 dqGraphIndex = 0;
-            ui64 generation = 0;
-            if (QueryState) {
-                generation = QueryState->Generation;
-            }
-            auto stateLoadMode = FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT;//FederatedQuery::StateLoadMode::EMPTY;
+            ui64 generation = QueryState ? QueryState->Generation : 0;
+            auto stateLoadMode = FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT;
             FederatedQuery::StreamingDisposition streamingDisposition;
             NFq::NProto::TGraphParams dqGraphParams;
 
             TString executionId = QueryState ? QueryState->UserRequestContext->CurrentExecutionId : "";
             CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
-                ::NFq::TCoordinatorId((executionId) + "-" + ToString(dqGraphIndex), generation),
+                ::NFq::TCoordinatorId(executionId, generation),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
-                config,
+                checkpointsConfig.GetCheckpointingPeriodMillis(),
+                checkpointsConfig.GetCheckpointingSnapshotRotationPeriod(),
+                checkpointsConfig.GetMaxInflight(),
                 Counters->GetKqpCounters(),
                 dqGraphParams,
                 stateLoadMode,

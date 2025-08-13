@@ -233,7 +233,6 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetStartAllOrFail(true);
     request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
     request.MutableRuntimeSettings()->SetUseSpilling(TasksGraph.GetMeta().AllowWithSpilling);
-    //request.MutableRuntimeSettings()->SetStartCA(! ((bool)CheckpointCoordinatorId));
 
     if (RlPath) {
         auto rlPath = request.MutableRuntimeSettings()->MutableRlPath();

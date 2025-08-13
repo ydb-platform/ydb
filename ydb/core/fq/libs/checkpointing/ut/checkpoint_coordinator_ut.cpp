@@ -105,12 +105,6 @@ struct TTestBootstrap : public TTestActorRuntime {
         ActorToTask[MapActor]     = GraphState.GetTask()[1].GetId();
         ActorToTask[EgressActor]  = GraphState.GetTask()[2].GetId();
 
-        Settings = NConfig::TCheckpointCoordinatorConfig();
-        Settings.SetEnabled(true);
-        Settings.SetCheckpointingPeriodMillis(TDuration::Hours(1).MilliSeconds());
-        Settings.SetCheckpointingSnapshotRotationPeriod(snaphotRotationPeriod);
-        Settings.SetMaxInflight(1);
-
         NYql::TDqConfiguration::TPtr DqSettings = MakeIntrusive<NYql::TDqConfiguration>();
 
         SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
@@ -119,7 +113,9 @@ struct TTestBootstrap : public TTestActorRuntime {
             CoordinatorId,
             StorageProxy,
             RunActor,
-            Settings,
+            TDuration::Hours(1).MilliSeconds(),
+            snaphotRotationPeriod,
+            1,
             Counters,
             NProto::TGraphParams(),
             FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,

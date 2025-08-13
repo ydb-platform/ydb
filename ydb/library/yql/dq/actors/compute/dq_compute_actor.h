@@ -258,8 +258,6 @@ struct TComputeRuntimeSettings {
 
     bool WithProgressStats = false;
 
-    bool StartCA = true;
-
     inline bool CollectNone() const {
         return StatsMode <= NDqProto::DQ_STATS_MODE_NONE;
     }

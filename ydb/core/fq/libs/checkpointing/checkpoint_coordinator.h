@@ -25,7 +25,9 @@ public:
     TCheckpointCoordinator(TCoordinatorId coordinatorId,
                            const TActorId& storageProxy,
                            const TActorId& runActorId,
-                           const TCheckpointCoordinatorConfig& settings,
+                           ui64 checkpointingPeriodMillis,
+                           ui64 snapshotRotationPeriod,
+                           ui64 maxInflight,
                            const ::NMonitoring::TDynamicCounterPtr& counters,
                            const NProto::TGraphParams& graphParams,
                            const FederatedQuery::StateLoadMode& stateLoadMode,
@@ -164,6 +166,7 @@ private:
     const TDuration CheckpointingPeriod;
     ui64 CheckpointingSnapshotRotationPeriod = 0;
     ui64 CheckpointingSnapshotRotationIndex = 0;
+    ui64 MaxInflight = 0;
     const NProto::TGraphParams GraphParams;
     TString GraphDescId;
 
@@ -197,7 +200,9 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     TCoordinatorId coordinatorId,
     const TActorId& storageProxy,
     const TActorId& runActorId,
-    const TCheckpointCoordinatorConfig& settings,
+    ui64 checkpointingPeriodMillis,
+    ui64 snapshotRotationPeriod,
+    ui64 maxInflight,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
     const FederatedQuery::StateLoadMode& stateLoadMode,

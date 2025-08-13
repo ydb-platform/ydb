@@ -136,7 +136,6 @@ class TMockPqGateway : public IMockPqGateway {
         }
 
         std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvent(bool /*block*/ = false) override {
-
             return std::nullopt;
         }
 
@@ -150,7 +149,6 @@ class TMockPqGateway : public IMockPqGateway {
 
         void Write(NYdb::NTopic::TContinuationToken&& /*continuationToken*/, NYdb::NTopic::TWriteMessage&& /*message*/,
                         NYdb::TTransactionBase* /*tx*/ = nullptr) override {
-
         }
 
         void Write(NYdb::NTopic::TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo = std::nullopt,
@@ -171,15 +169,12 @@ class TMockPqGateway : public IMockPqGateway {
         }
 
         void WriteEncoded(NYdb::NTopic::TContinuationToken&& /*continuationToken*/, NYdb::NTopic::TWriteMessage&& /*params*/,
-                                NYdb::TTransactionBase* /*tx*/ = nullptr) override {
-
-                                }
+            NYdb::TTransactionBase* /*tx*/ = nullptr) override {
+        }
 
         void WriteEncoded(NYdb::NTopic::TContinuationToken&& /*continuationToken*/, std::string_view /*data*/, NYdb::NTopic::ECodec /*codec*/, uint32_t /*originalSize*/,
-                                std::optional<uint64_t> /*seqNo*/ = std::nullopt, std::optional<TInstant> /*createTimestamp*/ = std::nullopt) override {
-
-                                }
-
+                std::optional<uint64_t> /*seqNo*/ = std::nullopt, std::optional<TInstant> /*createTimestamp*/ = std::nullopt) override {
+        }
 
         bool Close(TDuration /*closeTimeout*/ = TDuration::Max()) override {
             return true;
@@ -205,7 +200,6 @@ class TMockPqGateway : public IMockPqGateway {
         TEvGen EvGen;
         std::shared_ptr<TMockTopicWriteSession> WriteSession;
         std::vector<TString> WriteSessionData;
-        //NThreading::TPromise<TWriteResult> WriteSessionPromise = NThreading::NewPromise<TWriteResult>();
         TMutex Mutex;
     };
 
@@ -329,9 +323,6 @@ public:
     }
 
     NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& /*sessionId*/, const TString& /*cluster*/, const TString& /*database*/, const TString& path, const TString& /*token*/) override {
-        Topics[path];
-        CheckTopicPath(path);
-
         NPq::NConfigurationManager::TTopicDescription result(path);
         result.PartitionsCount = 1;
         return NThreading::MakeFuture<NPq::NConfigurationManager::TDescribePathResult>(NPq::NConfigurationManager::TDescribePathResult::Make<NPq::NConfigurationManager::TTopicDescription>(result));
@@ -341,10 +332,7 @@ public:
         Y_ENSURE(false, "Not implemented");
     }
 
-    IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& /*sessionId*/, const TString& /*cluster*/, const TString& /*database*/, const TString& path, const TString& /*token*/) override {
-        Topics[path];
-        CheckTopicPath(path);
-
+    IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& /*sessionId*/, const TString& /*cluster*/, const TString& /*database*/, const TString& /*path*/, const TString& /*token*/) override {
         return NThreading::MakeFuture<TDescribeFederatedTopicResult>(IPqGateway::TDescribeFederatedTopicResult{{
             .PartitionsCount = 1,
         }});

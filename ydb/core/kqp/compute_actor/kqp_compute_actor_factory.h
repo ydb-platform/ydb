@@ -132,8 +132,6 @@ public:
         TString Database;
 
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-
-        bool StartCA = true;
     };
 
     typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;

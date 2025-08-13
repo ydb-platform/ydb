@@ -179,7 +179,6 @@ public:
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;
         runtimeSettings.WithProgressStats = args.WithProgressStats;
-        runtimeSettings.StartCA = args.StartCA;
 
         if (runtimeSettings.UseSpilling) {
             args.Task->SetEnableSpilling(runtimeSettings.UseSpilling);

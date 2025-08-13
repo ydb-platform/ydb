@@ -31,7 +31,19 @@ from (select i_category
           and ss_item_sk=i_item_sk
           and ss_store_sk = s_store_sk
           and d_month_seq between 1200 and 1200+11
-       group by  rollup(item.i_category, item.i_class, item.i_brand, item.i_product_name, date_dim.d_year, date_dim.d_qoy, date_dim.d_moy,store.s_store_id))dw1) dw2
+       -- group by  rollup(item.i_category, item.i_class, item.i_brand, item.i_product_name, date_dim.d_year, date_dim.d_qoy, date_dim.d_moy,store.s_store_id)
+       group by grouping sets (
+         (item.i_category, item.i_class, item.i_brand, item.i_product_name, date_dim.d_year, date_dim.d_qoy, date_dim.d_moy,store.s_store_id),
+         (item.i_category, item.i_class, item.i_brand, item.i_product_name, date_dim.d_year, date_dim.d_qoy, date_dim.d_moy),
+         (item.i_category, item.i_class, item.i_brand, item.i_product_name, date_dim.d_year, date_dim.d_qoy),
+         (item.i_category, item.i_class, item.i_brand, item.i_product_name, date_dim.d_year),
+         (item.i_category, item.i_class, item.i_brand, item.i_product_name),
+         (item.i_category, item.i_class, item.i_brand),
+         (item.i_category, item.i_class),
+         (item.i_category),
+         ((date_dim.d_year < 0) as FAKE)
+       )
+       )dw1) dw2
 where rk <= 100
 order by i_category
         ,i_class

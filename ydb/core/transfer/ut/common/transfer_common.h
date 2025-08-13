@@ -31,3 +31,5 @@ void ProcessingCDCMessage(const std::string& tableType);
 
 void ProcessingTargetTable(const std::string& tableType);
 void ProcessingTargetTableOtherType(const std::string& tableType);
+
+void DropColumn(const std::string& tableType);

@@ -816,3 +816,41 @@ void Upsert_OneBatch(const std::string& tableType) {
     testCase.DropTransfer();
     testCase.DropTable();
 }
+
+void DropColumn(const std::string& tableType)
+{
+    MainTestCase testCase(std::nullopt, tableType);
+    testCase.CreateTable(R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Utf8,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )");
+    testCase.CreateTopic(1);
+    testCase.CreateTransfer(R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key:CAST($x._offset AS Uint64),
+                        Message:CAST($x._data AS Utf8)
+                    |>
+                ];
+            };
+        )");
+    
+    testCase.Write({"Message-1"});
+    testCase.CheckResult({{
+        _C("Message", TString("Message-1"))
+    }});
+
+    testCase.ExecuteDDL(Sprintf(R"(
+        ALTER TABLE %s DROP COLUMN Message
+        )", testCase.TableName.data()));
+
+    testCase.Write({"Message-2"});
+
+    testCase.CheckTransferStateError("Unknown column: Message");
+}

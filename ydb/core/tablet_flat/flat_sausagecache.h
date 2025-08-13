@@ -2,7 +2,6 @@
 #include "flat_sausage_gut.h"
 #include "shared_handle.h"
 #include "shared_cache_events.h"
-#include <ydb/core/util/cache_cache.h>
 #include <ydb/core/util/page_map.h>
 
 namespace NKikimr {

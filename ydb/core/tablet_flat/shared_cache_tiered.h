@@ -1,37 +1,22 @@
 #pragma once
 
-#include "shared_cache_counters.h"
-#include "shared_cache_switchable.h"
+#include "shared_cache_s3fifo.h"
 
 namespace NKikimr::NSharedCache {
 
     template <typename TPage, typename TPageTraits>
     class TTieredCache {
-        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-        using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
-        using TCache = TSwitchableCache<TPage, TPageTraits>;
+        using TCache = TS3FIFOCache<TPage, TPageTraits>;
 
     public:
-        template <typename TCacheBuilder>
-        TTieredCache(ui64 limit, TCacheBuilder createCache, TReplacementPolicy policy, TSharedPageCacheCounters& cacheCounters)
+        TTieredCache(ui64 limit)
             : CacheTiers(::Reserve(2))
         {
-            CacheTiers.emplace_back(limit, createCache(), cacheCounters.ReplacementPolicySize(policy));
+            CacheTiers.emplace_back(limit);
             RegularTier = &CacheTiers.back();
 
-            CacheTiers.emplace_back(0, createCache(), cacheCounters.ReplacementPolicySize(policy));
+            CacheTiers.emplace_back(0);
             TryKeepInMemoryTier = &CacheTiers.back();
-        }
-
-        template <typename TCacheBuilder>
-        TIntrusiveList<TPage> Switch(TCacheBuilder createCache, TCounterPtr sizeCounter) Y_WARN_UNUSED_RESULT {
-            TIntrusiveList<TPage> evictedList;
-
-            for (auto& cacheTier : CacheTiers) {
-                evictedList.Append(cacheTier.Switch(createCache(), sizeCounter));
-            }
-
-            return evictedList;
         }
 
         TIntrusiveList<TPage> EvictNext() Y_WARN_UNUSED_RESULT {
@@ -80,6 +65,23 @@ namespace NKikimr::NSharedCache {
             }
         
             return result;
+        }
+
+        struct TStats {
+            ui64 RegularBytes;
+            ui64 TryKeepInMemoryBytes;
+            ui64 RegularLimit;
+            ui64 TryKeepInMemoryLimit;
+        };
+
+        // for ut
+        TStats GetStats() const {
+            return {
+                .RegularBytes = RegularTier->GetSize(),
+                .TryKeepInMemoryBytes = TryKeepInMemoryTier->GetSize(),
+                .RegularLimit = RegularTier->GetLimit(),
+                .TryKeepInMemoryLimit = TryKeepInMemoryTier->GetLimit()
+            };
         }
 
     private:

@@ -1,6 +1,7 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
 #include "util_fmt_abort.h"
+#include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>

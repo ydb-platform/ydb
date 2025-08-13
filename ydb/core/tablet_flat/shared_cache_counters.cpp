@@ -4,10 +4,6 @@ namespace NKikimr::NSharedCache {
 
 TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : Counters(counters)
-    // lru cache counters:
-    , FreshBytes(counters->GetCounter("fresh"))
-    , StagingBytes(counters->GetCounter("staging"))
-    , WarmBytes(counters->GetCounter("warm"))
     // page counters:
     , MemLimitBytes(counters->GetCounter("MemLimitBytes"))
     , ConfigLimitBytes(counters->GetCounter("ConfigLimitBytes"))
@@ -34,9 +30,5 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , SucceedRequests(counters->GetCounter("SucceedRequests", true))
     , FailedRequests(counters->GetCounter("FailedRequests", true))
 { }
-
-TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolicySize(TReplacementPolicy policy) {
-    return Counters->GetCounter(TStringBuilder() << "ReplacementPolicySize/" << policy);
-}
 
 } // namespace NKikimr::NSharedCache

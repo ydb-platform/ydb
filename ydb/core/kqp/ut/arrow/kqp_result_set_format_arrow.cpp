@@ -162,7 +162,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ExecuteAndCombineBatches(TQuery
         UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty");
         UNIT_ASSERT_GE_C(batches.size(), minBatchesCount, "Batches count must be greater than or equal to " + ToString(minBatchesCount));
 
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> arrowBatches;
         auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
 
         for (const auto& batch : batches) {
@@ -170,10 +170,10 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ExecuteAndCombineBatches(TQuery
             UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
             UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
 
-            batches.push_back(std::move(arrowBatch));
+            arrowBatches.push_back(std::move(arrowBatch));
         }
 
-        auto resultBatch = NArrow::CombineBatches(batches);
+        auto resultBatch = NArrow::CombineBatches(arrowBatches);
         UNIT_ASSERT_C(resultBatch->ValidateFull().ok(), "Batch combine validation failed");
 
         resultBatches.push_back(std::move(resultBatch));

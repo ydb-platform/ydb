@@ -81,10 +81,6 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        if (Checkpoints) {
-            // prevent adding data into channel that already contains untransferred checkpoint (we can tolerate multiple checkpoints without any data between)
-            return EDqFillLevel::HardLimit;
-        }
         return FillLevel;
     }
 
@@ -236,7 +232,8 @@ public:
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
-        Checkpoints.push_back(std::move(checkpoint));
+        YQL_ENSURE(!Checkpoint);
+        Checkpoint.ConstructInPlace(std::move(checkpoint));
     }
 
     [[nodiscard]]
@@ -308,9 +305,9 @@ public:
 
     [[nodiscard]]
     bool Pop(NDqProto::TCheckpoint& checkpoint) override {
-        if (!HasData() && Checkpoints) {
-            checkpoint = std::move(Checkpoints.front());
-            Checkpoints.pop_front();
+        if (!HasData() && Checkpoint) {
+            checkpoint = std::move(*Checkpoint);
+            Checkpoint = Nothing();
             return true;
         }
         return false;
@@ -482,7 +479,7 @@ private:
     bool Finished = false;
 
     TMaybe<NDqProto::TWatermark> Watermark;
-    TDeque<NDqProto::TCheckpoint> Checkpoints;
+    TMaybe<NDqProto::TCheckpoint> Checkpoint;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = NoLimit;
 };

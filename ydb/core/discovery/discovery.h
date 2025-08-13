@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/bridge.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -14,6 +15,7 @@ namespace NDiscovery {
         TString CachedMessage;
         TString CachedMessageSsl;
         TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
+        TBridgeInfo::TPtr BridgeInfo;
         TEvStateStorage::TEvBoardInfo::EStatus Status = TEvStateStorage::TEvBoardInfo::EStatus::Ok;
     };
 }
@@ -60,7 +62,8 @@ namespace NDiscovery {
         TMap<TActorId, TEvStateStorage::TBoardInfoEntry>,
         TSet<TString>,
         TString,
-        const THolder<TEvInterconnect::TEvNodeInfo>&);
+        const THolder<TEvInterconnect::TEvNodeInfo>&,
+        const TBridgeInfo::TPtr& bridgeInfo);
 }
 
 using TLookupPathFunc = std::function<TString(const TString&)>;
@@ -75,6 +78,6 @@ IActor* CreateDiscoverer(
     const TActorId& cacheId);
 
 // Used to reduce number of requests to Board
-IActor* CreateDiscoveryCache(const TString& endpointId = {});
+IActor* CreateDiscoveryCache(const TString& endpointId = {}, const TMaybe<TActorId>& nameserviceActorId = {});
 
 }

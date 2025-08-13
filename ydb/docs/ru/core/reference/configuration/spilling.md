@@ -36,7 +36,7 @@ table_service_config:
 
 Где:
 
-- `node_id` — идентификатор узла
+- `node_id` — идентификатор [узла](../../concepts/glossary.md#node)
 - `session_id` — уникальный идентификатор сессии, который создается при инициализации [Spilling Service](../../contributor/spilling-service.md) один раз при старте процесса ydbd
 
 Пример полного пути к файлу спиллинга:

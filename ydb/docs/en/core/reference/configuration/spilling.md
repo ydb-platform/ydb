@@ -37,7 +37,7 @@ Spilling files have the following name format:
 
 Where:
 
-- `node_id` — node identifier
+- `node_id` — [node](../../concepts/glossary.md#node) identifier
 - `session_id` — unique session identifier that is created when initializing the [Spilling Service](../../contributor/spilling-service.md) once when the ydbd process starts
 
 Example of a complete spilling file path:

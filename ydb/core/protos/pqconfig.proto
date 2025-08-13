@@ -445,8 +445,6 @@ message TPQTabletConfig {
     optional TOffloadConfig OffloadConfig = 38;
 
     optional bool EnableCompactification = 39 [default = false];
-
-    optional bool EnablePerPartitionCounters = 40 [default = false];
 }
 
 message THeartbeat {

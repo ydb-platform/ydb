@@ -1081,11 +1081,6 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     BytesWrittenTotal.Setup(
         IsSupportive(), true,
         NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"BytesWritten" + txSuffix}, true));
-    auto partitionLabels = labels;
-    partitionLabels.push_back({ .Labels = {{"Partition", ToString(Partition.InternalPartitionId)}}, .AggrNames = {"total"}});
-    BytesWrittenPerPartition.Setup(
-        IsSupportive(), true,
-        NKikimr::NPQ::TMultiCounter(subGroup, partitionLabels, {}, {"BytesWrittenPerPartition" + txSuffix}, true));
     BytesWrittenUncompressed.Setup(
         IsSupportive(), false,
         NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"UncompressedBytesWritten" + suffix}, true));

@@ -99,9 +99,8 @@ Y_UNIT_TEST(Partition) {
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy.html"));
-        countersStr << "\n";
-        auto res = countersStr.Str();
-        UNIT_ASSERT_EQUAL(res, referenceCounters);
+
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {

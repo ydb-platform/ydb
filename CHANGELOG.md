@@ -60,7 +60,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20040:Enabled verbose memory limit by default in recipe [#20040](https://github.com/ydb-platform/ydb/pull/20040). ([Ivan](https://github.com/abyss7))
 * 20272:Enabled the following feature flags by default: EnableTopicAutopartitioningForCDC, EnableTopicAutopartitioningForReplication, EnableTopicTransfer. [#20272](https://github.com/ydb-platform/ydb/pull/20272) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20253:Separated bulk statistics operations from non-bulk. [#20253](https://github.com/ydb-platform/ydb/pull/20253) ([Vladilen](https://github.com/Vladilen))
-* 22541:Add unit tests for storage group configuration propagation via DistConf cache. Improve BSC's SendToWarden method, send message directly to local warden. [#22541](https://github.com/ydb-platform/ydb/pull/22541) ([Sergey Belyakov](https://github.com/serbel324))
 * 22511:Add ICB control to change ReadRequestsInFlightLimit via changing dynconfig [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
 * 22385:no cache when access with user token [#22385](https://github.com/ydb-platform/ydb/pull/22385) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 22226:meta forward authorize header [#22226](https://github.com/ydb-platform/ydb/pull/22226) ([Andrei Rykov](https://github.com/StekPerepolnen))

@@ -130,7 +130,7 @@ private:
     void PropagateStatistics();
     void PropagateFastStatistics();
     size_t PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
-        size_t lastSSIndex, bool useSizeLimit);
+        size_t lastSSIndex, bool useSizeLimit, ui64 cookie);
 
     void Handle(TEvStatistics::TEvAnalyze::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
@@ -261,6 +261,8 @@ private:
     std::unordered_set<TNodeId> FastNodes; // nodes for fast propagation
     std::unordered_set<TSSId> FastSchemeShards; // schemeshards for fast propagation
 
+    ui64 CurPropagationSeq = 0;
+    static constexpr ui64 InvalidPropagationSeq = -1; // used as request cookie for fast propagation requests
     bool PropagationInFlight = false;
     std::vector<TNodeId> PropagationNodes;
     std::vector<TSSId> PropagationSchemeShards;

@@ -23,8 +23,8 @@
 
 #include <library/cpp/yt/memory/range.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/generated/Message.fbs.h>
-#include <contrib/libs/apache/arrow/cpp/src/generated/Schema.fbs.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/generated/Message.fbs.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/generated/Schema.fbs.h>
 
 #include <vector>
 
@@ -35,7 +35,7 @@ using namespace NComplexTypes;
 using namespace NTableClient;
 using namespace NTzTypes;
 
-using namespace org::apache::arrow;
+using namespace org::apache::arrow20;
 
 constinit const auto Logger = FormatsLogger;
 
@@ -80,7 +80,7 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
         *flatbufBuilder,
         SerializeString(flatbufBuilder, "Timestamp"),
         /*nullable*/ false,
-        flatbuf::Type::Int,
+        flatbuf::Type_Int,
         timestampOffset);
 
     childrenOffset.push_back(timestampField);
@@ -96,7 +96,7 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
             *flatbufBuilder,
             SerializeString(flatbufBuilder, "TzIndex"),
             /*nullable*/ false,
-            flatbuf::Type::Int,
+            flatbuf::Type_Int,
             tzIndexOffset);
 
         childrenOffset.push_back(std::move(tzIndexField));
@@ -108,14 +108,14 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
             *flatbufBuilder,
             SerializeString(flatbufBuilder, "TzName"),
             /*nullable*/ false,
-            flatbuf::Type::Binary,
+            flatbuf::Type_Binary,
             tzNameOffset);
 
         childrenOffset.push_back(std::move(tzNameField));
     }
 
     return std::tuple(
-        flatbuf::Type::Struct_,
+        flatbuf::Type_Struct_,
         flatbuf::CreateStruct_(*flatbufBuilder).Union(),
         std::move(childrenOffset));
 }
@@ -130,7 +130,7 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
         case ESimpleLogicalValueType::Null:
         case ESimpleLogicalValueType::Void:
             return std::tuple(
-                flatbuf::Type::Null,
+                flatbuf::Type_Null,
                 flatbuf::CreateNull(*flatbufBuilder)
                     .Union(),
                 std::vector<flatbuffers::Offset<flatbuf::Field>>());
@@ -144,7 +144,7 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
         case ESimpleLogicalValueType::Int32:
         case ESimpleLogicalValueType::Uint32:
             return std::tuple(
-                flatbuf::Type::Int,
+                flatbuf::Type_Int,
                 flatbuf::CreateInt(
                     *flatbufBuilder,
                     GetIntegralTypeBitWidth(simpleType),
@@ -154,7 +154,7 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
 
         case ESimpleLogicalValueType::Interval:
             return std::tuple(
-                flatbuf::Type::Int,
+                flatbuf::Type_Int,
                 flatbuf::CreateInt(
                     *flatbufBuilder,
                     /*bitWidth*/ 64,
@@ -164,52 +164,52 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
 
         case ESimpleLogicalValueType::Date:
             return std::tuple(
-                flatbuf::Type::Date,
+                flatbuf::Type_Date,
                 flatbuf::CreateDate(
                     *flatbufBuilder,
-                    flatbuf::DateUnit::DAY)
+                    flatbuf::DateUnit_DAY)
                     .Union(),
                 std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Datetime:
             return std::tuple(
-                flatbuf::Type::Timestamp,
+                flatbuf::Type_Timestamp,
                 flatbuf::CreateTimestamp(
                     *flatbufBuilder,
-                    flatbuf::TimeUnit::SECOND)
+                    flatbuf::TimeUnit_SECOND)
                     .Union(),
                 std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Timestamp:
             return std::tuple(
-                flatbuf::Type::Timestamp,
+                flatbuf::Type_Timestamp,
                 flatbuf::CreateTimestamp(
                     *flatbufBuilder,
-                    flatbuf::TimeUnit::MICROSECOND)
+                    flatbuf::TimeUnit_MICROSECOND)
                     .Union(),
                 std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Double:
             return std::tuple(
-                flatbuf::Type::FloatingPoint,
+                flatbuf::Type_FloatingPoint,
                 flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
-                    flatbuf::Precision::DOUBLE)
+                    flatbuf::Precision_DOUBLE)
                     .Union(),
                 std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Float:
             return std::tuple(
-                flatbuf::Type::FloatingPoint,
+                flatbuf::Type_FloatingPoint,
                 flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
-                    flatbuf::Precision::SINGLE)
+                    flatbuf::Precision_SINGLE)
                     .Union(),
                 std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
         case ESimpleLogicalValueType::Boolean:
             return std::tuple(
-                flatbuf::Type::Bool,
+                flatbuf::Type_Bool,
                 flatbuf::CreateBool(*flatbufBuilder)
                     .Union(),
                 std::vector<flatbuffers::Offset<flatbuf::Field>>());
@@ -217,7 +217,7 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
         case ESimpleLogicalValueType::String:
         case ESimpleLogicalValueType::Any:
             return std::tuple(
-                flatbuf::Type::Binary,
+                flatbuf::Type_Binary,
                 flatbuf::CreateBinary(*flatbufBuilder)
                     .Union(),
                 std::vector<flatbuffers::Offset<flatbuf::Field>>());
@@ -233,7 +233,7 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
         case ESimpleLogicalValueType::Utf8:
         case ESimpleLogicalValueType::Json:
             return std::tuple(
-                flatbuf::Type::Utf8,
+                flatbuf::Type_Utf8,
                 flatbuf::CreateUtf8(*flatbufBuilder)
                     .Union(),
                 std::vector<flatbuffers::Offset<flatbuf::Field>>());
@@ -1611,21 +1611,21 @@ private:
 
         auto schemaOffset = flatbuf::CreateSchema(
             flatbufBuilder,
-            flatbuf::Endianness::Little,
+            flatbuf::Endianness_Little,
             fieldsOffset,
             flatbufBuilder.CreateVector(customMetadata));
 
         auto messageOffset = flatbuf::CreateMessage(
             flatbufBuilder,
-            flatbuf::MetadataVersion::V4,
-            flatbuf::MessageHeader::Schema,
+            flatbuf::MetadataVersion_V4,
+            flatbuf::MessageHeader_Schema,
             schemaOffset.Union(),
             0);
 
         flatbufBuilder.Finish(messageOffset);
 
         RegisterMessage(
-            flatbuf::MessageHeader::Schema,
+            flatbuf::MessageHeader_Schema,
             std::move(flatbufBuilder));
     }
 
@@ -1704,15 +1704,15 @@ private:
 
         auto messageOffset = flatbuf::CreateMessage(
             flatbufBuilder,
-            flatbuf::MetadataVersion::V4,
-            flatbuf::MessageHeader::DictionaryBatch,
+            flatbuf::MetadataVersion_V4,
+            flatbuf::MessageHeader_DictionaryBatch,
             dictionaryBatchOffset.Union(),
             bodySize);
 
         flatbufBuilder.Finish(messageOffset);
 
         RegisterMessage(
-            flatbuf::MessageHeader::DictionaryBatch,
+            flatbuf::MessageHeader_DictionaryBatch,
             std::move(flatbufBuilder),
             bodySize,
             std::move(bodyWriter));
@@ -1730,15 +1730,15 @@ private:
 
         auto messageOffset = flatbuf::CreateMessage(
             flatbufBuilder,
-            flatbuf::MetadataVersion::V4,
-            flatbuf::MessageHeader::RecordBatch,
+            flatbuf::MetadataVersion_V4,
+            flatbuf::MessageHeader_RecordBatch,
             recordBatchOffset.Union(),
             bodySize);
 
         flatbufBuilder.Finish(messageOffset);
 
         RegisterMessage(
-            flatbuf::MessageHeader::RecordBatch,
+            flatbuf::MessageHeader_RecordBatch,
             std::move(flatbufBuilder),
             bodySize,
             std::move(bodyWriter));

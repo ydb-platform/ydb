@@ -42,7 +42,7 @@ PEERDIR(
     yt/yt/client/formats
     yt/yt/library/column_converters
 
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     contrib/libs/yaml
 )
 

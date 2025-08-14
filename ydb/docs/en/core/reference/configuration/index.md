@@ -8,22 +8,25 @@ Each configuration section serves a specific purpose in defining how the {{ ydb-
 
 The following top-level configuration sections are available, listed in alphabetical order:
 
-- [{#T}](actor_system_config.md) — CPU resource allocation across actor system pools
-- [{#T}](auth_config.md) — Authentication and authorization settings
-- [{#T}](blob_storage_config.md) — Static cluster group configuration for system tablets
-- [{#T}](client_certificate_authorization.md) — Client certificate authentication
-- [{#T}](domains_config.md) — Cluster domain configuration including Blob Storage and State Storage
-- [{#T}](feature_flags.md) — Feature flags to enable or disable specific {{ ydb-short-name }} features
-- [{#T}](healthcheck_config.md) — Health check service thresholds and timeout settings
-- [{#T}](hive.md) — Hive component configuration for tablet management
-- [{#T}](host_configs.md) — Typical host configurations for cluster nodes
-- [{#T}](hosts.md) — Static cluster nodes configuration
-- [{#T}](log_config.md) — Logging configuration and parameters
-- [{#T}](memory_controller_config.md) — Memory allocation and limits for database components
-- [{#T}](node_broker_config.md) — Stable node names configuration
-- [{#T}](resource_broker_config.md) — Resource broker for controlling CPU and memory consumption
-- [{#T}](security_config.md) — Security configuration settings
-- [{#T}](tls.md) — TLS configuration for secure connections
+#|
+|| **Section** | **Required** | **Description** ||
+|| [{#T}](actor_system_config.md) | Yes | CPU resource allocation across actor system pools ||
+|| [{#T}](auth_config.md) | No | Authentication and authorization settings ||
+|| [{#T}](blob_storage_config.md) | No | Static cluster group configuration for system tablets ||
+|| [{#T}](client_certificate_authorization.md) | No | Client certificate authentication ||
+|| [{#T}](domains_config.md) | No | Cluster domain configuration including Blob Storage and State Storage ||
+|| [{#T}](feature_flags.md) | No | Feature flags to enable or disable specific {{ ydb-short-name }} features ||
+|| [{#T}](healthcheck_config.md) | No | Health check service thresholds and timeout settings ||
+|| [{#T}](hive.md) | No | Hive component configuration for tablet management ||
+|| [{#T}](host_configs.md) | No | Typical host configurations for cluster nodes ||
+|| [{#T}](hosts.md) | Yes | Static cluster nodes configuration ||
+|| [{#T}](log_config.md) | No | Logging configuration and parameters ||
+|| [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components ||
+|| [{#T}](node_broker_config.md) | No | Stable node names configuration ||
+|| [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption ||
+|| [{#T}](security_config.md) | No | Security configuration settings ||
+|| [{#T}](tls.md) | No | TLS configuration for secure connections ||
+|#
 
 ## Practical Guidelines
 

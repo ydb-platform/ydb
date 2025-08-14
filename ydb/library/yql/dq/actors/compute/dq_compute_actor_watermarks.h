@@ -36,6 +36,7 @@ public:
 
 private:
     void RecalcPendingWatermark();
+    bool UpdateAndRecalcPendingWatermark(TMaybe<TInstant>& storedWatermark, TInstant watermark);
     bool MaybePopPendingWatermark();
 
 private:

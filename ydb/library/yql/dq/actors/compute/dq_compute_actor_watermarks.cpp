@@ -57,10 +57,8 @@ bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, 
     LOG_T("Async input " << inputId << " notified about watermark " << watermark);
 
     auto& asyncInputWatermark = it->second;
-    if (asyncInputWatermark < watermark) {
+    if (UpdateAndRecalcPendingWatermark(asyncInputWatermark, watermark)) {
         LOG_T("Async input " << inputId << " watermark was updated to " << watermark);
-        asyncInputWatermark = watermark;
-        RecalcPendingWatermark();
         return true;
     }
 
@@ -77,13 +75,28 @@ bool TDqComputeActorWatermarks::NotifyInChannelWatermarkReceived(ui64 inputId, T
     LOG_T("Input channel " << inputId << " notified about watermark " << watermark);
 
     auto& inputChannelWatermark = it->second;
-    if (!inputChannelWatermark || *inputChannelWatermark < watermark) {
+    if (UpdateAndRecalcPendingWatermark(inputChannelWatermark, watermark)) {
         LOG_T("Input channel " << inputId << " watermark was updated to " << watermark);
-        inputChannelWatermark = watermark;
-        RecalcPendingWatermark();
         return true;
     }
 
+    return false;
+}
+
+// Modifies and optionally recalc pending watermarks
+bool TDqComputeActorWatermarks::UpdateAndRecalcPendingWatermark(TMaybe<TInstant>& storedWatermark, TInstant watermark) {
+    if (storedWatermark < watermark) {
+        if (PendingWatermark == std::exchange(storedWatermark, watermark)) {
+            // PendingWatermark was unset; old watermark value was unset
+            // -> it is possible now all channels have watermark set, needs recalc
+            // PendingWatermark was set and same as old watermark value
+            // -> it is possible PendingWatermark can be advanced, needs recalc
+            RecalcPendingWatermark();
+        } else {
+            // otherwise PendingWatermark will be same
+        }
+        return true;
+    }
     return false;
 }
 

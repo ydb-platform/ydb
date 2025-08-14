@@ -3,12 +3,12 @@
 namespace NKikimr::NColumnShard {
 TDuplicateFilteringCounters::TDuplicateFilteringCounters()
     : TBase("DuplicateFiltering")
-    , MergeRowsAccepted(TBase::GetDeriviative("SourcesMerging/RowsAccepted"))
-    , MergeRowsRejected(TBase::GetDeriviative("SourcesMerging/RowsRejected"))
-    , MergeRowsBulkAccepted(TBase::GetDeriviative("SourcesMerging/RowsBulkAccepted"))
-    , IntersectingPortionsPerRequest(TBase::GetHistogram("SourcesMerging/IntersectingPortions", NMonitoring::ExponentialHistogram(18, 2, 8)))
-    , FilterCacheHits(TBase::GetDeriviative("SourcesMerging/FilterCache/Hits"))
-    , FilterCacheMisses(TBase::GetDeriviative("SourcesMerging/FilterCache/Misses"))
+    , MergeRowsAccepted(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsAccepted"))
+    , MergeRowsRejected(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsRejected"))
+    , MergeRowsBulkAccepted(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsBulkAccepted"))
+    , IntersectingPortionsPerRequest(TBase::GetHistogram("DuplicateFiltering/IntersectingPortions", NMonitoring::ExponentialHistogram(18, 2, 8)))
+    , FilterCacheHits(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Hits"))
+    , FilterCacheMisses(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Misses"))
 {
 }
 }   // namespace NKikimr::NColumnShard

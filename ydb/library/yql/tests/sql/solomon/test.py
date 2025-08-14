@@ -18,7 +18,8 @@ from yql_utils import (
 
 from test_utils import (
     get_config,
-    pytest_generate_tests_for_run)
+    pytest_generate_tests_for_run,
+    get_case_file)
 
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
@@ -70,7 +71,7 @@ def test(suite, case, cfg, solomon):
     log('===' + case + '-' + cfg)
 
     xfail = is_xfail(config)
-    program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
+    program_sql = get_case_file(DATA_PATH, suite, case, {'.sql', '.yql'})
     sql_query = codecs.open(program_sql, encoding='utf-8').read()
 
     files = get_files(suite, config, DATA_PATH)

@@ -5,4 +5,6 @@ items:
   href: goose.md
 - name: Liquibase
   href: liquibase.md
+- name: dbt
+  href: dbt.md
 

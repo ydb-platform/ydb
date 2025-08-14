@@ -884,8 +884,6 @@ private:
                 }
                 JoinedTableBuild->Clear();
                 JoinedTableBuild->ResetIterator();
-
-                std::swap(JoinedTableBuild, JoinedTableReturn);
             }
 
             if (!*HaveMoreRightRows && !*HaveMoreLeftRows) {
@@ -931,6 +929,7 @@ private:
                 JoinedTableBuild->ResetIterator();
                 LeftPacker->EndTime = std::chrono::system_clock::now();
                 RightPacker->EndTime = std::chrono::system_clock::now();
+                std::swap(JoinedTableBuild, JoinedTableReturn);
             }
 
         }

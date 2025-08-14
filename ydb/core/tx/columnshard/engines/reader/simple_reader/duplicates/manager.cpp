@@ -37,6 +37,13 @@ public:
         , DataAccessorsManager(dataAccessorsManager)
         , IntersectionsMemory(insersectionsMemory)
     {
+        AFL_VERIFY(Owner);
+        AFL_VERIFY(Context);
+        AFL_VERIFY(Portions.size());
+        AFL_VERIFY(Columns.size());
+        AFL_VERIFY(ColumnDataManager);
+        AFL_VERIFY(DataAccessorsManager);
+        AFL_VERIFY(IntersectionsMemory);
     }
 };
 
@@ -111,7 +118,7 @@ public:
     }
 };
 
-class TDataAccessorFetching: public IDataAccessorRequestsSubscriber {
+class TColumnDataAccessorFetching: public IDataAccessorRequestsSubscriber {
 private:
     TColumnFetchingRequest Request;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsMemoryGuard;
@@ -138,7 +145,8 @@ private:
     }
 
 public:
-    TDataAccessorFetching(TColumnFetchingRequest&& request, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& accessorsMemoryGuard)
+    TColumnDataAccessorFetching(
+        TColumnFetchingRequest&& request, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& accessorsMemoryGuard)
         : Request(std::move(request))
         , AccessorsMemoryGuard(accessorsMemoryGuard)
     {
@@ -169,7 +177,7 @@ private:
             request->AddPortion(portion);
         }
         auto dataAccessorsManager = Request.GetDataAccessorsManager();
-        request->RegisterSubscriber(std::make_shared<TDataAccessorFetching>(std::move(Request), guard));
+        request->RegisterSubscriber(std::make_shared<TColumnDataAccessorFetching>(std::move(Request), guard));
         dataAccessorsManager->AskData(request);
         return true;
     }
@@ -326,7 +334,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
 
     TColumnFetchingRequest columnFetchingRequest(
         SelfId(), constructor, std::move(sourcesToFetch), columns, ColumnDataManager, DataAccessorsManager, memoryGuard);
-    const ui64 mem = TDataAccessorFetching::GetRequiredMemory(columnFetchingRequest, LastSchema);
+    const ui64 mem = TColumnDataAccessorFetching::GetRequiredMemory(columnFetchingRequest, LastSchema);
     NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(constructor->GetMemoryProcessId(),
         constructor->GetMemoryScopeId(), constructor->GetMemoryGroupId(),
         { std::make_shared<TDataAccessorAllocation>(std::move(columnFetchingRequest), mem) },

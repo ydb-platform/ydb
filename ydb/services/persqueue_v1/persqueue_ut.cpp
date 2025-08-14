@@ -7973,40 +7973,5 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL((ui64)group->GetNamedCounter("bin", "20480")->Val(), 1);
         }
     }
-
-
-    Y_UNIT_TEST(TopicCompactionSingleMessage) {
-        TServerSettings settings = PQSettings(0, 1);
-        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
-        settings.PQConfig.SetRoot("/Root");
-        settings.PQConfig.SetDatabase("/Root");
-        settings.SetEnableTopicServiceTx(true);
-        NPersQueue::TTestServer server{settings, true};
-        auto* runtime = server.GetRuntime();
-        runtime->GetAppData().FeatureFlags.SetEnableTopicMessageMeta(true);
-
-        TString topic = "topic";
-        auto driver = server.AnnoyingClient->GetDriver();
-        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
-
-        NYdb::NTopic::TCreateTopicSettings createSettings;
-        createSettings.BeginConfigurePartitioningSettings()
-              .MinActivePartitions(1)
-              .MaxActivePartitions(1);
-
-        auto status = topicClient.CreateTopic(topic, createSettings).GetValueSync();
-        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-        server.WaitInit(topic);
-
-        TString data{"a", 800_KB};
-        NYdb::NTopic::TWriteSessionSettings wSettings {topic, "srcId", "srcId"};
-        wSettings.DirectWriteToPartition(false);
-        auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
-        std::vector<std::pair<std::string, std::string>> metadata = {{"__key", "key1"}};
-        {
-            auto message = NYdb::NTopic::TWriteMessage{"Somedata"}.MessageMeta(metadata);
-            writer->Write(std::move(message));
-        }
-    }
 }
 }

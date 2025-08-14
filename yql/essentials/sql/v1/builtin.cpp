@@ -3476,7 +3476,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             };
             auto fullName = moduleName + "." + name;
             return new TYqlTypeConfigUdf(pos, fullName, multiArgs, multiArgs.size() + 1);
-        } else if (!(ns.StartsWith("re2") && lowerName == "options")) {
+        } else if (!(ns.StartsWith("re2") && (lowerName == "options" || lowerName == "isvalidregexp"))) {
             auto newArgs = args;
             if (ns.StartsWith("re2")) {
                 // convert run config is tuple of string and optional options

@@ -262,7 +262,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::Die(const TActorContext& ctx) {
-        TRlHelpers::PassAway(TDerived::SelfId());
+        TRlHelpers::PassAway(this->SelfId());
         TBase::Die(ctx);
     }
 

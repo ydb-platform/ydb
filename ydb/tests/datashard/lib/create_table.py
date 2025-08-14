@@ -67,6 +67,7 @@ def create_columnshard_table_sql_request(table_name: str, columns: dict[str, dic
     """
     return sql_create
 
+
 def create_ttl_sql_request(ttl: str, inteval: dict[str, str], time: str, table_name: str) -> str:
     create_ttl = []
     for pt in inteval.keys():

@@ -26,7 +26,7 @@ namespace NKikimr::NSchemeShard::NOlap {
 
     inline std::expected<void, TString> CheckColumnType(const ::NKikimrSchemeOp::TOlapColumnDescription& column, const TAppData* appData) {
 
-        if ((column.GetType() == "Datetime64" || column.GetType() ==  "Timestamp64" || column.GetType() == "Interval64")
+        if ((column.GetType() == "Datetime64" || column.GetType() == "Timestamp64" || column.GetType() == "Interval64")
             && !appData->FeatureFlags.GetEnableTableDatetime64()) {
             return std::unexpected(std::format(
                 "Type '{}' specified for column '{}', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)",

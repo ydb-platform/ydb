@@ -10,6 +10,7 @@ from ydb.tests.stress.common.common import WorkloadBase
 
 logger = logging.getLogger("YdbTopicWorkload")
 
+
 @dataclass
 class WriteProfile:
     message_rate: float
@@ -31,7 +32,18 @@ def parse_write_profile(profile) -> WriteProfile:
 
 
 class YdbTopicWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, consumers, consumer_threads, partitions, write_profiles: list[WriteProfile], tables_prefix, restart_interval):
+    def __init__(
+        self,
+        endpoint,
+        database,
+        duration,
+        consumers,
+        consumer_threads,
+        partitions,
+        write_profiles: list[WriteProfile],
+        tables_prefix,
+        restart_interval,
+    ):
         super().__init__(None, tables_prefix, 'topic', None)
         self.endpoint = endpoint
         self.database = database
@@ -56,13 +68,19 @@ class YdbTopicWorkload(WorkloadBase):
         self.cli_path = path_to_unpack
 
     def get_command_prefix(self, subcmds: list[str]) -> list[str]:
-        return [
-            self.cli_path,
-            '--verbose',
-            '--endpoint', self.endpoint,
-            '--database={}'.format(self.database),
-            'workload', 'topic'
-        ] + subcmds + ['--topic', f'{self.table_prefix}']
+        return (
+            [
+                self.cli_path,
+                '--verbose',
+                '--endpoint',
+                self.endpoint,
+                '--database={}'.format(self.database),
+                'workload',
+                'topic',
+            ]
+            + subcmds
+            + ['--topic', f'{self.table_prefix}']
+        )
 
     def cmd_run(self, cmd):
         cmd = [str(arg) for arg in cmd]
@@ -71,54 +89,57 @@ class YdbTopicWorkload(WorkloadBase):
 
     def __read_loop(self):
         def run():
-            subcmds=[
-                    'run',
-                    'read',
-                    '--seconds', self.duration,
-                    '--consumers', self.consumers,
-                    '--threads', self.consumer_threads,
-                    '--no-commit',
+            subcmds = [
+                'run',
+                'read',
+                '--seconds',
+                self.duration,
+                '--consumers',
+                self.consumers,
+                '--threads',
+                self.consumer_threads,
+                '--no-commit',
             ]
-            if (self.restart_interval is not None):
-                subcmds += ['--restart-interval', self.restart_interval, ]
-            self.cmd_run(
-                self.get_command_prefix(subcmds=subcmds)
-            )
+            if self.restart_interval is not None:
+                subcmds += [
+                    '--restart-interval',
+                    self.restart_interval,
+                ]
+            self.cmd_run(self.get_command_prefix(subcmds=subcmds))
+
         return run
 
     def __write_loop(self, profile: WriteProfile):
         def run():
-            subcmds=[
-                    'run',
-                    'write',
-                    '--seconds', self.duration,
-                    '--message-rate', profile.message_rate,
-                    '--message-size', profile.message_size,
-                    '--key-count', profile.keys_count,
-                    '--key-prefix', profile.key_prefix,
-                    '--threads', profile.producers,
-                    '--warmup', '0',
-                ]
-            self.cmd_run(
-                self.get_command_prefix(subcmds=subcmds)
-            )
+            subcmds = [
+                'run',
+                'write',
+                '--seconds',
+                self.duration,
+                '--message-rate',
+                profile.message_rate,
+                '--message-size',
+                profile.message_size,
+                '--key-count',
+                profile.keys_count,
+                '--key-prefix',
+                profile.key_prefix,
+                '--threads',
+                profile.producers,
+                '--warmup',
+                '0',
+            ]
+            self.cmd_run(self.get_command_prefix(subcmds=subcmds))
+
         return run
 
     def tear_up(self):
         self.cmd_run(
-            self.get_command_prefix(subcmds=[
-                'init',
-                '--consumers', self.consumers,
-                '--partitions', self.partitions
-            ])
+            self.get_command_prefix(subcmds=['init', '--consumers', self.consumers, '--partitions', self.partitions])
         )
 
     def tear_down(self):
-        self.cmd_run(
-            self.get_command_prefix(subcmds=[
-                'clean'
-            ])
-        )
+        self.cmd_run(self.get_command_prefix(subcmds=['clean']))
 
     def get_workload_thread_funcs(self):
         writers = [self.__write_loop(profile) for profile in self.write_profiles]

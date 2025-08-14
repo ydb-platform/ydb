@@ -427,10 +427,12 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr
         auto findWaiting = BuildingFilters.find(key);
         AFL_VERIFY(findWaiting != BuildingFilters.end());
         AFL_VERIFY(findWaiting->second.size());
-        Counters->OnFilterCacheHit(findWaiting->second.size() - 1);
-        Counters->OnFilterCacheMiss();
-        for (const std::shared_ptr<TInternalFilterConstructor>& callback : findWaiting->second) {
-            callback->AddFilter(key, std::move(filter));
+        if (findWaiting->second.size()) {
+            Counters->OnFilterCacheHit(findWaiting->second.size() - 1);
+            Counters->OnFilterCacheMiss();
+            for (const std::shared_ptr<TInternalFilterConstructor>& callback : findWaiting->second) {
+                callback->AddFilter(key, std::move(filter));
+            }
         }
         BuildingFilters.erase(findWaiting);
 

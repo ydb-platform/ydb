@@ -131,6 +131,13 @@ private:
     }
 
     bool ReadyToCheckpoint() {
+        for (const auto sourceId: Sources) {
+            const auto input = TaskRunner->GetSource(sourceId);
+            // sources are not polled upon checkpoint
+            if (!input->Empty()) { // check if buffer is empty
+                return false;
+            }
+        }
         for (const auto inputChannelId: InputsWithCheckpoints) {
             const auto input = TaskRunner->GetInputChannel(inputChannelId);
             if (!input->IsPausedByCheckpoint()) {
@@ -156,6 +163,13 @@ private:
     }
 
     bool ReadyToWatermark() {
+        for (const auto sourceId: SourcesWithWatermarks) {
+            const auto input = TaskRunner->GetSource(sourceId);
+            // sources are not polled upon watermark
+            if (!input->Empty()) { // check if buffer is empty
+                return false;
+            }
+        }
         for (const auto inputChannelId: InputsWithWatermarks) {
             const auto input = TaskRunner->GetInputChannel(inputChannelId);
             if (!input->IsPausedByWatermark()) {

@@ -80,6 +80,6 @@ When executing queries, {{ ydb-short-name }} tries to stay within the memory lim
 ## See Also
 
 - [Spilling Service](../contributor/spilling-service.md)
-- [Spilling configuration](../reference/configuration/table_service_config.html)
+- [Spilling configuration](../reference/configuration/table_service_config.md)
 - [{{ ydb-short-name }} monitoring](../devops/observability/monitoring.md)
 - [Performance diagnostics](../troubleshooting/performance/index.md)

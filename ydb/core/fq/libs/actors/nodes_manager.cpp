@@ -299,7 +299,9 @@ private:
     void Handle(NFq::TEvNodesManager::TEvGetNodesRequest::TPtr& ev) {
         LOG_E("TNodesManagerActor::TEvGetNodesRequest");
         auto response = MakeHolder<NFq::TEvNodesManager::TEvGetNodesResponse>();
-        response->NodeIds.push_back(777);
+        for (const auto& info : Peers) {
+            response->NodeIds.push_back(info.NodeId);
+        }
         Send(ev->Sender, response.Release());
     }
 

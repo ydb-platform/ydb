@@ -207,8 +207,6 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 // TODO: Use result sets metadata
                 if (self->ResultSets_.size() <= part.GetResultSetIndex()) {
                     self->ResultSets_.resize(part.GetResultSetIndex() + 1);
-                    self->ArrowSchemas_.resize(part.GetResultSetIndex() + 1);
-                    self->BytesData_.resize(part.GetResultSetIndex() + 1);
                 }
 
                 auto& resultSet = self->ResultSets_[part.GetResultSetIndex()];

@@ -123,6 +123,7 @@ void AssertArrowValueResultsSize(const std::vector<TResultSet>& arrowResultSets,
 
         const auto& schema = TArrowAccessor::GetArrowSchema(arrowResultSet);
         const auto& batches = TArrowAccessor::GetArrowBatches(arrowResultSet);
+
         UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty");
 
         std::shared_ptr<arrow::Schema> arrowSchema = NArrow::DeserializeSchema(TString(schema));
@@ -209,6 +210,8 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, std::optional<TArr
         const auto& schema = TArrowAccessor::GetArrowSchema(result.GetResultSet(0));
         const auto& batches = TArrowAccessor::GetArrowBatches(result.GetResultSet(0));
 
+        UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
         schemaCompressedBatch = NArrow::DeserializeSchema(TString(schema));
         compressedBatch = std::move(batches[0]);
     }
@@ -222,6 +225,8 @@ void CompareCompressedAndDefaultBatches(TQueryClient& client, std::optional<TArr
 
         const auto& schema = TArrowAccessor::GetArrowSchema(result.GetResultSet(0));
         const auto& batches = TArrowAccessor::GetArrowBatches(result.GetResultSet(0));
+
+        UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
         schemaDefaultBatch = NArrow::DeserializeSchema(TString(schema));
         defaultBatch = std::move(batches[0]);
@@ -503,6 +508,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
         const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
+        UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
         auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
         auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
 
@@ -540,6 +547,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
         const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
         const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
+
+        UNIT_ASSERT_C(!batches.empty(), "Expected at least one empty batch");
 
         auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
         auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
@@ -656,6 +665,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 SELECT Name, Amount FROM Test WHERE Group = 2;
             )", /* assertSize */ true);
 
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
             NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
                 std::make_pair("Name", TTypeInfo(NTypeIds::String)),
                 std::make_pair("Amount", TTypeInfo(NTypeIds::Uint64))
@@ -671,6 +682,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 SELECT Amount, Name FROM Test WHERE Group = 2;
             )", /* assertSize */ true);
 
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
             NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
                 std::make_pair("Amount", TTypeInfo(NTypeIds::Uint64)),
                 std::make_pair("Name", TTypeInfo(NTypeIds::String))
@@ -685,6 +698,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             auto batches = ExecuteAndCombineBatches(client, R"(
                 SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
             )", /* assertSize */ true);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
             NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
                 std::make_pair("Comment", TTypeInfo(NTypeIds::String)),
@@ -713,6 +728,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         auto batches = ExecuteAndCombineBatches(client, R"(
             SELECT * FROM LargeTable;
         )", /* assertSize */ true, /* minBatchesCount */ 2);
+
+        UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
         UNIT_ASSERT_VALUES_EQUAL(batches.front()->num_rows(), 200);
         UNIT_ASSERT_VALUES_EQUAL(batches.front()->num_columns(), 4);
@@ -759,6 +776,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                     SELECT BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, DecimalValue
                     FROM ArithmeticTypesTable ORDER BY BoolValue;
             )", /* assertSize */ true);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
             NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
                 std::make_pair("BoolValue", TTypeInfo(NTypeIds::Bool)),
@@ -819,6 +838,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 FROM StringTypesTable ORDER BY Utf8Value;
             )", /* assertSize */ true);
 
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
             NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
                 std::make_pair("Utf8Value", TTypeInfo(NTypeIds::Utf8)),
                 std::make_pair("JsonValue", TTypeInfo(NTypeIds::Json)),
@@ -875,6 +896,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 FROM BinaryTypesTable ORDER BY StringValue;
             )", /* assertSize */ true);
 
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
             NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
                 std::make_pair("StringValue", TTypeInfo(NTypeIds::String)),
                 std::make_pair("YsonValue", TTypeInfo(NTypeIds::Yson)),
@@ -928,6 +951,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 SELECT DateValue, DatetimeValue, TimestampValue, IntervalValue
                 FROM TimeTypesTable ORDER BY DateValue;
             )", /* assertSize */ true);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
             NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
                 std::make_pair("DateValue", TTypeInfo(NTypeIds::Date)),
@@ -1018,6 +1043,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
             const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
 
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
+
             auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
             auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
 
@@ -1044,6 +1071,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
             const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
             const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
+
+            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
             auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
             auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);

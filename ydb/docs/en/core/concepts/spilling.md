@@ -75,11 +75,11 @@ Data transfer channels continuously monitor their state:
 
 ## Interaction with Memory Controller
 
-When executing queries, {{ ydb-short-name }} tries to stay within the memory limit set by the [memory controller](../../reference/configuration/index.md#memory-controller). To continue fitting within this limit even as intermediate computations grow, spilling is used. For more details, see the [Memory Management section](../reference/configuration/table_service_config.md#memory-management).
+When executing queries, {{ ydb-short-name }} tries to stay within the memory limit set by the [memory controller](../../reference/configuration/index.html#memory-controller). To continue fitting within this limit even as intermediate computations grow, spilling is used. For more details, see the [Memory Management section](../reference/configuration/table_service_config.html#memory-management).
 
 ## See Also
 
 - [Spilling Service](../contributor/spilling-service.md)
-- [Spilling configuration](../reference/configuration/table_service_config.md)
+- [Spilling configuration](../reference/configuration/table_service_config.html)
 - [{{ ydb-short-name }} monitoring](../devops/observability/monitoring.md)
 - [Performance diagnostics](../troubleshooting/performance/index.md)

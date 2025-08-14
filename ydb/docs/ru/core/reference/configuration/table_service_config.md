@@ -114,7 +114,7 @@ table_service_config:
 
 - `Can not run operation` — переполнение очереди операций в пуле потоков I/O. См. [{#T}](../../troubleshooting/spilling/can-not-run-operation.md)
 
-### Управление памятью
+### Управление памятью {#memory-management}
 
 #### Связь с memory_controller_config
 

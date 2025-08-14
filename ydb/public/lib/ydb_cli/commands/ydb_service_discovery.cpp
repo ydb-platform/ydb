@@ -16,6 +16,7 @@ TCommandListEndpoints::TCommandListEndpoints()
 
 void TCommandListEndpoints::Config(TConfig& config) {
     TYdbSimpleCommand::Config(config);
+    config.Opts->AddLongOption('p', "piles", "Output piles info").StoreTrue(&OutputPilesInfo).DefaultValue(false).Hidden();
     config.SetFreeArgsNum(0);
 }
 
@@ -55,7 +56,7 @@ void TCommandListEndpoints::PrintResponse(NDiscovery::TListEndpointsResult& resu
     }
 
     const auto& pileStates = result.GetPileStates();
-    if (pileStates.size()) {
+    if (OutputPilesInfo && pileStates.size()) {
         Cout << Endl;
         for (const auto& pileState : pileStates) {
             Cout << "Pile \"" << pileState.PileName << "\": " << pileState.State << Endl;

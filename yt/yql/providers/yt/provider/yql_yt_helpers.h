@@ -48,9 +48,9 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
 TMaybe<ui64> GetLimit(const TExprNode& settings);
 TExprNode::TPtr GetLimitExpr(const TExprNode::TPtr& limitSetting, TExprContext& ctx);
 IGraphTransformer::TStatus UpdateTableMeta(const TExprNode::TPtr& tableNode, TExprNode::TPtr& newTableNode,
-    const TYtTablesData::TPtr& tablesData, bool checkSqlView, bool updateRowSpecType, TExprContext& ctx);
+    const TYtTablesData::TPtr& tablesData, bool checkSqlView, bool updateRowSpecType, bool useNativeYtDefaultColumnOrder, TExprContext& ctx);
 TExprNode::TPtr ValidateAndUpdateTablesMeta(const TExprNode::TPtr& input, TStringBuf cluster,
-    const TYtTablesData::TPtr& tablesData, bool updateRowSpecType, ERuntimeClusterSelectionMode mode, TExprContext& ctx);
+    const TYtTablesData::TPtr& tablesData, bool updateRowSpecType, bool useNativeYtDefaultColumnOrder, ERuntimeClusterSelectionMode mode, TExprContext& ctx);
 TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx, bool resetTmpOnly, bool isEvaluationInProgress);
 NNodes::TExprBase GetOutTable(NNodes::TExprBase ytOutput);
 std::pair<NNodes::TExprBase, TString> GetOutTableWithCluster(NNodes::TExprBase ytOutput);

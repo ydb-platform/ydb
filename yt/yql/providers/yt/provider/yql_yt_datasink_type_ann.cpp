@@ -251,8 +251,10 @@ private:
         auto opInput = input->ChildPtr(TYtTransientOpBase::idx_Input);
         const ERuntimeClusterSelectionMode selectionMode =
             State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        const bool useNativeYtDefaultColumnOrder =
+            State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
         auto newInput = ValidateAndUpdateTablesMeta(opInput, clusterName, State_->TablesData,
-            State_->Types->UseTableMetaFromGraph, selectionMode, ctx);
+            State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, selectionMode, ctx);
         if (!newInput) {
             return TStatus::Error;
         }
@@ -671,20 +673,22 @@ private:
             if (contentRowSpecs) {
                 size_t from = 0;
                 if (initialWrite) {
+                    const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
                     nextDescription.RowSpecSortReady = true;
                     if (nextDescription.IsReplaced) {
-                        nextDescription.RowSpec->CopySortness(ctx, *contentRowSpecs.front(), TYqlRowSpecInfo::ECopySort::Exact);
+                        nextDescription.RowSpec->CopySortness(ctx, *contentRowSpecs.front(), useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::Exact);
                         if (auto contentNativeType = contentRowSpecs.front()->GetNativeYtType()) {
-                            nextDescription.RowSpec->CopyTypeOrders(*contentNativeType);
+                            nextDescription.RowSpec->CopyTypeOrders(*contentNativeType, useNativeYtDefaultColumnOrder);
                         }
                         from = 1;
                     } else {
                         nextDescription.MonotonicKeys = monotonicKeys;
                         if (description.RowSpec) {
-                            nextDescription.RowSpec->CopySortness(ctx, *description.RowSpec, TYqlRowSpecInfo::ECopySort::Exact);
+                            nextDescription.RowSpec->CopySortness(ctx, *description.RowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::Exact);
                             const auto currNativeType = description.RowSpec->GetNativeYtType();
                             if (currNativeType && nextDescription.RowSpec->GetNativeYtType() != currNativeType) {
-                                nextDescription.RowSpec->CopyTypeOrders(*currNativeType);
+                                nextDescription.RowSpec->CopyTypeOrders(*currNativeType, useNativeYtDefaultColumnOrder);
                             }
                         }
                     }
@@ -1615,8 +1619,10 @@ private:
             return TStatus::Error;
         }
 
+        const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
         TExprNode::TPtr newTable;
-        auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, ctx);
+        auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx);
         if (TStatus::Ok != status.Level) {
             if (TStatus::Error != status.Level && newTable != table) {
                 output = ctx.ChangeChild(*input, TYtWriteTable::idx_Table, std::move(newTable));
@@ -1744,8 +1750,10 @@ private:
 
         auto dropTable = TYtDropTable(input);
         if (!TYtTableInfo::HasSubstAnonymousLabel(dropTable.Table())) {
+            const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
             TExprNode::TPtr newTable;
-            auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, ctx);
+            auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx);
             if (TStatus::Ok != status.Level) {
                 if (TStatus::Error != status.Level && newTable != table) {
                     output = ctx.ChangeChild(*input, TYtWriteTable::idx_Table, std::move(newTable));
@@ -1913,8 +1921,10 @@ private:
                 return status;
             }
 
+            const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
             TExprNode::TPtr newTable;
-            status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, ctx);
+            status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx);
             if (TStatus::Ok != status.Level) {
                 if (TStatus::Error != status.Level && newTable != table) {
                     output = ctx.ChangeChild(*input, TYtPublish::idx_Publish, std::move(newTable));

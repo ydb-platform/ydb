@@ -1028,6 +1028,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
 
     TVector<bool> sortDirections(sortTableOrder.size(), true);
     ui64 nativeTypeFlags = state.Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
+    const bool useNativeYtDefaultColumnOrder = state.Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
     TMaybe<NYT::TNode> nativeType;
 
     if (needRemapBeforeSort) {
@@ -1076,7 +1077,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
     sortOut.RowSpec->SortDirections = sortDirections;
 
     if (nativeType) {
-        sortOut.RowSpec->CopyTypeOrders(*nativeType);
+        sortOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
     }
 
     return Build<TYtSection>(ctx, pos)

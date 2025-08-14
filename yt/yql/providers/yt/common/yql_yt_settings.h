@@ -138,6 +138,7 @@ public:
     NCommon::TConfSetting<NSize::TSize, Static> _LocalTableContentLimit;
     NCommon::TConfSetting<bool, Static> EnableDynamicStoreReadInDQ;
     NCommon::TConfSetting<bool, Static> UseDefaultArrowAllocatorInJobs;
+    NCommon::TConfSetting<bool, Static> UseNativeYtDefaultColumnOrder;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

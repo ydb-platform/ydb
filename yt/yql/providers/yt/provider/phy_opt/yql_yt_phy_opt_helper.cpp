@@ -1018,6 +1018,7 @@ TVector<TYtOutTable> ConvertMultiOutTablesWithSortAware(TExprNode::TPtr& lambda,
 
     const ui64 nativeTypeFlags = state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
     const bool useNativeDescSort = state->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = state->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
     const auto multi = constraints.GetConstraint<TMultiConstraintNode>();
     const TTupleExprType* tupleType = outItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
 
@@ -1032,7 +1033,7 @@ TVector<TYtOutTable> ConvertMultiOutTablesWithSortAware(TExprNode::TPtr& lambda,
         if (auto sorted = itemConstraints ? itemConstraints->GetConstraint<TSortedConstraintNode>() : nullptr) {
             TKeySelectorBuilder builder(pos, ctx, useNativeDescSort, tupleItemType->Cast<TStructExprType>());
             builder.ProcessConstraint(*sorted);
-            builder.FillRowSpecSort(*outTable.RowSpec);
+            builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
             if (builder.NeedMap()) {
                 remapper = builder.MakeRemapLambda(true);
             }
@@ -1100,6 +1101,7 @@ TYtOutTable ConvertSingleOutTableWithSortAware(TExprNode::TPtr& lambda, bool& or
 
     const ui64 nativeTypeFlags = state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
     const bool useNativeDescSort = state->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = state->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
     const auto outStructType = outItemType->Cast<TStructExprType>();
 
     ordered = false;
@@ -1107,7 +1109,7 @@ TYtOutTable ConvertSingleOutTableWithSortAware(TExprNode::TPtr& lambda, bool& or
     if (auto sorted = constraints.GetConstraint<TSortedConstraintNode>()) {
         TKeySelectorBuilder builder(pos, ctx, useNativeDescSort, outStructType);
         builder.ProcessConstraint(*sorted);
-        builder.FillRowSpecSort(*outTable.RowSpec);
+        builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
 
         if (builder.NeedMap()) {
             lambda = ctx.Builder(pos)

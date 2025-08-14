@@ -1,13 +1,11 @@
-from __future__ import annotations
-
 import abc
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from pip._internal.metadata.base import BaseDistribution
 from pip._internal.req import InstallRequirement
 
 if TYPE_CHECKING:
-    from pip._internal.build_env import BuildEnvironmentInstaller
+    from pip._internal.index.package_finder import PackageFinder
 
 
 class AbstractDistribution(metaclass=abc.ABCMeta):
@@ -34,7 +32,7 @@ class AbstractDistribution(metaclass=abc.ABCMeta):
         self.req = req
 
     @abc.abstractproperty
-    def build_tracker_id(self) -> str | None:
+    def build_tracker_id(self) -> Optional[str]:
         """A string that uniquely identifies this requirement to the build tracker.
 
         If None, then this dist has no work to do in the build tracker, and
@@ -48,7 +46,7 @@ class AbstractDistribution(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def prepare_distribution_metadata(
         self,
-        build_env_installer: BuildEnvironmentInstaller,
+        finder: "PackageFinder",
         build_isolation: bool,
         check_build_deps: bool,
     ) -> None:

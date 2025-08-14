@@ -46,7 +46,7 @@ public:
 
     TVector<std::pair<TString, bool>> ForeignSortColumns() const;
 
-    void FillRowSpecSort(TYqlRowSpecInfo& rowSpec, bool useNativeYtDefaultColumnOrder);
+    void FillRowSpecSort(TYqlRowSpecInfo& rowSpec);
 
 private:
     template <bool ComputedTuple, bool SingleColumn>

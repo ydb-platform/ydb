@@ -2,6 +2,7 @@ import hashlib
 import logging
 import sys
 from optparse import Values
+from typing import List
 
 from pip._internal.cli.base_command import Command
 from pip._internal.cli.status_codes import ERROR, SUCCESS
@@ -36,7 +37,7 @@ class HashCommand(Command):
         )
         self.parser.insert_option_group(0, self.cmd_opts)
 
-    def run(self, options: Values, args: list[str]) -> int:
+    def run(self, options: Values, args: List[str]) -> int:
         if not args:
             self.parser.print_usage(sys.stderr)
             return ERROR

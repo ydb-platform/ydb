@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 import sys
+from typing import List, Optional, Set, Tuple
 
 from pip._vendor.packaging.tags import Tag
 
@@ -27,10 +26,10 @@ class TargetPython:
 
     def __init__(
         self,
-        platforms: list[str] | None = None,
-        py_version_info: tuple[int, ...] | None = None,
-        abis: list[str] | None = None,
-        implementation: str | None = None,
+        platforms: Optional[List[str]] = None,
+        py_version_info: Optional[Tuple[int, ...]] = None,
+        abis: Optional[List[str]] = None,
+        implementation: Optional[str] = None,
     ) -> None:
         """
         :param platforms: A list of strings or None. If None, searches for
@@ -63,8 +62,8 @@ class TargetPython:
         self.py_version_info = py_version_info
 
         # This is used to cache the return value of get_(un)sorted_tags.
-        self._valid_tags: list[Tag] | None = None
-        self._valid_tags_set: set[Tag] | None = None
+        self._valid_tags: Optional[List[Tag]] = None
+        self._valid_tags_set: Optional[Set[Tag]] = None
 
     def format_given(self) -> str:
         """
@@ -86,7 +85,7 @@ class TargetPython:
             f"{key}={value!r}" for key, value in key_values if value is not None
         )
 
-    def get_sorted_tags(self) -> list[Tag]:
+    def get_sorted_tags(self) -> List[Tag]:
         """
         Return the supported PEP 425 tags to check wheel candidates against.
 
@@ -111,7 +110,7 @@ class TargetPython:
 
         return self._valid_tags
 
-    def get_unsorted_tags(self) -> set[Tag]:
+    def get_unsorted_tags(self) -> Set[Tag]:
         """Exactly the same as get_sorted_tags, but returns a set.
 
         This is important for performance.

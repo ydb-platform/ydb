@@ -1,21 +1,16 @@
-from __future__ import annotations
-
 import dataclasses
 import re
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from pip._vendor import tomli_w
+from pip._vendor.typing_extensions import Self
 
 from pip._internal.models.direct_url import ArchiveInfo, DirInfo, VcsInfo
 from pip._internal.models.link import Link
 from pip._internal.req.req_install import InstallRequirement
 from pip._internal.utils.urls import url_to_path
-
-if TYPE_CHECKING:
-    from typing_extensions import Self
 
 PYLOCK_FILE_NAME_RE = re.compile(r"^pylock\.([^.]+)\.toml$")
 
@@ -24,70 +19,70 @@ def is_valid_pylock_file_name(path: Path) -> bool:
     return path.name == "pylock.toml" or bool(re.match(PYLOCK_FILE_NAME_RE, path.name))
 
 
-def _toml_dict_factory(data: list[tuple[str, Any]]) -> dict[str, Any]:
+def _toml_dict_factory(data: List[Tuple[str, Any]]) -> Dict[str, Any]:
     return {key.replace("_", "-"): value for key, value in data if value is not None}
 
 
 @dataclass
 class PackageVcs:
     type: str
-    url: str | None
+    url: Optional[str]
     # (not supported) path: Optional[str]
-    requested_revision: str | None
+    requested_revision: Optional[str]
     commit_id: str
-    subdirectory: str | None
+    subdirectory: Optional[str]
 
 
 @dataclass
 class PackageDirectory:
     path: str
-    editable: bool | None
-    subdirectory: str | None
+    editable: Optional[bool]
+    subdirectory: Optional[str]
 
 
 @dataclass
 class PackageArchive:
-    url: str | None
+    url: Optional[str]
     # (not supported) path: Optional[str]
     # (not supported) size: Optional[int]
     # (not supported) upload_time: Optional[datetime]
-    hashes: dict[str, str]
-    subdirectory: str | None
+    hashes: Dict[str, str]
+    subdirectory: Optional[str]
 
 
 @dataclass
 class PackageSdist:
     name: str
     # (not supported) upload_time: Optional[datetime]
-    url: str | None
+    url: Optional[str]
     # (not supported) path: Optional[str]
     # (not supported) size: Optional[int]
-    hashes: dict[str, str]
+    hashes: Dict[str, str]
 
 
 @dataclass
 class PackageWheel:
     name: str
     # (not supported) upload_time: Optional[datetime]
-    url: str | None
+    url: Optional[str]
     # (not supported) path: Optional[str]
     # (not supported) size: Optional[int]
-    hashes: dict[str, str]
+    hashes: Dict[str, str]
 
 
 @dataclass
 class Package:
     name: str
-    version: str | None = None
+    version: Optional[str] = None
     # (not supported) marker: Optional[str]
     # (not supported) requires_python: Optional[str]
     # (not supported) dependencies
-    vcs: PackageVcs | None = None
-    directory: PackageDirectory | None = None
-    archive: PackageArchive | None = None
+    vcs: Optional[PackageVcs] = None
+    directory: Optional[PackageDirectory] = None
+    archive: Optional[PackageArchive] = None
     # (not supported) index: Optional[str]
-    sdist: PackageSdist | None = None
-    wheels: list[PackageWheel] | None = None
+    sdist: Optional[PackageSdist] = None
+    wheels: Optional[List[PackageWheel]] = None
     # (not supported) attestation_identities: Optional[List[Dict[str, Any]]]
     # (not supported) tool: Optional[Dict[str, Any]]
 
@@ -167,7 +162,7 @@ class Pylock:
     # (not supported) extras: List[str] = []
     # (not supported) dependency_groups: List[str] = []
     created_by: str = "pip"
-    packages: list[Package] = dataclasses.field(default_factory=list)
+    packages: List[Package] = dataclasses.field(default_factory=list)
     # (not supported) tool: Optional[Dict[str, Any]]
 
     def as_toml(self) -> str:

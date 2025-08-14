@@ -1,7 +1,7 @@
-from __future__ import annotations
+from typing import List, Optional
 
 
-def main(args: list[str] | None = None) -> int:
+def main(args: Optional[List[str]] = None) -> int:
     """This is preserved for old console scripts that may still be referencing
     it.
 

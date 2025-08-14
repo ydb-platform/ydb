@@ -1,7 +1,5 @@
 """Utilities related archives."""
 
-from __future__ import annotations
-
 import logging
 import os
 import shutil
@@ -9,7 +7,7 @@ import stat
 import sys
 import tarfile
 import zipfile
-from collections.abc import Iterable
+from typing import Iterable, List, Optional
 from zipfile import ZipInfo
 
 from pip._internal.exceptions import InstallationError
@@ -49,7 +47,7 @@ def current_umask() -> int:
     return mask
 
 
-def split_leading_dir(path: str) -> list[str]:
+def split_leading_dir(path: str) -> List[str]:
     path = path.lstrip("/").lstrip("\\")
     if "/" in path and (
         ("\\" in path and path.find("/") < path.find("\\")) or "\\" not in path
@@ -133,7 +131,7 @@ def unzip_file(filename: str, location: str, flatten: bool = True) -> None:
                     "outside target directory ({})"
                 )
                 raise InstallationError(message.format(filename, fn, location))
-            if fn.endswith(("/", "\\")):
+            if fn.endswith("/") or fn.endswith("\\"):
                 # A directory
                 ensure_dir(fn)
             else:
@@ -309,7 +307,7 @@ def _untar_without_filter(
 def unpack_file(
     filename: str,
     location: str,
-    content_type: str | None = None,
+    content_type: Optional[str] = None,
 ) -> None:
     filename = os.path.realpath(filename)
     if (

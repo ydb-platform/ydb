@@ -1,10 +1,7 @@
-from __future__ import annotations
-
 import json
 import logging
-from collections.abc import Iterable
 from optparse import Values
-from typing import Any, Callable
+from typing import Any, Iterable, List, Optional
 
 from pip._vendor.packaging.version import Version
 
@@ -53,19 +50,16 @@ class IndexCommand(IndexGroupCommand):
         self.parser.insert_option_group(0, index_opts)
         self.parser.insert_option_group(0, self.cmd_opts)
 
-    def handler_map(self) -> dict[str, Callable[[Values, list[str]], None]]:
-        return {
+    def run(self, options: Values, args: List[str]) -> int:
+        handlers = {
             "versions": self.get_available_package_versions,
         }
 
-    def run(self, options: Values, args: list[str]) -> int:
-        handler_map = self.handler_map()
-
         # Determine action
-        if not args or args[0] not in handler_map:
+        if not args or args[0] not in handlers:
             logger.error(
                 "Need an action (%s) to perform.",
-                ", ".join(sorted(handler_map)),
+                ", ".join(sorted(handlers)),
             )
             return ERROR
 
@@ -73,7 +67,7 @@ class IndexCommand(IndexGroupCommand):
 
         # Error handling happens here, not in the action-handlers.
         try:
-            handler_map[action](options, args[1:])
+            handlers[action](options, args[1:])
         except PipError as e:
             logger.error(e.args[0])
             return ERROR
@@ -84,8 +78,8 @@ class IndexCommand(IndexGroupCommand):
         self,
         options: Values,
         session: PipSession,
-        target_python: TargetPython | None = None,
-        ignore_requires_python: bool | None = None,
+        target_python: Optional[TargetPython] = None,
+        ignore_requires_python: Optional[bool] = None,
     ) -> PackageFinder:
         """
         Create a package finder appropriate to the index command.
@@ -105,7 +99,7 @@ class IndexCommand(IndexGroupCommand):
             target_python=target_python,
         )
 
-    def get_available_package_versions(self, options: Values, args: list[Any]) -> None:
+    def get_available_package_versions(self, options: Values, args: List[Any]) -> None:
         if len(args) != 1:
             raise CommandError("You need to specify exactly one argument")
 

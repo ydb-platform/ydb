@@ -1,6 +1,7 @@
 import logging
 import os
 from optparse import Values
+from typing import List
 
 from pip._internal.cli import cmdoptions
 from pip._internal.cli.cmdoptions import make_target_python
@@ -74,7 +75,7 @@ class DownloadCommand(RequirementCommand):
         self.parser.insert_option_group(0, self.cmd_opts)
 
     @with_cleanup
-    def run(self, options: Values, args: list[str]) -> int:
+    def run(self, options: Values, args: List[str]) -> int:
         options.ignore_installed = True
         # editable doesn't really make sense for `pip download`, but the bowels
         # of the RequirementSet code require that property.
@@ -130,7 +131,7 @@ class DownloadCommand(RequirementCommand):
 
         requirement_set = resolver.resolve(reqs, check_supported_wheels=True)
 
-        downloaded: list[str] = []
+        downloaded: List[str] = []
         for req in requirement_set.requirements.values():
             if req.satisfied_by is None:
                 assert req.name is not None

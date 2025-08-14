@@ -2,11 +2,9 @@
 A module that implements tooling to enable easy warnings about deprecations.
 """
 
-from __future__ import annotations
-
 import logging
 import warnings
-from typing import Any, TextIO
+from typing import Any, Optional, TextIO, Type, Union
 
 from pip._vendor.packaging.version import parse
 
@@ -24,12 +22,12 @@ _original_showwarning: Any = None
 
 # Warnings <-> Logging Integration
 def _showwarning(
-    message: Warning | str,
-    category: type[Warning],
+    message: Union[Warning, str],
+    category: Type[Warning],
     filename: str,
     lineno: int,
-    file: TextIO | None = None,
-    line: str | None = None,
+    file: Optional[TextIO] = None,
+    line: Optional[str] = None,
 ) -> None:
     if file is not None:
         if _original_showwarning is not None:
@@ -57,10 +55,10 @@ def install_warning_logger() -> None:
 def deprecated(
     *,
     reason: str,
-    replacement: str | None,
-    gone_in: str | None,
-    feature_flag: str | None = None,
-    issue: int | None = None,
+    replacement: Optional[str],
+    gone_in: Optional[str],
+    feature_flag: Optional[str] = None,
+    issue: Optional[int] = None,
 ) -> None:
     """Helper to deprecate existing functionality.
 

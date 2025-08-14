@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from typing import Any
+from typing import Any, Optional
 
 from pip._vendor.packaging.specifiers import SpecifierSet
 from pip._vendor.packaging.utils import NormalizedName, canonicalize_name
@@ -53,8 +51,8 @@ class SpecifierRequirement(Requirement):
     def __init__(self, ireq: InstallRequirement) -> None:
         assert ireq.link is None, "This is a link, not a specifier"
         self._ireq = ireq
-        self._equal_cache: str | None = None
-        self._hash: int | None = None
+        self._equal_cache: Optional[str] = None
+        self._hash: Optional[int] = None
         self._extras = frozenset(canonicalize_name(e) for e in self._ireq.extras)
 
     @property
@@ -130,8 +128,8 @@ class SpecifierWithoutExtrasRequirement(SpecifierRequirement):
     def __init__(self, ireq: InstallRequirement) -> None:
         assert ireq.link is None, "This is a link, not a specifier"
         self._ireq = install_req_drop_extras(ireq)
-        self._equal_cache: str | None = None
-        self._hash: int | None = None
+        self._equal_cache: Optional[str] = None
+        self._hash: Optional[int] = None
         self._extras = frozenset(canonicalize_name(e) for e in self._ireq.extras)
 
     @property
@@ -161,7 +159,7 @@ class RequiresPythonRequirement(Requirement):
     def __init__(self, specifier: SpecifierSet, match: Candidate) -> None:
         self.specifier = specifier
         self._specifier_string = str(specifier)  # for faster __eq__
-        self._hash: int | None = None
+        self._hash: Optional[int] = None
         self._candidate = match
 
     def __str__(self) -> str:

@@ -1,10 +1,7 @@
-from __future__ import annotations
-
 import logging
 import string
-from collections.abc import Generator, Iterable, Iterator
 from optparse import Values
-from typing import NamedTuple
+from typing import Generator, Iterable, Iterator, List, NamedTuple, Optional
 
 from pip._vendor.packaging.requirements import InvalidRequirement
 from pip._vendor.packaging.utils import canonicalize_name
@@ -47,7 +44,7 @@ class ShowCommand(Command):
 
         self.parser.insert_option_group(0, self.cmd_opts)
 
-    def run(self, options: Values, args: list[str]) -> int:
+    def run(self, options: Values, args: List[str]) -> int:
         if not args:
             logger.warning("ERROR: Please provide a package name or names.")
             return ERROR
@@ -65,24 +62,24 @@ class _PackageInfo(NamedTuple):
     name: str
     version: str
     location: str
-    editable_project_location: str | None
-    requires: list[str]
-    required_by: list[str]
+    editable_project_location: Optional[str]
+    requires: List[str]
+    required_by: List[str]
     installer: str
     metadata_version: str
-    classifiers: list[str]
+    classifiers: List[str]
     summary: str
     homepage: str
-    project_urls: list[str]
+    project_urls: List[str]
     author: str
     author_email: str
     license: str
     license_expression: str
-    entry_points: list[str]
-    files: list[str] | None
+    entry_points: List[str]
+    files: Optional[List[str]]
 
 
-def search_packages_info(query: list[str]) -> Generator[_PackageInfo, None, None]:
+def search_packages_info(query: List[str]) -> Generator[_PackageInfo, None, None]:
     """
     Gather details from installed distributions. Print distribution name,
     version, location, and installed files. Installed files requires a
@@ -135,7 +132,7 @@ def search_packages_info(query: list[str]) -> Generator[_PackageInfo, None, None
 
         files_iter = dist.iter_declared_entries()
         if files_iter is None:
-            files: list[str] | None = None
+            files: Optional[List[str]] = None
         else:
             files = sorted(files_iter)
 

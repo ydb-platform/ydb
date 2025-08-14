@@ -434,19 +434,4 @@ DEFINE_REFCOUNTED_TYPE(TArrowFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TBlobFormatConfig
-    : public NYTree::TYsonStruct
-{
-    std::optional<std::string> PartIndexColumnName;
-    std::optional<std::string> DataColumnName;
-
-    REGISTER_YSON_STRUCT(TBlobFormatConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TBlobFormatConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NFormats

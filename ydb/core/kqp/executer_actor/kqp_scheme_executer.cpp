@@ -20,8 +20,8 @@ using namespace NThreading;
 
 namespace {
 
-bool CheckAlterAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
-    bool isDatabaseEntry = true; // first entry is always database
+static bool CheckAlterAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
+    bool isDatabase = true; // first entry is always database
 
     using TEntry = NSchemeCache::TSchemeCacheNavigate::TEntry;
 
@@ -29,15 +29,13 @@ bool CheckAlterAccess(const NACLib::TUserToken& userToken, const NSchemeCache::T
         if (!entry.SecurityObject) {
             continue;
         }
-        if (isDatabaseEntry) { // first entry is always database
-            isDatabaseEntry = false;
-            continue;
-        }
 
-        const ui32 access = NACLib::AlterSchema | NACLib::DescribeSchema;
+        const ui32 access = isDatabase ? NACLib::CreateDirectory | NACLib::CreateTable : NACLib::GenericRead | NACLib::GenericWrite;
         if (!entry.SecurityObject->CheckAccess(access, userToken)) {
             return false;
         }
+
+        isDatabase = false;
     }
 
     return true;

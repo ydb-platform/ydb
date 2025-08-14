@@ -2,6 +2,7 @@ import logging
 import os
 import shutil
 from optparse import Values
+from typing import List
 
 from pip._internal.cache import WheelCache
 from pip._internal.cli import cmdoptions
@@ -100,7 +101,7 @@ class WheelCommand(RequirementCommand):
         self.parser.insert_option_group(0, self.cmd_opts)
 
     @with_cleanup
-    def run(self, options: Values, args: list[str]) -> int:
+    def run(self, options: Values, args: List[str]) -> int:
         session = self.get_default_session(options)
 
         finder = self._build_package_finder(options, session)
@@ -145,7 +146,7 @@ class WheelCommand(RequirementCommand):
 
         requirement_set = resolver.resolve(reqs, check_supported_wheels=True)
 
-        reqs_to_build: list[InstallRequirement] = []
+        reqs_to_build: List[InstallRequirement] = []
         for req in requirement_set.requirements.values():
             if req.is_wheel:
                 preparer.save_linked_requirement(req)

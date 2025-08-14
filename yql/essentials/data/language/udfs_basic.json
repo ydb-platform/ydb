@@ -605,9 +605,6 @@
       "name": "Grep"
     },
     {
-      "name": "IsValidRegexp"
-    },
-    {
       "name": "Match"
     },
     {
@@ -635,9 +632,6 @@
     },
     {
       "name": "Grep"
-    },
-    {
-      "name": "IsValidRegexp"
     },
     {
       "name": "Match"

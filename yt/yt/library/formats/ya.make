@@ -5,7 +5,6 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 SRCS(
     arrow_parser.cpp
     arrow_writer.cpp
-    blob_writer.cpp
     dsv_parser.cpp
     dsv_writer.cpp
     escape.cpp
@@ -42,7 +41,7 @@ PEERDIR(
     yt/yt/client/formats
     yt/yt/library/column_converters
 
-    contrib/libs/apache/arrow_next
+    contrib/libs/apache/arrow
     contrib/libs/yaml
 )
 

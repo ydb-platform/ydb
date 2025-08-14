@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 import logging
 import os
+from typing import Optional
 
 from pip._vendor.pyproject_hooks import BuildBackendHookCaller, HookMissing
 
@@ -15,7 +14,7 @@ def build_wheel_editable(
     backend: BuildBackendHookCaller,
     metadata_directory: str,
     tempd: str,
-) -> str | None:
+) -> Optional[str]:
     """Build one InstallRequirement using the PEP 660 build process.
 
     Returns path to wheel if successfully built. Otherwise, returns None.

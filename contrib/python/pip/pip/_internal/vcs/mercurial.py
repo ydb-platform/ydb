@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 import configparser
 import logging
 import os
+from typing import List, Optional, Tuple
 
 from pip._internal.exceptions import BadCommand, InstallationError
 from pip._internal.utils.misc import HiddenText, display_path
@@ -31,7 +30,7 @@ class Mercurial(VersionControl):
     )
 
     @staticmethod
-    def get_base_rev_args(rev: str) -> list[str]:
+    def get_base_rev_args(rev: str) -> List[str]:
         return [f"--rev={rev}"]
 
     def fetch_new(
@@ -45,7 +44,7 @@ class Mercurial(VersionControl):
             display_path(dest),
         )
         if verbosity <= 0:
-            flags: tuple[str, ...] = ("--quiet",)
+            flags: Tuple[str, ...] = ("--quiet",)
         elif verbosity == 1:
             flags = ()
         elif verbosity == 2:
@@ -58,20 +57,9 @@ class Mercurial(VersionControl):
             cwd=dest,
         )
 
-    def switch(
-        self,
-        dest: str,
-        url: HiddenText,
-        rev_options: RevOptions,
-        verbosity: int = 0,
-    ) -> None:
-        extra_flags = []
+    def switch(self, dest: str, url: HiddenText, rev_options: RevOptions) -> None:
         repo_config = os.path.join(dest, self.dirname, "hgrc")
         config = configparser.RawConfigParser()
-
-        if verbosity <= 0:
-            extra_flags.append("-q")
-
         try:
             config.read(repo_config)
             config.set("paths", "default", url.secret)
@@ -80,23 +68,12 @@ class Mercurial(VersionControl):
         except (OSError, configparser.NoSectionError) as exc:
             logger.warning("Could not switch Mercurial repository to %s: %s", url, exc)
         else:
-            cmd_args = make_command("update", *extra_flags, rev_options.to_args())
+            cmd_args = make_command("update", "-q", rev_options.to_args())
             self.run_command(cmd_args, cwd=dest)
 
-    def update(
-        self,
-        dest: str,
-        url: HiddenText,
-        rev_options: RevOptions,
-        verbosity: int = 0,
-    ) -> None:
-        extra_flags = []
-
-        if verbosity <= 0:
-            extra_flags.append("-q")
-
-        self.run_command(["pull", *extra_flags], cwd=dest)
-        cmd_args = make_command("update", *extra_flags, rev_options.to_args())
+    def update(self, dest: str, url: HiddenText, rev_options: RevOptions) -> None:
+        self.run_command(["pull", "-q"], cwd=dest)
+        cmd_args = make_command("update", "-q", rev_options.to_args())
         self.run_command(cmd_args, cwd=dest)
 
     @classmethod
@@ -139,12 +116,12 @@ class Mercurial(VersionControl):
         return current_rev_hash
 
     @classmethod
-    def is_commit_id_equal(cls, dest: str, name: str | None) -> bool:
+    def is_commit_id_equal(cls, dest: str, name: Optional[str]) -> bool:
         """Always assume the versions don't match"""
         return False
 
     @classmethod
-    def get_subdirectory(cls, location: str) -> str | None:
+    def get_subdirectory(cls, location: str) -> Optional[str]:
         """
         Return the path to Python project root, relative to the repo root.
         Return None if the project root is in the repo root.
@@ -158,7 +135,7 @@ class Mercurial(VersionControl):
         return find_path_to_project_root_from_repo_root(location, repo_root)
 
     @classmethod
-    def get_repository_root(cls, location: str) -> str | None:
+    def get_repository_root(cls, location: str) -> Optional[str]:
         loc = super().get_repository_root(location)
         if loc:
             return loc

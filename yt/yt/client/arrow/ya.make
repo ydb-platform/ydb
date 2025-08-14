@@ -13,7 +13,7 @@ PEERDIR(
     yt/yt/client
     yt/yt/library/formats
 
-    contrib/libs/apache/arrow_next
+    contrib/libs/apache/arrow
 )
 
 END()

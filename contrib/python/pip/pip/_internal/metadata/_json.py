@@ -1,9 +1,8 @@
 # Extracted from https://github.com/pfmoore/pkg_metadata
-from __future__ import annotations
 
 from email.header import Header, decode_header, make_header
 from email.message import Message
-from typing import Any, cast
+from typing import Any, Dict, List, Union, cast
 
 METADATA_FIELDS = [
     # Name, Multiple-Use
@@ -41,10 +40,10 @@ def json_name(field: str) -> str:
     return field.lower().replace("-", "_")
 
 
-def msg_to_json(msg: Message) -> dict[str, Any]:
+def msg_to_json(msg: Message) -> Dict[str, Any]:
     """Convert a Message object into a JSON-compatible dictionary."""
 
-    def sanitise_header(h: Header | str) -> str:
+    def sanitise_header(h: Union[Header, str]) -> str:
         if isinstance(h, Header):
             chunks = []
             for bytes, encoding in decode_header(h):
@@ -66,7 +65,7 @@ def msg_to_json(msg: Message) -> dict[str, Any]:
             continue
         key = json_name(field)
         if multi:
-            value: str | list[str] = [
+            value: Union[str, List[str]] = [
                 sanitise_header(v) for v in msg.get_all(field)  # type: ignore
             ]
         else:

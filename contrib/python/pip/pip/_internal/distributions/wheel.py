@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from pip._vendor.packaging.utils import canonicalize_name
 
@@ -12,7 +10,7 @@ from pip._internal.metadata import (
 )
 
 if TYPE_CHECKING:
-    from pip._internal.build_env import BuildEnvironmentInstaller
+    from pip._internal.index.package_finder import PackageFinder
 
 
 class WheelDistribution(AbstractDistribution):
@@ -22,7 +20,7 @@ class WheelDistribution(AbstractDistribution):
     """
 
     @property
-    def build_tracker_id(self) -> str | None:
+    def build_tracker_id(self) -> Optional[str]:
         return None
 
     def get_metadata_distribution(self) -> BaseDistribution:
@@ -37,7 +35,7 @@ class WheelDistribution(AbstractDistribution):
 
     def prepare_distribution_metadata(
         self,
-        build_env_installer: BuildEnvironmentInstaller,
+        finder: "PackageFinder",
         build_isolation: bool,
         check_build_deps: bool,
     ) -> None:

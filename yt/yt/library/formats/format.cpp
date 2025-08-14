@@ -2,7 +2,6 @@
 
 #include "arrow_parser.h"
 #include "arrow_writer.h"
-#include "blob_writer.h"
 #include "dsv_parser.h"
 #include "dsv_writer.h"
 #include "protobuf_parser.h"
@@ -354,14 +353,6 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
                 nameTable,
                 tableSchemas,
                 columns,
-                std::move(output),
-                enableContextSaving,
-                controlAttributesConfig,
-                keyColumnCount);
-        case EFormatType::Blob:
-            return CreateSchemalessWriterForBlob(
-                format.Attributes(),
-                nameTable,
                 std::move(output),
                 enableContextSaving,
                 controlAttributesConfig,

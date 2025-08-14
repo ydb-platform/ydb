@@ -10,14 +10,11 @@ for sub-dependencies
     a. "first found, wins" (where the order is breadth first)
 """
 
-from __future__ import annotations
-
 import logging
 import sys
 from collections import defaultdict
-from collections.abc import Iterable
 from itertools import chain
-from typing import Optional
+from typing import DefaultDict, Iterable, List, Optional, Set, Tuple
 
 from pip._vendor.packaging import specifiers
 from pip._vendor.packaging.requirements import Requirement
@@ -52,12 +49,12 @@ from pip._internal.utils.packaging import check_requires_python
 
 logger = logging.getLogger(__name__)
 
-DiscoveredDependencies = defaultdict[Optional[str], list[InstallRequirement]]
+DiscoveredDependencies = DefaultDict[Optional[str], List[InstallRequirement]]
 
 
 def _check_dist_requires_python(
     dist: BaseDistribution,
-    version_info: tuple[int, int, int],
+    version_info: Tuple[int, int, int],
     ignore_requires_python: bool = False,
 ) -> None:
     """
@@ -120,7 +117,7 @@ class Resolver(BaseResolver):
         self,
         preparer: RequirementPreparer,
         finder: PackageFinder,
-        wheel_cache: WheelCache | None,
+        wheel_cache: Optional[WheelCache],
         make_install_req: InstallRequirementProvider,
         use_user_site: bool,
         ignore_dependencies: bool,
@@ -128,7 +125,7 @@ class Resolver(BaseResolver):
         ignore_requires_python: bool,
         force_reinstall: bool,
         upgrade_strategy: str,
-        py_version_info: tuple[int, ...] | None = None,
+        py_version_info: Optional[Tuple[int, ...]] = None,
     ) -> None:
         super().__init__()
         assert upgrade_strategy in self._allowed_strategies
@@ -155,7 +152,7 @@ class Resolver(BaseResolver):
         self._discovered_dependencies: DiscoveredDependencies = defaultdict(list)
 
     def resolve(
-        self, root_reqs: list[InstallRequirement], check_supported_wheels: bool
+        self, root_reqs: List[InstallRequirement], check_supported_wheels: bool
     ) -> RequirementSet:
         """Resolve what operations need to be done
 
@@ -177,7 +174,7 @@ class Resolver(BaseResolver):
         # exceptions cannot be checked ahead of time, because
         # _populate_link() needs to be called before we can make decisions
         # based on link type.
-        discovered_reqs: list[InstallRequirement] = []
+        discovered_reqs: List[InstallRequirement] = []
         hash_errors = HashErrors()
         for req in chain(requirement_set.all_requirements, discovered_reqs):
             try:
@@ -195,9 +192,9 @@ class Resolver(BaseResolver):
         self,
         requirement_set: RequirementSet,
         install_req: InstallRequirement,
-        parent_req_name: str | None = None,
-        extras_requested: Iterable[str] | None = None,
-    ) -> tuple[list[InstallRequirement], InstallRequirement | None]:
+        parent_req_name: Optional[str] = None,
+        extras_requested: Optional[Iterable[str]] = None,
+    ) -> Tuple[List[InstallRequirement], Optional[InstallRequirement]]:
         """Add install_req as a requirement to install.
 
         :param parent_req_name: The name of the requirement that needed this
@@ -245,8 +242,8 @@ class Resolver(BaseResolver):
             return [install_req], None
 
         try:
-            existing_req: InstallRequirement | None = requirement_set.get_requirement(
-                install_req.name
+            existing_req: Optional[InstallRequirement] = (
+                requirement_set.get_requirement(install_req.name)
             )
         except KeyError:
             existing_req = None
@@ -326,7 +323,9 @@ class Resolver(BaseResolver):
             req.should_reinstall = True
         req.satisfied_by = None
 
-    def _check_skip_installed(self, req_to_install: InstallRequirement) -> str | None:
+    def _check_skip_installed(
+        self, req_to_install: InstallRequirement
+    ) -> Optional[str]:
         """Check if req_to_install should be skipped.
 
         This will check if the req is installed, and whether we should upgrade
@@ -378,7 +377,7 @@ class Resolver(BaseResolver):
         self._set_req_to_reinstall(req_to_install)
         return None
 
-    def _find_requirement_link(self, req: InstallRequirement) -> Link | None:
+    def _find_requirement_link(self, req: InstallRequirement) -> Optional[Link]:
         upgrade = self._is_upgrade_allowed(req)
         best_candidate = self.finder.find_requirement(req, upgrade)
         if not best_candidate:
@@ -489,7 +488,7 @@ class Resolver(BaseResolver):
         self,
         requirement_set: RequirementSet,
         req_to_install: InstallRequirement,
-    ) -> list[InstallRequirement]:
+    ) -> List[InstallRequirement]:
         """Prepare a single requirements file.
 
         :return: A list of additional InstallRequirements to also install.
@@ -512,7 +511,7 @@ class Resolver(BaseResolver):
             ignore_requires_python=self.ignore_requires_python,
         )
 
-        more_reqs: list[InstallRequirement] = []
+        more_reqs: List[InstallRequirement] = []
 
         def add_req(subreq: Requirement, extras_requested: Iterable[str]) -> None:
             # This idiosyncratically converts the Requirement to str and let
@@ -570,7 +569,7 @@ class Resolver(BaseResolver):
 
     def get_installation_order(
         self, req_set: RequirementSet
-    ) -> list[InstallRequirement]:
+    ) -> List[InstallRequirement]:
         """Create the installation order.
 
         The installation order is topological - requirements are installed
@@ -581,7 +580,7 @@ class Resolver(BaseResolver):
         # installs the user specified things in the order given, except when
         # dependencies must come earlier to achieve topological order.
         order = []
-        ordered_reqs: set[InstallRequirement] = set()
+        ordered_reqs: Set[InstallRequirement] = set()
 
         def schedule(req: InstallRequirement) -> None:
             if req.satisfied_by or req in ordered_reqs:

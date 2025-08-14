@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from typing import Dict, Generator
 
 from pip._vendor.requests.models import Response
 
@@ -23,7 +23,7 @@ from pip._internal.exceptions import NetworkConnectionError
 # you're not asking for a compressed file and will then decompress it
 # before sending because if that's the case I don't think it'll ever be
 # possible to make this work.
-HEADERS: dict[str, str] = {"Accept-Encoding": "identity"}
+HEADERS: Dict[str, str] = {"Accept-Encoding": "identity"}
 
 DOWNLOAD_CHUNK_SIZE = 256 * 1024
 

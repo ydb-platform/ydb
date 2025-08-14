@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import datetime
 import functools
 import hashlib
@@ -9,7 +7,7 @@ import optparse
 import os.path
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Dict, Optional
 
 from pip._vendor.packaging.version import Version
 from pip._vendor.packaging.version import parse as parse_version
@@ -56,7 +54,7 @@ def _convert_date(isodate: str) -> datetime.datetime:
 
 class SelfCheckState:
     def __init__(self, cache_dir: str) -> None:
-        self._state: dict[str, Any] = {}
+        self._state: Dict[str, Any] = {}
         self._statefile_path = None
 
         # Try to load the existing state
@@ -76,7 +74,7 @@ class SelfCheckState:
     def key(self) -> str:
         return sys.prefix
 
-    def get(self, current_time: datetime.datetime) -> str | None:
+    def get(self, current_time: datetime.datetime) -> Optional[str]:
         """Check if we have a not-outdated version loaded already."""
         if not self._state:
             return None
@@ -167,7 +165,7 @@ def was_installed_by_pip(pkg: str) -> bool:
 
 def _get_current_remote_pip_version(
     session: PipSession, options: optparse.Values
-) -> str | None:
+) -> Optional[str]:
     # Lets use PackageFinder to see what the latest pip version is
     link_collector = LinkCollector.create(
         session,
@@ -198,8 +196,8 @@ def _self_version_check_logic(
     state: SelfCheckState,
     current_time: datetime.datetime,
     local_version: Version,
-    get_remote_version: Callable[[], str | None],
-) -> UpgradePrompt | None:
+    get_remote_version: Callable[[], Optional[str]],
+) -> Optional[UpgradePrompt]:
     remote_version_str = state.get(current_time)
     if remote_version_str is None:
         remote_version_str = get_remote_version()

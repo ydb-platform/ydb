@@ -5,14 +5,11 @@ need PackageFinder capability don't unnecessarily import the
 PackageFinder machinery and all its vendored dependencies, etc.
 """
 
-from __future__ import annotations
-
 import logging
 from functools import partial
 from optparse import Values
-from typing import Any
+from typing import Any, List, Optional, Tuple
 
-from pip._internal.build_env import SubprocessBuildEnvironmentInstaller
 from pip._internal.cache import WheelCache
 from pip._internal.cli import cmdoptions
 from pip._internal.cli.index_command import IndexGroupCommand
@@ -61,8 +58,8 @@ def with_cleanup(func: Any) -> Any:
             registry.set_delete(t, False)
 
     def wrapper(
-        self: RequirementCommand, options: Values, args: list[Any]
-    ) -> int | None:
+        self: RequirementCommand, options: Values, args: List[Any]
+    ) -> Optional[int]:
         assert self.tempdir_registry is not None
         if options.no_clean:
             configure_tempdir_registry(self.tempdir_registry)
@@ -103,7 +100,7 @@ class RequirementCommand(IndexGroupCommand):
         session: PipSession,
         finder: PackageFinder,
         use_user_site: bool,
-        download_dir: str | None = None,
+        download_dir: Optional[str] = None,
         verbosity: int = 0,
     ) -> RequirementPreparer:
         """
@@ -137,7 +134,6 @@ class RequirementCommand(IndexGroupCommand):
             src_dir=options.src_dir,
             download_dir=download_dir,
             build_isolation=options.build_isolation,
-            build_isolation_installer=SubprocessBuildEnvironmentInstaller(finder),
             check_build_deps=options.check_build_deps,
             build_tracker=build_tracker,
             session=session,
@@ -157,14 +153,14 @@ class RequirementCommand(IndexGroupCommand):
         preparer: RequirementPreparer,
         finder: PackageFinder,
         options: Values,
-        wheel_cache: WheelCache | None = None,
+        wheel_cache: Optional[WheelCache] = None,
         use_user_site: bool = False,
         ignore_installed: bool = True,
         ignore_requires_python: bool = False,
         force_reinstall: bool = False,
         upgrade_strategy: str = "to-satisfy-only",
-        use_pep517: bool | None = None,
-        py_version_info: tuple[int, ...] | None = None,
+        use_pep517: Optional[bool] = None,
+        py_version_info: Optional[Tuple[int, ...]] = None,
     ) -> BaseResolver:
         """
         Create a Resolver instance for the given parameters.
@@ -212,15 +208,15 @@ class RequirementCommand(IndexGroupCommand):
 
     def get_requirements(
         self,
-        args: list[str],
+        args: List[str],
         options: Values,
         finder: PackageFinder,
         session: PipSession,
-    ) -> list[InstallRequirement]:
+    ) -> List[InstallRequirement]:
         """
         Parse command-line arguments into the corresponding requirements.
         """
-        requirements: list[InstallRequirement] = []
+        requirements: List[InstallRequirement] = []
         for filename in options.constraints:
             for parsed_req in parse_requirements(
                 filename,
@@ -326,8 +322,8 @@ class RequirementCommand(IndexGroupCommand):
         self,
         options: Values,
         session: PipSession,
-        target_python: TargetPython | None = None,
-        ignore_requires_python: bool | None = None,
+        target_python: Optional[TargetPython] = None,
+        ignore_requires_python: Optional[bool] = None,
     ) -> PackageFinder:
         """
         Create a package finder appropriate to this requirement command.

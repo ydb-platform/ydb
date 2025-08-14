@@ -1,9 +1,13 @@
-from __future__ import annotations
-
 import importlib.util
 import os
+import sys
 from collections import namedtuple
-from typing import Any
+from typing import Any, List, Optional
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    from pip._vendor import tomli as tomllib
 
 from pip._vendor.packaging.requirements import InvalidRequirement
 
@@ -12,7 +16,6 @@ from pip._internal.exceptions import (
     InvalidPyProjectBuildRequires,
     MissingPyProjectBuildRequires,
 )
-from pip._internal.utils.compat import tomllib
 from pip._internal.utils.packaging import get_requirement
 
 
@@ -30,8 +33,8 @@ BuildSystemDetails = namedtuple(
 
 
 def load_pyproject_toml(
-    use_pep517: bool | None, pyproject_toml: str, setup_py: str, req_name: str
-) -> BuildSystemDetails | None:
+    use_pep517: Optional[bool], pyproject_toml: str, setup_py: str, req_name: str
+) -> Optional[BuildSystemDetails]:
     """Load the pyproject.toml file.
 
     Parameters:
@@ -163,7 +166,7 @@ def load_pyproject_toml(
 
     backend = build_system.get("build-backend")
     backend_path = build_system.get("backend-path", [])
-    check: list[str] = []
+    check: List[str] = []
     if backend is None:
         # If the user didn't specify a backend, we assume they want to use
         # the setuptools backend. But we can't be sure they have included

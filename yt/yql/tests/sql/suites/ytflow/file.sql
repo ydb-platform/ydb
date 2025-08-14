@@ -3,8 +3,10 @@ use plato;
 pragma Engine = "ytflow";
 
 pragma Ytflow.Cluster = "plato";
-pragma Ytflow.PipelineDirectory = "pipelines";
-pragma Ytflow.PipelineName = "test";
+pragma Ytflow.PipelinePath = "pipeline";
+
+pragma Ytflow.YtConsumerPath = "consumers/main_consumer";
+pragma Ytflow.YtProducerPath = "consumers/main_producer";
 
 $suffix = FileContent("file.txt");
 $delta = Cast(FileContent("http_file.txt") as Int64);

@@ -1128,11 +1128,9 @@ TFiberCanceler GetCurrentFiberCanceler()
 
 void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
 {
-    YT_VERIFY(future);
-    YT_VERIFY(invoker);
-
-    NThreading::VerifyNoSpinLockAffinity();
     YT_VERIFY(!IsContextSwitchForbidden());
+    YT_VERIFY(future);
+    YT_ASSERT(invoker);
 
     auto* currentFiber = NDetail::TryGetCurrentFiber();
     if (!currentFiber) {
@@ -1143,6 +1141,7 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
         return;
     }
 
+    NThreading::VerifyNoSpinLockAffinity();
     YT_VERIFY(invoker != GetSyncInvoker());
 
     // Ensure canceler created.

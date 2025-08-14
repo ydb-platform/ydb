@@ -1,13 +1,10 @@
 """Logic that powers autocompletion installed by ``pip completion``."""
 
-from __future__ import annotations
-
 import optparse
 import os
 import sys
-from collections.abc import Iterable
 from itertools import chain
-from typing import Any
+from typing import Any, Iterable, List, Optional
 
 from pip._internal.cli.main_parser import create_main_parser
 from pip._internal.commands import commands_dict, create_command
@@ -35,7 +32,7 @@ def autocomplete() -> None:
     options = []
 
     # subcommand
-    subcommand_name: str | None = None
+    subcommand_name: Optional[str] = None
     for word in cwords:
         if word in subcommands:
             subcommand_name = word
@@ -103,12 +100,6 @@ def autocomplete() -> None:
             if option[1] and option[0][:2] == "--":
                 opt_label += "="
             print(opt_label)
-
-        # Complete sub-commands (unless one is already given).
-        if not any(name in cwords for name in subcommand.handler_map()):
-            for handler_name in subcommand.handler_map():
-                if handler_name.startswith(current):
-                    print(handler_name)
     else:
         # show main parser options only when necessary
 
@@ -130,8 +121,8 @@ def autocomplete() -> None:
 
 
 def get_path_completion_type(
-    cwords: list[str], cword: int, opts: Iterable[Any]
-) -> str | None:
+    cwords: List[str], cword: int, opts: Iterable[Any]
+) -> Optional[str]:
     """Get the type of path completion (``file``, ``dir``, ``path`` or None)
 
     :param cwords: same as the environmental variable ``COMP_WORDS``

@@ -18,7 +18,6 @@ CREATE_TABLE_GRANTS = ['ydb.granular.create_table']
 ALTER_TABLE_ADD_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_DROP_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ERASE_ROW_GRANTS = ['ydb.granular.describe_schema', 'ydb.granular.select_row', 'ydb.granular.erase_row']
-ALTER_TABLE_CREATE_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_ALTER_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_DROP_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 DROP_TABLE_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
@@ -28,6 +27,21 @@ READ_TOPIC_GRANTS = []
 ALTER_TABLE_DROP_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 CREATE_TOPIC_GRANTS = ['ydb.granular.create_queue']
 DROP_TOPIC_GRANTS = ['ydb.granular.remove_schema']
+ALL_USED_GRANS = set(
+    CREATE_TABLE_GRANTS
+    + ALTER_TABLE_ADD_COLUMN_GRANTS
+    + ALTER_TABLE_DROP_COLUMN_GRANTS
+    + ERASE_ROW_GRANTS
+    + ALTER_TABLE_ALTER_INDEX_GRANTS
+    + ALTER_TABLE_DROP_INDEX_GRANTS
+    + DROP_TABLE_GRANTS
+    + ALTER_TABLE_ADD_CHANGEFEED_GRANTS
+    + ALTER_TOPIC_ADD_CONSUMER_GRANTS
+    + READ_TOPIC_GRANTS
+    + ALTER_TABLE_DROP_CHANGEFEED_GRANTS
+    + CREATE_TOPIC_GRANTS
+    + DROP_TOPIC_GRANTS
+)
 
 
 def run_query(config, query):
@@ -57,25 +71,29 @@ def create_user(ydb_cluster, admin_config, user_name):
     )
 
 
-def revoke_all_grants(admin_config, user_name, object_name):
-    run_with_assert(admin_config, f"REVOKE all ON `{object_name}` FROM {user_name};")
+def revoke_grants(admin_config, user_name, object_name, all_grants):
+    if all_grants is None or len(all_grants) == 0:
+        return
+
+    revoke_grants_query = ''
+    for grant in all_grants:
+        revoke_grants_query += f"REVOKE '{grant}' ON `{object_name}` FROM {user_name};"
+    run_with_assert(admin_config, revoke_grants_query)
 
 
 def provide_grants(admin_config, user_name, object_name, required_grants):
     if required_grants is None or len(required_grants) == 0:
         return
 
-    grants = ""
+    provide_grants_query = ''
     for grant in required_grants:
-        if grants:
-            grants += ", "
-        grants += f"'{grant}'"
-
-    run_with_assert(admin_config, f"GRANT {grants} ON `{object_name}` TO {user_name};")
+        assert grant in ALL_USED_GRANS, 'Keep ALL_USED_GRANS updated with all used grants'
+        provide_grants_query += f"GRANT '{grant}' ON `{object_name}` TO {user_name};"
+    run_with_assert(admin_config, provide_grants_query)
 
 
 def _test_grants(admin_config, user_config, user_name, query, object_name, required_grants, expected_err):
-    revoke_all_grants(admin_config, user_name, object_name)
+    revoke_grants(admin_config, user_name, object_name, ALL_USED_GRANS)
     if required_grants is not None and len(required_grants) > 0:  # means the query does not require any grants
         run_with_assert(user_config, query, expected_err=expected_err)
         provide_grants(admin_config, user_name, object_name, required_grants)
@@ -146,12 +164,12 @@ def test_granular_grants_for_tables(ydb_cluster):
     create_index_query = f"ALTER TABLE `{TABLE_PATH}` ADD INDEX `b_column_index` GLOBAL ON (`b`);"
     _test_grants(
         tenant_admin_config,
-        user2_config,
-        'user2',
+        user1_config,
+        'user1',
         create_index_query,
         TABLE_PATH,
-        ALTER_TABLE_CREATE_INDEX_GRANTS,
-        "you do not have access permissions",
+        [],  # user1 is the owner of a table
+        "",
     )
 
     # ALTER TABLE ... ALTER INDEX

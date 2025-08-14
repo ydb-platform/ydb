@@ -1,15 +1,20 @@
 """Validation of dependencies of packages"""
 
-from __future__ import annotations
-
 import logging
-from collections.abc import Generator, Iterable
 from contextlib import suppress
 from email.parser import Parser
 from functools import reduce
 from typing import (
     Callable,
+    Dict,
+    FrozenSet,
+    Generator,
+    Iterable,
+    List,
     NamedTuple,
+    Optional,
+    Set,
+    Tuple,
 )
 
 from pip._vendor.packaging.requirements import Requirement
@@ -27,21 +32,21 @@ logger = logging.getLogger(__name__)
 
 class PackageDetails(NamedTuple):
     version: Version
-    dependencies: list[Requirement]
+    dependencies: List[Requirement]
 
 
 # Shorthands
-PackageSet = dict[NormalizedName, PackageDetails]
-Missing = tuple[NormalizedName, Requirement]
-Conflicting = tuple[NormalizedName, Version, Requirement]
+PackageSet = Dict[NormalizedName, PackageDetails]
+Missing = Tuple[NormalizedName, Requirement]
+Conflicting = Tuple[NormalizedName, Version, Requirement]
 
-MissingDict = dict[NormalizedName, list[Missing]]
-ConflictingDict = dict[NormalizedName, list[Conflicting]]
-CheckResult = tuple[MissingDict, ConflictingDict]
-ConflictDetails = tuple[PackageSet, CheckResult]
+MissingDict = Dict[NormalizedName, List[Missing]]
+ConflictingDict = Dict[NormalizedName, List[Conflicting]]
+CheckResult = Tuple[MissingDict, ConflictingDict]
+ConflictDetails = Tuple[PackageSet, CheckResult]
 
 
-def create_package_set_from_installed() -> tuple[PackageSet, bool]:
+def create_package_set_from_installed() -> Tuple[PackageSet, bool]:
     """Converts a list of distributions into a PackageSet."""
     package_set = {}
     problems = False
@@ -59,7 +64,7 @@ def create_package_set_from_installed() -> tuple[PackageSet, bool]:
 
 
 def check_package_set(
-    package_set: PackageSet, should_ignore: Callable[[str], bool] | None = None
+    package_set: PackageSet, should_ignore: Optional[Callable[[str], bool]] = None
 ) -> CheckResult:
     """Check if a package set is consistent
 
@@ -72,8 +77,8 @@ def check_package_set(
 
     for package_name, package_detail in package_set.items():
         # Info about dependencies of package_name
-        missing_deps: set[Missing] = set()
-        conflicting_deps: set[Conflicting] = set()
+        missing_deps: Set[Missing] = set()
+        conflicting_deps: Set[Conflicting] = set()
 
         if should_ignore and should_ignore(package_name):
             continue
@@ -103,7 +108,7 @@ def check_package_set(
     return missing, conflicting
 
 
-def check_install_conflicts(to_install: list[InstallRequirement]) -> ConflictDetails:
+def check_install_conflicts(to_install: List[InstallRequirement]) -> ConflictDetails:
     """For checking if the dependency graph would be consistent after \
     installing given requirements
     """
@@ -130,7 +135,7 @@ def check_unsupported(
     for p in packages:
         with suppress(FileNotFoundError):
             wheel_file = p.read_text("WHEEL")
-            wheel_tags: frozenset[Tag] = reduce(
+            wheel_tags: FrozenSet[Tag] = reduce(
                 frozenset.union,
                 map(parse_tag, Parser().parsestr(wheel_file).get_all("Tag", [])),
                 frozenset(),
@@ -140,8 +145,8 @@ def check_unsupported(
 
 
 def _simulate_installation_of(
-    to_install: list[InstallRequirement], package_set: PackageSet
-) -> set[NormalizedName]:
+    to_install: List[InstallRequirement], package_set: PackageSet
+) -> Set[NormalizedName]:
     """Computes the version of packages after installing to_install."""
     # Keep track of packages that were installed
     installed = set()
@@ -159,8 +164,8 @@ def _simulate_installation_of(
 
 
 def _create_whitelist(
-    would_be_installed: set[NormalizedName], package_set: PackageSet
-) -> set[NormalizedName]:
+    would_be_installed: Set[NormalizedName], package_set: PackageSet
+) -> Set[NormalizedName]:
     packages_affected = set(would_be_installed)
 
     for package_name in package_set:

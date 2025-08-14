@@ -1,9 +1,9 @@
-from __future__ import annotations
+from typing import List, Optional
 
-__version__ = "25.2"
+__version__ = "25.1.1"
 
 
-def main(args: list[str] | None = None) -> int:
+def main(args: Optional[List[str]] = None) -> int:
     """This is an internal API only meant for use by pip's own console scripts.
 
     For additional details, see https://github.com/pypa/pip/issues/7498.

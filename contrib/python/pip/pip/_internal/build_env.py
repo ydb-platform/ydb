@@ -1,7 +1,5 @@
 """Build Environment used for isolation during sdist building"""
 
-from __future__ import annotations
-
 import logging
 import os
 import pathlib
@@ -9,9 +7,8 @@ import site
 import sys
 import textwrap
 from collections import OrderedDict
-from collections.abc import Iterable
 from types import TracebackType
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Iterable, List, Optional, Set, Tuple, Type, Union
 
 from pip._vendor.packaging.version import Version
 
@@ -26,12 +23,11 @@ from pip._internal.utils.temp_dir import TempDirectory, tempdir_kinds
 
 if TYPE_CHECKING:
     from pip._internal.index.package_finder import PackageFinder
-    from pip._internal.req.req_install import InstallRequirement
 
 logger = logging.getLogger(__name__)
 
 
-def _dedup(a: str, b: str) -> tuple[str] | tuple[str, str]:
+def _dedup(a: str, b: str) -> Union[Tuple[str], Tuple[str, str]]:
     return (a, b) if a != b else (a,)
 
 
@@ -60,7 +56,7 @@ def get_runnable_pip() -> str:
     return os.fsdecode(source / "__pip-runner__.py")
 
 
-def _get_system_sitepackages() -> set[str]:
+def _get_system_sitepackages() -> Set[str]:
     """Get system site packages
 
     Usually from site.getsitepackages,
@@ -80,108 +76,10 @@ def _get_system_sitepackages() -> set[str]:
     return {os.path.normcase(path) for path in system_sites}
 
 
-class BuildEnvironmentInstaller(Protocol):
-    """
-    Interface for installing build dependencies into an isolated build
-    environment.
-    """
-
-    def install(
-        self,
-        requirements: Iterable[str],
-        prefix: _Prefix,
-        *,
-        kind: str,
-        for_req: InstallRequirement | None,
-    ) -> None: ...
-
-
-class SubprocessBuildEnvironmentInstaller:
-    """
-    Install build dependencies by calling pip in a subprocess.
-    """
-
-    def __init__(self, finder: PackageFinder) -> None:
-        self.finder = finder
-
-    def install(
-        self,
-        requirements: Iterable[str],
-        prefix: _Prefix,
-        *,
-        kind: str,
-        for_req: InstallRequirement | None,
-    ) -> None:
-        finder = self.finder
-        args: list[str] = [
-            sys.executable,
-            get_runnable_pip(),
-            "install",
-            "--ignore-installed",
-            "--no-user",
-            "--prefix",
-            prefix.path,
-            "--no-warn-script-location",
-            "--disable-pip-version-check",
-            # As the build environment is ephemeral, it's wasteful to
-            # pre-compile everything, especially as not every Python
-            # module will be used/compiled in most cases.
-            "--no-compile",
-            # The prefix specified two lines above, thus
-            # target from config file or env var should be ignored
-            "--target",
-            "",
-        ]
-        if logger.getEffectiveLevel() <= logging.DEBUG:
-            args.append("-vv")
-        elif logger.getEffectiveLevel() <= VERBOSE:
-            args.append("-v")
-        for format_control in ("no_binary", "only_binary"):
-            formats = getattr(finder.format_control, format_control)
-            args.extend(
-                (
-                    "--" + format_control.replace("_", "-"),
-                    ",".join(sorted(formats or {":none:"})),
-                )
-            )
-
-        index_urls = finder.index_urls
-        if index_urls:
-            args.extend(["-i", index_urls[0]])
-            for extra_index in index_urls[1:]:
-                args.extend(["--extra-index-url", extra_index])
-        else:
-            args.append("--no-index")
-        for link in finder.find_links:
-            args.extend(["--find-links", link])
-
-        if finder.proxy:
-            args.extend(["--proxy", finder.proxy])
-        for host in finder.trusted_hosts:
-            args.extend(["--trusted-host", host])
-        if finder.custom_cert:
-            args.extend(["--cert", finder.custom_cert])
-        if finder.client_cert:
-            args.extend(["--client-cert", finder.client_cert])
-        if finder.allow_all_prereleases:
-            args.append("--pre")
-        if finder.prefer_binary:
-            args.append("--prefer-binary")
-        args.append("--")
-        args.extend(requirements)
-        with open_spinner(f"Installing {kind}") as spinner:
-            call_subprocess(
-                args,
-                command_desc=f"pip subprocess to install {kind}",
-                spinner=spinner,
-            )
-
-
 class BuildEnvironment:
     """Creates and manages an isolated environment to install build deps"""
 
-    def __init__(self, installer: BuildEnvironmentInstaller) -> None:
-        self.installer = installer
+    def __init__(self) -> None:
         temp_dir = TempDirectory(kind=tempdir_kinds.BUILD_ENV, globally_managed=True)
 
         self._prefixes = OrderedDict(
@@ -189,8 +87,8 @@ class BuildEnvironment:
             for name in ("normal", "overlay")
         )
 
-        self._bin_dirs: list[str] = []
-        self._lib_dirs: list[str] = []
+        self._bin_dirs: List[str] = []
+        self._lib_dirs: List[str] = []
         for prefix in reversed(list(self._prefixes.values())):
             self._bin_dirs.append(prefix.bin_dir)
             self._lib_dirs.extend(prefix.lib_dirs)
@@ -258,9 +156,9 @@ class BuildEnvironment:
 
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
     ) -> None:
         for varname, old_value in self._save_env.items():
             if old_value is None:
@@ -270,7 +168,7 @@ class BuildEnvironment:
 
     def check_requirements(
         self, reqs: Iterable[str]
-    ) -> tuple[set[tuple[str, str]], set[str]]:
+    ) -> Tuple[Set[Tuple[str, str]], Set[str]]:
         """Return 2 sets:
         - conflicting requirements: set of (installed, wanted) reqs tuples
         - missing requirements: set of reqs
@@ -304,18 +202,96 @@ class BuildEnvironment:
 
     def install_requirements(
         self,
+        finder: "PackageFinder",
         requirements: Iterable[str],
         prefix_as_string: str,
         *,
         kind: str,
-        for_req: InstallRequirement | None = None,
     ) -> None:
         prefix = self._prefixes[prefix_as_string]
         assert not prefix.setup
         prefix.setup = True
         if not requirements:
             return
-        self.installer.install(requirements, prefix, kind=kind, for_req=for_req)
+        self._install_requirements(
+            get_runnable_pip(),
+            finder,
+            requirements,
+            prefix,
+            kind=kind,
+        )
+
+    @staticmethod
+    def _install_requirements(
+        pip_runnable: str,
+        finder: "PackageFinder",
+        requirements: Iterable[str],
+        prefix: _Prefix,
+        *,
+        kind: str,
+    ) -> None:
+        args: List[str] = [
+            sys.executable,
+            pip_runnable,
+            "install",
+            "--ignore-installed",
+            "--no-user",
+            "--prefix",
+            prefix.path,
+            "--no-warn-script-location",
+            "--disable-pip-version-check",
+            # As the build environment is ephemeral, it's wasteful to
+            # pre-compile everything, especially as not every Python
+            # module will be used/compiled in most cases.
+            "--no-compile",
+            # The prefix specified two lines above, thus
+            # target from config file or env var should be ignored
+            "--target",
+            "",
+        ]
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            args.append("-vv")
+        elif logger.getEffectiveLevel() <= VERBOSE:
+            args.append("-v")
+        for format_control in ("no_binary", "only_binary"):
+            formats = getattr(finder.format_control, format_control)
+            args.extend(
+                (
+                    "--" + format_control.replace("_", "-"),
+                    ",".join(sorted(formats or {":none:"})),
+                )
+            )
+
+        index_urls = finder.index_urls
+        if index_urls:
+            args.extend(["-i", index_urls[0]])
+            for extra_index in index_urls[1:]:
+                args.extend(["--extra-index-url", extra_index])
+        else:
+            args.append("--no-index")
+        for link in finder.find_links:
+            args.extend(["--find-links", link])
+
+        if finder.proxy:
+            args.extend(["--proxy", finder.proxy])
+        for host in finder.trusted_hosts:
+            args.extend(["--trusted-host", host])
+        if finder.custom_cert:
+            args.extend(["--cert", finder.custom_cert])
+        if finder.client_cert:
+            args.extend(["--client-cert", finder.client_cert])
+        if finder.allow_all_prereleases:
+            args.append("--pre")
+        if finder.prefer_binary:
+            args.append("--prefer-binary")
+        args.append("--")
+        args.extend(requirements)
+        with open_spinner(f"Installing {kind}") as spinner:
+            call_subprocess(
+                args,
+                command_desc=f"pip subprocess to install {kind}",
+                spinner=spinner,
+            )
 
 
 class NoOpBuildEnvironment(BuildEnvironment):
@@ -329,9 +305,9 @@ class NoOpBuildEnvironment(BuildEnvironment):
 
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
     ) -> None:
         pass
 
@@ -340,10 +316,10 @@ class NoOpBuildEnvironment(BuildEnvironment):
 
     def install_requirements(
         self,
+        finder: "PackageFinder",
         requirements: Iterable[str],
         prefix_as_string: str,
         *,
         kind: str,
-        for_req: InstallRequirement | None = None,
     ) -> None:
         raise NotImplementedError()

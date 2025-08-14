@@ -22,20 +22,26 @@ from typing import (
     Dict,
     Iterable,
     List,
-    Literal,
     Mapping,
     NamedTuple,
     Optional,
-    Protocol,
     TextIO,
     Tuple,
     Type,
     Union,
     cast,
-    runtime_checkable,
 )
 
 from pip._vendor.rich._null_file import NULL_FILE
+
+if sys.version_info >= (3, 8):
+    from typing import Literal, Protocol, runtime_checkable
+else:
+    from pip._vendor.typing_extensions import (
+        Literal,
+        Protocol,
+        runtime_checkable,
+    )  # pragma: no cover
 
 from . import errors, themes
 from ._emoji_replace import _emoji_replace
@@ -733,14 +739,6 @@ class Console:
             if no_color is not None
             else self._environ.get("NO_COLOR", "") != ""
         )
-        if force_interactive is None:
-            tty_interactive = self._environ.get("TTY_INTERACTIVE", None)
-            if tty_interactive is not None:
-                if tty_interactive == "0":
-                    force_interactive = False
-                elif tty_interactive == "1":
-                    force_interactive = True
-
         self.is_interactive = (
             (self.is_terminal and not self.is_dumb_terminal)
             if force_interactive is None
@@ -753,7 +751,7 @@ class Console:
         )
         self._record_buffer: List[Segment] = []
         self._render_hooks: List[RenderHook] = []
-        self._live_stack: List[Live] = []
+        self._live: Optional["Live"] = None
         self._is_alt_screen = False
 
     def __repr__(self) -> str:
@@ -825,26 +823,24 @@ class Console:
         self._buffer_index -= 1
         self._check_buffer()
 
-    def set_live(self, live: "Live") -> bool:
-        """Set Live instance. Used by Live context manager (no need to call directly).
+    def set_live(self, live: "Live") -> None:
+        """Set Live instance. Used by Live context manager.
 
         Args:
             live (Live): Live instance using this Console.
-
-        Returns:
-            Boolean that indicates if the live is the topmost of the stack.
 
         Raises:
             errors.LiveError: If this Console has a Live context currently active.
         """
         with self._lock:
-            self._live_stack.append(live)
-            return len(self._live_stack) == 1
+            if self._live is not None:
+                raise errors.LiveError("Only one live display may be active at once")
+            self._live = live
 
     def clear_live(self) -> None:
-        """Clear the Live instance. Used by the Live context manager (no need to call directly)."""
+        """Clear the Live instance."""
         with self._lock:
-            self._live_stack.pop()
+            self._live = None
 
     def push_render_hook(self, hook: RenderHook) -> None:
         """Add a new render hook to the stack.
@@ -996,13 +992,12 @@ class Console:
     @property
     def options(self) -> ConsoleOptions:
         """Get default console options."""
-        size = self.size
         return ConsoleOptions(
-            max_height=size.height,
-            size=size,
+            max_height=self.size.height,
+            size=self.size,
             legacy_windows=self.legacy_windows,
             min_width=1,
-            max_width=size.width,
+            max_width=self.width,
             encoding=self.encoding,
             is_terminal=self.is_terminal,
         )

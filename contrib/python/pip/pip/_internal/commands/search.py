@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 import shutil
 import sys
@@ -7,7 +5,7 @@ import textwrap
 import xmlrpc.client
 from collections import OrderedDict
 from optparse import Values
-from typing import TypedDict
+from typing import Dict, List, Optional, TypedDict
 
 from pip._vendor.packaging.version import parse as parse_version
 
@@ -26,7 +24,7 @@ from pip._internal.utils.misc import write_output
 class TransformedHit(TypedDict):
     name: str
     summary: str
-    versions: list[str]
+    versions: List[str]
 
 
 logger = logging.getLogger(__name__)
@@ -51,7 +49,7 @@ class SearchCommand(Command, SessionCommandMixin):
 
         self.parser.insert_option_group(0, self.cmd_opts)
 
-    def run(self, options: Values, args: list[str]) -> int:
+    def run(self, options: Values, args: List[str]) -> int:
         if not args:
             raise CommandError("Missing required argument (search query).")
         query = args
@@ -67,7 +65,7 @@ class SearchCommand(Command, SessionCommandMixin):
             return SUCCESS
         return NO_MATCHES_FOUND
 
-    def search(self, query: list[str], options: Values) -> list[dict[str, str]]:
+    def search(self, query: List[str], options: Values) -> List[Dict[str, str]]:
         index_url = options.index
 
         session = self.get_default_session(options)
@@ -85,13 +83,13 @@ class SearchCommand(Command, SessionCommandMixin):
         return hits
 
 
-def transform_hits(hits: list[dict[str, str]]) -> list[TransformedHit]:
+def transform_hits(hits: List[Dict[str, str]]) -> List["TransformedHit"]:
     """
     The list from pypi is really a list of versions. We want a list of
     packages with the list of versions stored inline. This converts the
     list from pypi into one we can use.
     """
-    packages: dict[str, TransformedHit] = OrderedDict()
+    packages: Dict[str, TransformedHit] = OrderedDict()
     for hit in hits:
         name = hit["name"]
         summary = hit["summary"]
@@ -113,7 +111,7 @@ def transform_hits(hits: list[dict[str, str]]) -> list[TransformedHit]:
     return list(packages.values())
 
 
-def print_dist_installation_info(latest: str, dist: BaseDistribution | None) -> None:
+def print_dist_installation_info(latest: str, dist: Optional[BaseDistribution]) -> None:
     if dist is not None:
         with indent_log():
             if dist.version == latest:
@@ -130,15 +128,15 @@ def print_dist_installation_info(latest: str, dist: BaseDistribution | None) -> 
                     write_output("LATEST:    %s", latest)
 
 
-def get_installed_distribution(name: str) -> BaseDistribution | None:
+def get_installed_distribution(name: str) -> Optional[BaseDistribution]:
     env = get_default_environment()
     return env.get_distribution(name)
 
 
 def print_results(
-    hits: list[TransformedHit],
-    name_column_width: int | None = None,
-    terminal_width: int | None = None,
+    hits: List["TransformedHit"],
+    name_column_width: Optional[int] = None,
+    terminal_width: Optional[int] = None,
 ) -> None:
     if not hits:
         return
@@ -174,5 +172,5 @@ def print_results(
             pass
 
 
-def highest_version(versions: list[str]) -> str:
+def highest_version(versions: List[str]) -> str:
     return max(versions, key=parse_version)

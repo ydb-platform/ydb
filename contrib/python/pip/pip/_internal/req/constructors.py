@@ -8,14 +8,12 @@ These are meant to be used elsewhere within pip to create instances of
 InstallRequirement.
 """
 
-from __future__ import annotations
-
 import copy
 import logging
 import os
 import re
-from collections.abc import Collection
 from dataclasses import dataclass
+from typing import Collection, Dict, List, Optional, Set, Tuple, Union
 
 from pip._vendor.packaging.markers import Marker
 from pip._vendor.packaging.requirements import InvalidRequirement, Requirement
@@ -43,7 +41,7 @@ logger = logging.getLogger(__name__)
 operators = Specifier._operators.keys()
 
 
-def _strip_extras(path: str) -> tuple[str, str | None]:
+def _strip_extras(path: str) -> Tuple[str, Optional[str]]:
     m = re.match(r"^(.+)(\[[^\]]+\])$", path)
     extras = None
     if m:
@@ -55,19 +53,19 @@ def _strip_extras(path: str) -> tuple[str, str | None]:
     return path_no_extras, extras
 
 
-def convert_extras(extras: str | None) -> set[str]:
+def convert_extras(extras: Optional[str]) -> Set[str]:
     if not extras:
         return set()
     return get_requirement("placeholder" + extras.lower()).extras
 
 
-def _set_requirement_extras(req: Requirement, new_extras: set[str]) -> Requirement:
+def _set_requirement_extras(req: Requirement, new_extras: Set[str]) -> Requirement:
     """
     Returns a new requirement based on the given one, with the supplied extras. If the
     given requirement already has extras those are replaced (or dropped if no new extras
     are given).
     """
-    match: re.Match[str] | None = re.fullmatch(
+    match: Optional[re.Match[str]] = re.fullmatch(
         # see https://peps.python.org/pep-0508/#complete-grammar
         r"([\w\t .-]+)(\[[^\]]*\])?(.*)",
         str(req),
@@ -77,8 +75,8 @@ def _set_requirement_extras(req: Requirement, new_extras: set[str]) -> Requireme
     assert (
         match is not None
     ), f"regex match on requirement {req} failed, this should never happen"
-    pre: str | None = match.group(1)
-    post: str | None = match.group(3)
+    pre: Optional[str] = match.group(1)
+    post: Optional[str] = match.group(3)
     assert (
         pre is not None and post is not None
     ), f"regex group selection for requirement {req} failed, this should never happen"
@@ -86,7 +84,7 @@ def _set_requirement_extras(req: Requirement, new_extras: set[str]) -> Requireme
     return get_requirement(f"{pre}{extras}{post}")
 
 
-def parse_editable(editable_req: str) -> tuple[str | None, str, set[str]]:
+def parse_editable(editable_req: str) -> Tuple[Optional[str], str, Set[str]]:
     """Parses an editable requirement into:
         - a requirement name
         - an URL
@@ -196,10 +194,10 @@ def deduce_helpful_msg(req: str) -> str:
 
 @dataclass(frozen=True)
 class RequirementParts:
-    requirement: Requirement | None
-    link: Link | None
-    markers: Marker | None
-    extras: set[str]
+    requirement: Optional[Requirement]
+    link: Optional[Link]
+    markers: Optional[Marker]
+    extras: Set[str]
 
 
 def parse_req_from_editable(editable_req: str) -> RequirementParts:
@@ -207,7 +205,7 @@ def parse_req_from_editable(editable_req: str) -> RequirementParts:
 
     if name is not None:
         try:
-            req: Requirement | None = get_requirement(name)
+            req: Optional[Requirement] = get_requirement(name)
         except InvalidRequirement as exc:
             raise InstallationError(f"Invalid requirement: {name!r}: {exc}")
     else:
@@ -223,16 +221,16 @@ def parse_req_from_editable(editable_req: str) -> RequirementParts:
 
 def install_req_from_editable(
     editable_req: str,
-    comes_from: InstallRequirement | str | None = None,
+    comes_from: Optional[Union[InstallRequirement, str]] = None,
     *,
-    use_pep517: bool | None = None,
+    use_pep517: Optional[bool] = None,
     isolated: bool = False,
-    global_options: list[str] | None = None,
-    hash_options: dict[str, list[str]] | None = None,
+    global_options: Optional[List[str]] = None,
+    hash_options: Optional[Dict[str, List[str]]] = None,
     constraint: bool = False,
     user_supplied: bool = False,
     permit_editable_wheels: bool = False,
-    config_settings: dict[str, str | list[str]] | None = None,
+    config_settings: Optional[Dict[str, Union[str, List[str]]]] = None,
 ) -> InstallRequirement:
     parts = parse_req_from_editable(editable_req)
 
@@ -272,7 +270,7 @@ def _looks_like_path(name: str) -> bool:
     return False
 
 
-def _get_url_from_path(path: str, name: str) -> str | None:
+def _get_url_from_path(path: str, name: str) -> Optional[str]:
     """
     First, it checks whether a provided path is an installable directory. If it
     is, returns the path.
@@ -306,7 +304,7 @@ def _get_url_from_path(path: str, name: str) -> str | None:
     return path_to_url(path)
 
 
-def parse_req_from_line(name: str, line_source: str | None) -> RequirementParts:
+def parse_req_from_line(name: str, line_source: Optional[str]) -> RequirementParts:
     if is_url(name):
         marker_sep = "; "
     else:
@@ -378,7 +376,7 @@ def parse_req_from_line(name: str, line_source: str | None) -> RequirementParts:
             raise InstallationError(msg)
 
     if req_as_string is not None:
-        req: Requirement | None = _parse_req_string(req_as_string)
+        req: Optional[Requirement] = _parse_req_string(req_as_string)
     else:
         req = None
 
@@ -387,16 +385,16 @@ def parse_req_from_line(name: str, line_source: str | None) -> RequirementParts:
 
 def install_req_from_line(
     name: str,
-    comes_from: str | InstallRequirement | None = None,
+    comes_from: Optional[Union[str, InstallRequirement]] = None,
     *,
-    use_pep517: bool | None = None,
+    use_pep517: Optional[bool] = None,
     isolated: bool = False,
-    global_options: list[str] | None = None,
-    hash_options: dict[str, list[str]] | None = None,
+    global_options: Optional[List[str]] = None,
+    hash_options: Optional[Dict[str, List[str]]] = None,
     constraint: bool = False,
-    line_source: str | None = None,
+    line_source: Optional[str] = None,
     user_supplied: bool = False,
-    config_settings: dict[str, str | list[str]] | None = None,
+    config_settings: Optional[Dict[str, Union[str, List[str]]]] = None,
 ) -> InstallRequirement:
     """Creates an InstallRequirement from a name, which might be a
     requirement, directory containing 'setup.py', filename, or URL.
@@ -424,9 +422,9 @@ def install_req_from_line(
 
 def install_req_from_req_string(
     req_string: str,
-    comes_from: InstallRequirement | None = None,
+    comes_from: Optional[InstallRequirement] = None,
     isolated: bool = False,
-    use_pep517: bool | None = None,
+    use_pep517: Optional[bool] = None,
     user_supplied: bool = False,
 ) -> InstallRequirement:
     try:
@@ -463,9 +461,9 @@ def install_req_from_req_string(
 def install_req_from_parsed_requirement(
     parsed_req: ParsedRequirement,
     isolated: bool = False,
-    use_pep517: bool | None = None,
+    use_pep517: Optional[bool] = None,
     user_supplied: bool = False,
-    config_settings: dict[str, str | list[str]] | None = None,
+    config_settings: Optional[Dict[str, Union[str, List[str]]]] = None,
 ) -> InstallRequirement:
     if parsed_req.is_editable:
         req = install_req_from_editable(

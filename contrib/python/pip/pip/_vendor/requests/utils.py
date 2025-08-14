@@ -38,7 +38,6 @@ from .compat import (
     getproxies,
     getproxies_environment,
     integer_types,
-    is_urllib3_1,
 )
 from .compat import parse_http_list as _parse_list_header
 from .compat import (
@@ -137,9 +136,7 @@ def super_len(o):
     total_length = None
     current_position = 0
 
-    if not is_urllib3_1 and isinstance(o, str):
-        # urllib3 2.x+ treats all strings as utf-8 instead
-        # of latin-1 (iso-8859-1) like http.client.
+    if isinstance(o, str):
         o = o.encode("utf-8")
 
     if hasattr(o, "__len__"):
@@ -219,7 +216,14 @@ def get_netrc_auth(url, raise_errors=False):
         netrc_path = None
 
         for f in netrc_locations:
-            loc = os.path.expanduser(f)
+            try:
+                loc = os.path.expanduser(f)
+            except KeyError:
+                # os.path.expanduser can fail when $HOME is undefined and
+                # getpwuid fails. See https://bugs.python.org/issue20164 &
+                # https://github.com/psf/requests/issues/1846
+                return
+
             if os.path.exists(loc):
                 netrc_path = loc
                 break
@@ -229,7 +233,13 @@ def get_netrc_auth(url, raise_errors=False):
             return
 
         ri = urlparse(url)
-        host = ri.hostname
+
+        # Strip port numbers from netloc. This weird `if...encode`` dance is
+        # used for Python 3.2, which doesn't support unicode literals.
+        splitstr = b":"
+        if isinstance(url, str):
+            splitstr = splitstr.decode("ascii")
+        host = ri.netloc.split(splitstr)[0]
 
         try:
             _netrc = netrc(netrc_path).authenticators(host)

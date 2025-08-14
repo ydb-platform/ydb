@@ -1,11 +1,9 @@
-from __future__ import annotations
-
 import contextlib
 import hashlib
 import logging
 import os
-from collections.abc import Generator
 from types import TracebackType
+from typing import Dict, Generator, Optional, Type, Union
 
 from pip._internal.req.req_install import InstallRequirement
 from pip._internal.utils.temp_dir import TempDirectory
@@ -19,7 +17,7 @@ def update_env_context_manager(**changes: str) -> Generator[None, None, None]:
 
     # Save values from the target and change them.
     non_existent_marker = object()
-    saved_values: dict[str, object | str] = {}
+    saved_values: Dict[str, Union[object, str]] = {}
     for name, new_value in changes.items():
         try:
             saved_values[name] = target[name]
@@ -40,7 +38,7 @@ def update_env_context_manager(**changes: str) -> Generator[None, None, None]:
 
 
 @contextlib.contextmanager
-def get_build_tracker() -> Generator[BuildTracker, None, None]:
+def get_build_tracker() -> Generator["BuildTracker", None, None]:
     root = os.environ.get("PIP_BUILD_TRACKER")
     with contextlib.ExitStack() as ctx:
         if root is None:
@@ -67,18 +65,18 @@ class BuildTracker:
 
     def __init__(self, root: str) -> None:
         self._root = root
-        self._entries: dict[TrackerId, InstallRequirement] = {}
+        self._entries: Dict[TrackerId, InstallRequirement] = {}
         logger.debug("Created build tracker: %s", self._root)
 
-    def __enter__(self) -> BuildTracker:
+    def __enter__(self) -> "BuildTracker":
         logger.debug("Entered build tracker: %s", self._root)
         return self
 
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
     ) -> None:
         self.cleanup()
 

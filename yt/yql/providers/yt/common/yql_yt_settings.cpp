@@ -469,7 +469,6 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
     REGISTER_SETTING(*this, UseDefaultArrowAllocatorInJobs);
-    REGISTER_SETTING(*this, UseNativeYtDefaultColumnOrder);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);

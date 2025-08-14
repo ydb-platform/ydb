@@ -1,12 +1,10 @@
-from __future__ import annotations
-
 import functools
 import logging
 import os
 import pathlib
 import sys
 import sysconfig
-from typing import Any
+from typing import Any, Dict, Optional
 
 from pip._internal.models.scheme import SCHEME_KEYS, Scheme
 from pip._internal.utils.compat import WINDOWS
@@ -89,7 +87,7 @@ def _looks_like_bpo_44860() -> bool:
     return unix_user_platlib == "$usersite"
 
 
-def _looks_like_red_hat_patched_platlib_purelib(scheme: dict[str, str]) -> bool:
+def _looks_like_red_hat_patched_platlib_purelib(scheme: Dict[str, str]) -> bool:
     platlib = scheme["platlib"]
     if "/$platlibdir/" in platlib:
         platlib = platlib.replace("/$platlibdir/", f"/{_PLATLIBDIR}/")
@@ -99,7 +97,7 @@ def _looks_like_red_hat_patched_platlib_purelib(scheme: dict[str, str]) -> bool:
     return unpatched.replace("$platbase/", "$base/") == scheme["purelib"]
 
 
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def _looks_like_red_hat_lib() -> bool:
     """Red Hat patches platlib in unix_prefix and unix_home, but not purelib.
 
@@ -114,7 +112,7 @@ def _looks_like_red_hat_lib() -> bool:
     )
 
 
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def _looks_like_debian_scheme() -> bool:
     """Debian adds two additional schemes."""
     from distutils.command.install import INSTALL_SCHEMES
@@ -122,7 +120,7 @@ def _looks_like_debian_scheme() -> bool:
     return "deb_system" in INSTALL_SCHEMES and "unix_local" in INSTALL_SCHEMES
 
 
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def _looks_like_red_hat_scheme() -> bool:
     """Red Hat patches ``sys.prefix`` and ``sys.exec_prefix``.
 
@@ -142,7 +140,7 @@ def _looks_like_red_hat_scheme() -> bool:
     )
 
 
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def _looks_like_slackware_scheme() -> bool:
     """Slackware patches sysconfig but fails to patch distutils and site.
 
@@ -158,7 +156,7 @@ def _looks_like_slackware_scheme() -> bool:
     return "/lib64/" in paths["purelib"] and "/lib64/" not in user_site
 
 
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def _looks_like_msys2_mingw_scheme() -> bool:
     """MSYS2 patches distutils and sysconfig to use a UNIX-like scheme.
 
@@ -176,7 +174,7 @@ def _looks_like_msys2_mingw_scheme() -> bool:
     )
 
 
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def _warn_mismatched(old: pathlib.Path, new: pathlib.Path, *, key: str) -> None:
     issue_url = "https://github.com/pypa/pip/issues/10151"
     message = (
@@ -194,13 +192,13 @@ def _warn_if_mismatch(old: pathlib.Path, new: pathlib.Path, *, key: str) -> bool
     return True
 
 
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def _log_context(
     *,
     user: bool = False,
-    home: str | None = None,
-    root: str | None = None,
-    prefix: str | None = None,
+    home: Optional[str] = None,
+    root: Optional[str] = None,
+    prefix: Optional[str] = None,
 ) -> None:
     parts = [
         "Additional context:",
@@ -216,10 +214,10 @@ def _log_context(
 def get_scheme(
     dist_name: str,
     user: bool = False,
-    home: str | None = None,
-    root: str | None = None,
+    home: Optional[str] = None,
+    root: Optional[str] = None,
     isolated: bool = False,
-    prefix: str | None = None,
+    prefix: Optional[str] = None,
 ) -> Scheme:
     new = _sysconfig.get_scheme(
         dist_name,
@@ -283,7 +281,7 @@ def get_scheme(
             continue
 
         # On Python 3.9+, sysconfig's posix_user scheme sets platlib against
-        # sys.platlibdir, but distutils's unix_user incorrectly continues
+        # sys.platlibdir, but distutils's unix_user incorrectly coninutes
         # using the same $usersite for both platlib and purelib. This creates a
         # mismatch when sys.platlibdir is not "lib".
         skip_bpo_44860 = (

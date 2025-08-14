@@ -31,8 +31,8 @@ using namespace NActors;
 using namespace NConsole;
 using namespace Ydb;
 
-static bool CheckAddIndexAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
-    bool isDatabaseEntry = true;
+static bool CheckAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
+    bool isDatabase = true; // first entry is always database
 
     using TEntry = NSchemeCache::TSchemeCacheNavigate::TEntry;
 
@@ -40,15 +40,13 @@ static bool CheckAddIndexAccess(const NACLib::TUserToken& userToken, const NSche
         if (!entry.SecurityObject) {
             continue;
         }
-        if (isDatabaseEntry) { // first entry is always database
-            isDatabaseEntry = false;
-            continue;
-        }
 
-        const ui32 access = NACLib::AlterSchema | NACLib::DescribeSchema;
+        const ui32 access = isDatabase ? NACLib::CreateDirectory | NACLib::CreateTable : NACLib::GenericRead | NACLib::GenericWrite;
         if (!entry.SecurityObject->CheckAccess(access, userToken)) {
             return false;
         }
+
+        isDatabase = false;
     }
 
     return true;
@@ -327,7 +325,7 @@ private:
     }
 
     void AlterTableAddIndexOp(const NSchemeCache::TSchemeCacheNavigate* resp, const TActorContext& ctx) {
-        if (UserToken && !CheckAddIndexAccess(*UserToken, resp)) {
+        if (UserToken && !CheckAccess(*UserToken, resp)) {
             TXLOG_W("Access check failed");
             return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
         }

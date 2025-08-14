@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import contextlib
 import errno
 import logging
@@ -7,11 +5,10 @@ import logging.handlers
 import os
 import sys
 import threading
-from collections.abc import Generator
 from dataclasses import dataclass
 from io import TextIOWrapper
 from logging import Filter
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Generator, List, Optional, Type
 
 from pip._vendor.rich.console import (
     Console,
@@ -43,7 +40,7 @@ class BrokenStdoutLoggingError(Exception):
     """
 
 
-def _is_broken_pipe_error(exc_class: type[BaseException], exc: BaseException) -> bool:
+def _is_broken_pipe_error(exc_class: Type[BaseException], exc: BaseException) -> bool:
     if exc_class is BrokenPipeError:
         return True
 
@@ -159,7 +156,7 @@ def get_console(*, stderr: bool = False) -> Console:
 
 
 class RichPipStreamHandler(RichHandler):
-    KEYWORDS: ClassVar[list[str] | None] = []
+    KEYWORDS: ClassVar[Optional[List[str]]] = []
 
     def __init__(self, console: Console) -> None:
         super().__init__(
@@ -172,7 +169,7 @@ class RichPipStreamHandler(RichHandler):
 
     # Our custom override on Rich's logger, to make things work as we need them to.
     def emit(self, record: logging.LogRecord) -> None:
-        style: Style | None = None
+        style: Optional[Style] = None
 
         # If we are given a diagnostic error to present, present it with indentation.
         if getattr(record, "rich", False):
@@ -243,7 +240,7 @@ class ExcludeLoggerFilter(Filter):
         return not super().filter(record)
 
 
-def setup_logging(verbosity: int, no_color: bool, user_log_file: str | None) -> int:
+def setup_logging(verbosity: int, no_color: bool, user_log_file: Optional[str]) -> int:
     """Configures and sets up all of the logging
 
     Returns the requested logging level, as its integer value.

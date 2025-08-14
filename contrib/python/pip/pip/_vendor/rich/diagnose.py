@@ -26,7 +26,6 @@ def report() -> None:  # pragma: no cover
         "TERM_PROGRAM",
         "TERM",
         "TTY_COMPATIBLE",
-        "TTY_INTERACTIVE",
         "VSCODE_VERBOSE_LOGGING",
     )
     env = {name: os.getenv(name) for name in env_names}

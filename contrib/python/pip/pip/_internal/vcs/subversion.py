@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 import logging
 import os
 import re
+from typing import List, Optional, Tuple
 
 from pip._internal.utils.misc import (
     HiddenText,
@@ -39,7 +38,7 @@ class Subversion(VersionControl):
         return True
 
     @staticmethod
-    def get_base_rev_args(rev: str) -> list[str]:
+    def get_base_rev_args(rev: str) -> List[str]:
         return ["-r", rev]
 
     @classmethod
@@ -74,7 +73,7 @@ class Subversion(VersionControl):
     @classmethod
     def get_netloc_and_auth(
         cls, netloc: str, scheme: str
-    ) -> tuple[str, tuple[str | None, str | None]]:
+    ) -> Tuple[str, Tuple[Optional[str], Optional[str]]]:
         """
         This override allows the auth information to be passed to svn via the
         --username and --password options instead of via the URL.
@@ -87,7 +86,7 @@ class Subversion(VersionControl):
         return split_auth_from_netloc(netloc)
 
     @classmethod
-    def get_url_rev_and_auth(cls, url: str) -> tuple[str, str | None, AuthInfo]:
+    def get_url_rev_and_auth(cls, url: str) -> Tuple[str, Optional[str], AuthInfo]:
         # hotfix the URL scheme after removing svn+ from svn+ssh:// re-add it
         url, rev, user_pass = super().get_url_rev_and_auth(url)
         if url.startswith("ssh://"):
@@ -95,7 +94,9 @@ class Subversion(VersionControl):
         return url, rev, user_pass
 
     @staticmethod
-    def make_rev_args(username: str | None, password: HiddenText | None) -> CommandArgs:
+    def make_rev_args(
+        username: Optional[str], password: Optional[HiddenText]
+    ) -> CommandArgs:
         extra_args: CommandArgs = []
         if username:
             extra_args += ["--username", username]
@@ -129,7 +130,7 @@ class Subversion(VersionControl):
         return url
 
     @classmethod
-    def _get_svn_url_rev(cls, location: str) -> tuple[str | None, int]:
+    def _get_svn_url_rev(cls, location: str) -> Tuple[Optional[str], int]:
         from pip._internal.exceptions import InstallationError
 
         entries_path = os.path.join(location, cls.dirname, "entries")
@@ -140,7 +141,7 @@ class Subversion(VersionControl):
             data = ""
 
         url = None
-        if data.startswith(("8", "9", "10")):
+        if data.startswith("8") or data.startswith("9") or data.startswith("10"):
             entries = list(map(str.splitlines, data.split("\n\x0c\n")))
             del entries[0][0]  # get rid of the '8'
             url = entries[0][3]
@@ -179,11 +180,11 @@ class Subversion(VersionControl):
         return url, rev
 
     @classmethod
-    def is_commit_id_equal(cls, dest: str, name: str | None) -> bool:
+    def is_commit_id_equal(cls, dest: str, name: Optional[str]) -> bool:
         """Always assume the versions don't match"""
         return False
 
-    def __init__(self, use_interactive: bool | None = None) -> None:
+    def __init__(self, use_interactive: Optional[bool] = None) -> None:
         if use_interactive is None:
             use_interactive = is_console_interactive()
         self.use_interactive = use_interactive
@@ -193,11 +194,11 @@ class Subversion(VersionControl):
         # Special value definitions:
         #   None: Not evaluated yet.
         #   Empty tuple: Could not parse version.
-        self._vcs_version: tuple[int, ...] | None = None
+        self._vcs_version: Optional[Tuple[int, ...]] = None
 
         super().__init__()
 
-    def call_vcs_version(self) -> tuple[int, ...]:
+    def call_vcs_version(self) -> Tuple[int, ...]:
         """Query the version of the currently installed Subversion client.
 
         :return: A tuple containing the parts of the version information or
@@ -225,7 +226,7 @@ class Subversion(VersionControl):
 
         return parsed_version
 
-    def get_vcs_version(self) -> tuple[int, ...]:
+    def get_vcs_version(self) -> Tuple[int, ...]:
         """Return the version of the currently installed Subversion client.
 
         If the version of the Subversion client has already been queried,
@@ -300,13 +301,7 @@ class Subversion(VersionControl):
         )
         self.run_command(cmd_args)
 
-    def switch(
-        self,
-        dest: str,
-        url: HiddenText,
-        rev_options: RevOptions,
-        verbosity: int = 0,
-    ) -> None:
+    def switch(self, dest: str, url: HiddenText, rev_options: RevOptions) -> None:
         cmd_args = make_command(
             "switch",
             self.get_remote_call_options(),
@@ -316,13 +311,7 @@ class Subversion(VersionControl):
         )
         self.run_command(cmd_args)
 
-    def update(
-        self,
-        dest: str,
-        url: HiddenText,
-        rev_options: RevOptions,
-        verbosity: int = 0,
-    ) -> None:
+    def update(self, dest: str, url: HiddenText, rev_options: RevOptions) -> None:
         cmd_args = make_command(
             "update",
             self.get_remote_call_options(),

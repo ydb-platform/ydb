@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import errno
 import json
 import operator
@@ -7,7 +5,7 @@ import os
 import shutil
 import site
 from optparse import SUPPRESS_HELP, Values
-from pathlib import Path
+from typing import List, Optional
 
 from pip._vendor.packaging.utils import canonicalize_name
 from pip._vendor.requests.exceptions import InvalidProxyURL
@@ -28,11 +26,7 @@ from pip._internal.cli.req_command import (
     with_cleanup,
 )
 from pip._internal.cli.status_codes import ERROR, SUCCESS
-from pip._internal.exceptions import (
-    CommandError,
-    InstallationError,
-    InstallWheelBuildError,
-)
+from pip._internal.exceptions import CommandError, InstallationError
 from pip._internal.locations import get_scheme
 from pip._internal.metadata import get_environment
 from pip._internal.models.installation_report import InstallationReport
@@ -278,7 +272,7 @@ class InstallCommand(RequirementCommand):
         )
 
     @with_cleanup
-    def run(self, options: Values, args: list[str]) -> int:
+    def run(self, options: Values, args: List[str]) -> int:
         if options.use_user_site and options.target_dir is not None:
             raise CommandError("Can not combine '--user' and '--target'")
 
@@ -314,8 +308,8 @@ class InstallCommand(RequirementCommand):
             isolated_mode=options.isolated_mode,
         )
 
-        target_temp_dir: TempDirectory | None = None
-        target_temp_dir_path: str | None = None
+        target_temp_dir: Optional[TempDirectory] = None
+        target_temp_dir_path: Optional[str] = None
         if options.target_dir:
             options.ignore_installed = True
             options.target_dir = os.path.abspath(options.target_dir)
@@ -439,12 +433,17 @@ class InstallCommand(RequirementCommand):
             )
 
             if build_failures:
-                raise InstallWheelBuildError(build_failures)
+                raise InstallationError(
+                    "Failed to build installable wheels for some "
+                    "pyproject.toml based projects ({})".format(
+                        ", ".join(r.name for r in build_failures)  # type: ignore
+                    )
+                )
 
             to_install = resolver.get_installation_order(requirement_set)
 
             # Check for conflicts in the package set we're installing.
-            conflicts: ConflictDetails | None = None
+            conflicts: Optional[ConflictDetails] = None
             should_warn_about_conflicts = (
                 not options.ignore_dependencies and options.warn_about_conflicts
             )
@@ -582,8 +581,8 @@ class InstallCommand(RequirementCommand):
                 shutil.move(os.path.join(lib_dir, item), target_item_dir)
 
     def _determine_conflicts(
-        self, to_install: list[InstallRequirement]
-    ) -> ConflictDetails | None:
+        self, to_install: List[InstallRequirement]
+    ) -> Optional[ConflictDetails]:
         try:
             return check_install_conflicts(to_install)
         except Exception:
@@ -600,7 +599,7 @@ class InstallCommand(RequirementCommand):
         if not missing and not conflicting:
             return
 
-        parts: list[str] = []
+        parts: List[str] = []
         if resolver_variant == "legacy":
             parts.append(
                 "pip's legacy dependency resolver does not consider dependency "
@@ -646,11 +645,11 @@ class InstallCommand(RequirementCommand):
 
 def get_lib_location_guesses(
     user: bool = False,
-    home: str | None = None,
-    root: str | None = None,
+    home: Optional[str] = None,
+    root: Optional[str] = None,
     isolated: bool = False,
-    prefix: str | None = None,
-) -> list[str]:
+    prefix: Optional[str] = None,
+) -> List[str]:
     scheme = get_scheme(
         "",
         user=user,
@@ -662,7 +661,7 @@ def get_lib_location_guesses(
     return [scheme.purelib, scheme.platlib]
 
 
-def site_packages_writable(root: str | None, isolated: bool) -> bool:
+def site_packages_writable(root: Optional[str], isolated: bool) -> bool:
     return all(
         test_writable_dir(d)
         for d in set(get_lib_location_guesses(root=root, isolated=isolated))
@@ -670,10 +669,10 @@ def site_packages_writable(root: str | None, isolated: bool) -> bool:
 
 
 def decide_user_install(
-    use_user_site: bool | None,
-    prefix_path: str | None = None,
-    target_dir: str | None = None,
-    root_path: str | None = None,
+    use_user_site: Optional[bool],
+    prefix_path: Optional[str] = None,
+    target_dir: Optional[str] = None,
+    root_path: Optional[str] = None,
     isolated_mode: bool = False,
 ) -> bool:
     """Determine whether to do a user install based on the input options.
@@ -775,24 +774,20 @@ def create_os_error_message(
         )
         parts.append(".\n")
 
-    # On Windows, errors like EINVAL or ENOENT may occur
-    # if a file or folder name exceeds 255 characters,
-    # or if the full path exceeds 260 characters and long path support isn't enabled.
-    # This condition checks for such cases and adds a hint to the error output.
+    # Suggest the user to enable Long Paths if path length is
+    # more than 260
+    if (
+        WINDOWS
+        and error.errno == errno.ENOENT
+        and error.filename
+        and len(error.filename) > 260
+    ):
+        parts.append(
+            "HINT: This error might have occurred since "
+            "this system does not have Windows Long Path "
+            "support enabled. You can find information on "
+            "how to enable this at "
+            "https://pip.pypa.io/warnings/enable-long-paths\n"
+        )
 
-    if WINDOWS and error.errno in (errno.EINVAL, errno.ENOENT) and error.filename:
-        if any(len(part) > 255 for part in Path(error.filename).parts):
-            parts.append(
-                "HINT: This error might be caused by a file or folder name exceeding "
-                "255 characters, which is a Windows limitation even if long paths "
-                "are enabled.\n "
-            )
-        if len(error.filename) > 260:
-            parts.append(
-                "HINT: This error might have occurred since "
-                "this system does not have Windows Long Path "
-                "support enabled. You can find information on "
-                "how to enable this at "
-                "https://pip.pypa.io/warnings/enable-long-paths\n"
-            )
     return "".join(parts).strip() + "\n"

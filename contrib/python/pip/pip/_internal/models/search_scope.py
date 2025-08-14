@@ -4,6 +4,7 @@ import os
 import posixpath
 import urllib.parse
 from dataclasses import dataclass
+from typing import List
 
 from pip._vendor.packaging.utils import canonicalize_name
 
@@ -22,15 +23,15 @@ class SearchScope:
 
     __slots__ = ["find_links", "index_urls", "no_index"]
 
-    find_links: list[str]
-    index_urls: list[str]
+    find_links: List[str]
+    index_urls: List[str]
     no_index: bool
 
     @classmethod
     def create(
         cls,
-        find_links: list[str],
-        index_urls: list[str],
+        find_links: List[str],
+        index_urls: List[str],
         no_index: bool,
     ) -> "SearchScope":
         """
@@ -41,7 +42,7 @@ class SearchScope:
         # it and if it exists, use the normalized version.
         # This is deliberately conservative - it might be fine just to
         # blindly normalize anything starting with a ~...
-        built_find_links: list[str] = []
+        built_find_links: List[str] = []
         for link in find_links:
             if link.startswith("~"):
                 new_link = normalize_path(link)
@@ -103,7 +104,7 @@ class SearchScope:
             )
         return "\n".join(lines)
 
-    def get_index_urls_locations(self, project_name: str) -> list[str]:
+    def get_index_urls_locations(self, project_name: str) -> List[str]:
         """Returns the locations found via self.index_urls
 
         Checks the url_name on the main (first in the list) index and

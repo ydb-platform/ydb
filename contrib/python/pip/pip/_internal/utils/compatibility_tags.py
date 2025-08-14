@@ -1,8 +1,7 @@
 """Generate and work with PEP 425 Compatibility Tags."""
 
-from __future__ import annotations
-
 import re
+from typing import List, Optional, Tuple
 
 from pip._vendor.packaging.tags import (
     PythonVersion,
@@ -20,12 +19,12 @@ from pip._vendor.packaging.tags import (
 _apple_arch_pat = re.compile(r"(.+)_(\d+)_(\d+)_(.+)")
 
 
-def version_info_to_nodot(version_info: tuple[int, ...]) -> str:
+def version_info_to_nodot(version_info: Tuple[int, ...]) -> str:
     # Only use up to the first two numbers.
     return "".join(map(str, version_info[:2]))
 
 
-def _mac_platforms(arch: str) -> list[str]:
+def _mac_platforms(arch: str) -> List[str]:
     match = _apple_arch_pat.match(arch)
     if match:
         name, major, minor, actual_arch = match.groups()
@@ -45,7 +44,7 @@ def _mac_platforms(arch: str) -> list[str]:
     return arches
 
 
-def _ios_platforms(arch: str) -> list[str]:
+def _ios_platforms(arch: str) -> List[str]:
     match = _apple_arch_pat.match(arch)
     if match:
         name, major, minor, actual_multiarch = match.groups()
@@ -65,7 +64,7 @@ def _ios_platforms(arch: str) -> list[str]:
     return arches
 
 
-def _android_platforms(arch: str) -> list[str]:
+def _android_platforms(arch: str) -> List[str]:
     match = re.fullmatch(r"android_(\d+)_(.+)", arch)
     if match:
         api_level, abi = match.groups()
@@ -75,7 +74,7 @@ def _android_platforms(arch: str) -> list[str]:
         return [arch]
 
 
-def _custom_manylinux_platforms(arch: str) -> list[str]:
+def _custom_manylinux_platforms(arch: str) -> List[str]:
     arches = [arch]
     arch_prefix, arch_sep, arch_suffix = arch.partition("_")
     if arch_prefix == "manylinux2014":
@@ -96,7 +95,7 @@ def _custom_manylinux_platforms(arch: str) -> list[str]:
     return arches
 
 
-def _get_custom_platforms(arch: str) -> list[str]:
+def _get_custom_platforms(arch: str) -> List[str]:
     arch_prefix, arch_sep, arch_suffix = arch.partition("_")
     if arch.startswith("macosx"):
         arches = _mac_platforms(arch)
@@ -111,7 +110,7 @@ def _get_custom_platforms(arch: str) -> list[str]:
     return arches
 
 
-def _expand_allowed_platforms(platforms: list[str] | None) -> list[str] | None:
+def _expand_allowed_platforms(platforms: Optional[List[str]]) -> Optional[List[str]]:
     if not platforms:
         return None
 
@@ -136,7 +135,7 @@ def _get_python_version(version: str) -> PythonVersion:
 
 
 def _get_custom_interpreter(
-    implementation: str | None = None, version: str | None = None
+    implementation: Optional[str] = None, version: Optional[str] = None
 ) -> str:
     if implementation is None:
         implementation = interpreter_name()
@@ -146,11 +145,11 @@ def _get_custom_interpreter(
 
 
 def get_supported(
-    version: str | None = None,
-    platforms: list[str] | None = None,
-    impl: str | None = None,
-    abis: list[str] | None = None,
-) -> list[Tag]:
+    version: Optional[str] = None,
+    platforms: Optional[List[str]] = None,
+    impl: Optional[str] = None,
+    abis: Optional[List[str]] = None,
+) -> List[Tag]:
     """Return a list of supported tags for each version specified in
     `versions`.
 
@@ -163,9 +162,9 @@ def get_supported(
     :param abis: specify a list of abis you want valid
         tags for, or None. If None, use the local interpreter abi.
     """
-    supported: list[Tag] = []
+    supported: List[Tag] = []
 
-    python_version: PythonVersion | None = None
+    python_version: Optional[PythonVersion] = None
     if version is not None:
         python_version = _get_python_version(version)
 

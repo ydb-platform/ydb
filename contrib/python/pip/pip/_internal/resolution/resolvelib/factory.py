@@ -1,14 +1,21 @@
-from __future__ import annotations
-
 import contextlib
 import functools
 import logging
-from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import (
     TYPE_CHECKING,
     Callable,
+    Dict,
+    FrozenSet,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
     NamedTuple,
+    Optional,
     Protocol,
+    Sequence,
+    Set,
+    Tuple,
     TypeVar,
     cast,
 )
@@ -77,13 +84,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 C = TypeVar("C")
-Cache = dict[Link, C]
+Cache = Dict[Link, C]
 
 
 class CollectedRootRequirements(NamedTuple):
-    requirements: list[Requirement]
-    constraints: dict[str, Constraint]
-    user_requested: dict[str, int]
+    requirements: List[Requirement]
+    constraints: Dict[str, Constraint]
+    user_requested: Dict[str, int]
 
 
 class Factory:
@@ -92,12 +99,12 @@ class Factory:
         finder: PackageFinder,
         preparer: RequirementPreparer,
         make_install_req: InstallRequirementProvider,
-        wheel_cache: WheelCache | None,
+        wheel_cache: Optional[WheelCache],
         use_user_site: bool,
         force_reinstall: bool,
         ignore_installed: bool,
         ignore_requires_python: bool,
-        py_version_info: tuple[int, ...] | None = None,
+        py_version_info: Optional[Tuple[int, ...]] = None,
     ) -> None:
         self._finder = finder
         self.preparer = preparer
@@ -111,9 +118,9 @@ class Factory:
         self._build_failures: Cache[InstallationError] = {}
         self._link_candidate_cache: Cache[LinkCandidate] = {}
         self._editable_candidate_cache: Cache[EditableCandidate] = {}
-        self._installed_candidate_cache: dict[str, AlreadyInstalledCandidate] = {}
-        self._extras_candidate_cache: dict[
-            tuple[int, frozenset[NormalizedName]], ExtrasCandidate
+        self._installed_candidate_cache: Dict[str, AlreadyInstalledCandidate] = {}
+        self._extras_candidate_cache: Dict[
+            Tuple[int, FrozenSet[NormalizedName]], ExtrasCandidate
         ] = {}
         self._supported_tags_cache = get_supported()
 
@@ -142,9 +149,9 @@ class Factory:
     def _make_extras_candidate(
         self,
         base: BaseCandidate,
-        extras: frozenset[str],
+        extras: FrozenSet[str],
         *,
-        comes_from: InstallRequirement | None = None,
+        comes_from: Optional[InstallRequirement] = None,
     ) -> ExtrasCandidate:
         cache_key = (id(base), frozenset(canonicalize_name(e) for e in extras))
         try:
@@ -157,7 +164,7 @@ class Factory:
     def _make_candidate_from_dist(
         self,
         dist: BaseDistribution,
-        extras: frozenset[str],
+        extras: FrozenSet[str],
         template: InstallRequirement,
     ) -> Candidate:
         try:
@@ -172,12 +179,12 @@ class Factory:
     def _make_candidate_from_link(
         self,
         link: Link,
-        extras: frozenset[str],
+        extras: FrozenSet[str],
         template: InstallRequirement,
-        name: NormalizedName | None,
-        version: Version | None,
-    ) -> Candidate | None:
-        base: BaseCandidate | None = self._make_base_candidate_from_link(
+        name: Optional[NormalizedName],
+        version: Optional[Version],
+    ) -> Optional[Candidate]:
+        base: Optional[BaseCandidate] = self._make_base_candidate_from_link(
             link, template, name, version
         )
         if not extras or base is None:
@@ -188,9 +195,9 @@ class Factory:
         self,
         link: Link,
         template: InstallRequirement,
-        name: NormalizedName | None,
-        version: Version | None,
-    ) -> BaseCandidate | None:
+        name: Optional[NormalizedName],
+        version: Optional[Version],
+    ) -> Optional[BaseCandidate]:
         # TODO: Check already installed candidate, and use it if the link and
         # editable flag match.
 
@@ -247,7 +254,7 @@ class Factory:
         specifier: SpecifierSet,
         hashes: Hashes,
         prefers_installed: bool,
-        incompatible_ids: set[int],
+        incompatible_ids: Set[int],
     ) -> Iterable[Candidate]:
         if not ireqs:
             return ()
@@ -260,14 +267,14 @@ class Factory:
         assert template.req, "Candidates found on index must be PEP 508"
         name = canonicalize_name(template.req.name)
 
-        extras: frozenset[str] = frozenset()
+        extras: FrozenSet[str] = frozenset()
         for ireq in ireqs:
             assert ireq.req, "Candidates found on index must be PEP 508"
             specifier &= ireq.req.specifier
             hashes &= ireq.hashes(trust_internet=False)
             extras |= frozenset(ireq.extras)
 
-        def _get_installed_candidate() -> Candidate | None:
+        def _get_installed_candidate() -> Optional[Candidate]:
             """Get the candidate for the currently-installed version."""
             # If --force-reinstall is set, we want the version from the index
             # instead, so we "pretend" there is nothing installed.
@@ -346,7 +353,7 @@ class Factory:
     def _iter_explicit_candidates_from_base(
         self,
         base_requirements: Iterable[Requirement],
-        extras: frozenset[str],
+        extras: FrozenSet[str],
     ) -> Iterator[Candidate]:
         """Produce explicit candidates from the base given an extra-ed package.
 
@@ -397,8 +404,8 @@ class Factory:
         is_satisfied_by: Callable[[Requirement, Candidate], bool],
     ) -> Iterable[Candidate]:
         # Collect basic lookup information from the requirements.
-        explicit_candidates: set[Candidate] = set()
-        ireqs: list[InstallRequirement] = []
+        explicit_candidates: Set[Candidate] = set()
+        ireqs: List[InstallRequirement] = []
         for req in requirements[identifier]:
             cand, ireq = req.get_candidate_lookup()
             if cand is not None:
@@ -517,7 +524,7 @@ class Factory:
                     )
 
     def collect_root_requirements(
-        self, root_ireqs: list[InstallRequirement]
+        self, root_ireqs: List[InstallRequirement]
     ) -> CollectedRootRequirements:
         collected = CollectedRootRequirements([], {}, {})
         for i, ireq in enumerate(root_ireqs):
@@ -566,7 +573,7 @@ class Factory:
     def make_requirements_from_spec(
         self,
         specifier: str,
-        comes_from: InstallRequirement | None,
+        comes_from: Optional[InstallRequirement],
         requested_extras: Iterable[str] = (),
     ) -> Iterator[Requirement]:
         """
@@ -584,7 +591,7 @@ class Factory:
     def make_requires_python_requirement(
         self,
         specifier: SpecifierSet,
-    ) -> Requirement | None:
+    ) -> Optional[Requirement]:
         if self._ignore_requires_python:
             return None
         # Don't bother creating a dependency for an empty Requires-Python.
@@ -592,7 +599,9 @@ class Factory:
             return None
         return RequiresPythonRequirement(specifier, self._python_candidate)
 
-    def get_wheel_cache_entry(self, link: Link, name: str | None) -> CacheEntry | None:
+    def get_wheel_cache_entry(
+        self, link: Link, name: Optional[str]
+    ) -> Optional[CacheEntry]:
         """Look up the link in the wheel cache.
 
         If ``preparer.require_hashes`` is True, don't use the wheel cache,
@@ -609,7 +618,7 @@ class Factory:
             supported_tags=self._supported_tags_cache,
         )
 
-    def get_dist_to_uninstall(self, candidate: Candidate) -> BaseDistribution | None:
+    def get_dist_to_uninstall(self, candidate: Candidate) -> Optional[BaseDistribution]:
         # TODO: Are there more cases this needs to return True? Editable?
         dist = self._installed_dists.get(candidate.project_name)
         if dist is None:  # Not installed, no uninstallation required.
@@ -638,7 +647,7 @@ class Factory:
         return None
 
     def _report_requires_python_error(
-        self, causes: Sequence[ConflictCause]
+        self, causes: Sequence["ConflictCause"]
     ) -> UnsupportedPythonVersion:
         assert causes, "Requires-Python error reported with no cause"
 
@@ -660,7 +669,7 @@ class Factory:
         return UnsupportedPythonVersion(message)
 
     def _report_single_requirement_conflict(
-        self, req: Requirement, parent: Candidate | None
+        self, req: Requirement, parent: Optional[Candidate]
     ) -> DistributionNotFound:
         if parent is None:
             req_disp = str(req)
@@ -670,8 +679,8 @@ class Factory:
         cands = self._finder.find_all_candidates(req.project_name)
         skipped_by_requires_python = self._finder.requires_python_skipped_reasons()
 
-        versions_set: set[Version] = set()
-        yanked_versions_set: set[Version] = set()
+        versions_set: Set[Version] = set()
+        yanked_versions_set: Set[Version] = set()
         for c in cands:
             is_yanked = c.link.is_yanked if c.link else False
             if is_yanked:
@@ -713,8 +722,8 @@ class Factory:
 
     def get_installation_error(
         self,
-        e: ResolutionImpossible[Requirement, Candidate],
-        constraints: dict[str, Constraint],
+        e: "ResolutionImpossible[Requirement, Candidate]",
+        constraints: Dict[str, Constraint],
     ) -> InstallationError:
         assert e.causes, "Installation error reported with no cause"
 
@@ -747,7 +756,7 @@ class Factory:
         # satisfied at once.
 
         # A couple of formatting helpers
-        def text_join(parts: list[str]) -> str:
+        def text_join(parts: List[str]) -> str:
             if len(parts) == 1:
                 return parts[0]
 

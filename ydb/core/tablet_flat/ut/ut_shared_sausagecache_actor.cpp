@@ -1,4 +1,3 @@
-#include <shared_cache_counters.h>
 #include <shared_cache_events.h>
 #include <shared_sausagecache.h>
 #include <ydb/core/base/counters.h>

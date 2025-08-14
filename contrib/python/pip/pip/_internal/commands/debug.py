@@ -1,12 +1,10 @@
-from __future__ import annotations
-
 import locale
 import logging
 import os
 import sys
 from optparse import Values
 from types import ModuleType
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 import pip._vendor
 from pip._vendor.certifi import where
@@ -36,7 +34,7 @@ def show_sys_implementation() -> None:
         show_value("name", implementation_name)
 
 
-def create_vendor_txt_map() -> dict[str, str]:
+def create_vendor_txt_map() -> Dict[str, str]:
     with open_text_resource("pip._vendor", "vendor.txt") as f:
         # Purge non version specifying lines.
         # Also, remove any space prefix or suffixes (including comments).
@@ -48,7 +46,7 @@ def create_vendor_txt_map() -> dict[str, str]:
     return dict(line.split("==", 1) for line in lines)
 
 
-def get_module_from_module_name(module_name: str) -> ModuleType | None:
+def get_module_from_module_name(module_name: str) -> Optional[ModuleType]:
     # Module name can be uppercase in vendor.txt for some reason...
     module_name = module_name.lower().replace("-", "_")
     # PATCH: setuptools is actually only pkg_resources.
@@ -66,7 +64,7 @@ def get_module_from_module_name(module_name: str) -> ModuleType | None:
         raise
 
 
-def get_vendor_version_from_module(module_name: str) -> str | None:
+def get_vendor_version_from_module(module_name: str) -> Optional[str]:
     module = get_module_from_module_name(module_name)
     version = getattr(module, "__version__", None)
 
@@ -81,7 +79,7 @@ def get_vendor_version_from_module(module_name: str) -> str | None:
     return version
 
 
-def show_actual_vendor_versions(vendor_txt_versions: dict[str, str]) -> None:
+def show_actual_vendor_versions(vendor_txt_versions: Dict[str, str]) -> None:
     """Log the actual version and print extra info if there is
     a conflict or if the actual version could not be imported.
     """
@@ -171,7 +169,7 @@ class DebugCommand(Command):
         self.parser.insert_option_group(0, self.cmd_opts)
         self.parser.config.load()
 
-    def run(self, options: Values, args: list[str]) -> int:
+    def run(self, options: Values, args: List[str]) -> int:
         logger.warning(
             "This command is only meant for debugging. "
             "Do not use this with automation for parsing and getting these "

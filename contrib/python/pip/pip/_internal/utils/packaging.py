@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 import functools
 import logging
+from typing import Optional, Tuple
 
 from pip._vendor.packaging import specifiers, version
 from pip._vendor.packaging.requirements import Requirement
@@ -11,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=32)
 def check_requires_python(
-    requires_python: str | None, version_info: tuple[int, ...]
+    requires_python: Optional[str], version_info: Tuple[int, ...]
 ) -> bool:
     """
     Check if the given Python version matches a "Requires-Python" specifier.

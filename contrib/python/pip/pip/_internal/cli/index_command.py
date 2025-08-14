@@ -6,14 +6,12 @@ so commands which don't always hit the network (e.g. list w/o --outdated or
 --uptodate) don't need waste time importing PipSession and friends.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import sys
 from functools import lru_cache
 from optparse import Values
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from pip._vendor import certifi
 
@@ -29,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 @lru_cache
-def _create_truststore_ssl_context() -> SSLContext | None:
+def _create_truststore_ssl_context() -> Optional["SSLContext"]:
     if sys.version_info < (3, 10):
         logger.debug("Disabling truststore because Python version isn't 3.10+")
         return None
@@ -58,10 +56,10 @@ class SessionCommandMixin(CommandContextMixIn):
 
     def __init__(self) -> None:
         super().__init__()
-        self._session: PipSession | None = None
+        self._session: Optional[PipSession] = None
 
     @classmethod
-    def _get_index_urls(cls, options: Values) -> list[str] | None:
+    def _get_index_urls(cls, options: Values) -> Optional[List[str]]:
         """Return a list of index urls from user-provided options."""
         index_urls = []
         if not getattr(options, "no_index", False):
@@ -74,7 +72,7 @@ class SessionCommandMixin(CommandContextMixIn):
         # Return None rather than an empty list
         return index_urls or None
 
-    def get_default_session(self, options: Values) -> PipSession:
+    def get_default_session(self, options: Values) -> "PipSession":
         """Get a default-managed session."""
         if self._session is None:
             self._session = self.enter_context(self._build_session(options))
@@ -87,9 +85,9 @@ class SessionCommandMixin(CommandContextMixIn):
     def _build_session(
         self,
         options: Values,
-        retries: int | None = None,
-        timeout: int | None = None,
-    ) -> PipSession:
+        retries: Optional[int] = None,
+        timeout: Optional[int] = None,
+    ) -> "PipSession":
         from pip._internal.network.session import PipSession
 
         cache_dir = options.cache_dir
@@ -136,7 +134,7 @@ class SessionCommandMixin(CommandContextMixIn):
         return session
 
 
-def _pip_self_version_check(session: PipSession, options: Values) -> None:
+def _pip_self_version_check(session: "PipSession", options: Values) -> None:
     from pip._internal.self_outdated_check import pip_self_version_check as check
 
     check(session, options)

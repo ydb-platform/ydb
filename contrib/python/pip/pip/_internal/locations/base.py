@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 import functools
 import os
 import site
 import sys
 import sysconfig
+import typing
 
 from pip._internal.exceptions import InstallationError
 from pip._internal.utils import appdirs
@@ -72,11 +71,11 @@ def get_src_prefix() -> str:
 try:
     # Use getusersitepackages if this is present, as it ensures that the
     # value is initialised properly.
-    user_site: str | None = site.getusersitepackages()
+    user_site: typing.Optional[str] = site.getusersitepackages()
 except AttributeError:
     user_site = site.USER_SITE
 
 
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def is_osx_framework() -> bool:
     return bool(sysconfig.get_config_var("PYTHONFRAMEWORK"))

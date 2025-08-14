@@ -1,8 +1,5 @@
-from __future__ import annotations
-
-from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Optional
+from typing import FrozenSet, Iterable, Optional, Tuple
 
 from pip._vendor.packaging.specifiers import SpecifierSet
 from pip._vendor.packaging.utils import NormalizedName
@@ -12,10 +9,10 @@ from pip._internal.models.link import Link, links_equivalent
 from pip._internal.req.req_install import InstallRequirement
 from pip._internal.utils.hashes import Hashes
 
-CandidateLookup = tuple[Optional["Candidate"], Optional[InstallRequirement]]
+CandidateLookup = Tuple[Optional["Candidate"], Optional[InstallRequirement]]
 
 
-def format_name(project: NormalizedName, extras: frozenset[NormalizedName]) -> str:
+def format_name(project: NormalizedName, extras: FrozenSet[NormalizedName]) -> str:
     if not extras:
         return project
     extras_expr = ",".join(sorted(extras))
@@ -26,21 +23,21 @@ def format_name(project: NormalizedName, extras: frozenset[NormalizedName]) -> s
 class Constraint:
     specifier: SpecifierSet
     hashes: Hashes
-    links: frozenset[Link]
+    links: FrozenSet[Link]
 
     @classmethod
-    def empty(cls) -> Constraint:
+    def empty(cls) -> "Constraint":
         return Constraint(SpecifierSet(), Hashes(), frozenset())
 
     @classmethod
-    def from_ireq(cls, ireq: InstallRequirement) -> Constraint:
+    def from_ireq(cls, ireq: InstallRequirement) -> "Constraint":
         links = frozenset([ireq.link]) if ireq.link else frozenset()
         return Constraint(ireq.specifier, ireq.hashes(trust_internet=False), links)
 
     def __bool__(self) -> bool:
         return bool(self.specifier) or bool(self.hashes) or bool(self.links)
 
-    def __and__(self, other: InstallRequirement) -> Constraint:
+    def __and__(self, other: InstallRequirement) -> "Constraint":
         if not isinstance(other, InstallRequirement):
             return NotImplemented
         specifier = self.specifier & other.specifier
@@ -50,7 +47,7 @@ class Constraint:
             links = links.union([other.link])
         return Constraint(specifier, hashes, links)
 
-    def is_satisfied_by(self, candidate: Candidate) -> bool:
+    def is_satisfied_by(self, candidate: "Candidate") -> bool:
         # Reject if there are any mismatched URL constraints on this package.
         if self.links and not all(_match_link(link, candidate) for link in self.links):
             return False
@@ -80,7 +77,7 @@ class Requirement:
         """
         raise NotImplementedError("Subclass should override")
 
-    def is_satisfied_by(self, candidate: Candidate) -> bool:
+    def is_satisfied_by(self, candidate: "Candidate") -> bool:
         return False
 
     def get_candidate_lookup(self) -> CandidateLookup:
@@ -90,7 +87,7 @@ class Requirement:
         raise NotImplementedError("Subclass should override")
 
 
-def _match_link(link: Link, candidate: Candidate) -> bool:
+def _match_link(link: Link, candidate: "Candidate") -> bool:
     if candidate.source_link:
         return links_equivalent(link, candidate.source_link)
     return False
@@ -129,13 +126,13 @@ class Candidate:
         raise NotImplementedError("Override in subclass")
 
     @property
-    def source_link(self) -> Link | None:
+    def source_link(self) -> Optional[Link]:
         raise NotImplementedError("Override in subclass")
 
-    def iter_dependencies(self, with_requires: bool) -> Iterable[Requirement | None]:
+    def iter_dependencies(self, with_requires: bool) -> Iterable[Optional[Requirement]]:
         raise NotImplementedError("Override in subclass")
 
-    def get_install_requirement(self) -> InstallRequirement | None:
+    def get_install_requirement(self) -> Optional[InstallRequirement]:
         raise NotImplementedError("Override in subclass")
 
     def format_for_error(self) -> str:

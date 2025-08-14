@@ -1,12 +1,8 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from typing import Optional
 
 from pip._internal.distributions.base import AbstractDistribution
+from pip._internal.index.package_finder import PackageFinder
 from pip._internal.metadata import BaseDistribution
-
-if TYPE_CHECKING:
-    from pip._internal.build_env import BuildEnvironmentInstaller
 
 
 class InstalledDistribution(AbstractDistribution):
@@ -17,7 +13,7 @@ class InstalledDistribution(AbstractDistribution):
     """
 
     @property
-    def build_tracker_id(self) -> str | None:
+    def build_tracker_id(self) -> Optional[str]:
         return None
 
     def get_metadata_distribution(self) -> BaseDistribution:
@@ -26,7 +22,7 @@ class InstalledDistribution(AbstractDistribution):
 
     def prepare_distribution_metadata(
         self,
-        build_env_installer: BuildEnvironmentInstaller,
+        finder: PackageFinder,
         build_isolation: bool,
         check_build_deps: bool,
     ) -> None:

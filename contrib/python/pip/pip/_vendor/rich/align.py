@@ -1,5 +1,11 @@
+import sys
 from itertools import chain
-from typing import TYPE_CHECKING, Iterable, Optional, Literal
+from typing import TYPE_CHECKING, Iterable, Optional
+
+if sys.version_info >= (3, 8):
+    from typing import Literal
+else:
+    from pip._vendor.typing_extensions import Literal  # pragma: no cover
 
 from .constrain import Constrain
 from .jupyter import JupyterMixin

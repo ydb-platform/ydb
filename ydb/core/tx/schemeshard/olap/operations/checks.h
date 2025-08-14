@@ -34,7 +34,7 @@ namespace NKikimr::NSchemeShard::NOlap {
         }
 
         if (column.GetType() == "Decimal"
-            && !appData->FeatureFlags.GetEnableParameterizedDecimal()){
+            && !appData->FeatureFlags.GetEnableParameterizedDecimal()) {
             return std::unexpected(std::format(
                 "Type '{}' specified for column '{}', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)",
                 column.GetType().data(), column.GetName().data()));

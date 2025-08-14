@@ -709,7 +709,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
 
     // For unique or vector index rewrite UPDATE to UPDATE ON
     if (needsKqpEffect) {
-        auto effect = Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
+        return Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))
             .Input<TKqpWriteConstraint>()
                 .Input(updatedRows)
@@ -721,9 +721,6 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 .Build()
             .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
             .Done();
-
-        effects.emplace_back(effect);
-        return Build<TExprList>(ctx, update.Pos()).Add(effects).Done();
     }
 
     const auto& pk = tableData.Metadata->KeyColumnNames;

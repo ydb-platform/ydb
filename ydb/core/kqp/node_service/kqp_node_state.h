@@ -1,7 +1,9 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/util/tuples.h>
 
@@ -28,20 +30,22 @@ struct TTasksRequest {
     using TTaskExpirationInfo = std::tuple<TInstant, ui64, TActorId>;
     THashMap<ui64, TTaskContext> InFlyTasks;
     ui64 TxId = 0;
+    NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     TInstant Deadline;
     TActorId Executer;
     TActorId TimeoutTimer;
     bool ExecutionCancelled = false;
     TInstant StartTime;
 
-    explicit TTasksRequest(ui64 txId, TActorId executer, TInstant startTime)
+    explicit TTasksRequest(ui64 txId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TActorId executer, TInstant startTime)
         : TxId(txId)
+        , Query(query)
         , Executer(executer)
         , StartTime(startTime)
     {
     }
 
-    TTaskExpirationInfo GetExpritationInfo() const {
+    TTaskExpirationInfo GetExpirationInfo() const {
         return std::make_tuple(Deadline, TxId, Executer);
     }
 };
@@ -95,10 +99,18 @@ public:
                 auto ret = TRemoveTaskContext{request.InFlyTasks.size()};
 
                 if (request.InFlyTasks.empty()) {
-                    auto expireIt = ExpiringRequests.find(request.GetExpritationInfo());
+                    auto expireIt = ExpiringRequests.find(request.GetExpirationInfo());
                     if (expireIt != ExpiringRequests.end()) {
                         ExpiringRequests.erase(expireIt);
                     }
+
+                    if (auto query = requestIt->second.Query) {
+                        auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
+                        removeQueryEvent->Query = query;
+                        const auto& actorCtx = NActors::TActorContext::AsActorContext();
+                        actorCtx.Send(MakeKqpSchedulerServiceId(actorCtx.SelfID.NodeId()), removeQueryEvent.Release());
+                    }
+
                     Requests.erase(*senderIt);
                     SenderIdsByTxId.erase(senderIt);
                     YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
@@ -109,11 +121,6 @@ public:
         }
 
         return Nothing();
-    }
-
-    TMaybe<TTasksRequest> RemoveRequest(ui64 txId, const TActorId& requester) {
-        TWriteGuard guard(RWLock);
-        return RemoveRequestImpl(txId, requester);
     }
 
     // return the vector of pairs where the first element is a taskId
@@ -169,29 +176,6 @@ public:
                 }
             }
         }
-    }
-private:
-
-    TMaybe<TTasksRequest> RemoveRequestImpl(ui64 txId, const TActorId& requester) {
-        auto key = std::make_pair(txId, requester);
-        auto* request = Requests.FindPtr(key);
-        if (!request) {
-            return Nothing();
-        }
-
-        TMaybe<TTasksRequest> ret = std::move(*request);
-        Requests.erase(key);
-
-        const auto senders = SenderIdsByTxId.equal_range(txId);
-        for (auto senderIt = senders.first; senderIt != senders.second; ++senderIt) {
-            if (senderIt->second == requester) {
-                SenderIdsByTxId.erase(senderIt);
-                break;
-            }
-        }
-
-        YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
-        return ret;
     }
 
 private:

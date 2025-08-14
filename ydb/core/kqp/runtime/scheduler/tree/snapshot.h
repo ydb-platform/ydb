@@ -27,9 +27,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::SNAPSHOT>, public std::enable_shared_from_this<TQuery> {
     public:
-        TQuery(const TQueryId& queryId, NDynamic::TQuery* query);
+        TQuery(const TQueryId& queryId, NDynamic::TQueryPtr query);
 
-        NDynamic::TQuery* Origin; // TODO: why public?
+        std::weak_ptr<NDynamic::TQuery> Origin; // TODO: why public?
     };
 
     class TPool : public TTreeElement, public NHdrf::TPool<ETreeType::SNAPSHOT> {

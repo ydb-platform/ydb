@@ -143,7 +143,8 @@ private:
     std::map<ui32, EAllocationType> Allocated;
 };
 
-bool CreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit& split, const TTopicInfo::TPtr& topic) {
+bool ShouldCreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit& split, const TTopicInfo::TPtr& topic) {
+    // return if we should create one child at the root level in the case when another child already exists
     if (!split.GetAllowRootLevelSibling() || split.ChildPartitionIdsSize() == 0) {
         return false;
     }
@@ -734,7 +735,7 @@ public:
             TPartitionIndexGenerator indexGenerator(topic->NextPartitionId, topic->TotalGroupCount + 1);
             for (const auto& split : alter.GetSplit()) {
                 for (const ui32 childId : split.GetChildPartitionIds()) {
-                    const auto reserve = indexGenerator.ReservePartitionIndex(childId, split.GetPartition(), CreateSiblingAtRootLevel(split, topic));
+                    const auto reserve = indexGenerator.ReservePartitionIndex(childId, split.GetPartition(), ShouldCreateSiblingAtRootLevel(split, topic));
                     if (!reserve.has_value()) {
                         errStr = TStringBuilder() << "Split with prescribed partition ids: " << reserve.error();
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
@@ -831,7 +832,7 @@ public:
                         result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
-                    if (prescribedChildPartitionId && CreateSiblingAtRootLevel(split, topic)) [[unlikely]] {
+                    if (prescribedChildPartitionId && ShouldCreateSiblingAtRootLevel(split, topic)) [[unlikely]] {
                         if (topic->Partitions.contains(*prescribedChildPartitionId)) {
                             LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                                         std::format("Skipping split partition {} because child partition {} exists",

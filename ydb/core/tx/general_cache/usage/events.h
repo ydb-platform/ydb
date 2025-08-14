@@ -68,8 +68,7 @@ struct TEvents {
         TSourceId GetSourceId() const {
             return SourceId;
         }
-    }
-
+    };
     class TEvUpdateMaxCacheSize: public NActors::TEventLocal<TEvUpdateMaxCacheSize, EvUpdateMaxCacheSize> {
     private:
         YDB_READONLY_CONST(ui64, MaxCacheSize);

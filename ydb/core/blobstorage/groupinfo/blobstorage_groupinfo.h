@@ -338,7 +338,7 @@ public:
     const std::vector<TGroupId>& GetBridgeGroupIds() const { return BridgeGroupIds; }
     bool IsBridged() const { return !BridgeGroupIds.empty(); }
     std::optional<TGroupId> GetBridgeProxyGroupId() const { return BridgeProxyGroupId; }
-    std::optional<TBridgePileId> GetBridgePileId() const { return BridgePileId; }
+    TBridgePileId GetBridgePileId() const { return BridgePileId; }
 
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
@@ -485,7 +485,7 @@ private:
     // bridge mode fields
     std::vector<TGroupId> BridgeGroupIds;
     std::optional<TGroupId> BridgeProxyGroupId;
-    std::optional<TBridgePileId> BridgePileId;
+    TBridgePileId BridgePileId;
 };
 
 // physical fail domain description

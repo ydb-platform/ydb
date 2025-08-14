@@ -23,7 +23,7 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenNotifyConfigMismatch;
     struct TEvNodeWardenWriteMetadata;
     struct TEvNodeWardenQueryCacheResult;
-    struct TEvNodeWardenManageSyncers;
+    struct TEvNodeWardenNotifySyncerFinished;
 
     constexpr ui32 ProxyConfigurationTimeoutMilliseconds = 200;
     constexpr TDuration BackoffMin = TDuration::MilliSeconds(20);
@@ -145,6 +145,7 @@ namespace NKikimr::NStorage {
 
         ui64 NextConfigCookie = 1;
         std::unordered_map<ui64, std::function<void(TEvBlobStorage::TEvControllerConfigResponse*)>> ConfigInFlight;
+        std::unordered_map<ui64, NKikimrBlobStorage::TEvControllerConfigRequest> UnfinishedRequests;
 
         TBackoffTimer ConfigSaveTimer{BackoffMin.MilliSeconds(), BackoffMax.MilliSeconds()};
         std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
@@ -534,7 +535,6 @@ namespace NKikimr::NStorage {
             TActorId GroupResolver; // resolver actor id
             TIntrusiveList<TVDiskRecord, TGroupRelationTag> VDisksOfGroup;
             TNodeLayoutInfoPtr NodeLayoutInfo;
-            THashMap<TBridgePileId, TActorId> WorkingSyncers;
         };
 
         std::unordered_map<ui32, TGroupRecord> Groups;
@@ -624,7 +624,9 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvAskRestartVDisk::TPtr ev);
         void Handle(TEvBlobStorage::TEvAskWardenRestartPDisk::TPtr ev);
         void Handle(TEvBlobStorage::TEvNotifyWardenPDiskRestarted::TPtr ev);
+        void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
+        void SendUnfinishedRequests();
 
         void FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus> *pb, bool initial);
 
@@ -639,7 +641,29 @@ namespace NKikimr::NStorage {
 
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::TPtr ev);
 
-        void HandleManageSyncers(TAutoPtr<TEventHandle<TEvNodeWardenManageSyncers>> ev);
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Bridge syncer operation
+
+        struct TWorkingSyncer {
+            const TGroupId BridgeProxyGroupId;
+            ui32 BridgeProxyGroupGeneration;
+            const TGroupId SourceGroupId;
+            const TGroupId TargetGroupId;
+            TActorId ActorId;
+            bool Finished = false;
+            std::optional<TString> ErrorReason;
+
+            friend std::strong_ordering operator <=>(const TWorkingSyncer& x, const TWorkingSyncer& y) {
+                return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId) <=>
+                    std::tie(y.BridgeProxyGroupId, y.SourceGroupId, y.TargetGroupId);
+            }
+        };
+
+        std::set<TWorkingSyncer> WorkingSyncers;
+
+        void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);
+        void FillInWorkingSyncers(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

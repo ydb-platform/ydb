@@ -31,7 +31,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
@@ -491,6 +491,9 @@ public:
         ui32 softTimeout = shs.GetSoftTimeoutMs();
         for(auto& [idx, sessionInfo] : *LocalSessions) {
             Send(sessionInfo.WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
+            if (sessionInfo.AttachedRpcId) {
+                Send(sessionInfo.AttachedRpcId, CreateEvCloseSessionResponse(sessionInfo.SessionId).release());
+            }
         }
     }
 
@@ -1026,6 +1029,9 @@ public:
         ui32 softTimeout = sbs.GetSoftSessionShutdownTimeoutMs();
         Counters->ReportSessionShutdownRequest(sessionInfo->DbCounters);
         Send(sessionInfo->WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
+        if (sessionInfo->AttachedRpcId) {
+            Send(sessionInfo->AttachedRpcId, CreateEvCloseSessionResponse(sessionInfo->SessionId).release());
+        }
     }
 
     void ProcessMonShutdownQueue(ui32 wantsToShutdown) {
@@ -1423,11 +1429,7 @@ private:
             }
 
             if (rpcActor) {
-                auto closeEv = MakeHolder<TEvKqp::TEvCloseSessionResponse>();
-                closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
-                closeEv->Record.MutableResponse()->SetSessionId(sessionId);
-                closeEv->Record.MutableResponse()->SetClosed(true);
-                Send(rpcActor, closeEv.Release());
+                Send(rpcActor, CreateEvCloseSessionResponse(sessionId));
             }
 
             return;
@@ -1444,7 +1446,7 @@ private:
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         const auto& databaseId = ev->Get()->GetDatabaseId();
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || (ev->Get()->IsInternalCall() && WorkloadManagerConfig.GetEnabled())) {
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall()) {
             ev->Get()->SetPoolId("");
             return true;
         }
@@ -1458,6 +1460,8 @@ private:
         const auto& poolInfo = ResourcePoolsCache.GetPoolInfo(databaseId, poolId, ActorContext());
 
         if (!poolInfo) {
+            Y_ASSERT(!poolId.empty());
+            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
             return true;
         }
 
@@ -1798,6 +1802,14 @@ private:
 
     TResourcePoolsCache ResourcePoolsCache;
     TDatabasesCache DatabasesCache;
+
+    std::unique_ptr<TEvKqp::TEvCloseSessionResponse> CreateEvCloseSessionResponse(const TString& sessionId) {
+        auto closeEv = std::make_unique<TEvKqp::TEvCloseSessionResponse>();
+        closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+        closeEv->Record.MutableResponse()->SetSessionId(sessionId);
+        closeEv->Record.MutableResponse()->SetClosed(true);
+        return closeEv;
+    }
 };
 
 } // namespace

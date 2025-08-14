@@ -6,7 +6,19 @@ namespace NYdbWorkload {
 
 class TWorkloadDataInitializerBase::TDataGenerator final: public IBulkDataGenerator {
 public:
-    explicit TDataGenerator(const TWorkloadDataInitializerBase& owner, const TString& name, ui64 size, const TString& tablePath, const TFsPath& dataPath, const TVector<TString>& columnNames = {});
+    enum class EPortionSizeUnit {
+        Byte,
+        Line
+    };
+
+    explicit TDataGenerator(
+        const TWorkloadDataInitializerBase& owner,
+        const TString& name, ui64 size,
+        const TString& tablePath,
+        const TFsPath& dataPath,
+        const TVector<TString>& columnNames = {},
+        EPortionSizeUnit sizeUnit = EPortionSizeUnit::Byte
+    );
     virtual TDataPortions GenerateDataPortion() override;
 
 private:
@@ -36,6 +48,7 @@ private:
     ui32 FilesCount = 0;
     TAdaptiveLock Lock;
     bool FirstPortion = true;
+    EPortionSizeUnit SizeUnit;
 };
 
 }

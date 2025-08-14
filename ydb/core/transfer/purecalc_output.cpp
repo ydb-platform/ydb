@@ -56,6 +56,7 @@ public:
                 return nullptr;
             }
 
+            Out.EstimateSize = 0;
             Out.Value = value.GetElement(0);
 
             const auto& columns = OutputSpec.GetStructColumns();
@@ -74,6 +75,17 @@ public:
 
                 if (column.GetNotNull() && !e) {
                     throw yexception() << "The value of the '" << column.GetName() << "' column must be non-NULL";
+                }
+
+                if (e) {
+                    switch (static_cast<Ydb::Type::PrimitiveTypeId>(column.GetTypeId())) {
+                        case Ydb::Type_PrimitiveTypeId_STRING:
+                        case Ydb::Type_PrimitiveTypeId_UTF8:
+                            Out.EstimateSize += e.AsStringRef().Size();
+                            break;
+                        default:
+                            Out.EstimateSize += 8;
+                    }
                 }
             }
 

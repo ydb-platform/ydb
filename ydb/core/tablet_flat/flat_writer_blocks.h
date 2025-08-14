@@ -16,7 +16,7 @@ namespace NWriter {
         using ECache = NTable::NPage::ECache;
         using EPage = NTable::NPage::EPage;
         using TPageId = NTable::NPage::TPageId;
-        using TCache = TPrivatePageCache::TInfo;
+        using TPageCollection = TPrivatePageCache::TPageCollection;
 
         struct TResult : TMoveOnly {
             TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;

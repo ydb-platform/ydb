@@ -15,6 +15,7 @@ class TJsonCluster : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfigResponse;
+    bool NodeWardenStorageConfigResponseProcessed = false;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse>> PDisksResponse;
@@ -33,7 +34,7 @@ class TJsonCluster : public TViewerPipeClient {
         TNodeId NodeId;
         TString DataCenter;
         TSubDomainKey SubDomainKey;
-        std::optional<ui32> PileId;
+        std::optional<ui32> PileNum;
         bool Static = false;
         bool Connected = false;
         bool Disconnected = false;
@@ -258,13 +259,13 @@ private:
                     NodeCache.emplace(node.NodeInfo.NodeId, &node);
                 }
                 if (NodesInfoResponse->Get()->PileMap) {
-                    for (ui32 pileId = 0; pileId < NodesInfoResponse->Get()->PileMap->size(); ++pileId) {
-                        for (ui32 nodeId : (*NodesInfoResponse->Get()->PileMap)[pileId]) {
+                    for (ui32 pileNum = 0; pileNum < NodesInfoResponse->Get()->PileMap->size(); ++pileNum) {
+                        for (ui32 nodeId : (*NodesInfoResponse->Get()->PileMap)[pileNum]) {
                             auto itNode = NodeCache.find(nodeId);
                             if (itNode == NodeCache.end()) {
                                 continue;
                             }
-                            itNode->second->PileId = pileId;
+                            itNode->second->PileNum = pileNum;
                         }
                     }
                 }
@@ -350,7 +351,7 @@ private:
             StorageStatsResponse.reset();
         }
 
-        if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone()) {
+        if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone() && !NodeWardenStorageConfigResponseProcessed) {
             if (NodeWardenStorageConfigResponse->IsOk()) {
                 if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
                     const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
@@ -358,22 +359,24 @@ private:
                     std::unordered_map<ui32, ui32> pileNodes;
                     for (const auto& pile : srcBridgeInfo.Piles) {
                         auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
-                        pbBridgePileInfo.SetPileId(pile.BridgePileId.GetRawId());
+                        pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
                         pbBridgePileInfo.SetName(pile.Name);
                         pbBridgePileInfo.SetState(pile.State);
                         pbBridgePileInfo.SetIsPrimary(pile.IsPrimary);
                         pbBridgePileInfo.SetIsBeingPromoted(pile.IsBeingPromoted);
                     }
                     for (const auto& node : NodeData) {
-                        if (node.PileId) {
-                            pileNodes[*node.PileId]++;
+                        if (node.PileNum) {
+                            pileNodes[*node.PileNum]++;
                         }
                     }
+                    ui32 pileNum = 0;
                     for (auto& pile : *pbBridgeInfo.MutablePiles()) {
-                        auto it = pileNodes.find(pile.GetPileId());
+                        auto it = pileNodes.find(pileNum);
                         if (it != pileNodes.end()) {
                             pile.SetNodes(it->second);
                         }
+                        ++pileNum;
                     }
                 } else {
                     AddProblem("empty-node-warden-bridge-info");
@@ -381,6 +384,7 @@ private:
             } else {
                 AddProblem("no-node-warden-storage-config");
             }
+            NodeWardenStorageConfigResponseProcessed = true;
         }
 
         if (TimeToAskWhiteboard()) {

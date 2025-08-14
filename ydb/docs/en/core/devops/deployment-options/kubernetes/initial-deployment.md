@@ -196,6 +196,7 @@ Annotations:  <none>
 API Version:  ydb.tech/v1alpha1
 Kind:         Database
 ...
+  Storage Endpoint:  grpc://storage-sample-grpc.default.svc.cluster.local:2135
 Status:
   State:  Ready
 Events:
@@ -242,15 +243,15 @@ Check how {{ ydb-short-name }} works:
  2. Start a new pod with [{{ ydb-short-name }} CLI]((../reference/ydb-cli/index.md)):
 
     ```bash
-    kubectl run -it --image=cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.44 --rm ydb-cli bash
+    kubectl run -it --image=cr.yandex/crptqonuodf51kdj7a7d/ydb:24.4.4.2 --rm ydb-cli bash
     ```
 
- 3. Query the {{ ydb-short-name }} database:
+ 3. Query the {{ ydb-short-name }} database (you can get the endpoint from the output of `kubectl describe database.ydb.tech`):
 
     ```bash
-    ydb \
+    /opt/ydb/bin/ydb \
       --endpoint grpc://database-sample-grpc:2135 \
-      --database /root/database-sample \
+      --database /Root/database-sample \
       sql -s 'SELECT 2 + 2;'
     ```
 

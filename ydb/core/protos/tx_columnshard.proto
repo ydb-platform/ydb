@@ -99,6 +99,7 @@ message TEvWriteResult {
     optional uint64 WriteId = 4;
     optional uint64 TableId = 5;
     optional string DedupId = 6;
+    optional uint64 OverloadSubscribed = 7;
 }
 
 message TEvRead {
@@ -355,4 +356,15 @@ message TInternalOperationData {
     optional uint64 PathId = 3;
     optional bool WritePortions = 4;
     optional bool IsBulk = 5;
+}
+
+// Sent by columnshard when some overload reason stopped being relevant
+message TEvOverloadReady {
+    optional uint64 TabletID = 1;
+    optional uint64 SeqNo = 2;
+}
+
+// Sent by overload subscribers to unsubscribe and free memory
+message TEvOverloadUnsubscribe {
+    optional uint64 SeqNo = 1;
 }

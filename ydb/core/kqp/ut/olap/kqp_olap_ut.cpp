@@ -1653,6 +1653,55 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(PushdownFilterMultiConsumersRead) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64	NOT NULL,
+                b Int32,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        std::vector<TString> queries = {
+            R"(
+                $sub = (select distinct (b) from `/Root/t1` where b > 10);
+
+                select count(*) from `/Root/t1` as t1
+                where t1.b = $sub;
+            )",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Olap filter not pushed down. Query: " << query);
+
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
     Y_UNIT_TEST(ProjectionPushDown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -3356,7 +3405,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(BulkUpsertUpdate) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        runnerSettings.SetColumnShardAlterObjectEnabled(true).SetColumnShardReaderClassName("PLAIN");
+        runnerSettings.SetColumnShardAlterObjectEnabled(true);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TTestHelper testHelper(runnerSettings);
 
@@ -4031,6 +4080,103 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(BulkUpserPredefinedData) {   //test for https://github.com/ydb-platform/ydb/issues/20003
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TTestHelper testHelper(settings);
+        auto queryClient = testHelper.GetKikimr().GetQueryClient();
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                    CREATE TABLE `/Root/arrow/columns` (
+                        hash Utf8 NOT NULL, 
+                        length Int32 NOT NULL, 
+                        PRIMARY KEY(hash)
+                    )
+                    WITH (STORE = COLUMN)
+                )", NQuery::TTxControl::NoTx())
+                              .GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const unsigned char schemaBytes[] = { 0xff, 0xff, 0xff, 0xff, 0xe0, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00,
+            0x0e, 0x00, 0x06, 0x00, 0x0d, 0x00, 0x08, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x01,
+            0x0a, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x08, 0x00, 0x04, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x00, 0x18, 0x00,
+            0x14, 0x00, 0x00, 0x00, 0x13, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x08, 0x00, 0x04, 0x00, 0x12, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00,
+            0x14, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x04, 0x00, 0x04, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x68, 0x61, 0x73, 0x68, 0x00, 0x00, 0x12, 0x00,
+            0x18, 0x00, 0x14, 0x00, 0x13, 0x00, 0x12, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x08, 0x00, 0x04, 0x00, 0x12, 0x00, 0x00, 0x00, 0x14, 0x00,
+            0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x01, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x0c, 0x00, 0x08, 0x00, 0x07, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x20, 0x00,
+            0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x6c, 0x65, 0x6e, 0x67, 0x74, 0x68, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        const auto& serializedSchema = TString{ (const char*)schemaBytes, sizeof(schemaBytes) };
+
+        const unsigned char dataBytes[] = { 0xff, 0xff, 0xff, 0xff, 0xc8, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c,
+            0x00, 0x16, 0x00, 0x0e, 0x00, 0x15, 0x00, 0x10, 0x00, 0x04, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x04, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x03, 0x0a, 0x00, 0x18, 0x00, 0x0c, 0x00, 0x08, 0x00, 0x04, 0x00, 0x0a,
+            0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x68, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a,
+            0x00, 0x00, 0x00, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+        {
+            //write prepared serialized batch, that contains a single row
+            const auto& serializedData = TString{ (const char*)dataBytes, sizeof(dataBytes) };
+            const auto& arrowSchema = NArrow::DeserializeSchema(serializedSchema);
+            const auto& arrowBatch = NArrow::DeserializeBatch(serializedData, arrowSchema);
+            auto csHelper = NKikimr::Tests::NCS::THelper{ testHelper.GetKikimr().GetTestServer() };
+            csHelper.SendDataViaActorSystem("/Root/arrow/columns", arrowBatch, Ydb::StatusIds::SUCCESS);
+        }
+
+        {
+            //check that the row is written to the table
+            auto queryClient = testHelper.GetKikimr().GetQueryClient();
+            auto result = queryClient.ExecuteQuery("SELECT * FROM `/Root/arrow/columns`", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[\"1234567890\";10]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(BulkUpsertIntoNotNullableColumn, AddNull) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TTestHelper testHelper(settings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("hash").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("length").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        const TString tableName = "/Root/ttt";
+        testTable.SetName(tableName).SetPrimaryKey({ "hash" }).SetSharding({ "hash" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        {
+            TTestHelper::TUpdatesBuilder rowsBuilder(testTable.GetArrowSchema(schema));
+            for (ui32 i = 0; i < 10; ++i) {
+                auto hash = TStringBuilder() << "SomeArtificalHash:" << TString(i, '0');
+                if (AddNull && (i == 5)) { //Add single incorrect row
+                    rowsBuilder.AddRow().Add(hash.c_str()).AddNull();
+                } else {
+                    rowsBuilder.AddRow().Add(hash.c_str()).Add(hash.size());
+                }
+            }
+            if (AddNull) {
+                testHelper.BulkUpsert(testTable, rowsBuilder, Ydb::StatusIds::BAD_REQUEST,
+                    "Cannot write data into shard(Incorrect request: cannot prepare incoming batch: empty field for non-default column: "
+                    "'length')");
+            } else {
+                testHelper.BulkUpsert(testTable, rowsBuilder);
+            }
+        }
+    }
+
     Y_UNIT_TEST(InsertEmptyString) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
@@ -4284,7 +4430,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(ReverseMerge) {
         auto runnerSettings =
-            TKikimrSettings().SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true).SetColumnShardReaderClassName("PLAIN");
+            TKikimrSettings().SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true);
         runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();

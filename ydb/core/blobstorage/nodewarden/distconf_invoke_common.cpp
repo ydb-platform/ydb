@@ -167,27 +167,30 @@ namespace NKikimr::NStorage {
                     case TQuery::kNotifyBridgeSyncFinished:
                         return NotifyBridgeSyncFinished(op.Command.GetNotifyBridgeSyncFinished());
 
+                    case TQuery::kUpdateBridgeGroupInfo:
+                        return UpdateBridgeGroupInfo(op.Command.GetUpdateBridgeGroupInfo());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
                 }
 
                 throw TExError() << "Unhandled request";
             },
-            [&](TCollectConfigsAndPropose&) {
+            [&](TCollectConfigsAndPropose& op) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection");
 
                 TEvScatter task;
                 task.MutableCollectConfigs();
-                IssueScatterTask(std::move(task), [this](TEvGather *res) {
+                IssueScatterTask(std::move(task), [this, singleBridgePileId = op.SingleBridgePileId](TEvGather *res) {
                     Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
                     Y_ABORT_UNLESS(!Self->CurrentProposition);
 
                     if (!res->HasCollectConfigs()) {
                         throw TExError() << "Incorrect CollectConfigs response";
-                    } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
+                    } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt,
+                            singleBridgePileId); r.ErrorReason) {
                         throw TExError() << *r.ErrorReason;
                     } else if (r.ConfigToPropose) {
-                        CheckSyncersAfterCommit = r.CheckSyncersAfterCommit;
                         StartProposition(&r.ConfigToPropose.value(), /*acceptLocalQuorum=*/ true,
                             /*requireScepter=*/ false, /*mindPrev=*/ true,
                             r.PropositionBase ? &r.PropositionBase.value() : nullptr);
@@ -197,7 +200,6 @@ namespace NKikimr::NStorage {
                 });
             },
             [&](TProposeConfig& op) {
-                CheckSyncersAfterCommit = op.CheckSyncersAfterCommit;
                 StartProposition(&op.Config);
             }
         }, Query);
@@ -242,9 +244,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum,
             bool requireScepter, bool mindPrev, const NKikimrBlobStorage::TStorageConfig *propositionBase) {
-        if (auto error = UpdateClusterState(config)) {
-            throw TExError() << *error;
-        } else if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
+        if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
             throw TExError() << "No quorum to start propose/commit configuration";
         } else if (requireScepter && !Self->Scepter) {
             throw TExError() << "No scepter";
@@ -296,7 +296,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-            SelfId(), CheckSyncersAfterCommit, mindPrev);
+            SelfId(), mindPrev);
         if (error) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
                 (Error, *error), (ProposedConfig, *config));

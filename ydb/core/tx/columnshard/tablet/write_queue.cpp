@@ -29,6 +29,7 @@ void TWriteTask::Abort(TColumnShard* owner, const TString& reason, const TActorC
     auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
         owner->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, reason);
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
+    owner->UpdateOverloadsStatus();
     ctx.Send(SourceId, result.release(), 0, Cookie);
 }
 

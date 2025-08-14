@@ -319,6 +319,12 @@ TProfiler<UseWeakPtr>::TProfiler(
 { }
 
 template <bool UseWeakPtr>
+bool TProfiler<UseWeakPtr>::IsEnabled() const
+{
+    return Enabled_;
+}
+
+template <bool UseWeakPtr>
 TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithPrefix(const std::string& prefix) const
 {
     if (!Enabled_) {

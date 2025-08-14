@@ -931,7 +931,7 @@ private:
                     << "State: " << info.State << Endl
                     << "KMeans: " << info.KMeans.DebugString() << Endl
                     << "Sample: " << info.Sample.DebugString() << Endl
-                    << "IsBroken: " << info.IsBroken << Endl
+                    << "IsBroken: " << (info.IsBroken ? "YES" : "NO") << Endl
                     << "Issue: " << info.GetIssue() << Endl
 
                     << "Shards.size: " << info.Shards.size() << Endl

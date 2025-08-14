@@ -1392,6 +1392,16 @@ TSourcePtr TSqlSelect::BuildStmt(const TRule& node, TPosition& pos) {
         .Label = extra.Last.Settings.Label,
     };
 
+    if (assumeOrderBy) {
+        YQL_ENSURE(!orderBy.empty());
+
+        Ctx_.Warning(orderBy[0]->OrderExpr->GetPos(), TIssuesIds::WARNING)
+            << "ASSUME ORDER BY is used, "
+            << "but UNION, INTERSECT and EXCEPT "
+            << "operators have no ordering guarantees, "
+            << "therefore consider using ORDER BY";
+    }
+
     if (orderBy) {
         TVector<TNodePtr> groupByExpr;
         TVector<TNodePtr> groupBy;

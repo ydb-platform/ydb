@@ -12,7 +12,7 @@ def post_install(self):
 
 
 fast_float = NixSourceProject(
-    owners=["g:clickhouse", "g:cpp-contrib", "g:kikimr"],
+    owners=["g:clickhouse", "g:cpp-contrib"],
     nixattr="fast-float",
     arcdir="contrib/restricted/fast_float",
     copy_sources=["include/fast_float/*.h"],

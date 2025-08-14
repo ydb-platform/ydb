@@ -72,7 +72,7 @@ Y_UNIT_TEST(ApiVersionsRequest) {
 }
 
 Y_UNIT_TEST(ApiVersionsResponse) {
-    TString longString = "long-string-value-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"; 
+    TString longString = "long-string-value-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     TWritableBuf sb(nullptr, BUFFER_SIZE);
 
@@ -304,7 +304,7 @@ struct Meta_TKafkaInt8 {
     static constexpr const char* About = "The test field.";
     static constexpr const TKafkaInt32 Tag = 31;
     static const Type Default; // = 7;
-                
+
     static constexpr TKafkaVersions PresentVersions{3, 97};
     static constexpr TKafkaVersions TaggedVersions{11, 17};
     static constexpr TKafkaVersions NullableVersions{5, 19};
@@ -367,7 +367,7 @@ struct Meta_TKafkaStruct {
     static constexpr const char* About = "The test field.";
     static constexpr const TKafkaInt32 Tag = 31;
     static const Type Default; // = 7;
-                
+
     static constexpr TKafkaVersions PresentVersions{3, 97};
     static constexpr TKafkaVersions TaggedVersions{11, 17};
     static constexpr TKafkaVersions NullableVersions{5, 19};
@@ -390,7 +390,7 @@ struct Meta_TKafkaString {
     static constexpr const char* About = "The test field.";
     static constexpr const TKafkaInt32 Tag = 31;
     static const Type Default; // = 7;
-                
+
     static constexpr TKafkaVersions PresentVersions{3, 97};
     static constexpr TKafkaVersions TaggedVersions{11, 17};
     static constexpr TKafkaVersions NullableVersions{5, 19};
@@ -455,7 +455,7 @@ struct Meta_TKafkaArray {
     static constexpr const char* Name = "value";
     static constexpr const char* About = "The test field.";
     static constexpr const TKafkaInt32 Tag = 31;
-                
+
     static constexpr TKafkaVersions PresentVersions{3, 97};
     static constexpr TKafkaVersions TaggedVersions{11, 17};
     static constexpr TKafkaVersions NullableVersions{5, 19};
@@ -518,7 +518,7 @@ struct Meta_TKafkaBytes {
     static constexpr const char* Name = "value";
     static constexpr const char* About = "The test field.";
     static constexpr const TKafkaInt32 Tag = 31;
-                
+
     static constexpr TKafkaVersions PresentVersions{3, 97};
     static constexpr TKafkaVersions TaggedVersions{11, 17};
     static constexpr TKafkaVersions NullableVersions{5, 19};
@@ -616,7 +616,7 @@ struct Meta_TKafkaFloat64 {
     static constexpr const char* About = "The test field.";
     static constexpr const TKafkaInt32 Tag = 31;
     static const Type Default; // = 7;
-                
+
     static constexpr TKafkaVersions PresentVersions{3, 97};
     static constexpr TKafkaVersions TaggedVersions{11, 17};
     static constexpr TKafkaVersions NullableVersions{5, 19};
@@ -644,7 +644,7 @@ Y_UNIT_TEST(TKafkaFloat64_PresentVersion_NotTaggedVersion) {
 }
 
 Y_UNIT_TEST(RequestHeader_reference) {
-    ui8 reference[] = {0x00, 0x12, 0x00, 0x00, 0x7F, 0x6F, 0x6F, 0x68, 0x00, 0x0A, 0x70, 0x72, 0x6F, 0x64, 0x75, 0x63, 
+    ui8 reference[] = {0x00, 0x12, 0x00, 0x00, 0x7F, 0x6F, 0x6F, 0x68, 0x00, 0x0A, 0x70, 0x72, 0x6F, 0x64, 0x75, 0x63,
                      0x65, 0x72, 0x2D, 0x31};
 
     TWritableBuf sb(nullptr, BUFFER_SIZE);
@@ -667,9 +667,9 @@ Y_UNIT_TEST(ProduceRequestData) {
                        0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x01, 0x89, 0x0C, 0x95, 0xAF, 0x25, 0x00,
                        0x00, 0x01, 0x89, 0x0C, 0x95, 0xB2, 0x19, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
                        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x5C, 0x00, 0x00, 0x00, 0x06, 0x6B, 0x65,
-                       0x79, 0x0E, 0x6D, 0x73, 0x67, 0x2D, 0x31, 0x2D, 0x31, 0x06, 0x06, 0x68, 0x2D, 0x31, 0x0A, 0x76, 
-                       0x2D, 0x31, 0x2D, 0x31, 0x06, 0x68, 0x2D, 0x32, 0x0A, 0x76, 0x2D, 0x32, 0x2D, 0x31, 0x06, 0x68, 
-                       0x2D, 0x33, 0x0A, 0x76, 0x2D, 0x33, 0x2D, 0x31, 0x5E, 0x00, 0xE6, 0x0B, 0x02, 0x06, 0x6B, 0x65, 
+                       0x79, 0x0E, 0x6D, 0x73, 0x67, 0x2D, 0x31, 0x2D, 0x31, 0x06, 0x06, 0x68, 0x2D, 0x31, 0x0A, 0x76,
+                       0x2D, 0x31, 0x2D, 0x31, 0x06, 0x68, 0x2D, 0x32, 0x0A, 0x76, 0x2D, 0x32, 0x2D, 0x31, 0x06, 0x68,
+                       0x2D, 0x33, 0x0A, 0x76, 0x2D, 0x33, 0x2D, 0x31, 0x5E, 0x00, 0xE6, 0x0B, 0x02, 0x06, 0x6B, 0x65,
                        0x79, 0x0E, 0x6D, 0x73, 0x67, 0x2D, 0x31, 0x2D, 0x32, 0x06, 0x06, 0x68, 0x2D, 0x31, 0x0A, 0x76,
                        0x2D, 0x31, 0x2D, 0x32, 0x06, 0x68, 0x2D, 0x32, 0x0A, 0x76, 0x2D, 0x32, 0x2D, 0x32, 0x06, 0x68,
                        0x2D, 0x33, 0x0A, 0x76, 0x2D, 0x33, 0x2D, 0x32, 0x5E, 0x00, 0xE8, 0x0B, 0x04, 0x06, 0x6B, 0x65,
@@ -706,7 +706,7 @@ Y_UNIT_TEST(ProduceRequestData) {
     UNIT_ASSERT_EQUAL(r0.BaseSequence, 0);
 
     UNIT_ASSERT_EQUAL(r0.Records.size(), (size_t)3);
-    
+
     UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("key", 3));
     UNIT_ASSERT_EQUAL(r0.Records[0].Value, TKafkaRawBytes("msg-1-1", 7));
     UNIT_ASSERT_EQUAL(r0.Records[0].Headers.size(), (size_t)3);
@@ -716,7 +716,7 @@ Y_UNIT_TEST(ProduceRequestData) {
     UNIT_ASSERT_EQUAL(r0.Records[0].Headers[1].Value, TKafkaRawBytes("v-2-1", 5));
     UNIT_ASSERT_EQUAL(r0.Records[0].Headers[2].Key, TKafkaRawBytes("h-3", 3));
     UNIT_ASSERT_EQUAL(r0.Records[0].Headers[2].Value, TKafkaRawBytes("v-3-1", 5));
-    
+
     UNIT_ASSERT_EQUAL(r0.Records[1].Key, TKafkaRawBytes("key", 3));
     UNIT_ASSERT_EQUAL(r0.Records[1].Value, TKafkaRawBytes("msg-1-2", 7));
     UNIT_ASSERT_EQUAL(r0.Records[1].Headers.size(), (size_t)3);
@@ -726,7 +726,7 @@ Y_UNIT_TEST(ProduceRequestData) {
     UNIT_ASSERT_EQUAL(r0.Records[1].Headers[1].Value, TKafkaRawBytes("v-2-2", 5));
     UNIT_ASSERT_EQUAL(r0.Records[1].Headers[2].Key, TKafkaRawBytes("h-3", 3));
     UNIT_ASSERT_EQUAL(r0.Records[1].Headers[2].Value, TKafkaRawBytes("v-3-2", 5));
-    
+
     UNIT_ASSERT_EQUAL(r0.Records[2].Key, TKafkaRawBytes("key", 3));
     UNIT_ASSERT_EQUAL(r0.Records[2].Value, TKafkaRawBytes("msg-1-3", 7));
     UNIT_ASSERT_EQUAL(r0.Records[2].Headers.size(), (size_t)3);
@@ -775,19 +775,19 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0) {
     auto& r0 = *result.TopicData[0].PartitionData[0].Records;
     UNIT_ASSERT_EQUAL(r0.BaseOffset, 0);
     UNIT_ASSERT_EQUAL(r0.BatchLength, 0);
-    UNIT_ASSERT_EQUAL(r0.PartitionLeaderEpoch, 0);
+    UNIT_ASSERT_EQUAL(r0.PartitionLeaderEpoch, -1);
     UNIT_ASSERT_EQUAL(r0.Magic, 0);
     UNIT_ASSERT_EQUAL(r0.Crc, 544167206);
     UNIT_ASSERT_EQUAL(r0.Attributes, 0);
     UNIT_ASSERT_EQUAL(r0.LastOffsetDelta, 0);
-    UNIT_ASSERT_EQUAL(r0.BaseTimestamp, 0);
-    UNIT_ASSERT_EQUAL(r0.MaxTimestamp, 0);
-    UNIT_ASSERT_EQUAL(r0.ProducerId, 0);
-    UNIT_ASSERT_EQUAL(r0.ProducerEpoch, 0);
-    UNIT_ASSERT_EQUAL(r0.BaseSequence, 0);
+    UNIT_ASSERT_EQUAL(r0.BaseTimestamp, -1);
+    UNIT_ASSERT_EQUAL(r0.MaxTimestamp, -1);
+    UNIT_ASSERT_EQUAL(r0.ProducerId, -1);
+    UNIT_ASSERT_EQUAL(r0.ProducerEpoch, -1);
+    UNIT_ASSERT_EQUAL(r0.BaseSequence, -1);
 
     UNIT_ASSERT_EQUAL(r0.Records.size(), (size_t)1);
-    
+
     UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("key-1", 5));
     UNIT_ASSERT_EQUAL(r0.Records[0].Value, TKafkaRawBytes("test message", 12));
     UNIT_ASSERT_EQUAL(r0.Records[0].Headers.size(), (size_t)0);

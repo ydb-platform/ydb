@@ -270,6 +270,15 @@ namespace NKikimr {
     {
     };
 
+    struct TEvBlobStorage::TEvControllerUpdateSyncerState
+        : TEventPB<
+            TEvControllerUpdateSyncerState,
+            NKikimrBlobStorage::TEvControllerUpdateSyncerState,
+            TEvBlobStorage::EvControllerUpdateSyncerState>
+    {
+        TEvControllerUpdateSyncerState() = default;
+    };
+
     struct TEvBlobStorage::TEvVStatus : public TEventPB<
         TEvBlobStorage::TEvVStatus,
         NKikimrBlobStorage::TEvVStatus,

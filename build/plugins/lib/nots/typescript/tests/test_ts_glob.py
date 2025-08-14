@@ -3,7 +3,7 @@ from build.plugins.lib.nots.typescript.ts_glob import ts_glob, TsGlobConfig
 
 class TestTsGlobIncluding:
     ts_glob_config = TsGlobConfig(
-        root_dir="src", out_dir="build", include=["src/module_a/**/*", "src/module_b/**/*", "src/module_x"]
+        root_dir="src", out_dir="build", include=["src/module_a/**/*", "src/module_b/**/*.ts", "src/module_x"]
     )
 
     def test_dir_include(self):

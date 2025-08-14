@@ -130,7 +130,7 @@ public:
         return *WriteAction;
     }
 
-    const TInsertedPortions& DetachInsertedData() {
+    TInsertedPortions&& DetachInsertedData() {
         AFL_VERIFY(!Detached);
         Detached = true;
         return std::move(InsertedData);

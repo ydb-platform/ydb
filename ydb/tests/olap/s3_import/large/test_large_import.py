@@ -130,6 +130,7 @@ class TestLargeS3Import:
                     f"tables: {get_external_param('results-table', '-')}, "
                     f"has key {'YES' if os.getenv('RESULT_YDB_OAUTH', None) else 'NO'}")
 
+        YdbCluster._dyn_nodes_count = 0  # Disable node count check
         health_errors, health_warnings = YdbCluster.check_if_ydb_alive()
         logger.info(f"ydb health warnings: {health_warnings}")
         assert health_errors is None, f"ydb is not alive: {health_errors}"

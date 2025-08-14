@@ -1440,7 +1440,6 @@ public:
                     }
 
                     SendToSchemeExecuter(tx);
-                    ++QueryState->CurrentTx;
                     return false;
 
                 case NKqpProto::TKqpPhyTx::TYPE_DATA:
@@ -1607,6 +1606,8 @@ public:
             temporary, TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
+
+        ++QueryState->CurrentTx;
     }
 
     static ui32 GetResultsCount(const IKqpGateway::TExecPhysicalRequest& req) {

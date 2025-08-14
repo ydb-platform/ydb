@@ -13,7 +13,6 @@
 #include <yql/essentials/utils/fetch/fetch.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/context.h>
-#include <yql/essentials/utils/multi_resource_lock.h>
 #include <yql/essentials/utils/md5_stream.h>
 #include <yql/essentials/utils/retry.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -30,6 +29,7 @@
 #include <util/string/builder.h>
 #include <util/stream/str.h>
 #include <util/stream/file.h>
+#include <util/system/file_lock.h>
 #include <util/stream/null.h>
 #include <util/system/env.h>
 #include <util/system/fs.h>
@@ -42,6 +42,25 @@
 
 
 namespace NYql {
+
+namespace {
+
+constexpr char ComponentName[] = "file_storage";
+
+class TFileLockGuard {
+public:
+    explicit TFileLockGuard(const TFsPath& lockFilePath)
+        : Lock_(lockFilePath)
+        , Guard_(Lock_)
+    {
+    }
+
+private:
+    TFileLock Lock_;
+    TGuard<TFileLock> Guard_;
+};
+
+}
 
 class TFileStorageImpl: public IFileStorage {
 public:
@@ -61,7 +80,7 @@ public:
         YQL_LOG(INFO) << "PutFile to cache: " << file;
         const auto md5 = FileChecksum(file);
         const TString storageFileName = md5 + ".file";
-        auto lock = MultiResourceLock_.Acquire(storageFileName);
+        TFileLockGuard lockGuard(GetLockFilePath(storageFileName));
         return Storage_.Put(storageFileName, outFileName, md5, [&file, &md5](const TFsPath& dstFile) {
             NFs::HardLinkOrCopy(file, dstFile);
             i64 length = GetFileLength(dstFile.c_str());
@@ -85,7 +104,7 @@ public:
         }
         const auto md5 = originalMd5.empty() ? MD5::File(file) : originalMd5;
         const auto strippedMetaFile = md5 + ".stripped_meta";
-        auto lock = MultiResourceLock_.Acquire(strippedMetaFile);
+        TFileLockGuard lockGuard(GetLockFilePath(strippedMetaFile));
 
         TUrlMeta strippedMeta;
         strippedMeta.TryReadFrom(GetRoot() / strippedMetaFile);
@@ -123,7 +142,7 @@ public:
         const auto md5 = MD5::Calc(data);
         const TString storageFileName = md5 + ".file";
         YQL_LOG(INFO) << "PutInline to cache. md5=" << md5;
-        auto lock = MultiResourceLock_.Acquire(storageFileName);
+        TFileLockGuard lockGuard(GetLockFilePath(storageFileName));
         return Storage_.Put(storageFileName, TString(), md5, [&data, &md5](const TFsPath& dstFile) {
             TStringInput in(data);
             TFile outFile(dstFile, CreateAlways | ARW | AX);
@@ -179,6 +198,10 @@ public:
         return Storage_.GetTemp();
     }
 
+    TFsPath GetLockFilePath(const TString& lockName) const final {
+        return Storage_.GetLockFilePath(ComponentName, lockName);
+    }
+
     const TFileStorageConfig& GetConfig() const final {
         return Config_;
     }
@@ -195,8 +218,7 @@ private:
 
     TFileLinkPtr DoPutUrl(const THttpURL& url, const TString& token, const NFS::IDownloaderPtr& downloader) {
         const auto urlMetaFile = BuildUrlMetaFileName(url, token);
-        auto lock = MultiResourceLock_.Acquire(urlMetaFile); // let's use meta file as lock name
-
+        TFileLockGuard lockGuard(GetLockFilePath(urlMetaFile));
         TUrlMeta urlMeta;
         urlMeta.TryReadFrom(GetRoot() / urlMetaFile);
 
@@ -280,7 +302,6 @@ private:
     TStorage Storage_;
     const TFileStorageConfig Config_;
     std::vector<NFS::IDownloaderPtr> Downloaders_;
-    TMultiResourceLock MultiResourceLock_;
     const bool UseFakeChecksums_;   // YQL-15353
 };
 

@@ -22,7 +22,7 @@ protected:
     virtual void DoExecute() = 0;
 public:
     void Execute() {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);

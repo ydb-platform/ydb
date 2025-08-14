@@ -479,9 +479,9 @@ public:
             DiskSpace = NKikimrViewer::EFlag::Grey;
             DiskSpaceUsage = 0;
             for (const TVDisk& vdisk : VDisks) {
+                available += vdisk.AvailableSize;
                 auto itPDisk = pDisks.find(vdisk.VSlotId);
                 if (itPDisk != pDisks.end()) {
-                    available += std::min(itPDisk->second.GetSlotTotalSize() - vdisk.AllocatedSize, vdisk.AvailableSize);
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
                 }
@@ -630,7 +630,7 @@ public:
     std::unordered_map<TVSlotId, const NKikimrSysView::TVSlotInfo*> VSlotsByVSlotId;
     std::unordered_map<TVSlotId, const NKikimrWhiteboard::TVDiskStateInfo*> VDisksByVSlotId;
     std::unordered_map<TPDiskId, const NKikimrWhiteboard::TPDiskStateInfo*> PDisksByPDiskId;
-    std::unordered_map<ui32, TString> PileNames;
+    std::unordered_map<TBridgePileId, TString> PileNames;
 
     TFieldsType FieldsRequested; // fields that were requested by user
     TFieldsType FieldsRequired; // fields that are required to calculate the response
@@ -859,6 +859,20 @@ public:
             NeedSort = false;
             NeedLimit = false;
         }
+
+    }
+
+public:
+    void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
+        if (!Viewer->CheckAccessViewer(TBase::GetRequest())) {
+            FieldsRequired.reset(+EGroupFields::NodeId); // fields that are not available for database users
+            FieldsRequired.reset(+EGroupFields::PDiskId);
+            FieldsRequired.reset(+EGroupFields::PDisk);
+            FieldsRequired.reset(+EGroupFields::PileName);
+        }
         FieldsRequested = FieldsRequired; // no dependent fields
         for (auto field = +EGroupFields::GroupId; field != +EGroupFields::COUNT; ++field) {
             if (FieldsRequired.test(field)) {
@@ -867,13 +881,6 @@ public:
                     FieldsRequired |= itDependentFields->second;
                 }
             }
-        }
-    }
-
-public:
-    void Bootstrap() override {
-        if (NeedToRedirect()) {
-            return;
         }
         if (Database) {
             if (!DatabaseNavigateResponse) {
@@ -1311,13 +1318,13 @@ public:
 
     void ProcessResponses() {
         AddEvent("ProcessResponses");
-        if (NodeWardenStorageConfigResponse) {
-            if (!NodeWardenStorageConfigResponseProcessed && NodeWardenStorageConfigResponse->IsDone()) {
+        if (NodeWardenStorageConfigResponse && !NodeWardenStorageConfigResponseProcessed) {
+            if (NodeWardenStorageConfigResponse->IsDone()) {
                 if (NodeWardenStorageConfigResponse->IsOk()) {
                     if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
                         const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
                         for (const auto& pile : srcBridgeInfo.Piles) {
-                            PileNames[pile.BridgePileId.GetRawId()] = pile.Name;
+                            PileNames[pile.BridgePileId] = pile.Name;
                         }
                     } else {
                         AddProblem("empty-node-warden-bridge-info");
@@ -1347,7 +1354,8 @@ public:
                     group.PutUserDataLatency = info.GetPutUserDataLatency();
                     group.GetFastLatency = info.GetGetFastLatency();
                     if (info.HasBridgePileId() && !PileNames.empty()) {
-                        group.PileName = PileNames[info.GetBridgePileId()];
+                        const auto bridgePileId = TBridgePileId::FromProto(&info, &NKikimrSysView::TGroupInfo::GetBridgePileId);
+                        group.PileName = PileNames[bridgePileId];
                         FieldsAvailable.set(+EGroupFields::PileName);
                     }
                 }
@@ -2056,26 +2064,28 @@ public:
             }
         }
 
-        auto itPDisk = PDisks.find(vdisk.VSlotId);
-        if (itPDisk != PDisks.end()) {
-            const TPDisk& pdisk = itPDisk->second;
-            NKikimrViewer::TStoragePDisk& jsonPDisk = *jsonVDisk.MutablePDisk();
-            jsonPDisk.SetPDiskId(pdisk.GetPDiskId());
-            jsonPDisk.SetPath(pdisk.Path);
-            jsonPDisk.SetType(pdisk.Type);
-            jsonPDisk.SetGuid(::ToString(pdisk.Guid));
-            jsonPDisk.SetCategory(pdisk.Category);
-            jsonPDisk.SetTotalSize(pdisk.TotalSize);
-            jsonPDisk.SetAvailableSize(pdisk.AvailableSize);
-            jsonPDisk.SetStatus(pdisk.Status);
-            jsonPDisk.SetDecommitStatus(pdisk.DecommitStatus);
-            jsonPDisk.SetSlotSize(pdisk.GetSlotTotalSize());
-            if (pdisk.DiskSpace != NKikimrViewer::Grey) {
-                jsonPDisk.SetDiskSpace(pdisk.DiskSpace);
-            }
-            auto itPDiskByPDiskId = PDisksByPDiskId.find(vdisk.VSlotId);
-            if (itPDiskByPDiskId != PDisksByPDiskId.end()) {
-                jsonPDisk.MutableWhiteboard()->CopyFrom(*(itPDiskByPDiskId->second));
+        if (FieldsRequested.test(+EGroupFields::PDisk)) {
+            auto itPDisk = PDisks.find(vdisk.VSlotId);
+            if (itPDisk != PDisks.end()) {
+                const TPDisk& pdisk = itPDisk->second;
+                NKikimrViewer::TStoragePDisk& jsonPDisk = *jsonVDisk.MutablePDisk();
+                jsonPDisk.SetPDiskId(pdisk.GetPDiskId());
+                jsonPDisk.SetPath(pdisk.Path);
+                jsonPDisk.SetType(pdisk.Type);
+                jsonPDisk.SetGuid(::ToString(pdisk.Guid));
+                jsonPDisk.SetCategory(pdisk.Category);
+                jsonPDisk.SetTotalSize(pdisk.TotalSize);
+                jsonPDisk.SetAvailableSize(pdisk.AvailableSize);
+                jsonPDisk.SetStatus(pdisk.Status);
+                jsonPDisk.SetDecommitStatus(pdisk.DecommitStatus);
+                jsonPDisk.SetSlotSize(pdisk.GetSlotTotalSize());
+                if (pdisk.DiskSpace != NKikimrViewer::Grey) {
+                    jsonPDisk.SetDiskSpace(pdisk.DiskSpace);
+                }
+                auto itPDiskByPDiskId = PDisksByPDiskId.find(vdisk.VSlotId);
+                if (itPDiskByPDiskId != PDisksByPDiskId.end()) {
+                    jsonPDisk.MutableWhiteboard()->CopyFrom(*(itPDiskByPDiskId->second));
+                }
             }
         }
         if (!vdisk.Donors.empty()) {

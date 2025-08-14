@@ -146,7 +146,7 @@ namespace NSQLComplete {
 
             if (local.Object && global.Use) {
                 request.Constraints.Object->Provider = global.Use->Provider;
-                request.Constraints.Object->Cluster = global.Use->Cluster;
+                request.Constraints.Object->Cluster = global.Use->Name;
             }
 
             if (local.Object && local.Object->HasCluster()) {
@@ -198,19 +198,30 @@ namespace NSQLComplete {
                 return local;
             }
 
+            if (TMaybe<TClusterContext> cluster = function->Cluster) {
+                object->Provider = cluster->Provider;
+                object->Cluster = cluster->Name;
+            }
+
             auto& name = function->Name;
             size_t number = function->ArgumentNumber;
 
             name = NormalizeName(name);
 
             if (name == "concat") {
-                object->Kinds.emplace(EObjectKind::Folder);
-                object->Kinds.emplace(EObjectKind::Table);
+                object->Kinds = {EObjectKind::Folder, EObjectKind::Table};
             } else if ((number == 0) &&
                        (name == "range" || name == "like" ||
                         name == "regexp" || name == "filter" ||
                         name == "folder" || name == "walkfolders")) {
-                object->Kinds.emplace(EObjectKind::Folder);
+                object->Kinds = {EObjectKind::Folder};
+            } else if ((number == 1 || number == 2) && (name == "range")) {
+                if (TMaybe<TString> path = function->Arg0) {
+                    object->Path = *path;
+                    object->Path.append("/");
+                }
+
+                object->Kinds = {EObjectKind::Folder, EObjectKind::Table};
             }
 
             return local;

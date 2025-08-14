@@ -403,8 +403,10 @@ namespace NActors {
                             TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), ev->GetRecipientRewrite());
                             TActivationContext *prevTlsActivationContext = TlsActivationContext;
                             TlsActivationContext = &ctx;
+                            Y_DEFER {
+                                TlsActivationContext = prevTlsActivationContext;
+                            };
                             recipientActor->Receive(ev);
-                            TlsActivationContext = prevTlsActivationContext;
                             // we expect the logger to never die in tests
                         }
                     }
@@ -1348,7 +1350,7 @@ namespace NActors {
                 return true;
             }
 
-            if (options.FinalEvents.empty()) {
+            if (options.FinalEvents.empty() && !options.CustomFinalCondition) {
                 for (auto& mbox : currentMailboxes) {
                     if (!mbox.second->IsActive(TInstant::MicroSeconds(CurrentTimestamp)))
                         continue;
@@ -1693,6 +1695,10 @@ namespace NActors {
             TActivationContext *prevTlsActivationContext = TlsActivationContext;
             TlsActivationContext = &ctx;
             CurrentRecipient = actorId;
+            Y_DEFER {
+                CurrentRecipient = TActorId();
+                TlsActivationContext = prevTlsActivationContext;
+            };
             {
                 TInverseGuard<TMutex> inverseGuard(Mutex);
 #ifdef USE_ACTOR_CALLSTACK
@@ -1702,8 +1708,6 @@ namespace NActors {
                 recipientActor->Receive(ev);
                 node->ExecutorThread->DropUnregistered();
             }
-            CurrentRecipient = TActorId();
-            TlsActivationContext = prevTlsActivationContext;
         } else {
             if (VERBOSE) {
                 Cerr << "Failed to find actor with local id: " << recipientLocalId << "\n";

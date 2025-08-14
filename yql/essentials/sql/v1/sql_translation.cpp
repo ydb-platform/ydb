@@ -3457,6 +3457,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     //      an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     //    | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     //    | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
+    //    | WATERMARK AS LPAREN expr RPAREN
     switch (rule.Alt_case()) {
     case TRule_table_hint::kAltTableHint1: {
         const auto& alt = rule.GetAlt_table_hint1();
@@ -3569,6 +3570,18 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         }
     }
 
+    case TRule_table_hint::kAltTableHint4: {
+        const auto& alt = rule.GetAlt_table_hint4();
+        const auto pos = Ctx_.TokenPosition(alt.GetToken1());
+        TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
+        auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4());
+        if (!expr) {
+            return false;
+        }
+        hints["watermark"] = { BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr)) };
+        break;
+    }
+
     case TRule_table_hint::ALT_NOT_SET:
         Y_ABORT("You should change implementation according to grammar changes");
     }
@@ -3635,11 +3648,6 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
     switch (node.Alt_case()) {
     case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
         if (node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
-            if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
-                Error() << "Cluster should not be used in limited view";
-                return false;
-            }
-
             if (!ClusterExpr(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
                 return false;
             }
@@ -3658,14 +3666,20 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
         break;
     }
     case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore2: {
+        if (node.GetAlt_simple_table_ref_core2().HasBlock1()) {
+            if (!ClusterExpr(node.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+                return false;
+            }
+        }
+
         if (cluster.Empty()) {
             Error() << "No cluster name given and no default cluster is selected";
             return false;
         }
 
-        auto at = node.GetAlt_simple_table_ref_core2().HasBlock1();
+        auto at = node.GetAlt_simple_table_ref_core2().HasBlock2();
         TString bindName;
-        if (!NamedNodeImpl(node.GetAlt_simple_table_ref_core2().GetRule_bind_parameter2(), bindName, *this)) {
+        if (!NamedNodeImpl(node.GetAlt_simple_table_ref_core2().GetRule_bind_parameter3(), bindName, *this)) {
             return false;
         }
         auto named = GetNamedNode(bindName);
@@ -4490,7 +4504,7 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
             break;
         }
         case TRule_window_frame_bound::ALT_NOT_SET:
-            Y_ABORT("FrameClause: frame bound not corresond to grammar changes");
+            Y_ABORT("FrameClause: frame bound not correspond to grammar changes");
     }
     return true;
 }

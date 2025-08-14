@@ -1,6 +1,9 @@
 #include "log.h"
+#include "log_ut.h"
+
 #include "context.h"
 #include "profile.h"
+
 #include <yql/essentials/utils/log/ut/log_parser.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -21,9 +24,9 @@ using namespace NLog;
 
 Y_UNIT_TEST_SUITE(TLogTest)
 {
-    Y_UNIT_TEST(Format) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Formatting) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
         YqlLogger().UpdateProcInfo("my_proc");
 
         TString message = "some performance info";
@@ -45,9 +48,21 @@ Y_UNIT_TEST_SUITE(TLogTest)
         UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, message);
     }
 
-    Y_UNIT_TEST(Levels) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(SpecialCharacters) {
         TStringStream out;
-        YqlLoggerScope logger(&out); // default log level INFO
+        YqlLoggerScope logger(&out, Format);
+        YqlLogger().UpdateProcInfo("\\evil\\");
+
+        YQL_LOG(INFO) << "My name is \"YQL\"!";
+
+        TLogRow logRow = ParseLogRow(out.Str());
+        UNIT_ASSERT_STRINGS_EQUAL(logRow.ProcName, "\\evil\\");
+        UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "My name is \"YQL\"!");
+    }
+
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Levels) {
+        TStringStream out;
+        YqlLoggerScope logger(&out, Format); // default log level INFO
 
         YQL_LOG(FATAL) << "fatal message";
         YQL_LOG(ERROR) << "error message";
@@ -85,9 +100,9 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(Components) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Components) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
 
         YQL_CLOG(INFO, Default) << "default message";
         YQL_CLOG(INFO, Core) << "core message";
@@ -164,9 +179,9 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(Conditional) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Conditional) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
 
         YQL_LOG_IF(INFO, true) << "default info message";
         YQL_LOG_IF(INFO, false) << "must not be logged";
@@ -191,9 +206,9 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(Contexts) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Contexts) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
 
         UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "");
         YQL_LOG(INFO) << "level0 - begin";
@@ -226,19 +241,22 @@ Y_UNIT_TEST_SUITE(TLogTest)
             TLogRow logRow = ParseLogRow(row2Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx1} level1 - begin");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx1");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level1 - begin");
         }
         {
             TLogRow logRow = ParseLogRow(row3Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx1/ctx2} level2");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx1/ctx2");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level2");
         }
         {
             TLogRow logRow = ParseLogRow(row4Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx1} level1 - end");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx1");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level1 - end");
         }
         {
             TLogRow logRow = ParseLogRow(row5Str);
@@ -248,9 +266,9 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(UnknownSessionContexts) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(UnknownSessionContexts) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
 
         {
             YQL_LOG_CTX_ROOT_SCOPE("ctx");
@@ -286,37 +304,42 @@ Y_UNIT_TEST_SUITE(TLogTest)
             TLogRow logRow = ParseLogRow(row1Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx} level0 - begin");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level0 - begin");
         }
         {
             TLogRow logRow = ParseLogRow(row2Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx} level1 - begin");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level1 - begin");
         }
         {
             TLogRow logRow = ParseLogRow(row3Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx/ctx1} level2");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx/ctx1");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level2");
         }
         {
             TLogRow logRow = ParseLogRow(row4Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx} level1 - end");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level1 - end");
         }
         {
             TLogRow logRow = ParseLogRow(row5Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx} level0 - end");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level0 - end");
         }
     }
 
-    Y_UNIT_TEST(SessionContexts) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(SessionContexts) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
 
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE("sessionId", "ctx");
@@ -352,35 +375,40 @@ Y_UNIT_TEST_SUITE(TLogTest)
             TLogRow logRow = ParseLogRow(row1Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{sessionId/ctx} level0 - begin");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "sessionId/ctx");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level0 - begin");
         }
         {
             TLogRow logRow = ParseLogRow(row2Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{sessionId/ctx} level1 - begin");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "sessionId/ctx");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level1 - begin");
         }
         {
             TLogRow logRow = ParseLogRow(row3Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{sessionId/ctx/ctx1} level2");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "sessionId/ctx/ctx1");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level2");
         }
         {
             TLogRow logRow = ParseLogRow(row4Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{sessionId/ctx} level1 - end");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "sessionId/ctx");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level1 - end");
         }
         {
             TLogRow logRow = ParseLogRow(row5Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{sessionId/ctx} level0 - end");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "sessionId/ctx");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level0 - end");
         }
     }
 
-    Y_UNIT_TEST(ThrowWithContext) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(ThrowWithContext) {
         bool isThrown = false;
         YQL_LOG_CTX_SCOPE("first");
         try {
@@ -412,9 +440,9 @@ Y_UNIT_TEST_SUITE(TLogTest)
         UNIT_ASSERT_C(isThrown, "exception was not thrown");
     }
 
-    Y_UNIT_TEST(ContextOverride) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(ContextOverride) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
 
         UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath().second, "");
         {
@@ -448,37 +476,42 @@ Y_UNIT_TEST_SUITE(TLogTest)
             TLogRow logRow = ParseLogRow(row1Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx1} level1 - begin");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx1");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level1 - begin");
         }
         {
             TLogRow logRow = ParseLogRow(row2Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx1/ctx2} level2 - begin");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx1/ctx2");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level2 - begin");
         }
         {
             TLogRow logRow = ParseLogRow(row3Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::ERROR);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx3} level3");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx3");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level3");
         }
         {
             TLogRow logRow = ParseLogRow(row4Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx1/ctx2} level2 - end");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx1/ctx2");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level2 - end");
         }
         {
             TLogRow logRow = ParseLogRow(row5Str);
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "{ctx1} level1 - end");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Path, "ctx1");
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "level1 - end");
         }
     }
 
-    Y_UNIT_TEST(Profiling) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Profiling) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
 
         {
             YQL_PROFILE_SCOPE(INFO, "scope1");
@@ -541,9 +574,9 @@ Y_UNIT_TEST_SUITE(TLogTest)
         return a + b;
     }
 
-    Y_UNIT_TEST(ProfilingFuncs) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(ProfilingFuncs) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
 
         Func1(1, 2);
         Func2(1, 2);
@@ -575,18 +608,18 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(Limit1) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Limit1) {
         size_t limit = 0;
         {
             TStringStream out;
-            YqlLoggerScope logger(&out);
+            YqlLoggerScope logger(&out, Format);
             YqlLogger().UpdateProcInfo("proc");
             YQL_CLOG(INFO, Core) << "message1";
             limit = out.Str().length() * 2 - 7; // Not more than 2 log lines
         }
 
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
         YqlLogger().UpdateProcInfo("proc");
         YqlLogger().SetMaxLogLimit(limit);
 
@@ -617,18 +650,18 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
-    Y_UNIT_TEST(Limit2) {
+    Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Limit2) {
         size_t limit = 0;
         {
             TStringStream out;
-            YqlLoggerScope logger(&out);
+            YqlLoggerScope logger(&out, Format);
             YqlLogger().UpdateProcInfo("proc");
             YQL_CLOG(INFO, Core) << "message1";
             limit = out.Str().length() * 2 - 7; // Not more than 2 log lines
         }
 
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out, Format);
         YqlLogger().UpdateProcInfo("proc");
         YqlLogger().SetMaxLogLimit(limit);
 

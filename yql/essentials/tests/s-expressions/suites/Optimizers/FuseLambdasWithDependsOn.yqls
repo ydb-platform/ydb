@@ -1,0 +1,58 @@
+(
+(let res_sink (DataSink 'result))
+
+(let $row1 (AsStruct '('"key" (Int32 '"1")) '('"value" (Int32 '"101"))))
+(let $row2 (AsStruct '('"key" (Int32 '"2")) '('"value" (Int32 '"102"))))
+(let $row3 (AsStruct '('"key" (Int32 '"3")) '('"value" (Int32 '"103"))))
+(let $row4 (AsStruct '('"key" (Int32 '"4")) '('"value" (Int32 '"104"))))
+(let $row5 (AsStruct '('"key" (Int32 '"5")) '('"value" (Int32 '"105"))))
+(let $input (AsList $row1 $row2 $row3 $row4 $row5))
+
+# ----------------------
+
+(let $wideFlow1 (ExpandMap (ToFlow $input (DependsOn (Int32 '"1"))) (lambda '($row) (Member $row '"key") (Member $row '"value"))))
+
+# can be fused
+(let $processed1 (ExpandMap (NarrowMap $wideFlow1 (lambda '($key $value) $key)) (lambda '($key) (RandomNumber (DependsOn $key)))))
+
+(let $result1 (NarrowMap $processed1 (lambda '($rand) (AsStruct '('"rand" $rand)))))
+(let world (Write! world res_sink (Key) (Collect $result1) '('('type) '('label '"Result 1"))))
+(let world (Commit! world res_sink))
+
+# ----------------------
+
+(let $wideFlow2 (ExpandMap (ToFlow $input (DependsOn (Int32 '"2"))) (lambda '($row) (Member $row '"key") (Member $row '"value"))))
+
+# can be fused
+(let $processed2 (WideMap (WideMap $wideFlow2 (lambda '($key $value) $key $value)) (lambda '($key $value) (RandomNumber (DependsOn $key)) (RandomNumber (DependsOn $value)))))
+
+(let $result2 (NarrowMap $processed2 (lambda '($rand1 $rand2) (AsStruct '('"rand1" $rand1) '('"rand2" $rand2)))))
+(let world (Write! world res_sink (Key) (Collect $result2) '('('type) '('label '"Result 2"))))
+(let world (Commit! world res_sink))
+
+# ----------------------
+
+(let $wideFlow3 (ExpandMap (ToFlow $input (DependsOn (Int32 '"3"))) (lambda '($row) (Member $row '"key") (Member $row '"value"))))
+
+# cannot be fused
+(let $processed3 (ExpandMap (NarrowMap $wideFlow3 (lambda '($key $value) (Int32 '"42"))) (lambda '($key) (RandomNumber (DependsOn $key)))))
+
+(let $result3 (NarrowMap $processed3 (lambda '($rand) (AsStruct '('"rand" $rand)))))
+(let world (Write! world res_sink (Key) (Collect $result3) '('('type) '('label '"Result 3"))))
+(let world (Commit! world res_sink))
+
+# ----------------------
+
+(let $wideFlow4 (ExpandMap (ToFlow $input (DependsOn (Int32 '"4"))) (lambda '($row) (Member $row '"key") (Member $row '"value"))))
+
+# cannot be fused
+(let $processed4 (WideMap (WideMap $wideFlow4 (lambda '($key $value) $key (Int32 '"42"))) (lambda '($key $value) (RandomNumber (DependsOn $key)) (RandomNumber (DependsOn $value)))))
+
+(let $result4 (NarrowMap $processed4 (lambda '($rand1 $rand2) (AsStruct '('"rand1" $rand1) '('"rand2" $rand2)))))
+(let world (Write! world res_sink (Key) (Collect $result4) '('('type) '('label '"Result 4"))))
+(let world (Commit! world res_sink))
+
+# ----------------------
+
+(return world)
+)

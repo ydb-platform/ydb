@@ -575,9 +575,43 @@ bool IsDependedImpl(const TExprNode* from, const TExprNode* to, TNodeMap<bool>& 
     return false;
 }
 
+bool IsDependedOnAnyImpl(const TExprNode* from, const TNodeSet& to, TNodeMap<bool>& deps) {
+    if (to.cend() != to.find(from)) {
+        return true;
+    }
+
+    auto [it, inserted] = deps.emplace(from, false);
+    if (!inserted) {
+        return it->second;
+    }
+
+    for (const auto& child : from->Children()) {
+        if (IsDependedOnAnyImpl(child.Get(), to, deps)) {
+            return it->second = true;
+        }
+    }
+
+    return false;
+}
+
 bool IsDepended(const TExprNode& from, const TExprNode& to) {
     TNodeMap<bool> deps;
     return IsDependedImpl(&from, &to, deps);
+}
+
+bool AreAllDependedOnAny(const TExprNode::TChildrenType& from, const TNodeSet& to) {
+    if (to.empty()) {
+        return false;
+    }
+
+    TNodeMap<bool> deps;
+    for (const auto& node : from) {
+        if (!IsDependedOnAnyImpl(node.Get(), to, deps)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool MarkDepended(const TExprNode& from, const TExprNode& to, TNodeMap<bool>& deps) {
@@ -2718,6 +2752,30 @@ bool IsNormalizedDependsOn(const TExprNode& node) {
     }
 
     return false;
+}
+
+bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner) {
+    auto innerLambdaBody = GetLambdaBody(inner);
+    auto outerLambdaArgs = outer.Head().Children();
+    YQL_ENSURE(outerLambdaArgs.size() == innerLambdaBody.size());
+
+    // inner lambda bodies which used in DependsOn after fuse
+    TExprNode::TListType toCheck;
+    for (size_t i = 0; i < outerLambdaArgs.size(); i++) {
+        if (outerLambdaArgs[i]->IsUsedInDependsOn()) {
+            toCheck.push_back(innerLambdaBody[i]);
+        }
+    }
+    if (toCheck.empty()) {
+        return true;
+    }
+
+    TNodeSet innerLambdaArgs;
+    inner.Head().ForEachChild([&](const TExprNode& arg) {
+        innerLambdaArgs.insert(&arg);
+    });
+
+    return AreAllDependedOnAny(toCheck, innerLambdaArgs);
 }
 
 }

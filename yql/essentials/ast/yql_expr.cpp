@@ -2300,22 +2300,6 @@ const TTypeAnnotationNode* CompileTypeAnnotation(const TAstNode& node, TExprCont
     return compileCtx.CompileTypeAnnotationNode(node);
 }
 
-template<class Set>
-bool IsDependedImpl(const TExprNode& node, const Set& dependences, TNodeSet& visited) {
-    if (!visited.emplace(&node).second)
-        return false;
-
-    if (dependences.cend() != dependences.find(&node))
-        return true;
-
-    for (const auto& child : node.Children()) {
-        if (IsDependedImpl(*child, dependences, visited))
-            return true;
-    }
-
-    return false;
-}
-
 namespace {
 
 enum EChangeState : ui8 {
@@ -2650,11 +2634,6 @@ TExprNode::TListType TExprContext::ReplaceNodes(TExprNode::TListType&& starts, c
 
 template TExprNode::TListType TExprContext::ReplaceNodes<true>(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces);
 template TExprNode::TListType TExprContext::ReplaceNodes<false>(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces);
-
-bool IsDepended(const TExprNode& node, const TNodeSet& dependences) {
-    TNodeSet visited;
-    return !dependences.empty() && IsDependedImpl(node, dependences, visited);
-}
 
 void CheckArguments(const TExprNode& root) {
     try {

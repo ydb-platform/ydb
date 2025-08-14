@@ -2590,7 +2590,7 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
             .Build();
     }
 
-    if (node->Head().IsCallable("NarrowMap")) {
+    if (node->Head().IsCallable("NarrowMap") && CanFuseLambdas(*node->Child(1), *node->Head().Child(1))) {
         return FuseNarrowMap<true>(*node, ctx);
     }
 
@@ -2605,8 +2605,14 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
 template<bool Ordered>
 TExprNode::TPtr OptimizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap")) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
+            return node;
+        }
         return FuseNarrowMap<false>(*node, ctx);
     } else if (input.IsCallable({"MultiMap", "OrderedMultiMap", "NarrowMultiMap"})) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
+            return node;
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         return ctx.NewCallable(node->Pos(), Ordered || input.IsCallable("NarrowMultiMap") ? input.Content() : node->Content(), {input.HeadPtr(), ctx.FuseLambdas(node->Tail(), input.Tail())});
     }
@@ -3439,7 +3445,7 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     if (node->Head().IsCallable("NarrowMap")) {
-        if (!arg.IsUsedInDependsOn()) {
+        if (!arg.IsUsedInDependsOn() && CanFuseLambdas(*node->Child(1), *node->Head().Child(1))) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << node->Head().Content();
             const auto width = node->Head().Tail().Head().ChildrenSize();
             auto lambda = ctx.Builder(node->Pos())
@@ -3457,8 +3463,8 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
         }
     }
 
-    if (1U == node->Head().UseCount() && !arg.IsUsedInDependsOn()) {
-        if (node->Head().IsCallable({"Map", "OrderedMap"})) {
+    if (node->Head().IsCallable({"Map", "OrderedMap"})) {
+        if (1U == node->Head().UseCount() && CanFuseLambdas(*node->Child(1), *node->Head().Child(1))) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << node->Head().Content();
             auto lambda = ctx.Builder(node->Pos())
                     .Lambda()
@@ -3955,6 +3961,9 @@ bool IsSimpleExpand(const TExprNode& out, const TExprNode& arg) {
 
 TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable({"Map", "OrderedMap"})) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
+            return node;
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         auto lambda = ctx.Builder(node->Pos())
             .Lambda()
@@ -4028,8 +4037,10 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
     }
 
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap")) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
+            return node;
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
-
         if (input.Tail().Tail().IsCallable("AsStruct")) {
             auto apply = ApplyNarrowMap(input.Tail(), ctx);
             TLieralStructsCacheMap membersMap; // TODO: move to context.
@@ -7104,12 +7115,18 @@ TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, 
 
 TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("ExpandMap")) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
+            return node;
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         auto lambda = ctx.FuseLambdas(node->Tail(), input.Tail());
         return ctx.NewCallable(node->Pos(),
             node->Content().starts_with("Narrow") ? TString("Ordered") += node->Content().substr(6U, 16U) : input.Content(),
             {input.HeadPtr(), std::move(lambda)});
     } else if (input.IsCallable("WideMap") && !node->IsCallable("NarrowFlatMap")) {
+        if (!CanFuseLambdas(*node->Child(1), *input.Child(1))) {
+            return node;
+        }
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         auto lambda = ctx.FuseLambdas(node->Tail(), input.Tail());
         return ctx.ChangeChildren(*node, {input.HeadPtr(), std::move(lambda)});
@@ -7387,8 +7404,15 @@ TExprNode::TPtr OptimizeNarrowFlatMap(const TExprNode::TPtr& node, TExprContext&
     return OptimizeWideMaps(node, ctx);
 }
 
-TExprNode::TPtr  OptimizeSqueezeToDict(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr OptimizeSqueezeToDict(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap")) {
+        if (!CanFuseLambdas(*node->Child(1), input.Tail())) {
+            return node;
+        }
+        if (!CanFuseLambdas(*node->Child(2), input.Tail())) {
+            return node;
+        }
+
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         return ctx.NewCallable(node->Pos(), "NarrowSqueezeToDict", {
             input.HeadPtr(),

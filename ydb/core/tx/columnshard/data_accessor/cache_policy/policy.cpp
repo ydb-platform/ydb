@@ -22,7 +22,6 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 AFL_VERIFY(RequestedAddresses.erase(address));
                 objects.emplace(address, std::move(i));
             }
-
             Callback->OnReceiveData(OwnerActorId, std::move(objects), std::move(RequestedAddresses), {});
         }
 

@@ -31,5 +31,5 @@ items:
   href: security_config.md
 - name: tls
   href: tls.md
-- name: spilling
-  href: spilling.md
+- name: table_service_config
+  href: table_service_config.md

@@ -11,7 +11,7 @@
 
 ## См. также
 
-- [Конфигурация спиллинга](../../reference/configuration/spilling.md)
+- [Конфигурация спиллинга](../../reference/configuration/table_service_config.md)
 - [Концепция спиллинга](../../concepts/spilling.md)
 - [Конфигурация контроллера памяти](../../reference/configuration/index.html#memory-controller)
 - [Мониторинг {{ ydb-short-name }}](../../devops/observability/monitoring.md)

@@ -81,6 +81,6 @@ ORDER BY total_amount DESC;
 ## См. также
 
 - [Spilling Service](../contributor/spilling-service.md)
-- [Конфигурация спиллинга](../reference/configuration/spilling.md)
+- [Конфигурация спиллинга](../reference/configuration/table_service_config.md)
 - [Мониторинг {{ ydb-short-name }}](../devops/observability/monitoring.md)
 - [Диагностика производительности](../troubleshooting/performance/index.md)

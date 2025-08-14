@@ -11,7 +11,7 @@ This section provides troubleshooting information for common spilling issues in 
 
 ## See Also
 
-- [Spilling Configuration](../../reference/configuration/spilling.md)
+- [Spilling Configuration](../../reference/configuration/table_service_config.md)
 - [Spilling Concept](../../concepts/spilling.md)
 - [Memory Controller Configuration](../../reference/configuration/index.html#memory-controller)
 - [{{ ydb-short-name }} Monitoring](../../devops/observability/monitoring.md)

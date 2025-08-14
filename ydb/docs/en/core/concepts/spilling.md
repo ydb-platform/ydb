@@ -76,6 +76,6 @@ Data transfer channels continuously monitor their state:
 ## See Also
 
 - [Spilling Service](../contributor/spilling-service.md)
-- [Spilling configuration](../reference/configuration/spilling.md)
+- [Spilling configuration](../reference/configuration/table_service_config.md)
 - [{{ ydb-short-name }} monitoring](../devops/observability/monitoring.md)
 - [Performance diagnostics](../troubleshooting/performance/index.md)

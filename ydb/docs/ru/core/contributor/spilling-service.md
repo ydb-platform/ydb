@@ -9,7 +9,7 @@
 ### Основные компоненты
 
 - **Task queue**: Сервис поддерживает внутреннюю очередь операций записи и чтения. Все запросы на спиллинг помещаются в данную очередь и обрабатываются асинхронно.
-- **Thread pool**: Для выполнения операций ввода-вывода используется пул рабочих потоков. Количество потоков [конфигурируется](../reference/configuration/spilling.md#workerscount) и влияет на производительность сервиса.
+- **Thread pool**: Для выполнения операций ввода-вывода используется пул рабочих потоков. Количество потоков [конфигурируется](../reference/configuration/table_service_config.md#workerscount) и влияет на производительность сервиса.
 - **File management**: Сервис автоматически создает, удаляет и управляет файлами на диске.
 - **Resource monitoring**: Сервис осуществляет мониторинг использования дискового пространства, количества активных операций и других метрик производительности.
 
@@ -76,11 +76,11 @@ sequenceDiagram
 
 ## Конфигурация
 
-Подробная информация о настройке Spilling Service доступна в разделе [Конфигурация спиллинга](../reference/configuration/spilling.md).
+Подробная информация о настройке Spilling Service доступна в разделе [Конфигурация спиллинга](../reference/configuration/table_service_config.md).
 
 ## См. также
 
 - [Концепция спиллинга](../concepts/spilling.md)
-- [Конфигурация спиллинга](../reference/configuration/spilling.md)
+- [Конфигурация спиллинга](../reference/configuration/table_service_config.md)
 - [Мониторинг {{ ydb-short-name }}](../devops/observability/monitoring.md)
 - [Диагностика производительности](../troubleshooting/performance/index.md)

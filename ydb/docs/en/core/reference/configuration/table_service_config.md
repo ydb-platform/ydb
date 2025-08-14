@@ -1,35 +1,31 @@
-# Spilling Configuration
+# `table_service_config` configuration section
 
-[Spilling](../../concepts/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that temporarily saves data to disk when the system runs out of RAM. This section describes configuration parameters for setting up spilling in production environments.
+The `table_service_config` section contains configuration parameters for the table service, including spilling settings.
 
+## spilling_service_config
 
-## Primary Configuration Parameters
+[Spilling](../../concepts/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that temporarily saves data to disk when the system runs out of RAM.
 
-### Spilling Service (spilling_service_config)
-
-**Location:** `table_service_config.spilling_service_config`
-
-The main configuration of the spilling service is defined in the `spilling_service_config` section:
+### Primary Configuration Parameters
 
 ```yaml
 table_service_config:
-  spilling_service_config:
-    local_file_config:
-      root: ""
-      max_total_size: 21474836480    # 20 GiB
-      io_thread_pool:
-        workers_count: 2
-        queue_size: 1000
+    spilling_service_config:
+        local_file_config:
+            root: ""
+            max_total_size: 21474836480
+            io_thread_pool:
+            workers_count: 2
+            queue_size: 1000
 ```
+
+### Directory Configuration
 
 #### local_file_config.root
 
 **Type:** `string`  
-**Default:** `""` (automatic detection)  
-**Description:** A filesystem directory for saving spilling files. When empty, the system automatically creates a directory in the format `{TMP}/spilling-tmp-<username>`.
-
-- `{TMP}` — system temporary directory, determined from the `TMPDIR` environment variable or standard system paths
-- `<username>` — username under which the `ydbd` process is running
+**Default:** `""` (temporary directory)  
+**Description:** A filesystem directory for saving spilling files.
 
 For each `ydbd` process, a separate directory is created with a unique name. Spilling directories have the following name format:
 
@@ -38,26 +34,31 @@ For each `ydbd` process, a separate directory is created with a unique name. Spi
 Where:
 
 - `node_id` — [node](../../concepts/glossary.md#node) identifier
-- `spilling_service_id` — unique instance identifier that is created when initializing the [Spilling Service](../../contributor/spilling-service.md) once when the ydbd process starts
+- `spilling_service_id` — unique instance identifier that is created when initializing the [Spilling Service](../../contributor/spilling-service.md) one time when the ydbd process starts
 
 Spilling files are stored inside each such directory.
 
 Example of a complete spilling directory path:
 
 ```bash
-/tmp/spilling-tmp-user/node_1_32860791-037c-42b4-b201-82a0a337ac80
+/tmp/spilling-tmp-<username>/node_1_32860791-037c-42b4-b201-82a0a337ac80
 ```
+
+Where:
+
+- `/tmp` — value of the `root` parameter
+- `<username>` — username under which the `ydbd` process is running
 
 **Important notes:**
 
 - At process startup, all existing spilling directories in the specified directory are automatically deleted. Spilling directories have a special name format that includes an instance identifier, which is generated once when the ydbd process starts. When a new process starts, all directories in the spilling directory that match the name format but have a different `spilling_service_id` from the current one are deleted.
 - The directory must have sufficient write and read permissions for the user under which ydbd is running
 
-##### Recommendations
+{% note info %}
 
-- Use a separate disk or partition for spilling
-- Preferably use fast storage devices (SSD/NVMe)
-- Ensure sufficient free space is available
+Spilling is only performed on [database nodes](../../concepts/glossary.md#database-node).
+
+{% endnote %}
 
 ##### Possible errors
 
@@ -81,7 +82,11 @@ Example of a complete spilling directory path:
 
 {% note info %}
 
-I/O pool threads for spilling are created in addition to the threads allocated to the [actor system](../../concepts/glossary.md#actor-system). When planning the number of threads, consider the overall system load.
+I/O pool threads for spilling are created in addition to threads allocated for the [actor system](../../concepts/glossary.md#actor-system). When planning the number of threads, consider the overall system load.
+
+**Important:** The spilling thread pool is separate from the actor system thread pools.
+
+For information about configuring actor system thread pools and their impact on system performance, see [Actor System Configuration](index.md#actor-system) and [Changing Actor System Configuration](../../devops/configuration-management/configuration-v1/change_actorsystem_configs.md). For Configuration V2, the actor system settings are described in the [Configuration V2 settings](../../devops/configuration-management/configuration-v2/config-settings.md).
 
 {% endnote %}
 
@@ -94,7 +99,6 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 ##### Recommendations
 
 - Increase for high-load systems
-- Consider the number of CPU cores on the server
 
 ##### Possible errors
 
@@ -110,22 +114,22 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 
 - `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling/can-not-run-operation.md)
 
-## Memory Management
+### Memory Management
 
-### Relationship with memory_controller_config
+#### Relationship with memory_controller_config
 
-Spilling activation is closely related to memory controller settings. Detailed `memory_controller_config` configuration is described in a [separate article](../../reference/configuration/index.html#memory-controller).
+Spilling activation is closely related to memory controller settings. Detailed `memory_controller_config` configuration is described in a [separate article](index.html#memory-controller).
 
 The key parameter for spilling is **`activities_limit_percent`**, which determines the amount of memory allocated for query processing activities. This parameter affects the available memory for user queries and, accordingly, the frequency of spilling activation.
 
-### Impact on spilling
+#### Impact on spilling
 
 - When increasing `activities_limit_percent`, less memory remains for query execution → spilling activates more frequently
 - When decreasing `activities_limit_percent`, more memory is available for queries → spilling activates less frequently
 
-## File System Requirements
+### File System Requirements
 
-### File Descriptors
+#### File Descriptors
 
 {% note warning %}
 
@@ -144,9 +148,9 @@ Where `ydb` is the username under which `ydbd` runs.
 
 After changing the file, you need to reboot the system or re-login to apply the new limits.
 
-## Configuration Examples
+### Configuration Examples
 
-### High-load System
+#### High-load System
 
 For maximum performance in high-load systems, it is recommended to increase the spilling size and number of worker threads:
 
@@ -161,7 +165,7 @@ table_service_config:
         queue_size: 2000
 ```
 
-### Limited Resources
+#### Limited Resources
 
 For systems with limited resources, it is recommended to use conservative settings:
 
@@ -176,13 +180,13 @@ table_service_config:
         queue_size: 500
 ```
 
-## Advanced Configuration
+### Advanced Configuration
 
-### Enabling and Disabling Spilling
+#### Enabling and Disabling Spilling
 
 The following parameters control the enabling and disabling of various spilling types. They should typically only be changed when there are specific system requirements.
 
-#### local_file_config.enable
+##### local_file_config.enable
 
 **Location:** `table_service_config.spilling_service_config.local_file_config.enable`
 **Type:** `boolean`  
@@ -200,20 +204,19 @@ table_service_config:
       enable: true
 ```
 
-#### enable_spilling_nodes
+##### enable_spilling_nodes
 
 **Location:** `table_service_config.enable_spilling_nodes`  
-**Type:** `string`  
-**Possible values:** `"All"` | `"GraceJoin"` | `"Aggregate"` | `"None"`  
-**Default:** `"All"`  
-**Description:** Controls enabling spilling in compute nodes.
+**Type:** `bool`  
+**Default:** `true`  
+**Description:** Enables spilling on database nodes. When disabled (`false`), spilling does not function on database nodes.
 
 ```yaml
 table_service_config:
-  enable_spilling_nodes: "All"
+  enable_spilling_nodes: true
 ```
 
-#### enable_query_service_spilling
+##### enable_query_service_spilling
 
 **Location:** `table_service_config.enable_query_service_spilling`  
 **Type:** `boolean`  
@@ -231,26 +234,27 @@ This setting works in conjunction with the local spilling service configuration.
 
 {% endnote %}
 
-## Complete Example
+### Complete Example
 
 ```yaml
 table_service_config:
+  enable_spilling_nodes: true
   enable_query_service_spilling: true
-  enable_spilling_nodes: "All"
   spilling_service_config:
     local_file_config:
       enable: true
-      root: ""
-      max_total_size: 21474836480    # 20 GiB
+      root: "/var/spilling"
+      max_total_size: 53687091200    # 50 GiB
       io_thread_pool:
-        workers_count: 2
-        queue_size: 1000
+        workers_count: 4
+        queue_size: 1500
 ```
 
 ## See Also
 
 - [Spilling Concept](../../concepts/spilling.md)
-- [Memory Controller Configuration](../../reference/configuration/index.html#memory-controller)
+- [Spilling Service Architecture](../../contributor/spilling-service.md)
+- [Spilling Troubleshooting](../../troubleshooting/spilling/index.md)
+- [Memory Controller Configuration](index.html#memory-controller)
 - [{{ ydb-short-name }} Monitoring](../../devops/observability/monitoring.md)
 - [Performance Diagnostics](../../troubleshooting/performance/index.md)
-- [Spilling Troubleshooting](../../troubleshooting/spilling/index.md)

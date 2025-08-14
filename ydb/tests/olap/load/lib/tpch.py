@@ -59,6 +59,7 @@ class TestTpch10(TpchSuiteBase):
 
 
 class TestTpch100(TpchSuiteBase):
+    iterations: int = 10
     tables_size: dict[str, int] = {
         'lineitem': 600037902,
     }

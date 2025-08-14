@@ -1083,7 +1083,7 @@ protected:
         for (auto n: it->second) {
             if (TCoUnordered::Match(n)) {
                 nodesToOptimize.emplace(n, arg.Ptr());
-            } else if (!TCoDependsOnBase::Match(n)) {
+            } else if (!IsDependsOnUsage(*n, parentsMap)) {
                 return node;
             }
         }

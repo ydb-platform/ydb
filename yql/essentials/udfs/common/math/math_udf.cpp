@@ -1,6 +1,7 @@
 #include "math_ir.h"
 
-
+#include <util/system/byteorder.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 
 extern const char TagRoundingMode[] = "MathRoundingMode";
@@ -90,6 +91,44 @@ using namespace NKikimr;
 using namespace NUdf;
 
 namespace {
+    const char SwapBytesUDF[] = "SwapBytes";
+    template <class TUserType>
+    class TSwapBytesFunc: public TBoxedValue {
+    private:
+        TSourcePosition Pos_;
+
+        TSwapBytesFunc(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+        TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
+            if constexpr (sizeof(TUserType) == 1) {
+                return args[0];
+            }
+            return TUnboxedValuePod(SwapBytes(args[0].Get<TUserType>()));
+        }
+
+    public:
+        static void DeclareSignature(
+            TStringRef name,
+            TType* userType,
+            IFunctionTypeInfoBuilder& builder,
+            bool typesOnly)
+        {
+            Y_UNUSED(name);
+            Y_UNUSED(userType);
+
+            builder.SimpleSignature<TUserType(TAutoMap<TUserType>)>()
+                .IsStrict()
+                .SetMinLangVer(NYql::MakeLangVersion(2025, 3));
+            if (!typesOnly) {
+                builder.Implementation(new TSwapBytesFunc<TUserType>(builder.GetSourcePosition()));
+            }
+        }
+    };
+
     extern const char epsilon[] = "Epsilon";
     using TEpsilon = TNamedArg<double, epsilon>;
 
@@ -102,6 +141,7 @@ namespace {
 
     SIMPLE_MODULE(TMathModule,
         MATH_UDF_MAP_WITHOUT_IR(REGISTER_MATH_UDF)
+        TUserDataTypeFuncFactory<true, false, SwapBytesUDF, TSwapBytesFunc, ui8, ui16, ui32, ui64>,
         MATH_UDF_MAP(REGISTER_MATH_UDF, REGISTER_MATH_UDF_LAST))
 }
 

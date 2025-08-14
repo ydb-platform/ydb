@@ -199,6 +199,10 @@ public:
             builder.Columns<TCoVoid>().Build();
         }
 
+        if (topicKeyParser.GetWatermark()) {
+            builder.Watermark(topicKeyParser.GetWatermark());
+        }
+
         return Build<TCoRight>(ctx, read.Pos())
             .Input(builder.Done())
             .Done().Ptr();

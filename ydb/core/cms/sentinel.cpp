@@ -1150,6 +1150,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         auto* updateRequest = request->Record.MutableSelfHealNodesStateUpdate();
         updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealConfig.WaitForConfigStep.GetValue() / 1000000); // milliseconds -> seconds
         updateRequest->SetEnableSelfHealStateStorage(Config.StateStorageSelfHealConfig.Enable);
+        updateRequest->SetPileupReplicas(Config.StateStorageSelfHealConfig.PileupReplicas);
         for (auto& [nodeId, node] : SentinelState->Nodes) {
             SentinelState->NeedSelfHealStateStorage |= node.Compute();
             auto* nodeState = updateRequest->AddNodesState();

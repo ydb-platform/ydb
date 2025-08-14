@@ -15,6 +15,7 @@
 #include <util/stream/str.h>
 #include <util/system/tempfile.h>
 #include <util/thread/pool.h>
+#include <util/system/file_lock.h>
 
 using namespace NYql;
 using namespace NThreading;
@@ -241,6 +242,74 @@ Y_UNIT_TEST_SUITE(TFileStorageTests) {
         UNIT_ASSERT_VALUES_EQUAL("XYZPQAZWSXEDC", ReadFileContent(link4->GetPath()));
         UNIT_ASSERT_VALUES_UNEQUAL(link1->GetMd5(), link3->GetMd5());
         UNIT_ASSERT_VALUES_EQUAL(link3->GetMd5(), link4->GetMd5());
+    }
+
+    Y_UNIT_TEST(FileLockTest) {
+        auto server = CreateTestHttpServer();
+
+        TString currentETag = "TAG_1";
+        TString currentContent = "ABC";
+
+        TFileStoragePtr fs = CreateTestFS();
+        int downloadCount = 0;
+
+        server->SetRequestHandler([&](auto& request) {
+            Y_UNUSED(request);
+            TVector<TString> locks;
+            (fs->GetRoot() / "locks").ListNames(locks);
+            TVector<TString> fileStorageLocks;
+            for (auto lock : locks) {
+                if (lock.Contains("file_storage")) {
+                    fileStorageLocks.push_back(lock);
+                }
+            }
+            UNIT_ASSERT_EQUAL(1, fileStorageLocks.size());
+            downloadCount++;
+            return TTestHttpServer::TReply::OkETag(currentContent, currentETag);
+        });
+
+        auto url = server->GetUrl();
+
+        auto link1 = fs->PutUrl(url, {});
+        auto link2 = fs->PutUrl(url, {});
+        UNIT_ASSERT_GE(downloadCount, 1);
+    }
+
+    Y_UNIT_TEST(ParallelDownload) {
+        TSimpleThreadPool threadPool;
+        threadPool.Start(12);
+
+        auto server = CreateTestHttpServer();
+        TFileStoragePtr fs = CreateTestFS();
+
+        TString currentETag = "TAG_1";
+        TString currentContent = "ABC";
+
+        std::atomic<int> downloadCount = 0;
+        std::atomic<int> notModifiedCount = 0;
+        server->SetRequestHandler([&](const NYql::TTestHttpServer::TRequest& request) {
+            Sleep(TDuration::Seconds(1));
+
+            if (request.IfNoneMatch == currentETag) {
+                notModifiedCount++;
+                return TTestHttpServer::TReply::NotModified(currentETag);
+            }
+            downloadCount++;
+            return TTestHttpServer::TReply::OkETag(currentContent, currentETag);
+        });
+
+        auto url = server->GetUrl();
+        auto slowAsyncDowloading = [&]() {
+            auto link1 = fs->PutUrl(url, {});
+            return;
+        };
+
+        NThreading::TFuture<void> future1 = NThreading::Async(slowAsyncDowloading, threadPool);
+        NThreading::TFuture<void> future2 = NThreading::Async(slowAsyncDowloading, threadPool);
+        future1.Wait();
+        future2.Wait();
+        UNIT_ASSERT_EQUAL(downloadCount, 1);
+        UNIT_ASSERT_EQUAL(notModifiedCount, 1);
     }
 
     Y_UNIT_TEST(PutUrlWeakETagChange) {

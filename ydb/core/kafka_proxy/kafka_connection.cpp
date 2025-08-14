@@ -609,6 +609,7 @@ protected:
     }
 
     void OnRequestProcessed(const Msg::TPtr& request) {
+        KAFKA_LOG_T("Request with correlationId " << request->Header.CorrelationId << " processed. Erasing it from PendingRequests and PendingRequestsQueue");
         InflightSize -= request->ExpectedSize;
         PendingRequests.erase(request->Header.CorrelationId);
         PendingRequestsQueue.pop_front();
@@ -617,7 +618,9 @@ protected:
     bool ProcessReplyQueue(const TActorContext& ctx) {
         while(!PendingRequestsQueue.empty()) {
             auto& request = PendingRequestsQueue.front();
+            KAFKA_LOG_T("Processing reply queue for request with correlationId " << request->Header.CorrelationId);
             if (request->Response.get() == nullptr) {
+                KAFKA_LOG_T("Response for request with correlationId " << request->Header.CorrelationId << " is empty.");
                 break;
             }
 
@@ -632,6 +635,7 @@ protected:
     }
 
     bool Reply(const TRequestHeaderData* header, const TApiMessage* reply, const TString method, const TInstant requestStartTime, EKafkaErrors errorCode, const TActorContext& ctx) {
+        KAFKA_LOG_T("Building reply for method " << method << " and correlationId " << header->CorrelationId << " with error code: " << errorCode);
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;
         

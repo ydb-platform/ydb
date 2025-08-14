@@ -75,7 +75,7 @@ private:
     NConcurrency::IPollerPtr GetOrCreatePoller(
         NConcurrency::IThreadPoolPollerPtr* poller,
         bool isXfer,
-        const TString& threadNamePrefix);
+        std::string threadNamePrefix);
 
     std::vector<TTcpConnectionPtr> GetConnections();
     void BuildOrchid(NYson::IYsonConsumer* consumer);

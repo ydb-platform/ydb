@@ -30,6 +30,22 @@ void SetupMinimalRuntime(TTestActorRuntime& runtime, const TStateStorageSetupper
 TIntrusiveConstPtr<TStateStorageInfo> GetStateStorageInfo(TTestActorRuntime& runtime);
 TEvStateStorage::TEvResolveReplicasList::TPtr ResolveReplicas(TTestActorRuntime& runtime, const TString& path);
 
+template <typename TEvent>
+size_t CountEvents(TTestBasicRuntime& runtime, bool dispatch = true, TActorId recipient = {}) {
+    if (dispatch) {
+        if (!runtime.DispatchEvents()) {
+            return 0;
+        }
+    } else {
+        // is necessary to accumulate sent events
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
+
+    return CountIf(runtime.CaptureEvents(), [=](const TAutoPtr<IEventHandle> ev) {
+        return ev->GetTypeRewrite() == TEvent::EventType && (recipient ? ev->Recipient == recipient : true);
+    });
+}
+
 class TTestContext: public TTestBasicRuntime {
 public:
     using TTestBasicRuntime::TTestBasicRuntime;
@@ -67,21 +83,8 @@ public:
     }
 
     template <typename TEvent>
-    size_t CountEvents(bool dispatch = true) {
-        if (dispatch) {
-            if (!DispatchEvents()) {
-                return 0;
-            }
-        }
-
-        return CountIf(CaptureEvents(), [](const TAutoPtr<IEventHandle> ev) {
-            return ev->GetTypeRewrite() == TEvent::EventType;
-        });
-    }
-
-    template <typename TEvent>
     size_t CountEdgeEvents() {
-        return CountEvents<TEvent>(false);
+        return CountEvents<TEvent>(*this, false);
     }
 
     NInternalEvents::TEvHandshakeResponse::TPtr HandshakeReplica(

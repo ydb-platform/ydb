@@ -12,11 +12,12 @@
 namespace NYdbWorkload {
 
 TWorkloadDataInitializerBase::TDataGenerator::TDataGenerator(const TWorkloadDataInitializerBase& owner, const TString& name, ui64 size,
-    const TString& tablePath, const TFsPath& dataPath, const TVector<TString>& columnNames)
+    const TString& tablePath, const TFsPath& dataPath, const TVector<TString>& columnNames, EPortionSizeUnit sizeUnit)
     : IBulkDataGenerator(name, size)
     , Owner(owner)
     , TablePath(tablePath)
     , ColumnNames(columnNames)
+    , SizeUnit(sizeUnit)
 {
     if (dataPath.IsDirectory()) {
         TVector<TFsPath> children;
@@ -99,8 +100,24 @@ public:
             TString line;
             if (Owner.Owner.StateProcessor && Owner.Owner.StateProcessor->GetState().contains(Path)) {
                 auto position = Owner.Owner.StateProcessor->GetState().at(Path).Position;
-                while(position > ReadBytes) {
-                    ReadBytes += Decompressor->Skip(position - ReadBytes);
+                switch (Owner.SizeUnit) {
+                    case EPortionSizeUnit::Byte:
+                        while(position > ReadBytes) {
+                            ReadBytes += Decompressor->Skip(position - ReadBytes);
+                        }
+                        break;
+                    case EPortionSizeUnit::Line:
+                        TString line;
+                        while (position > ReadLines) {
+                            if (auto read = Decompressor->ReadLine(line)) {
+                                ReadBytes += read;
+                            } else {
+                                break;
+                            }
+                            ++ReadLines;
+                        }
+                        break;
+
                 }
             }
             while (const auto read = Decompressor->ReadLine(line)) {
@@ -124,13 +141,22 @@ public:
         data << JoinSeq("\n", lines) << Endl;
         const auto position = ReadBytes;
         ReadBytes += readBytes;
+        ReadLines += lines.size();
+        auto getSize = [this, &readBytes, &lines](){
+            switch (Owner.SizeUnit) {
+                case EPortionSizeUnit::Byte:
+                    return readBytes;
+                case EPortionSizeUnit::Line:
+                    return lines.size();
+            }
+        };
         return MakeIntrusive<TDataPortionWithState>(
             Owner.Owner.StateProcessor.Get(),
             Owner.Owner.Params.GetFullTableName(Owner.TablePath.c_str()),
             Path,
             TDataPortion::TCsv(std::move(data), Foramt),
             position,
-            readBytes
+            getSize()
         );
     }
 
@@ -139,6 +165,7 @@ private:
     TString Header;
     const TString& Foramt;
     ui64 ReadBytes = 0;
+    ui64 ReadLines = 0;
 };
 
 class TWorkloadDataInitializerBase::TDataGenerator::TTsvFile final: public TWorkloadDataInitializerBase::TDataGenerator::TCsvFileBase {

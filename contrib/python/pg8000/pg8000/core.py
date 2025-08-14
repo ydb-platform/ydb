@@ -147,19 +147,17 @@ def _flush(sock):
 
 
 def _read(sock, size):
-    got = 0
-    buff = []
+    buff = bytearray()
     try:
-        while got < size:
-            block = sock.read(size - got)
+        while len(buff) < size:
+            block = sock.read(size - len(buff))
             if block == b"":
                 raise InterfaceError("network error")
-            buff.append(block)
-            got += len(block)
+            buff.extend(block)
     except OSError as e:
         raise InterfaceError("network error") from e
 
-    return b"".join(buff)
+    return bytes(buff)
 
 
 def _write(sock, d):
@@ -271,6 +269,7 @@ class CoreConnection:
         tcp_keepalive=True,
         application_name=None,
         replication=None,
+        startup_params=None,
         sock=None,
     ):
         self._client_encoding = "utf8"
@@ -296,6 +295,15 @@ class CoreConnection:
             "application_name": application_name,
             "replication": replication,
         }
+        start_params = {} if startup_params is None else startup_params
+        common_params = init_params.keys() & start_params.keys()
+
+        if len(common_params) > 0:
+            raise InterfaceError(
+                "The parameters '{common_params}' can't appear in startup_params, they "
+                "must be set using keyword arguments."
+            )
+        init_params.update(start_params)
 
         for k, v in tuple(init_params.items()):
             if isinstance(v, str):
@@ -754,10 +762,11 @@ class CoreConnection:
         return context
 
     def _send_message(self, code, data):
+        buff = bytearray(code)
+        buff.extend(i_pack(len(data) + 4))
+        buff.extend(data)
         try:
-            _write(self._sock, code)
-            _write(self._sock, i_pack(len(data) + 4))
-            _write(self._sock, data)
+            _write(self._sock, bytes(buff))
         except ValueError as e:
             if str(e) == "write to closed file":
                 raise InterfaceError("connection is closed")

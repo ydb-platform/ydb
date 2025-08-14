@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic(1);
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic(1);
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )", testCase.TableName.data()));
         permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.write", "ydb.generic.read"});
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )", testCase.TableName.data()));
         permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.read"});
@@ -217,6 +217,56 @@ Y_UNIT_TEST_SUITE(Transfer)
             )", MainTestCase::CreateTransferSettings::WithExpectedError("Access denied for scheme request"));
 
         testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(Create_WithoutAlterTopicPermission_AndGrant)
+    {
+        auto id = RandomNumber<ui16>();
+        auto username = TStringBuilder() << "u" << id;
+
+        MainTestCase testCase(std::nullopt, "ROW");
+        testCase.CreateUser(username);
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        testCase.CreateTopic(1);
+        testCase.Grant(testCase.TopicName, username, {"ydb.generic.read"});
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithUsername(username));
+
+        // Hasn't the alter topic permission. Can't create consumer
+        testCase.CheckTransferStateError("Create stream error: UNAUTHORIZED");
+
+        testCase.PauseTransfer();
+        testCase.Grant(testCase.TopicName, username, {"ydb.granular.alter_schema"});
+        testCase.ResumeTransfer();
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
     }
 
     Y_UNIT_TEST(LocalTopic_WithPermission)
@@ -309,7 +359,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )",
 
@@ -318,7 +368,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     return [
                         <|
                             Key:CAST($x._offset AS Uint64),
-                            Message:CAST($x._data || " new lambda" AS Utf8)
+                            Message:COALESCE(CAST($x._data || " new lambda" AS Utf8), "Message is empty")
                         |>
                     ];
                 };
@@ -336,7 +386,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         return [
                             <|
                                 Key:CAST($x._offset AS Uint64),
-                                Message:CAST($x._data || " 1 lambda" AS Utf8)
+                                Message:COALESCE(CAST($x._data || " 1 lambda" AS Utf8), "Message is empty")
                             |>
                         ];
                     };
@@ -346,7 +396,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         return [
                             <|
                                 Key:CAST($x._offset AS Uint64),
-                                Message:CAST($x._data || " 2 lambda" AS Utf8)
+                                Message:COALESCE(CAST($x._data || " 2 lambda" AS Utf8), "Message is empty")
                             |>
                         ];
                     };
@@ -365,7 +415,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic(1);
@@ -400,7 +450,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic(1);
@@ -446,7 +496,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic();
@@ -455,7 +505,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     return [
                         <|
                             Key:CAST($x._offset AS Uint64),
-                            Message:CAST($x._data AS Utf8)
+                            Message:Unwrap(CAST($x._data AS Utf8), "data is empty")
                         |>
                     ];
                 };
@@ -493,7 +543,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -552,7 +602,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -570,6 +620,41 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    Y_UNIT_TEST(DescribeTransferWithErrorTopicNotFound)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(false));
+
+        testCase.CheckTransferStateError("Path not found");
+
+        auto d = testCase.DescribeTransfer();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetState(), TTransferDescription::EState::Error);
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetSrcPath(), TStringBuilder() << "local/" << testCase.TopicName);
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetDstPath(), TStringBuilder() << "/local/" << testCase.TableName);
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
     Y_UNIT_TEST(CustomConsumer)
     {
         MainTestCase testCase;
@@ -579,7 +664,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -633,7 +718,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -682,7 +767,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -737,7 +822,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -784,7 +869,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -822,7 +907,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -874,7 +959,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8 NOT NULL,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
 
@@ -962,7 +1047,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Message Utf8,
                     PRIMARY KEY (Key)
                 )  WITH (
-                    STORE = COLUMN
+                    STORE = ROW
                 );
             )");
         testCase.CreateTopic(1);
@@ -976,7 +1061,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(1), 1));
+            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(2), 1_MB));
 
         testCase.Write({"Message-1"});
 
@@ -1013,12 +1098,26 @@ Y_UNIT_TEST_SUITE(Transfer)
             _C("Message", TString("Message-2")),
         }});
 
+        testCase.Write({"Message-3"});
+        Sleep(TDuration::MilliSeconds(500));
+
         // More cycles for pause/resume
         testCase.PauseTransfer();
-        testCase.CheckTransferState(TTransferDescription::EState::Paused);
+
+        testCase.Write({"Message-4"});
 
         testCase.ResumeTransfer();
         testCase.CheckTransferState(TTransferDescription::EState::Running);
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }, {
+            _C("Message", TString("Message-2")),
+        }, {
+            _C("Message", TString("Message-3")),
+        }, {
+            _C("Message", TString("Message-4")),
+        }});
 
         testCase.DropTransfer();
         testCase.DropTable();
@@ -1256,6 +1355,247 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTransfer();
         testCase.DropTopic();
         testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(AlterLambdaOnWork)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TableName.data()));
+
+        testCase.Write({"Message-1"});
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithTransformLambda(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST("NEW LAMBDA " || $x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )"));
+
+        testCase.Write({"Message-2"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }, {
+            _C("Message", TString("NEW LAMBDA Message-2"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(CreateAndAlterTransferInDirectory)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateDirectory("/local/subdir");
+        testCase.CreateTransfer(TStringBuilder() << "subdir/" << testCase.TransferName, Sprintf(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", testCase.TableName.data()));
+
+        testCase.AlterTransfer(TStringBuilder() << "subdir/" << testCase.TransferName,
+            MainTestCase::AlterTransferSettings::WithBatching(TDuration::Seconds(1), 1));
+    }
+
+    Y_UNIT_TEST(Alter_WithSecret)
+    {
+        auto id = RandomNumber<ui16>();
+        auto username = TStringBuilder() << "u" << id;
+        auto secretName = TStringBuilder() << "s" << id;
+
+        MainTestCase permissionSetup;
+        permissionSetup.CreateUser(username);
+        permissionSetup.Grant("", username, {"ydb.granular.create_table", "ydb.granular.create_queue", "ydb.granular.alter_schema"});
+
+        MainTestCase testCase(username);
+        testCase.ExecuteDDL(Sprintf(R"(
+                CREATE OBJECT %s (TYPE SECRET) WITH value="%s@builtin"
+            )", secretName.data(), username.data()));
+
+        permissionSetup.ExecuteDDL(Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )", testCase.TableName.data()));
+        permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.write", "ydb.generic.read"});
+
+        testCase.CreateTopic(1);
+        permissionSetup.Grant(testCase.TopicName, username, {"ALL"});
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithSecretName(secretName));
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.PauseTransfer();
+        testCase.CheckTransferState(TTransferDescription::EState::Paused);
+        testCase.ResumeTransfer();
+
+        testCase.Write({"Message-2"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }, {
+            _C("Message", TString("Message-2"))
+        }});
+
+        testCase.DropTopic();
+        testCase.DropTransfer();
+    }
+
+    Y_UNIT_TEST(MessageField_Key) {
+        MainTestCase(std::nullopt).Run({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:CAST($x._key AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withAttributes({ {"__key", "key_value"} })},
+
+            .Expectations = {{
+                _C("Value", TString("key_value")),
+            }}
+        });
+    }
+
+    Y_UNIT_TEST(MessageField_Key_Empty) {
+        MainTestCase(std::nullopt).Run({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:CAST($x._key AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withAttributes({ {"__not_key", "key_value"} })},
+
+            .Expectations = {{
+                _T<NullChecker>("Value"),
+            }}
+        });
+    }
+
+    Y_UNIT_TEST(ErrorInMultiLine) {
+        MainTestCase testCase(std::nullopt, "ROW");
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8 NOT NULL,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:Unwrap(Nothing(Utf8?), "unwrap error")
+                        |>,
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:Unwrap(CAST($x._key AS Utf8))
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckTransferStateError("unwrap error");
+
     }
 }
 

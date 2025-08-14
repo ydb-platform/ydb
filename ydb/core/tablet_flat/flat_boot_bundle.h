@@ -17,7 +17,7 @@ namespace NBoot {
 
     class TBundleLoadStep final: public NBoot::IStep {
     public:
-        using TCache = TPrivatePageCache::TInfo;
+        using TPageCollection = TPrivatePageCache::TPageCollection;
 
         static constexpr NBoot::EStep StepKind = NBoot::EStep::Bundle;
 
@@ -41,8 +41,8 @@ namespace NBoot {
             PageCollections.resize(LargeGlobIds.size());
 
             for (auto slot: xrange(LargeGlobIds.size())) {
-                if (auto *info = Back->PageCaches.FindPtr(LargeGlobIds[slot].Lead)) {
-                    PageCollections[slot] = *info;
+                if (auto *pageCollection = Back->PageCollections.FindPtr(LargeGlobIds[slot].Lead)) {
+                    PageCollections[slot] = *pageCollection;
                 } else {
                     LeftMetas += Spawn<TLoadBlobs>(LargeGlobIds[slot], slot);
                 }
@@ -85,7 +85,7 @@ namespace NBoot {
             } else {
                 auto *pack = new NPageCollection::TPageCollection(load->LargeGlobId, load->PlainData());
 
-                PageCollections[load->Cookie] = new TPrivatePageCache::TInfo(pack);
+                PageCollections[load->Cookie] = new TPageCollection(pack);
             }
 
             TryLoad();
@@ -137,11 +137,11 @@ namespace NBoot {
 
         void PropagateSideEffects(const NTable::TPartView &partView)
         {
-            for (auto &cache : partView.As<NTable::TPartStore>()->PageCollections)
-                Logic->Result().PageCaches.push_back(cache);
+            for (auto &pageCollection : partView.As<NTable::TPartStore>()->PageCollections)
+                Logic->Result().PageCollections.push_back(pageCollection);
 
-            if (auto &cache = partView.As<NTable::TPartStore>()->Pseudo)
-                Logic->Result().PageCaches.push_back(cache);
+            if (auto &pageCollection = partView.As<NTable::TPartStore>()->Pseudo)
+                Logic->Result().PageCollections.push_back(pageCollection);
         }
 
     private:
@@ -149,7 +149,7 @@ namespace NBoot {
 
         TAutoPtr<NTable::TLoader> Loader;
         TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
-        TVector<TIntrusivePtr<TCache>> PageCollections;
+        TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
         TString Legacy;
         TString Opaque;
         TVector<TString> Deltas;

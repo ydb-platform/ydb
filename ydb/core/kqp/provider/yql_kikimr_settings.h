@@ -63,6 +63,8 @@ public:
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
 
+    NCommon::TConfSetting<bool, Static> UseDqHashCombine;
+
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
 
@@ -210,6 +212,9 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableIndexStreamWrite = false;
     bool EnableOlapPushdownProjections = false;
     bool EnableParallelUnionAllConnectionsForExtend = false;
+    bool EnableTempTablesForUser = false;
+
+    bool EnableSimpleProgramsSinglePartitionOptimization = true;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;

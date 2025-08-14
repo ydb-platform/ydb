@@ -19,6 +19,7 @@
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <arrow/api.h>
@@ -1430,12 +1431,16 @@ struct TReadAggregateResult {
     std::vector<int64_t> Counts = { 100 };
 };
 
-void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const TString& testDataBlob, bool addProjection,
+void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const TString& testDataBlob, bool addProjection, const bool simpleReader,
     const std::vector<ui32>& aggKeys = {}, const TReadAggregateResult& expectedResult = {},
     const TReadAggregateResult& expectedFiltered = { 1, { 1 }, { 1 }, { 1 } }) {
     addProjection = true;
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    if (simpleReader) {
+        runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+        runtime.GetAppData(0).ColumnShardConfig.SetDeduplicationEnabled(true);
+    }
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
@@ -1992,15 +1997,15 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestReadWithProgramNoProjection();
     }
 
-    Y_UNIT_TEST(ReadAggregate) {
+    Y_UNIT_TEST_DUO(ReadAggregate, SimpleReader) {
         auto schema = TTestSchema::YdbAllTypesSchema();
         auto testBlob = MakeTestBlob({ 0, 100 }, schema);
 
-        TestReadAggregate(schema, testBlob, false);
-        TestReadAggregate(schema, testBlob, true);
+        TestReadAggregate(schema, testBlob, false, SimpleReader);
+        TestReadAggregate(schema, testBlob, true, SimpleReader);
     }
 
-    Y_UNIT_TEST(ReadGroupBy) {
+    Y_UNIT_TEST_DUO(ReadGroupBy, SimpleReader) {
         auto schema = TTestSchema::YdbAllTypesSchema();
         auto testBlob = MakeTestBlob({ 0, 100 }, schema);
 
@@ -2022,26 +2027,26 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
             // the type has the same values in test batch so result would be grouped in one row
             if (sameValTypes.contains(schema[key].GetType().GetTypeId())) {
-                TestReadAggregate(schema, testBlob, (key % 2), { key }, resGrouped, resFiltered);
+                TestReadAggregate(schema, testBlob, (key % 2), SimpleReader, { key }, resGrouped, resFiltered);
             } else {
-                TestReadAggregate(schema, testBlob, (key % 2), { key }, resDefault, resFiltered);
+                TestReadAggregate(schema, testBlob, (key % 2), SimpleReader, { key }, resDefault, resFiltered);
             }
         }
         for (ui32 key = 0; key < schema.size() - 1; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << "\n";
             if (sameValTypes.contains(schema[key].GetType().GetTypeId()) && sameValTypes.contains(schema[key + 1].GetType().GetTypeId())) {
-                TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1 }, resGrouped, resFiltered);
+                TestReadAggregate(schema, testBlob, SimpleReader, (key % 2), { key, key + 1 }, resGrouped, resFiltered);
             } else {
-                TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1 }, resDefault, resFiltered);
+                TestReadAggregate(schema, testBlob, SimpleReader, (key % 2), { key, key + 1 }, resDefault, resFiltered);
             }
         }
         for (ui32 key = 0; key < schema.size() - 2; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << ", " << key + 2 << "\n";
             if (sameValTypes.contains(schema[key].GetType().GetTypeId()) && sameValTypes.contains(schema[key + 1].GetType().GetTypeId()) &&
                 sameValTypes.contains(schema[key + 1].GetType().GetTypeId())) {
-                TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1, key + 2 }, resGrouped, resFiltered);
+                TestReadAggregate(schema, testBlob, (key % 2), SimpleReader, { key, key + 1, key + 2 }, resGrouped, resFiltered);
             } else {
-                TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1, key + 2 }, resDefault, resFiltered);
+                TestReadAggregate(schema, testBlob, (key % 2), SimpleReader, { key, key + 1, key + 2 }, resDefault, resFiltered);
             }
         }
     }

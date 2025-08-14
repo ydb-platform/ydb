@@ -60,6 +60,7 @@ const TStringBuf INFER_SCHEMA_ATTR_NAME = "_infer_schema";
 const TStringBuf SCHEMA_ATTR_NAME = "schema";
 const TStringBuf SCHEMA_MODE_ATTR_NAME = "schema_mode";
 const TStringBuf FORMAT_ATTR_NAME = "_format";
+const TStringBuf NATIVE_STRICT_SCHEMA_ATTR_NAME = "native_strict_schema";
 
 const TStringBuf KeyFilterName = "keyFilter";
 const TStringBuf CurrentYtClusterShortcut = "current";

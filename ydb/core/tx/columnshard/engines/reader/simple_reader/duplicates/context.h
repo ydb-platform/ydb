@@ -10,7 +10,6 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 class TInternalFilterConstructor: TMoveOnly {
 private:
     const TEvRequestFilter::TPtr OriginalRequest;
-    const TColumnDataSplitter Intervals;
     const std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
     const std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
     const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GroupGuard;
@@ -73,14 +72,11 @@ public:
         return OriginalRequest;
     }
 
-    const TColumnDataSplitter& GetIntervals() const {
-        return Intervals;
-    }
-
-    TInternalFilterConstructor(const TEvRequestFilter::TPtr& request, TColumnDataSplitter&& splitter);
+    TInternalFilterConstructor(const TEvRequestFilter::TPtr& request);
 
     ~TInternalFilterConstructor() {
-        AFL_VERIFY(IsDone())("state", DebugString());
+        AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()))(
+                                                                             "state", DebugString());
     }
 
     TString DebugString() const {
@@ -100,10 +96,10 @@ public:
         return ProcessGuard->GetProcessId();
     }
     ui64 GetMemoryScopeId() const {
-        return ScopeGuard->GetProcessId();
+        return ScopeGuard->GetScopeId();
     }
     ui64 GetMemoryGroupId() const {
-        return GroupGuard->GetProcessId();
+        return GroupGuard->GetGroupId();
     }
 };
 

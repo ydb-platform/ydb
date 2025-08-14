@@ -461,7 +461,7 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
 
         return true;
     } catch (const std::exception& handleExc) {
-        LOG_E("OnUnhandledException throws unhandled exception " 
+        LOG_E("OnUnhandledException throws unhandled exception "
             << TypeName(handleExc) << ": " << handleExc.what() << Endl
             << TBackTrace::FromCurrentException().PrintToString());
         return false;

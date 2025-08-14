@@ -37,6 +37,12 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config)
     config.Opts->AddLongOption("no-consumer", "Read without consumer")
         .Hidden()
         .StoreTrue(&Scenario.ReadWithoutConsumer);
+    config.Opts->AddLongOption("no-commit", "Read without committing topic offsets")
+        .Hidden()
+        .StoreTrue(&Scenario.ReadWithoutCommit);
+    config.Opts->AddLongOption("restart-interval", "Recreate reader session period (ex. '100s', '3m')")
+        .Hidden()
+        .StoreMappedResult(&Scenario.RestartInterval, TDuration::Parse);
 
     // Specific params
     config.Opts->AddLongOption("consumer-prefix", "Use consumers with names '<consumer-prefix>-0' ... '<consumer-prefix>-<n-1>' where n is set in the '--consumers' option.")

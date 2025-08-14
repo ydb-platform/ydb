@@ -24,10 +24,18 @@ class TColumnFetchingContext;
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
+    friend class TMergeableInterval;
+
 private:
+    class TPortionsSlice;
+
+private:
+    inline static const ui64 FILTER_CACHE_SIZE_CNT = 100;
+
     inline static TAtomicCounter NextRequestId = 0;
 
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
+    const std::shared_ptr<arrow::Schema> PKSchema;
     std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
     const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
@@ -35,6 +43,32 @@ private:
     THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
+
+private:
+    static TPortionIntervalTree MakeIntervalTree(const std::deque<NSimple::TSourceConstructor>& portions) {
+        TPortionIntervalTree intervals;
+        for (const auto& portion : portions) {
+            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
+                                   portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
+        }
+        return intervals;
+    }
+
+    static THashMap<ui64, std::shared_ptr<TPortionInfo>> MakePortionsIndex(const TPortionIntervalTree& intervals) {
+        THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
+        intervals.EachRange(
+            [&portions](const TPortionIntervalTree::TOwnedRange& /*range*/, const std::shared_ptr<TPortionInfo>& portion) mutable {
+                AFL_VERIFY(portions.emplace(portion->GetPortionId(), portion).second);
+            });
+        return portions;
+    }
+
+    void BuildFilterForSlice(const TPortionsSlice& slice, const std::shared_ptr<TInternalFilterConstructor>& constructor,
+        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard,
+        const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion);
+
+    std::vector<TPortionsSlice> FindIntervalBorders(const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& dataByPortion,
+        const std::shared_ptr<TInternalFilterConstructor>& context) const;
 
 private:
     STATEFN(StateMain) {

@@ -1,4 +1,3 @@
-
 # INSERT INTO
 
 {% note warning %}

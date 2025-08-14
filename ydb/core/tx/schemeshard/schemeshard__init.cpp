@@ -25,6 +25,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TVector<ui64> ImportsToResume;
     THashMap<TPathId, TVector<TPathId>> CdcStreamScansToResume;
     TVector<TPathId> RestoreTablesToUnmark;
+    TVector<ui64> IncrementalBackupsToResume;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -4670,6 +4671,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TIndexBuildInfo::FillFromRow(rowset, &buildInfo);
                     });
 
+                    if (!Self->EnableVectorIndex) { // prevent build index from progress
+                        buildInfo->IsBroken = true;
+                    }
+
                     // Note: broken build are also added to IndexBuilds
                     Y_ASSERT(!Self->IndexBuilds.contains(buildInfo->Id));
                     Self->IndexBuilds[buildInfo->Id] = buildInfo;
@@ -5383,6 +5388,69 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read incremental backups
+        {
+            {
+                auto rowset = db.Table<Schema::IncrementalBackups>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    ui64 id = rowset.GetValue<Schema::IncrementalBackups::Id>();
+                    auto domainPathId = TPathId(rowset.GetValueOrDefault<Schema::IncrementalBackups::DomainPathOwnerId>(selfId),
+                                                rowset.GetValue<Schema::IncrementalBackups::DomainPathId>());
+
+                    TIncrementalBackupInfo::TPtr backupInfo = new TIncrementalBackupInfo(id, domainPathId);
+
+                    backupInfo->State = static_cast<TIncrementalBackupInfo::EState>(rowset.GetValue<Schema::IncrementalBackups::State>());
+
+                    backupInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::IncrementalBackups::StartTime>());
+                    backupInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::IncrementalBackups::EndTime>());
+                    if (rowset.HaveValue<Schema::IncrementalBackups::UserSID>()) {
+                        backupInfo->UserSID = rowset.GetValue<Schema::IncrementalBackups::UserSID>();
+                    }
+
+                    Self->IncrementalBackups[id] = backupInfo;
+
+                    if (!backupInfo->IsFinished()) {
+                        IncrementalBackupsToResume.push_back(backupInfo->Id);
+                    }
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            {
+                auto rowset = db.Table<Schema::IncrementalBackupItems>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    ui64 id = rowset.GetValue<Schema::IncrementalBackupItems::Id>();
+                    Y_VERIFY_S(Self->IncrementalBackups.contains(id), "Incremental backup is not found"
+                               << ": id# " << id);
+
+                    TIncrementalBackupInfo::TPtr info = Self->IncrementalBackups.at(id);
+
+                    TPathId pathId = TPathId(rowset.GetValue<Schema::IncrementalBackupItems::PathOwnerId>(),
+                                             rowset.GetValue<Schema::IncrementalBackupItems::PathId>());
+
+                    auto& item = info->Items[pathId];
+
+                    item.State = static_cast<TIncrementalBackupInfo::TItem::EState>(rowset.GetValue<Schema::IncrementalBackupItems::State>());
+                    item.PathId = pathId;
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+        }
+
         CollectObjectsToClean();
 
         OnComplete.ApplyOnExecute(Self, txc, ctx);
@@ -5445,6 +5513,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .TablesToClean = std::move(TablesToClean),
             .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
             .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
+            .IncrementalBackupIds = std::move(IncrementalBackupsToResume),
         });
     }
 };

@@ -9,21 +9,23 @@
 Конструкция `INDEX` используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} {% if backend_name == "YDB" and oss == true %}для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables) таблиц{% else %}на таблице{% endif %}:
 
 ```yql
-CREATE TABLE table_name (
-    ...
-    INDEX <index_name> GLOBAL [UNIQUE] [SYNC|ASYNC] [USING <тип_индекса>] ON ( <index_columns> ) COVER ( <cover_columns> ),
-    ...
+CREATE TABLE `<table_name>` (
+  ...
+    INDEX `<index_name>`
+    [GLOBAL|LOCAL]
+    [UNIQUE]
+    [SYNC|ASYNC]
+    [USING <index_type>]
+    ON ( <index_columns> )
+    [COVER ( <cover_columns> )]
+    [WITH ( <parameter_name> = <parameter_value>[, ...])]
+  [,   ...]
 )
 ```
 
 где:
 
-* **index_name** — уникальное имя индекса, по которому будет возможно обращение к данным.
-* **SYNC/ASYNC** — синхронная или асинхронная запись в индекс, если не указано — синхронная.
-* **тип_индекса** - тип индекса, в настоящее время поддерживается только `secondary`.
-* **UNIQUE** — создаёт индекс с гарантией уникальности для вставляемых значений.
-* **index_columns** — имена колонок создаваемой таблицы через запятую, по которым возможен поиск в индексе.
-* **cover_columns** — имена колонок создаваемой таблицы через запятую, которые будет сохранены в индексе дополнительно к колонкам поиска, давая возможность получить дополнительные данные без обращения за ними в таблицу.
+{% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
 {% if backend_name == "YDB" and oss == true %}
 

@@ -35,8 +35,8 @@ namespace {
 
 //-----------------------------------------------------------------------------
 
-constexpr auto GracefulShutdownTimeout = std::chrono::seconds(5);
-constexpr auto MinWarmupPerTerminal = std::chrono::milliseconds(1);
+constexpr auto GracefulShutdownTimeout = std::chrono::seconds(10);
+constexpr auto MinWarmupPerTerminalMs = std::chrono::milliseconds(1);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
 
@@ -259,7 +259,7 @@ void TPCCRunner::Join() {
             auto now = Clock::now();
             auto delta = now - shutdownTs;
             if (delta >= GracefulShutdownTimeout) {
-                LOG_E("Graceful shutdown timeout on terminal " << terminal->GetID());
+                LOG_W("Graceful shutdown timeout on terminal " << terminal->GetID());
                 break;
             }
         }
@@ -291,13 +291,28 @@ void TPCCRunner::RunSync() {
     // We don't want to start all terminals at the same time, because then there will be
     // a huge queue of ready terminals, which we can't handle
     bool forcedWarmup = false;
-    uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
+    uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminalMs.count() / 1000 + 1;
+
     uint32_t warmupSeconds;
-    if (Config.WarmupDuration.Seconds() < minWarmupSeconds) {
-        forcedWarmup = true; // we must print log message later after display update
-        warmupSeconds = minWarmupSeconds;
+    if (Config.WarmupDuration == TDuration()) {
+        // adaptive, a very simple heuristic
+        if (Config.WarehouseCount <= 10) {
+            warmupSeconds = 30;
+        } else if (Config.WarehouseCount <= 100) {
+            warmupSeconds = 5 * 60;
+        } else if (Config.WarehouseCount <= 1000) {
+            warmupSeconds = 10 * 60;
+        } else if (Config.WarehouseCount <= 1000) {
+            warmupSeconds = 30 * 60;
+        }
+        warmupSeconds = std::max(warmupSeconds, minWarmupSeconds);
     } else {
+        // user specified
         warmupSeconds = Config.WarmupDuration.Seconds();
+        if (warmupSeconds < minWarmupSeconds) {
+            forcedWarmup = true; // we must print log message later after display update
+            warmupSeconds = minWarmupSeconds;
+        }
     }
 
     WarmupStartTs = Clock::now();
@@ -312,7 +327,7 @@ void TPCCRunner::RunSync() {
     // produced after this point and before the first screen update
     if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
         LogBackend->StartCapture(); // start earlier?
-        Tui = std::make_unique<TRunnerTui>(*LogBackend, DataToDisplay);
+        Tui = std::make_unique<TRunnerTui>(Log, *LogBackend, DataToDisplay);
     }
 
     if (forcedWarmup) {
@@ -325,7 +340,7 @@ void TPCCRunner::RunSync() {
     for (; startedTerminalId < Terminals.size() && !GetGlobalInterruptSource().stop_requested(); ++startedTerminalId) {
         Terminals[startedTerminalId]->Start();
 
-        std::this_thread::sleep_for(MinWarmupPerTerminal);
+        std::this_thread::sleep_for(MinWarmupPerTerminalMs);
         now = Clock::now();
         UpdateDisplayIfNeeded(now);
     }
@@ -347,7 +362,13 @@ void TPCCRunner::RunSync() {
 
     StopWarmup.store(true, std::memory_order_relaxed);
 
-    LOG_I("Measuring during " << Config.RunDuration);
+    // If warmup was interrupted we don't want to print INFO log about measurements.
+    // However, we still initialize all displayed variables on the screen and used in
+    // final calculations
+
+    if (!GetGlobalInterruptSource().stop_requested()) {
+        LOG_I("Measuring during " << Config.RunDuration);
+    }
 
     MeasurementsStartTs = Clock::now();
     MeasurementsStartTsWall = TInstant::Now();
@@ -754,8 +775,13 @@ void TRunConfig::SetDisplay() {
 //-----------------------------------------------------------------------------
 
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
-    TPCCRunner runner(connectionConfig, runConfig);
-    runner.RunSync();
+    try {
+        TPCCRunner runner(connectionConfig, runConfig);
+        runner.RunSync();
+    } catch (const std::exception& ex) {
+        std::cerr << "Exception while execution: " << ex.what() << std::endl;
+        throw NConsoleClient::TNeedToExitWithCode(EXIT_FAILURE);
+    }
 }
 
 } // namespace NYdb::NTPCC

@@ -112,6 +112,7 @@ public:
             CheckClose();
             if (IsAlive()) {
                 ALOG_DEBUG(HttpLog, GetSocketName() << "connection available for reuse");
+                ConnectionTimeout = CONNECTION_TIMEOUT;
                 Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionAvailable(SelfId(), Destination));
             }
         }
@@ -152,10 +153,10 @@ protected:
     }
 
     void Connect() {
-        ALOG_DEBUG(HttpLog, GetSocketName() << "connecting to " << Address->ToString());
         TSocketImpl::Create(Address->SockAddr()->sa_family);
         TSocketImpl::SetNonBlock();
         TSocketImpl::SetTimeout(ConnectionTimeout);
+        ALOG_DEBUG(HttpLog, GetSocketName() << "connecting...");
         int res = TSocketImpl::Connect(Address);
         RegisterPoller();
         switch (-res) {
@@ -430,7 +431,12 @@ protected:
     void HandleTimeout() {
         TDuration inactivityTime = NActors::TActivationContext::Now() - LastActivity;
         if (inactivityTime >= ConnectionTimeout) {
-            FailConnection("Connection timed out");
+            if (RequestOwner) {
+                FailConnection("Connection timed out");
+            } else {
+                ALOG_DEBUG(HttpLog, GetSocketName() << "connection closed due to inactivity");
+                PassAway();
+            }
         } else {
             Schedule(Min(ConnectionTimeout - inactivityTime, TDuration::MilliSeconds(100)), new NActors::TEvents::TEvWakeup());
         }

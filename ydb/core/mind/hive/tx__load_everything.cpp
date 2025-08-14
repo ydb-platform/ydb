@@ -314,7 +314,7 @@ public:
             }
             while (!bridgePileRowset.EndOfSet()) {
                 ++numPiles;
-                TBridgePileId pileId = TBridgePileId::FromValue(bridgePileRowset.GetValue<Schema::BridgePile::Id>());
+                TBridgePileId pileId = TBridgePileId::FromLocalDb(bridgePileRowset.GetValue<Schema::BridgePile::Id>());
                 auto& pileInfo = Self->GetPile(pileId);
                 pileInfo.State = bridgePileRowset.GetValue<Schema::BridgePile::State>();
                 pileInfo.IsPrimary = bridgePileRowset.GetValue<Schema::BridgePile::IsPrimary>();
@@ -360,7 +360,7 @@ public:
                     }
                 }
                 node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
-                node.BridgePileId = TBridgePileId::FromValue(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
+                node.BridgePileId = TBridgePileId::FromLocalDb(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
                 if (!node.ServicedDomains) {
                     node.ServicedDomains = { Self->RootDomainKey };
                 }

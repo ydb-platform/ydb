@@ -410,12 +410,10 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
         info->SetGetFastLatency(latencyStats.GetFast->MicroSeconds());
     }
 
-    if (groupInfo->BridgePileId) {
-        info->SetBridgePileId(groupInfo->BridgePileId->GetRawId());
-    }
+    groupInfo->BridgePileId.CopyToProto(info, &std::decay_t<decltype(*info)>::SetBridgePileId);
 
     if (groupInfo->BridgeProxyGroupId) {
-        info->SetProxyGroupId(groupInfo->BridgeProxyGroupId->GetRawId());
+        groupInfo->BridgeProxyGroupId->CopyToProto(info, &std::decay_t<decltype(*info)>::SetProxyGroupId);
     }
 
     info->SetLayoutCorrect(groupInfo->IsLayoutCorrect(finder));
@@ -500,8 +498,8 @@ void TBlobStorageController::UpdateSystemViews() {
                     SysViewChangedGroups.insert(*group->BridgeProxyGroupId);
                 }
                 if (group->BridgeGroupInfo) {
-                    for (auto id : group->BridgeGroupInfo->GetBridgeGroupIds()) {
-                        SysViewChangedGroups.insert(TGroupId::FromValue(id));
+                    for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                        SysViewChangedGroups.insert(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
                     }
                 }
             }
@@ -595,9 +593,10 @@ void TBlobStorageController::UpdateSystemViews() {
                 pb->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus));
                 pb->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus));
 
-                for (size_t i = 0; i < group.Info->GetBridgeGroupIds().size(); ++i) {
-                    state.Groups[group.Info->GetBridgeGroupIds()[i]].SetProxyGroupId(group.Info->GroupID.GetRawId());
-                    state.Groups[group.Info->GetBridgeGroupIds()[i]].SetBridgePileId(i);
+                info->GetBridgePileId().CopyToProto(pb, &NKikimrSysView::TGroupInfo::SetBridgePileId);
+
+                if (const auto& proxyGroupId = info->GetBridgeProxyGroupId()) {
+                    proxyGroupId->CopyToProto(pb, &NKikimrSysView::TGroupInfo::SetProxyGroupId);
                 }
             }
         }
@@ -626,7 +625,9 @@ void TBlobStorageController::UpdateSystemViews() {
 
         for (auto& [groupId, g] : state.Groups) {
             if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeGroupInfo) {
-                aggr(g, group->BridgeGroupInfo->GetBridgeGroupIds());
+                aggr(g, group->BridgeGroupInfo->GetBridgeGroupState().GetPile() | std::views::transform([](const auto& pile) {
+                    return TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                }));
             } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end()) {
                 aggr(g, it->second.Info->GetBridgeGroupIds());
             }

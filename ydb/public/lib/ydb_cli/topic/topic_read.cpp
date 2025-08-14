@@ -192,7 +192,7 @@ namespace NYdb::NConsoleClient {
             }
 
             if (!PartitionReadOffset_.empty()) {
-                if (ui64* nextOffset = PartitionReadOffset_.FindPtr(event->GetPartitionSession()->GetPartitionId())) {
+                if (ui64* nextOffset = MapFindPtr(PartitionReadOffset_, event->GetPartitionSession()->GetPartitionId())) {
                     *nextOffset = message.GetOffset() + 1; // memorize next offset for the case of session soft restart
                 }
             }
@@ -243,7 +243,7 @@ namespace NYdb::NConsoleClient {
 
     std::optional<uint64_t> TTopicReader::GetNextReadOffset(ui64 partitionId) const {
         if (!PartitionReadOffset_.empty()) {
-            if (const ui64* offset = PartitionReadOffset_.FindPtr(partitionId)) {
+            if (const ui64* offset = MapFindPtr(PartitionReadOffset_, partitionId)) {
                 return *offset;
             }
         }

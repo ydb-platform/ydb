@@ -16,7 +16,7 @@ namespace NYdb::NConsoleClient {
 
     class TTopicReaderSettings {
     public:
-        using TPartitionReadOffsetMap = THashMap<ui64, ui64>;
+        using TPartitionReadOffsetMap = std::unordered_map<ui64, ui64>;
 
         TTopicReaderSettings(
             TMaybe<i64> limit,

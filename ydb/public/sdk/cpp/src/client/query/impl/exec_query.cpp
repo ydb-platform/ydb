@@ -182,7 +182,11 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
                     std::vector<TResultSet> resultSets;
                     for (size_t i = 0; i < resultProtos.size(); ++i) {
-                        resultSets.emplace_back(std::move(resultProtos[i]), std::move(arrowSchemas[i]), std::move(bytesData[i]));
+                        auto proto = std::move(resultProtos[i]);
+                        auto arrowSchema = arrowSchemas.size() > i ? std::move(arrowSchemas[i]) : std::string();
+                        auto data = bytesData.size() > i ? std::move(bytesData[i]) : std::vector<std::string>();
+
+                        resultSets.emplace_back(std::move(proto), std::move(arrowSchema), std::move(data));
                     }
 
                     self->Promise_.SetValue(TExecuteQueryResult(

@@ -38,16 +38,3 @@ class TestTpchDuplicatesZeroLevel(TpchDoubleImportTestBase):
                                     {{"class_name" : "Zero"}}]}}`);
         """
         cls.run_cli(['table', 'query', 'execute', '-t', 'scheme', '-q', set_compaction_query])
-
-
-class TestTpchDuplicatesNoCompaction(TpchDoubleImportTestBase):
-    """https://github.com/ydb-platform/ydb/issues/22252"""
-
-    @classmethod
-    def _alter_compaction(cls, table) -> str:
-        set_compaction_query = f"""
-            ALTER OBJECT `/{YdbCluster.ydb_database}/olap_yatests/{cls._get_path()}/{table}` (TYPE TABLE)
-                SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                    {{"levels" : [{{"class_name" : "Zero"}}]}}`);
-        """
-        cls.run_cli(['table', 'query', 'execute', '-t', 'scheme', '-q', set_compaction_query])

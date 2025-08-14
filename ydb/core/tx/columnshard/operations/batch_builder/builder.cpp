@@ -55,7 +55,7 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             if (defaultFields.empty()) {
                 if (!Context.GetNoTxWrite()) {
                     std::shared_ptr<NConveyor::ITask> task =
-                        std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batch.GetContainer(), Context);
+                        std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batch.GetContainer(), Context, ActualSnapshot);
                     NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
                 } else {
                     NActors::TActivationContext::ActorSystem()->Send(Context.GetBufferizationPortionsActorId(),
@@ -91,7 +91,7 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         case NEvWrite::EModificationType::Delete: {
             if (!Context.GetNoTxWrite()) {
                 std::shared_ptr<NConveyor::ITask> task =
-                    std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batch.GetContainer(), Context);
+                    std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batch.GetContainer(), Context, ActualSnapshot);
                 NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
             } else {
                 NActors::TActivationContext::ActorSystem()->Send(Context.GetBufferizationPortionsActorId(),

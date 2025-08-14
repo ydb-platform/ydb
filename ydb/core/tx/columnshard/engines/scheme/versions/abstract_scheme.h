@@ -99,7 +99,7 @@ public:
     [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
         const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters, std::optional<TSnapshot>) const;
     void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;
     std::set<ui32> GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const;
     std::vector<ui32> ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const;

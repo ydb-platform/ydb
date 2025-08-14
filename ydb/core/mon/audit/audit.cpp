@@ -127,7 +127,7 @@ void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& u
 }
 
 void TAuditCtx::FinishAudit(const NHttp::THttpOutgoingResponsePtr& response) {
-    AuditEnabled &= NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, SubjectType);
+    AuditEnabled &= NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, SubjectType);
 
     if (!AuditEnabled) {
         return;

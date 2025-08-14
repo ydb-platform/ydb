@@ -179,6 +179,10 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
         if (splitParameters.PartitionScaleParticipants.Defined()) {
             for (const auto& childPartitionId : splitParameters.PartitionScaleParticipants->GetChildPartitionIds()) {
                 split.add_childpartitionids(childPartitionId);
+                if (const auto* childNode = PartitionGraph.GetPartition(childPartitionId); childNode != nullptr) {
+                    PQ_LOG_NOTICE(fmt::format("Child partition# {} already exists. Performing unordered split. Partition# {}", childPartitionId, partitionId));
+                    split.set_allowrootlevelsibling(true);
+                }
             }
         }
         return {.Split = std::move(split), .Remove = false};

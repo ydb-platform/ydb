@@ -590,6 +590,7 @@ public:
     ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::RightOnly), logger, logComponent))
     ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly), logger, logComponent))
     ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>(logger, logComponent))
+    ,   JoinedTablePtr2(std::make_unique<GraceJoin::TTable>(logger, logComponent))
     ,   JoinCompleted(std::make_unique<bool>(false))
     ,   PartialJoinCompleted(std::make_unique<bool>(false))
     ,   HaveMoreLeftRows(std::make_unique<bool>(true))
@@ -847,28 +848,30 @@ private:
 
             if ( *PartialJoinCompleted) {
                 // Returns join results (batch or full)
-                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
+                auto* currentOutputTable = UseSecondTable ? JoinedTablePtr2.get() : JoinedTablePtr.get();
+                while (currentOutputTable->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
                     UnpackJoinedData(output);
+                    
+                    // Try to fetch new data while returning results
+                    if ((*HaveMoreLeftRows || *HaveMoreRightRows) && 
+                        LeftPacker->TuplesBatchPacked < LeftPacker->BatchSize && 
+                        RightPacker->TuplesBatchPacked < RightPacker->BatchSize) {
+                        FetchAndPackData(ctx, nullptr);
+                    }
+                    
                     return EFetchResult::One;
                 }
 
-                // Resets batch state for batch join
-                if (!*HaveMoreRightRows) {
-                    *PartialJoinCompleted = false;
-                    LeftPacker->TuplesBatchPacked = 0;
-                    LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
-                    JoinedTablePtr->Clear();
-                    JoinedTablePtr->ResetIterator();
-                }
-
-
-                if (!*HaveMoreLeftRows ) {
-                    *PartialJoinCompleted = false;
-                    RightPacker->TuplesBatchPacked = 0;
-                    RightPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
-                    JoinedTablePtr->Clear();
-                    JoinedTablePtr->ResetIterator();
-                }
+                // Swap tables and reset for next batch
+                UseSecondTable = !UseSecondTable;
+                *PartialJoinCompleted = false;
+                LeftPacker->TuplesBatchPacked = 0;
+                RightPacker->TuplesBatchPacked = 0;
+                LeftPacker->TablePtr->Clear();
+                RightPacker->TablePtr->Clear();
+                auto* nextBuildTable = UseSecondTable ? JoinedTablePtr.get() : JoinedTablePtr2.get();
+                nextBuildTable->Clear();
+                nextBuildTable->ResetIterator();
             }
 
             if (!*HaveMoreRightRows && !*HaveMoreLeftRows) {
@@ -902,7 +905,8 @@ private:
 
                 auto& leftTable = *LeftPacker->TablePtr;
                 auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
-                if (IsSpillingAllowed && ctx.SpillerFactory && !JoinedTablePtr->TryToPreallocateMemoryForJoin(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows)) {
+                auto* currentBuildTable = UseSecondTable ? JoinedTablePtr.get() : JoinedTablePtr2.get();
+                if (IsSpillingAllowed && ctx.SpillerFactory && !currentBuildTable->TryToPreallocateMemoryForJoin(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows)) {
                     SwitchMode(EOperatingMode::Spilling, ctx);
                     return EFetchResult::Yield;
                 }
@@ -910,8 +914,8 @@ private:
                 *PartialJoinCompleted = true;
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();
-                JoinedTablePtr->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
-                JoinedTablePtr->ResetIterator();
+                currentBuildTable->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                currentBuildTable->ResetIterator();
                 LeftPacker->EndTime = std::chrono::system_clock::now();
                 RightPacker->EndTime = std::chrono::system_clock::now();
             }
@@ -1072,6 +1076,7 @@ private:
     const std::unique_ptr<TGraceJoinPacker> LeftPacker;
     const std::unique_ptr<TGraceJoinPacker> RightPacker;
     const std::unique_ptr<GraceJoin::TTable> JoinedTablePtr;
+    const std::unique_ptr<GraceJoin::TTable> JoinedTablePtr2;
     const std::unique_ptr<bool> JoinCompleted;
     const std::unique_ptr<bool> PartialJoinCompleted;
     const std::unique_ptr<bool> HaveMoreLeftRows;
@@ -1082,6 +1087,7 @@ private:
 
     bool IsSpillingFinalized = false;
     bool IsEarlyExitDueToEmptyInput = false;
+    bool UseSecondTable = false;
 
     NYql::NUdf::TCounter CounterOutputRows_;
     ui32 SpilledBucketsJoinOrderCurrentIndex = 0;

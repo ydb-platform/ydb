@@ -1343,7 +1343,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         for (const auto& c : pqTabletConfig->GetConsumers()) {
             auto& oldName = c.GetName();
-            Cerr << "Check consumer " << oldName << Endl;
             auto name = NPersQueue::ConvertOldConsumerName(oldName, pqConfig);
             bool erase = false;
             for (auto consumer: request.drop_consumers()) {

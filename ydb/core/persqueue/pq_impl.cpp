@@ -170,18 +170,19 @@ private:
         responseRecord.SetErrorCode(NPersQueue::NErrorCode::OK);
 
         Y_ABORT_UNLESS(readResult.ResultSize() > 0 || isDirectRead);
+
+        ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
+                                   ? (responseRecord.HasPartitionResponse()
+                                        ? responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs()
+                                        : readResult.GetReadFromTimestampMs())
+                                   : 0;
+
         if (!responseRecord.HasPartitionResponse()) {
             auto partResp = responseRecord.MutablePartitionResponse();
             auto readRes = partResp->MutableCmdReadResult();
             readRes->SetBlobsFromDisk(readRes->GetBlobsFromDisk() + readResult.GetBlobsFromDisk());
             readRes->SetBlobsFromCache(readRes->GetBlobsFromCache() + readResult.GetBlobsFromCache());
         }
-        ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
-                                   ? (!responseRecord.HasPartitionResponse()
-                                        ? readResult.GetReadFromTimestampMs()
-                                        : responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs())
-                                   : 0;
-
         if (record.GetPartitionResponse().HasCookie())
             responseRecord.MutablePartitionResponse()->SetCookie(record.GetPartitionResponse().GetCookie());
 
@@ -200,7 +201,6 @@ private:
                 return;
             auto& back = partResp->GetResult(partResp->ResultSize() - 1);
             if (back.GetPartNo() + 1 < back.GetTotalParts()) {
-                Cerr << "===ReadProxy: remove incomplete message on offset " << back.GetOffset() << Endl;
                 partResp->MutableResult()->RemoveLast();
             }
         };
@@ -302,7 +302,7 @@ private:
         ) {
             //Try another read. Set TMP_MARKER so that response is redirected to proxy, but here we will treat is as "initial" response still.
             Request.SetRequestId(TMP_REQUEST_MARKER);
-
+            Cerr << "==Read proxy: extra read\n!";
             Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
             Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
             THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);

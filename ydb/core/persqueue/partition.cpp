@@ -3253,9 +3253,6 @@ TPartition::EProcessResult TPartition::PreProcessUserAct(
 }
 
 void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
-    if (act.IsInternal) {
-        Cerr << "===Partition: commit internal user act\n";
-    }
     const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
     const TString& user = act.ClientId;
     RemoveUserAct(user);
@@ -3471,9 +3468,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
 void TPartition::ScheduleReplyOk(const ui64 dst, bool internal)
 {
-    if (internal)
-        Cerr << "===Partition - schedule OK reply  for internal Req\n";
-
     Replies.emplace_back(internal ? SelfId() : Tablet,
                          MakeReplyOk(dst, internal).Release());
 }
@@ -3499,7 +3493,6 @@ void TPartition::ScheduleReplyError(const ui64 dst, bool internal,
                                     const TString& error)
 {
     PQ_LOG_ERROR("Got error: " << error);
-    Y_ABORT_UNLESS(!internal); //ToDo: !! remove, add TEvError processing to compacter (and handler in partition)!
     Replies.emplace_back(internal ? SelfId() : Tablet,
                          MakeReplyError(dst,
                                         errorCode,

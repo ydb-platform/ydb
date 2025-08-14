@@ -425,8 +425,8 @@ TReadAnswer TReadInfo::FormAnswer(
         size += blob.GetBlobSize();
         lastBlobSize += blob.GetBlobSize();
         if (blob.IsLastPart()) {
-            bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
-                    ReadTimestampMs > blob.WriteTimestamp.MilliSeconds() || blob.Data.empty();
+            bool messageSkippingBehaviour = (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
+                    ReadTimestampMs > blob.WriteTimestamp.MilliSeconds()) || blob.Data.empty();
             ++cnt;
             if (messageSkippingBehaviour) {
                 --cnt;
@@ -614,11 +614,10 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
     if (!DataKeysBody.empty() && (Head.Offset > startOffset || Head.Offset == startOffset && Head.PartNo > partNo)) { //will read smth from body
         auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(startOffset, partNo),
             [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
-        if (it == DataKeysBody.begin()) //could be true if data is deleted or gaps are created {
-            {Cerr << "KeyKeys from body, offset: " << startOffset << ":" << partNo << " data keys begin offset: " << DataKeysBody.begin()->Key.GetOffset()<< ", partition start offset: " << StartOffset << Endl;
-            Cerr << "FirstHeadKey: " << (HeadKeys.empty() ? TString("None") : HeadKeys.begin()->Key.ToString()) << Endl;
+        if (it == DataKeysBody.begin()) {//could be true if data is deleted or gaps are created {
             return blobs;
-            }
+        }
+
         Y_ABORT_UNLESS(it != DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
         Y_ABORT_UNLESS(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
         --it;
@@ -732,8 +731,6 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
 
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
-    Cerr << "===Handle TEvRead, read->Offset: " << read->Offset << ", internal: " << read->IsInternal << Endl;
-
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
@@ -927,7 +924,6 @@ void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TAc
 }
 
 void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx) {
-    Cerr << "=== Partiti: handle response with cooike: " << ev->Get()->Cookie << ", internal:" << ev->Get()->IsInternal << "\n";
     if (ev->Get()->IsInternal) {
         if (Compacter) {
             Compacter->ProcessResponse(ev);

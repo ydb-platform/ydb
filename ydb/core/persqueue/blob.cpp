@@ -18,9 +18,6 @@ TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
 {
     Y_ABORT_UNLESS(Data != End);
     ParseBatch();
-    if (Header.GetPartNo() != Key.GetPartNo()) {
-        Cerr << "===Error around key: " << Key.ToString() << Endl;
-    }
     Y_ABORT_UNLESS(Header.GetPartNo() == Key.GetPartNo());
 }
 
@@ -31,9 +28,6 @@ void TBlobIterator::ParseBatch() {
     Count += Header.GetCount();
     Offset += Header.GetCount();
     InternalPartsCount += Header.GetInternalPartsCount();
-    if (Count > Key.GetCount() || InternalPartsCount > Key.GetInternalPartsCount()) {
-        Cerr << "===Error around key: " << Key.ToString() << Endl;
-    }
     Y_ABORT_UNLESS(Count <= Key.GetCount());
     Y_ABORT_UNLESS(InternalPartsCount <= Key.GetInternalPartsCount());
 }

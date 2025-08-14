@@ -113,6 +113,7 @@ namespace NKikimr::NEvWrite {
         AFL_VERIFY(record.GetTabletID() == ShardId)("ev_tablet_id", record.GetTabletID())("shard_id", ShardId);
 
         if (!RetryWriteRequest(false)) {
+            auto gPassAway = PassAwayGuard();
             const TString errMsg = TStringBuilder() << "Shard " << ShardId << " is still overloaded after " << NumRetries << " retries";
             ExternalController->OnFail(Ydb::StatusIds::OVERLOADED, errMsg);
         }
@@ -165,5 +166,13 @@ namespace NKikimr::NEvWrite {
 
     bool TShardWriter::IsMaxRetriesReached() const {
         return NumRetries >= MaxRetriesPerShard;
+    }
+
+    void TShardWriter::Die(const NActors::TActorContext& ctx) {
+        if (RetryBySubscription && LastOverloadSeqNo) {
+            SendToTablet(MakeHolder<TEvColumnShard::TEvOverloadUnsubscribe>(LastOverloadSeqNo));
+        }
+
+        TBase::Die(ctx);
     }
 }

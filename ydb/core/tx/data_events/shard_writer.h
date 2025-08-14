@@ -210,6 +210,8 @@ public:
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
     void Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev);
 
+    void Die(const NActors::TActorContext& ctx) override;
+
 private:
     bool RetryWriteRequest(const bool delayed = true);
     bool IsMaxRetriesReached() const;

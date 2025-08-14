@@ -61,13 +61,13 @@ Example of a complete spilling directory path:
 
 ##### Possible errors
 
-- `Permission denied` — insufficient directory access permissions. See [{#T}](../../troubleshooting/spilling.md#permission-denied)
+- `Permission denied` — insufficient directory access permissions. See [{#T}](../../troubleshooting/spilling/permission-denied.md)
 
 #### local_file_config.max_total_size
 
 **Type:** `uint64`  
 **Default:** `21474836480` (20 GiB)  
-**Description:** Maximum total size of all spilling files. When the limit is exceeded, spilling operations fail with an error.
+**Description:** Maximum total size of all spilling files on each [node](../../concepts/glossary.md#node). When the limit is exceeded, spilling operations fail with an error. The total spilling limit across the entire cluster is the sum of `max_total_size` values from all nodes.
 
 ##### Recommendations
 
@@ -75,7 +75,7 @@ Example of a complete spilling directory path:
 
 ##### Possible errors
 
-- `Total size limit exceeded: X/YMb` — maximum total size of spilling files exceeded. See [{#T}](../../troubleshooting/spilling.md#total-size-limit-exceeded)
+- `Total size limit exceeded: X/YMb` — maximum total size of spilling files exceeded. See [{#T}](../../troubleshooting/spilling/total-size-limit-exceeded.md)
 
 ### Thread Pool Configuration
 
@@ -98,7 +98,7 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 
 ##### Possible errors
 
-- `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling.md#can-not-run-operation)
+- `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling/can-not-run-operation.md)
 
 #### local_file_config.io_thread_pool.queue_size
 
@@ -108,7 +108,7 @@ I/O pool threads for spilling are created in addition to the threads allocated t
 
 ##### Possible errors
 
-- `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling.md#can-not-run-operation)
+- `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling/can-not-run-operation.md)
 
 ## Memory Management
 
@@ -191,7 +191,7 @@ The following parameters control the enabling and disabling of various spilling 
 
 ##### Possible errors
 
-- `Spilling Service not started` / `Service not started` — attempt to use spilling when Spilling Service is disabled. See [{#T}](../../troubleshooting/spilling.md#spilling-service-not-started)
+- `Spilling Service not started` / `Service not started` — attempt to use spilling when Spilling Service is disabled. See [{#T}](../../troubleshooting/spilling/service-not-started.md)
 
 ```yaml
 table_service_config:
@@ -253,4 +253,4 @@ table_service_config:
 - [Memory Controller Configuration](../../reference/configuration/index.html#memory-controller)
 - [{{ ydb-short-name }} Monitoring](../../devops/observability/monitoring.md)
 - [Performance Diagnostics](../../troubleshooting/performance/index.md)
-- [Spilling Troubleshooting](../../troubleshooting/spilling.md)
+- [Spilling Troubleshooting](../../troubleshooting/spilling/index.md)

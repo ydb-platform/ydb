@@ -61,13 +61,13 @@ table_service_config:
 
 ##### Возможные ошибки
 
-- `Permission denied` — недостаточные права доступа к директории. См. [{#T}](../../troubleshooting/spilling.md#permission-denied)
+- `Permission denied` — недостаточные права доступа к директории. См. [{#T}](../../troubleshooting/spilling/permission-denied.md)
 
 #### local_file_config.max_total_size
 
 **Тип:** `uint64`  
 **По умолчанию:** `21474836480` (20 GiB)  
-**Описание:** Максимальный суммарный размер всех файлов спиллинга. При превышении лимита операции спиллинга завершаются ошибкой.
+**Описание:** Максимальный суммарный размер всех файлов спиллинга на каждом [узле](../../concepts/glossary.md#node). При превышении лимита операции спиллинга завершаются ошибкой. Общий лимит спиллинга во всем кластере равен сумме значений `max_total_size` со всех узлов.
 
 ##### Рекомендации
 
@@ -75,7 +75,7 @@ table_service_config:
 
 ##### Возможные ошибки
 
-- `Total size limit exceeded: X/YMb` — превышен максимальный суммарный размер файлов спиллинга. См. [{#T}](../../troubleshooting/spilling.md#total-size-limit-exceeded)
+- `Total size limit exceeded: X/YMb` — превышен максимальный суммарный размер файлов спиллинга. См. [{#T}](../../troubleshooting/spilling/total-size-limit-exceeded.md)
 
 ### Конфигурация пула потоков
 
@@ -98,7 +98,7 @@ table_service_config:
 
 ##### Возможные ошибки
 
-- `Can not run operation` — переполнение очереди операций в пуле потоков I/O. См. [{#T}](../../troubleshooting/spilling.md#can-not-run-operation)
+- `Can not run operation` — переполнение очереди операций в пуле потоков I/O. См. [{#T}](../../troubleshooting/spilling/can-not-run-operation.md)
 
 #### local_file_config.io_thread_pool.queue_size
 
@@ -108,7 +108,7 @@ table_service_config:
 
 ##### Возможные ошибки
 
-- `Can not run operation` — переполнение очереди операций в пуле потоков I/O. См. [{#T}](../../troubleshooting/spilling.md#can-not-run-operation)
+- `Can not run operation` — переполнение очереди операций в пуле потоков I/O. См. [{#T}](../../troubleshooting/spilling/can-not-run-operation.md)
 
 ## Управление памятью
 
@@ -191,7 +191,7 @@ table_service_config:
 
 ##### Возможные ошибки
 
-- `Spilling Service not started` / `Service not started` — попытка использования спиллинга при выключенном Spilling Service. См. [{#T}](../../troubleshooting/spilling.md#spilling-service-not-started)
+- `Spilling Service not started` / `Service not started` — попытка использования спиллинга при выключенном Spilling Service. См. [{#T}](../../troubleshooting/spilling/service-not-started.md)
 
 ```yaml
 table_service_config:
@@ -253,4 +253,4 @@ table_service_config:
 - [Конфигурация контроллера памяти](../../reference/configuration/index.html#memory-controller)
 - [Мониторинг {{ ydb-short-name }}](../../devops/observability/monitoring.md)
 - [Диагностика производительности](../../troubleshooting/performance/index.md)
-- [Устранение неполадок спиллинга](../../troubleshooting/spilling.md)
+- [Устранение неполадок спиллинга](../../troubleshooting/spilling/index.md)

@@ -1,0 +1,34 @@
+# Total size limit exceeded
+
+Maximum total size of spilling files exceeded (parameter `max_total_size`). This occurs when the total size of all spilling files reaches the configured limit, preventing new spilling operations.
+
+## Diagnostics
+
+Check the current spilling usage:
+
+- Monitor the total size of spilling files in the spilling directory
+- Check the current value of `max_total_size` parameter
+- Review available disk space in the spilling directory location
+- Check if there are any stuck spilling files that should have been cleaned up
+
+## Recommendations
+
+To resolve this issue:
+
+1. **Increase spilling size limit:**
+   - If there is sufficient free disk space, increase the `max_total_size` parameter in the configuration
+   - It is recommended to increase the value by 20-50% from the current one
+
+2. **Expand disk space:**
+   - If there is insufficient free disk space, add additional disk space
+   - Ensure that the spilling directory is located on a disk with sufficient volume
+
+3. **Try repeating the query:**
+   - Wait for other resource-intensive queries to complete
+   - Repeat the query execution during less busy times
+
+{% note info %}
+
+The `max_total_size` parameter controls the maximum total size of all spilling files. When this limit is reached, spilling operations fail with an error.
+
+{% endnote %}

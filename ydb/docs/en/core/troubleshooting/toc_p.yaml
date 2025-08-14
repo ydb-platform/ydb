@@ -1,6 +1,9 @@
 items:
 - name: Spilling issues
-  href: spilling.md
+  href: spilling/index.md
+  include:
+    mode: link
+    path: spilling/toc_p.yaml
 - name: Performance issues
   href: performance/index.md
   include:

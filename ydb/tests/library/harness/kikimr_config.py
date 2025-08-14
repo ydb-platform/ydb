@@ -148,10 +148,10 @@ class KikimrConfigGenerator(object):
             enable_alter_database_create_hive_first=False,
             overrided_actor_system_config=None,
             default_users=None,  # dict[user]=password
-            extra_feature_flags=None,    # list[str]
-            disabled_feature_flags=None, # list[str]
-            extra_grpc_services=None,    # list[str]
-            disabled_grpc_services=None, # list[str]
+            extra_feature_flags=None,     # list[str]
+            disabled_feature_flags=None,  # list[str]
+            extra_grpc_services=None,     # list[str]
+            disabled_grpc_services=None,  # list[str]
             hive_config=None,
             datashard_config=None,
             enforce_user_token_requirement=False,
@@ -338,7 +338,6 @@ class KikimrConfigGenerator(object):
             item for item in (self.yaml_config['grpc_config']['services'] + extra_grpc_services)
             if item not in disabled_grpc_services
         ]
-
 
         # NOTE(shmel1k@): change to 'true' after migration to YDS scheme
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs

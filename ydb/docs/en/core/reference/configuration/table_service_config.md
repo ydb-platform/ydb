@@ -124,8 +124,14 @@ The key parameter for spilling is **`activities_limit_percent`**, which determin
 
 #### Impact on spilling
 
-- When increasing `activities_limit_percent`, less memory remains for query execution → spilling activates more frequently
-- When decreasing `activities_limit_percent`, more memory is available for queries → spilling activates less frequently
+- When increasing `activities_limit_percent`, more memory is available for queries → spilling activates less frequently
+- When decreasing `activities_limit_percent`, less memory is available for queries → spilling activates more frequently
+
+{% note warning %}
+
+However, it's important to consider that spilling itself requires memory. If you set `activities_limit_percent` too high, memory may still be exhausted despite spilling, as the spilling mechanism itself consumes memory resources.
+
+{% endnote %}
 
 ### File System Requirements
 

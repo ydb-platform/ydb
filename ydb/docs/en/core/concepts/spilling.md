@@ -73,6 +73,10 @@ Data transfer channels continuously monitor their state:
 4. **Continued operation**: The channel continues accepting new data after freeing memory space  
 5. **Recovery**: When the next stage is ready, data is read from external storage and passed further  
 
+## Interaction with Memory Controller
+
+When executing queries, {{ ydb-short-name }} tries to stay within the memory limit set by the [memory controller](../../reference/configuration/index.md#memory-controller). To continue fitting within this limit even as intermediate computations grow, spilling is used. For more details, see the [Memory Management section](../reference/configuration/table_service_config.md#memory-management).
+
 ## See Also
 
 - [Spilling Service](../contributor/spilling-service.md)

@@ -62,7 +62,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20253:Separated bulk statistics operations from non-bulk. [#20253](https://github.com/ydb-platform/ydb/pull/20253) ([Vladilen](https://github.com/Vladilen))
 * 20738:Added statistics for the grouped limiter and caches. [#20738](https://github.com/ydb-platform/ydb/pull/20738) ([Vladilen](https://github.com/Vladilen))
 * 21183:Added audit log events for [YMQ](https://yandex.cloud/ru/services/message-queue) events. [#21183](https://github.com/ydb-platform/ydb/pull/21183) ([flown4qqqq](https://github.com/flown4qqqq))
-* 21172:raw bytes have been supported [#21172](https://github.com/ydb-platform/ydb/pull/21172) ([Oleg Doronin](https://github.com/dorooleg))
 * 21010:Added more attributes to DSProxy and VDisk [spans](https://ydb.tech/docs/ru/reference/observability/tracing/setup) to make it easier to find them in the metrics explorer. [#21010](https://github.com/ydb-platform/ydb/pull/21010) ([Sergey Belyakov](https://github.com/serbel324))
 * 19684:Added a command to move pdisk from one node to another, if both nodes have access to the underlying drive. This way we can skip data synchronization, since new disk will just use data of the "old" disk [#19684](https://github.com/ydb-platform/ydb/pull/19684) ([Semyon Danilov](https://github.com/SammyVimes))
 

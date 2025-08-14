@@ -58,7 +58,8 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true, bool enableAutoTopicCreation = false) {
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true, bool enableAutoTopicCreation = false,
+                                                                                                                    bool enableAutoConsumerCreation = false) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -93,7 +94,9 @@ public:
             appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(true);
         }
         appConfig.MutableKafkaProxyConfig()->SetTopicCreationDefaultPartitions(2);
-
+        if (enableAutoConsumerCreation) {
+            appConfig.MutableKafkaProxyConfig()->SetAutoCreateConsumersEnable(true);
+        }
         if (serverless) {
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetHostname("localhost");
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetPort(FAKE_SERVERLESS_KAFKA_PROXY_PORT);
@@ -210,7 +213,7 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
 
             NYdb::NScheme::TSchemeClient schemeClient(*Driver);
-            NYdb::NScheme::TPermissions permissions("user-no-rights", {"ydb.generic.read"});
+            NYdb::NScheme::TPermissions permissions("user-no-rights", {});
 
             auto result = schemeClient
                               .ModifyPermissions(
@@ -2551,8 +2554,58 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, FAKE_SERVERLESS_KAFKA_PROXY_PORT);
     }
 
-    Y_UNIT_TEST(OffsetFetchConsumerTopicAutocreationScenario) {
-        TInsecureTestServer testServer("1", false, false, true);
+    Y_UNIT_TEST(OffsetFetchConsumerAutocreationScenario) {
+        TInsecureTestServer testServer("1", false, false, false, true);
+
+        TString nonExistedTopicName = "non-existent-topic";
+        TString existedTopicName = "existent-topic";
+        TString consumerName = "my-consumer";
+        TString newConsumer1 = "new-consumer-1";
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            CreateTopic(pqClient, existedTopicName, 3, {consumerName});
+        }
+
+        { TKafkaTestClient client(testServer.Port);
+            // authenticating as user with read and write rights
+            TString userName = "user123@/Root";
+            TString userPassword = "UsErPassword";
+            client.AuthenticateToKafka(userName, userPassword);
+            {
+                // checking consumer autocreation for existing topic
+                std::map<TString, std::vector<i32>> topicsToPartions;
+                topicsToPartions[existedTopicName] = std::vector<i32>{0, 1};
+                auto msg = client.OffsetFetch(newConsumer1, topicsToPartions);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, existedTopicName);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].PartitionIndex, 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[1].ErrorCode, EKafkaErrors::NONE_ERROR);
+            }
+
+            {
+                // non-existent topic with non-existent consumer should return an error for unexistent topic
+                std::map<TString, std::vector<i32>> topicsToPartions;
+                topicsToPartions[nonExistedTopicName] = std::vector<i32>{0};
+                auto msg = client.OffsetFetch(newConsumer1, topicsToPartions);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].ErrorCode, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Name, nonExistedTopicName);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].PartitionIndex, 0);
+                UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OffsetFetchTopicConsumerAutocreationScenario) {
+        TInsecureTestServer testServer("1", false, false, true, true);
 
         TString nonExistedTopicName1 = "non-existent-topic-1";
         TString nonExistedTopicName2 = "non-existent-topic-2";

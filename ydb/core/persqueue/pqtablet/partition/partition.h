@@ -913,6 +913,11 @@ private:
 
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
+    NMonitoring::TDynamicCounterPtr DynamicCounters;
+    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWrite;
+    NMonitoring::TDynamicCounters::TCounterPtr SourceIdCount;
+    NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastWriteMs;
+    NMonitoring::TDynamicCounters::TCounterPtr PartitionWriteQuotaUsage;
     TInstant LastCountersUpdate;
 
     TSubscriber Subscriber;

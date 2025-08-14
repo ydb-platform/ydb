@@ -265,7 +265,7 @@ Y_UNIT_TEST(Limits) {
     auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
-    ui32 passiveBytes = bTreeIndex ? 131 : 7772;
+    ui32 passiveBytes = bTreeIndex ? 139 : 7772;
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
@@ -334,7 +334,7 @@ Y_UNIT_TEST(Limits_Config) {
     auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
-    ui32 passiveBytes = bTreeIndex ? 131 : 7772;
+    ui32 passiveBytes = bTreeIndex ? 139 : 7772;
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });

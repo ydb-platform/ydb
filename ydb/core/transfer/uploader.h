@@ -101,7 +101,7 @@ private:
         }
     }
 
-    void PassAway() {
+    void PassAway() override {
         for (auto& [_, v] : CookieMapping) {
             TThis::Send(v.second, new TEvents::TEvPoison());
         }

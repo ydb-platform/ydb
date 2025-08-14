@@ -1,14 +1,6 @@
 # Добавление данных в таблицы
 
-{% note warning %}
-
-{% include [not_allow_for_olap](../../_includes/not_allow_for_olap_text.md) %}
-
-{% include [not_allow_for_olap](../../_includes/ways_add_data_to_olap.md) %}
-
-{% endnote %}
-
-Наполните данными [созданные](create_demo_tables.md) ранее строковые таблицы с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
+Наполните данными [созданные](create_demo_tables.md) ранее таблицы с помощью конструкции [REPLACE INTO](../../yql/reference/syntax/replace_into.md).
 
 ```yql
 REPLACE INTO series (series_id, title, release_date, series_info)

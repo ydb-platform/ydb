@@ -1,17 +1,5 @@
 # DELETE FROM
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% note warning %}
-
-Supported only for [row-oriented](../../../concepts/datamodel/table.md#row-oriented-tables) tables. Support for [column-oriented](../../../concepts/datamodel/table.md#column-oriented-tables) tables is currently under development.
-
-Instead of using `DELETE FROM` to delete data from colum-oriented tables, you can use the mechanism of deleting rows by time — [TTL](../../../concepts/ttl.md). TTL can be set when [creating](create_table/index.md) the table via `CREATE TABLE` or [modified](alter_table/index.md) later via `ALTER TABLE`.
-
-{% endnote %}
-
-{% endif %}
-
 Deletes rows that match the `WHERE` clause, from the table.{% if feature_mapreduce %}  The table is searched by name in the database specified by the [USE](use.md) operator.{% endif %}
 
 ## Example

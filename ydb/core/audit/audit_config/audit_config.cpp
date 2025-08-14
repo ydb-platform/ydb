@@ -52,6 +52,15 @@ bool TAuditConfig::EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::E
     return true;
 }
 
+bool TAuditConfig::EnableLogPhase(NKikimrConfig::TAuditConfig::ELogPhase logPhase) {
+    // Default: write logs only for "Completed" phase
+    if (logPhase == NKikimrConfig::TAuditConfig::Completed && LogPhaseSize() == 0) {
+        return true;
+    }
+
+    return std::find(GetLogPhase().begin(), GetLogPhase().end(), logPhase) != GetLogPhase().end();
+}
+
 void TAuditConfig::ResetLogClassMap() {
     LogClassMap.clear();
     for (const NKikimrConfig::TAuditConfig::TLogClassConfig& cfg : GetLogClassConfig()) {

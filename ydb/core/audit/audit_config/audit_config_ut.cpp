@@ -85,6 +85,29 @@ Y_UNIT_TEST_SUITE(AuditConfigTest) {
         TAuditConfig cfg;
         UNIT_ASSERT(!cfg.EnableLogging(TLogClassConfig::Login, NACLibProto::SUBJECT_TYPE_USER));
     }
+
+    Y_UNIT_TEST(LogPhaseDefault) {
+        TAuditConfig cfg;
+        UNIT_ASSERT(cfg.EnableLogPhase(TAuditConfig::Completed));
+        UNIT_ASSERT(!cfg.EnableLogPhase(TAuditConfig::Received));
+    }
+
+    Y_UNIT_TEST(LogPhaseInConfig) {
+        TAuditConfig cfg = FromProtoText(R"(
+            LogPhase: Received
+        )");
+
+        UNIT_ASSERT(!cfg.EnableLogPhase(TAuditConfig::Completed));
+        UNIT_ASSERT(cfg.EnableLogPhase(TAuditConfig::Received));
+
+        cfg = FromProtoText(R"(
+            LogPhase: Received
+            LogPhase: Completed
+        )");
+
+        UNIT_ASSERT(cfg.EnableLogPhase(TAuditConfig::Completed));
+        UNIT_ASSERT(cfg.EnableLogPhase(TAuditConfig::Received));
+    }
 }
 
 } // namespace NKikimr::NAudit

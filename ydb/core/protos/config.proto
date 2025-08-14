@@ -1819,11 +1819,16 @@ message TAuditConfig {
         repeated EAccountType ExcludeAccountType = 3; // If audit logging for log class is enabled, excludes logging for these account types
     }
 
+    enum ELogPhase {
+        Received = 1;  // A request is received and the initial checks and authentication are made // "status" field of audit log record is equal to "IN-PROCESS"
+        Completed = 2; // A request is completely finished and has final status // "status"/"detailed_status" fields of audit log record are equal to request's final status
+    }
+
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
     repeated TLogClassConfig LogClassConfig = 4;
-    optional bool LogRequestsOnReceiving = 5;
+    repeated ELogPhase LogPhase = 5; // The phases of requests execution where audit log records are written
 };
 
 message THiveTabletLimit {

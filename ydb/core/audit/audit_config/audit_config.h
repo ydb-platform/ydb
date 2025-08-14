@@ -21,6 +21,7 @@ public:
     TAuditConfig& operator=(const NKikimrConfig::TAuditConfig&);
 
     bool EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogClass logClass, NACLibProto::ESubjectType subjectType) const;
+    bool EnableLogPhase(NKikimrConfig::TAuditConfig::ELogPhase logPhase);
 
 private:
     using TLogClassMap = THashMap<NKikimrConfig::TAuditConfig::TLogClassConfig::ELogClass, TLogClassSettings>;

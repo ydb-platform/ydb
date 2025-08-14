@@ -482,14 +482,16 @@ private:
         const TString sanitizedToken = TBase::GetSanitizedToken();
         if (auditEnabled) {
             AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
-            if (AppData()->AuditConfig.GetLogRequestsOnReceiving()) {
+            if (AppData()->AuditConfig.EnableLogPhase(NKikimrConfig::TAuditConfig::Received)) {
                 AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());
             }
 
-            requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
-                AuditContextEnd(requestBaseCtx);
-                AuditLog(status, parts);
-            });
+            if (AppData()->AuditConfig.EnableLogPhase(NKikimrConfig::TAuditConfig::Completed)) {
+                requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
+                    AuditContextEnd(requestBaseCtx);
+                    AuditLog(status, parts);
+                });
+            }
         }
     }
 

@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 namespace {
 
-class TColumnFetchingRequest: NColumnShard::TMonitoringObjectsCounter<TColumnFetchingRequest> {
+class TColumnFetchingRequest: NColumnShard::TMonitoringObjectsCounter<TColumnFetchingRequest>, TMoveOnly {
 private:
     YDB_READONLY_DEF(TActorId, Owner);
     YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Context);

@@ -2812,7 +2812,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         std::vector<TRuntimeNode> tuples;
         for (const auto& row : data) {
             auto key = pb.NewDataLiteral<ui32>(row[0].Get<ui32>());
-            auto value = pb.NewDataLiteral(row[1].AsStringRef());
+            auto value = pb.NewDataLiteral<NUdf::EDataSlot::String>(row[1].AsStringRef());
             tuples.push_back(pb.NewTuple({key, value}));
         }
         
@@ -2877,8 +2877,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             while (iterator.Next(tuple)) {
                 resultCount++;
                 // Verify join result structure
-                auto leftValue = tuple.GetElement(0).AsStringRef();
-                auto rightValue = tuple.GetElement(1).AsStringRef();
+                auto leftElem = tuple.GetElement(0);
+                auto rightElem = tuple.GetElement(1);
+                auto leftValue = leftElem.AsStringRef();
+                auto rightValue = rightElem.AsStringRef();
                 UNIT_ASSERT(leftValue.size() > 0);
                 UNIT_ASSERT(rightValue.size() > 0);
             }
@@ -2948,8 +2950,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         while (iterator.Next(tuple)) {
             resultCount++;
             // Verify join result: should be (left_value, right_value)
-            UNIT_ASSERT(tuple.GetElement(0).AsStringRef().StartsWith("L")); // Left value
-            UNIT_ASSERT(tuple.GetElement(1).AsStringRef().StartsWith("R")); // Right value
+            auto leftVal = tuple.GetElement(0);
+            auto rightVal = tuple.GetElement(1);
+            UNIT_ASSERT(leftVal.AsStringRef().StartsWith("L"));
+            UNIT_ASSERT(rightVal.AsStringRef().StartsWith("R"));
         }
 
         // Expected result: 50 joined rows total (every right row matches some left row)
@@ -3012,8 +3016,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             resultCount++;
             
             // Verify join result: should be (category_name, fact_data)
-            auto categoryName = tuple.GetElement(0).AsStringRef();
-            auto factData = tuple.GetElement(1).AsStringRef();
+            auto categoryElem = tuple.GetElement(0);
+            auto factElem = tuple.GetElement(1);
+            auto categoryName = categoryElem.AsStringRef();
+            auto factData = factElem.AsStringRef();
             
             UNIT_ASSERT(categoryName.StartsWith("Category_")); // Dimension value
             UNIT_ASSERT(factData.StartsWith("fact_")); // Fact value
@@ -3085,10 +3091,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         while (iterator.Next(tuple)) {
             resultCount++;
             
-            auto leftValue = tuple.GetElement(0).AsStringRef();
-            auto rightValue = tuple.GetElement(1).AsStringRef();
+            auto leftElem = tuple.GetElement(0);
+            auto rightElem = tuple.GetElement(1);
+            auto leftValue = leftElem.AsStringRef();
+            auto rightValue = rightElem.AsStringRef();
             
-            // Verify structure
             UNIT_ASSERT(leftValue.StartsWith("Dim"));
             UNIT_ASSERT(rightValue.StartsWith("Fact"));
             
@@ -3162,8 +3169,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             resultCount++;
             
             // Verify each result
-            auto leftValue = tuple.GetElement(0).AsStringRef();
-            auto rightValue = tuple.GetElement(1).AsStringRef();
+            auto leftElem = tuple.GetElement(0);
+            auto rightElem = tuple.GetElement(1);
+            auto leftValue = leftElem.AsStringRef();
+            auto rightValue = rightElem.AsStringRef();
             
             UNIT_ASSERT_VALUES_EQUAL(leftValue, "Key1");
             UNIT_ASSERT(rightValue.StartsWith("Value"));
@@ -3225,8 +3234,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         NUdf::TUnboxedValue tuple;
         
         while (iterator.Next(tuple)) {
-            auto category = tuple.GetElement(0).AsStringRef();
-            auto transaction = tuple.GetElement(1).AsStringRef();
+            auto categoryElem = tuple.GetElement(0);
+            auto transactionElem = tuple.GetElement(1);
+            auto category = categoryElem.AsStringRef();
+            auto transaction = transactionElem.AsStringRef();
             
             UNIT_ASSERT(transaction.StartsWith("Transaction"));
             

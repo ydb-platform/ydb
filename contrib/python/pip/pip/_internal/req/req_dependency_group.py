@@ -1,17 +1,13 @@
-import sys
-from typing import Any, Dict, Iterable, Iterator, List, Tuple
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    from pip._vendor import tomli as tomllib
+from collections.abc import Iterable, Iterator
+from typing import Any
 
 from pip._vendor.dependency_groups import DependencyGroupResolver
 
 from pip._internal.exceptions import InstallationError
+from pip._internal.utils.compat import tomllib
 
 
-def parse_dependency_groups(groups: List[Tuple[str, str]]) -> List[str]:
+def parse_dependency_groups(groups: list[tuple[str, str]]) -> list[str]:
     """
     Parse dependency groups data as provided via the CLI, in a `[path:]group` syntax.
 
@@ -22,7 +18,7 @@ def parse_dependency_groups(groups: List[Tuple[str, str]]) -> List[str]:
 
 
 def _resolve_all_groups(
-    resolvers: Dict[str, DependencyGroupResolver], groups: List[Tuple[str, str]]
+    resolvers: dict[str, DependencyGroupResolver], groups: list[tuple[str, str]]
 ) -> Iterator[str]:
     """
     Run all resolution, converting any error from `DependencyGroupResolver` into
@@ -39,7 +35,7 @@ def _resolve_all_groups(
             ) from e
 
 
-def _build_resolvers(paths: Iterable[str]) -> Dict[str, Any]:
+def _build_resolvers(paths: Iterable[str]) -> dict[str, Any]:
     resolvers = {}
     for path in paths:
         if path in resolvers:
@@ -62,7 +58,7 @@ def _build_resolvers(paths: Iterable[str]) -> Dict[str, Any]:
     return resolvers
 
 
-def _load_pyproject(path: str) -> Dict[str, Any]:
+def _load_pyproject(path: str) -> dict[str, Any]:
     """
     This helper loads a pyproject.toml as TOML.
 

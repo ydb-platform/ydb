@@ -1,6 +1,6 @@
 # Total Size Limit Exceeded
 
-The maximum total size of spilling files has been exceeded (parameter [`max_total_size`](../../../reference/configuration/table_service_config.html#local-file-config-max-total-size)). This occurs when the total size of all spilling files reaches the configured limit, preventing new spilling operations.
+The maximum total size of spilling files has been exceeded (parameter [`max_total_size`](../../../reference/configuration/table_service_config.md#local-file-config-max-total-size)). This occurs when the total size of all spilling files reaches the configured limit, preventing new spilling operations.
 
 ## Diagnostics
 

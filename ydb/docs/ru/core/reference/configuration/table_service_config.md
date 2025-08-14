@@ -118,7 +118,7 @@ table_service_config:
 
 #### Связь с memory_controller_config
 
-Активация спиллинга тесно связана с настройками контроллера памяти. Подробная конфигурация `memory_controller_config` описана в [отдельной статье](index.html#memory-controller).
+Активация спиллинга тесно связана с настройками контроллера памяти. Подробная конфигурация `memory_controller_config` описана в [отдельной статье](memory_controller_config.md).
 
 Ключевым параметром для спиллинга является **`activities_limit_percent`**, который определяет объем памяти, выделяемый для активностей по обработке запросов. От этого параметра зависит доступная память для пользовательских запросов и, соответственно, частота активации спиллинга.
 
@@ -250,6 +250,6 @@ table_service_config:
 - [Концепция спиллинга](../../concepts/spilling.md)
 - [Архитектура Spilling Service](../../contributor/spilling-service.md)
 - [Устранение неполадок спиллинга](../../troubleshooting/spilling/index.md)
-- [Конфигурация контроллера памяти](index.md#memory-controller)
+- [Конфигурация контроллера памяти](memory_controller_config.md)
 - [Мониторинг {{ ydb-short-name }}](../../devops/observability/monitoring.md)
 - [Диагностика производительности](../../troubleshooting/performance/index.md)

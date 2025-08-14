@@ -94,7 +94,7 @@ ydb hard nofile 10000
 
 {% note info %}
 
-Для получения дополнительной информации о конфигурации спиллинга и его связи с файловыми дескрипторами см. раздел [«Конфигурация спиллинга»](../../../reference/configuration/table_service_config.html#file-system-requirements).
+Для получения дополнительной информации о конфигурации спиллинга и его связи с файловыми дескрипторами см. раздел [«Конфигурация спиллинга»](../../../reference/configuration/table_service_config.md#file-system-requirements).
 
 {% endnote %}
 

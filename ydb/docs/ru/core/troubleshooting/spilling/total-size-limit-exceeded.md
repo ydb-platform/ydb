@@ -1,13 +1,13 @@
 # Total size limit exceeded
 
-Превышен максимальный суммарный размер файлов спиллинга (параметр [`max_total_size`](../../../reference/configuration/table_service_config.html#local-file-config-max-total-size)). Это происходит, когда общий размер всех файлов спиллинга достигает настроенного лимита, что препятствует новым операциям спиллинга.
+Превышен максимальный суммарный размер файлов спиллинга (параметр [`max_total_size`](../../../reference/configuration/table_service_config.md#local-file-config-max-total-size)). Это происходит, когда общий размер всех файлов спиллинга достигает настроенного лимита, что препятствует новым операциям спиллинга.
 
 ## Диагностика
 
 Проверьте текущее использование спиллинга:
 
 - Отслеживайте общий размер файлов спиллинга в директории спиллинга
-- Проверьте текущее значение параметра [`max_total_size`](../../../reference/configuration/table_service_config.html#local-file-config-max-total-size)
+- Проверьте текущее значение параметра [`max_total_size`](../../../reference/configuration/table_service_config.md#local-file-config-max-total-size)
 - Просмотрите доступное дисковое пространство в расположении директории спиллинга
 - Проверьте, есть ли зависшие файлы спиллинга, которые должны были быть очищены
 
@@ -16,7 +16,7 @@
 Для решения этой проблемы:
 
 1. **Увеличьте лимит размера спиллинга:**
-   - Если на диске достаточно свободного места, увеличьте параметр [`max_total_size`](../../../reference/configuration/table_service_config.html#local-file-config-max-total-size) в конфигурации
+   - Если на диске достаточно свободного места, увеличьте параметр [`max_total_size`](../../../reference/configuration/table_service_config.md#local-file-config-max-total-size) в конфигурации
    - Рекомендуется увеличить значение на 20-50% от текущего
 
 2. **Расширьте дисковое пространство:**

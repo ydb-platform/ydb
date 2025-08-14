@@ -118,7 +118,7 @@ For information about configuring actor system thread pools and their impact on 
 
 #### Relationship with memory_controller_config
 
-Spilling activation is closely related to memory controller settings. Detailed `memory_controller_config` configuration is described in a [separate article](index.html#memory-controller).
+Spilling activation is closely related to memory controller settings. Detailed `memory_controller_config` configuration is described in a [separate article](memory_controller_config.md).
 
 The key parameter for spilling is **`activities_limit_percent`**, which determines the amount of memory allocated for query processing activities. This parameter affects the available memory for user queries and, accordingly, the frequency of spilling activation.
 
@@ -250,6 +250,6 @@ table_service_config:
 - [Spilling Concept](../../concepts/spilling.md)
 - [Spilling Service Architecture](../../contributor/spilling-service.md)
 - [Spilling Troubleshooting](../../troubleshooting/spilling/index.md)
-- [Memory Controller Configuration](index.html#memory-controller)
+- [Memory Controller Configuration](memory_controller_config.md)
 - [{{ ydb-short-name }} Monitoring](../../devops/observability/monitoring.md)
 - [Performance Diagnostics](../../troubleshooting/performance/index.md)

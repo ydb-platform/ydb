@@ -2812,7 +2812,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         std::vector<TRuntimeNode> tuples;
         for (const auto& row : data) {
             auto key = pb.NewDataLiteral<ui32>(row[0].Get<ui32>());
-            auto value = pb.NewDataLiteral<NUdf::TStringRef>(row[1].AsStringRef());
+            auto value = pb.NewDataLiteral(row[1].AsStringRef());
             tuples.push_back(pb.NewTuple({key, value}));
         }
         
@@ -2877,8 +2877,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             while (iterator.Next(tuple)) {
                 resultCount++;
                 // Verify join result structure
-                UNIT_ASSERT(tuple.GetElement(0).AsStringRef().size() > 0); // Left value
-                UNIT_ASSERT(tuple.GetElement(1).AsStringRef().size() > 0); // Right value
+                auto leftValue = tuple.GetElement(0).AsStringRef();
+                auto rightValue = tuple.GetElement(1).AsStringRef();
+                UNIT_ASSERT(leftValue.size() > 0);
+                UNIT_ASSERT(rightValue.size() > 0);
             }
 
             // Verify we got the expected number of results
@@ -2901,7 +2903,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         for (ui32 i = 1; i <= 5; ++i) {
             leftData.push_back({
                 NUdf::TUnboxedValuePod(i),
-                NUdf::TUnboxedValuePod(TStringBuf("L" + ToString(i)))
+                MakeString("L" + ToString(i))
             });
         }
 
@@ -2909,7 +2911,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         for (ui32 i = 1; i <= 50; ++i) {
             rightData.push_back({
                 NUdf::TUnboxedValuePod(i % 5 + 1), // Keys 1-5, so all will match left
-                NUdf::TUnboxedValuePod(TStringBuf("R" + ToString(i)))
+                MakeString("R" + ToString(i))
             });
         }
 
@@ -2971,7 +2973,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         for (ui32 i = 0; i < 300; ++i) { // Reduced size for faster test
             factData.push_back({
                 NUdf::TUnboxedValuePod((i % 3) + 1), // category_id: 1, 2, or 3
-                NUdf::TUnboxedValuePod(TStringBuf("fact_" + ToString(i))) // fact_data
+                MakeString("fact_" + ToString(i))
             });
         }
 
@@ -3048,7 +3050,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         for (ui32 i = 1; i <= 200; ++i) {
             rightData.push_back({
                 NUdf::TUnboxedValuePod(i % 2 + 1), // Alternates between 1 and 2
-                NUdf::TUnboxedValuePod(TStringBuf("Fact" + ToString(i)))
+                MakeString("Fact" + ToString(i))
             });
         }
 
@@ -3123,7 +3125,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         for (ui32 i = 1; i <= 100; ++i) {
             rightData.push_back({
                 NUdf::TUnboxedValuePod(1u), // All match the single left key
-                NUdf::TUnboxedValuePod(TStringBuf("Value" + ToString(i)))
+                MakeString("Value" + ToString(i))
             });
         }
 
@@ -3191,7 +3193,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             ui32 categoryId = (i % 2 == 0) ? 100u : 200u; // Alternate between categories
             factData.push_back({
                 NUdf::TUnboxedValuePod(categoryId),
-                NUdf::TUnboxedValuePod(TStringBuf("Transaction" + ToString(i)))
+                MakeString("Transaction" + ToString(i))
             });
         }
 

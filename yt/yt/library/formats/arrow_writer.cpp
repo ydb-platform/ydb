@@ -173,10 +173,10 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
 
         case ESimpleLogicalValueType::Datetime:
             return std::tuple(
-                flatbuf::Type::Date,
-                flatbuf::CreateDate(
+                flatbuf::Type::Timestamp,
+                flatbuf::CreateTimestamp(
                     *flatbufBuilder,
-                    flatbuf::DateUnit::MILLISECOND)
+                    flatbuf::TimeUnit::SECOND)
                     .Union(),
                 std::vector<flatbuffers::Offset<flatbuf::Field>>());
 
@@ -703,7 +703,6 @@ void SerializeDatetimeColumn(
     TRecordBatchSerializationContext* context)
 {
     const auto* column = typedColumn.Column;
-    const auto maxAllowedValue = std::numeric_limits<i64>::max() / 1000;
     YT_VERIFY(column->Values);
 
     YT_LOG_DEBUG("Adding datetime column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
@@ -747,10 +746,7 @@ void SerializeDatetimeColumn(
                     return values[index];
                 },
                 [&] (auto value) {
-                    if (value > maxAllowedValue) {
-                        THROW_ERROR_EXCEPTION("Datetime value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)", value, maxAllowedValue);
-                    }
-                    *currentOutput++ = value * 1000;
+                    *currentOutput++ = value;
                 });
         });
 }

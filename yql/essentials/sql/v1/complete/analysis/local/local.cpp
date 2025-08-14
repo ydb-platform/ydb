@@ -278,6 +278,7 @@ namespace NSQLComplete {
 
             if (AnyOf(candidates.Rules, RuleAdapted(IsLikelyObjectRefStack))) {
                 object.Kinds.emplace(EObjectKind::Folder);
+                object.Kinds.emplace(EObjectKind::Unknown);
             }
 
             if (AnyOf(candidates.Rules, RuleAdapted(IsLikelyExistingTableStack))) {

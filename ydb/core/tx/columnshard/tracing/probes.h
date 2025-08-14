@@ -21,8 +21,12 @@ namespace NKikimr::NColumnShard  {
         NAMES("tabletId", "transactionTimeMs", "totalTimeMs", "portionsSize")) \
     PROBE(TxBlobsWritingFinished, \
         GROUPS("Write"), \
-        TYPES(ui64, TDuration, TDuration, TDuration), \
-        NAMES("tabletId", "transactionTimeMs", "completeTimeMs", "totalTimeMs")) \
+        TYPES(ui64, TDuration, TDuration, TDuration, TDuration), \
+        NAMES("tabletId", "transactionTimeMs", "completeTimeMs", "totalTimeMs", "writeMs")) \
+    PROBE(StartCleanup, \
+        GROUPS("Cleanup"), \
+        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64, bool, ui64, ui64), \
+        NAMES("tabletId", "totalPortionsCount", "totalPortions", "portionsPrepared", "drop", "skip", "portionsBatchCount", "chunksBatchCount", "limitExceeded", "maxPortionsBatchLimit", "maxChunksBatchLimit")) \
 
 LWTRACE_DECLARE_PROVIDER(YDB_CS)
 

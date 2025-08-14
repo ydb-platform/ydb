@@ -144,10 +144,11 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
         writeMeta.OnStage(NEvWrite::EWriteStage::Finished);
+        LWPROBE(TxBlobsWritingFinished, Self->TabletID(), TransactionTime, TInstant::Now() - startCompleteTime, TInstant::Now() - StartTime, now - writeMeta.GetWriteStartInstant());
     }
     Self->SetupCompaction(pathIds);
     TDuration completeTime = TInstant::Now() - startCompleteTime;
-    LWPROBE(TTxBlobsWritingFinished, Self->TabletID(), TransactionTime, completeTime, TInstant::Now() - StartTime);
+    LWPROBE(TTxBlobsWritingFinished, Self->TabletID(), TransactionTime, completeTime, TInstant::Now() - StartTime, TDuration::Zero());
 }
 
 TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus /* writeStatus */,

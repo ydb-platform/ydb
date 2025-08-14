@@ -1150,9 +1150,11 @@ message TCheckpointsConfig {
         optional uint64 MaxTaskStateSizeBytes = 2;
         optional uint64 MaxRowSizeBytes = 3;
     }
+
     message TCheckpointGcConfig {
         optional bool Enabled = 1;
     }
+
     message TExternalStorage {
         optional string Endpoint = 1;
         optional string Database = 2;
@@ -1167,7 +1169,9 @@ message TCheckpointsConfig {
         optional uint32 OperationTimeoutSec = 11;
         optional uint32 CancelAfterSec = 12;
         optional bool UseSsl = 13;
+        optional uint32 TableClientMaxActiveSessions = 14;
     }
+
     message TLocalStorage {
         optional string TablePrefix = 1; // Default: .metadata/queries/checkpoints/
     }

@@ -196,9 +196,28 @@ TYdbConnection::TYdbConnection(const NConfig::TYdbStorageConfig& config,
 {
 }
 
+TYdbConnection::TYdbConnection(const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
+                               const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+                               const NYdb::TDriver& driver)
+    : Driver(driver)
+    , TableClient(Driver, GetClientSettings<NYdb::NTable::TClientSettings>(config, credProviderFactory))
+    , SchemeClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
+    , CoordinationClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
+    , RateLimiterClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
+    , DB(config.GetDatabase())
+    , TablePathPrefix(JoinPath(DB, config.GetTablePrefix()))
+{
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config,
+                                   const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+                                   const NYdb::TDriver& driver) {
+    return MakeIntrusive<TYdbConnection>(config, credProviderFactory, driver);
+}
+
+TYdbConnectionPtr NewYdbConnection(const NKikimrConfig::TCheckpointsConfig::TExternalStorage& config,
                                    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
                                    const NYdb::TDriver& driver) {
     return MakeIntrusive<TYdbConnection>(config, credProviderFactory, driver);
@@ -323,24 +342,6 @@ TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
     auto future = context->Transaction->Rollback();
     context->Transaction.reset();
     return future;
-}
-
-NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const NConfig::TYdbStorageConfig& config) {
-    TString oauth;
-    if (config.GetToken()) {
-        oauth = config.GetToken();
-    } else if (config.GetOAuthFile()) {
-        oauth = StripString(TFileInput(config.GetOAuthFile()).ReadAll());
-    } else {
-        oauth = GetEnv("YDB_TOKEN");
-    }
-
-    NKikimr::TYdbCredentialsSettings credSettings;
-    credSettings.UseLocalMetadata = config.GetUseLocalMetadataService();
-    credSettings.OAuthToken = oauth;
-    credSettings.SaKeyFile = config.GetSaKeyFile();
-    credSettings.IamEndpoint = config.GetIamEndpoint();
-    return credSettings;
 }
 
 } // namespace NFq

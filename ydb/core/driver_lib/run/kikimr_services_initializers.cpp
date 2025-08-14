@@ -2218,31 +2218,8 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         const auto& checkpointConfig = Config.GetQueryServiceConfig().GetCheckpointsConfig();
         if (checkpointConfig.GetEnabled()) {
-            const auto& config = Config.GetQueryServiceConfig().GetCheckpointsConfig();
-
-            NFq::NConfig::TCheckpointCoordinatorConfig tmpConfig;
-            tmpConfig.SetEnabled(checkpointConfig.GetEnabled());
-            auto& storageConfig = *tmpConfig.MutableStorage();
-            const auto& externalStorage = checkpointConfig.GetExternalStorage();
-            storageConfig.SetEndpoint(externalStorage.HasEndpoint() ? externalStorage.GetEndpoint() : GetEnv("YDB_ENDPOINT"));
-            storageConfig.SetDatabase(externalStorage.HasDatabase() ? externalStorage.GetDatabase() : GetEnv("YDB_DATABASE"));
-            storageConfig.SetOAuthFile(externalStorage.GetOAuthFile());
-            storageConfig.SetToken(externalStorage.GetToken());
-            storageConfig.SetTablePrefix(externalStorage.GetTablePrefix());
-            storageConfig.SetCertificateFile(externalStorage.GetCertificateFile());
-            storageConfig.SetIamEndpoint(externalStorage.GetIamEndpoint());
-            storageConfig.SetSaKeyFile(externalStorage.GetSaKeyFile());
-            storageConfig.SetUseLocalMetadataService(externalStorage.GetUseLocalMetadataService());
-            storageConfig.SetClientTimeoutSec(externalStorage.GetClientTimeoutSec());
-            storageConfig.SetOperationTimeoutSec(externalStorage.GetOperationTimeoutSec());
-            storageConfig.SetCancelAfterSec(externalStorage.GetCancelAfterSec());
-            storageConfig.SetUseSsl(externalStorage.GetUseSsl());
-            const auto& gc = config.GetCheckpointGarbageConfig();
-            auto& gcConfig = *tmpConfig.MutableCheckpointGarbageConfig();
-            gcConfig.SetEnabled(gc.GetEnabled());
-
             auto service = NFq::NewCheckpointStorageService(
-                tmpConfig,
+                checkpointConfig,
                 "cs",
                 NKikimr::CreateYdbCredentialsProviderFactory,
                 NFq::TYqSharedResources::Cast(YqSharedResources),

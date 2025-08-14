@@ -1489,9 +1489,9 @@ namespace Tests {
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             auto yqSharedResources = NFq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
 
-            NFq::NConfig::TCheckpointCoordinatorConfig tmpConfig;
+            NKikimrConfig::TCheckpointsConfig tmpConfig;
             tmpConfig.SetEnabled(config.GetEnabled());
-            auto& storageConfig = *tmpConfig.MutableStorage();
+            auto& storageConfig = *tmpConfig.MutableExternalStorage();
             const auto& externalStorage = config.GetExternalStorage();
             storageConfig.SetEndpoint(externalStorage.HasEndpoint() ? externalStorage.GetEndpoint() : GetEnv("YDB_ENDPOINT"));
             storageConfig.SetDatabase(externalStorage.HasDatabase() ? externalStorage.GetDatabase() : GetEnv("YDB_DATABASE"));

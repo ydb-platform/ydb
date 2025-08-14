@@ -27,9 +27,7 @@ namespace NFq {
 TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
                                                const TActorId& storageProxy,
                                                const TActorId& runActorId,
-                                               ui64 checkpointingPeriodMillis,
-                                               ui64 snapshotRotationPeriod,
-                                               ui64 maxInflight,
+                                               const NKikimrConfig::TCheckpointsConfig& settings,
                                                const ::NMonitoring::TDynamicCounterPtr& counters,
                                                const NProto::TGraphParams& graphParams,
                                                const FederatedQuery::StateLoadMode& stateLoadMode,
@@ -38,10 +36,10 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
     , CoordinatorId(std::move(coordinatorId))
     , StorageProxy(storageProxy)
     , RunActorId(runActorId)
-    , CheckpointingPeriod(TDuration::MilliSeconds(checkpointingPeriodMillis))
-    , CheckpointingSnapshotRotationPeriod(snapshotRotationPeriod)
-    , CheckpointingSnapshotRotationIndex(snapshotRotationPeriod)   // First - snapshot
-    , MaxInflight(maxInflight)
+    , Settings(settings)
+    , CheckpointingPeriod(TDuration::MilliSeconds(Settings.GetCheckpointingPeriodMillis()))
+    , CheckpointingSnapshotRotationPeriod(Settings.GetCheckpointingSnapshotRotationPeriod())
+    , CheckpointingSnapshotRotationIndex(CheckpointingSnapshotRotationPeriod)   // First - snapshot
     , GraphParams(graphParams)
     , Metrics(TCheckpointCoordinatorMetrics(counters))
     , StateLoadMode(stateLoadMode)
@@ -353,8 +351,8 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvScheduleC
     CC_LOG_D("Got TEvScheduleCheckpointing");
     ScheduleNextCheckpoint();
     const auto checkpointsInFly = PendingCheckpoints.size() + PendingCommitCheckpoints.size();
-    if (checkpointsInFly >= MaxInflight || (InitingZeroCheckpoint && !FailedZeroCheckpoint)) {
-        CC_LOG_W("Skip schedule checkpoint event since inflight checkpoint limit exceeded: current: " << checkpointsInFly << ", limit: " << MaxInflight);
+    if (checkpointsInFly >= Settings.GetMaxInflight() || (InitingZeroCheckpoint && !FailedZeroCheckpoint)) {
+        CC_LOG_W("Skip schedule checkpoint event since inflight checkpoint limit exceeded: current: " << checkpointsInFly << ", limit: " << Settings.GetMaxInflight());
         Metrics.SkippedDueToInFlightLimit->Inc();
         return;
     }
@@ -666,9 +664,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     TCoordinatorId coordinatorId,
     const TActorId& storageProxy,
     const TActorId& runActorId,
-    ui64 checkpointingPeriodMillis,
-    ui64 snapshotRotationPeriod,
-    ui64 maxInflight,
+    const NKikimrConfig::TCheckpointsConfig& config,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
     const FederatedQuery::StateLoadMode& stateLoadMode,
@@ -678,9 +674,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
         coordinatorId,
         storageProxy,
         runActorId,
-        checkpointingPeriodMillis,
-        snapshotRotationPeriod,
-        maxInflight,
+        config,
         counters,
         graphParams,
         stateLoadMode,

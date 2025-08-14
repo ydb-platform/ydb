@@ -66,9 +66,9 @@ struct TRequestContext : public TThrRefBase {
 };
 
 class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
-    NConfig::TCheckpointCoordinatorConfig Config;
+    NKikimrConfig::TCheckpointsConfig Config;
     TString IdsPrefix;
-    NConfig::TYdbStorageConfig StorageConfig;
+    NKikimrConfig::TCheckpointsConfig::TExternalStorage StorageConfig;
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
     TActorId ActorGC;
@@ -79,7 +79,7 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
 
 public:
     explicit TStorageProxy(
-        const NConfig::TCheckpointCoordinatorConfig& config,
+        const NKikimrConfig::TCheckpointsConfig& config,
         const TString& idsPrefix,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
@@ -116,7 +116,7 @@ private:
     void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev);
 };
 
-static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig, NConfig::TYdbStorageConfig& ydbStorageConfig) {
+static void FillDefaultParameters(NKikimrConfig::TCheckpointsConfig& checkpointCoordinatorConfig, NKikimrConfig::TCheckpointsConfig::TExternalStorage& ydbStorageConfig) {
     auto& limits = *checkpointCoordinatorConfig.MutableStateStorageLimits();
     if (!limits.GetMaxGraphCheckpointsSizeBytes()) {
         limits.SetMaxGraphCheckpointsSizeBytes(1099511627776);
@@ -130,8 +130,8 @@ static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpo
         limits.SetMaxRowSizeBytes(MaxYdbStringValueLength);
     }
 
-    if (!checkpointCoordinatorConfig.GetStorage().GetToken() && checkpointCoordinatorConfig.GetStorage().GetOAuthFile()) {
-        checkpointCoordinatorConfig.MutableStorage()->SetToken(StripString(TFileInput(checkpointCoordinatorConfig.GetStorage().GetOAuthFile()).ReadAll()));
+    if (!checkpointCoordinatorConfig.GetExternalStorage().GetToken() && checkpointCoordinatorConfig.GetExternalStorage().GetOAuthFile()) {
+        checkpointCoordinatorConfig.MutableExternalStorage()->SetToken(StripString(TFileInput(checkpointCoordinatorConfig.GetExternalStorage().GetOAuthFile()).ReadAll()));
     }
 
     if (!ydbStorageConfig.GetToken() && ydbStorageConfig.GetOAuthFile()) {
@@ -140,14 +140,14 @@ static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpo
 }
 
 TStorageProxy::TStorageProxy(
-    const NConfig::TCheckpointCoordinatorConfig& config,
+    const NKikimrConfig::TCheckpointsConfig& config,
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , IdsPrefix(idsPrefix)
-    , StorageConfig(Config.GetStorage())
+    , StorageConfig(Config.GetExternalStorage())
     , CredentialsProviderFactory(credentialsProviderFactory)
     , YqSharedResources(yqSharedResources)
     , Metrics(MakeIntrusive<TStorageProxyMetrics>(counters)) {
@@ -156,7 +156,7 @@ TStorageProxy::TStorageProxy(
 
 void TStorageProxy::Bootstrap() {
     LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
-    auto ydbConnectionPtr = NewYdbConnection(Config.GetStorage(), CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver);
+    auto ydbConnectionPtr = NewYdbConnection(Config.GetExternalStorage(), CredentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver);
     CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr);
     StateStorage = NewYdbStateStorage(Config, ydbConnectionPtr);
     if (Config.GetCheckpointGarbageConfig().GetEnabled()) {
@@ -452,7 +452,7 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewStorageProxy(
-    const NConfig::TCheckpointCoordinatorConfig& config,
+    const NKikimrConfig::TCheckpointsConfig& config,
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,

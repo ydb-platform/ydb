@@ -7,7 +7,7 @@
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 
-#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -25,9 +25,7 @@ public:
     TCheckpointCoordinator(TCoordinatorId coordinatorId,
                            const TActorId& storageProxy,
                            const TActorId& runActorId,
-                           ui64 checkpointingPeriodMillis,
-                           ui64 snapshotRotationPeriod,
-                           ui64 maxInflight,
+                           const NKikimrConfig::TCheckpointsConfig& settings,
                            const ::NMonitoring::TDynamicCounterPtr& counters,
                            const NProto::TGraphParams& graphParams,
                            const FederatedQuery::StateLoadMode& stateLoadMode,
@@ -162,11 +160,10 @@ private:
     const TActorId StorageProxy;
     const TActorId RunActorId;
     std::unique_ptr<TCheckpointIdGenerator> CheckpointIdGenerator;
-    TCheckpointCoordinatorConfig Settings;
+    NKikimrConfig::TCheckpointsConfig Settings;
     const TDuration CheckpointingPeriod;
     ui64 CheckpointingSnapshotRotationPeriod = 0;
     ui64 CheckpointingSnapshotRotationIndex = 0;
-    ui64 MaxInflight = 0;
     const NProto::TGraphParams GraphParams;
     TString GraphDescId;
 
@@ -200,9 +197,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     TCoordinatorId coordinatorId,
     const TActorId& storageProxy,
     const TActorId& runActorId,
-    ui64 checkpointingPeriodMillis,
-    ui64 snapshotRotationPeriod,
-    ui64 maxInflight,
+    const NKikimrConfig::TCheckpointsConfig& settings,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
     const FederatedQuery::StateLoadMode& stateLoadMode,

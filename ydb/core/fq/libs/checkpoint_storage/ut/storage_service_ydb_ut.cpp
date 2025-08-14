@@ -43,9 +43,9 @@ TRuntimePtr PrepareTestActorRuntime(const char* tablePrefix, bool enableGc = fal
     TRuntimePtr runtime(new TTestBasicRuntime(1, true));
     runtime->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
 
-    NConfig::TCheckpointCoordinatorConfig config;
+    NKikimrConfig::TCheckpointsConfig config;
     config.SetEnabled(true);
-    auto& checkpointConfig = *config.MutableStorage();
+    auto& checkpointConfig = *config.MutableExternalStorage();
     checkpointConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
     checkpointConfig.SetDatabase(GetEnv("YDB_DATABASE"));
     checkpointConfig.SetToken("");

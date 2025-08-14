@@ -1,11 +1,13 @@
 #include <ydb/core/grpc_services/base/base.h>
 
-#include "rpc_common/rpc_common.h"
 #include "service_table.h"
 #include "audit_dml_operations.h"
 
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/scheme/scheme_types_defs.h>
+#include <ydb/core/util/proto_duration.h>
 
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/minikql/dom/yson.h>
@@ -43,7 +45,7 @@ bool CheckNoDecimalTypes(const std::shared_ptr<arrow::RecordBatch>& batch, TStri
 }
 
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
-bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) {
+bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, const NScheme::TTypeInfo* tableColumnType = nullptr) {
     switch (type.id()) {
         case arrow::Type::BOOL:
             toType.set_type_id(Ydb::Type::BOOL);
@@ -90,10 +92,19 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
         case arrow::Type::DURATION:
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
+        case arrow::Type::FIXED_SIZE_BINARY: {
+            if (tableColumnType && tableColumnType->GetTypeId() == NScheme::NTypeIds::Decimal) {
+                Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
+                decimalType->set_precision(tableColumnType->GetDecimalType().GetPrecision());
+                decimalType->set_scale(tableColumnType->GetDecimalType().GetScale());
+                return true;
+            }
+
+            break;
+        }
         case arrow::Type::DECIMAL:
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
-        case arrow::Type::FIXED_SIZE_BINARY:
         case arrow::Type::DATE32:
         case arrow::Type::DATE64:
         case arrow::Type::TIME32:
@@ -418,14 +429,30 @@ private:
 
         out.reserve(schema->num_fields());
 
+        const NSchemeCache::TSchemeCacheNavigate* resolveResult = GetResolveNameResult();
+        THashMap<TString, NScheme::TTypeInfo> tableColumnTypes;
+        if (resolveResult && resolveResult->ResultSet.size() == 1) {
+            const auto& entry = resolveResult->ResultSet.front();
+            for (const auto& [_, colInfo] : entry.Columns) {
+                tableColumnTypes[colInfo.Name] = colInfo.PType;
+            }
+        }
+
         for (auto& field : schema->fields()) {
             auto& name = field->name();
             auto& type = field->type();
 
             Ydb::Type ydbType;
-            if (!ConvertArrowToYdbPrimitive(*type, ydbType)) {
+            const NScheme::TTypeInfo* tableColumnType = nullptr;
+            auto tableTypeIt = tableColumnTypes.find(name);
+            if (tableTypeIt != tableColumnTypes.end()) {
+                tableColumnType = &tableTypeIt->second;
+            }
+            
+            if (!ConvertArrowToYdbPrimitive(*type, ydbType, tableColumnType)) {
                 return TConclusionStatus::Fail("Cannot convert arrow type to ydb one: " + type->ToString());
             }
+
             out.emplace_back(name, std::move(ydbType));
         }
 

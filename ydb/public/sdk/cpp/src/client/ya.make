@@ -1,5 +1,4 @@
 RECURSE(
-    arrow
     cms
     common_client
     common_client/impl

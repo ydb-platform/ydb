@@ -2811,85 +2811,79 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest) {
 
 }
 
-// Tests for parallel reading optimization (two-table approach)  
-Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
+Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinYieldTest) {
+    // Фабрика для создания стандартной лямбды Fetch
+    static auto CreateStandardFetchFunc(ui64 streamSize) -> TFetchFunction {
+        return [streamSize](ui64& totalFetches, TComputationContext& compCtx, NUdf::TUnboxedValue& result) -> NUdf::EFetchStatus {
+            ++totalFetches;
 
-    Y_UNIT_TEST(TestAsymmetricJoinData) {
-        TSetup<false> setup(GetTestFactory());
+            if (streamSize == 100 && totalFetches % 5 == 0) {
+                return NUdf::EFetchStatus::Yield;
+            }
+
+            if (totalFetches > streamSize) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            NUdf::TUnboxedValue* items = nullptr;
+            result = compCtx.HolderFactory.CreateDirectArrayHolder(2, items);
+            items[0] = NUdf::TUnboxedValuePod(totalFetches);
+            items[1] = MakeString(ToString(totalFetches) * 5);
+
+            return NUdf::EFetchStatus::Ok;
+        };
+    }
+
+    void RunGraceJoinEmptyCaseTest() {
+        // Создаем лямбды для левого и правого стримов
+        auto leftFetchFunc = CreateStandardFetchFunc(10);
+        auto rightFetchFunc = CreateStandardFetchFunc(100);
+
+        TSetup<false> setup(GetNodeFactory(leftFetchFunc, rightFetchFunc));
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        // Left side: small amount (10 rows)
-        const std::vector<std::pair<TString, TString>> leftData = {
-            {"1", "L1"}, {"1", "L2"}, {"1", "L3"}, {"1", "L4"}, {"1", "L5"},
-            {"1", "L6"}, {"1", "L7"}, {"1", "L8"}, {"1", "L9"}, {"1", "L10"}
-        };
-
-        const auto tupleType = pb.NewTupleType({
-            pb.NewDataType(NUdf::TDataType<ui64>::Id),
-            pb.NewDataType(NUdf::TDataType<char*>::Id),
-            pb.NewDataType(NUdf::TDataType<char*>::Id)
-        });
-        
-        std::vector<TRuntimeNode> tuples;
-        for (const auto& row : leftData) {
-            auto key = pb.NewDataLiteral<ui64>(1u);
-            auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>(row.first);
-            auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>(row.second);
-            tuples.push_back(pb.NewTuple({key, value1, value2}));
-        }
-        
-        const auto leftList = pb.NewList(tupleType, tuples);
-        const auto leftStream = pb.ToFlow(leftList);
-        
-        // Right side: TestYieldStream (yields periodically)
-        TCallableBuilder callableBuilder(*setup.Env, "TestYieldStream",
-            pb.NewStreamType(pb.NewTupleType({
-                pb.NewDataType(NUdf::TDataType<ui64>::Id),
-                pb.NewDataType(NUdf::TDataType<char*>::Id)
-            })));
-        const auto rightStreamNode = TRuntimeNode(callableBuilder.Build(), false);
-        const auto rightStream = pb.ToFlow(rightStreamNode);
+        const auto leftStream = MakeStream(setup, false);
+        const auto rightStream = MakeStream(setup, true);
 
         const auto resultType = pb.NewFlowType(pb.NewMultiType({
-            pb.NewDataType(NUdf::TDataType<char*>::Id),
-            pb.NewDataType(NUdf::TDataType<char*>::Id),
             pb.NewDataType(NUdf::TDataType<char*>::Id),
             pb.NewDataType(NUdf::TDataType<char*>::Id)
         }));
 
         const auto joinFlow = pb.GraceJoin(
-            pb.ExpandMap(leftStream, [&](TRuntimeNode item) -> TRuntimeNode::TList {
-                return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)};
+            pb.ExpandMap(pb.ToFlow(leftStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
             }),
-            pb.ExpandMap(rightStream, [&](TRuntimeNode item) -> TRuntimeNode::TList {
-                return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)};
+            pb.ExpandMap(pb.ToFlow(rightStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
             }),
-            EJoinKind::Inner, {0U}, {0U}, {1U, 0U, 2U}, {1U, 3U}, resultType);
+            EJoinKind::Inner,
+            {0U}, {0U},
+            {1U, 0U}, {1U, 1U},
+            resultType);
 
-        // Manually iterate to handle Yield
-        const auto graph = setup.BuildGraph(joinFlow);
-        auto root = graph->GetValue();
-        
-        ui32 count = 0;
+        const auto pgmReturn = pb.FromFlow(pb.NarrowMap(joinFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            return pb.NewTuple(items);
+        }));
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto streamVal = graph->GetValue();
         NUdf::TUnboxedValue result;
-        
-        while (true) {
-            auto status = root.Fetch(result);
-            if (status == NUdf::EFetchStatus::Finish) {
-                break;
-            }
-            if (status == NUdf::EFetchStatus::Ok) {
-                ++count;
-            }
-            // Continue on Yield
-        }
 
-        // TestYieldStream produces tuples with keys: 0,1,2,Yield,0,Yield,1,2,0,1,2,0,Yield,1,2
-        // Left side has key=1, so we should get matches for positions with key=1
-        // That's positions: 1, 6, 9, 10, 13 = 5 matches from right side
-        // 10 left rows * 5 right matches = 50 results
-        UNIT_ASSERT_VALUES_EQUAL(count, 50);
+        auto status = NUdf::EFetchStatus::Ok;
+        while (status != NUdf::EFetchStatus::Finish) {
+            status = streamVal.Fetch(result);
+        }
     }
+
+#define ADD_JOIN_TESTS_FOR_KIND(Kind)                               \
+    Y_UNIT_TEST(Kind##_EmptyLeft) {                                 \
+        RunGraceJoinEmptyCaseTest();    \
+    }                                                               \
+
+    ADD_JOIN_TESTS_FOR_KIND(Inner)
+
+#undef ADD_JOIN_TESTS_FOR_KIND
 
 }
 

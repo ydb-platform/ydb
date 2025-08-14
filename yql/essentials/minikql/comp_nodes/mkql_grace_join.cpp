@@ -30,7 +30,7 @@ namespace NMiniKQL {
 
 namespace {
 
-const ui32 PartialJoinBatchSize = 100000; // Number of tuples for one join batch
+const ui32 PartialJoinBatchSize = 5; // Number of tuples for one join batch
 
 struct TColumnDataPackInfo {
     ui32 ColumnIdx = 0; // Column index in tuple
@@ -702,10 +702,24 @@ private:
         Mode = mode;
     }
 
+    TString FetchResultToString(NKikimr::NMiniKQL::EFetchResult result) {
+        switch (result) {
+            case NKikimr::NMiniKQL::EFetchResult::One:
+                return "One";
+            case NKikimr::NMiniKQL::EFetchResult::Finish:
+                return "Finish";
+            case NKikimr::NMiniKQL::EFetchResult::Yield:
+                return "Yield";
+            default:
+                return "Unknown";
+        }
+    }
+
     EFetchResult FetchAndPackData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
         NKikimr::NMiniKQL::EFetchResult resultRight;
 
+        Cerr << "MISHA left fetched " << FetchResultToString(resultLeft) << Endl;
         if (resultLeft == EFetchResult::One) {
             if (LeftPacker->TuplesPacked == 0) {
                 LeftPacker->StartTime = std::chrono::system_clock::now();
@@ -745,6 +759,7 @@ private:
             }
         } else {
             resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
+            Cerr << "MISHA right fetched " << FetchResultToString(resultRight) << Endl;
         }
 
         if (resultRight == EFetchResult::One) {
@@ -845,15 +860,22 @@ private:
     }
 
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        Cerr << "MISHA: DoCalcInMem" << Endl;
 
         while (!*JoinCompleted ) {
 
             if ( *PartialJoinCompleted) {
 
                 while (JoinedTableReturn->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
-                    UnpackJoinedData(output);
-                    
-                    const ui64 maxFetchBatchSize = PartialJoinBatchSize;
+                    const ui64 maxFetchBatchSize = 10000;
+                    std::cerr << std::format("GraceJoin[{}]: Loop condition - HaveMoreLeftRows={} HaveMoreRightRows={} LeftPacked={} RightPacked={} Total={} Limit={}\n",
+                            static_cast<const void*>(JoinedTableBuild.get()),
+                            *HaveMoreLeftRows,
+                            *HaveMoreRightRows,
+                            LeftPacker->TuplesBatchPacked,
+                            RightPacker->TuplesBatchPacked,
+                            LeftPacker->TuplesBatchPacked + RightPacker->TuplesBatchPacked,
+                            maxFetchBatchSize);
                     while ((*HaveMoreLeftRows || *HaveMoreRightRows) && 
                            (LeftPacker->TuplesBatchPacked + RightPacker->TuplesBatchPacked) < maxFetchBatchSize) {
                         std::cerr << std::format("GraceJoin[{}]: Parallel fetch while returning results. LeftPacked={} RightPacked={} Limit={}\n",
@@ -861,11 +883,16 @@ private:
                             LeftPacker->TuplesBatchPacked,
                             RightPacker->TuplesBatchPacked, 
                             maxFetchBatchSize);
-                        auto fetchResult = FetchAndPackData(ctx, nullptr);
+                        auto fetchResult = FetchAndPackData(ctx, output);
+                        if (fetchResult == EFetchResult::One) {
+                            return fetchResult;
+                        }   
                         if (fetchResult != EFetchResult::Finish) {
                             break;
                         }
                     }
+
+                    UnpackJoinedData(output);
                     
                     return EFetchResult::One;
                 }

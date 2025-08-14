@@ -4,8 +4,6 @@ option cc_enable_arenas = true;
 package Ydb.Bridge;
 
 option java_package = "com.yandex.ydb.bridge.proto";
-option java_outer_classname = "BridgeProtos";
-option java_multiple_files = true;
 
 import "ydb/public/api/protos/annotations/validation.proto";
 

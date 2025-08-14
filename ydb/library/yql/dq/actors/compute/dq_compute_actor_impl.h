@@ -764,6 +764,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
             sourceInfo.ResumeByWatermark(watermark);
         }
 
+        // XXX Does nothing in async CA, not used (yet) in sync CA
         for (auto& [id, channelInfo] : InputChannelsMap) {
             if (channelInfo.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED) {
                 continue;
@@ -839,7 +840,6 @@ protected:
         ui32 SrcStageId;
         IDqInputChannel::TPtr Channel;
         bool HasPeer = false;
-        std::deque<TInstant> PendingWatermarks;
         const NDqProto::EWatermarksMode WatermarksMode;
         std::optional<NDqProto::TCheckpoint> PendingCheckpoint;
         const NDqProto::ECheckpointingMode CheckpointingMode;
@@ -860,13 +860,12 @@ protected:
         }
 
         bool IsPaused() const {
-            return !PendingWatermarks.empty() || PendingCheckpoint.has_value();
+            return PendingCheckpoint.has_value();
         }
 
         void Pause(TInstant watermark) {
             YQL_ENSURE(WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
 
-            PendingWatermarks.emplace_back(watermark);
             if (Channel) {
                 Channel->AddWatermark(watermark);
             }
@@ -882,13 +881,6 @@ protected:
         }
 
         void ResumeByWatermark(TInstant watermark) {
-            while (!PendingWatermarks.empty() && PendingWatermarks.front() <= watermark) {
-                if (PendingWatermarks.front() != watermark) {
-                    CA_LOG_W("Input channel " << ChannelId <<
-                        " watermarks were collapsed. See YQ-1441. Dropped watermark: " << PendingWatermarks.front());
-                }
-                PendingWatermarks.pop_front();
-            }
             if (Channel) {
                 Channel->ResumeByWatermark(watermark);
             }

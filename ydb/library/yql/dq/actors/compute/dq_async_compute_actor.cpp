@@ -248,7 +248,6 @@ private:
             DUMP(info, ChannelId);
             DUMP(info, SrcStageId);
             DUMP(info, HasPeer);
-            html << "PendingWatermarks: " << JoinSeq(' ', info.PendingWatermarks) << "<br />";
             html << "WatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
             html << "PendingCheckpoint: " << info.PendingCheckpoint.has_value() << " " << (info.PendingCheckpoint ? TStringBuilder{} << info.PendingCheckpoint->GetId() << " " << info.PendingCheckpoint->GetGeneration() : TString{}) << "<br />";
             html << "CheckpointingMode: " << NDqProto::ECheckpointingMode_Name(info.CheckpointingMode) << "<br />";
@@ -980,7 +979,7 @@ private:
         if (watermark) {
             if (WatermarksTracker.NotifyInChannelWatermarkReceived( channelId, *watermark)) {
                 CA_LOG_T("Pause input channel " << channelId << " because of watermark");
-                inputChannel->Pause(*watermark);
+                inputChannel->Pause(*watermark); // XXX does nothing in async CA
             }
         }
 

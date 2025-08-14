@@ -214,37 +214,15 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 }
 
                 auto& resultSet = self->ResultSets_[part.GetResultSetIndex()];
-                if (resultSet.columns().empty()) {
-                    resultSet.mutable_columns()->CopyFrom(inRsProto.columns());
-                }
-
                 resultSet.set_format(inRsProto.format());
 
                 switch (resultSet.format()) {
                     case Ydb::ResultSet::FORMAT_VALUE: {
-                        resultSet.mutable_rows()->Reserve(resultSet.mutable_rows()->size() + inRsProto.rows_size());
-                        for (const auto& row : inRsProto.rows()) {
-                            *resultSet.mutable_rows()->Add() = row;
-                        }
+                        self->CollectYdbValues(resultSet, inRsProto);
                         break;
                     }
                     case Ydb::ResultSet::FORMAT_ARROW: {
-                        if (self->ArrowSchemas_.size() <= part.GetResultSetIndex()) {
-                            self->ArrowSchemas_.resize(part.GetResultSetIndex() + 1);
-                            self->BytesData_.resize(part.GetResultSetIndex() + 1);
-                        }
-
-                        auto& arrowSchema = self->ArrowSchemas_[part.GetResultSetIndex()];
-                        auto& bytesData = self->BytesData_[part.GetResultSetIndex()];
-
-                        auto& mutableProto = inRs.MutableProto();
-                        if (arrowSchema.empty()) {
-                            arrowSchema = std::move(*mutableProto.mutable_arrow_format_meta()->mutable_schema());
-                        }
-
-                        if (auto* data = mutableProto.mutable_data(); data && !data->empty()) {
-                            bytesData.emplace_back(std::move(*data));
-                        }
+                        self->CollectArrowBytes(resultSet, inRs.MutableProto(), part.GetResultSetIndex());
                         break;
                     }
                     default:
@@ -258,6 +236,40 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
             self->Next();
         });
+    }
+
+private:
+    void CollectYdbValues(Ydb::ResultSet& resultSet, const Ydb::ResultSet& inRsProto) {
+        if (resultSet.columns().empty()) {
+            resultSet.mutable_columns()->CopyFrom(inRsProto.columns());
+        }
+
+        resultSet.mutable_rows()->Reserve(resultSet.mutable_rows()->size() + inRsProto.rows_size());
+        for (const auto& row : inRsProto.rows()) {
+            *resultSet.mutable_rows()->Add() = row;
+        }
+    }
+
+    void CollectArrowBytes(Ydb::ResultSet& resultSet, Ydb::ResultSet& mutableInRsProto, uint64_t index) {
+        if (resultSet.columns().empty()) {
+            resultSet.mutable_columns()->CopyFrom(mutableInRsProto.columns());
+        }
+
+        if (ArrowSchemas_.size() <= index) {
+            ArrowSchemas_.resize(index + 1);
+            BytesData_.resize(index + 1);
+        }
+
+        auto& arrowSchema = ArrowSchemas_[index];
+        auto& bytesData = BytesData_[index];
+
+        if (arrowSchema.empty()) {
+            arrowSchema = std::move(*mutableInRsProto.mutable_arrow_format_meta()->mutable_schema());
+        }
+
+        if (auto* data = mutableInRsProto.mutable_data(); data && !data->empty()) {
+            bytesData.emplace_back(std::move(*data));
+        }
     }
 };
 

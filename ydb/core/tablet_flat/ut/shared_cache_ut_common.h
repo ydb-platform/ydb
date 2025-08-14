@@ -81,6 +81,10 @@ namespace NKikimr::NSharedCache::NTest {
             page->SetFrequency(frequency);
         }
 
+        static void IncrementFrequency(TPage* page) {
+            page->IncrementFrequency();
+        }
+
         static ui32 GetTier(TPage* page) {
             return static_cast<ui32>(page->CacheMode);
         }

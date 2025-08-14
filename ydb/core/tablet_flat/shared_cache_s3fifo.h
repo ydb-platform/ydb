@@ -125,7 +125,7 @@ public:
         switch (location) {
             case ES3FIFOPageLocation::SmallQueue:
             case ES3FIFOPageLocation::MainQueue: {
-                TouchFast(page);
+                TPageTraits::IncrementFrequency(page);
                 return {};
             }
             case ES3FIFOPageLocation::None:
@@ -203,9 +203,7 @@ private:
                     TPageTraits::SetFrequency(page, 0);
                     Push(MainQueue, page);
                 } else {
-                    if (frequency) { // the page is used only once
-                        TPageTraits::SetFrequency(page, 0);
-                    }
+                    // frequency = 0
                     AddGhost(page);
                     return page;
                 }
@@ -227,19 +225,10 @@ private:
         return nullptr;
     }
 
-    void TouchFast(TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) != ES3FIFOPageLocation::None);
-
-        ui32 frequency = TPageTraits::GetFrequency(page);
-        if (frequency < 3) {
-            TPageTraits::SetFrequency(page, frequency + 1);
-        }
-    }
-
     TIntrusiveList<TPage> Insert(TPage* page) {
         Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) == ES3FIFOPageLocation::None);
 
-        Push(IsGhost(page) ? MainQueue : SmallQueue, page);
+        Push(IsGhost(page) || TPageTraits::GetFrequency(page) > 0 ? MainQueue : SmallQueue, page);
         TPageTraits::SetFrequency(page, 0);
 
         TIntrusiveList<TPage> evictedList;

@@ -184,10 +184,6 @@ private:
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
             ActorSpan.GetTraceId());
     }
-    virtual void PassAway() override {
-        Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
-        TBase::PassAway();
-    }
 
 public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
@@ -210,7 +206,9 @@ public:
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
     void Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev);
 
+protected:
     void Die(const NActors::TActorContext& ctx) override;
+    void PassAway() override;
 
 private:
     bool RetryWriteRequest(const bool delayed = true);

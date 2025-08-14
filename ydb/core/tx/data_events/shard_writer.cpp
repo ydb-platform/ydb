@@ -102,6 +102,9 @@ namespace NKikimr::NEvWrite {
             return;
         }
 
+        if (RetryBySubscription) {
+            LastOverloadSeqNo = 0;
+        }
         ExternalController->OnSuccess(ShardId, 0, WritePartIdx);
     }
 
@@ -171,8 +174,20 @@ namespace NKikimr::NEvWrite {
     void TShardWriter::Die(const NActors::TActorContext& ctx) {
         if (RetryBySubscription && LastOverloadSeqNo) {
             SendToTablet(MakeHolder<TEvColumnShard::TEvOverloadUnsubscribe>(LastOverloadSeqNo));
+            LastOverloadSeqNo = 0;
         }
 
         TBase::Die(ctx);
+    }
+
+    void TShardWriter::PassAway() {
+        if (RetryBySubscription && LastOverloadSeqNo) {
+            SendToTablet(MakeHolder<TEvColumnShard::TEvOverloadUnsubscribe>(LastOverloadSeqNo));
+            LastOverloadSeqNo = 0;
+        }
+
+        Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
+
+        TBase::PassAway();
     }
 }

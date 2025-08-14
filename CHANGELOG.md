@@ -61,25 +61,10 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20272:Enabled the following feature flags by default: EnableTopicAutopartitioningForCDC, EnableTopicAutopartitioningForReplication, EnableTopicTransfer. [#20272](https://github.com/ydb-platform/ydb/pull/20272) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20253:Separated bulk statistics operations from non-bulk. [#20253](https://github.com/ydb-platform/ydb/pull/20253) ([Vladilen](https://github.com/Vladilen))
 * 21448:Added support for a user-defined Certificate Authority (CA) in asynchronous replication. [#21448](https://github.com/ydb-platform/ydb/pull/21448) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
-* 21420:It was: the topic was created with 1 partition and autpartitioning support.
-So: a topic is created with the number of partitions equal to the number of datashard / 16 and autopartitioning support.
-
-Creating a topic with 1 partition could negatively affect the replication speed of the table because  autopartitioning of the topic does not occur instantly. [#21420](https://github.com/ydb-platform/ydb/pull/21420) ([Nikolay Shestakov](https://github.com/nshestakov))
-* 21391:The new HashV2 is a slight improvement over HashV1 - it "spreads" the pre-final hash value to better distribute keys which otherwise will end up in the same hash-bucket.
-
-Config option is
-```
-table_service_config:
-  default_hash_shuffle_func_type: HASH_V2
-```
-
-Manually tested:
-- config option is applied,
-- HashV2 improves performance for TPCH Q21,
-- query plan contains proper hash function name. [#21391](https://github.com/ydb-platform/ydb/pull/21391) ([Ivan](https://github.com/abyss7))
-* 21336:Introspection consists of human-readable strings when the stat mode is "Full" or higher.
-It's possible to manually override the number of tasks using pragma `OverridePlanner`. [#21336](https://github.com/ydb-platform/ydb/pull/21336) ([Ivan](https://github.com/abyss7))
-* 20303:Add --iam-token-file argument to ydb-dstool [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
+* 21420:Topics are now created with the number of partitions equal to datashards/16 instead of 1 partition. This improves table replication speed by avoiding delays from autopartitioning. [#21420](https://github.com/ydb-platform/ydb/pull/21420) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 21391:Implemented an optimized HashV2 hash function that improves data distribution and enhances query execution performance. This mode is enabled by setting the `table_service_config: default_hash_shuffle_func_type: HASH_V2` in the cluster configuration. [#21391](https://github.com/ydb-platform/ydb/pull/21391) ([Ivan](https://github.com/abyss7))
+* 21336:Introspection consists of human-readable strings when the stat mode is "Full" or higher. It's possible to manually override the number of tasks using pragma `OverridePlanner`. [#21336](https://github.com/ydb-platform/ydb/pull/21336) ([Ivan](https://github.com/abyss7))
+* 20303:Add `--iam-token-file` argument to ydb-dstool. [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
 
 ### Bug fixes
 
@@ -137,10 +122,6 @@ It's possible to manually override the number of tasks using pragma `OverridePla
 * 17198:Fixed an issue with UUID data type handling in YDB CLI backup/restore operations. [#17198](https://github.com/ydb-platform/ydb/pull/17198) ([Semyon Danilov](https://github.com/SammyVimes))
 * 20560:Resolved an issue with memory travel when a consumer commits an offset to the topic with autopartitioning enabled. [#20560](https://github.com/ydb-platform/ydb/pull/20560) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20386:Resolved an issue with reporting of gRPC metrics for serverless databases. [#20386](https://github.com/ydb-platform/ydb/pull/20386) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
-* 21702:Fix for https://github.com/ydb-platform/ydb/issues/21275 and https://github.com/ydb-platform/ydb/issues/21673 [#21702](https://github.com/ydb-platform/ydb/pull/21702) ([Denis Khalikov](https://github.com/denis0x0D))
-* 21613:Fixed race in create s3 read actor: https://github.com/ydb-platform/ydb/issues/21240 [#21613](https://github.com/ydb-platform/ydb/pull/21613) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
-* 21424:Fixed temp dir owner id column name due to compatibility fail with 25-1-3 [#21424](https://github.com/ydb-platform/ydb/pull/21424) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
-* 21384:Fix for https://github.com/ydb-platform/ydb/issues/21156 [#21384](https://github.com/ydb-platform/ydb/pull/21384) ([Denis Khalikov](https://github.com/denis0x0D))
 
 ### YDB UI
 

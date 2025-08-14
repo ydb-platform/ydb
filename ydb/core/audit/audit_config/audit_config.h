@@ -12,6 +12,7 @@ private:
     struct TLogClassSettings {
         NKikimrConfig::TAuditConfig::TLogClassConfig::ELogClass LogClass;
         std::vector<NACLibProto::ESubjectType> ExcludeSubjectTypes;
+        std::vector<NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase> LogPhase; // On which phases we write logs
         bool EnableLogging;
     };
 
@@ -20,7 +21,10 @@ public:
     TAuditConfig(const NKikimrConfig::TAuditConfig&);
     TAuditConfig& operator=(const NKikimrConfig::TAuditConfig&);
 
-    bool EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogClass logClass, NACLibProto::ESubjectType subjectType) const;
+    bool EnableLogging(
+        NKikimrConfig::TAuditConfig::TLogClassConfig::ELogClass logClass,
+        NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase,
+        NACLibProto::ESubjectType subjectType) const;
 
 private:
     using TLogClassMap = THashMap<NKikimrConfig::TAuditConfig::TLogClassConfig::ELogClass, TLogClassSettings>;

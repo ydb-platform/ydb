@@ -28,7 +28,7 @@ NThreading::TFuture<NKikimr::NMiniKQL::ISpiller::TKey> TDqComputeStorage::Put(TC
 }
 
 NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::Get(TKey key) {
-    return GetInternal(key, false);
+    return Extract(key);
 }
 
 NThreading::TFuture<void> TDqComputeStorage::Delete(TKey key) {
@@ -41,15 +41,10 @@ NThreading::TFuture<void> TDqComputeStorage::Delete(TKey key) {
 }
 
 NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::Extract(TKey key) {
-    return GetInternal(key, true);
-}
-
-NThreading::TFuture<std::optional<TChunkedBuffer>> TDqComputeStorage::GetInternal(TKey key, bool removeBlobAfterRead) {
-
     auto promise = NThreading::NewPromise<std::optional<TChunkedBuffer>>();
     auto future = promise.GetFuture();
 
-    ActorSystem_->Send(ComputeStorageActorId_, new TEvGet(key, std::move(promise), removeBlobAfterRead));
+    ActorSystem_->Send(ComputeStorageActorId_, new TEvGet(key, std::move(promise)));
     return future;
 }
 

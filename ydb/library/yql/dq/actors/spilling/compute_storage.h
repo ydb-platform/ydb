@@ -30,8 +30,6 @@ public:
     NThreading::TFuture<void> Delete(TKey key) override;
 
 private:
-    NThreading::TFuture<std::optional<TChunkedBuffer>> GetInternal(TKey key, bool removeBlobAfterRead);
-
     NActors::TActorSystem* ActorSystem_;
     IDqComputeStorageActor* ComputeStorageActor_;
     NActors::TActorId ComputeStorageActorId_;

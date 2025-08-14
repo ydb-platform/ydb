@@ -2690,16 +2690,13 @@ Y_UNIT_TEST(TestReadRequestInFlightLimit)
     icb->RegisterSharedControl(readRequestInFlightLimit, "KeyValueVolumeControls.ReadRequestsInFlightLimit");
     readRequestInFlightLimit = 5;
 
-    ui64 creationUnixTime = (TInstant::Now() - TDuration::Seconds(1000)).Seconds();
-
     CmdWrite("key-1", "value",
         NKikimrClient::TKeyValueRequest::MAIN,
         NKikimrClient::TKeyValueRequest::REALTIME,
-        creationUnixTime,
         tc);
     CmdRead({"key-1"},
         NKikimrClient::TKeyValueRequest::REALTIME,
-        {"value"}, {false}, {creationUnixTime},
+        {"value"}, {false},
         tc);
 }
 

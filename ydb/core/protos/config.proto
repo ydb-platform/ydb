@@ -2376,7 +2376,7 @@ message TKafkaProxyConfig {
     optional uint32 TransactionTimeoutMs = 12 [default = 300000]; // 5 minutes (same as in kafka)
     optional bool AutoCreateTopicsEnable = 13 [default = false];
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
-    optional bool AutoCreateConsumersEnable = 15 [default = false];
+    optional bool AutoCreateConsumersEnable = 15 [default = true];
 }
 
 message TAwsCompatibilityConfig {

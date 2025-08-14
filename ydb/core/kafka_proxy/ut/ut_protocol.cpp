@@ -59,7 +59,7 @@ public:
     TIpPort Port;
 
     TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true, bool enableAutoTopicCreation = false,
-                                                                                                                    bool enableAutoConsumerCreation = false) {
+                                                                                                                    bool enableAutoConsumerCreation = true) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -94,8 +94,8 @@ public:
             appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(true);
         }
         appConfig.MutableKafkaProxyConfig()->SetTopicCreationDefaultPartitions(2);
-        if (enableAutoConsumerCreation) {
-            appConfig.MutableKafkaProxyConfig()->SetAutoCreateConsumersEnable(true);
+        if (!enableAutoConsumerCreation) {
+            appConfig.MutableKafkaProxyConfig()->SetAutoCreateConsumersEnable(false);
         }
         if (serverless) {
             appConfig.MutableKafkaProxyConfig()->MutableProxy()->SetHostname("localhost");
@@ -1537,7 +1537,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     } // Y_UNIT_TEST(BalanceScenarioCdc)
 
     Y_UNIT_TEST(OffsetCommitAndFetchScenario) {
-        TInsecureTestServer testServer("2");
+        TInsecureTestServer testServer("2", false, true, false, false);
         testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_TRACE);
         testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
 

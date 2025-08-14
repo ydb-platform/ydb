@@ -319,7 +319,7 @@ private:
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
-    NThreading::TFuture<void> InitializeTenantNodes(const TString& database, TPortGenerator& grpcPortGen) const {
+    NThreading::TFuture<void> InitializeTenantNodes(const TString& database, const std::optional<NKikimrWhiteboard::TSystemStateInfo>& systemStateInfo, TPortGenerator& grpcPortGen) const {
         EHealthCheck level = Settings_.HealthCheckLevel;
         i32 nodesCount = Settings_.NodeCount;
         TVector<ui32> tenantNodesIdx;
@@ -336,6 +336,7 @@ private:
             .VerboseLevel = Settings_.VerboseLevel,
             .Database = absolutePath
         };
+        const auto edgeActor = GetRuntime()->AllocateEdgeActor();
 
         std::vector<NThreading::TFuture<void>> futures;
         futures.reserve(nodesCount);
@@ -351,6 +352,10 @@ private:
                 GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0, true), node, GetRuntime()->GetAppData(node).UserPoolId);
             }
 
+            if (systemStateInfo) {
+                GetRuntime()->Send(NKikimr::NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetRuntime()->GetNodeId(node)), edgeActor, new NKikimr::NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(*systemStateInfo));
+            }
+
             const auto promise = NThreading::NewPromise();
             GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), tenantNodesIdx ? tenantNodesIdx[nodeIdx] : nodeIdx, GetRuntime()->GetAppData().SystemPoolId);
             futures.emplace_back(promise.GetFuture());
@@ -360,11 +365,23 @@ private:
     }
 
     void InitializeTenants(TPortGenerator& grpcPortGen) const {
-        std::vector<NThreading::TFuture<void>> futures(1, InitializeTenantNodes(Settings_.DomainName, grpcPortGen));
+        std::optional<NKikimrWhiteboard::TSystemStateInfo> systemStateInfo;
+        if (const auto memoryInfoProvider = Server_->GetProcessMemoryInfoProvider()) {
+            systemStateInfo = NKikimrWhiteboard::TSystemStateInfo();
+
+            const auto& memInfo = memoryInfoProvider->Get();
+            if (memInfo.CGroupLimit) {
+                systemStateInfo->SetMemoryLimit(*memInfo.CGroupLimit);
+            } else if (memInfo.MemTotal) {
+                systemStateInfo->SetMemoryLimit(*memInfo.MemTotal);
+            }
+        }
+
+        std::vector<NThreading::TFuture<void>> futures(1, InitializeTenantNodes(Settings_.DomainName, systemStateInfo, grpcPortGen));
         futures.reserve(StorageMeta_.GetTenants().size() + 1);
         for (const auto& [tenantName, tenantInfo] : StorageMeta_.GetTenants()) {
             if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
-                futures.emplace_back(InitializeTenantNodes(GetTenantPath(tenantName), grpcPortGen));
+                futures.emplace_back(InitializeTenantNodes(GetTenantPath(tenantName), systemStateInfo, grpcPortGen));
             }
         }
 

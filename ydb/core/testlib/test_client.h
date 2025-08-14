@@ -398,6 +398,7 @@ namespace Tests {
         const NYdb::TDriver& GetDriver() const;
         const NYdbGrpc::TGRpcServer& GetGRpcServer() const;
         const NYdbGrpc::TGRpcServer& GetTenantGRpcServer(const TString& tenant) const;
+        TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> GetProcessMemoryInfoProvider() const;
 
         ui32 StaticNodes() const {
             return Settings->NodeCount;
@@ -420,6 +421,7 @@ namespace Tests {
         const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
         NFq::IYqSharedResources::TPtr YqSharedResources;
+        TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 
         TTestActorRuntime::TEventObserverHolder SysViewsRosterUpdateObserver;
         bool SysViewsRosterUpdateFinished;

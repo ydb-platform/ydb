@@ -17,7 +17,7 @@ using namespace NPageCollection;
 static const ui64 NO_QUEUE_COOKIE = 1;
 static const ui64 ASYNC_QUEUE_COOKIE = 2;
 
-static const ui64 MemoryLimit = 4 * (104 + 10); // sizeof(TPage) = 104
+static const ui64 MemoryLimit = 4 * (sizeof(TPage) + 10);
 
 struct TFetch {
     ui64 Cookie;
@@ -1355,7 +1355,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     Y_UNIT_TEST(InMemory_Basics) {
         TSharedPageCacheMock sharedCache;
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
-        ui64 collection1TotalSize = 4 * (104 + 10);
+        ui64 collection1TotalSize = 4 * (sizeof(TPage) + 10);
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({
@@ -1401,7 +1401,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     Y_UNIT_TEST(InMemory_Preemption) {
         TSharedPageCacheMock sharedCache;
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
-        ui64 collection1TotalSize = 4 * (104 + 10);
+        ui64 collection1TotalSize = 4 * (sizeof(TPage) + 10);
 
         // request not in-memory page
         sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, {1});
@@ -1460,7 +1460,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     Y_UNIT_TEST(InMemory_NotEnoughMemory) {
         TSharedPageCacheMock sharedCache;
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 6u);
-        ui64 collection1TotalSize = 6 * (104 + 10);
+        ui64 collection1TotalSize = 6 * (sizeof(TPage) + 10);
 
         // only 4 pages should be in memory cache
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
@@ -1483,7 +1483,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     Y_UNIT_TEST(InMemory_Enabling) {
         TSharedPageCacheMock sharedCache;
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
-        ui64 collection1TotalSize = 4 * (104 + 10);
+        ui64 collection1TotalSize = 4 * (sizeof(TPage) + 10);
 
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {2});
         sharedCache.CheckFetches({
@@ -1523,7 +1523,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     Y_UNIT_TEST(InMemory_Enabling_AllRequested) {
         TSharedPageCacheMock sharedCache;
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
-        ui64 collection1TotalSize = 4 * (104 + 10);
+        ui64 collection1TotalSize = 4 * (sizeof(TPage) + 10);
 
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0, 1, 2, 3});
         sharedCache.CheckFetches({
@@ -1558,7 +1558,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     Y_UNIT_TEST(InMemory_Disabling) {
         TSharedPageCacheMock sharedCache;
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
-        ui64 collection1TotalSize = 4 * (104 + 10);
+        ui64 collection1TotalSize = 4 * (sizeof(TPage) + 10);
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({
@@ -1590,7 +1590,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     Y_UNIT_TEST(InMemory_Detach) {
         TSharedPageCacheMock sharedCache;
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
-        ui64 collection1TotalSize = 4 * (104 + 10);
+        ui64 collection1TotalSize = 4 * (sizeof(TPage) + 10);
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({
@@ -1631,7 +1631,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     Y_UNIT_TEST(InMemory_Unregister) {
         TSharedPageCacheMock sharedCache;
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 4u);
-        ui64 collection1TotalSize = 4 * (104 + 10);
+        ui64 collection1TotalSize = 4 * (sizeof(TPage) + 10);
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({
@@ -1737,10 +1737,10 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     Y_UNIT_TEST(InMemory_MoveEvictedToRegular) {
         TSharedPageCacheMock sharedCache;
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 2u);
-        ui64 collection1TotalSize = 2 * (104 + 10);
+        ui64 collection1TotalSize = 2 * (sizeof(TPage) + 10);
 
         sharedCache.Collection2 = MakeIntrusiveConst<TPageCollectionMock>(2ul, 4u);
-        ui64 collection2TotalSize = 4 * (104 + 10);
+        ui64 collection2TotalSize = 4 * (sizeof(TPage) + 10);
 
         ui64 fetchNo = 1;
         ui64 cacheHits = 0;

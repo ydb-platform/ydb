@@ -22,7 +22,12 @@ select  item.i_item_id,
        cd_education_status = 'College' and
        d_year = 2002 and
        s_state in ('TN','TN', 'TN', 'TN', 'TN', 'TN')
- group by rollup (item.i_item_id, store.s_state)
+ -- group by rollup (item.i_item_id, store.s_state)
+ group by grouping sets (
+   (item.i_item_id, store.s_state),
+   (item.i_item_id),
+   ((d_year < 0) AS FAKE)
+ )
  order by item.i_item_id
          ,store.s_state
  limit 100;

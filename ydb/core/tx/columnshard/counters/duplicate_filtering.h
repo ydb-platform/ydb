@@ -16,6 +16,9 @@ private:
 
     NMonitoring::THistogramPtr IntersectingPortionsPerRequest;
 
+    NMonitoring::TDynamicCounters::TCounterPtr FilterCacheHits;
+    NMonitoring::TDynamicCounters::TCounterPtr FilterCacheMisses;
+
 public:
     TDuplicateFilteringCounters();
 
@@ -27,6 +30,13 @@ public:
 
     void OnFilterRequest(const ui64 intersectingPortions) const {
         IntersectingPortionsPerRequest->Collect(intersectingPortions);
+    }
+
+    void OnFilterCacheHit(const ui64 count = 1) const {
+        FilterCacheHits->Add(count);
+    }
+    void OnFilterCacheMiss(const ui64 count = 1) const {
+        FilterCacheMisses->Add(count);
     }
 };
 }   // namespace NKikimr::NColumnShard

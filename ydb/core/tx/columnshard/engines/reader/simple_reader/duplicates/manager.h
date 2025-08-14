@@ -77,6 +77,7 @@ private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
+            hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
             hFunc(NPrivate::TEvFilterConstructionResult, Handle);
             hFunc(NPrivate::TEvDuplicateSourceCacheResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
@@ -86,6 +87,7 @@ private:
     }
 
     void Handle(const TEvRequestFilter::TPtr&);
+    void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
     void Handle(const NPrivate::TEvFilterConstructionResult::TPtr&);
     void Handle(const NPrivate::TEvDuplicateSourceCacheResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {

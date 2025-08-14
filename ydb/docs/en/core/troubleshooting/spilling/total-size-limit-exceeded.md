@@ -1,6 +1,6 @@
 # Total Size Limit Exceeded
 
-The maximum total size of spilling files has been exceeded (parameter [`max_total_size`](../../../reference/configuration/table_service_config.md#local-file-config-max-total-size)). This occurs when the total size of all spilling files reaches the configured limit, preventing new spilling operations.
+The maximum total size of spilling files has been exceeded (parameter [`max_total_size`](../../reference/configuration/table_service_config.md#local-file-config-max-total-size)). This occurs when the total size of all spilling files reaches the configured limit, preventing new spilling operations.
 
 ## Diagnostics
 
@@ -16,7 +16,7 @@ Check the current spilling usage:
 To resolve this issue:
 
 1. **Increase the spilling size limit:**
-   - If there is sufficient free disk space, increase the [`max_total_size`](../../../reference/configuration/table_service_config.md#local-file-config-max-total-size) parameter in the configuration.
+   - If there is sufficient free disk space, increase the [`max_total_size`](../../reference/configuration/table_service_config.md#local-file-config-max-total-size) parameter in the configuration.
    - Increase the value by 20–50% from the current one.
 
 2. **Expand disk space:**

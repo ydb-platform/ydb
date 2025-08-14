@@ -6,13 +6,13 @@ An attempt to use spilling occurs when the Spilling Service is disabled. This ha
 
 Check the spilling service configuration:
 
-- Verify that [`table_service_config.spilling_service_config.local_file_config.enable`](../../../reference/configuration/table_service_config.md#local-file-config-enable) is set to `true`.
+- Verify that [`table_service_config.spilling_service_config.local_file_config.enable`](../../reference/configuration/table_service_config.md#local-file-config-enable) is set to `true`.
 
 ## Recommendations
 
 To enable spilling:
 
-1. Set [`table_service_config.spilling_service_config.local_file_config.enable`](../../../reference/configuration/table_service_config.md#local-file-config-enable): `true` in your configuration.
+1. Set [`table_service_config.spilling_service_config.local_file_config.enable`](../../reference/configuration/table_service_config.md#local-file-config-enable): `true` in your configuration.
 
 {% note info %}
 

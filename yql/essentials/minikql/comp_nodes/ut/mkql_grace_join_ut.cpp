@@ -2801,24 +2801,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
 
 
 
-    TRuntimeNode CreateMockFlow(TSetup<false>& setup, const std::vector<std::vector<NUdf::TUnboxedValue>>& data, const TString& name) {
+    TRuntimeNode CreateMockFlow(TSetup<false>& setup, const std::vector<std::vector<NUdf::TUnboxedValue>>& data) {
         TProgramBuilder& pb = *setup.PgmBuilder;
         
-        // Create tuple type for (ui32, string)
         const auto tupleType = pb.NewTupleType({
             pb.NewDataType(NUdf::TDataType<ui32>::Id),
             pb.NewDataType(NUdf::TDataType<char*>::Id)
         });
 
-        // Convert data to runtime nodes
         std::vector<TRuntimeNode> tuples;
         for (const auto& row : data) {
             auto key = pb.NewDataLiteral<ui32>(row[0].Get<ui32>());
-            auto value = pb.NewDataLiteral<NUdf::TUtf8>(row[1].AsStringRef());
+            auto value = pb.NewDataLiteral<NUdf::TStringRef>(row[1].AsStringRef());
             tuples.push_back(pb.NewTuple({key, value}));
         }
-
-        // Create list and convert to flow
+        
         const auto list = pb.NewList(tupleType, tuples);
         return pb.ToFlow(list);
     }
@@ -2826,30 +2823,30 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
     Y_UNIT_TEST(TestAsymmetricDataFinish) {
         // This is the KEY test case for our optimization!
         // Test when one stream finishes much earlier than the other
-        TSetup<false> setup(GetNodeFactory());
+        TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         // Case 1: Left finishes early, right continues
         {
             // Left: only 3 rows
             std::vector<std::vector<NUdf::TUnboxedValue>> leftData = {
-                {NUdf::TUnboxedValuePod(1u), NUdf::TUnboxedValuePod("L1"_su)},
-                {NUdf::TUnboxedValuePod(2u), NUdf::TUnboxedValuePod("L2"_su)},
-                {NUdf::TUnboxedValuePod(3u), NUdf::TUnboxedValuePod("L3"_su)}
+                {NUdf::TUnboxedValuePod(1u), MakeString("L1")},
+                {NUdf::TUnboxedValuePod(2u), MakeString("L2")},
+                {NUdf::TUnboxedValuePod(3u), MakeString("L3")}
             };
 
             // Right: 100 rows (much longer stream)
             std::vector<std::vector<NUdf::TUnboxedValue>> rightData;
             for (ui32 i = 1; i <= 100; ++i) {
                 rightData.push_back({
-                    NUdf::TUnboxedValuePod(i % 3 + 1), // Keys 1,2,3 - will match left
-                    NUdf::TUnboxedValuePod(TStringBuf("R" + ToString(i)))
+                    NUdf::TUnboxedValuePod(i % 3 + 1),
+                    MakeString("R" + ToString(i))
                 });
             }
 
             // Create flows
-            const auto leftFlow = CreateMockFlow(setup, leftData, "left");
-            const auto rightFlow = CreateMockFlow(setup, rightData, "right");
+            const auto leftFlow = CreateMockFlow(setup, leftData);
+            const auto rightFlow = CreateMockFlow(setup, rightData);
 
             // Define result type
             const auto resultType = pb.NewFlowType(pb.NewMultiType({
@@ -2893,7 +2890,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
     Y_UNIT_TEST(TestTableSwapWithContinuousReading) {
         // Test the core optimization: while returning results from one table,
         // we read data into the other table, then swap them
-        TSetup<false> setup(GetNodeFactory());
+        TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         // Create data that will require multiple table swaps
@@ -2917,8 +2914,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         }
 
         // Create flows
-        const auto leftFlow = CreateMockFlow(setup, leftData, "left");
-        const auto rightFlow = CreateMockFlow(setup, rightData, "right");
+        const auto leftFlow = CreateMockFlow(setup, leftData);
+        const auto rightFlow = CreateMockFlow(setup, rightData);
 
         // Define result type
         const auto resultType = pb.NewFlowType(pb.NewMultiType({
@@ -2959,14 +2956,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
 
     Y_UNIT_TEST(TestRealWorldAsymmetricJoin) {
         // Simulate real-world scenario: small dimension table joined with large fact table
-        TSetup<false> setup(GetNodeFactory());
+        TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         // Dimension table: small, finishes quickly
         std::vector<std::vector<NUdf::TUnboxedValue>> dimData = {
-            {NUdf::TUnboxedValuePod(1u), NUdf::TUnboxedValuePod("Category_A"_su)},
-            {NUdf::TUnboxedValuePod(2u), NUdf::TUnboxedValuePod("Category_B"_su)},
-            {NUdf::TUnboxedValuePod(3u), NUdf::TUnboxedValuePod("Category_C"_su)}
+            {NUdf::TUnboxedValuePod(1u), MakeString("Category_A")},
+            {NUdf::TUnboxedValuePod(2u), MakeString("Category_B")},
+            {NUdf::TUnboxedValuePod(3u), MakeString("Category_C")}
         };
 
         // Fact table: large, continues streaming
@@ -2979,8 +2976,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         }
 
         // Create flows
-        const auto dimFlow = CreateMockFlow(setup, dimData, "dimension");
-        const auto factFlow = CreateMockFlow(setup, factData, "fact");
+        const auto dimFlow = CreateMockFlow(setup, dimData);
+        const auto factFlow = CreateMockFlow(setup, factData);
 
         // Define result type
         const auto resultType = pb.NewFlowType(pb.NewMultiType({
@@ -3037,13 +3034,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
     Y_UNIT_TEST(TestBatchProcessingWithAsymmetricFinish) {
         // Test that when one stream finishes early, the other stream
         // continues to be processed in batches with proper table swapping
-        TSetup<false> setup(GetNodeFactory());
+        TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         // Left: finishes after just 2 rows
         std::vector<std::vector<NUdf::TUnboxedValue>> leftData = {
-            {NUdf::TUnboxedValuePod(1u), NUdf::TUnboxedValuePod("DimA"_su)},
-            {NUdf::TUnboxedValuePod(2u), NUdf::TUnboxedValuePod("DimB"_su)}
+            {NUdf::TUnboxedValuePod(1u), MakeString("DimA")},
+            {NUdf::TUnboxedValuePod(2u), MakeString("DimB")}
         };
 
         // Right: continues with many rows that will need multiple batch processing
@@ -3055,8 +3052,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             });
         }
 
-        const auto leftFlow = CreateMockFlow(setup, leftData, "left");
-        const auto rightFlow = CreateMockFlow(setup, rightData, "right");
+        const auto leftFlow = CreateMockFlow(setup, leftData);
+        const auto rightFlow = CreateMockFlow(setup, rightData);
 
         const auto resultType = pb.NewFlowType(pb.NewMultiType({
             pb.NewDataType(NUdf::TDataType<char*>::Id),
@@ -3113,12 +3110,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
     Y_UNIT_TEST(TestIterativeResultRetrieval) {
         // Test that demonstrates the key optimization: getting results one by one
         // should trigger continuous reading of input data
-        TSetup<false> setup(GetNodeFactory());
+        TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         // Small left side - will finish early
         std::vector<std::vector<NUdf::TUnboxedValue>> leftData = {
-            {NUdf::TUnboxedValuePod(1u), NUdf::TUnboxedValuePod("Key1"_su)}
+            {NUdf::TUnboxedValuePod(1u), MakeString("Key1")}
         };
 
         // Large right side - continues after left finishes
@@ -3130,8 +3127,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             });
         }
 
-        const auto leftFlow = CreateMockFlow(setup, leftData, "left");
-        const auto rightFlow = CreateMockFlow(setup, rightData, "right");
+        const auto leftFlow = CreateMockFlow(setup, leftData);
+        const auto rightFlow = CreateMockFlow(setup, rightData);
 
         const auto resultType = pb.NewFlowType(pb.NewMultiType({
             pb.NewDataType(NUdf::TDataType<char*>::Id),
@@ -3179,13 +3176,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
     Y_UNIT_TEST(TestMemoryEfficiencyWithLargeAsymmetricData) {
 
 
-        TSetup<false> setup(GetNodeFactory());
+        TSetup<false> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
 
         std::vector<std::vector<NUdf::TUnboxedValue>> dimData = {
-            {NUdf::TUnboxedValuePod(100u), NUdf::TUnboxedValuePod("Electronics"_su)},
-            {NUdf::TUnboxedValuePod(200u), NUdf::TUnboxedValuePod("Books"_su)}
+            {NUdf::TUnboxedValuePod(100u), MakeString("Electronics")},
+            {NUdf::TUnboxedValuePod(200u), MakeString("Books")}
         };
 
         // Facts: Large number of transactions
@@ -3198,8 +3195,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             });
         }
 
-        const auto dimFlow = CreateMockFlow(setup, dimData, "dimension");
-        const auto factFlow = CreateMockFlow(setup, factData, "facts");
+        const auto dimFlow = CreateMockFlow(setup, dimData);
+        const auto factFlow = CreateMockFlow(setup, factData);
 
         const auto resultType = pb.NewFlowType(pb.NewMultiType({
             pb.NewDataType(NUdf::TDataType<char*>::Id),

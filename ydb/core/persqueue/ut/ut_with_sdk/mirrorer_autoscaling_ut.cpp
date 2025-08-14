@@ -390,8 +390,6 @@ namespace NKikimr::NPersQueueTests {
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Partitions, finalPartitionsCount);
 
             // write to source topic
-            TMap<ui32, ui32> messagesPerPartition;
-            TMap<TString, size_t> messagesPerSourceId;
             constexpr TWriteCount writeBatch[]{
                 {0, 10},
                 {2, 15},
@@ -400,8 +398,6 @@ namespace NKikimr::NPersQueueTests {
             for (const TWriteCount& wc : writeBatch) {
                 Cerr << (TStringBuilder() << "Writing to partition " << wc.Partiton << " " << wc.Count << " messages\n");
                 const auto [sourceId] = WriteToPartition(wc.Partiton, *driver, srcTopic, wc.Count);
-                messagesPerPartition[wc.Partiton] += wc.Count;
-                messagesPerSourceId[sourceId] += wc.Count;
             }
 
             auto createReader = [&](const TString& topic, ui32 partition) {
@@ -510,9 +506,6 @@ namespace NKikimr::NPersQueueTests {
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Partitions, 2); // not splitted yet
 
             // write to source topic
-            TMap<ui32, ui32> messagesPerPartition;
-            TMap<TString, size_t> messagesPerSourceId;
-
             constexpr TWriteCount writeBatch[]{
                 {0, 10},
                 {2, 15},
@@ -521,8 +514,6 @@ namespace NKikimr::NPersQueueTests {
             for (const TWriteCount& wc : writeBatch) {
                 Cerr << (TStringBuilder() << "Writing to partition " << wc.Partiton << " " << wc.Count << " messages\n");
                 const auto [sourceId] = WriteToPartition(wc.Partiton, *driver, srcTopic, wc.Count);
-                messagesPerPartition[wc.Partiton] += wc.Count;
-                messagesPerSourceId[sourceId] += wc.Count;
             }
 
             auto createReader = [&](const TString& topic, ui32 partition) {

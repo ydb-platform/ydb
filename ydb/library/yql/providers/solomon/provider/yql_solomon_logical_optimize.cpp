@@ -63,9 +63,12 @@ public:
         }
 
         for (size_t i = 0; i < labelNames.Size(); ++i) {
-            if (TString column = labelNames.Item(i).StringValue(); extractMembers.contains(column)) {
-                newLabelNames.push_back(Build<TCoAtom>(ctx, node.Pos()).Value(column).Done());
-                newLabelNameAliases.push_back(Build<TCoAtom>(ctx, node.Pos()).Value(labelNameAliases.Item(i).StringValue()).Done());
+            TString columnName = labelNames.Item(i).StringValue();
+            TString columnAlias = labelNameAliases.Item(i).StringValue();
+
+            if (extractMembers.contains(columnAlias)) {
+                newLabelNames.push_back(Build<TCoAtom>(ctx, node.Pos()).Value(columnName).Done());
+                newLabelNameAliases.push_back(Build<TCoAtom>(ctx, node.Pos()).Value(columnAlias).Done());
             }
         }
 

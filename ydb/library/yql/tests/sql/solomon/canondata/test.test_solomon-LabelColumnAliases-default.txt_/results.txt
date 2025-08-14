@@ -1,0 +1,1 @@
+[{"Write"=[{"Type"=["ListType";["StructType";[["value";["OptionalType";["DataType";"Double"]]];["l2";["DataType";"String"]]]]];"Data"=[[["100"];""];[["200"];""];[["300"];""]]}]}]

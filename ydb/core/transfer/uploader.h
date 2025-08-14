@@ -13,6 +13,7 @@ class TTableUploader : public TActorBootstrapped<TTableUploader<TData>> {
     using TThis = TTableUploader<TData>;
 
     static constexpr size_t MaxRetries = 9;
+    static constexpr size_t BaseTimeoutMs = 1000;
 
 public:
     TTableUploader(const TActorId& parentActor, const TScheme::TPtr& scheme, std::unordered_map<TString, std::shared_ptr<TData>>&& data)
@@ -71,7 +72,7 @@ private:
         auto withRetry = ev->Get()->Status != Ydb::StatusIds::SCHEME_ERROR;
         auto& retry = Retries[tablePath];
         if (withRetry && retry < MaxRetries) {
-            size_t timeout = size_t(1000) << retry;
+            size_t timeout = BaseTimeoutMs << retry;
             TThis::Schedule(TDuration::MilliSeconds(timeout + RandomNumber<size_t>(timeout >> 2)), new NTransferPrivate::TEvRetryTable(tablePath));
             ++retry;
             CookieMapping.erase(ev->Cookie);

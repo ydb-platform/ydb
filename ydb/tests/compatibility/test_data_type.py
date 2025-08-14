@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_columnshard_table_sql_request
-from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, cleanup_type_name, format_sql_value
+from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, cleanup_type_name, format_sql_value, types_missing_in_column_tables
 
 
 class TestDataType(RestartToAnotherVersionFixture):
@@ -16,18 +16,24 @@ class TestDataType(RestartToAnotherVersionFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self, store_type):
-        self.store_type = store_type
-        self.pk_types = []
-        self.pk_types.append({"Int64": lambda i: i})
-        self.count_table = 1
-        for type_name, lamb in pk_types.items():
-            self.pk_types[self.count_table - 1][type_name] = lamb
-            if len(self.pk_types[self.count_table - 1]) >= 20:
-                self.pk_types.append({"Int64": lambda i: i})
-                self.count_table += 1
-        self.table_names = []
+        # ydb/docs/en/core/concepts/_includes/limits-ydb.md
+        columns_in_pk_limit = 20
         self.count_rows = 30
-        self.all_types = {**pk_types, **non_pk_types}
+        self.store_type = store_type
+        # not all the types are supported for column tables
+        supported_pk_types = pk_types if store_type == "ROW" else {k: v for k, v in pk_types.items() if k not in types_missing_in_column_tables}
+        supported_non_pk_types = non_pk_types if store_type == "ROW" else {k: v for k, v in non_pk_types.items() if k not in types_missing_in_column_tables}
+        self.all_types = {**supported_pk_types, **supported_non_pk_types}
+
+        self.count_table = 0
+        self.pk_types = []
+        for type_name, lamb in supported_pk_types.items():
+            if len(self.pk_types) == 0 or len(self.pk_types[-1]) >= columns_in_pk_limit:
+                self.count_table += 1
+                self.pk_types.append({"Int64": lambda i: i})
+            self.pk_types[-1][type_name] = lamb
+
+        self.table_names = []
         self.columns = []
         for i in range(self.count_table):
             self.columns.append(

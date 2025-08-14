@@ -133,24 +133,24 @@ pk_types = {
     "Uint16": lambda i: i,
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
-    # "Bool": lambda i: bool(i),
+    "Bool": lambda i: bool(i),
     "Decimal(15,0)": lambda i: "{}".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
-    # "DyNumber": lambda i: float(f"{i}e1"),
+    "DyNumber": lambda i: float(f"{i}e1"),
 
     "String": lambda i: f"String {i}",
     "Utf8": lambda i: f"Utf8 {i}",
-    # "UUID": lambda i: UUID("3{:03}5678-e89b-12d3-a456-556642440000".format(i)),
+    "UUID": lambda i: UUID("3{:03}5678-e89b-12d3-a456-556642440000".format(i)),
 
     "Date": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
     "Datetime": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
     "Timestamp": lambda i: 1696200000000000 + i * 100000000,
-    # "Interval": lambda i: i,
+    "Interval": lambda i: i,
     "Date32": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
     "Datetime64": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
     "Timestamp64": lambda i: 1696200000000000 + i * 100000000,
-    # "Interval64": lambda i: i,
+    "Interval64": lambda i: i,
 }
 
 non_pk_types = {
@@ -159,4 +159,12 @@ non_pk_types = {
     "Json": lambda i: "{{\"another_key\": {}}}".format(i),
     "JsonDocument": lambda i: "{{\"another_doc_key\": {}}}".format(i),
     "Yson": lambda i: "[{}]".format(i),
+}
+
+types_missing_in_column_tables = {
+    "Bool",
+    "DyNumber",
+    "UUID",
+    "Interval",
+    "Interval64",
 }

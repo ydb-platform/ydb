@@ -14,6 +14,7 @@ TEST_SRCS(
     test_stress.py
     test_statistics.py
     test_system_views.py
+    test_simple_reader.py
     test_rolling.py
     test_data_type.py
     test_ctas.py

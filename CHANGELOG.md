@@ -144,5 +144,5 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20048:Improved performance of upsert operations for tables with defaults. Upsert operations now ignore the last DefaulFilledColumnsCnt columns if a row exist. This logic allows QP to avoid reading rows to check if it exists (the whole operation with default columns is processed at a shard). [#20048](https://github.com/ydb-platform/ydb/pull/20048) ([r314-git](https://github.com/r314-git))
 * 19724:Added the `buffer_page_alloc_size` configuration parameter with the default value of 4Kb. [#19724](https://github.com/ydb-platform/ydb/pull/19724) ([Ivan](https://github.com/abyss7))
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
-* 20428:Улучшена параллельное выполнение запросов. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
+* 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 

@@ -22,6 +22,8 @@
 
 #include <chrono>
 #include <limits>
+#include <format>
+#include <iostream>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -843,42 +845,46 @@ private:
     }
 
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        // Collecting data for join and perform join (batch or full)
+
         while (!*JoinCompleted ) {
 
             if ( *PartialJoinCompleted) {
-                // Returns join results (batch or full)
+
                 while (JoinedTableReturn->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
                     UnpackJoinedData(output);
                     
-                    // Aggressively fetch new data while returning results
-                    const ui64 maxFetchBatchSize = PartialJoinBatchSize; // Use same limit as main batch size
+                    const ui64 maxFetchBatchSize = PartialJoinBatchSize;
                     while ((*HaveMoreLeftRows || *HaveMoreRightRows) && 
                            (LeftPacker->TuplesBatchPacked + RightPacker->TuplesBatchPacked) < maxFetchBatchSize) {
+                        std::cerr << std::format("GraceJoin[{}]: Parallel fetch while returning results. LeftPacked={} RightPacked={} Limit={}\n",
+                            static_cast<const void*>(JoinedTableBuild.get()),
+                            LeftPacker->TuplesBatchPacked,
+                            RightPacker->TuplesBatchPacked, 
+                            maxFetchBatchSize);
                         auto fetchResult = FetchAndPackData(ctx, nullptr);
                         if (fetchResult != EFetchResult::Finish) {
-                            break; // Stop if we got Yield or immediate result
+                            break;
                         }
                     }
                     
                     return EFetchResult::One;
                 }
 
-                // Resets batch state for batch join
+
                 if (!*HaveMoreRightRows) {
                     *PartialJoinCompleted = false;
                     LeftPacker->TuplesBatchPacked = 0;
-                    LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                    LeftPacker->TablePtr->Clear();
                 }
 
                 if (!*HaveMoreLeftRows ) {
                     *PartialJoinCompleted = false;
                     RightPacker->TuplesBatchPacked = 0;
-                    RightPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                    RightPacker->TablePtr->Clear();
                 }
                 JoinedTableBuild->Clear();
                 JoinedTableBuild->ResetIterator();
-                // Swap tables for next batch
+
                 std::swap(JoinedTableBuild, JoinedTableReturn);
             }
 

@@ -365,8 +365,8 @@ namespace NKikimr::NStorage {
                 }
             },
             [&](TProposeConfig&) {
-                Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
-                if (status != TResult::OK) { // we were asked to commit config, but error has occured
+                if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+                    // we were asked to commit config, but error has occured
                     Y_ABORT_UNLESS(errorReason);
                     switchToError.emplace(*errorReason);
                 }

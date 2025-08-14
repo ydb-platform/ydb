@@ -6,6 +6,19 @@ namespace NKikimr::NStorage {
     bool TDistributedConfigKeeper::UpdateBridgeConfig(NKikimrBlobStorage::TStorageConfig *config) {
         bool changes = false;
 
+        if (config->HasClusterState()) {
+            auto *clusterState = config->MutableClusterState();
+            if (clusterState->GetPrimaryPile() != clusterState->GetPromotedPile()) {
+                const auto promotedPileId = TBridgePileId::FromProto(clusterState, &NKikimrBridge::TClusterState::GetPromotedPile);
+                if (promotedPileId.GetPileIndex() < clusterState->PerPileStateSize() &&
+                        clusterState->GetPerPileState(promotedPileId.GetPileIndex()) == NKikimrBridge::TClusterState::SYNCHRONIZED) {
+                    // TODO(alexvru): some external conditions? wait for external components?
+                    promotedPileId.CopyToProto(clusterState, &NKikimrBridge::TClusterState::SetPrimaryPile);
+                    changes = true;
+                }
+            }
+        }
+
         if (config->HasClusterStateDetails()) {
             auto *details = config->MutableClusterStateDetails();
 

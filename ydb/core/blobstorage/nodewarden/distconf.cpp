@@ -150,6 +150,10 @@ namespace NKikimr::NStorage {
 
             QuorumValid = false;
 
+            if (BridgeInfo && !BridgeInfo->SelfNodePile->IsPrimary) {
+                UnbindNodesFromOtherPiles("not primary pile anymore");
+            }
+
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
                 StorageConfig->GetFingerprint() != config.GetFingerprint()) {

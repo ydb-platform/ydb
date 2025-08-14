@@ -31,14 +31,32 @@ void TDqComputeActorWatermarks::RegisterAsyncInput(ui64 inputId) {
     AsyncInputsWatermarks[inputId] = Nothing();
 }
 
+void TDqComputeActorWatermarks::UnregisterAsyncInput(ui64 inputId) {
+    auto found = AsyncInputsWatermarks.erase(inputId);
+    Y_ENSURE(found);
+    RecalcPendingWatermark();
+}
+
 void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId) {
     InputChannelsWatermarks[inputId] = Nothing();
 }
 
+void TDqComputeActorWatermarks::UnregisterInputChannel(ui64 inputId) {
+    auto found = InputChannelsWatermarks.erase(inputId);
+    Y_ENSURE(found);
+    RecalcPendingWatermark();
+}
+
 bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark) {
+    auto it = AsyncInputsWatermarks.find(inputId);
+    if (it == AsyncInputsWatermarks.end()) {
+        LOG_D("Ignored watermark notification on unregistered async input " << inputId);
+        return false;
+    }
+
     LOG_T("Async input " << inputId << " notified about watermark " << watermark);
 
-    auto& asyncInputWatermark = AsyncInputsWatermarks[inputId];
+    auto& asyncInputWatermark = it->second;
     if (asyncInputWatermark < watermark) {
         LOG_T("Async input " << inputId << " watermark was updated to " << watermark);
         asyncInputWatermark = watermark;
@@ -50,9 +68,15 @@ bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, 
 }
 
 bool TDqComputeActorWatermarks::NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark) {
+    auto it = InputChannelsWatermarks.find(inputId);
+    if (it == InputChannelsWatermarks.end()) {
+        LOG_D("Ignored watermark notification on unregistered input channel" << inputId);
+        return false;
+    }
+
     LOG_T("Input channel " << inputId << " notified about watermark " << watermark);
 
-    auto& inputChannelWatermark = InputChannelsWatermarks[inputId];
+    auto& inputChannelWatermark = it->second;
     if (!inputChannelWatermark || *inputChannelWatermark < watermark) {
         LOG_T("Input channel " << inputId << " watermark was updated to " << watermark);
         inputChannelWatermark = watermark;

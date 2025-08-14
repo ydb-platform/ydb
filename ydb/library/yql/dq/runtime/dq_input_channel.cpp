@@ -95,6 +95,9 @@ public:
         if (IsPausedByCheckpoint()) {
             return;
         }
+        if (IsFinished()) {
+            return;
+        }
         SkipWatermarksBeforeBarrier();
         Y_ENSURE(!PendingBarriers.empty());
         Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
@@ -167,15 +170,18 @@ public:
 
     void ResumeByWatermark(TInstant watermark) override {
         Y_ENSURE(Empty());
-        Y_ENSURE(!PendingBarriers.empty());
         Y_ENSURE(PauseBarrier == watermark);
+        PauseBarrier = TBarrier::NoBarrier;
+        if (IsFinished()) {
+            return;
+        }
+        Y_ENSURE(!PendingBarriers.empty());
         Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
         if (PendingBarriers.front().Barrier == watermark) {
             BeforeBarrier = PendingBarriers.front();
             PendingBarriers.pop_front();
         }
         Y_ENSURE(PendingBarriers.empty() || PendingBarriers.front().Barrier > watermark);
-        PauseBarrier = TBarrier::NoBarrier;
     }
 
     void ResumeByCheckpoint() override {

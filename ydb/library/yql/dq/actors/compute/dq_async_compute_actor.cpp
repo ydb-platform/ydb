@@ -779,6 +779,16 @@ private:
             }
         }
 
+        for (auto inputChannelId : ev->Get()->FinishedInputsWithWatermarks) {
+            CA_LOG_T("Unregister watermarked input channel " << inputChannelId);
+            WatermarksTracker.UnregisterInputChannel(inputChannelId);
+        }
+
+        for (auto sourceId : ev->Get()->FinishedSourcesWithWatermarks) {
+            CA_LOG_T("Unregister watermarked async input " << sourceId);
+            WatermarksTracker.UnregisterInputChannel(sourceId);
+        }
+
         ReadyToCheckpointFlag = (bool) ev->Get()->ProgramState;
         if (ev->Get()->CheckpointRequestedFromTaskRunner) {
             CheckpointRequestedFromTaskRunner = false;

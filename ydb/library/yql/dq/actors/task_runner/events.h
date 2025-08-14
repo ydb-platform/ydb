@@ -226,6 +226,8 @@ struct TEvTaskRunFinished
         ui64 mkqlMemoryLimit = 0,
         THolder<TMiniKqlProgramState>&& programState = nullptr,
         TMaybe<TInstant> watermarkInjectedToOutputs = Nothing(),
+        TVector<ui32>&& finishedInputsWithWatermarks = {},
+        TVector<ui32>&& finishedSourcesWithWatermarks = {},
         bool checkpointRequestedFromTaskRunner = false,
         TDuration computeTime = TDuration::Zero())
         : RunStatus(runStatus)
@@ -236,6 +238,8 @@ struct TEvTaskRunFinished
         , MkqlMemoryLimit(mkqlMemoryLimit)
         , ProgramState(std::move(programState))
         , WatermarkInjectedToOutputs(watermarkInjectedToOutputs)
+        , FinishedInputsWithWatermarks(finishedInputsWithWatermarks)
+        , FinishedSourcesWithWatermarks(finishedSourcesWithWatermarks)
         , CheckpointRequestedFromTaskRunner(checkpointRequestedFromTaskRunner)
         , ComputeTime(computeTime)
     { }
@@ -249,6 +253,8 @@ struct TEvTaskRunFinished
     ui64 MkqlMemoryLimit = 0;
     THolder<TMiniKqlProgramState> ProgramState;
     TMaybe<TInstant> WatermarkInjectedToOutputs = Nothing();
+    TVector<ui32> FinishedInputsWithWatermarks;
+    TVector<ui32> FinishedSourcesWithWatermarks;
     bool CheckpointRequestedFromTaskRunner = false;
     TDuration ComputeTime;
 };

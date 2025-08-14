@@ -1,5 +1,4 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
-#include <ydb/core/util/random.h>
 
 #include <library/cpp/iterator/enumerate.h>
 

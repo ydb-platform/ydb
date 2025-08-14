@@ -240,26 +240,34 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
     auto eventPtr = ev->Release();
     TString topicName = eventPtr->TopicName;
     TopicsToResponses[topicName] = eventPtr;
-    if (Context->Config.GetAutoCreateTopicsEnable()) {
-        auto& topicGroupRequest = GroupRequests[topicName];
-        auto topicResponse = GetOffsetResponseForTopic(topicGroupRequest.TopicRequest, topicGroupRequest.GroupId);
+    bool topicNotCreatedYet = false;
+    auto& topicGroupRequests = GroupRequests[topicName];
+    for (const auto& [topicRequest, groupId] : topicGroupRequests) {
+        if (topicNotCreatedYet) {
+            break;
+        }
+        auto topicResponse = GetOffsetResponseForTopic(topicRequest, groupId);
         for (const auto& topicPartition : topicResponse.Partitions) {
-            TString topicName = GetTopicNameWithoutDb(DatabasePath, *topicGroupRequest.TopicRequest.Name);
+            if (topicNotCreatedYet) {
+                break;
+            }
+            TString topicName = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
             TString topicPath = NormalizePath(DatabasePath, topicName);
-            if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND) {
+            if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND &&
+                    (Context->Config.GetAutoCreateConsumersEnable() ||
+                     Context->Config.GetAutoCreateTopicsEnable())) {
                 // consumer is not assigned to the topic case
                 TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(topicName,
                                                                         topicPath,
                                                                         topicName,
-                                                                        topicGroupRequest.GroupId,
-                                                                        topicResponse.Partitions);
+                                                                        groupId);
                 break;
-            } else if (topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION) {
+            } else if (topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
+                        Context->Config.GetAutoCreateTopicsEnable()) {
                 // topic or partition does not exist case
-                bool continueChecking = CreateTopicIfNecessary(topicName, *topicGroupRequest.TopicRequest.Name, topicGroupRequest.GroupId, ctx);
-                if (!continueChecking) {
-                    break;
-                }
+                CreateTopicIfNecessary(topicName, *topicRequest.Name, ctx);
+                topicNotCreatedYet = true;
+                break;
             }
         }
     }
@@ -273,7 +281,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
 void TKafkaOffsetFetchActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     // TKafkaOffsetFetchActor can receive TEvResponse only from TKafkaCreateTopicsActor actor
     TActorId& creatorActorId = ev->Sender;
-    const TModifiedTopicInfo& createdTopicInformation = CreateTopicInfo[creatorActorId];
+    const TString& createdTopicName = CreateTopicActorIdToName[creatorActorId];
     auto errorCode = ev->Release()->ErrorCode;
     DependantActors.erase(creatorActorId);
     if (errorCode != EKafkaErrors::NONE_ERROR) {
@@ -287,16 +295,16 @@ void TKafkaOffsetFetchActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const
     }
 
     NKikimr::NGRpcProxy::V1::TLocalRequestBase locationRequest{
-        NormalizePath(Context->DatabasePath, createdTopicInformation.TopicName),
+        NormalizePath(Context->DatabasePath, createdTopicName),
         Context->DatabasePath,
         GetUserSerializedToken(Context),
     };
     ctx.Register(new TTopicOffsetActor(
-        createdTopicInformation.Entities.Consumers,
+        TopicToEntities[createdTopicName].Consumers,
         locationRequest,
         SelfId(),
-        createdTopicInformation.Entities.Partitions,
-        createdTopicInformation.TopicName,
+        TopicToEntities[createdTopicName].Partitions,
+        createdTopicName,
         GetUsernameOrAnonymous(Context)
     ));
 }
@@ -314,19 +322,19 @@ void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlter
         return;
     }
 
-    const TModifiedTopicInfo& alteredTopicInfo = AlterTopicInfo[ev->Cookie];
+    const TString& alteredTopicName = AlterTopicCookieToName[ev->Cookie];
     NKikimr::NGRpcProxy::V1::TLocalRequestBase locationRequest{
-        NormalizePath(Context->DatabasePath, alteredTopicInfo.TopicName),
+        NormalizePath(Context->DatabasePath, alteredTopicName),
         Context->DatabasePath,
         GetUserSerializedToken(Context),
     };
     TActorId actorId = SelfId();
     ctx.Register(new TTopicOffsetActor(
-        alteredTopicInfo.Entities.Consumers,
+        TopicToEntities[alteredTopicName].Consumers,
         locationRequest,
         actorId,
-        alteredTopicInfo.Entities.Partitions,
-        alteredTopicInfo.TopicName,
+        TopicToEntities[alteredTopicName].Partitions,
+        alteredTopicName,
         GetUsernameOrAnonymous(Context)
     ));
 
@@ -343,7 +351,7 @@ void TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr
     Kqp->SendYqlRequest(Sprintf(FETCH_ASSIGNMENTS.c_str(), NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->GetStorageTablePath().c_str()), params.Build(), KqpCookie, ctx);
 }
 
-void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
+void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     std::vector<std::pair<std::optional<TString>, TConsumerProtocolAssignment>> assignments;
     KAFKA_LOG_D("Recieved KQP response");
     ParseGroupsAssignments(ev, assignments);
@@ -404,9 +412,8 @@ void TKafkaOffsetFetchActor::ExtractPartitions(const TString& group, const NKafk
     }
 };
 
-void TKafkaOffsetFetchActor::ParseGroupsAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev,
-                                                    std::vector<std::pair<std::optional<TString>,
-                                                    TConsumerProtocolAssignment>>& assignments) {
+void TKafkaOffsetFetchActor::ParseGroupsAssignments(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
+                                                    std::vector<std::pair<std::optional<TString>, TConsumerProtocolAssignment>>& assignments) {
     if (!ev) {
         return;
     }
@@ -437,8 +444,7 @@ void TKafkaOffsetFetchActor::ParseGroupsAssignments(NKqp::TEvKqp::TEvQueryRespon
 void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topicName,
                                     const TString& topicPath,
                                     const TString& originalTopicName,
-                                    const TString& groupId,
-                                    const std::vector<TOffsetFetchResponsePartitions>& topicPartitions) {
+                                    const TString& groupId) {
     TTopicGroupIdAndPath consumerTopicRequest = TTopicGroupIdAndPath{groupId, topicPath};
     if (ConsumerTopicAlterRequestAttempts.find(consumerTopicRequest) == ConsumerTopicAlterRequestAttempts.end()) {
         ConsumerTopicAlterRequestAttempts.insert(consumerTopicRequest);
@@ -457,13 +463,7 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
         consumer->set_name(c.ConsumerName_);
     }
     AlterTopicCookie++;
-    TModifiedTopicInfo alteredTopicInfo;
-    alteredTopicInfo.TopicName = originalTopicName;
-    alteredTopicInfo.Entities.Consumers->insert(groupId);
-    for (const auto& topicPartition : topicPartitions) {
-        alteredTopicInfo.Entities.Partitions->insert(topicPartition.PartitionIndex);
-    }
-    AlterTopicInfo[AlterTopicCookie] = alteredTopicInfo;
+    AlterTopicCookieToName[AlterTopicCookie] = originalTopicName;
     auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = topicName, this]
         (Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
         NYdb::NIssue::TIssues issues;
@@ -480,12 +480,11 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
 
 }
 
-bool TKafkaOffsetFetchActor::CreateTopicIfNecessary(const TString& topicName,
+void TKafkaOffsetFetchActor::CreateTopicIfNecessary(const TString& topicName,
                                                     const TString& originalTopicName,
-                                                    const TString& groupId,
                                                     const TActorContext& ctx) {
     if (TopicCreateRequestAttempts.find(topicName) != TopicCreateRequestAttempts.end()) {
-        return false;
+        return;
     }
     TopicCreateRequestAttempts.insert(topicName);
     InflyTopics++;
@@ -506,14 +505,7 @@ bool TKafkaOffsetFetchActor::CreateTopicIfNecessary(const TString& topicName,
         1,
         TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)));
     DependantActors.insert(actorId);
-    TModifiedTopicInfo createdTopicInfo;
-    createdTopicInfo.TopicName = originalTopicName;
-    createdTopicInfo.Entities.Consumers->insert(groupId);
-    for (int partitionIndex = 0; partitionIndex < topicToCreate.NumPartitions; partitionIndex++) {
-        createdTopicInfo.Entities.Partitions->insert(partitionIndex);
-    }
-    CreateTopicInfo[actorId] = createdTopicInfo;
-    return false;
+    CreateTopicActorIdToName[actorId] = originalTopicName;
 }
 
 TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() {
@@ -548,7 +540,7 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
 
 TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics TKafkaOffsetFetchActor::GetOffsetResponseForTopic(
                                     TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics const &requestTopic,
-                                    TString groupId) {
+                                    const TString& groupId) {
     TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics topic;
     TString topicName = requestTopic.Name.value();
     topic.Name = topicName;
@@ -601,7 +593,7 @@ NYdb::TParamsBuilder TKafkaOffsetFetchActor::BuildFetchAssignmentsParams(const s
 void TKafkaOffsetFetchActor::FillMapWithGroupRequests() {
     for (const auto& groupRequest : Message->Groups) {
         for (auto& topicRequest : groupRequest.Topics) {
-            GroupRequests[*topicRequest.Name] = TTopicGroupRequest{topicRequest, *groupRequest.GroupId};
+            GroupRequests[*topicRequest.Name].emplace_back(topicRequest, *groupRequest.GroupId);
         }
     }
 }

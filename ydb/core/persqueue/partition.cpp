@@ -1889,6 +1889,9 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     if (PartitionCountersLabeled->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Get() != timeLag) {
         haveChanges = true;
         PartitionCountersLabeled->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Set(timeLag);
+        if (DynamicCounters && WriteTimeLagMsByLastWrite) {
+            WriteTimeLagMsByLastWrite->Set(timeLag);
+        }
     }
 
     if (PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Get()) {

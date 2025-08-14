@@ -71,7 +71,8 @@ private:
         auto withRetry = ev->Get()->Status != Ydb::StatusIds::SCHEME_ERROR;
         auto& retry = Retries[tablePath];
         if (withRetry && retry < MaxRetries) {
-            TThis::Schedule(TDuration::Seconds(1 << retry), new NTransferPrivate::TEvRetryTable(tablePath));
+            size_t timeout = size_t(1000) << retry;
+            TThis::Schedule(TDuration::MilliSeconds(timeout + RandomNumber<size_t>(timeout >> 2)), new NTransferPrivate::TEvRetryTable(tablePath));
             ++retry;
             CookieMapping.erase(ev->Cookie);
             return;

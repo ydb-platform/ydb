@@ -2879,8 +2879,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
                 // Verify join result structure
                 auto leftElem = tuple.GetElement(0);
                 auto rightElem = tuple.GetElement(1);
-                TStringRef leftValue = leftElem.AsStringRef();
-                TStringRef rightValue = rightElem.AsStringRef();
+                TStringBuf leftValue = leftElem.AsStringRef();
+                TStringBuf rightValue = rightElem.AsStringRef();
                 UNIT_ASSERT(leftValue.size() > 0);
                 UNIT_ASSERT(rightValue.size() > 0);
             }
@@ -2952,8 +2952,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             // Verify join result: should be (left_value, right_value)
             auto leftVal = tuple.GetElement(0);
             auto rightVal = tuple.GetElement(1);
-            TStringRef leftStr = leftVal.AsStringRef();
-            TStringRef rightStr = rightVal.AsStringRef();
+            TStringBuf leftStr = leftVal.AsStringRef();
+            TStringBuf rightStr = rightVal.AsStringRef();
             UNIT_ASSERT(leftStr.StartsWith("L"));
             UNIT_ASSERT(rightStr.StartsWith("R"));
         }
@@ -3020,8 +3020,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             // Verify join result: should be (category_name, fact_data)
             auto categoryElem = tuple.GetElement(0);
             auto factElem = tuple.GetElement(1);
-            TStringRef categoryName = categoryElem.AsStringRef();
-            TStringRef factData = factElem.AsStringRef();
+            TStringBuf categoryName = categoryElem.AsStringRef();
+            TStringBuf factData = factElem.AsStringRef();
             
             UNIT_ASSERT(categoryName.StartsWith("Category_"));
             UNIT_ASSERT(factData.StartsWith("fact_"));
@@ -3095,8 +3095,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             
             auto leftElem = tuple.GetElement(0);
             auto rightElem = tuple.GetElement(1);
-            TStringRef leftValue = leftElem.AsStringRef();
-            TStringRef rightValue = rightElem.AsStringRef();
+            TStringBuf leftValue = leftElem.AsStringRef();
+            TStringBuf rightValue = rightElem.AsStringRef();
             
             UNIT_ASSERT(leftValue.StartsWith("Dim"));
             UNIT_ASSERT(rightValue.StartsWith("Fact"));
@@ -3173,8 +3173,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
             // Verify each result
             auto leftElem = tuple.GetElement(0);
             auto rightElem = tuple.GetElement(1);
-            TStringRef leftValue = leftElem.AsStringRef();
-            TStringRef rightValue = rightElem.AsStringRef();
+            TStringBuf leftValue = leftElem.AsStringRef();
+            TStringBuf rightValue = rightElem.AsStringRef();
             
             UNIT_ASSERT_VALUES_EQUAL(leftValue, "Key1");
             UNIT_ASSERT(rightValue.StartsWith("Value"));
@@ -3238,8 +3238,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinParallelTest) {
         while (iterator.Next(tuple)) {
             auto categoryElem = tuple.GetElement(0);
             auto transactionElem = tuple.GetElement(1);
-            TStringRef category = categoryElem.AsStringRef();
-            TStringRef transaction = transactionElem.AsStringRef();
+            TStringBuf category = categoryElem.AsStringRef();
+            TStringBuf transaction = transactionElem.AsStringRef();
             
             UNIT_ASSERT(transaction.StartsWith("Transaction"));
             

@@ -30,7 +30,7 @@ namespace NMiniKQL {
 
 namespace {
 
-const ui32 PartialJoinBatchSize = 5; // Number of tuples for one join batch
+const ui32 PartialJoinBatchSize = 100000; // Number of tuples for one join batch
 
 struct TColumnDataPackInfo {
     ui32 ColumnIdx = 0; // Column index in tuple
@@ -881,20 +881,22 @@ private:
                     return EFetchResult::One;
                 }
 
-
                 if (!*HaveMoreRightRows) {
                     *PartialJoinCompleted = false;
                     LeftPacker->TuplesBatchPacked = 0;
-                    LeftPacker->TablePtr->Clear();
+                    LeftPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                    JoinedTableBuild->Clear();
+                    JoinedTableBuild->ResetIterator();
                 }
+
 
                 if (!*HaveMoreLeftRows ) {
                     *PartialJoinCompleted = false;
                     RightPacker->TuplesBatchPacked = 0;
-                    RightPacker->TablePtr->Clear();
+                    RightPacker->TablePtr->Clear(); // Clear table content, ready to collect data for next batch
+                    JoinedTableBuild->Clear();
+                    JoinedTableBuild->ResetIterator();
                 }
-                JoinedTableBuild->Clear();
-                JoinedTableBuild->ResetIterator();
             }
 
             if (!*HaveMoreRightRows && !*HaveMoreLeftRows) {

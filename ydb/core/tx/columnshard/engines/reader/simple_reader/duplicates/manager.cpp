@@ -378,6 +378,7 @@ void TDuplicateManager::BuildFilterForSlice(const TPortionsSlice& slice, const s
         AFL_VERIFY(findBuilding->empty())("existing", findBuilding->front()->DebugString())("new", constructor->DebugString())(
             "key", mainMapInfo.DebugString());
         findBuilding->emplace_back(constructor);
+        Counters->OnFilterCacheHit();
         return;
     }
 
@@ -413,6 +414,7 @@ void TDuplicateManager::BuildFilterForSlice(const TPortionsSlice& slice, const s
     }
     NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
     TValidator::CheckNotNull(BuildingFilters.FindPtr(mainMapInfo))->emplace_back(constructor);
+    Counters->OnFilterCacheMiss();
 }
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr& ev) {
@@ -426,13 +428,8 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr
         LOCAL_LOG_TRACE("event", "extract_constructed_filter")("range", key.DebugString());
         auto findWaiting = BuildingFilters.find(key);
         AFL_VERIFY(findWaiting != BuildingFilters.end());
-        AFL_VERIFY(findWaiting->second.size());
-        if (findWaiting->second.size()) {
-            Counters->OnFilterCacheHit(findWaiting->second.size() - 1);
-            Counters->OnFilterCacheMiss();
-            for (const std::shared_ptr<TInternalFilterConstructor>& callback : findWaiting->second) {
-                callback->AddFilter(key, std::move(filter));
-            }
+        for (const std::shared_ptr<TInternalFilterConstructor>& callback : findWaiting->second) {
+            callback->AddFilter(key, std::move(filter));
         }
         BuildingFilters.erase(findWaiting);
 

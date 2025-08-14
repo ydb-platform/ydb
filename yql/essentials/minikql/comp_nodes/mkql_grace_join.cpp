@@ -719,7 +719,6 @@ private:
         const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
         NKikimr::NMiniKQL::EFetchResult resultRight;
 
-        Cerr << "MISHA left fetched " << FetchResultToString(resultLeft) << Endl;
         if (resultLeft == EFetchResult::One) {
             if (LeftPacker->TuplesPacked == 0) {
                 LeftPacker->StartTime = std::chrono::system_clock::now();
@@ -759,7 +758,6 @@ private:
             }
         } else {
             resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
-            Cerr << "MISHA right fetched " << FetchResultToString(resultRight) << Endl;
         }
 
         if (resultRight == EFetchResult::One) {
@@ -860,7 +858,6 @@ private:
     }
 
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        Cerr << "MISHA: DoCalcInMem" << Endl;
 
         while (!*JoinCompleted ) {
 
@@ -868,21 +865,8 @@ private:
 
                 while (JoinedTableReturn->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
                     const ui64 maxFetchBatchSize = 10000;
-                    std::cerr << std::format("GraceJoin[{}]: Loop condition - HaveMoreLeftRows={} HaveMoreRightRows={} LeftPacked={} RightPacked={} Total={} Limit={}\n",
-                            static_cast<const void*>(JoinedTableBuild.get()),
-                            *HaveMoreLeftRows,
-                            *HaveMoreRightRows,
-                            LeftPacker->TuplesBatchPacked,
-                            RightPacker->TuplesBatchPacked,
-                            LeftPacker->TuplesBatchPacked + RightPacker->TuplesBatchPacked,
-                            maxFetchBatchSize);
                     while ((*HaveMoreLeftRows || *HaveMoreRightRows) && 
                            (LeftPacker->TuplesBatchPacked + RightPacker->TuplesBatchPacked) < maxFetchBatchSize) {
-                        std::cerr << std::format("GraceJoin[{}]: Parallel fetch while returning results. LeftPacked={} RightPacked={} Limit={}\n",
-                            static_cast<const void*>(JoinedTableBuild.get()),
-                            LeftPacker->TuplesBatchPacked,
-                            RightPacker->TuplesBatchPacked, 
-                            maxFetchBatchSize);
                         auto fetchResult = FetchAndPackData(ctx, output);
                         if (fetchResult == EFetchResult::One) {
                             return fetchResult;

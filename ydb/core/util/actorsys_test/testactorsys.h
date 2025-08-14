@@ -113,6 +113,7 @@ class TTestActorSystem {
         TIntrusivePtr<TDomainsInfo> DomainsInfo;
         TFeatureFlags FeatureFlags;
         TIntrusivePtr<IMonotonicTimeProvider> MonotonicTimeProvider;
+        NKikimrConfig::TBridgeConfig BridgeConfig;
     };
 
     const ui32 MaxNodeId;
@@ -216,6 +217,10 @@ public:
         CurrentTestActorSystem = nullptr;
     }
 
+    NKikimrConfig::TBridgeConfig& GetAppDataBridgeConfig() {
+        return AppDataInfo.BridgeConfig;
+    }
+
     static TIntrusivePtr<ITimeProvider> CreateTimeProvider();
     static TIntrusivePtr<IMonotonicTimeProvider> CreateMonotonicTimeProvider();
 
@@ -232,6 +237,8 @@ public:
         appData->DomainsInfo = AppDataInfo.DomainsInfo;
         appData->MonotonicTimeProvider = AppDataInfo.MonotonicTimeProvider;
         appData->InitFeatureFlags(AppDataInfo.FeatureFlags);
+        appData->BridgeConfig.CopyFrom(AppDataInfo.BridgeConfig);
+        appData->BridgeModeEnabled = AppDataInfo.BridgeConfig.PilesSize() != 0;
 
         appData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
         appData->HiveConfig.SetMaxNodeUsageToKick(100);

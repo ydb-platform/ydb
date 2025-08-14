@@ -346,8 +346,7 @@ namespace NKikimr::NStorage {
 
             if (!res->HasCollectConfigs()) {
                 throw TExError() << "Incorrect CollectConfigs response";
-            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, TBridgePileId());
-                    r.ErrorReason) {
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
                 throw TExError() << "Unexpected config proposition";
@@ -558,8 +557,7 @@ namespace NKikimr::NStorage {
 
             if (Self->StorageConfig->GetGeneration()) {
                 throw TExRace() << "Storage config generation regenerated while collecting configs";
-            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID, TBridgePileId());
-                    r.ErrorReason) {
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
                 StartProposition(&r.ConfigToPropose.value());

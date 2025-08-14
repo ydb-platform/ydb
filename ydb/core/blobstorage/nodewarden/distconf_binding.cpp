@@ -718,6 +718,7 @@ namespace NKikimr::NStorage {
         std::vector<ui32> goingToUnbind;
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             if (BridgeInfo->GetPileForNode(nodeId) != BridgeInfo->SelfNodePile) {
+                SendEvent(nodeId, info, TEvNodeConfigReversePush::MakeRejected());
                 goingToUnbind.push_back(nodeId);
             }
         }

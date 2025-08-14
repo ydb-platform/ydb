@@ -38,22 +38,13 @@ namespace NKikimr::NStorage {
 
         if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
             Y_ABORT_UNLESS(!Self->Binding);
-
-            switch (auto& state = Self->RootState) {
-                case ERootState::INITIAL:
-                    state = ERootState::LOCAL_QUORUM_OP;
-                    break;
-
-                case ERootState::RELAX:
-                    state = ERootState::IN_PROGRESS;
-                    break;
-
-                case ERootState::LOCAL_QUORUM_OP:
-                case ERootState::IN_PROGRESS:
-                case ERootState::ERROR_TIMEOUT:
-                    Y_ABORT_S("unexpected RootState# " << state);
+            if (Self->RootState == ERootState::RELAX) {
+                Y_ABORT_UNLESS(Self->Scepter); // node must have scepter
+                Self->RootState = ERootState::IN_PROGRESS;
+            } else {
+                Y_ABORT_UNLESS(Self->RootState == ERootState::INITIAL);
+                Y_ABORT_UNLESS(!Self->Scepter); // this operation is invoked without a scepter
             }
-
             ExecuteQuery();
         } else {
             // TEvAbortQuery will come soon (must be already in mailbox)
@@ -176,19 +167,18 @@ namespace NKikimr::NStorage {
 
                 throw TExError() << "Unhandled request";
             },
-            [&](TCollectConfigsAndPropose& op) {
+            [&](TCollectConfigsAndPropose&) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection");
 
                 TEvScatter task;
                 task.MutableCollectConfigs();
-                IssueScatterTask(std::move(task), [this, singleBridgePileId = op.SingleBridgePileId](TEvGather *res) {
+                IssueScatterTask(std::move(task), [this](TEvGather *res) {
                     Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
                     Y_ABORT_UNLESS(!Self->CurrentProposition);
 
                     if (!res->HasCollectConfigs()) {
                         throw TExError() << "Incorrect CollectConfigs response";
-                    } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt,
-                            singleBridgePileId); r.ErrorReason) {
+                    } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                         throw TExError() << *r.ErrorReason;
                     } else if (r.ConfigToPropose) {
                         StartProposition(&r.ConfigToPropose.value(), /*acceptLocalQuorum=*/ true,
@@ -321,13 +311,6 @@ namespace NKikimr::NStorage {
     // Query termination and result delivery
 
     void TInvokeRequestHandlerActor::RunCommonChecks(bool requireScepter) {
-        Y_ABORT_UNLESS(
-            Self->RootState == ERootState::LOCAL_QUORUM_OP ||
-            Self->RootState == ERootState::IN_PROGRESS
-        );
-
-        Y_ABORT_UNLESS(!Self->CurrentProposition);
-
         if (!Self->StorageConfig) {
             throw TExError() << "No agreed StorageConfig";
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
@@ -335,6 +318,12 @@ namespace NKikimr::NStorage {
         } else if (requireScepter && !Self->Scepter) {
             throw TExError() << "No scepter";
         }
+
+        if (requireScepter) {
+            Y_ABORT_UNLESS(Self->RootState == ERootState::IN_PROGRESS);
+        }
+
+        Y_ABORT_UNLESS(!Self->CurrentProposition);
     }
 
     void TInvokeRequestHandlerActor::Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
@@ -368,8 +357,12 @@ namespace NKikimr::NStorage {
                 TActivationContext::Send(handle.release());
             },
             [&](TCollectConfigsAndPropose&) {
-                // this is just temporary failure
-                // TODO(alexvru): backoff?
+                if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+                    // reschedule operation
+                    TActivationContext::Schedule(TDuration::MilliSeconds(Self->CollectConfigsBackoffTimer.NextBackoffMs()),
+                        new IEventHandle(TEvPrivate::EvRetryCollectConfigsAndPropose, 0, Self->SelfId(), {}, nullptr,
+                            InvokePipelineGeneration));
+                }
             },
             [&](TProposeConfig&) {
                 Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
@@ -385,24 +378,15 @@ namespace NKikimr::NStorage {
 
         // reset root state in keeper actor if this query is still valid and there is no pending proposition
         if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition) {
-            switch (auto& state = Self->RootState) {
-                case ERootState::IN_PROGRESS:
-                    state = ERootState::RELAX;
-                    break;
-
-                case ERootState::LOCAL_QUORUM_OP:
-                    state = Self->Scepter ? ERootState::RELAX : ERootState::INITIAL;
-                    break;
-
-                case ERootState::INITIAL:
-                case ERootState::ERROR_TIMEOUT:
-                case ERootState::RELAX:
-                    Y_ABORT_S("unexpected RootState# " << state);
+            if (Self->RootState == ERootState::IN_PROGRESS) {
+                Self->RootState = ERootState::RELAX;
+            } else {
+                Y_ABORT_UNLESS(Self->RootState == ERootState::INITIAL); // this operation has been executed without a scepter
             }
         }
 
         if (switchToError) {
-            InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, std::move(*switchToError), true);
+            InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, std::move(*switchToError));
         }
     }
 

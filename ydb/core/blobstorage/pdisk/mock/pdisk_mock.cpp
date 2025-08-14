@@ -1052,17 +1052,23 @@ public:
         Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::ERROR, std::nullopt), 0, ev->Cookie);
     }
 
+    std::optional<ui64> GetPDiskGuid() const {
+        return Impl.PDiskGuid
+            ? std::make_optional(Impl.PDiskGuid)
+            : std::nullopt;
+    }
+
     void Handle(NPDisk::TEvReadMetadata::TPtr& ev) {
         if (Impl.Metadata) {
-            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(*Impl.Metadata), Impl.PDiskGuid), 0, ev->Cookie);
+            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(*Impl.Metadata), GetPDiskGuid()), 0, ev->Cookie);
         } else {
-            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(NPDisk::EPDiskMetadataOutcome::NO_METADATA, Impl.PDiskGuid), 0, ev->Cookie);
+            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(NPDisk::EPDiskMetadataOutcome::NO_METADATA, GetPDiskGuid()), 0, ev->Cookie);
         }
     }
 
     void Handle(NPDisk::TEvWriteMetadata::TPtr& ev) {
         Impl.Metadata.emplace(std::move(ev->Get()->Metadata));
-        Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::OK, Impl.PDiskGuid), 0, ev->Cookie);
+        Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::OK, GetPDiskGuid()), 0, ev->Cookie);
     }
 
     void Handle(TEvMoveDrive::TPtr& ev) {
@@ -1109,6 +1115,8 @@ public:
         cFunc(EvBecomeError, HandleMoveToErrorState);
 
         cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
+
+        cFunc(TEvents::TSystem::Poison, PassAway);
     )
 
     STRICT_STFUNC(StateError,
@@ -1134,6 +1142,8 @@ public:
         cFunc(EvBecomeNormal, HandleMoveToNormalState);
 
         cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
+
+        cFunc(TEvents::TSystem::Poison, PassAway);
     )
 };
 

@@ -26,13 +26,13 @@ namespace NKikimr::NSchemeShard::NOlap {
 
     inline std::expected<void, TString> CheckColumnType(const ::NKikimrSchemeOp::TOlapColumnDescription& column, const TAppData* appData) {
 
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("iurii", "debug") ("type", column.GetType())("flag", !appData->FeatureFlags.GetEnableTableDatetime64())("id", column.GetTypeId());
         if ((column.GetType() == "Datetime64" || column.GetType() ==  "Timestamp64" || column.GetType() == "Interval64")
             && !appData->FeatureFlags.GetEnableTableDatetime64()) {
             return std::unexpected(std::format(
                 "Type '{}' specified for column '{}', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)",
                 column.GetType().data(), column.GetName().data()));
         }
+
         if (column.GetType() == "Decimal"
             && !appData->FeatureFlags.GetEnableParameterizedDecimal()){
             return std::unexpected(std::format(
@@ -46,7 +46,6 @@ namespace NKikimr::NSchemeShard::NOlap {
     inline std::expected<void, TString> CheckColumns(const T& columns, const TAppData* appData) {
         std::expected<void, TString> init{};
 
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("iurii", "debug") ("size", columns.size());
         return std::accumulate(
             columns.begin(),
             columns.end(),

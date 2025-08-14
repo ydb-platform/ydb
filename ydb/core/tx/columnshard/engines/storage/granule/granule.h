@@ -401,14 +401,12 @@ public:
     }
 
     std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion, const bool committedOnly = true) const {
-        {
-            auto it = Portions.find(portion);
-            if (it != Portions.end()) {
-                return it->second;
-            }
-            if (committedOnly) {
-                return nullptr;
-            }
+        if (auto it = Portions.find(portion); it != Portions.end()) {
+            return it->second;
+        }
+
+        if (committedOnly) {
+            return nullptr;
         }
 
         auto it = InsertedPortionsById.find(portion);

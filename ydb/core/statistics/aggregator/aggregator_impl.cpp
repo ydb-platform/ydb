@@ -14,13 +14,10 @@
 
 namespace NKikimr::NStat {
 
-TStatisticsAggregator::TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info, bool forTests)
+TStatisticsAggregator::TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
-    PropagateInterval = forTests ? TDuration::Seconds(5) : TDuration::Minutes(3);
-    PropagateTimeout = forTests ? TDuration::Seconds(3) : TDuration::Minutes(2);
-
     auto seed = std::random_device{}();
     RandomGenerator.seed(seed);
 
@@ -43,6 +40,15 @@ void TStatisticsAggregator::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const 
 
 void TStatisticsAggregator::OnActivateExecutor(const TActorContext& ctx) {
     SA_LOG_I("[" << TabletID() << "] OnActivateExecutor");
+
+    auto appData = AppData(ctx);
+    Y_ABORT_UNLESS(appData);
+    PropagateIntervalDedicated = TDuration::Seconds(
+        appData->StatisticsConfig.GetBaseStatsPropagateIntervalSecondsDedicated());
+    PropagateIntervalServerless = TDuration::Seconds(
+        appData->StatisticsConfig.GetBaseStatsPropagateIntervalSecondsServerless());
+    // Start with the dedicated interval, switch to the serverless one if needed.
+    PropagateInterval = PropagateIntervalDedicated;
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
@@ -231,6 +237,11 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
 void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
     SA_LOG_T("[" << TabletID() << "] EvPropagate");
 
+    if (BaseStatistics.size() > 1) {
+        // We are in a shared database, switch to a bigger propagation interval.
+        PropagateInterval = PropagateIntervalServerless;
+    }
+
     if (EnableStatistics) {
         PropagateStatistics();
     }
@@ -239,7 +250,7 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev) {
-    SA_LOG_D("[" << TabletID() << "] EvPropagateStatisticsResponse cookie: " << ev->Cookie);
+    SA_LOG_D("[" << TabletID() << "] EvPropagateStatisticsResponse, cookie: " << ev->Cookie);
 
     if (!PropagationInFlight) {
         return;
@@ -350,7 +361,8 @@ void TStatisticsAggregator::PropagateStatistics() {
         ssIds.push_back(ssId);
     }
 
-    Schedule(PropagateTimeout, new TEvPrivate::TEvPropagateTimeout);
+    auto timeout = PropagateInterval * 3 / 5;
+    Schedule(timeout, new TEvPrivate::TEvPropagateTimeout);
 
     ++CurPropagationSeq;
     PropagationInFlight = true;

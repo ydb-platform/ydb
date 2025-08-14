@@ -90,11 +90,11 @@ ydb hard nofile 10000
 
 Where `ydb` is the username under which `ydbd` runs.
 
-After changing the file, you need to reboot the system or re-login to apply the new limits.
+After changing the file, you need to reboot the system or log in again to apply the new limits.
 
 {% note info %}
 
-For more information about spilling configuration and its relationship with file descriptors, see the [Spilling Configuration](../../../reference/configuration/table_service_config.html#file-system-requirements) section.
+For more information about spilling configuration and its relationship with file descriptors, see the [Spilling Configuration](../../../reference/configuration/table_service_config.md#file-system-requirements) section.
 
 {% endnote %}
 

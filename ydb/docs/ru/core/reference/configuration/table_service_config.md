@@ -250,6 +250,6 @@ table_service_config:
 - [Концепция спиллинга](../../concepts/spilling.md)
 - [Архитектура Spilling Service](../../contributor/spilling-service.md)
 - [Устранение неполадок спиллинга](../../troubleshooting/spilling/index.md)
-- [Конфигурация контроллера памяти](index.html#memory-controller)
+- [Конфигурация контроллера памяти](index.md#memory-controller)
 - [Мониторинг {{ ydb-short-name }}](../../devops/observability/monitoring.md)
 - [Диагностика производительности](../../troubleshooting/performance/index.md)

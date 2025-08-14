@@ -13,6 +13,6 @@
 
 - [Конфигурация спиллинга](../../reference/configuration/table_service_config.md)
 - [Концепция спиллинга](../../concepts/spilling.md)
-- [Конфигурация контроллера памяти](../../reference/configuration/index.html#memory-controller)
+- [Конфигурация контроллера памяти](../../reference/configuration/index.md#memory-controller)
 - [Мониторинг {{ ydb-short-name }}](../../devops/observability/monitoring.md)
 - [Диагностика производительности](../performance/index.md)

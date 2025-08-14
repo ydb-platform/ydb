@@ -232,7 +232,7 @@ public:
     }
 
     static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, int colNumber = 0) {
-        Y_DEBUG_ABORT_UNLESS(colNumber < key.Size());
+        Y_DEBUG_ABORT_UNLESS(colNumber < key.GetColumnsCount());
         auto& column = key.Column(colNumber);
         auto res = column.GetScalar(key.GetPosition());
         Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());

@@ -148,7 +148,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     }
     Self->SetupCompaction(pathIds);
     TDuration completeTime = TInstant::Now() - startCompleteTime;
-    LWPROBE(TTxBlobsWritingFinished, Self->TabletID(), TransactionTime, completeTime, TInstant::Now() - StartTime, TDuration::Zero());
+    LWPROBE(TxBlobsWritingFinished, Self->TabletID(), TransactionTime, completeTime, TInstant::Now() - StartTime, TDuration::Zero());
 }
 
 TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus /* writeStatus */,

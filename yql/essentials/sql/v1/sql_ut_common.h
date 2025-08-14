@@ -2170,6 +2170,14 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(res.Root);
     }
 
+    Y_UNIT_TEST(InsertIntoNamedExpr) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            $target = "target";
+            INSERT INTO plato.$target (x) VALUES ((1));
+        )sql");
+        UNIT_ASSERT(res.Root);
+    }
+
     Y_UNIT_TEST(WarnMissingIsBeforeNotNull) {
         NYql::TAstParseResult res = SqlToYql("select 1 NOT NULL");
         UNIT_ASSERT(res.Root);
@@ -4986,6 +4994,14 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropTableNamedNode) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            $x = "y";
+            DROP TABLE plato.$x;
+        )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
     Y_UNIT_TEST(TooManyErrors) {

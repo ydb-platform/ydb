@@ -90,7 +90,11 @@ namespace NSQLComplete {
                 return TFolderEntry::Table;
             }
 
-            ythrow yexception() << "Unexpected type: " << type;
+            if (!type.IsString()) {
+                ythrow yexception() << "Unexpected type: " << type;
+            }
+
+            return type.GetStringSafe();
         }
 
     } // namespace

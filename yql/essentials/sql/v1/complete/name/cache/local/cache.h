@@ -60,7 +60,7 @@ namespace NSQLComplete {
                 with_lock (Mutex_) {
                     if (auto it = Origin_.Find(key); it != Origin_.End()) {
                         entry.Value = it->Value;
-                        entry.IsExpired = (it->Deadline < Clock_->Now());
+                        entry.IsExpired = (it->Deadline <= Clock_->Now());
                     }
                 }
 

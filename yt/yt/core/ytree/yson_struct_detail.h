@@ -92,7 +92,7 @@ struct IYsonStructParameter
 
     virtual void Save(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
 
-    virtual void PostprocessParameter(const TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const = 0;
+    virtual void PostprocessParameter(TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const = 0;
 
     virtual void SetDefaultsInitialized(TYsonStructBase* self, bool dontSetLiteMembers = false) = 0;
 
@@ -229,7 +229,8 @@ private:
 template <class TValue>
 struct IYsonFieldAccessor
 {
-    virtual TValue& GetValue(const TYsonStructBase* source) = 0;
+    virtual TValue& GetValue(TYsonStructBase* source) = 0;
+    virtual const TValue& GetValue(const TYsonStructBase* source) = 0;
     virtual bool HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const = 0;
     virtual ~IYsonFieldAccessor() = default;
 };
@@ -243,7 +244,8 @@ class TYsonFieldAccessor
 public:
     explicit TYsonFieldAccessor(TYsonStructField<TStruct, TValue> field);
     bool HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const override;
-    TValue& GetValue(const TYsonStructBase* source) override;
+    TValue& GetValue(TYsonStructBase* source) override;
+    const TValue& GetValue(const TYsonStructBase* source) override;
 
 private:
     TYsonStructField<TStruct, TValue> Field_;
@@ -258,7 +260,8 @@ class TUniversalYsonParameterAccessor
 public:
     explicit TUniversalYsonParameterAccessor(std::function<TValue&(TStruct*)> field);
     bool HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const override;
-    TValue& GetValue(const TYsonStructBase* source) override;
+    TValue& GetValue(TYsonStructBase* source) override;
+    const TValue& GetValue(const TYsonStructBase* source) override;
 
 private:
     std::function<TValue&(TStruct*)> Accessor_;
@@ -295,7 +298,7 @@ public:
         const TLoadParameterOptions& options,
         const std::function<void()>& validate) override;
 
-    void PostprocessParameter(const TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const override;
+    void PostprocessParameter(TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const override;
     void SetDefaultsInitialized(TYsonStructBase* self, bool dontSetLiteMembers = false) override;
     void Save(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
     bool CanOmitValue(const TYsonStructBase* self) const override;

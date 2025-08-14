@@ -982,7 +982,7 @@ table_hint:
 ;
 
 object_ref: (cluster_expr DOT)? id_or_at;
-simple_table_ref_core: object_ref | COMMAT? bind_parameter;
+simple_table_ref_core: object_ref | (cluster_expr DOT)? COMMAT? bind_parameter;
 simple_table_ref: simple_table_ref_core table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 

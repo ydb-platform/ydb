@@ -1,34 +1,45 @@
-# {{ ydb-short-name }} cluster configuration
+# {{ ydb-short-name }} Cluster Configuration
 
-The cluster configuration is specified in the YAML file passed in the `--yaml-config` parameter when the cluster nodes are run.
+The cluster configuration is specified in the YAML file passed in the `--yaml-config` parameter when the cluster nodes are run. This article provides an overview of the main configuration sections and links to detailed documentation for each section.
 
-This article describes the main groups of configurable parameters in this file.
+Each configuration section serves a specific purpose in defining how the {{ ydb-short-name }} cluster operates, from hardware resource allocation to security settings and feature flags. The configuration is organized into logical groups that correspond to different aspects of cluster management and operation.
 
-## host_configs: Typical host configurations {#host-configs}
+## Configuration Sections
 
-A {{ ydb-short-name }} cluster consists of multiple nodes, and one or more typical server configurations are usually used for their deployment. To avoid repeating its description for each node, there is a `host_configs` section in the configuration file that lists the used configurations and assigned IDs.
+The following top-level configuration sections are available, listed in alphabetical order:
 
-### Syntax
+#|
+|| **Section** | **Required** | **Description** ||
+|| [{#T}](actor_system_config.md) | Yes | CPU resource allocation across actor system pools ||
+|| [{#T}](auth_config.md) | No | Authentication and authorization settings ||
+|| [{#T}](blob_storage_config.md) | No | Static cluster group configuration for system tablets ||
+|| [{#T}](client_certificate_authorization.md) | No | Client certificate authentication ||
+|| [{#T}](domains_config.md) | No | Cluster domain configuration including Blob Storage and State Storage ||
+|| [{#T}](feature_flags.md) | No | Feature flags to enable or disable specific {{ ydb-short-name }} features ||
+|| [{#T}](healthcheck_config.md) | No | Health check service thresholds and timeout settings ||
+|| [{#T}](hive.md) | No | Hive component configuration for tablet management ||
+|| [{#T}](host_configs.md) | No | Typical host configurations for cluster nodes ||
+|| [{#T}](hosts.md) | Yes | Static cluster nodes configuration ||
+|| [{#T}](log_config.md) | No | Logging configuration and parameters ||
+|| [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components ||
+|| [{#T}](node_broker_config.md) | No | Stable node names configuration ||
+|| [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption ||
+|| [{#T}](security_config.md) | No | Security configuration settings ||
+|| [{#T}](tls.md) | No | TLS configuration for secure connections ||
+|#
 
-```yaml
-host_configs:
-- host_config_id: 1
-  drive:
-  - path: <path_to_device>
-    type: <type>
-  - path: ...
-- host_config_id: 2
-  ...
-```
+## Practical Guidelines
 
-The `host_config_id` attribute specifies a numeric configuration ID. The `drive` attribute contains a collection of descriptions of connected drives. Each description consists of two attributes:
+While this documentation section focuses on complete reference documentation for available settings, practical recommendations on what to tune and when can be found in the following places:
 
-- `path`: Path to the mounted block device, for example, `/dev/disk/by-partlabel/ydb_disk_ssd_01`
-- `type`: Type of the device's physical media: `ssd`, `nvme`, or `rot` (rotational - HDD)
+- As part of the initial {{ ydb-short-name }} cluster deployment:
 
-### Examples
+    - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
+    - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
+    - [Manual](../../devops/deployment-options/manual/initial-deployment.md)
 
-One configuration with ID 1 and one SSD disk accessible via `/dev/disk/by-partlabel/ydb_disk_ssd_01`:
+- As part of [troubleshooting](../../troubleshooting/index.md)
+- As part of [security hardening](../../security/index.md)
 
 ```yaml
 host_configs:

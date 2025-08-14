@@ -18,7 +18,7 @@ This article describes the key differences between these two approaches.
 
 [Configuration V1](../configuration-management/configuration-v1/index.md) of a {{ ydb-short-name }} cluster consists of two parts:
 
-* **Static configuration:** manages key node parameters, including [State Storage](../../reference/configuration/index.md#domains-state) and [static group](../../reference/configuration/index.md#blob_storage_config) configuration (`domains_config` and `blob_storage_config` sections respectively). Requires manual placement of the same configuration file on each cluster node. The path to the configuration is specified when starting the node using the `--yaml-config` option.
+* **Static configuration:** manages key node parameters, including [State Storage](../../reference/configuration/domains_config.md#domains-state) and [static group](../../reference/configuration/blob_storage_config.md#blob_storage_config) configuration (`domains_config` and `blob_storage_config` sections respectively). Requires manual placement of the same configuration file on each cluster node. The path to the configuration is specified when starting the node using the `--yaml-config` option.
 * **Dynamic configuration:** manages other cluster parameters. Loaded centrally using the `ydb admin config replace` command and distributed to database nodes.
 
 If your cluster is running on configuration V1, it is recommended to perform [migration to configuration V2](migration/migration-to-v2.md).

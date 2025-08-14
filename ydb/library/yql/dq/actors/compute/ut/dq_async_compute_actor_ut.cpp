@@ -556,9 +556,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
         LOG_D("Got " << ev->Get()->Record.DebugString());
         TDqSerializedBatch sbatch;
-        sbatch.Proto = ev->Get()->Record.GetChannelData().GetData();
+        auto& channelData = *ev->Get()->Record.MutableChannelData();
+        sbatch.Proto = std::move(*channelData.MutableData());
         dqInputChannel->Push(std::move(sbatch));
-        if (ev->Get()->Record.GetChannelData().GetFinished()) {
+        bool finished = channelData.GetFinished();
+        if (finished) {
             dqInputChannel->Finish();
         }
         TUnboxedValueBatch batch;
@@ -604,8 +606,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 }
             }
         }
-        if (ev->Get()->Record.GetChannelData().HasWatermark()) {
-            auto watermark = TInstant::MicroSeconds(ev->Get()->Record.GetChannelData().GetWatermark().GetTimestampUs());
+        if (channelData.HasWatermark()) {
+            auto watermark = TInstant::MicroSeconds(channelData.GetWatermark().GetTimestampUs());
             cbWatermark(watermark);
         }
         if (dqInputChannel->IsFinished()) {
@@ -613,10 +615,10 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
         if (!ev->Get()->Record.GetNoAck()) {
             auto ack = new TEvDqCompute::TEvChannelDataAck;
-            ack->Record.SetChannelId(ev->Get()->Record.GetChannelData().GetChannelId());
+            ack->Record.SetChannelId(channelData.GetChannelId());
             ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
             ack->Record.SetFreeSpace(3123); // XXX simulates limited channel size
-            ack->Record.SetFinish(ev->Get()->Record.GetChannelData().GetFinished());
+            ack->Record.SetFinish(channelData.GetFinished());
 #if 1
             ActorSystem.Send(ev->Sender, ev->Recipient, ack);
 #else // this alternative hits bug in test framework (?)

@@ -1,25 +1,5 @@
 # REPLACE INTO
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% note warning %}
-
-Supported only for [row-oriented](../../../concepts/datamodel/table.md#row-oriented-tables) tables. Support for [column-oriented](../../../concepts/datamodel/table.md#column-oriented-tables) tables is currently under development.
-
-{% if oss %}
-
-Available methods for loading data into columnar tables:
-
-* [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/export-import/import-file.md)
-* [Bulk data upsert](../../../recipes/ydb-sdk/bulk-upsert.md)
-* [Yandex Data Transfer](https://yandex.cloud/ru/services/data-transfer)
-
-{% endif %}
-
-{% endnote %}
-
-{% endif %}
-
 Saves data to a table, overwriting the rows based on the primary key.{% if feature_mapreduce %}  The table is searched by name in the database specified by the [USE](use.md) operator.{% endif %} If the given primary key is missing, a new row is added to the table. If the given `PRIMARY_KEY` exists, the row is overwritten. The values of columns not involved in the operation are replaced by their default values.
 
 {% note info %}

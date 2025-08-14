@@ -1,26 +1,6 @@
 # INSERT INTO
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% note warning %}
-
-Supported only for [row-oriented](../../../concepts/datamodel/table.md#row-oriented-tables) tables. Support for [column-oriented](../../../concepts/datamodel/table.md#column-oriented-tables) tables is currently under development.
-
-{% if oss %}
-
-Available methods for loading data into columnar tables:
-
-* [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/export-import/import-file.md)
-* [Bulk data upsert](../../../recipes/ydb-sdk/bulk-upsert.md)
-* [Yandex Data Transfer](https://yandex.cloud/ru/services/data-transfer)
-
-{% endif %}
-
-{% endnote %}
-
-{% endif %}
-
-{% if select_command != "SELECT STREAM" %} Adds rows to the table. {% if feature_bulk_tables %} If the target table already exists and is not sorted, the operation `INSERT INTO` adds rows at the end of the table. In the case of a sorted table, YQL tries to preserve sorting by running a sorted merge. {% endif %}{% if feature_map_tables %} If you try to insert a row into a table with an existing primary key value, the operation fails with the `PRECONDITION_FAILED` error code and the `Operation aborted due to constraint violation: insert_pk` message returned.{% endif %}
+{% if select_command != "SELECT STREAM" %} Adds rows to the table.{% if feature_bulk_tables %} If the target table already exists and is not sorted, the operation `INSERT INTO` adds rows at the end of the table. In the case of a sorted table, YQL tries to preserve sorting by running a sorted merge. {% endif %}{% if feature_map_tables %} If you try to insert a row into a table with an existing primary key value, the operation fails with the `PRECONDITION_FAILED` error code and the `Operation aborted due to constraint violation: insert_pk` message returned.{% endif %}
 
 {% if feature_mapreduce %}The table is searched by name in the database specified by the [USE](use.md) operator.{% endif %}
 

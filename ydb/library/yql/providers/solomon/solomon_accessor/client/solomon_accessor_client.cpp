@@ -459,6 +459,8 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("names");
 
+        builder.AddUrlParam("projectId", 
+            Settings.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING ? Settings.GetCluster() : Settings.GetProject());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("from", from.ToString());
@@ -476,6 +478,8 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
+        builder.AddUrlParam("projectId", 
+            Settings.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING ? Settings.GetCluster() : Settings.GetProject());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("from", from.ToString());
@@ -495,6 +499,9 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("data");
+
+        builder.AddUrlParam("projectId", 
+            Settings.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING ? Settings.GetCluster() : Settings.GetProject());
 
         return builder.Build();
     }
@@ -532,7 +539,6 @@ private:
         }
         *request.mutable_from_time() = NProtoInterop::CastToProto(from);
         *request.mutable_to_time() = NProtoInterop::CastToProto(to);
-        *request.mutable_force_replica() = DefaultReplica;
 
         if (Settings.GetDownsampling().GetDisabled()) {
             request.mutable_downsampling()->set_disabled(true);

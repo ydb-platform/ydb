@@ -223,8 +223,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Counters.MemLimitBytes->Set(MemLimitBytes);
 
         ActualizeCacheSizeLimit();
-
-        DoGC();
     }
 
     void Registered(TActorSystem *sys, const TActorId &owner) {
@@ -283,8 +281,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             TryMoveToTryKeepInMemoryCache(collection, std::move(msg->PageCollection), ev->Sender);
             break;
         }
-
-        DoGC();
     }
 
     void Handle(NSharedCache::TEvSaveCompactedPages::TPtr &ev, const TActorContext& ctx) {
@@ -310,8 +306,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             BodyProvided(collection, page.Get());
             Evict(Cache.Touch(page.Get()));
         }
-
-        DoGC();
     }
 
     void Handle(NSharedCache::TEvRequest::TPtr &ev, const TActorContext& ctx) {
@@ -469,8 +463,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 << " from cache " << msg->Pages);
             SendResult(*request);
         }
-
-        DoGC();
     }
 
     void RequestFromQueue(TRequestQueue &queue) {
@@ -639,8 +631,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (droppedPages) {
             SendDroppedPages(ev->Sender, std::move(droppedPages));
         }
-
-        DoGC();
     }
 
     void Handle(NSharedCache::TEvUnregister::TPtr &ev, const TActorContext& ctx) {
@@ -670,8 +660,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Remove owner " << ev->Sender);
         Owners.erase(ownerIt);
         Counters.Owners->Dec();
-
-        DoGC();
     }
 
     void Handle(NSharedCache::TEvDetach::TPtr &ev, const TActorContext& ctx) {
@@ -705,8 +693,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TryMoveToRegularCache(*collection, ev->Sender);
 
         TryDropExpiredCollection(*collection);
-
-        DoGC();
     }
 
     void Handle(NBlockIO::TEvData::TPtr &ev, const TActorContext& ctx) {
@@ -736,7 +722,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             if (queue) {
                 RequestFromQueue(*queue);
             }
-            DoGC();
             return;
         }
 
@@ -759,8 +744,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (queue) {
             RequestFromQueue(*queue);
         }
-
-        DoGC();
     }
 
     TPage* EnsurePage(const NPageCollection::IPageCollection& pageCollection, TCollection& collection, const TPageId pageId, ECacheMode initialMode) {
@@ -1191,8 +1174,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
         ScanRequests.Limit = Config.GetScanQueueInFlyLimit();
-
-        DoGC();
     }
 
     inline ui64 GetStatAllBytes() const {
@@ -1282,6 +1263,8 @@ public:
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
         }
+
+        DoGC();
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

@@ -6,14 +6,13 @@
 
 Проверьте конфигурацию сервиса спиллинга:
 
-- Убедитесь, что `table_service_config.spilling_service_config.local_file_config.enable` установлен в `true`.
-- Просмотрите логи {{ ydb-short-name }} на наличие ошибок запуска сервиса спиллинга.
+- Убедитесь, что [`table_service_config.spilling_service_config.local_file_config.enable`](../../../reference/configuration/table_service_config.md#local-file-config-enable) установлен в `true`.
 
 ## Рекомендации
 
 Для включения спиллинга:
 
-1. Установите `table_service_config.spilling_service_config.local_file_config.enable: true` в вашей конфигурации.
+1. Установите [`table_service_config.spilling_service_config.local_file_config.enable`](../../../reference/configuration/table_service_config.md#local-file-config-enable): `true` в вашей конфигурации.
 
 {% note info %}
 

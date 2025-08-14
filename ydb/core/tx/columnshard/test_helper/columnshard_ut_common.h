@@ -14,6 +14,7 @@
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 
+#include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
 
@@ -537,6 +538,13 @@ public:
                 if constexpr (std::is_same<TData, NYdb::TDecimalValue>::value) {
                     if constexpr (arrow::is_decimal128_type<T>::value) {
                         Y_ABORT_UNLESS(typedBuilder.Append(arrow::Decimal128(data.Hi_, data.Low_)).ok());
+                        return true;
+                    }
+                }
+                if constexpr (std::is_same<TData, NYdb::TUuidValue>::value) {
+                    if constexpr (arrow::is_fixed_size_binary_type<T>::value) {
+                        Y_ABORT_UNLESS(typedBuilder.byte_width() == NUuid::UUID_LEN);
+                        Y_ABORT_UNLESS(typedBuilder.Append(data.Buf_.Bytes).ok());
                         return true;
                     }
                 }

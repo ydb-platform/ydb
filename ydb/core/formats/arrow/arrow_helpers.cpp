@@ -53,6 +53,14 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>(const
     return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
+template <>
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>(const NScheme::TTypeInfo& typeInfo) {
+    if (typeInfo.GetTypeId() == NScheme::NTypeIds::Uuid) {
+        return arrow::fixed_size_binary(16);
+    }
+    return std::shared_ptr<arrow::DataType>();
+}
+
 arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo typeInfo) {
     std::shared_ptr<arrow::DataType> result;
     bool success = SwitchYqlTypeToArrowType(typeInfo, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
@@ -60,7 +68,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo 
         result = CreateEmptyArrowImpl<TType>(typeInfo);
         return true;
     });
-    if (success) {
+    if (success && result) {
         return result;
     }
 
@@ -79,6 +87,8 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
         case NScheme::NTypeIds::Date:
         case NScheme::NTypeIds::Date32:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+        case NScheme::NTypeIds::Uuid:
+            return std::make_shared<arrow::StringType>();
         default:
             return GetArrowType(typeId);
     }

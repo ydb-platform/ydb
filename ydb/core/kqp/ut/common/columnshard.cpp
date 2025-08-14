@@ -5,6 +5,7 @@
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
+#include <yql/essentials/types/uuid/uuid.h>
 
 extern "C" {
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
@@ -391,6 +392,8 @@ namespace NKqp {
             return arrow::field(name, arrow::binary(), nullable);
         case NScheme::NTypeIds::Decimal:
             return arrow::field(name, arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale()), nullable);
+        case NScheme::NTypeIds::Uuid:
+            return arrow::field(name, arrow::fixed_size_binary(NUuid::UUID_LEN), nullable);
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:

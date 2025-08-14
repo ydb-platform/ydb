@@ -10,6 +10,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/pack.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
@@ -286,6 +287,23 @@ public:
     }
 };
 
+template <>
+class TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TUuid> {
+public:
+    using TArrayType = arrow::FixedSizeBinaryArray;
+    static void Validate(const arrow::FixedSizeBinaryArray& array) {
+        YQL_ENSURE(array.byte_width() == NUuid::UUID_LEN);
+    }
+
+    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::FixedSizeBinaryArray& array, const ui32 rowIndex) {
+        auto data = array.GetView(rowIndex);
+        return MakeString(NUdf::TStringRef(data.data(), data.size()));
+    }
+    static TFixedWidthStatAccumulator BuildStatAccumulator(const NScheme::TTypeInfo& typeInfo) {
+        return TFixedWidthStatAccumulator(typeInfo);
+    }
+};
+
 }
 
 template <class TElementAccessor, class TAccessor>
@@ -429,6 +447,10 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
         case NTypeIds::Decimal:
         {
             return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Decimal128Array, NYql::NDecimal::TInt128>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+        }
+        case NTypeIds::Uuid:
+        {
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TUuid>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::PairUi64Ui64:
         case NTypeIds::ActorId:

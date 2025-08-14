@@ -75,7 +75,7 @@ public:
             }
         }
 
-        if constexpr(std::is_same_v<T, NYql::NDecimal::TInt128>) {
+        if constexpr(std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, NYql::NUuid::TUuid>) {
             auto& fixedScalar = checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
             T value; memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
             return static_cast<TDerived*>(this)->MakeBlockItem(value);
@@ -126,7 +126,7 @@ public:
             out.PushChar(1);
         }
 
-        if constexpr(std::is_same_v<T, NYql::NDecimal::TInt128>) {
+        if constexpr(std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, NYql::NUuid::TUuid>) {
             auto& fixedScalar = arrow::internal::checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
             T value; memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
             out.PushNumber(value);

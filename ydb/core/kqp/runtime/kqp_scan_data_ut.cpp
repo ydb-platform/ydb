@@ -2,6 +2,7 @@
 
 #include <yql/essentials/public/udf/udf_ut_helpers.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NMiniKQL {
@@ -44,6 +45,7 @@ struct TDataRow {
             {27, TTypeInfo(NPg::TypeDescFromPgTypeName("pgint8")), ""},
             {28, TTypeInfo(NPg::TypeDescFromPgTypeName("pgfloat4")), ""},
             {29, TTypeInfo(NPg::TypeDescFromPgTypeName("pgfloat8")), ""},
+            {30, TTypeInfo(NTypeIds::Uuid), ""},
         };
     }
 
@@ -77,6 +79,7 @@ struct TDataRow {
     i64 PgInt8;
     float PgFloat4;
     double PgFloat8;
+    NYql::NUuid::TUuid Uuid;
 
     static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
         std::vector<std::shared_ptr<arrow::Field>> fields = {
@@ -110,6 +113,7 @@ struct TDataRow {
             arrow::field("pgint8", arrow::int64()),
             arrow::field("pgfloat4", arrow::float32()),
             arrow::field("pgfloat8", arrow::float64()),
+            arrow::field("uuid", arrow::fixed_size_binary(16)),
         };
 
         return std::make_shared<arrow::Schema>(std::move(fields));
@@ -195,6 +199,9 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
             } else if (colName == "interval64") {
                 auto result = batchBuilder->GetFieldAs<arrow::Date64Builder>(colIndex++)->Append(row.Interval64);
                 UNIT_ASSERT(result.ok());
+            } else if (colName == "uuid") {
+                auto result = batchBuilder->GetFieldAs<arrow::FixedSizeBinaryBuilder>(colIndex++)->Append(row.Uuid.Data);
+                UNIT_ASSERT(result.ok());
             } else if (colName == "dec") {
                 auto result = batchBuilder->GetFieldAs<arrow::Decimal128Builder>(colIndex++)->Append(reinterpret_cast<const char*>(&row.Decimal));
                 UNIT_ASSERT(result.ok());
@@ -225,13 +232,19 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
     return batch;
 }
 
+NYql::NUuid::TUuid MakeUuid(TStringBuf stringUuid) {
+    NYql::NUuid::TUuid uuid;
+    Y_ABORT_UNLESS(NKikimr::NUuid::ParseUuidToArray(stringUuid, reinterpret_cast<ui16*>(uuid.Data), false));
+    return uuid;
+}
+
 TVector<TDataRow> TestRows() {
     TVector<TDataRow> rows = {
-        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1"                       , "u1"                      , "{j:1}", "{y:1}", 0, 0, 0, 0, -1, -1, -1, -1, 111, 1111, -21,  210, -2100,  21.3f,  21.6},
-        {false,  2,  2,  2,  2, 2, 2, 2, 2,  2.0f,  2.0, "s2"                       , "u2"                      , "{j:2}", "{y:2}", 0, 0, 0, 0, -2, -2, -2, -2, 222, 2222,  22, -220,  2200, -22.3f,  22.6},
-        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3"                       , "u3"                      , "{j:3}", "{y:3}", 0, 0, 0, 0, -3, -3, -3, -3, 333, 3333,  23,  230, -2300,  23.3f, -23.6},
-        {false, -4, -4, -4, -4, 4, 4, 4, 4,  4.0f,  4.0, "s4"                       , "u4"                      , "{j:4}", "{y:4}", 0, 0, 0, 0, -4, -4, -4, -4, 444, 4444, -24,  240,  2400, -24.3f,  24.6},
-        {false, -5, -5, -5, -5, 5, 5, 5, 5,  5.0f,  5.0, "long5long5long5long5long5", "utflong5utflong5utflong5", "{j:5}", "{y:5}", 0, 0, 0, 0, -5, -5, -5, -5, 555, 5555,  25, -250,  2500,  25.3f, -25.6},
+        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1"                       , "u1"                      , "{j:1}", "{y:1}", 0, 0, 0, 0, -1, -1, -1, -1, 111, 1111, -21,  210, -2100,  21.3f,  21.6, MakeUuid("00000011-0022-0033-0044-000000000055")},
+        {false,  2,  2,  2,  2, 2, 2, 2, 2,  2.0f,  2.0, "s2"                       , "u2"                      , "{j:2}", "{y:2}", 0, 0, 0, 0, -2, -2, -2, -2, 222, 2222,  22, -220,  2200, -22.3f,  22.6, MakeUuid("00001100-2200-3300-4400-000000005500")},
+        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3"                       , "u3"                      , "{j:3}", "{y:3}", 0, 0, 0, 0, -3, -3, -3, -3, 333, 3333,  23,  230, -2300,  23.3f, -23.6, MakeUuid("00110000-0033-0044-0000-000000550000")},
+        {false, -4, -4, -4, -4, 4, 4, 4, 4,  4.0f,  4.0, "s4"                       , "u4"                      , "{j:4}", "{y:4}", 0, 0, 0, 0, -4, -4, -4, -4, 444, 4444, -24,  240,  2400, -24.3f,  24.6, MakeUuid("11000000-3300-4400-0000-000055000000")},
+        {false, -5, -5, -5, -5, 5, 5, 5, 5,  5.0f,  5.0, "long5long5long5long5long5", "utflong5utflong5utflong5", "{j:5}", "{y:5}", 0, 0, 0, 0, -5, -5, -5, -5, 555, 5555,  25, -250,  2500,  25.3f, -25.6, MakeUuid("00000033-0044-0000-0000-005500000011")},
     };
     return rows;
 }
@@ -252,6 +265,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         NUdf::TStringValue str(pattern.size());
         std::memcpy(str.Data(), pattern.data(), pattern.size());
         NUdf::TUnboxedValue containsLongString(NUdf::TUnboxedValuePod(std::move(str)));
+        NYql::NUuid::TUuid uuid(MakeUuid("00000000-4400-3300-2200-000000000011"));
         NYql::NDecimal::TInt128 decimalVal = 123456789012;
         NYql::NDecimal::TInt128 decimal35Val = 987654321012;
         TVector<TTestCase> cases = {
@@ -303,6 +317,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod::Embedded("{j:0}"), NTypeIds::Json   , {16, 8 } },
             {NUdf::TUnboxedValuePod::Embedded("{y:0}"), NTypeIds::Yson   , {16, 8 } },
             {containsLongString                       , NTypeIds::String, {16 + pattern.size(), pattern.size()}},
+            {NUdf::TUnboxedValuePod(uuid        ), NTypeIds::Uuid, {16 + 16, 16}},
             {NUdf::TUnboxedValuePod(            ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgint2"  )), {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4"  )), {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), TTypeInfo(NPg::TypeDescFromPgTypeName("pgint8"  )), {16, 8 } },
@@ -374,6 +389,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             UNIT_ASSERT_EQUAL(container[27].Get<i64 >(), row.PgInt8     );
             UNIT_ASSERT_EQUAL(container[28].Get<float >(), row.PgFloat4 );
             UNIT_ASSERT_EQUAL(container[29].Get<double>(), row.PgFloat8 );
+            UNIT_ASSERT_EQUAL(container[30].Get<NYql::NUuid::TUuid>(), row.Uuid );
         }
 
         UNIT_ASSERT(scanData.IsEmpty());

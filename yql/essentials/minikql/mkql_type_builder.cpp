@@ -15,6 +15,7 @@
 #include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <array>
 
 #include <arrow/c/bridge.h>
@@ -1544,7 +1545,8 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
         return true;
     }
     case NUdf::EDataSlot::Uuid: {
-        return false;
+        type = arrow::fixed_size_binary(NUuid::UUID_LEN);
+        return true;
     }
     case NUdf::EDataSlot::Decimal: {
         type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));

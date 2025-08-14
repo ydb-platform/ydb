@@ -22,7 +22,7 @@ supported_pk_types = [
 
     "String",
     "Utf8",
-    # Uuid", https://github.com/ydb-platform/ydb/issues/13047
+    "Uuid",  # https://github.com/ydb-platform/ydb/issues/13047
 
     "Date",
     "Datetime",

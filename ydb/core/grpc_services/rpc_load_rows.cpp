@@ -114,9 +114,12 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
             decimalType->set_scale(arrowDecimal->scale());
             return true;
         }
+        case arrow::Type::FIXED_SIZE_BINARY: {
+            toType.set_type_id(Ydb::Type::UUID);
+            return true;
+        }
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
-        case arrow::Type::FIXED_SIZE_BINARY:
         case arrow::Type::DATE32:
         case arrow::Type::DATE64:
         case arrow::Type::TIME32:

@@ -11,6 +11,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/arrow/mkql_bit_utils.h>
 #include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/types/uuid/uuid.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -195,6 +196,31 @@ struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
 
         TScalarResult()
             : arrow::FixedSizeBinaryScalar(arrow::fixed_size_binary(16))
+        { }
+    };
+};
+
+template<>
+struct TPrimitiveDataType<NYql::NUuid::TUuid> {
+    using TLayout = NYql::NUuid::TUuid;
+
+    class TResult: public arrow::FixedSizeBinaryType
+    {
+    public:
+        TResult(): arrow::FixedSizeBinaryType(NUuid::UUID_LEN)
+        { }
+    };
+
+
+    class TScalarResult: public arrow::FixedSizeBinaryScalar
+    {
+    public:
+        TScalarResult(std::shared_ptr<arrow::Buffer> value)
+            : arrow::FixedSizeBinaryScalar(std::move(value), arrow::fixed_size_binary(NUuid::UUID_LEN))
+        { }
+
+        TScalarResult()
+            : arrow::FixedSizeBinaryScalar(arrow::fixed_size_binary(NUuid::UUID_LEN))
         { }
     };
 };

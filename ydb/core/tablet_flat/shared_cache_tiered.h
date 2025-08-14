@@ -43,6 +43,10 @@ namespace NKikimr::NSharedCache {
             TryKeepInMemoryTier->UpdateLimit(tryKeepInMemoryLimit);
         }
 
+        ui64 GetLimit() const {
+            return RegularTier->GetLimit() + TryKeepInMemoryTier->GetLimit();
+        }
+
         ui64 GetSize() const {
             ui64 result = 0;
             for (const auto& cacheTier : CacheTiers) {

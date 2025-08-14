@@ -23,6 +23,10 @@ namespace NKikimr::NSharedCache {
 
 using namespace NTabletFlatExecutor;
 
+::NFormatPrivate::THumanReadableSize HumanReadableBytes(ui64 bytes) {
+    return HumanReadableSize(bytes, SF_BYTES);
+}
+
 struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TRequest> {
     bool IsResponded() const {
         return !Sender;
@@ -130,9 +134,6 @@ static bool DoTraceLog() {
 class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     using ELnLev = NUtil::ELnLev;
 
-    static const ui64 DO_GC_SCHEDULED_TAG = 1;
-    static const ui64 DO_GC_MANUAL_TAG = 2;
-
     static const ui64 NO_QUEUE_COOKIE = 1;
     static const ui64 ASYNC_QUEUE_COOKIE = 2;
     static const ui64 SCAN_QUEUE_COOKIE = 3;
@@ -203,6 +204,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (MemoryConsumer) {
             MemoryConsumer->SetConsumption(GetStatAllBytes());
         }
+
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "GC has finished with"
+            << " Limit: " << HumanReadableBytes(Cache.GetLimit())
+            << " Active: " << HumanReadableBytes(StatActiveBytes)
+            << " Passive: " << HumanReadableBytes(StatPassiveBytes)
+            << " LoadInFly: " << HumanReadableBytes(StatLoadInFlyBytes)
+        );
     }
 
     void Handle(NMemory::TEvConsumerRegistered::TPtr &ev, const TActorContext& ctx) {
@@ -216,7 +224,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto *msg = ev->Get();
 
         LOG_INFO_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Limit memory consumer"
-            << " with " << HumanReadableSize(msg->LimitBytes, SF_BYTES));
+            << " with " << HumanReadableBytes(msg->LimitBytes));
 
         MemLimitBytes = msg->LimitBytes;
         Counters.MemLimitBytes->Set(MemLimitBytes);
@@ -802,18 +810,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void Wakeup(TKikimrEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Wakeup " << ev->Get()->Tag);
+        auto tag = static_cast<EWakeupTag>(ev->Get()->Tag);
+        LOG_INFO_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Wakeup " << tag);
 
-        switch (ev->Get()->Tag) {
-        case DO_GC_SCHEDULED_TAG: {
+        switch (tag) {
+        case EWakeupTag::DoGCScheduled:
             ScheduleGC();
             [[fallthrough]];
-        case DO_GC_MANUAL_TAG:
+        case EWakeupTag::DoGCManual:
             // DoGC will be called at the end of StateFunc
             break;
-        }
-        default:
-            Y_TABLET_ERROR("Unknown wakeup tag: " << ev->Get()->Tag);
         }
     }
 
@@ -852,7 +858,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void ScheduleGC() {
-        TActivationContext::AsActorContext().Schedule(TDuration::Seconds(15), new TKikimrEvents::TEvWakeup(DO_GC_SCHEDULED_TAG));
+        TActivationContext::AsActorContext().Schedule(TDuration::Seconds(15), new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCManual)));
     }
 
     void CheckExpiredCollections(THashSet<TCollection*> recheck) {

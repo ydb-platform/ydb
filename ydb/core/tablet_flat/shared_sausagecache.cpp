@@ -130,7 +130,8 @@ static bool DoTraceLog() {
 class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     using ELnLev = NUtil::ELnLev;
 
-    static const ui64 DO_GC_TAG = 1;
+    static const ui64 DO_GC_SCHEDULED_TAG = 1;
+    static const ui64 DO_GC_MANUAL_TAG = 2;
 
     static const ui64 NO_QUEUE_COOKIE = 1;
     static const ui64 ASYNC_QUEUE_COOKIE = 2;
@@ -153,8 +154,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     ui64 StatActiveBytes = 0;
     ui64 StatPassiveBytes = 0;
     ui64 StatLoadInFlyBytes = 0;
-
-    bool GCScheduled = false;
 
     ui64 MemLimitBytes = 0;
     ui64 TryKeepInMemoryBytes = 0;
@@ -806,9 +805,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         LOG_INFO_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Wakeup " << ev->Get()->Tag);
 
         switch (ev->Get()->Tag) {
-        case DO_GC_TAG: {
-            GCScheduled = false;
-            ProcessGCList();
+        case DO_GC_SCHEDULED_TAG: {
+            ScheduleGC();
+            [[fallthrough]];
+        case DO_GC_MANUAL_TAG:
+            // DoGC will be called at the end of StateFunc
             break;
         }
         default:
@@ -827,8 +828,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (recheck) {
             CheckExpiredCollections(std::move(recheck));
         }
-
-        TryScheduleGC();
     }
 
     void TryDrop(TPage* page, THashSet<TCollection*>& recheck) {
@@ -852,11 +851,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void TryScheduleGC() {
-        if (!GCScheduled) {
-            TActivationContext::AsActorContext().Schedule(TDuration::Seconds(15), new TKikimrEvents::TEvWakeup(DO_GC_TAG));
-            GCScheduled = true;
-        }
+    void ScheduleGC() {
+        TActivationContext::AsActorContext().Schedule(TDuration::Seconds(15), new TKikimrEvents::TEvWakeup(DO_GC_SCHEDULED_TAG));
     }
 
     void CheckExpiredCollections(THashSet<TCollection*> recheck) {
@@ -1244,6 +1240,8 @@ public:
                 NKikimrConsole::TConfigItem::BootstrapConfigItem, NKikimrConsole::TConfigItem::SharedCacheConfigItem}));
 
         Become(&TThis::StateFunc);
+
+        ScheduleGC();
     }
 
     STFUNC(StateFunc) {

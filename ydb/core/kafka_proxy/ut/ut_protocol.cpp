@@ -58,7 +58,7 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true, bool enableAutoTopicCreation = false,
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true, bool enableAutoTopicCreation = true,
                                                                                                                     bool enableAutoConsumerCreation = true) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
@@ -90,8 +90,8 @@ public:
         appConfig.MutableKafkaProxyConfig()->SetListeningPort(Port);
         appConfig.MutableKafkaProxyConfig()->SetMaxMessageSize(1024);
         appConfig.MutableKafkaProxyConfig()->SetMaxInflightSize(2048);
-        if (enableAutoTopicCreation) {
-            appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(true);
+        if (!enableAutoTopicCreation) {
+            appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(false);
         }
         appConfig.MutableKafkaProxyConfig()->SetTopicCreationDefaultPartitions(2);
         if (!enableAutoConsumerCreation) {

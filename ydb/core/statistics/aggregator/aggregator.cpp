@@ -5,11 +5,11 @@
 namespace NKikimr::NStat {
 
 IActor* CreateStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info) {
-    return new TStatisticsAggregator(tablet, info, false);
+    return new TStatisticsAggregator(tablet, info);
 }
 
 IActor* CreateStatisticsAggregatorForTests(const NActors::TActorId& tablet, TTabletStorageInfo* info) {
-    return new TStatisticsAggregator(tablet, info, true);
+    return new TStatisticsAggregator(tablet, info);
 }
 
 } // NKikimr::NStat

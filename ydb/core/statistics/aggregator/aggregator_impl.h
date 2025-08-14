@@ -33,7 +33,7 @@ public:
         return NKikimrServices::TActivity::STATISTICS_AGGREGATOR;
     }
 
-    TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info, bool forTests);
+    TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info);
 
 private:
     using TSSId = ui64;
@@ -242,8 +242,10 @@ private:
     static constexpr size_t StatsOptimizeFirstNodesCount = 3; // optimize first nodes - fast propagation
     static constexpr size_t StatsSizeLimitBytes = 2 << 20; // limit for stats size in one message
 
-    TDuration PropagateInterval;
-    TDuration PropagateTimeout;
+    TDuration PropagateIntervalDedicated;
+    TDuration PropagateIntervalServerless;
+    TDuration PropagateInterval = TDuration::Seconds(5);
+
     static constexpr TDuration FastCheckInterval = TDuration::MilliSeconds(50);
 
     std::unordered_map<TSSId, TString> BaseStatistics; // schemeshard id -> serialized stats for all paths

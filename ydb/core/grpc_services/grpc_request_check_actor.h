@@ -469,24 +469,25 @@ private:
     void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName) const {
         const TString userSID = TBase::GetUserSID();
         // DmlAudit, specially enabled through Scheme Shard
-        bool auditEnabled = requestBaseCtx->IsDmlAuditable() && IsAuditEnabledFor(userSID);
+        bool auditEnabledCompleted = requestBaseCtx->IsDmlAuditable() && IsAuditEnabledFor(userSID);
+        bool auditEnabledReceived = false;
 
-        if (!auditEnabled) {
-            TAuditMode auditMode = requestBaseCtx->GetAuditMode();
-            if (auditMode.IsModifying && !requestBaseCtx->IsInternalCall()) {
-                TIntrusiveConstPtr<NACLib::TUserToken> token = TBase::GetParsedToken();
-                auditEnabled = AppData()->AuditConfig.EnableLogging(auditMode.LogClass, token ? token->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS);
-            }
+        TAuditMode auditMode = requestBaseCtx->GetAuditMode();
+        if (auditMode.IsModifying && !requestBaseCtx->IsInternalCall()) {
+            TIntrusiveConstPtr<NACLib::TUserToken> token = TBase::GetParsedToken();
+            const NACLibProto::ESubjectType subjectType = token ? token->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
+            auditEnabledCompleted |= AppData()->AuditConfig.EnableLogging(auditMode.LogClass, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, subjectType);
+            auditEnabledReceived |= AppData()->AuditConfig.EnableLogging(auditMode.LogClass, NKikimrConfig::TAuditConfig::TLogClassConfig::Received, subjectType);
         }
 
         const TString sanitizedToken = TBase::GetSanitizedToken();
-        if (auditEnabled) {
+        if (auditEnabledReceived || auditEnabledCompleted) {
             AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
-            if (AppData()->AuditConfig.EnableLogPhase(NKikimrConfig::TAuditConfig::Received)) {
+            if (auditEnabledReceived) {
                 AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());
             }
 
-            if (AppData()->AuditConfig.EnableLogPhase(NKikimrConfig::TAuditConfig::Completed)) {
+            if (auditEnabledCompleted) {
                 requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
                     AuditContextEnd(requestBaseCtx);
                     AuditLog(status, parts);

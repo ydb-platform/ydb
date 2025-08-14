@@ -55,6 +55,10 @@ public:
         return future;
     }
 
+    NThreading::TFuture<void> ClearAll() override {
+        return TableDataService_ ? TableDataService_->Clear() : NThreading::MakeFuture();
+    }
+
 private:
     void ProcessGroupDeletionRequests() {
         auto runExistingGroupDeleteRequestsFunc = [&] () {

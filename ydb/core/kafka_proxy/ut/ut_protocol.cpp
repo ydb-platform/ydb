@@ -58,7 +58,7 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = false) {
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -136,8 +136,8 @@ public:
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NLog::PRI_TRACE);
 
-        if (enableNativeKafkaBalancing) {
-            KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(true);
+        if (!enableNativeKafkaBalancing) {
+            KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(false);
         }
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaTransactions(true);
 
@@ -258,6 +258,43 @@ std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent> Read(std::shared_ptr<
         }
     }
     Cerr << ">>>>> Received messages " << result.size() << Endl;
+    return result;
+}
+
+
+std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> ReadCommitWaitAcks(std::shared_ptr<NTopic::IReadSession> topicReader, int messageCount = 1) {
+    int gotMessages = 0;
+    std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> result;
+    bool gotAllMessages = false;
+    int lastOffset = -1;
+    while (!gotAllMessages) {
+        auto event = topicReader->GetEvent(true);
+        if (!event) {
+            break;
+        }
+        if (auto dataEvent = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            Cerr << ">>>>> Got TDataReceivedEvent " << dataEvent->DebugString() << Endl;
+            lastOffset = dataEvent->GetMessages().back().GetOffset();
+            gotMessages += dataEvent->GetMessages().size();
+            for (auto& message : dataEvent->GetMessages()) {
+                result.push_back(std::move(message));
+            }
+            if (gotMessages >= messageCount) {
+                gotAllMessages = true;
+            }
+            dataEvent->Commit();
+        } else if (auto* lockEv = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+            lockEv->Confirm();
+        } else if (auto* releaseEv = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+            releaseEv->Confirm();
+        } else if (auto* commitAck = std::get_if<NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
+            if (gotAllMessages && commitAck->GetCommittedOffset() == static_cast<ui64>(lastOffset + 1)) {
+                break;
+            }
+        } else if (auto* closeSessionEvent = std::get_if<NTopic::TSessionClosedEvent>(&*event)) {
+            break;
+        }
+    }
     return result;
 }
 
@@ -404,14 +441,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(readHeaderValueStr, headerValue);
             }
 
+            auto msg2 = client.Produce(topicName, 0, batch);
+
             // read by logbroker protocol
-            auto readMessages = Read(topicReader);
-            UNIT_ASSERT_EQUAL(readMessages.size(), 1);
+            auto readMessages = ReadCommitWaitAcks(topicReader, 2);
 
-            UNIT_ASSERT_EQUAL(readMessages[0].GetMessages().size(), 1);
-            auto& readMessage = readMessages[0].GetMessages()[0];
-            readMessage.Commit();
-
+            auto& readMessage = readMessages[0];
             UNIT_ASSERT_STRINGS_EQUAL(readMessage.GetData(), value);
             AssertMessageMeta(readMessage, "__key", key);
             AssertMessageMeta(readMessage, headerKey, headerValue);
@@ -453,7 +488,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
                                      static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            AssertMessageAvaialbleThroughLogbrokerApiAndCommit(topicReader);
+            ReadCommitWaitAcks(topicReader, 1);
         }
 
         {
@@ -482,8 +517,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[1].ErrorCode,
                                      static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            AssertMessageAvaialbleThroughLogbrokerApiAndCommit(topicReader);
-            AssertMessageAvaialbleThroughLogbrokerApiAndCommit(topicReader);
+            ReadCommitWaitAcks(topicReader, 2);
         }
 
         {
@@ -1183,7 +1217,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     void RunBalanceScenarionTest(bool forFederation) {
         TString protocolName = "roundrobin";
-        TInsecureTestServer testServer("2");
+        TInsecureTestServer testServer("2", false, false);
 
         TString topicName = "/Root/topic-0-test";
         TString shortTopicName = "topic-0-test";
@@ -1411,7 +1445,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     Y_UNIT_TEST(BalanceScenarioCdc) {
 
         TString protocolName = "roundrobin";
-        TInsecureTestServer testServer("2");
+        TInsecureTestServer testServer("2", false, false);
 
 
         TString tableName = "/Root/table-0-test";

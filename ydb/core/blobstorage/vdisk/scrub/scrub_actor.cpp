@@ -14,7 +14,7 @@ namespace NKikimr {
         , LogPrefix(VCtx->VDiskLogPrefix)
         , Counters(VCtx->VDiskCounters->GetSubgroup("subsystem", "scrub"))
         , MonGroup(Counters)
-        , DeepScrubbingGroup(VCtx->VDiskCounters->GetSubgroup("subsystem", "deepScrubbing"))
+        , DeepScrubbingSubgroups(VCtx->VDiskCounters->GetSubgroup("subsystem", "deepScrubbing"))
         , Arena(&TScrubCoroImpl::AllocateRopeArenaChunk)
         , ScrubEntrypoint(std::move(scrubEntrypoint))
         , ScrubEntrypointLsn(scrubEntrypointLsn)
@@ -239,38 +239,63 @@ namespace NKikimr {
 
     void TScrubCoroImpl::CheckIntegrity(const TLogoBlobID& blobId, bool isHuge) {
         SendToBSProxy(SelfActorId, Info->GroupID, new TEvBlobStorage::TEvCheckIntegrity(blobId, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::LowRead));
+                NKikimrBlobStorage::EGetHandleClass::LowRead, true));
         auto res = WaitForPDiskEvent<TEvBlobStorage::TEvCheckIntegrityResult>();
 
-        if (isHuge) {
-            ++DeepScrubbingGroup.HugeBlobsChecked();
-        } else {
-            ++DeepScrubbingGroup.SmallBlobsChecked();
+        TErasureType::EErasureSpecies erasure = Info->Type.GetErasure();
+        
+        NMonGroup::TDeepScrubbingGroup* counters = DeepScrubbingSubgroups.GetCounters(isHuge, erasure);
+        if (counters) {
+            ++counters->BlobsChecked();
         }
 
         if (res->Get()->Status != NKikimrProto::OK) {
             STLOGX(GetActorContext(), PRI_WARN, BS_VDISK_SCRUB, VDS97, VDISKP(LogPrefix, "TEvCheckIntegrity request failed"),
                     (BlobId, blobId), (ErrorReason, res->Get()->ErrorReason));
-            ++DeepScrubbingGroup.CheckIntegrityErrors();
-        } else {
-            ++DeepScrubbingGroup.CheckIntegritySuccesses();
-            if (res->Get()->PlacementStatus != TEvBlobStorage::TEvCheckIntegrityResult::PS_OK) {
-                STLOGX(GetActorContext(), PRI_CRIT, BS_VDISK_SCRUB, VDS98, VDISKP(LogPrefix, "TEvCheckIntegrity discovered placement issue"),
-                        (BlobId, blobId), (CheckIntegrityResult, res->Get()->ToString()));
-                if (isHuge) {
-                    ++DeepScrubbingGroup.PlacementIssuesHugeBlobs();
-                } else {
-                    ++DeepScrubbingGroup.PlacementIssuesSmallBlobs();
-                }
+            if (counters) {
+                ++counters->CheckIntegrityErrors();
             }
-            if (res->Get()->DataStatus != TEvBlobStorage::TEvCheckIntegrityResult::DS_OK) {
-                STLOGX(GetActorContext(), PRI_CRIT, BS_VDISK_SCRUB, VDS99, VDISKP(LogPrefix, "TEvCheckIntegrity discovered data issue"),
-                        (BlobId, blobId), (CheckIntegrityResult, res->Get()->ToString()));
-                if (isHuge) {
-                    ++DeepScrubbingGroup.DataIssuesHugeBlobs();
-                } else {
-                    ++DeepScrubbingGroup.DataIssuesSmallBlobs();
+        } else {
+            if (counters) {
+                ++counters->CheckIntegritySuccesses();
+            }
+
+            switch (res->Get()->PlacementStatus) {
+            case TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN:
+            case TEvBlobStorage::TEvCheckIntegrityResult::PS_REPLICATION_IN_PROGRESS:
+                if (counters) {
+                    ++counters->UnknownPlacementStatus();
                 }
+                break;
+            case TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_LOST:
+            case TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE:
+                STLOGX(GetActorContext(), PRI_CRIT, BS_VDISK_SCRUB, VDS98, VDISKP(LogPrefix, "TEvCheckIntegrity discovered placement issue"),
+                        (BlobId, blobId), (Erasure, TErasureType::ErasureSpeciesName(erasure)), (CheckIntegrityResult, res->Get()->ToString()));
+                if (counters) {
+                    ++counters->PlacementIssues();
+                }
+                break;
+            case TEvBlobStorage::TEvCheckIntegrityResult::PS_OK:
+            default:
+                break; // nothing to do
+            }
+
+            switch (res->Get()->DataStatus) {
+            case TEvBlobStorage::TEvCheckIntegrityResult::DS_UNKNOWN:
+                if (counters) {
+                    ++counters->UnknownDataStatus();
+                }
+                break;
+            case TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR:
+                STLOGX(GetActorContext(), PRI_CRIT, BS_VDISK_SCRUB, VDS99, VDISKP(LogPrefix, "TEvCheckIntegrity discovered data issue"),
+                        (BlobId, blobId), (Erasure, TErasureType::ErasureSpeciesName(erasure)), (CheckIntegrityResult, res->Get()->ToString()));
+                if (counters) {
+                    ++counters->DataIssues();
+                }
+                break;
+            case TEvBlobStorage::TEvCheckIntegrityResult::DS_OK:
+            default:
+                break; // nothing to do
             }
         }
     }

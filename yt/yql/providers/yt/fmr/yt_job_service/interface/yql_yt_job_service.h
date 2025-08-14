@@ -20,9 +20,8 @@ public:
 
     using TPtr = TIntrusivePtr<IYtJobService>;
 
-    // Either RichPath to actual Yt table or filepath is passed depending on type of underlying gateway.
     virtual NYT::TRawTableReaderPtr MakeReader(
-        const std::variant<NYT::TRichYPath, TString>& inputTableRef,
+        const TYtTableRef& ytTablePart,
         const TClusterConnection& clusterConnection = TClusterConnection(),
         const TYtReaderSettings& settings = TYtReaderSettings()
     ) = 0;

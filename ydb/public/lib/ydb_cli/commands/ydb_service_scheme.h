@@ -106,13 +106,15 @@ private:
     int PrintTransferResponsePretty(const NYdb::NReplication::TDescribeTransferResult& result) const;
 
     int DescribeView(const TDriver& driver);
-    int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
 
     int DescribeExternalDataSource(const TDriver& driver);
     int PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& result) const;
 
     int DescribeExternalTable(const TDriver& driver);
     int PrintExternalTableResponsePretty(const NYdb::NTable::TExternalTableDescription& result) const;
+
+    int DescribeSystemView(const TDriver& driver);
+    int PrintSystemViewResponsePretty(const NYdb::NTable::TSystemViewDescription& result) const;
 
     int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
     std::pair<TString, TString> ParseTopicConsumer() const;

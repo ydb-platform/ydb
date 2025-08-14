@@ -421,13 +421,9 @@ TExprNode::TPtr ExpandReplicateScalars(const TExprNode::TPtr& node, TExprContext
     }
 
     return ctx.Builder(node->Pos())
-        .Callable("FromFlow")
-            .Callable(0, "WideMap")
-                .Callable(0, "ToFlow")
-                    .Add(0, node->HeadPtr())
-                .Seal()
-                .Add(1, ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), std::move(args)), std::move(bodyItems)))
-            .Seal()
+        .Callable("WideMap")
+            .Add(0, node->HeadPtr())
+            .Add(1, ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), std::move(args)), std::move(bodyItems)))
         .Seal()
         .Build();
 }
@@ -5451,10 +5447,7 @@ TExprNode::TPtr DropUnusedStateFromUpdate(const TExprNode& lambda, const std::ve
 }
 
 TExprNode::TPtr MakeWideMapForDropUnused(TExprNode::TPtr&& input, const std::vector<ui32>& unused, TExprContext& ctx) {
-    const bool isFlow = input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
     const auto width = GetStreamOrFlowElementsCount(input->GetTypeAnn());
-    input = isFlow ? std::move(input) : ctx.NewCallable(input->Pos(), "ToFlow", {std::move(input)});
-
     auto result = ctx.Builder(input->Pos())
         .Callable("WideMap")
             .Add(0, std::move(input))
@@ -5469,8 +5462,6 @@ TExprNode::TPtr MakeWideMapForDropUnused(TExprNode::TPtr&& input, const std::vec
                 })
             .Seal()
         .Seal().Build();
-    auto pos = result->Pos();
-    result = isFlow ? result : ctx.NewCallable(pos, "FromFlow", {std::move(result)});
     return result;
 }
 
@@ -6653,24 +6644,20 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
         if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
             const auto& wideFromBlocks = input.Head();
             // Technically, the code below rewrites the following sequence
-            // (WideMap (ToFlow (WideFromBlocks (FromFlow (<input>)))))
-            // into (ToFlow (WideFromBlocks (FromFlow (WideMap (<input>)).
+            // (WideMap (ToFlow (WideFromBlocks (<input>))))
+            // into (ToFlow (WideFromBlocks (WideMap (<input>).
             // Hence, the logging is left intact.
             YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << wideFromBlocks.Content() << " with " << node->Content();
             // If tail is FromFlow, its input is WideFlow and can be
             // used intact; Otherwise the input is WideStream, so the
             // new input should be converted to WideFlow.
             const auto tail = wideFromBlocks.HeadPtr();
-            const auto flowInput = tail->IsCallable("FromFlow") ? tail->HeadPtr()
-                                 : ctx.NewCallable(tail->Pos(), "ToFlow", { tail });
             return ctx.Builder(node->Pos())
                 .Callable("ToFlow")
                     .Callable(0, "WideFromBlocks")
-                        .Callable(0, "FromFlow")
-                            .Callable(0, "WideMap")
-                                .Add(0, flowInput)
-                                .Add(1, newLambda)
-                            .Seal()
+                        .Callable(0, "WideMap")
+                            .Add(0, tail)
+                            .Add(1, newLambda)
                         .Seal()
                     .Seal()
                 .Seal()
@@ -6682,7 +6669,7 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
         return node;
     }
 
-    auto multiInputType = input.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    auto* multiInputType = GetWideFlowOrStreamComponents(*input.GetTypeAnn());
     ui32 newNodes;
     TNodeMap<size_t> rewritePositions;
     TExprNode::TPtr blockLambda;
@@ -6690,6 +6677,8 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
     bool keepInputColumns = false;
     if (!TBlockRewriter(ctx, types).CollectBlockRewrites(multiInputType->GetItems(), keepInputColumns, lambda, newNodes, rewritePositions, blockLambda, restLambda)) {
         return node;
+    } else {
+        MKQL_ENSURE(input.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow, "Only flow WideMap node can be rewritten to blocks.");
     }
 
     if (!newNodes) {
@@ -6701,17 +6690,13 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
     auto ret = ctx.Builder(node->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
-                .Callable(0, "FromFlow")
-                    .Callable(0, "WideMap")
-                        .Callable(0, "ToFlow")
-                            .Callable(0, "WideToBlocks")
-                                .Callable(0, "FromFlow")
-                                    .Add(0, node->HeadPtr())
-                                .Seal()
-                            .Seal()
+                .Callable(0, "WideMap")
+                    .Callable(0, "WideToBlocks")
+                        .Callable(0, "FromFlow")
+                            .Add(0, node->HeadPtr())
                         .Seal()
-                        .Add(1, blockLambda)
                     .Seal()
+                    .Add(1, blockLambda)
                 .Seal()
             .Seal()
         .Seal()
@@ -6745,11 +6730,9 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
 
     auto blockMapped = ctx.Builder(node->Pos())
         .Callable("WideMap")
-            .Callable(0, "ToFlow")
-                .Callable(0, "WideToBlocks")
-                    .Callable(0, "FromFlow")
-                        .Add(0, node->HeadPtr())
-                    .Seal()
+            .Callable(0, "WideToBlocks")
+                .Callable(0, "FromFlow")
+                    .Add(0, node->HeadPtr())
                 .Seal()
             .Seal()
             .Add(1, blockLambda)
@@ -6760,23 +6743,17 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         // lambda is block-friendly
         YQL_ENSURE(it->second == multiInputType->GetSize(), "Block filter column must follow original input columns");
         auto result = ctx.Builder(node->Pos())
-            .Callable("ToFlow")
-                .Callable(0, "BlockCompress")
-                    .Callable(0, "FromFlow")
-                        .Add(0, blockMapped)
-                    .Seal()
-                    .Atom(1, it->second)
-                .Seal()
+            .Callable("BlockCompress")
+                .Add(0, blockMapped)
+                .Atom(1, it->second)
             .Seal()
             .Build();
 
         if (node->ChildrenSize() == 3) {
             result = ctx.Builder(node->Pos())
-                .Callable("ToFlow")
-                    .Callable(0, "WideTakeBlocks")
-                        .Add(0, ctx.NewCallable(node->Pos(), "FromFlow", {result}))
-                        .Add(1, node->ChildPtr(2))
-                    .Seal()
+                .Callable("WideTakeBlocks")
+                    .Add(0, result)
+                    .Add(1, node->ChildPtr(2))
                 .Seal()
                 .Build();
         }
@@ -6786,9 +6763,7 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         return ctx.Builder(node->Pos())
             .Callable("ToFlow")
                 .Callable(0, "WideFromBlocks")
-                    .Callable(0, "FromFlow")
-                        .Add(0, result)
-                    .Seal()
+                    .Add(0, result)
                 .Seal()
             .Seal()
             .Build();
@@ -6801,9 +6776,7 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         .Callable("WideFilter")
             .Callable(0, "ToFlow")
                 .Callable(0, "WideFromBlocks")
-                    .Callable(0, "FromFlow")
-                        .Add(0, blockMapped)
-                    .Seal()
+                    .Add(0, blockMapped)
                 .Seal()
             .Seal()
             .Add(1, restLambda)
@@ -7055,9 +7028,8 @@ TExprNode::TPtr OptimizeBlockMerge(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, TExprContext& ctx) {
-    const auto& child = wideMap->Head();
-    YQL_ENSURE(wideMap->IsCallable("WideMap") && child.IsCallable("ToFlow") && child.Head().IsCallable("ReplicateScalars"));
-    const auto& input = child.Head();
+    const auto& input = wideMap->Head();
+    YQL_ENSURE(wideMap->IsCallable("WideMap") && input.IsCallable("ReplicateScalars"));
     auto inputTypes = input.GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
     YQL_ENSURE(inputTypes.size() > 0);
 
@@ -7120,18 +7092,12 @@ TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, 
     }
 
     return ctx.Builder(wideMap->Pos())
-        .Callable("ToFlow")
-            .Callable(0, "ReplicateScalars")
-                .Callable(0, "FromFlow")
-                    .Callable(0, "WideMap")
-                        .Callable(0, "ToFlow")
-                            .Add(0, input.HeadPtr())
-                        .Seal()
-                        .Add(1, ctx.DeepCopyLambda(lambda))
-                    .Seal()
-                .Seal()
-                .Add(1, ctx.NewList(input.Pos(), std::move(replicatedOutputIndexes)))
+        .Callable("ReplicateScalars")
+            .Callable(0, "WideMap")
+                .Add(0, input.HeadPtr())
+                .Add(1, ctx.DeepCopyLambda(lambda))
             .Seal()
+            .Add(1, ctx.NewList(input.Pos(), std::move(replicatedOutputIndexes)))
         .Seal()
         .Build();
 }
@@ -7171,6 +7137,7 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
         } else if (input.IsCallable("ToFlow") && input.Head().IsCallable("BlockCompress")) {
+            // This branch is accessible for NarrowMap/ExpandMap callable optimization since they accept flow type.
             auto& blockCompress = input.Head();
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << blockCompress.Content() << " with " << unused.size() << " unused fields.";
             const auto index = FromString<ui32>(blockCompress.Tail().Content());
@@ -7185,7 +7152,22 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Seal()
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
+        } else if (input.IsCallable("BlockCompress")) {
+            // This branch is accessible for WideMap callable optimization since it accepts stream type.
+            auto& blockCompress = input;
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << blockCompress.Content() << " with " << unused.size() << " unused fields.";
+            const auto index = FromString<ui32>(blockCompress.Tail().Content());
+            const auto delta = std::distance(unused.cbegin(), std::find_if(unused.cbegin(), unused.cend(), std::bind(std::less<ui32>(), index, std::placeholders::_1)));
+            return ctx.Builder(node->Pos())
+                .Callable(node->Content())
+                    .Callable(0, blockCompress.Content())
+                        .Add(0, MakeWideMapForDropUnused(blockCompress.HeadPtr(), unused, ctx))
+                        .Atom(1, index - delta)
+                    .Seal()
+                    .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
+                .Seal().Build();
         } else if (input.IsCallable("ToFlow") && input.Head().IsCallable("WideToBlocks")) {
+            // This branch is accessible for NarrowMap/ExpandMap callable optimization since they accept flow type.
             auto actualUnused = unused;
             if (actualUnused.back() + 1U == node->Tail().Head().ChildrenSize())
                 actualUnused.pop_back();
@@ -7226,7 +7208,48 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Seal()
                     .Build();
             }
+        } else if (input.IsCallable("WideToBlocks")) {
+            // This branch is accessible for WideMap callable optimization since it accepts stream type.
+            auto actualUnused = unused;
+            if (actualUnused.back() + 1U == node->Tail().Head().ChildrenSize())
+                actualUnused.pop_back();
+            if (!actualUnused.empty()) {
+                const auto& wideToBlocks = input;
+                YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << wideToBlocks.Content() << " with " << actualUnused.size() << " unused fields.";
+                auto tail = wideToBlocks.HeadPtr();
+                const auto width = tail->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetSize();
+                // Note: Here we wrap WideMap with ToFlow/FromFlow
+                // since we allow stream version of WideMap only for Block types.
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Callable(0, "WideToBlocks")
+                            .Callable(0, "FromFlow")
+                                .Callable(0, "WideMap")
+                                    .Callable(0, "ToFlow")
+                                        .Add(0, std::move(tail))
+                                    .Seal()
+                                    .Lambda(1)
+                                        .Params("items", width)
+                                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                            for (auto i = 0U, j = 0U; i < width; ++i) {
+                                                if (unused.cend() == std::find(unused.cbegin(), unused.cend(), i))
+                                                    parent.Arg(j++, "items", i);
+                                            }
+                                            return parent;
+                                        })
+                                    .Seal()
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Add(1, DropUnusedArgs(node->Tail(), actualUnused, ctx))
+                    .Seal()
+                    .Build();
+            }
         } else if (input.IsCallable("ToFlow") && input.Head().IsCallable({"WideFromBlocks", "WideTakeBlocks", "WideSkipBlocks"})) {
+            // When Wide{Take,Skip}Blocks are optmized, the acceptable map types are NarrowMap/ExpandMap.
+            // When WideFromBlocks is optimized, the acceptable map types are NarrowMap/ExpandMap/WideMap.
+            // Using flow version of WideMap over WideFromBlocks ensures compliance with the following invariant:
+            // WideMap over stream type used <--> WideMap input types are block types.
             auto& inputHead = input.Head();
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << inputHead.Content() << " with " << unused.size() << " unused fields.";
             auto rewritedInputHead = ctx.ChangeChild(inputHead, 0U, MakeWideMapForDropUnused(inputHead.HeadPtr(), unused, ctx));
@@ -7235,6 +7258,16 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Callable(0,"ToFlow")
                         .Add(0, rewritedInputHead)
                     .Seal()
+                    .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
+                .Seal()
+                .Build();
+        } else if (input.IsCallable({"WideTakeBlocks", "WideSkipBlocks"})) {
+            // This branch is accessible for WideMap callable optimization since it accepts stream type.
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
+            auto rewritedInputHead = ctx.ChangeChild(input, 0U, MakeWideMapForDropUnused(input.HeadPtr(), unused, ctx));
+            return ctx.Builder(node->Pos())
+                .Callable(node->Content())
+                    .Add(0, rewritedInputHead)
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal()
                 .Build();
@@ -7276,8 +7309,8 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Add(0, ctx.ChangeChildren(input, std::move(children)))
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
-        } else if (node->IsCallable("WideMap") && input.IsCallable("ToFlow") && input.Head().IsCallable("ReplicateScalars")) {
-            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Head().Content();
+        } else if (node->IsCallable("WideMap") && input.IsCallable("ReplicateScalars")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content();
             return SwapReplicateScalarsWithWideMap(node, ctx);
         }
     }

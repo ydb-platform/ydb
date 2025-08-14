@@ -286,23 +286,23 @@ class TProcessorContext;
 
 class IResourcesAggregator {
 private:
-    virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
-        const std::shared_ptr<TAccessorsCollection>& collectionResult) const = 0;
+    virtual TConclusionStatus DoExecute(
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const = 0;
 
 public:
     virtual ~IResourcesAggregator() = default;
 
     [[nodiscard]] TConclusionStatus Execute(
-        const std::vector<std::shared_ptr<TAccessorsCollection>>& sources, const std::shared_ptr<TAccessorsCollection>& collectionResult) const {
-        return DoExecute(sources, collectionResult);
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const {
+        return DoExecute(std::move(sources), collectionResult);
     }
 };
 
 class TCompositeResourcesAggregator: public IResourcesAggregator {
 private:
     std::vector<std::shared_ptr<IResourcesAggregator>> Aggregators;
-    virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
-        const std::shared_ptr<TAccessorsCollection>& collectionResult) const override {
+    virtual TConclusionStatus DoExecute(
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const override {
         for (auto&& i : Aggregators) {
             auto conclusion = i->Execute(sources, collectionResult);
             if (conclusion.IsFail()) {

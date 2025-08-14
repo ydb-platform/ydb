@@ -9,7 +9,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -48,7 +48,7 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-
+#include <ydb/library/actors/async/wait_for_event.h>
 
 #include <util/generic/size_literals.h>
 
@@ -165,6 +165,7 @@ public:
         , BlockTrackingMode(executerConfig.TableServiceConfig.GetBlockTrackingMode())
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
+        , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
     {
         if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -567,19 +568,21 @@ protected:
         ReportEventElapsedTime();
     }
 
-    void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr& ev) {
+    void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr ev) {
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 
-#if defined(USE_HDRF_SCHEDULER)
-        const auto& poolId = GetUserRequestContext()->PoolId;
+        const auto& databaseId = GetUserRequestContext()->DatabaseId;
+        const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
 
-        auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
-        addQueryEvent->DatabaseId = Database;
-        addQueryEvent->PoolId = poolId.empty() ? NResourcePool::DEFAULT_POOL_ID : poolId;
-        addQueryEvent->QueryId = TxId;
-        this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release());
-#endif
+        if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
+            auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
+            addQueryEvent->DatabaseId = databaseId;
+            addQueryEvent->PoolId = poolId;
+            addQueryEvent->QueryId = TxId;
+            this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release(), 0, TxId);
+            Query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(TxId))->Get()->Query; // TODO: Y_DEFER
+        }
 
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
@@ -607,7 +610,7 @@ protected:
 
         if (BufferActorId && Request.LocksOp == ELocksOp::Rollback) {
             static_cast<TDerived*>(this)->Finalize();
-            return;
+            co_return;
         }
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
@@ -866,7 +869,7 @@ protected:
         for (const auto& [secretName, authInfo] : stage.GetSecureParams()) {
             const auto& structuredToken = NYql::CreateStructuredTokenParser(authInfo).ToBuilder().ReplaceReferences(SecureParams).ToJson();
             const auto& structuredTokenParser = NYql::CreateStructuredTokenParser(structuredToken);
-            YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentification supported for compute tasks");
+            YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentication supported for compute tasks");
             secureParams.emplace(secretName, structuredTokenParser.GetIAMToken());
         }
     }
@@ -1030,6 +1033,19 @@ protected:
         }
     }
 
+    void FillReadTaskFromSource(TTask& task, const TString& sourceName, const TString& structuredToken, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui64 nodeOffset) {
+        if (structuredToken) {
+            task.Meta.SecureParams.emplace(sourceName, structuredToken);
+        }
+
+        if (resourceSnapshot.empty()) {
+            task.Meta.Type = TTaskMeta::TTaskType::Compute;
+        } else {
+            task.Meta.NodeId = resourceSnapshot[nodeOffset % resourceSnapshot.size()].GetNodeId();
+            task.Meta.Type = TTaskMeta::TTaskType::Scan;
+        }
+    }
+
     void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount) {
         auto& intros = stageInfo.Introspections;
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -1072,15 +1088,26 @@ protected:
             structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
         }
 
-        ui64 selfNodeIdx = 0;
+        ui64 nodeOffset = 0;
         for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
             if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
-                selfNodeIdx = i;
+                nodeOffset = i;
                 break;
             }
         }
 
+        if (Request.QueryPhysicalGraph) {
+            for (const auto taskId : stageInfo.Tasks) {
+                auto& task = TasksGraph.GetTask(taskId);
+                FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
+                FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+                BuildSinks(stage, stageInfo, task);
+            }
+            return;
+        }
+
         TVector<ui64> tasksIds;
+        tasksIds.reserve(taskCount);
 
         // generate all tasks
         for (ui32 i = 0; i < taskCount; i++) {
@@ -1093,17 +1120,8 @@ protected:
                 input.SourceType = externalSource.GetType();
             }
 
-            if (structuredToken) {
-                task.Meta.SecureParams.emplace(sourceName, structuredToken);
-            }
+            FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-
-            if (resourceSnapshot.empty()) {
-                task.Meta.Type = TTaskMeta::TTaskType::Compute;
-            } else {
-                task.Meta.NodeId = resourceSnapshot[(selfNodeIdx + i) % resourceSnapshot.size()].GetNodeId();
-                task.Meta.Type = TTaskMeta::TTaskType::Scan;
-            }
 
             tasksIds.push_back(task.Id);
         }
@@ -1171,6 +1189,8 @@ protected:
         THashMap<ui64, ui64> assignedShardsCount;
 
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+        bool singlePartitionedStage = stage.GetIsSinglePartition();
 
         YQL_ENSURE(stage.GetSources(0).HasReadRangesSource());
         YQL_ENSURE(stage.GetSources(0).GetInputIndex() == 0 && stage.SourcesSize() == 1);
@@ -1408,7 +1428,7 @@ protected:
         bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
         bool isParallelPointRead = EnableParallelPointReadConsolidation && !isSequentialInFlight && !source.GetSorted() && IsParallelPointReadPossible(partitions);
 
-        if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead)) {
+        if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead || singlePartitionedStage)) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
 
             YQL_ENSURE(Stats);
@@ -1423,11 +1443,11 @@ protected:
             }
 
             if (shardInfo.KeyReadRanges) {
-                const TMaybe<ui64> nodeId = (isParallelPointRead) ? TMaybe<ui64>{SelfId().NodeId()} : Nothing();
+                const TMaybe<ui64> nodeId = (isParallelPointRead || singlePartitionedStage) ? TMaybe<ui64>{SelfId().NodeId()} : Nothing();
                 addPartition(startShard, nodeId, {}, shardInfo, inFlightShards);
                 fillRangesForTasks();
                 buildSinks();
-                return (isParallelPointRead) ? TMaybe<size_t>(partitions.size()) : Nothing();
+                return (isParallelPointRead || singlePartitionedStage) ? TMaybe<size_t>(partitions.size()) : Nothing();
             } else {
                 return 0;
             }
@@ -1460,6 +1480,17 @@ protected:
     void BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount) {
         auto& intros = stageInfo.Introspections;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+        if (Request.QueryPhysicalGraph) {
+            for (const auto taskId : stageInfo.Tasks) {
+                auto& task = TasksGraph.GetTask(taskId);
+                task.Meta.Type = TTaskMeta::TTaskType::Compute;
+                task.Meta.ExecuterId = SelfId();
+                FillSecureParamsFromStage(task.Meta.SecureParams, stage);
+                BuildSinks(stage, stageInfo, task);
+            }
+            return;
+        }
 
         ui32 partitionsCount = 1;
         ui32 inputTasks = 0;
@@ -1715,6 +1746,7 @@ protected:
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
             .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
+            .Query = Query,
         });
 
         auto err = Planner->PlanExecution();
@@ -1989,7 +2021,9 @@ protected:
     }
 
     void SaveScriptExternalEffect(std::unique_ptr<TEvSaveScriptExternalEffectRequest> scriptEffects) {
-        this->Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptEffects.release());
+        const auto runScriptActorId = GetUserRequestContext()->RunScriptActorId;
+        Y_ENSURE(runScriptActorId);
+        this->Send(runScriptActorId, scriptEffects.release());
     }
 
 protected:
@@ -2317,6 +2351,7 @@ protected:
     TMaybe<TInstant> CancelAt;
     TActorId Target;
     ui64 TxId = 0;
+    NScheduler::NHdrf::NDynamic::TQueryPtr Query;
 
     bool ShardsResolved = false;
     TKqpTasksGraph TasksGraph;
@@ -2381,6 +2416,9 @@ protected:
     TMaybe<NBatchOperations::TSettings> BatchOperationSettings;
 
     bool EnableParallelPointReadConsolidation = false;
+
+    bool AccountDefaultPoolInScheduler = false;
+
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

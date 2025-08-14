@@ -20,6 +20,7 @@ WITH (option = value [, ...])
 ### Параметры {#params}
 
 * `CONNECTION_STRING` — [строка соединения](../../../concepts/connect.md#connection_string) c базой-источником. Обязательный параметр.
+* `CA_CERT` — [корневой сертификат для TLS](../../../concepts/connect.md#tls-cert). Необязательный параметр. Может быть указан, если база-источник поддерживает режим обмена данными с шифрованием (`CONNECTION_STRING` начинается с `grpcs://`).
 * Настройки для аутентификации в базе-источнике одним из способов (обязательно):
 
   * С помощью [токена](../../../recipes/ydb-sdk/auth-access-token.md):
@@ -87,6 +88,18 @@ FOR `/Root/another_database` AS `/Root/my_database`
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
+);
+```
+
+Создание экземпляра асинхронной репликации с указанием корневого сертификата для TLS:
+
+```yql
+CREATE ASYNC REPLICATION my_consistent_replication
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_NAME = 'my_secret',
+    CA_CERT = '-----BEGIN CERTIFICATE-----...'
 );
 ```
 

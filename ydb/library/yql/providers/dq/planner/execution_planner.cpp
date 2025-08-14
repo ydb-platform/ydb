@@ -459,6 +459,7 @@ namespace NYql::NDqs {
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
             taskDesc.SetEnableSpilling(Settings->GetEnabledSpillingNodes());
+            taskDesc.SetValuePackerVersion(Settings->GetValuePackerVersion());
 
             if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
                 auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;

@@ -62,7 +62,6 @@ public:
     std::string Build();
 
 private:
-    std::string WrapTableName(const std::string& source);
     struct TEntryWithAlias
     {
         std::string Expression;
@@ -98,6 +97,8 @@ private:
     std::vector<TJoinEntry> JoinEntries_;
     std::optional<i64> Offset_;
     std::optional<i64> Limit_;
+
+    std::string WrapTableName(const std::string& source);
 
     static void FormatEntryWithAlias(TStringBuilderBase* builder, const TEntryWithAlias& entry);
     static void FormatOrderByEntry(TStringBuilderBase* builder, const TOrderByEntry& entry);

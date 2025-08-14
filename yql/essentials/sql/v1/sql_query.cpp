@@ -167,6 +167,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "ca_cert",
         "flush_interval",
         "batch_size_bytes",
+        "directory",
     };
 
     TSet<TString> stateSettings = {
@@ -3218,6 +3219,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TABLE_ELEM("AutoCommit", PragmaAutoCommit, true),
     TABLE_ELEM("UseTablePrefixForEach", PragmaUseTablePrefixForEach, true),
     PAIRED_TABLE_ELEM("SimpleColumns", SimpleColumns),
+    PAIRED_TABLE_ELEM("DebugPositions", DebugPositions),
     PAIRED_TABLE_ELEM("CoalesceJoinKeysOnQualifiedAll", CoalesceJoinKeysOnQualifiedAll),
     PAIRED_TABLE_ELEM("PullUpFlatMapOverJoin", PragmaPullUpFlatMapOverJoin),
     PAIRED_TABLE_ELEM("FilterPushdownOverJoinOptionalSide", FilterPushdownOverJoinOptionalSide),

@@ -82,10 +82,11 @@ private:
     class TColumnOwnerId {
     private:
         TPathId Tenant;
-        NColumnShard::TInternalPathId Owner;
+        //Use SS path id here because two shards from different tables on a node may have the same internal path id
+        NColumnShard::TSchemeShardLocalPathId Owner;
 
     public:
-        TColumnOwnerId(const TPathId& tenant, const NColumnShard::TInternalPathId owner)
+        TColumnOwnerId(const TPathId& tenant, const NColumnShard::TSchemeShardLocalPathId& owner)
             : Tenant(tenant)
             , Owner(owner) {
             AFL_VERIFY(!!Owner);
@@ -122,7 +123,7 @@ private:
     }
 
 public:
-    static std::shared_ptr<TSchemaObjectsCache> GetCache(const NColumnShard::TInternalPathId ownerPathId, const TPathId& tenantPathId) {
+    static std::shared_ptr<TSchemaObjectsCache> GetCache(const NColumnShard::TSchemeShardLocalPathId& ownerPathId, const TPathId& tenantPathId) {
         return Singleton<TSchemaCachesManager>()->GetCacheImpl(TColumnOwnerId(tenantPathId, ownerPathId));
     }
 

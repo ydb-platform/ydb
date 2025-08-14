@@ -551,7 +551,6 @@ private:
                               const TString& dbPath,
                               std::shared_ptr<TProgressFile> progressFile);
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
-    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc);
 
     TAsyncStatus UpsertTValueBufferParquet(
         const TString& dbPath,
@@ -890,49 +889,6 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
             });
     };
     return TableClient->RetryOperation(retryFunc, RetrySettings);
-}
-
-inline
-TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc) {
-    std::optional<TValue> prebuiltValue = buildFunc();
-    auto retryFunc = [this, &dbPath, buildFunc = std::move(buildFunc), prebuiltValue = std::move(prebuiltValue)]
-            (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
-        auto buildTValueAndSendRequest = [this, &buildFunc, &dbPath, &tableClient, &prebuiltValue]() {
-            // For every retry attempt after first request build value from strings again
-            // to prevent copying data in retryFunc in a happy way when there is only one request
-            TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc();
-            prebuiltValue = std::nullopt;
-            return tableClient.BulkUpsert(dbPath, std::move(builtValue), UpsertSettings)
-                .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
-                    NYdb::TStatus status = bulkUpsertResult.GetValueSync();
-                    return NThreading::MakeFuture(status);
-                });
-        };
-        // Running and re-running (with building TValue) requests on a separate pool to avoid deadlocks
-        return NThreading::Async(std::move(buildTValueAndSendRequest), *RetryPool);
-    };
-    if (!RequestsInflight->try_acquire()) {
-        if (Settings.Verbose_ && Settings.NewlineDelimited_) {
-            if (!InformedAboutLimit.exchange(true)) {
-                Cerr << (TStringBuilder() << "@ (each '@' means max request inflight is reached and a worker thread is waiting for "
-                "any response from database)" << Endl);
-            } else {
-                Cerr << '@';
-            }
-        }
-        RequestsInflight->acquire();
-    }
-    return TableClient->RetryOperation(retryFunc, RetrySettings)
-        .Apply([this](const TAsyncStatus& asyncStatus) {
-            NYdb::TStatus status = asyncStatus.GetValueSync();
-            if (!status.IsSuccess()) {
-                if (!Failed.exchange(true)) {
-                    ErrorStatus = MakeHolder<TStatus>(status);
-                }
-            }
-            RequestsInflight->release();
-            return asyncStatus;
-        });
 }
 
 inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
@@ -1330,23 +1286,21 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
             // Job ends on receiving final request (after all retries)
             std::counting_semaphore<> jobsInflight(maxJobInflight);
             auto upsertCsvFunc = [&](std::vector<TString>&& buffer) {
-                auto buildFunc = [&jobsInflight, &parser, buffer = std::move(buffer), &filePath, this]() mutable {
-                    try {
-                        return parser.BuildList(buffer, filePath);
-                    } catch (const std::exception& e) {
-                        if (!Failed.exchange(true)) {
-                            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
-                        }
-                        jobsInflight.release();
-                        throw;
-                    }
-                };
                 jobsInflight.acquire();
-                UpsertTValueBuffer(dbPath, std::move(buildFunc))
-                    .Apply([&jobsInflight](const TAsyncStatus& asyncStatus) {
-                        jobsInflight.release();
-                        return asyncStatus;
-                    });
+                try {
+                    UpsertTValueBufferOnArena(dbPath, [&parser, buffer = std::move(buffer), &filePath](google::protobuf::Arena* arena) mutable {
+                            return parser.BuildListOnArena(buffer, filePath, arena);
+                        })
+                        .Apply([&jobsInflight](const TAsyncStatus& asyncStatus) {
+                            jobsInflight.release();
+                            return asyncStatus;
+                        });
+                } catch (const std::exception& e) {
+                    if (!Failed.exchange(true)) {
+                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                    }
+                    jobsInflight.release();
+                }
             };
             std::vector<TAsyncStatus> inFlightRequests;
             std::vector<TString> buffer;

@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(SlowTopicAutopartitioning) {
     }
 
     ui64 GetBalancerTabletId(TTopicSdkTestSetup& setup, const TString& topicPath) {
-        auto pathDescr = setup.GetServer().AnnoyingClient->Ls(topicPath)->Record.GetPathDescription().GetSelf();
+        auto pathDescr = setup.GetServer().AnnoyingClient->Describe(&setup.GetRuntime(), topicPath).GetPathDescription().GetPersQueueGroup();
         auto balancerTabletId = pathDescr.GetBalancerTabletID();
         Cerr << ">>>>> BalancerTabletID=" << balancerTabletId << Endl << Flush;
         UNIT_ASSERT(balancerTabletId);

@@ -177,10 +177,6 @@ message TKqpPhyOpDeleteRows {
     TKqpPhyValue RowsValue = 1;
 }
 
-message TKqpPhyOpLookup {
-    TKqpPhyValue KeysValue = 1;
-}
-
 message TKqpPhyOpReadOlapRanges {
     enum EReadType {
         ROWS = 0;
@@ -237,7 +233,6 @@ message TKqpPhyTableOperation {
         TKqpPhyOpReadRange ReadRange = 3;
         TKqpPhyOpUpsertRows UpsertRows = 4;
         TKqpPhyOpDeleteRows DeleteRows = 5;
-        TKqpPhyOpLookup Lookup = 6;
         TKqpPhyOpReadOlapRanges ReadOlapRange = 7;
         TKqpPhyOpReadRanges ReadRanges = 8;
     }

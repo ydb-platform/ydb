@@ -212,7 +212,7 @@ public:
 
         if (resourcesDomainId) {
             TSubDomainInfo::TPtr resourcesDomain = context.SS->SubDomains.at(resourcesDomainId);
-            TTabletId sharedHive = context.SS->GetGlobalHive(context.Ctx);
+            TTabletId sharedHive = context.SS->GetGlobalHive();
             if (resourcesDomain->GetTenantHiveID()) {
                 sharedHive = resourcesDomain->GetTenantHiveID();
             }

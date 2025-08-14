@@ -7,7 +7,17 @@
   - cublasLt.h
   - cublas_v2.h
   - cuda.h
+  - cuda/annotated_ptr
   - cuda/atomic
+  - cuda/barrier
+  - cuda/discard_memory
+  - cuda/functional
+  - cuda/latch
+  - cuda/memory_resource
+  - cuda/pipeline
+  - cuda/ptx
+  - cuda/semaphore
+  - cuda/stream_ref
   - cuda/std/atomic
   - cuda/std/array
   - cuda/std/cassert

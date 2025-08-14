@@ -2287,7 +2287,7 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
 
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
     TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
-    TNodePtr options)
+    TNodePtr options, const TVector<TNodePtr>& depends)
 {
     const TString fullName = module + "." + name;
     TNodePtr callable;
@@ -2319,24 +2319,30 @@ TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const
     // optional arguments
     if (customUserType) {
         sqlCallArgs.push_back(customUserType);
-    } else if (!typeConfig.Empty() || runConfig || options) {
+    } else if (!typeConfig.Empty() || runConfig || options || !depends.empty()) {
         sqlCallArgs.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
 
     if (!typeConfig.Empty()) {
         sqlCallArgs.push_back(typeConfig.Build());
-    } else if (runConfig || options) {
+    } else if (runConfig || options || !depends.empty()) {
         sqlCallArgs.push_back(BuildQuotedAtom(pos, ""));
     }
 
     if (runConfig) {
         sqlCallArgs.push_back(runConfig);
-    } else if (options) {
+    } else if (options || !depends.empty()) {
         sqlCallArgs.push_back(new TCallNodeImpl(pos, "Void", {}));
     }
 
     if (options) {
         sqlCallArgs.push_back(options);
+    } else if (!depends.empty()) {
+        sqlCallArgs.push_back(BuildQuote(pos, BuildList(pos)));
+    }
+
+    for (const auto& d : depends) {
+        sqlCallArgs.push_back(new TCallNodeImpl(pos, "DependsOn", { d }));
     }
 
     return new TCallNodeImpl(pos, "SqlCall", sqlCallArgs);
@@ -3027,7 +3033,7 @@ struct TBuiltinFuncData {
             {"nothing", {"Nothing", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Nothing", 1, 1)}},
             {"formattype", {"FormatType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatType", 1, 1)}},
             {"formattypediff", {"FormatTypeDiff", "Normal", BuildNamedBuiltinFactoryCallback<TFormatTypeDiff<false>>("FormatTypeDiff")}},
-            {"formattypediffpretty", {"FormatTypeDeffPretty", "Normal", BuildNamedBuiltinFactoryCallback<TFormatTypeDiff<true>>("FormatTypeDiffPretty")}},
+            {"formattypediffpretty", {"FormatTypeDiffPretty", "Normal", BuildNamedBuiltinFactoryCallback<TFormatTypeDiff<true>>("FormatTypeDiffPretty")}},
             {"pgtype", {"PgType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlPgType>()}},
             {"pgconst", {"PgConst", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlPgConst>()}},
             {"pgop", {"PgOp", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlPgOp>()}},
@@ -3105,7 +3111,7 @@ struct TBuiltinFuncData {
             {"voidtypehandle", {"VoidTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VoidTypeHandle", 0, 0)}},
             {"nulltypehandle", {"NullTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("NullTypeHandle", 0, 0)}},
             {"emptylisttypehandle", {"EmptyListTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyListTypeHandle", 0, 0)}},
-            {"emptydicttypehandle", {"EmptyDictTypehandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDictTypeHandle", 0, 0)}},
+            {"emptydicttypehandle", {"EmptyDictTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDictTypeHandle", 0, 0)}},
             {"callabletypecomponents", {"CallableTypeComponents", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeComponents", 1, 1)}},
             {"callableargument", {"CallableArgument", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableArgument", 1, 3)}},
             {"callabletypehandle", {"CallableTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeHandle", 2, 4)}},
@@ -3931,7 +3937,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     TNodePtr typeConfig = MakeTypeConfig(pos, ns, usedArgs);
     return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType,
-        TDeferredAtom(typeConfig, ctx), nullptr, nullptr);
+        TDeferredAtom(typeConfig, ctx), nullptr, nullptr, {});
 }
 
 void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind)>& callback) {

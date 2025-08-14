@@ -1,4 +1,5 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 PEERDIR(
     yql/essentials/providers/common/proto

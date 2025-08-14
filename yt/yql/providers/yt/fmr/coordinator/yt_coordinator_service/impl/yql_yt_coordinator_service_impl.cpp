@@ -31,8 +31,7 @@ public:
             auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
             TVector<NYT::TRichYPath> richPaths;
             for (auto& ytTable: ytTables ) {
-                TString ytPath = NYT::AddPathPrefix(ytTable.Path, "//");
-                richPaths.emplace_back(NYT::TRichYPath(ytPath).Cluster(ytTable.Cluster));
+                richPaths.emplace_back(ytTable.RichPath);
             }
             try {
                 NYT::TMultiTablePartitions partitions = transaction->GetTablePartitions(richPaths, getTablePartitionsOptions);
@@ -69,7 +68,7 @@ private:
         std::vector<TGroupedYtTablesByCluster> tableGroups;
         std::unordered_map<TString, ui64> ytServerToGroups;
         for (auto& ytTable: ytTables) {
-            auto fmrTableId = TFmrTableId(ytTable.Cluster, ytTable.Path);
+            auto fmrTableId = TFmrTableId(ytTable.GetCluster(), ytTable.GetPath());
             auto clusterConnection = clusterConnections.at(fmrTableId);
             auto ytServerName = clusterConnection.YtServerName;
             if (!ytServerToGroups.contains(ytServerName)) {

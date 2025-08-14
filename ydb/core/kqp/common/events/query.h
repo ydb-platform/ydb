@@ -364,6 +364,22 @@ public:
         DatabaseId = databaseId;
     }
 
+    bool GetSaveQueryPhysicalGraph() const {
+        return SaveQueryPhysicalGraph;
+    }
+
+    void SetSaveQueryPhysicalGraph(bool saveQueryPhysicalGraph) {
+        SaveQueryPhysicalGraph = saveQueryPhysicalGraph;
+    }
+
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> GetQueryPhysicalGraph() const {
+        return QueryPhysicalGraph;
+    }
+
+    void SetQueryPhysicalGraph(NKikimrKqp::TQueryPhysicalGraph queryPhysicalGraph) {
+        QueryPhysicalGraph = std::make_shared<const NKikimrKqp::TQueryPhysicalGraph>(std::move(queryPhysicalGraph));
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -394,6 +410,8 @@ private:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
+    bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

@@ -88,13 +88,15 @@ void TAlterReplicationCardCommand::DoExecute(ICommandContextPtr context)
 void TPingChaosLeaseCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("chaos_lease_id", &TThis::ChaosLeaseId);
+    registrar.Parameter("ping_ancestors", &TThis::PingAncestors)
+        .Default(true);
 }
 
 void TPingChaosLeaseCommand::DoExecute(ICommandContextPtr context)
 {
     auto options = TChaosLeaseAttachOptions{};
     options.Ping = true;
-    options.PingAncestors = true;
+    options.PingAncestors = PingAncestors;
 
     auto future = context->GetClient()->AttachChaosLease(ChaosLeaseId, options);
     auto chaosLease = WaitFor(future)

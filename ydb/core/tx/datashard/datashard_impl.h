@@ -1792,7 +1792,7 @@ public:
     void SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext, const TActorContext &ctx) override;
     void CompactionComplete(ui32 tableId, const TActorContext &ctx) override;
     void CompletedLoansChanged(const TActorContext &ctx) override;
-    void VacuumComplete(ui64 dataCleanupGeneration, const TActorContext &ctx) override;
+    void VacuumComplete(ui64 vacuumGeneration, const TActorContext &ctx) override;
 
     void ReplyCompactionWaiters(
         ui32 tableId,
@@ -1938,10 +1938,10 @@ public:
         const TPathId& pathId, ui64 tableSchemaVersion,
         const TPathId& streamPathId, NKikimrSchemeOp::ECdcStreamState state);
 
-    TUserTable::TPtr AlterTableDropCdcStream(
+    TUserTable::TPtr AlterTableDropCdcStreams(
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, ui64 tableSchemaVersion,
-        const TPathId& streamPathId);
+        const TVector<TPathId>& streamPathId);
 
     TUserTable::TPtr AlterTableRotateCdcStream(
         const TActorContext& ctx, TTransactionContext& txc,

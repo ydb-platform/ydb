@@ -2145,7 +2145,7 @@ struct Schema : NIceDb::Schema {
         struct OperationId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct State : Column<2, NScheme::NTypeIds::Uint32> {};
         struct CurrentIncrementalIdx : Column<3, NScheme::NTypeIds::Uint32> {};
-        
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx>;
     };
@@ -2156,9 +2156,55 @@ struct Schema : NIceDb::Schema {
         struct ShardIdx : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
         struct LastKey : Column<4, NScheme::NTypeIds::String> {};
-        
+
         using TKey = TableKey<OperationId, ShardIdx>;
         using TColumns = TableColumns<OperationId, ShardIdx, Status, LastKey>;
+    };
+
+    struct SystemShardsToDelete : Table<124> {
+        struct ShardIdx : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
+
+        using TKey = TableKey<ShardIdx>;
+        using TColumns = TableColumns<ShardIdx>;
+    };
+
+    struct IncrementalBackups : Table<125> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct State : Column<2, NScheme::NTypeIds::Uint8> {};
+
+        struct DomainPathOwnerId : Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct DomainPathId : Column<4, NScheme::NTypeIds::Uint64> {};
+
+        struct UserSID : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct StartTime : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct EndTime : Column<7, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<
+            Id,
+            State,
+            DomainPathOwnerId,
+            DomainPathId,
+            UserSID,
+            StartTime,
+            EndTime
+        >;
+    };
+
+    struct IncrementalBackupItems : Table<126> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathOwnerId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct PathId : Column<3, NScheme::NTypeIds::Uint64> {};
+
+        struct State : Column<4, NScheme::NTypeIds::Uint8> {};
+
+        using TKey = TableKey<Id, PathOwnerId, PathId>;
+        using TColumns = TableColumns<
+            Id,
+            PathOwnerId,
+            PathId,
+            State
+        >;
     };
 
     using TTables = SchemaTables<
@@ -2282,7 +2328,10 @@ struct Schema : NIceDb::Schema {
         IncrementalRestoreOperations,
         KMeansTreeClusters,
         IncrementalRestoreState,
-        IncrementalRestoreShardProgress
+        IncrementalRestoreShardProgress,
+        SystemShardsToDelete,
+        IncrementalBackups,
+        IncrementalBackupItems
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

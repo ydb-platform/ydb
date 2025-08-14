@@ -860,6 +860,59 @@ struct THandlerActorYdb {
         return false;
     }
 
+    static void SetCORS(NHttp::THttpIncomingRequestPtr request, NHttp::THeadersBuilder* const headers) {
+        TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
+        if (origin.empty()) {
+            origin = "*";
+        }
+        headers->Set("Access-Control-Allow-Origin", origin);
+        headers->Set("Access-Control-Allow-Credentials", "true");
+        headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent");
+        headers->Set("Access-Control-Expose-Headers", "traceresponse,X-Worker-Name");
+        headers->Set("Access-Control-Allow-Methods", "OPTIONS,GET,POST,PUT,DELETE");
+        headers->Set("Allow", "OPTIONS,GET,POST,PUT,DELETE");
+    }
+
+    static NHttp::THttpOutgoingResponsePtr CreateResponse(NHttp::THttpIncomingRequestPtr request, TStringBuf status, TStringBuf message, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf(), TInstant lastModified = TInstant()) {
+        NHttp::THeadersBuilder headers;
+        if (!contentType.empty() && !body.empty()) {
+            headers.Set("Content-Type", contentType);
+        }
+        if (lastModified) {
+            headers.Set("Last-Modified", lastModified.FormatGmTime("%a, %d %b %Y %H:%M:%S GMT"));
+        }
+        SetCORS(request, &headers);
+        return request->CreateResponse(status, message, headers, body);
+    }
+
+    static NHttp::THttpOutgoingResponsePtr CreateResponseOK(NHttp::THttpIncomingRequestPtr request, TStringBuf body, TStringBuf contentType, TInstant lastModified = TInstant()) {
+        return CreateResponse(request, "200", "OK", contentType, body, lastModified);
+    }
+
+    static NHttp::THttpOutgoingResponsePtr CreateResponseBadRequest(NHttp::THttpIncomingRequestPtr request, TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html") {
+        if (html.empty() && request->IsError()) {
+            contentType = "text/plain";
+            html = request->GetErrorText();
+        }
+        return CreateResponse(request, "400", "Bad Request", contentType, html);
+    }
+
+    static NHttp::THttpOutgoingResponsePtr CreateResponseNotFound(NHttp::THttpIncomingRequestPtr request, TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html") {
+        return CreateResponse(request, "404", "Not Found", contentType, html);
+    }
+
+    static NHttp::THttpOutgoingResponsePtr CreateResponseTooManyRequests(NHttp::THttpIncomingRequestPtr request, TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html") {
+        return CreateResponse(request, "429", "Too Many Requests", contentType, html);
+    }
+
+    static NHttp::THttpOutgoingResponsePtr CreateResponseServiceUnavailable(NHttp::THttpIncomingRequestPtr request, TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html") {
+        return CreateResponse(request, "503", "Service Unavailable", contentType, html);
+    }
+
+    static NHttp::THttpOutgoingResponsePtr CreateResponseGatewayTimeout(NHttp::THttpIncomingRequestPtr request, TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html") {
+        return CreateResponse(request, "504", "Gateway Timeout", contentType, html);
+    }
+
     static NHttp::THttpOutgoingResponsePtr CreateStatusResponseForQuery(NHttp::THttpIncomingRequestPtr request, const NYdb::TStatus& status, const TJsonSettings& jsonSettings = TJsonSettings()) {
         Ydb::Operations::Operation operation;
         operation.set_status(static_cast<Ydb::StatusIds_StatusCode>(status.GetStatus()));
@@ -916,7 +969,7 @@ struct THandlerActorYdb {
         }
         TStringStream stream;
         TProtoToJson::ProtoToJson(stream, operation, jsonSettings);
-        return request->CreateResponse(status, message, "application/json", stream.Str());
+        return CreateResponse(request, status, message, "application/json", stream.Str());
     }
 
     static NHttp::THttpOutgoingResponsePtr CreateStatusResponse(NHttp::THttpIncomingRequestPtr request, const NYdb::TStatus& status, const TJsonSettings& jsonSettings = TJsonSettings()) {
@@ -978,21 +1031,21 @@ struct THandlerActorYdb {
         }
         TStringStream stream;
         TProtoToJson::ProtoToJson(stream, operation, jsonSettings);
-        return request->CreateResponse(status, message, "application/json", stream.Str());
+        return CreateResponse(request, status, message, "application/json", stream.Str());
     }
 
     static NHttp::THttpOutgoingResponsePtr CreateErrorResponse(NHttp::THttpIncomingRequestPtr request, const TEvPrivate::TEvErrorResponse* error) {
         NJson::TJsonValue json;
         json["message"] = error->Message;
         TString body = NJson::WriteJson(json, false);
-        return request->CreateResponse(error->Status, error->Message, "application/json", body);
+        return CreateResponse(request, error->Status, error->Message, "application/json", body);
     }
 
     static NHttp::THttpOutgoingResponsePtr CreateErrorResponse(NHttp::THttpIncomingRequestPtr request, const TString& error) {
         NJson::TJsonValue json;
         json["message"] = error;
         TString body = NJson::WriteJson(json, false);
-        return request->CreateResponseServiceUnavailable(body, "application/json");
+        return CreateResponseServiceUnavailable(request, body, "application/json");
     }
 
     static TString ColumnPrimitiveValueToString(NYdb::TValueParser& valueParser) {

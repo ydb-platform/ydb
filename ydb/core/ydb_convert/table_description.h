@@ -54,6 +54,7 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
 void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in);
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);
+void FillColumnDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in);
@@ -116,6 +117,8 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
 
 // out
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TPathDescription& in);
+void FillAttributes(Ydb::Table::DescribeSystemViewResult& out,
     const NKikimrSchemeOp::TPathDescription& in);
 void FillAttributes(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TPathDescription& in);

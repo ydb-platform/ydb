@@ -25,6 +25,7 @@ namespace NKikimr::NEvWrite {
         }
     }
 
+    NO_SANITIZE_THREAD
     void TWritersController::OnFail(const Ydb::StatusIds::StatusCode code, const TString& message) {
         Counters->OnCSFailed(code);
         FailsCount.Inc();
@@ -86,9 +87,11 @@ namespace NKikimr::NEvWrite {
         auto gPassAway = PassAwayGuard();
         if (ydbStatus != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             auto statusInfo = NEvWrite::NErrorCodes::TOperator::GetStatusInfo(ydbStatus).DetachResult();
+            const auto issues = msg->Record.GetIssues();
+            const TString issueString = issues.empty() ? "unspecified error" : issues[0].message();
             ExternalController->OnFail(statusInfo.GetYdbStatusCode(),
-                TStringBuilder() << "Cannot write data into shard(" << statusInfo.GetIssueGeneralText() << ") " << ShardId << " in longTx " <<
-                ExternalController->GetLongTxId().ToString());
+                TStringBuilder() << "Cannot write data into shard(" << statusInfo.GetIssueGeneralText() << ": " << issueString << ") " << ShardId
+                                 << " in longTx " << ExternalController->GetLongTxId().ToString());
             return;
         }
 

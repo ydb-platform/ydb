@@ -180,13 +180,13 @@ std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const T
 
 TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, TExprBase>>& parameters, const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos);
 
-[[maybe_unused]]
 TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprNode& argument, TExprContext& ctx, bool allowApply) {
     if (const auto params = ExtractBinaryFunctionParameters(coalesce, argument, ctx, coalesce.Pos(), allowApply)) {
         return Build<TKqpOlapFilterBinaryOp>(ctx, coalesce.Pos())
                 .Operator().Value("??", TNodeFlags::Default).Build()
                 .Left(params->first)
                 .Right(params->second)
+                .OpType(ExpandType(coalesce.Pos(), *(coalesce.Ptr()->GetTypeAnn()), ctx))
                 .Done();
     }
 
@@ -409,6 +409,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
                         .Operator().Value(arithmetic.Ref().Content(), TNodeFlags::Default).Build()
                         .Left(UnwrapOptionalTKqpOlapApplyColumnArg(params->first))
                         .Right(UnwrapOptionalTKqpOlapApplyColumnArg(params->second))
+                        .OpType(ExpandType(node.Pos(), *(arithmetic.Ptr()->GetTypeAnn()), ctx))
                         .Done();
             }
         }
@@ -552,6 +553,7 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
         .Operator().Value(compareOperator, TNodeFlags::Default).Build()
         .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.first))
         .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.second))
+        .OpType(ExpandType(predicate.Pos(), *(predicate.Ptr()->GetTypeAnn()), ctx))
         .Done();
 }
 
@@ -809,6 +811,7 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
     auto asStructPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TCoAsStruct>(node); };
     auto memberPred = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoMember>(node); };
     THashSet<TString> projectionMembers;
+    ui32 nextMemberId = 0;
 
     TVector<std::pair<TString, TExprNode::TPtr>> olapOperationsForProjections;
     // Expressions for projections are placed in `AsStruct` callable.
@@ -823,17 +826,19 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
                         olapOperations.size() == 1) {
                         auto originalMember = TExprBase(originalMembers.front()).Cast<TCoMember>();
                         auto originalMemberName = TString(originalMember.Name());
-                        // Do not push projection for the same column, we are not ready for this.
-                        if (projectionMembers.contains(originalMemberName)) {
-                            return {};
-                        }
-                        projectionMembers.insert(originalMemberName);
 
-                        // We cannot push projection if some predicate for the same column still not pushed.
                         if (!predicateMembers.contains(originalMemberName)) {
+                            if (projectionMembers.contains(originalMemberName)) {
+                                originalMemberName = "__kqp_olap_projection_" + originalMemberName + ToString(nextMemberId++);
+                            } else {
+                                projectionMembers.insert(originalMemberName);
+                            }
+
                             auto newMember = Build<TCoMember>(ctx, node->Pos())
                                 .Struct(originalMember.Struct())
-                                .Name(originalMember.Name())
+                                .Name<TCoAtom>()
+                                    .Value(originalMemberName)
+                                    .Build()
                             .Done();
 
                             auto olapOperation = olapOperations.front();
@@ -950,13 +955,22 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         return node;
     }
 
-    if (!node.Maybe<TCoFlatMap>().Input().Maybe<TKqpReadOlapTableRanges>()) {
+    if (!node.Maybe<TCoFlatMap>().Input().Maybe<TKqpReadOlapTableRanges>() &&
+        !node.Maybe<TCoFlatMap>().Input().Maybe<TCoExtractMembers>().Input().Maybe<TKqpReadOlapTableRanges>()) {
         return node;
     }
 
     auto flatmap = node.Cast<TCoFlatMap>();
-    auto read = flatmap.Input().Cast<TKqpReadOlapTableRanges>();
 
+    TExprNode::TPtr readPtr;
+    if (flatmap.Input().Maybe<TKqpReadOlapTableRanges>()) {
+        readPtr = flatmap.Input().Cast<TKqpReadOlapTableRanges>().Ptr();
+    } else {
+        readPtr = flatmap.Input().Cast<TCoExtractMembers>().Input().Cast<TKqpReadOlapTableRanges>().Ptr();
+    }
+    Y_ENSURE(readPtr);
+
+    auto read = TExprBase(readPtr).Cast<TKqpReadOlapTableRanges>();
     if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
         return node;
     }

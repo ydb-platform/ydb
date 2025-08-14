@@ -45,7 +45,7 @@ struct TOriginAttributes
 
     TProcessId Pid = 0;
 
-    NThreading::TThreadId Tid;
+    NThreading::TThreadId Tid = 0;
     TThreadName ThreadName;
 
     TInstant Datetime;

@@ -53,6 +53,7 @@ public:
         AddHandler({TPqWriteTopic::CallableName() }, Hndl(&TSelf::HandleWriteTopic));
         AddHandler({NNodes::TPqClusterConfig::CallableName() }, Hndl(&TSelf::HandleClusterConfig));
         AddHandler({TDqPqTopicSink::CallableName()}, Hndl(&TSelf::HandleDqPqTopicSink));
+        AddHandler({TPqInsert::CallableName()}, Hndl(&TSelf::HandleInsert));
     }
 
     TStatus HandleCommit(TExprBase input, TExprContext&) {
@@ -91,6 +92,27 @@ public:
             return TStatus::Error;
         }
         input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
+        if (!EnsureArgsCount(input.Ref(), 4U, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto insert = input.Cast<TPqInsert>();
+        const auto& insertInput = insert.Input().Ref();
+        if (!EnsureStructTypeWithSingleStringMember(insertInput.GetTypeAnn(), insertInput.Pos(), ctx)) {
+            return TStatus::Error;
+        }
+
+        auto itemSchema = insertInput.GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        auto column = itemSchema->GetItems()[0];
+        TVector<const TItemExprType*> items;
+        items.push_back(column);
+        auto itemType = ctx.MakeType<TStructExprType>(items);
+        auto type = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{ctx.MakeType<TListExprType>(itemType)});
+        input.Ptr()->SetTypeAnn(type);
         return TStatus::Ok;
     }
 

@@ -44,11 +44,10 @@ public:
         const auto version = params.GetTableSchemaVersion();
         Y_ENSURE(version);
 
-        // Process all streams atomically
         TUserTable::TPtr tableInfo;
+        tableInfo = DataShard.AlterTableDropCdcStreams(ctx, txc, pathId, version, streamPathIds);
+
         for (const auto& streamPathId : streamPathIds) {
-            tableInfo = DataShard.AlterTableDropCdcStream(ctx, txc, pathId, version, streamPathId);
-            
             auto& scanManager = DataShard.GetCdcStreamScanManager();
             scanManager.Forget(txc.DB, pathId, streamPathId);
             if (const auto* info = scanManager.Get(streamPathId)) {

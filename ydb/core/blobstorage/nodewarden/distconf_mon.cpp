@@ -260,6 +260,7 @@ namespace NKikimr::NStorage {
                             out << "LocalPileQuorum: " << (LocalPileQuorum ? "yes" : "no") << "<br/>";
                             out << "GlobalQuorum: " << (GlobalQuorum ? "yes" : "no") << "<br/>";
                             out << "NodeIdsForIncomingBinding: " << FormatList(NodeIdsForIncomingBinding) << "<br/>";
+                            out << "ConnectedUnsyncedPiles: " << FormatList(ConnectedUnsyncedPiles) << "<br/>";
                         }
                         TABLE_CLASS("table table-condensed") {
                             TABLEHEAD() {

@@ -1,3 +1,5 @@
+#include <yt/yt/core/test_framework/framework.h>
+
 #include <yt/yt/client/federated/cache.h>
 #include <yt/yt/client/federated/config.h>
 #include <yt/yt/client/api/options.h>
@@ -5,11 +7,10 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <library/cpp/testing/gtest/gtest.h>
-
 #include <util/system/env.h>
 
 namespace NYT::NClient::NFederated {
+namespace {
 
 using namespace NYT::NApi;
 using namespace NYT::NClient::NCache;
@@ -112,4 +113,5 @@ TEST(TFederatedClientsCacheTest, ConfigurationMissingCluster)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+} // namespace
 } // namespace NYT::NClient::NFederated

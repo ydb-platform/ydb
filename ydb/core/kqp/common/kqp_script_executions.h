@@ -7,7 +7,7 @@
 
 namespace NKikimr::NKqp {
 
-TString ScriptExecutionOperationFromExecutionId(const TString& executionId);
+TString ScriptExecutionOperationFromExecutionId(const std::string& executionId);
 TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId, TString& error);
 TMaybe<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId, TString& error);
 

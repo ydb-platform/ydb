@@ -64,20 +64,13 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
                 ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
             }
 
-            {
-                auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
-                UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_PREPARING);
-            }
-
             t.TestEnv->TestWaitNotification(runtime, buildIndexId);
 
             {
+                TInactiveZone inactive(activeZone);
+
                 auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
                 UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
-            }
-
-            {
-                TInactiveZone inactive(activeZone);
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table"),
                                    {NLs::PathExist,

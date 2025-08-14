@@ -166,33 +166,34 @@ namespace NKikimr::NStorage {
         {}
     };
 
-    struct TEvNodeWardenManageSyncers
-        : TEventLocal<TEvNodeWardenManageSyncers, TEvBlobStorage::EvNodeWardenManageSyncers>
+    struct TEvNodeWardenUpdateConfigFromPeer
+        : TEventLocal<TEvNodeWardenUpdateConfigFromPeer, TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer>
     {
-        struct TSyncer {
-            ui32 NodeId;
-            TGroupId GroupId;
-            TBridgePileId TargetBridgePileId;
-        };
-        std::vector<TSyncer> RunSyncers;
+        NKikimrBlobStorage::TStorageConfig Config;
 
-        TEvNodeWardenManageSyncers(std::vector<TSyncer>&& runSyncers)
-            : RunSyncers(std::move(runSyncers))
+        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig config)
+            : Config(std::move(config))
         {}
     };
 
-    struct TEvNodeWardenManageSyncersResult
-        : TEventLocal<TEvNodeWardenManageSyncersResult, TEvBlobStorage::EvNodeWardenManageSyncersResult>
+    struct TEvNodeWardenNotifySyncerFinished
+        : TEventLocal<TEvNodeWardenNotifySyncerFinished, TEvBlobStorage::EvNodeWardenNotifySyncerFinished>
     {
-        struct TSyncer {
-            TGroupId GroupId;
-            TBridgePileId TargetBridgePileId;
-        };
-        std::vector<TSyncer> WorkingSyncers;
+        const TGroupId BridgeProxyGroupId;
+        const ui32 BridgeProxyGroupGeneration;
+        const TGroupId SourceGroupId;
+        const TGroupId TargetGroupId;
+        std::optional<TString> ErrorReason;
 
-        TEvNodeWardenManageSyncersResult(std::vector<TSyncer>&& workingSyncers)
-            : WorkingSyncers(std::move(workingSyncers))
+        TEvNodeWardenNotifySyncerFinished(TGroupId bridgeProxyGroupId, ui32 bridgeProxyGroupGeneration,
+                TGroupId sourceGroupId, TGroupId targetGroupId, std::optional<TString> errorReason)
+            : BridgeProxyGroupId(bridgeProxyGroupId)
+            , BridgeProxyGroupGeneration(bridgeProxyGroupGeneration)
+            , SourceGroupId(sourceGroupId)
+            , TargetGroupId(targetGroupId)
+            , ErrorReason(errorReason)
         {}
+
     };
 
 } // NKikimr::NStorage

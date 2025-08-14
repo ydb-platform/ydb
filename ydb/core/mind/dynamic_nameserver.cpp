@@ -260,6 +260,7 @@ void TDynamicNameserver::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     const auto& config = *ev->Get()->Config;
 
     BridgeInfo = std::move(ev->Get()->BridgeInfo);
+    ListNodesCache->Invalidate();
 
     if (ev->Get()->SelfManagementEnabled) {
         // self-management through distconf is enabled and we are operating based on their tables, so apply them now
@@ -422,7 +423,7 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
                                    pr.second.Port, pr.second.Location, true);
             if (newPileMap && BridgeInfo) {
                 if (const auto *pile = BridgeInfo->GetPileForNode(pr.first)) {
-                    newPileMap->at(pile->BridgePileId.GetRawId()).push_back(pr.first);
+                    newPileMap->at(pile->BridgePileId.GetPileIndex()).push_back(pr.first);
                 }
             }
         }
@@ -1010,7 +1011,13 @@ void TListNodesCache::Invalidate() {
 }
 
 bool TListNodesCache::NeedUpdate(TInstant now) const {
-    return Nodes == nullptr || now > Expire;
+    if (Nodes == nullptr || now > Expire) {
+        return true;
+    }
+    if (!PileMap && AppData()->BridgeModeEnabled) {
+        return true;
+    }
+    return false;
 }
 
 TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr TListNodesCache::GetNodes() const {

@@ -274,6 +274,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
         return "BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         return "BACKUP INCREMENTAL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return "RESTORE";
@@ -287,6 +288,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP SYSTEM VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         return "CHANGE PATH STATE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        return "RESTORE INCREMENTAL FINALIZE";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -638,6 +641,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
         break;
@@ -653,6 +659,10 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetChangePathState().GetPath()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        // For incremental restore finalization, we don't have a specific path in the message
+        // since it operates on paths determined at runtime
         break;
     }
 

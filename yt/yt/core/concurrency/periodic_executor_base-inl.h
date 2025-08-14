@@ -318,9 +318,14 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::DoRunCallback()
 {
     if constexpr (std::same_as<TCallbackResult, void>) {
         Callback_();
+
+        auto guard = Guard(SpinLock_);
         TInvocationTimePolicy::ProcessResult();
     } else {
-        TInvocationTimePolicy::ProcessResult(Callback_());
+        auto&& result = Callback_();
+
+        auto guard = Guard(SpinLock_);
+        TInvocationTimePolicy::ProcessResult(std::forward<decltype(result)>(result));
     }
 }
 

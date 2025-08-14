@@ -132,6 +132,9 @@ namespace NKikimr {
 
     }
 
+    const ui32 TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce = 2u;
+    const ui32 TVDiskConfig::TinyDiskHullCompSortedPartsNum = 2u;
+
     void TVDiskConfig::SetupHugeBytes() {
         switch (BaseInfo.DeviceType) {
             case NPDisk::DEVICE_TYPE_SSD:

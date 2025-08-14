@@ -371,9 +371,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetQueryLimitBytes(200);
 
-        TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false));
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(

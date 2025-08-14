@@ -100,12 +100,11 @@ private:
 
     virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
 
-    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
+    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
         auto constructor = TBase::PopObjectWithAccessor();
         constructor.MutableObject().SetIndex(CurrentSourceIdx);
         ++CurrentSourceIdx;
-        std::shared_ptr<NReader::NCommon::IDataSource> result = constructor.MutableObject().Construct(context, constructor.DetachAccessor());
-        return result;
+        return constructor.MutableObject().Construct(context, constructor.DetachAccessor());
     }
 
 public:

@@ -1,5 +1,7 @@
 RECURSE(
     cdc
+    common
+    ctas
     kv
     log
     mixedpy
@@ -8,8 +10,9 @@ RECURSE(
     oltp_workload
     reconfig_state_storage_workload
     s3_backups
-    simple_queue
     show_create/view
+    simple_queue
     statistics_workload
+    topic
     transfer
 )

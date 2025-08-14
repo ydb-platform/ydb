@@ -1,13 +1,16 @@
 #include "kqp_scan_compute_actor.h"
+
 #include "kqp_scan_common.h"
 #include "kqp_compute_actor_impl.h"
-#include <ydb/core/grpc_services/local_rate_limiter.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
-#include <ydb/core/kqp/runtime/kqp_scan_data.h>
+#include <ydb/core/grpc_services/local_rate_limiter.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/kqp_scan_data.h>
+#include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
@@ -23,7 +26,7 @@ static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
 
 } // anonymous namespace
 
-TKqpScanComputeActor::TKqpScanComputeActor(TSchedulableOptions schedulableOptions, const TActorId& executerId, ui64 txId,
+TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableActorOptions schedulableOptions, const TActorId& executerId, ui64 txId,
     NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode)
@@ -111,6 +114,8 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
                     externalStat.SetExternalBytes(stat.ExternalBytes);
                     externalStat.SetFirstMessageMs(stat.FirstMessageMs);
                     externalStat.SetLastMessageMs(stat.LastMessageMs);
+                    externalStat.SetCpuTimeUs(stat.CpuTimeUs);
+                    externalStat.SetWaitInputTimeUs(stat.WaitTimeUs);
                     externalStat.SetWaitOutputTimeUs(stat.WaitOutputTimeUs);
                     externalStat.SetFinished(stat.Finished);
                 }
@@ -185,11 +190,11 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
 
     auto guard = TaskRunner->BindAllocator();
     if (!!msg.GetArrowBatch()) {
-        ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes()), BlockTrackingMode), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
+        ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes()), BlockTrackingMode), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
     } else if (!msg.GetRows().empty()) {
-        ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
+        ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
     } else {
-        ScanData->UpdateStats(0, 0, msg.GetTabletId(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
+        ScanData->UpdateStats(0, 0, msg.GetTabletId(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
     }
     if (IsQuotingEnabled()) {
         AcquireRateQuota();

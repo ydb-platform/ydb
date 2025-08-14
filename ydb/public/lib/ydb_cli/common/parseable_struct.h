@@ -86,38 +86,59 @@ public:
         return result;
     }
 
-    static TString FormatHelp(size_t indentSize = 0, char indentC = ' ') {
+    static TString FormatHelp(const TStringBuf helpMessage, size_t verbosityLevel, size_t indentSize = 0, char indentC = ' ') {
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
         TStringBuilder help;
-        const TString& indent = MakeIndent(indentSize, indentC);
+        help << helpMessage;
 
+        TString indent;
+        if (verbosityLevel >= 2 && indentSize) {
+            indent = MakeIndent(indentSize, indentC);
+        }
+
+        if (verbosityLevel >= 2) {
+            help << Endl << indent << "Possible property names:" << Endl;
+        } else {
+            help << ". Possible property names: ";
+        }
+
+        bool first = true;
         for (const auto& kv : Fields) {
-            help << indent << "  " << colors.BoldColor() << kv.first << colors.OldColor();
+            if (verbosityLevel >= 2) {
+                help << indent << indent << colors.BoldColor() << kv.first << colors.OldColor();
 
-            if (kv.second.Aliases) {
-                help << " (aliases: ";
+                if (kv.second.Aliases) {
+                    help << " (aliases: ";
 
-                bool first = true;
-                for (const auto& alias : kv.second.Aliases) {
-                    if (!first) {
-                        help << ", ";
+                    bool first = true;
+                    for (const auto& alias : kv.second.Aliases) {
+                        if (!first) {
+                            help << ", ";
+                        }
+                        first = false;
+                        help << colors.BoldColor() << alias << colors.OldColor();
                     }
+
+                    help << ")";
+                }
+
+                help << Endl;
+
+                if (kv.second.Description) {
+                    help << indent << "    ";
+                    if (kv.second.Required) {
+                        help << "[Required] ";
+                    }
+                    help << kv.second.Description << Endl;
+                }
+            } else {
+                if (first) {
                     first = false;
-                    help << colors.BoldColor() << alias << colors.OldColor();
+                } else {
+                    help << ", ";
                 }
-
-                help << ")";
-            }
-
-            help << Endl;
-
-            if (kv.second.Description) {
-                help << indent << "    ";
-                if (kv.second.Required) {
-                    help << "[Required] ";
-                }
-                help << kv.second.Description << Endl;
+                help << colors.BoldColor() << kv.first << colors.OldColor();
             }
         }
 

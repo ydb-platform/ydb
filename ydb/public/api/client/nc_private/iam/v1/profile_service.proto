@@ -3,7 +3,7 @@ syntax = "proto3";
 package nebius.iam.v1;
 
 
-import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+//import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
 import "ydb/public/api/client/nc_private/annotations.proto";
 import "ydb/public/api/client/nc_private/audit/annotations.proto";
 import "ydb/public/api/client/nc_private/common/v1/operation.proto";
@@ -80,7 +80,7 @@ message AnonymousAccount {
 }
 
 message UpdateProfileAttributesRequest {
-  UserAttributes attributes = 1 [
-    (buf.validate.field).required = true
-  ];
+  UserAttributes attributes = 1; // [
+  //   (buf.validate.field).required = true
+  // ];
 }

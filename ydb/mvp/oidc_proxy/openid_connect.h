@@ -1,6 +1,6 @@
 #pragma once
 #include "cracked_page.h"
-#include "extension_context.h"
+#include "extension.h"
 #include "context.h"
 #include "oidc_settings.h"
 #include <ydb/library/actors/core/events.h>
@@ -16,10 +16,12 @@
 namespace NMVP::NOIDC {
 
 struct TOpenIdConnectSettings;
+struct TExtensionContext;
 
 constexpr TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
 constexpr TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";
 constexpr TStringBuf AUTHORIZATION_HEADER = "Authorization";
+constexpr TStringBuf X_FORWARDED_FOR_HEADER = "X-Forwarded-For";
 constexpr TStringBuf LOCATION_HEADER = "Location";
 
 constexpr TStringBuf USER_SID = "UserSID";
@@ -66,6 +68,7 @@ TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, con
 TCheckStateResult CheckState(const TString& state, const TString& key);
 TString DecodeToken(const TStringBuf& cookie);
 TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName);
+TString GetAddressWithoutPort(const TString& address);
 
 
 struct TProxiedRequestParams {

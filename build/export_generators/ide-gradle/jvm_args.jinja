@@ -61,13 +61,24 @@ tasks.withType<JavaExec> {
 {%- if extra_jvm_args|length and test_jvm_args|join('|') != extra_jvm_args|join('|') %}
 {%-     set test_jvm_args = test_jvm_args + extra_jvm_args -%}
 {%- endif -%}
-{%- if test_jvm_args|length %}
+{%- set test_cwds = extra_targets|selectattr('test_cwd')|map(attribute='test_cwd')|sum|unique -%}
+{%- if test_jvm_args|length or test_cwds|length %}
 
 tasks.withType<Test> {
 {#- glue -#}
 {{ JvmArgs(test_jvm_args) }}
-{%- if target.enable_preview %}
+{%- if target.enable_preview -%}
     environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
-{%- endif -%}
+{%  endif -%}
+{%- if test_cwds|length -%}
+{%-     if test_cwds|length > 1 %}
+// Use first of found TEST_CWDs: {%- for tcwd in test_cwds -%}{{ tcwd }}{%- if not loop.last -%}, {%- endif -%}{%- endfor -%}
+{%-     endif -%}
+{%-     set test_cwd = test_cwds|first -%}
+{%-     if test_cwd[0] != '/' -%}
+{%-         set test_cwd = '$arcadia_root/' + test_cwd -%}
+{%-     endif %}
+    workingDir({{ PatchRoots(test_cwd) }})
+{%  endif -%}
 }
 {%- endif -%}

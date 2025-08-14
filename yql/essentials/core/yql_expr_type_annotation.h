@@ -129,6 +129,9 @@ bool EnsureWideFlowType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureWideStreamType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureWideFlowOrStreamType(const TExprNode& node, TExprContext& ctx);
+bool IsWideFlowOrStreamType(const TTypeAnnotationNode& type);
+const TMultiExprType* GetWideFlowOrStreamComponents(const TTypeAnnotationNode& type);
 bool IsWideBlockType(const TTypeAnnotationNode& type);
 bool IsWideSequenceBlockType(const TTypeAnnotationNode& type);
 bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types, bool reportUnspported = false);
@@ -189,8 +192,11 @@ template <bool WithOptional, bool WithList = true, bool WithStream = true>
 bool EnsureNewSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, const TTypeAnnotationNode** itemType = nullptr);
 bool EnsureAnySeqType(const TExprNode& node, TExprContext& ctx);
 bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx);
-bool EnsureDependsOnTail(const TExprNode& node, TExprContext& ctx, unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0);
+bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx, bool inner = false);
+IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types,
+    unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0
+);
 
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx);
 bool EnsureTypeHandleResourceType(const TExprNode& node, TExprContext& ctx);

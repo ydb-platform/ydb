@@ -12,12 +12,14 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
 
-    yql/essentials/parser/pg_wrapper
-    yt/yql/providers/yt/gateway/file
-    yql/essentials/sql/pg
-
+    ydb/library/yql/providers/pq/gateway/dummy
     ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src
+
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg
+
+    yt/yql/providers/yt/gateway/file
 )
 
 PEERDIR(

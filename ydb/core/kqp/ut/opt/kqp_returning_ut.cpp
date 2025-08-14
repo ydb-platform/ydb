@@ -12,8 +12,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpReturning) {
 
 Y_UNIT_TEST(ReturningTwice) {
-    NKikimrConfig::TAppConfig appConfig;
-    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings serverSettings;
     TKikimrRunner kikimr(serverSettings);
 
     auto client = kikimr.GetTableClient();
@@ -117,8 +116,7 @@ Y_UNIT_TEST(ReturningTwice) {
 }
 
 Y_UNIT_TEST(ReplaceSerial) {
-    NKikimrConfig::TAppConfig appConfig;
-    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings serverSettings;
     TKikimrRunner kikimr(serverSettings);
 
     auto client = kikimr.GetTableClient();
@@ -173,8 +171,7 @@ Y_UNIT_TEST(ReplaceSerial) {
 }
 
 Y_UNIT_TEST(ReturningSerial) {
-    NKikimrConfig::TAppConfig appConfig;
-    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+    auto serverSettings = TKikimrSettings().SetWithSampleTables(false);
     TKikimrRunner kikimr(serverSettings);
 
     auto client = kikimr.GetTableClient();

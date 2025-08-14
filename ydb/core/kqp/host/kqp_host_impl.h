@@ -270,12 +270,6 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusive
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
     NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optimizeCtx);
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
-    TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TTypeAnnotationContext& typesCtx,
-    NYql::TKikimrConfiguration::TPtr config);
-
-TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckQueryTransformer();
-
 TIntrusivePtr<NYql::IKikimrGateway> CreateKqpGatewayProxy(const TIntrusivePtr<IKqpGateway>& gateway,
     const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx, TActorSystem* actorSystem);
 

@@ -247,6 +247,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     api/unittests
+    arrow/unittests
     query_client/unittests
     signature/unittests
     table_client/unittests

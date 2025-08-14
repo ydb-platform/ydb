@@ -1,12 +1,13 @@
 #pragma once
 
-#include "shared_cache_tiers.h"
 #include "shared_handle.h"
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NSharedCache {
 
 using TPageId = NTable::NPage::TPageId;
+using EPage = NTable::NPage::EPage;
+using ECacheMode = NTable::NPage::ECacheMode;
 
 struct TCollection;
 
@@ -27,7 +28,7 @@ struct TPage
     ui32 CacheId : 4 = 0;
     ui32 CacheFlags1 : 4 = 0;
     ui32 CacheFlags2 : 4 = 0;
-    ECacheTier CacheTier : 2 = ECacheTier::Regular;
+    ECacheMode CacheMode : 2 = ECacheMode::Regular;
 
     const TPageId PageId;
     const size_t Size;

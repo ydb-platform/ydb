@@ -99,7 +99,7 @@ public:
     TString Name;
     ui64 DrainSeqNo = 0;
     std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
-    TBridgePileId BridgePileId = TBridgePileId::FromValue(0);
+    TBridgePileId BridgePileId;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;

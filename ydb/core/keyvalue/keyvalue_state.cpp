@@ -81,7 +81,10 @@ void PrepareCreationUnixTime(const R& request, I& interm)
 // Guideline:
 // Check SetError calls: there must be no changes made to the DB before SetError call (!)
 
-TKeyValueState::TKeyValueState() {
+TKeyValueState::TKeyValueState()
+    : ReadRequestsInFlightLimit_Base(3, 1, 4096)
+    , ReadRequestsInFlightLimit(ReadRequestsInFlightLimit_Base)
+{
     TabletCounters = nullptr;
     Clear();
 }
@@ -114,7 +117,6 @@ void TKeyValueState::Clear() {
 
     Queue.clear();
     IntermediatesInFlight = 0;
-    IntermediatesInFlightLimit = 3; // FIXME: Change to something like 10
     RoInlineIntermediatesInFlight = 0;
     DeletesPerRequestLimit = 100'000;
 
@@ -550,6 +552,14 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         }
     }
     ChannelBalancerActorId = ctx.Register(new TChannelBalancer(maxChannel + 1, KeyValueActorId));
+
+    TActorSystem *actorSystem = TActivationContext::ActorSystem();
+    if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
+        const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
+
+        icb->RegisterSharedControl(ReadRequestsInFlightLimit_Base, "KeyValueVolumeControls.ReadRequestsInFlightLimit");
+        ReadRequestsInFlightLimit.ResetControl(ReadRequestsInFlightLimit_Base);
+    }
 
     // Issue hard barriers
     using TGroupChannel = std::tuple<ui32, ui8>;
@@ -1831,7 +1841,8 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
     CountRequestComplete(status, stat, ctx);
     ResourceMetrics->TryUpdate(ctx);
 
-    if (Queue.size() && IntermediatesInFlight < IntermediatesInFlightLimit) {
+    ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
+    if (Queue.size() && IntermediatesInFlight < limit) {
         TRequestType::EType requestType = Queue.front()->Stat.RequestType;
 
         CountLatencyQueue(Queue.front()->Stat);
@@ -2488,14 +2499,14 @@ bool TKeyValueState::PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TK
                     return true;
                 }
             }
-            interm.Diffs[diffIdx].Offset = diff.GetOffset(); 
+            interm.Diffs[diffIdx].Offset = diff.GetOffset();
         }
 
         ui32 storageChannelIdx = BLOB_CHANNEL;
         if (request.HasStorageChannel()) {
             auto storageChannel = request.GetStorageChannel();
             ui32 storageChannelOffset = (ui32)storageChannel;
-            
+
             if (storageChannelOffset == NKikimrClient::TKeyValueRequest::INLINE) {
                 TStringStream str;
                 str << "KeyValue# " << TabletId;
@@ -3188,14 +3199,15 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
             RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
-            if (IntermediatesInFlight < IntermediatesInFlightLimit) {
-                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Create storage read request, Marker# KV54");
-                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
+            ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
+            if (IntermediatesInFlight < limit) {
                 ++IntermediatesInFlight;
+                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Create storage read request, InFlight# " << IntermediatesInFlight << "/" << limit << ", Marker# KV54");
+                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             } else {
                 ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Enqueue storage read request " << IntermediatesInFlight << '/' << IntermediatesInFlightLimit << ", Marker# KV56");
+                    << " Enqueue storage read request " << IntermediatesInFlight << '/' << limit << ", Marker# KV56");
                 PostponeIntermediate<TEvKeyValue::TEvRead>(std::move(intermediate));
             }
         }
@@ -3224,11 +3236,12 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
             RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
-            if (IntermediatesInFlight < IntermediatesInFlightLimit) {
-                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Create storage read range request, Marker# KV66");
-                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
+            ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
+            if (IntermediatesInFlight < limit) {
                 ++IntermediatesInFlight;
+                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                    << " Create storage read range request, InFlight# " << IntermediatesInFlight << "/" << limit << ", Marker# KV66");
+                RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             } else {
                 ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                     << " Enqueue storage read range request, Marker# KV59");
@@ -3365,11 +3378,12 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
                 RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 ++RoInlineIntermediatesInFlight;
             } else {
-                if (IntermediatesInFlight < IntermediatesInFlightLimit) {
-                    ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                        << " Create storage request for RO/RW, Marker# KV43");
-                    RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
+                ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
+                if (IntermediatesInFlight < limit) {
                     ++IntermediatesInFlight;
+                    ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                        << " Create storage request for RO/RW, InFlight# " << IntermediatesInFlight << "/" << limit << ", Marker# KV43");
+                    RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 } else {
                     ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                         << " Enqueue storage request for RO/RW, Marker# KV44");

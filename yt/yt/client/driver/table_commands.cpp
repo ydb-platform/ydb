@@ -926,6 +926,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& {
             return command->Options.RowsetProcessingBatchSize;
         })
+        .GreaterThan(0)
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
@@ -933,12 +934,28 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& {
             return command->Options.WriteRowsetSize;
         })
+        .GreaterThan(0)
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
         "max_join_batch_size",
         [] (TThis* command) -> auto& {
             return command->Options.MaxJoinBatchSize;
+        })
+        .GreaterThan(0)
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "use_order_by_in_join_subqueries",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseOrderByInJoinSubqueries;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EStatisticsAggregation>(
+        "statistics_aggregation",
+        [] (TThis* command) -> auto& {
+            return command->Options.StatisticsAggregation;
         })
         .Optional(/*init*/ false);
 }

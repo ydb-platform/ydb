@@ -276,9 +276,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     Y_UNIT_TEST_TWIN(IndexLoookupJoinStructJoin, StreamLookupJoin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -507,9 +506,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     Y_UNIT_TEST_TWIN(LeftJoinWithNull, StreamLookupJoin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -848,10 +846,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     Y_UNIT_TEST(TwoJoinsWithQueryService) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        auto serverSettings = TKikimrSettings().SetWithSampleTables(false);
 
         TKikimrRunner kikimr(serverSettings);
         auto client = kikimr.GetTableClient();
@@ -1665,11 +1660,9 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     Y_UNIT_TEST_TWIN(AllowJoinsForComplexPredicates, StreamLookup) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
-        appConfig.MutableTableServiceConfig()->SetIdxLookupJoinPointsLimit(10);
-
-        auto appsettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings appsettings;
+        appsettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        appsettings.AppConfig.MutableTableServiceConfig()->SetIdxLookupJoinPointsLimit(10);
 
         TKikimrRunner kikimr(appsettings);
         auto db = kikimr.GetTableClient();

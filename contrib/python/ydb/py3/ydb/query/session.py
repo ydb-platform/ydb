@@ -18,12 +18,10 @@ from .._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
 from .transaction import QueryTxContext
 
+from .._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT, DEFAULT_LONG_STREAM_TIMEOUT
+
 
 logger = logging.getLogger(__name__)
-
-
-DEFAULT_ATTACH_FIRST_RESP_TIMEOUT = 600
-DEFAULT_ATTACH_LONG_TIMEOUT = 31536000  # year
 
 
 class QuerySessionStateEnum(enum.Enum):
@@ -142,9 +140,9 @@ class BaseQuerySession:
         self._state = QuerySessionState(settings)
         self._attach_settings: BaseRequestSettings = (
             BaseRequestSettings()
-            .with_operation_timeout(DEFAULT_ATTACH_LONG_TIMEOUT)
-            .with_cancel_after(DEFAULT_ATTACH_LONG_TIMEOUT)
-            .with_timeout(DEFAULT_ATTACH_LONG_TIMEOUT)
+            .with_operation_timeout(DEFAULT_LONG_STREAM_TIMEOUT)
+            .with_cancel_after(DEFAULT_LONG_STREAM_TIMEOUT)
+            .with_timeout(DEFAULT_LONG_STREAM_TIMEOUT)
         )
 
         self._last_query_stats = None
@@ -233,7 +231,7 @@ class QuerySession(BaseQuerySession):
 
     _stream = None
 
-    def _attach(self, first_resp_timeout: int = DEFAULT_ATTACH_FIRST_RESP_TIMEOUT) -> None:
+    def _attach(self, first_resp_timeout: int = DEFAULT_INITIAL_RESPONSE_TIMEOUT) -> None:
         self._stream = self._attach_call()
         status_stream = _utilities.SyncResponseIterator(
             self._stream,

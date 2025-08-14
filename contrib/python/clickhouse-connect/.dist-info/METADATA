@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: clickhouse-connect
-Version: 0.8.10
+Version: 0.8.18
 Summary: ClickHouse Database Core Driver for Python, Pandas, and Superset
 Home-page: https://github.com/ClickHouse/clickhouse-connect
 Author: ClickHouse Inc.
@@ -36,6 +36,19 @@ Provides-Extra: orjson
 Requires-Dist: orjson; extra == "orjson"
 Provides-Extra: tzlocal
 Requires-Dist: tzlocal>=4.0; extra == "tzlocal"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 ## ClickHouse Connect
 
@@ -81,4 +94,4 @@ See the [run_async example](./examples/run_async.py) for more details.
 ### Complete Documentation
 
 The documentation for ClickHouse Connect has moved to
-[ClickHouse Docs](https://clickhouse.com/docs/en/integrations/language-clients/python/intro) 
+[ClickHouse Docs](https://clickhouse.com/docs/integrations/python) 

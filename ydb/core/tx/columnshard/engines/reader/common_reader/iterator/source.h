@@ -117,10 +117,22 @@ public:
 };
 
 class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
+public:
+    enum class EType {
+        Undefined,
+        SimpleSysInfo,
+        SimplePortion,
+        SimpleAggregation,
+        PlainPortion
+    };
+
 private:
     TAtomic SyncSectionFlag = 1;
+    YDB_READONLY(EType, Type, EType::Undefined);
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
+    static inline TAtomicCounter MemoryGroupCounter = 0;
+    YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
@@ -175,6 +187,14 @@ protected:
 
 public:
 
+    ui64 GetReservedMemory() const {
+        ui64 result = 0;
+        for (auto&& i : ResourceGuards) {
+            result += i->GetMemory();
+        }
+        return result;
+    }
+
     const TPortionDataAccessor& GetPortionAccessor() const {
         AFL_VERIFY(!!Accessor);
         return *Accessor;
@@ -199,11 +219,29 @@ public:
 
     template <class T>
     const T* GetAs() const {
+        AFL_VERIFY(T::CheckTypeCast(Type))("type", Type);
         return static_cast<const T*>(this);
     }
 
     template <class T>
     T* MutableAs() {
+        AFL_VERIFY(T::CheckTypeCast(Type))("type", Type);
+        return static_cast<T*>(this);
+    }
+
+    template <class T>
+    const T* GetOptionalAs() const {
+        if (!T::CheckTypeCast(Type)) {
+            return nullptr;
+        }
+        return static_cast<const T*>(this);
+    }
+
+    template <class T>
+    T* MutableOptionalAs() {
+        if (!T::CheckTypeCast(Type)) {
+            return nullptr;
+        }
         return static_cast<T*>(this);
     }
 
@@ -218,6 +256,7 @@ public:
     virtual void InitRecordsCount(const ui32 recordsCount) {
         AFL_VERIFY(!RecordsCountImpl);
         RecordsCountImpl = recordsCount;
+        AFL_VERIFY(StageData);
         StageData->InitRecordsCount(recordsCount);
     }
 
@@ -283,14 +322,11 @@ public:
         return TBlobRange();
     }
 
-    virtual std::optional<TSnapshot> GetDataSnapshot() const {
-        return std::nullopt;
-    }
-
-    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+    IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : SourceId(sourceId)
+        : Type(type)
+        , SourceId(sourceId)
         , SourceIdx(sourceIdx)
         , RecordSnapshotMin(recordSnapshotMin)
         , RecordSnapshotMax(recordSnapshotMax)

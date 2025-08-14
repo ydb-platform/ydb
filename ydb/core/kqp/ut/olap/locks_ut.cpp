@@ -16,7 +16,7 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapLocks) {
     Y_UNIT_TEST(TwoQueriesWithRestartTablet) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TKikimrRunner kikimr(settings);
@@ -72,12 +72,10 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
     }
 
     Y_UNIT_TEST_TWIN(NoDirtyReadsNo, SimpleReader) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -162,7 +160,7 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
     }
 
     Y_UNIT_TEST(TableSinkWithOlapStore) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TKikimrRunner kikimr(settings);
@@ -195,7 +193,7 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         //It corresponds to a SCAN, then NO write then COMMIT on that shard
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TTestHelper testHelper(settings);

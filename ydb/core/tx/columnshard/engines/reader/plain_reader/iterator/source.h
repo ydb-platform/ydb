@@ -97,6 +97,10 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    static bool CheckTypeCast(const EType type) {
+        return type == NCommon::IDataSource::EType::PlainPortion;
+    }
+
     virtual bool NeedAccessorsForRead() const = 0;
     virtual bool NeedAccessorsFetching() const = 0;
     virtual ui64 PredictAccessorsMemory() const = 0;
@@ -164,10 +168,10 @@ public:
 
     void RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr);
 
-    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TSimpleRow& start,
+    IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TSimpleRow& start,
         const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
+        : TBase(type, sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , StartReplaceKey(start)
         , FinishReplaceKey(finish)
         , Start(context->GetReadMetadata()->BuildSortedPosition(StartReplaceKey))
@@ -227,6 +231,10 @@ private:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
+    static bool CheckTypeCast(const EType type) {
+        return type == NCommon::IDataSource::EType::PlainPortion;
+    }
+
     virtual ui64 PredictAccessorsMemory() const override {
         return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) *
                sizeof(TColumnRecord);
@@ -284,7 +292,7 @@ public:
     }
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase(portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
+        : TBase(EType::PlainPortion, portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
               portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
               portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
         , Portion(portion)

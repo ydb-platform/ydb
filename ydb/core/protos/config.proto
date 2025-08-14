@@ -36,6 +36,7 @@ import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tenant_pool.proto";
 import "ydb/core/protos/tenant_slot_broker.proto";
 import "ydb/core/protos/workload_manager_config.proto";
+import "ydb/core/protos/nbs/blockstore.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "yql/essentials/core/file_storage/proto/file_storage.proto";
 import "yql/essentials/providers/common/proto/gateways_config.proto";
@@ -1564,7 +1565,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 10 }];
-        
+
         optional uint64 HullCompMaxInFlightWrites = 31 [(ControlOptions) = {
             Description: "Max writes inflight for level compaction",
             MinValue: 1,
@@ -1576,12 +1577,15 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 20 }];
-            
+
         optional uint64 EnableDeepScrubbing = 33 [(ControlOptions) = {
             Description: "Run CheckIntegrity requests during Scrub process instead of usual scrubbing",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+
+        reserved 34;
+        reserved 35;
     }
 
     message TTabletControls {
@@ -1729,6 +1733,15 @@ message TImmediateControlsConfig {
         map<string, TRequestConfig> RequestConfigs = 1;
     }
 
+    message TKeyValueVolumeControls {
+        optional uint64 ReadRequestsInFlightLimit = 1 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous read requests",
+            MinValue: 1,
+            MaxValue: 4096,
+            DefaultValue: 3
+        }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1743,6 +1756,7 @@ message TImmediateControlsConfig {
     optional TTableServiceControls TableServiceControls = 12;
     optional TTestShardControls TestShardControls = 13;
     optional TGRpcControls GRpcControls = 14;
+    optional TKeyValueVolumeControls KeyValueVolumeControls = 15;
 };
 
 message TMeteringConfig {
@@ -1779,9 +1793,36 @@ message TAuditConfig {
         optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
+    message TLogClassConfig {
+        enum ELogClass {
+            ClusterAdmin = 1;
+            DatabaseAdmin = 2;
+            Login = 3;
+            NodeRegistration = 4;
+            Ddl = 5;
+            Dml = 6;
+            Operations = 7; // Operations API. See ydb/public/api/grpc/ydb_operation_v1.proto
+            ExportImport = 8;
+            Acl = 9;
+            Default = 1000; // For default settings for all other nonconfigured log classes
+        }
+
+        enum EAccountType {
+            Anonymous = 1;
+            User = 2;
+            Service = 3;
+            ServiceImpersonatedFromUser = 4;
+        }
+
+        optional ELogClass LogClass = 1; // Log class selector. Default is used for all log classes that were not included in config
+        optional bool EnableLogging = 2; // Enables audit logging for specified log class
+        repeated EAccountType ExcludeAccountType = 3; // If audit logging for log class is enabled, excludes logging for these account types
+    }
+
     optional TStderrBackend StderrBackend = 1;
     optional TFileBackend FileBackend = 2;
     optional TUnifiedAgentBackend UnifiedAgentBackend = 3;
+    repeated TLogClassConfig LogClassConfig = 4;
 };
 
 message THiveTabletLimit {
@@ -2021,9 +2062,10 @@ message TColumnShardConfig {
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
     optional bool PortionMetaV0Usage = 41 [default = true];
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
-    optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
+    optional bool GenerateInternalPathId = 43 [default = false];
     optional bool ProxyWritingEnabled = 44 [default = true];
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
+    optional bool DeduplicationEnabled = 46 [default = true];
 }
 
 message TSchemeShardConfig {
@@ -2466,6 +2508,7 @@ message TAppConfig {
     optional TWorkloadManagerConfig WorkloadManagerConfig = 90;
     optional TBridgeConfig BridgeConfig = 91;
     optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
+    optional TBlockstoreConfig BlockstoreConfig = 93;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
@@ -2479,6 +2522,8 @@ message TAppConfig {
     optional string StartupStorageYaml = 108;
     optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
     optional TGeneralCacheConfig PortionsMetadataCache = 110;
+    optional TGeneralCacheConfig ColumnDataCache = 111;
+    optional TGroupedMemoryLimiterConfig DeduplicationGroupedMemoryLimiterConfig = 112;
 }
 
 message TYdbVersion {

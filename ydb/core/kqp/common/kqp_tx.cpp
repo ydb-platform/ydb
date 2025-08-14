@@ -306,7 +306,6 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
             for (const auto &tableOp : stage.GetTableOps()) {
                 switch (tableOp.GetTypeCase()) {
                     case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                    case NKqpProto::TKqpPhyTableOperation::kLookup:
                     case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                         return true;
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
@@ -355,7 +354,6 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
             for (const auto &tableOp : stage.GetTableOps()) {
                 switch (tableOp.GetTypeCase()) {
                     case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                    case NKqpProto::TKqpPhyTableOperation::kLookup:
                     case NKqpProto::TKqpPhyTableOperation::kReadRanges: {
                         if (modifiedTables.contains(getTable(tableOp.GetTable()))) {
                             return true;

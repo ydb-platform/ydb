@@ -10,6 +10,7 @@ import "ydb/core/protos/hive.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
 import "ydb/core/protos/sys_view.proto";
+import "ydb/core/protos/bridge.proto";
 
 package NKikimrViewer;
 option java_package = "ru.yandex.kikimr.proto";
@@ -315,6 +316,19 @@ enum EFlag {
     Red = 5;
 }
 
+message TBridgePileInfo {
+    optional uint32 PileId = 1;
+    optional string Name = 2;
+    optional NKikimrBridge.TClusterState.EPileState State = 3;
+    optional bool IsPrimary = 4;
+    optional bool IsBeingPromoted = 5;
+    optional uint32 Nodes = 6;
+}
+
+message TBridgeInfo {
+    repeated TBridgePileInfo Piles = 1;
+}
+
 message TClusterInfo {
     uint32 Version = 1;
     string Name = 2;
@@ -347,6 +361,7 @@ message TClusterInfo {
     uint64 Tenants = 61;
     double NetworkUtilization = 62;
     uint64 NetworkWriteThroughput = 63;
+    TBridgeInfo BridgeInfo = 64;
 }
 
 enum ETenantType {
@@ -467,6 +482,7 @@ message TStorageGroupInfo {
     optional uint64 LatencyPutTabletLog = 20;
     optional uint64 LatencyPutUserData = 21;
     optional uint64 LatencyGetFast = 22;
+    string PileName = 23;
     repeated TStorageVDisk VDisks = 30;
 }
 
@@ -545,6 +561,7 @@ message TNodeInfo {
     EFlag ConnectStatus = 10; // Max
     optional uint64 ReceiveThroughput = 11;
     optional uint64 SendThroughput = 12;
+    optional string PileName = 13;
     optional float NetworkUtilization = 20; // Sum
     optional float NetworkUtilizationMin = 21;
     optional float NetworkUtilizationMax = 22;

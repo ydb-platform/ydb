@@ -495,6 +495,7 @@ Y_WEAK void MaybeThrowSafeAssertionException(TStringBuf /*message*/)
 void AssertTrapImpl(
     TStringBuf trapType,
     TStringBuf expr,
+    TStringBuf description,
     TStringBuf file,
     int line,
     TStringBuf function)
@@ -504,6 +505,14 @@ void AssertTrapImpl(
     formatter.AppendString(trapType);
     formatter.AppendString("(");
     formatter.AppendString(expr);
+    if (!description.empty()) {
+        if (!expr.empty()) {
+            formatter.AppendString(", ");
+        }
+        formatter.AppendChar('"');
+        FormatString(&formatter, description, "Q");
+        formatter.AppendChar('"');
+    }
     formatter.AppendString(") at ");
     formatter.AppendString(file);
     formatter.AppendString(":");

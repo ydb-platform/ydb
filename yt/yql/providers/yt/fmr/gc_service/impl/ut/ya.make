@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    yt/yql/providers/yt/fmr/coordinator/impl
     yt/yql/providers/yt/fmr/gc_service/impl
     yt/yql/providers/yt/fmr/table_data_service/local/impl
 )

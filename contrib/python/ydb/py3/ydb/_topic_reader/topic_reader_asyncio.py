@@ -38,6 +38,8 @@ from ..query.base import TxEvent
 if typing.TYPE_CHECKING:
     from ..query.transaction import BaseQueryTxContext
 
+from .._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT
+
 logger = logging.getLogger(__name__)
 
 
@@ -490,7 +492,13 @@ class ReaderStream:
         logger.debug("reader stream %s send init request", self._id)
 
         stream.write(StreamReadMessage.FromClient(client_message=init_message))
-        init_response = await stream.receive()  # type: StreamReadMessage.FromServer
+        try:
+            init_response = await stream.receive(
+                timeout=DEFAULT_INITIAL_RESPONSE_TIMEOUT
+            )  # type: StreamReadMessage.FromServer
+        except asyncio.TimeoutError:
+            raise TopicReaderError("Timeout waiting for init response")
+
         if isinstance(init_response.server_message, StreamReadMessage.InitResponse):
             self._session_id = init_response.server_message.session_id
             logger.debug("reader stream %s initialized session=%s", self._id, self._session_id)

@@ -1942,19 +1942,15 @@ bool IsComparable(const TLogicalTypePtr& type)
 
 bool IsTzType(const TLogicalTypePtr& logicalType)
 {
-    switch (logicalType->GetMetatype()) {
-        case ELogicalMetatype::Simple:
-            switch (logicalType->AsSimpleTypeRef().GetElement()) {
-                case ESimpleLogicalValueType::TzDate:
-                case ESimpleLogicalValueType::TzDatetime:
-                case ESimpleLogicalValueType::TzTimestamp:
-                case ESimpleLogicalValueType::TzDate32:
-                case ESimpleLogicalValueType::TzDatetime64:
-                case ESimpleLogicalValueType::TzTimestamp64:
-                    return true;
-                default:
-                    return false;
-            }
+    auto simpleType = CastToV1Type(logicalType).first;
+    switch (simpleType) {
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            return true;
         default:
             return false;
     }

@@ -596,13 +596,11 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
 
 namespace {
 
-NView::TViewDescription DescribeView(TDriver driver, const TString& path) {
-    NView::TViewClient client(driver);
-    auto status = NConsoleClient::RetryFunction([&]() {
-        return client.DescribeView(path).ExtractValueSync();
-    });
+TString DescribeViewQuery(TDriver driver, const TString& path) {
+    TString query;
+    auto status = NDump::DescribeViewQuery(driver, path, query);
     VerifyStatus(status, "describe view");
-    return status.GetViewDescription();
+    return query;
 }
 
 }
@@ -625,12 +623,12 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
 
     LOG_I("Backup view " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    const auto viewDescription = DescribeView(driver, dbPath);
+    const auto query = DescribeViewQuery(driver, dbPath);
 
     const auto creationQuery = NDump::BuildCreateViewQuery(
         TFsPath(dbPathRelativeToBackupRoot).GetName(),
         dbPath,
-        TString(viewDescription.GetQueryText()),
+        query,
         dbBackupRoot,
         issues
     );
@@ -1026,7 +1024,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             } else if (dbIt.IsExternalTable()) {
                 BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
             } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
-                LOG_E("Skipping " << dbIt.GetFullPath().Quote() << ": dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported");
+                LOG_W("Skipping " << dbIt.GetFullPath().Quote() << ": dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported");
                 childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
                 childFolderPath.DeleteIfExists();
             }

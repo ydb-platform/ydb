@@ -134,7 +134,7 @@ class BridgeClient(object):
             logger.error("Failed to get cluster state")
             return None
 
-        return cluster_state.per_pile_state
+        return cluster_state.pile_states
 
     @property
     def primary_pile(self):
@@ -143,7 +143,7 @@ class BridgeClient(object):
         """
         for pile in self.per_pile_state:
             if pile.state == bridge_api.PileState.PRIMARY:
-                return pile.pile_id
+                return pile.pile_name
         return None
 
     def switchover(self, primary_pile_id):
@@ -157,7 +157,7 @@ class BridgeClient(object):
             True if successful, False otherwise
         """
         updates = [
-            bridge_api.PileStateUpdate(pile_id=primary_pile_id, state=bridge_api.PileState.PRIMARY),
+            bridge_api.PileState(pile_name=primary_pile_id, state=bridge_api.PileState.PRIMARY),
         ]
         result = self.update_cluster_state_result(updates)
         if result is None:
@@ -167,56 +167,56 @@ class BridgeClient(object):
         logger.info("Switched: pile %d to PRIMARY", primary_pile_id)
         return True
 
-    def failover(self, pile_id, primary_pile_id=None):
+    def failover(self, pile_name, primary_pile_name=None):
         """
         Switch pile to disconnected and another pile to primary.
 
         Args:
-            pile_id: Pile ID to switch to disconnected
-            primary_pile_id: Pile ID with primary state
+            pile_name: Pile name to switch to disconnected
+            primary_pile_name: Pile name with primary state
 
         Returns:
             True if successful, False otherwise
         """
 
         updates = []
-        current_primary_pile_id = self.primary_pile
-        if pile_id == current_primary_pile_id:
-            synchronized_pile_id = None
-            if primary_pile_id is not None:
-                synchronized_pile_id = primary_pile_id
+        current_primary_pile_name = self.primary_pile
+        if pile_name == current_primary_pile_name:
+            synchronized_pile_name = None
+            if primary_pile_name is not None:
+                synchronized_pile_name = primary_pile_name
             else:
                 for pile in self.per_pile_state:
                     if pile.state == bridge_api.PileState.SYNCHRONIZED:
-                        synchronized_pile_id = pile.pile_id
+                        synchronized_pile_name = pile.pile_name
                         break
 
-            if synchronized_pile_id is None:
+            if synchronized_pile_name is None:
                 logger.error("No synchronized pile found")
                 return False
 
-            updates.append(bridge_api.PileStateUpdate(pile_id=synchronized_pile_id, state=bridge_api.PileState.PRIMARY))
+            updates.append(bridge_api.PileState(pile_name=synchronized_pile_name, state=bridge_api.PileState.PRIMARY))
 
-        updates.append(bridge_api.PileStateUpdate(pile_id=pile_id, state=bridge_api.PileState.DISCONNECTED))
+        updates.append(bridge_api.PileState(pile_name=pile_name, state=bridge_api.PileState.DISCONNECTED))
         result = self.update_cluster_state_result(updates)
         if result is None:
-            if pile_id == current_primary_pile_id:
-                logger.error("Failed to update pile %d to PRIMARY", synchronized_pile_id)
-            logger.error("Failed to update pile %d to DISCONNECTED", pile_id)
+            if pile_name == current_primary_pile_name:
+                logger.error("Failed to update pile %s to PRIMARY", synchronized_pile_name)
+            logger.error("Failed to update pile %s to DISCONNECTED", pile_name)
             return False
 
-        if pile_id == current_primary_pile_id:
-            logger.info("Switched: pile %d to PRIMARY", synchronized_pile_id)
-        logger.info("Switched: pile %d to DISCONNECTED", pile_id)
+        if pile_name == current_primary_pile_name:
+            logger.info("Switched: pile %s to PRIMARY", synchronized_pile_name)
+        logger.info("Switched: pile %s to DISCONNECTED", pile_name)
         return True
 
-    def rejoin(self, pile_id, primary_pile_id=None):
+    def rejoin(self, pile_name, primary_pile_name=None):
         """
         Rejoin pile to unsynchronized using specific pile ids.
 
         Args:
-            pile_id: Pile ID to restore
-            another_pile_id: Pile ID to use for restore
+            pile_name: Pile name to restore
+            primary_pile_name: Pile name to use for restore
 
         Returns:
             True if successful, False otherwise
@@ -224,63 +224,63 @@ class BridgeClient(object):
 
         # TODO (@apkobzev): Implement split brain recovery
 
-        current_primary_pile_id = self.primary_pile
+        current_primary_pile_name = self.primary_pile
         updates = [
-            bridge_api.PileStateUpdate(pile_id=pile_id, state=bridge_api.PileState.NOT_SYNCHRONIZED),
+            bridge_api.PileState(pile_name=pile_name, state=bridge_api.PileState.NOT_SYNCHRONIZED),
         ]
-        result = self.update_cluster_state_result(updates, specific_pile_ids=[current_primary_pile_id])
+        result = self.update_cluster_state_result(updates, specific_pile_ids=[current_primary_pile_name])
         if result is None:
-            logger.error("Failed to update pile %d to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, current_primary_pile_id)
+            logger.error("Failed to update pile %s to NOT_SYNCHRONIZED using specific pile ids [%s]", pile_name, current_primary_pile_name)
             return False
 
-        logger.info("Switched: pile %d from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, current_primary_pile_id)
+        logger.info("Switched: pile %s from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%s]", pile_name, current_primary_pile_name)
 
-        result = self.update_cluster_state_result(updates, specific_pile_ids=[pile_id])
+        result = self.update_cluster_state_result(updates, specific_pile_ids=[pile_name])
         if result is None:
-            logger.error("Failed to update pile %d to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, pile_id)
+            logger.error("Failed to update pile %s to NOT_SYNCHRONIZED using specific pile ids [%s]", pile_name, pile_name)
             return False
 
-        logger.info("Switched: pile %d from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%d]", pile_id, pile_id)
+        logger.info("Switched: pile %s from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%s]", pile_name, pile_name)
         return True
 
-    def takedown(self, pile_id, primary_pile_id):
+    def takedown(self, pile_name, primary_pile_name=None):
         """
         Takedown pile.
 
         Args:
-            pile_id: Pile ID to takedown
+            pile_name: Pile name to takedown
 
         Returns:
             True if successful, False otherwise
         """
         updates = []
-        current_primary_pile_id = self.primary_pile
-        if pile_id == current_primary_pile_id:
-            synchronized_pile_id = None
-            if primary_pile_id is not None:
-                synchronized_pile_id = primary_pile_id
+        current_primary_pile_name = self.primary_pile
+        if pile_name == current_primary_pile_name:
+            synchronized_pile_name = None
+            if primary_pile_name is not None:
+                synchronized_pile_name = primary_pile_name
             else:
                 for pile in self.per_pile_state:
                     if pile.state == bridge_api.PileState.SYNCHRONIZED:
-                        synchronized_pile_id = pile.pile_id
+                        synchronized_pile_name = pile.pile_name
                         break
 
-            if synchronized_pile_id is None:
+            if synchronized_pile_name is None:
                 logger.error("No synchronized pile found")
                 return False
 
-            updates.append(bridge_api.PileStateUpdate(pile_id=synchronized_pile_id, state=bridge_api.PileState.PRIMARY))
+            updates.append(bridge_api.PileState(pile_name=synchronized_pile_name, state=bridge_api.PileState.PRIMARY))
 
-        updates.append(bridge_api.PileStateUpdate(pile_id=pile_id, state=bridge_api.PileState.DISCONNECTED))
+        updates.append(bridge_api.PileState(pile_name=pile_name, state=bridge_api.PileState.DISCONNECTED))
         result = self.update_cluster_state_result(updates)
         if result is not None:
-            if current_primary_pile_id == pile_id:
-                logger.info("Switched: pile %d to PRIMARY", synchronized_pile_id)
-            logger.info("Switched: pile %d to DISCONNECTED", pile_id)
+            if current_primary_pile_name == pile_name:
+                logger.info("Switched: pile %s to PRIMARY", synchronized_pile_name)
+            logger.info("Switched: pile %s to DISCONNECTED", pile_name)
         else:
-            if current_primary_pile_id == pile_id:
-                logger.error("Failed to update pile %d to PRIMARY", synchronized_pile_id)
-            logger.error("Failed to update pile %d to DISCONNECTED", pile_id)
+            if current_primary_pile_name == pile_name:
+                logger.error("Failed to update pile %s to PRIMARY", synchronized_pile_name)
+            logger.error("Failed to update pile %s to DISCONNECTED", pile_name)
             return False
 
         return True

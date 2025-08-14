@@ -862,6 +862,20 @@ public:
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
                 return false;
             }
+
+            if ("watermark" == hintName) {
+                TNodePtr option = Y(BuildQuotedAtom(Pos_, hintName));
+                auto anyColumnSrc = BuildAnyColumnSource(Pos_);
+                for (auto& x : hint.second) {
+                    if (!x->Init(ctx, anyColumnSrc.Get())) {
+                        return false;
+                    }
+                    option = L(option, x);
+                }
+                Nodes_.push_back(Q(option));
+                continue;
+            }
+
             TNodePtr option = Y(BuildQuotedAtom(Pos_, hintName));
             for (auto& x : hint.second) {
                 if (!x->Init(ctx, src)) {
@@ -3310,6 +3324,11 @@ public:
                 if (ctx.Engine) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos_, "Engine"), BuildQuotedAtom(Pos_, *ctx.Engine))));
+                }
+
+                if (ctx.DebugPositions) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos_, "DebugPositions"))));
                 }
             }
         }

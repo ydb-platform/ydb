@@ -194,6 +194,8 @@ public:
 
         bool LogAccEnabled = false;
         TMaybe<TGroupStat::EKind> LatencyQueueKind = {};
+
+        std::optional<ui32> ForceGroupGeneration; // work only with this specific group generation and nothing else
     };
 
     struct TTypeSpecificParameters {
@@ -220,6 +222,7 @@ public:
         , LatencyQueueKind(params.Common.LatencyQueueKind)
         , RacingDomains(&Info->GetTopology())
         , ExecutionRelay(std::move(params.Common.ExecutionRelay))
+        , ForceGroupGeneration(params.Common.ForceGroupGeneration)
     {
         if (ParentSpan) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
@@ -237,6 +240,8 @@ public:
     }
 
     virtual ~TBlobStorageGroupRequestActor() = default;
+
+    bool BootstrapCheck();
 
     virtual void Bootstrap() = 0;
     virtual void ReplyAndDie(NKikimrProto::EReplyStatus status) = 0;
@@ -321,6 +326,7 @@ private:
     std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
     bool ExecutionRelayUsed = false;
     bool FirstResponse = true;
+    std::optional<ui32> ForceGroupGeneration;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,

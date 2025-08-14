@@ -1,11 +1,13 @@
 #pragma once
 
-#include "shared_cache_tiers.h"
+#include "flat_page_iface.h"
 #include <ydb/core/util/cache_cache_iface.h>
 
 namespace NKikimr::NSharedCache::NTest {
 
     struct TPage : public TIntrusiveListItem<TPage> {
+        using ECacheMode = NTable::NPage::ECacheMode;
+
         ui32 Id;
         size_t Size;
 
@@ -14,7 +16,7 @@ namespace NKikimr::NSharedCache::NTest {
         {}
 
         ui32 CacheId : 4 = 0;
-        ECacheTier CacheTier : 2 = ECacheTier::Regular;
+        ECacheMode CacheMode : 2 = ECacheMode::Regular;
     };
 
     struct TPageTraits {
@@ -39,12 +41,8 @@ namespace NKikimr::NSharedCache::NTest {
             page->CacheId = id;
         }
 
-        static ECacheTier GetTier(TPage* page) {
-            return page->CacheTier;
-        }
-
-        static void SetTier(TPage* page, ECacheTier tier) {
-            page->CacheTier = tier;
+        static ui32 GetTier(TPage* page) {
+            return static_cast<ui32>(page->CacheMode);
         }
     };
 

@@ -357,6 +357,7 @@ FROM my_table;
 * `Udf(Foo::Bar)(1, 2, 'abc')` — Вызов udf `Foo::Bar`.
 * `Udf(Foo::Bar, Int32, @@{"device":"AHCI"}@@ as TypeConfig")(1, 2, 'abc')` — Вызов udf `Foo::Bar` с дополнительным типом `Int32` и указанным `TypeConfig`.
 * `Udf(Foo::Bar, "1e9+7" as RunConfig")(1, 'extended' As Precision)` — Вызов udf `Foo::Bar` с указанным `RunConfig` и именоваными параметрами.
+* `Udf(Foo::Bar, $parent as Depends)` — Вызов udf `Foo::Bar` с указанием зависимости вычисления от заданного узла - с версии [2025.03](../changelog/2025.03.md).
 
 #### Сигнатуры
 

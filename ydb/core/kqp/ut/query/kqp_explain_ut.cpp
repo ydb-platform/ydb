@@ -497,9 +497,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(FewEffects, UseSink) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -856,9 +854,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(IdxFullscan) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         CreateSampleTables(kikimr);
@@ -896,10 +892,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     }
 
     Y_UNIT_TEST(MultiJoinCteLinks) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(false);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig);
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(false);
         TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -933,12 +927,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     }
 
     Y_UNIT_TEST_TWIN(CreateTableAs, Stats) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
-        auto kikimrSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false)
-            .SetEnableTempTables(true);
+        auto kikimrSettings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
+        kikimrSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         TKikimrRunner kikimr(kikimrSettings);
         auto client = kikimr.GetQueryClient();
 
@@ -1071,9 +1061,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateConditional, UseSink) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1118,9 +1106,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateConditionalKey, UseSink) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1165,9 +1151,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateOn, UseSink) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1215,9 +1199,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateSecondaryConditional, UseSink) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1290,9 +1272,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateSecondaryConditionalPrimaryKey, UseSink) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1364,9 +1344,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateSecondaryConditionalSecondaryKey, UseSink) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1438,9 +1416,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateOnSecondary, UseSink) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1518,9 +1494,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST_TWIN(UpdateOnSecondaryWithoutSecondaryKey, UseSink) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

@@ -12,6 +12,7 @@ class TLockSharingInfo;
 }
 
 namespace NKikimr::NOlap::NReader::NCommon {
+
 class TSpecialReadContext;
 class IDataSource;
 class ISourcesConstructor {

@@ -197,7 +197,7 @@ class TestKiKiMRDistConfSelfHealParallelCall(KiKiMRDistConfSelfHealTest):
         time.sleep(1)
         rg = self.do_request_config()[f"{configName}Config"]["RingGroups"]
         assert_eq(len(rg), 2)
-        assert_eq(rg[0]["WriteOnly"], False)
+        assert_that("WriteOnly" not in rg[0])
         assert_eq(rg[1]["WriteOnly"], True)
 
         logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}}))
@@ -223,8 +223,8 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
         time.sleep(4)
         rg = self.do_request_config()[f"{configName}Config"]["RingGroups"]
         assert_eq(len(rg), 2)
-        assert_eq(rg[0]["WriteOnly"], False)
-        assert_eq(rg[1]["WriteOnly"], False)
+        assert_that("WriteOnly" not in rg[0])
+        assert_that("WriteOnly" not in rg[1])
 
         logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}}))
         time.sleep(1)

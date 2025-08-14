@@ -4,15 +4,11 @@ from hamcrest import assert_that
 import requests
 import threading
 import time
-import yaml
 
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
-from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
-import ydb.public.api.protos.ydb_config_pb2 as config
 
 logger = logging.getLogger(__name__)
 
@@ -31,15 +27,6 @@ def get_ring_group(request_config, config_name):
         return config["RingGroups"][0]
     else:
         return config["Ring"]
-
-
-def fetch_config(config_client):
-    fetch_config_response = config_client.fetch_all_configs()
-    assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
-
-    result = config.FetchConfigResult()
-    fetch_config_response.operation.result.Unpack(result)
-    return result.config[0].config
 
 
 class KiKiMRDistConfNodeStatusTest(object):
@@ -93,19 +80,6 @@ class KiKiMRDistConfNodeStatusTest(object):
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
-        cls.config_client = ConfigClient(cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)
-        fetched_config = fetch_config(cls.config_client)
-        dumped_fetched_config = yaml.safe_load(fetched_config)
-        config_section = dumped_fetched_config["config"]
-        logger.debug(f"replace_config_request dumped_fetched_config: {dumped_fetched_config}")
-
-        config_section["cms_config"] = cms_config
-        logger.debug(f"Nodes list: {config_section["hosts"]}")
-        time.sleep(1)
-        dumped_fetched_config["metadata"]["version"] = dumped_fetched_config["metadata"]["version"] + 1
-        replace_config_response = cls.config_client.replace_config(yaml.dump(dumped_fetched_config))
-        logger.debug(f"replace_config_response: {replace_config_response}")
-        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
 
     @classmethod
     def teardown_class(cls):

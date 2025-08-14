@@ -70,12 +70,16 @@ public:
 private:
     const Ydb::ResultSet& GetProto() const;
 
+    //! Mutable proto is used to move bytes without copying
     Ydb::ResultSet& MutableProto();
 
+    //! Returns format of the result set
     EFormat Format() const;
 
+    //! Returns serialized schema of arrow record batches
     const std::string& GetArrowSchema() const;
 
+    //! Returns bytes for binary data formats (arrow, etc.)
     const std::vector<std::string>& GetBytesData() const;
 
 private:

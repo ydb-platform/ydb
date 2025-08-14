@@ -404,6 +404,17 @@ private:
         return TStringBuilder() << Settings.GetGrpcEndpoint();
     }
 
+    TString GetProjectId() const {
+        switch (Settings.GetClusterType()) {
+            case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
+                return Settings.GetProject();
+            case NSo::NProto::ESolomonClusterType::CT_MONITORING:
+                return Settings.GetCluster();
+            default:
+                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(Settings.GetClusterType()));
+        }
+    }
+
     template <typename TCallback>
     void DoHttpRequest(TCallback&& callback, TString&& url, TString&& body = "") const {
         IHTTPGateway::THeaders headers;
@@ -459,8 +470,7 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("names");
 
-        builder.AddUrlParam("projectId", 
-            Settings.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING ? Settings.GetCluster() : Settings.GetProject());
+        builder.AddUrlParam("projectId", GetProjectId());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("from", from.ToString());
@@ -478,8 +488,7 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
-        builder.AddUrlParam("projectId", 
-            Settings.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING ? Settings.GetCluster() : Settings.GetProject());
+        builder.AddUrlParam("projectId", GetProjectId());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("from", from.ToString());
@@ -500,8 +509,7 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("data");
 
-        builder.AddUrlParam("projectId", 
-            Settings.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING ? Settings.GetCluster() : Settings.GetProject());
+        builder.AddUrlParam("projectId", GetProjectId());
 
         return builder.Build();
     }

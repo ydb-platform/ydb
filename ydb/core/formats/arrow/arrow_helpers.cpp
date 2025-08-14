@@ -39,15 +39,12 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(const NScheme::TTypeInfo& 
 template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>(const NScheme::TTypeInfo& typeInfo) {
     Y_UNUSED(typeInfo);
-    // For decimal types, we create FixedSizeBinaryType(16) instead of Decimal128Type
-    // This ensures compatibility with the new wire format
     return std::make_shared<arrow::FixedSizeBinaryType>(16);
 }
 
 template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>(const NScheme::TTypeInfo& typeInfo) {
     Y_UNUSED(typeInfo);
-    // For FixedSizeBinaryType, we create it with 16 bytes (for decimal data)
     return std::make_shared<arrow::FixedSizeBinaryType>(16);
 }
 

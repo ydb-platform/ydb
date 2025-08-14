@@ -246,7 +246,7 @@ Check how {{ ydb-short-name }} works:
     kubectl run -it --image=cr.yandex/crptqonuodf51kdj7a7d/ydb:24.4.4.2 --rm ydb-cli bash
     ```
 
- 3. Query the {{ ydb-short-name }} database (you can get the endpoint from the output of `kubectl describe database.ydb.tech`)
+ 3. Query the {{ ydb-short-name }} database (you can get the endpoint from the output of `kubectl describe database.ydb.tech`):
 
     ```bash
     /opt/ydb/bin/ydb \

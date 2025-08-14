@@ -1,25 +1,5 @@
 # UPSERT INTO
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% note warning %}
-
-Supported only for [row-oriented](../../../concepts/datamodel/table.md#row-oriented-tables) tables. Support for [column-oriented](../../../concepts/datamodel/table.md#column-oriented-tables) tables is currently under development.
-
-{% if oss %}
-
-Available methods for loading data into columnar tables:
-
-* [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/export-import/import-file.md)
-* [Bulk data upsert](../../../recipes/ydb-sdk/bulk-upsert.md)
-* [Yandex Data Transfer](https://yandex.cloud/ru/services/data-transfer)
-
-{% endif %}
-
-{% endnote %}
-
-{% endif %}
-
 UPSERT (which stands for UPDATE or INSERT) updates or inserts multiple rows to a table based on a comparison by the primary key. Missing rows are added. For the existing rows, the values of the specified columns are updated, but the values of the other columns are preserved.
 
 {% if feature_mapreduce %}

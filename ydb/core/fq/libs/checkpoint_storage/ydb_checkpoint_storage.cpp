@@ -674,12 +674,8 @@ TFuture<TIssues> TCheckpointStorage::Init()
 
     // TODO: list at first?
     if (YdbConnection->DB != YdbConnection->TablePathPrefix) {
-        auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix,
-            NYdb::NScheme::TMakeDirectorySettings()
-            .ClientTimeout(TDuration::Seconds(10))
-            .OperationTimeout(TDuration::Seconds(10)).CancelAfter(TDuration::Seconds(10))).GetValueSync();
+        auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
         if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
-            
             TStringStream ss;
             ss << "Failed to create path '" << YdbConnection->TablePathPrefix << "'";
             NYql::TIssue issue(ss.Str());

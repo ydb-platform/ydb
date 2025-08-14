@@ -148,11 +148,11 @@ class TMockPqGateway : public IMockPqGateway {
         }
 
         void Write(NYdb::NTopic::TContinuationToken&& /*continuationToken*/, NYdb::NTopic::TWriteMessage&& /*message*/,
-                        NYdb::TTransactionBase* /*tx*/ = nullptr) override {
+            NYdb::TTransactionBase* /*tx*/ = nullptr) override {
         }
 
         void Write(NYdb::NTopic::TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo = std::nullopt,
-                        std::optional<TInstant> /*createTimestamp*/ = std::nullopt) override {
+            std::optional<TInstant> /*createTimestamp*/ = std::nullopt) override {
             std::vector<NYdb::NTopic::TWriteSessionEvent::TWriteAck> acks;
             NYdb::NTopic::TWriteSessionEvent::TWriteAck ack;
             ack.SeqNo = *seqNo;
@@ -173,7 +173,7 @@ class TMockPqGateway : public IMockPqGateway {
         }
 
         void WriteEncoded(NYdb::NTopic::TContinuationToken&& /*continuationToken*/, std::string_view /*data*/, NYdb::NTopic::ECodec /*codec*/, uint32_t /*originalSize*/,
-                std::optional<uint64_t> /*seqNo*/ = std::nullopt, std::optional<TInstant> /*createTimestamp*/ = std::nullopt) override {
+            std::optional<uint64_t> /*seqNo*/ = std::nullopt, std::optional<TInstant> /*createTimestamp*/ = std::nullopt) override {
         }
 
         bool Close(TDuration /*closeTimeout*/ = TDuration::Max()) override {
@@ -377,10 +377,6 @@ public:
             return std::move(info.WriteSessionData);
         }
     }
-
-    // void AddTopic(const TString& topic, TEvGen evGen) override {
-    //     GetTopicInfo(topic).EvGen = evGen;
-    // }
 
 private:
     TTopicInfo& GetTopicInfo(const TString& topic) {

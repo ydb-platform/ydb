@@ -599,7 +599,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
             return err;
         }
 
-        if (TasksGraph.GetMeta().MayRunTasksLocally) {      // TODO
+        if (TasksGraph.GetMeta().MayRunTasksLocally) {
             // temporary flag until common ca factory is implemented.
             auto tasksOnNodeIt = TasksPerNode.find(ExecuterId.NodeId());
             if (tasksOnNodeIt != TasksPerNode.end()) {
@@ -648,7 +648,7 @@ void TKqpPlanner::PrepareCheckpoints() {
             break;
         }
     }
-    LOG_I("PrepareCheckpoints: has streaming ingress: " << hasStreamingIngress);
+    LOG_D("PrepareCheckpoints: has streaming ingress: " << hasStreamingIngress);
     if (!hasStreamingIngress) {
         CheckpointCoordinatorId = TActorId{};
         return;

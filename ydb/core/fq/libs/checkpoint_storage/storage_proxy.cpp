@@ -165,6 +165,7 @@ void TStorageProxy::Bootstrap() {
     }
     Initialize();
     Become(&TStorageProxy::StateFunc);
+
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped TStorageProxy " << SelfId() << " with connection to "
         << StorageConfig.GetEndpoint().data()
         << ":" << StorageConfig.GetDatabase().data())

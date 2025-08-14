@@ -653,7 +653,6 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
     SetupLogLevelFromTestParam(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR);
     SetupLogLevelFromTestParam(NKikimrServices::STREAMS_STORAGE_SERVICE);
-    SetupLogLevelFromTestParam(NKikimrServices::STREAMS_CONTROL_PLANE_SERVICE);
     SetupLogLevelFromTestParam(NKikimrServices::YDB_SDK);
 
     RunCall([this, domain = settings.DomainRoot]{

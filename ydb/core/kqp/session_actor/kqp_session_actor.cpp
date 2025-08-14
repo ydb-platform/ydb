@@ -1687,7 +1687,6 @@ public:
             ui64 generation = QueryState ? QueryState->Generation : 0;
             auto stateLoadMode = FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT;
             FederatedQuery::StreamingDisposition streamingDisposition;
-            NFq::NProto::TGraphParams dqGraphParams;
 
             TString executionId = QueryState ? QueryState->UserRequestContext->CurrentExecutionId : "";
             CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
@@ -1696,7 +1695,7 @@ public:
                 SelfId(),
                 checkpointsConfig,
                 Counters->GetKqpCounters(),
-                dqGraphParams,
+                NFq::NProto::TGraphParams(),
                 stateLoadMode,
                 streamingDisposition).Release());
                 LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId << ", generation " << generation);
@@ -2686,7 +2685,6 @@ public:
             }
         }
         if (CheckpointCoordinatorId) {
-            LOG_D("send TEvPoisonPill to coordinator");
             Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
             CheckpointCoordinatorId = TActorId{};
         }

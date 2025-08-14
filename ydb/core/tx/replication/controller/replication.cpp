@@ -219,7 +219,7 @@ public:
     }
 
     void ResetCredentials(const TActorContext& ctx) {
-        for (auto* x : TVector<TActorId*>{&SecretResolver, &YdbProxy}) {
+        for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &YdbProxy}) {
             if (auto actorId = std::exchange(*x, {})) {
                 ctx.Send(actorId, new TEvents::TEvPoison());
             }

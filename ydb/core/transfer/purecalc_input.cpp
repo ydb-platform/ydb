@@ -61,7 +61,7 @@ struct TMessageWrapper {
     const TMessage& Message;
 
     NYql::NUdf::TUnboxedValuePod GetCreateTimestamp() const {
-        return NYql::NUdf::TUnboxedValuePod(Message.CreateTimestamp.MilliSeconds());
+        return NYql::NUdf::TUnboxedValuePod(Message.CreateTimestamp.MicroSeconds());
     }
 
     NYql::NUdf::TUnboxedValuePod GetData() const {
@@ -89,7 +89,7 @@ struct TMessageWrapper {
     }
 
     NYql::NUdf::TUnboxedValuePod GetWriteTimestamp() const {
-        return NYql::NUdf::TUnboxedValuePod(Message.WriteTimestamp.MilliSeconds());
+        return NYql::NUdf::TUnboxedValuePod(Message.WriteTimestamp.MicroSeconds());
     }
 };
 

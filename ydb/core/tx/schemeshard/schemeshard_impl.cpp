@@ -8157,8 +8157,11 @@ void TSchemeShard::ConnectToSA() {
     NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = policy};
     SAPipeClientId = Register(NTabletPipe::CreateClient(SelfId(), (ui64)StatisticsAggregatorId, pipeConfig));
 
+    const bool isRootServerless = IsServerlessDomain(SubDomains.at(RootPathId()));
+
     auto connect = std::make_unique<NStat::TEvStatistics::TEvConnectSchemeShard>();
     connect->Record.SetSchemeShardId(TabletID());
+    connect->Record.SetIsRootSubdomainServerless(isRootServerless);
 
     NTabletPipe::SendData(SelfId(), SAPipeClientId, connect.release());
 
@@ -8168,6 +8171,7 @@ void TSchemeShard::ConnectToSA() {
         << ", at schemeshard: " << TabletID()
         << ", StatisticsAggregatorId: " << StatisticsAggregatorId
         << ", at schemeshard: " << TabletID()
+        << ", isRootServerless: " << isRootServerless;
     );
 }
 

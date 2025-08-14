@@ -23,17 +23,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 objects.emplace(address, std::move(i));
             }
 
-            THashMap<TAddress, TString> errorAddresses;
-            for (const auto& requestedAddress : RequestedAddresses) {
-                errorAddresses.emplace(requestedAddress, TStringBuilder{}
-                    << "portion { tablet: " << requestedAddress.GetTabletActorId()
-                    << ", portion_id: " << requestedAddress.GetPortionId()
-                    << ", path_id: " << requestedAddress.GetPathId()
-                    << ", internal_portion_address: " << requestedAddress.GetInternalPortionAddress().DebugString()
-                    << " } has already been removed");
-            }
-
-            Callback->OnReceiveData(OwnerActorId, std::move(objects), std::move(RequestedAddresses), std::move(errorAddresses));
+            Callback->OnReceiveData(OwnerActorId, std::move(objects), std::move(RequestedAddresses), {});
         }
 
     public:

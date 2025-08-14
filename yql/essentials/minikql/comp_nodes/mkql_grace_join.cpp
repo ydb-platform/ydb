@@ -669,13 +669,13 @@ private:
         switch(mode) {
             case EOperatingMode::InMemory: {
                 UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
-                        << (const void *)&*JoinedTablePtr << "# switching Memory mode to InMemory");
+                        << (const void *)&*JoinedTableBuild << "# switching Memory mode to InMemory");
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::Spilling: {
                 UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
-                        << (const void *)&*JoinedTablePtr << "# switching Memory mode to Spilling");
+                        << (const void *)&*JoinedTableBuild << "# switching Memory mode to Spilling");
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 auto spiller = ctx.SpillerFactory->CreateSpiller();
                 RightPacker->TablePtr->InitializeBucketSpillers(spiller);
@@ -684,7 +684,7 @@ private:
             }
             case EOperatingMode::ProcessSpilled: {
                 UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
-                        << (const void *)&*JoinedTablePtr << "# switching Memory mode to ProcessSpilled");
+                        << (const void *)&*JoinedTableBuild << "# switching Memory mode to ProcessSpilled");
                 SpilledBucketsJoinOrder.reserve(GraceJoin::NumberOfBuckets);
                 for (ui32 i = 0; i < GraceJoin::NumberOfBuckets; ++i) SpilledBucketsJoinOrder.push_back(i);
 
@@ -1035,7 +1035,7 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
 
         if (LeftPacker->TablePtr->IsBucketInMemory(nextBucketToJoin) && RightPacker->TablePtr->IsBucketInMemory(nextBucketToJoin)) {
             if (*PartialJoinCompleted) {
-                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData, nextBucketToJoin + 1)) {
+                while (JoinedTableBuild->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData, nextBucketToJoin + 1)) {
                     UnpackJoinedData(output);
                     return EFetchResult::One;
                 }
@@ -1048,8 +1048,8 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                 RightPacker->TablePtr->ClearBucket(nextBucketToJoin); // Clear content of returned bucket
                 RightPacker->TablePtr->ShrinkBucket(nextBucketToJoin);
 
-                JoinedTablePtr->Clear();
-                JoinedTablePtr->ResetIterator();
+                JoinedTableBuild->Clear();
+                JoinedTableBuild->ResetIterator();
                 *PartialJoinCompleted = false;
 
                 SpilledBucketsJoinOrderCurrentIndex++;
@@ -1058,12 +1058,12 @@ EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue*const*
                 LeftPacker->StartTime = std::chrono::system_clock::now();
                 RightPacker->StartTime = std::chrono::system_clock::now();
                 if ( SelfJoinSameKeys_ ) {
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
+                    JoinedTableBuild->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
                 } else {
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
+                    JoinedTableBuild->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, nextBucketToJoin, nextBucketToJoin+1);
                 }
 
-                JoinedTablePtr->ResetIterator();
+                JoinedTableBuild->ResetIterator();
                 LeftPacker->EndTime = std::chrono::system_clock::now();
                 RightPacker->EndTime = std::chrono::system_clock::now();
             }
@@ -1088,8 +1088,8 @@ private:
     const std::vector<TType *> RightColumnsTypes;
     const std::unique_ptr<TGraceJoinPacker> LeftPacker;
     const std::unique_ptr<TGraceJoinPacker> RightPacker;
-    const std::unique_ptr<GraceJoin::TTable> JoinedTableBuild;
-    const std::unique_ptr<GraceJoin::TTable> JoinedTableReturn;
+    std::unique_ptr<GraceJoin::TTable> JoinedTableBuild;
+    std::unique_ptr<GraceJoin::TTable> JoinedTableReturn;
     const std::unique_ptr<bool> JoinCompleted;
     const std::unique_ptr<bool> PartialJoinCompleted;
     const std::unique_ptr<bool> HaveMoreLeftRows;

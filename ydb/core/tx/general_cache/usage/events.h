@@ -55,7 +55,6 @@ struct TEvents {
         }
     };
 
-
     class TEvKillSource: public NActors::TEventLocal<TEvKillSource, EvKillSource> {
     private:
         const TSourceId SourceId;
@@ -69,6 +68,7 @@ struct TEvents {
             return SourceId;
         }
     };
+
     class TEvUpdateMaxCacheSize: public NActors::TEventLocal<TEvUpdateMaxCacheSize, EvUpdateMaxCacheSize> {
     private:
         YDB_READONLY_CONST(ui64, MaxCacheSize);

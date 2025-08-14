@@ -24,7 +24,8 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
             Config.MutableProxy()->SetHostname(proxyHost);
             Config.MutableProxy()->SetPort(9097);
         }
-
+        Config.SetAutoCreateTopicsEnable(false);
+        Config.SetAutoCreateConsumersEnable(false);
         auto* runtime = server.CleverServer->GetRuntime();
         auto request = GetMetadataRequest(topics);
 

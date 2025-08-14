@@ -1914,7 +1914,9 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     auto& response = ev->Get()->Record;
 
     if (response.HasCookie() && (response.GetCookie() == static_cast<ui64>(ERequestCookie::CompactificationWrite))) {
-        HaveCompacterRequestInflight = false;
+        Y_ABORT_UNLESS(CompacterKvRequestInflight);
+        CompacterKvRequestInflight = false;
+        Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         if (Compacter) {
             Compacter->ProcessResponse(ev);
         }
@@ -4092,4 +4094,15 @@ void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
     }
 }
 
+void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request) {
+    Y_ENSURE(!CompacterKvRequestInflight);
+    Y_ENSURE(!CompacterKvRequest);
+    Send(ReadQuotaTrackerActor, new TEvPQ::TEvAcquireExclusiveLock());
+    CompacterKvRequest = std::move(request);
+}
+
+void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
+    CompacterKvRequestInflight = true;
+    Send(BlobCache, CompacterKvRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
+}
 } // namespace NKikimr::NPQ

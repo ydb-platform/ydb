@@ -1104,6 +1104,9 @@ void TPartition::InitSplitMergeSlidingWindow() {
 
 void TPartition::CreateCompacter() {
     if (!Config.GetEnableCompactification() || !AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() || IsSupportive()) {
+        if (!IsSupportive()) {
+            Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
+        }
         Compacter.Reset();
         return;
     }
@@ -1111,14 +1114,9 @@ void TPartition::CreateCompacter() {
         Compacter->TryCompactionIfPossible();
         return;
     }
-    ui64 compStartOffset = 0;
 
     auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext()); //ToDo: Fix!
-    //if (userInfo) {
-        compStartOffset = userInfo.Offset;
-    // } else {
-    //     Y_ENSURE(false);
-    // }
+    ui64 compStartOffset = userInfo.Offset;
     Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
     Compacter->TryCompactionIfPossible();
 }

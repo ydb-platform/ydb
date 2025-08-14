@@ -102,7 +102,7 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
                         " readCookie " << ev->Get()->RequestCookie);
     }
 
-    if (!RequestsInflight && WaitingInflightRequests.empty() && (ExclusiveLockState == EExclusiveLockState::EAcquiring)) {
+    if (!RequestsInflight && (ExclusiveLockState == EExclusiveLockState::EAcquiring)) {
         ExclusiveLockState = EExclusiveLockState::EAcquired;
         ReplyExclusiveLockAcquired(ExclusiveLockRequester);
     }
@@ -150,6 +150,8 @@ void TPartitionQuoterBase::ScheduleWakeUp(const TActorContext& ctx) {
 
 void TPartitionQuoterBase::HandleAcquireExclusiveLock(TEvPQ::TEvAcquireExclusiveLock::TPtr& ev, const TActorContext& ctx)
 {
+    Cerr << "===Handle exlusive lock aquire\n";
+    Y_ABORT_UNLESS(ExclusiveLockState != EExclusiveLockState::EAcquired);
     switch (ExclusiveLockState) {
     case EExclusiveLockState::EReleased:
         ExclusiveLockState = EExclusiveLockState::EAcquiring;
@@ -176,6 +178,8 @@ void TPartitionQuoterBase::HandleAcquireExclusiveLock(TEvPQ::TEvAcquireExclusive
 
 void TPartitionQuoterBase::HandleReleaseExclusiveLock(TEvPQ::TEvReleaseExclusiveLock::TPtr& ev, const TActorContext& ctx)
 {
+    Cerr << "===Handle exlusive lock released\n";
+
     ExclusiveLockState = EExclusiveLockState::EReleased;
 
     ProcessInflightQueue();
@@ -186,6 +190,7 @@ void TPartitionQuoterBase::HandleReleaseExclusiveLock(TEvPQ::TEvReleaseExclusive
 
 void TPartitionQuoterBase::ReplyExclusiveLockAcquired(const TActorId& receiver)
 {
+    Cerr << "===Reply exlusive lock aquired\n";
     Send(receiver, new TEvPQ::TEvExclusiveLockAcquired());
 }
 

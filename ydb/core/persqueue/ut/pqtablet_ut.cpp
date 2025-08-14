@@ -268,7 +268,7 @@ protected:
     void ExpectNoExclusiveLockAcquired();
     void ExpectNoReadQuotaAcquired();
     void SendAcquireExclusiveLock();
-    void SendAcquireReadQuota();
+    void SendAcquireReadQuota(ui64 cookie, const TActorId& sender);
     void SendReadQuotaConsumed();
     void SendReleaseExclusiveLock();
     void WaitExclusiveLockAcquired();
@@ -2619,15 +2619,21 @@ void TPQTabletFixture::SendAcquireExclusiveLock()
                        new TEvPQ::TEvAcquireExclusiveLock());
 }
 
-void TPQTabletFixture::SendAcquireReadQuota(ui64 cookie)
-{
+class TEvReadTestEventHandle: public NActors::IEventHandle {
+public:
+    TEvReadTestEventHandle(THolder<TEvPQ::TEvRead>&& event, const TActorId& sender)
+        : NActors::IEventHandle(TActorId{}, sender, event.Release())
+    {}
+};
+
+void TPQTabletFixture::SendAcquireReadQuota(ui64 cookie, const TActorId& sender) {
     EnsureReadQuoterExists();
 
-    auto request = MakeHolder<TEvPQ::TEvRead>();
-
+    auto request = MakeHolder<TEvPQ::TEvRead>(cookie, 0, 99999, 0, 9999, "", "client", 999, 99999, 99999, 0, "", false, TActorId{});
+    auto handle = new TEvReadTestEventHandle(std::move(request), sender);
     Ctx->Runtime->Send(ReadQuoter->Quoter,
                        Ctx->Edge,
-                       new TEvPQ::TEvRequestQuota(cookie, std::move(request)));
+                       new TEvPQ::TEvRequestQuota(cookie, handle));
 }
 
 void TPQTabletFixture::SendReadQuotaConsumed()
@@ -2636,7 +2642,7 @@ void TPQTabletFixture::SendReadQuotaConsumed()
 
     Ctx->Runtime->Send(ReadQuoter->Quoter,
                        Ctx->Edge,
-                       new TEvPQ::TEvConsumed());
+                       new TEvPQ::TEvConsumed(1));
 }
 
 void TPQTabletFixture::SendReleaseExclusiveLock()
@@ -2679,7 +2685,7 @@ void TPQTabletFixture::EnsureReadQuoterExists()
 
 Y_UNIT_TEST_F(ReadQuoter_ExclusiveLock, TPQTabletFixture)
 {
-    SendAcquireReadQuota();
+    SendAcquireReadQuota(1, Ctx->Edge);
     WaitReadQuotaAcquired();
 
     SendAcquireExclusiveLock();
@@ -2688,7 +2694,7 @@ Y_UNIT_TEST_F(ReadQuoter_ExclusiveLock, TPQTabletFixture)
     SendReadQuotaConsumed();
     WaitExclusiveLockAcquired();
 
-    SendAcquireReadQuota();
+    SendAcquireReadQuota(2, Ctx->Edge);
     ExpectNoReadQuotaAcquired();
 
     SendReleaseExclusiveLock();

@@ -426,7 +426,7 @@ TReadAnswer TReadInfo::FormAnswer(
         lastBlobSize += blob.GetBlobSize();
         if (blob.IsLastPart()) {
             bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
-                    ReadTimestampMs > blob.WriteTimestamp.MilliSeconds();
+                    ReadTimestampMs > blob.WriteTimestamp.MilliSeconds() || blob.Data.empty();
             ++cnt;
             if (messageSkippingBehaviour) {
                 --cnt;
@@ -614,8 +614,11 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
     if (!DataKeysBody.empty() && (Head.Offset > startOffset || Head.Offset == startOffset && Head.PartNo > partNo)) { //will read smth from body
         auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(startOffset, partNo),
             [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
-        if (it == DataKeysBody.begin()) //could be true if data is deleted or gaps are created
+        if (it == DataKeysBody.begin()) //could be true if data is deleted or gaps are created {
+            {Cerr << "KeyKeys from body, offset: " << startOffset << ":" << partNo << " data keys begin offset: " << DataKeysBody.begin()->Key.GetOffset()<< ", partition start offset: " << StartOffset << Endl;
+            Cerr << "FirstHeadKey: " << (HeadKeys.empty() ? TString("None") : HeadKeys.begin()->Key.ToString()) << Endl;
             return blobs;
+            }
         Y_ABORT_UNLESS(it != DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
         Y_ABORT_UNLESS(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
         --it;

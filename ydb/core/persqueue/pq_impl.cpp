@@ -304,6 +304,7 @@ private:
             Request.SetRequestId(TMP_REQUEST_MARKER);
 
             Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
+            Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
             THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
             req->Record = Request;
             Send(Tablet, req.Release());

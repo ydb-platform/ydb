@@ -410,7 +410,6 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                                      1,
                                      quoterId,
                                      std::move(samplingControl),
-                                     Ctx->Runtime->GetAppData(0).FeatureFlags,
                                      newPartition);
     ActorId = Ctx->Runtime->Register(actor);
     return actor;

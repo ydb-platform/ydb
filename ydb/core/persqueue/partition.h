@@ -240,6 +240,7 @@ private:
     void Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr& ev);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
@@ -485,6 +486,7 @@ private:
     ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
     void CreateCompacter();
+    void SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -572,6 +574,7 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, HandleOnInit);
+            hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
 
             HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, HandleOnInit);
             HFuncTraced(TEvPQ::TEvGetWriteInfoError, HandleOnInit);
@@ -634,6 +637,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+            hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
             HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
@@ -994,7 +998,9 @@ private:
 
     ui64 CompacterCookie = 0;
     THolder<TPartitionCompaction> Compacter;
-    bool HaveCompacterRequestInflight = false;
+    bool CompacterPartitionRequestInflight = false;
+    bool CompacterKvRequestInflight = false;
+    THolder<TEvKeyValue::TEvRequest> CompacterKvRequest;
 
     using TPendingEvent = std::variant<
         std::unique_ptr<TEvPQ::TEvTxCalcPredicate>,

@@ -238,12 +238,20 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
     Schedule(PropagateInterval, new TEvPrivate::TEvPropagate());
 }
 
-void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr&) {
+void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev) {
+    SA_LOG_D("[" << TabletID() << "] EvPropagateStatisticsResponse cookie: " << ev->Cookie);
+
     if (!PropagationInFlight) {
         return;
     }
+    if (ev->Cookie != 0 && ev->Cookie != CurPropagationSeq) {
+        // Response is not from the current propagation round, ignore.
+        // Cookie == 0 may come from an older YDB version, retain the old logic for these events.
+        return;
+    }
     if (LastSSIndex < PropagationSchemeShards.size()) {
-        LastSSIndex = PropagatePart(PropagationNodes, PropagationSchemeShards, LastSSIndex, true);
+        LastSSIndex = PropagatePart(
+            PropagationNodes, PropagationSchemeShards, LastSSIndex, true, CurPropagationSeq);
     } else {
         PropagationInFlight = false;
         PropagationNodes.clear();
@@ -316,7 +324,7 @@ void TStatisticsAggregator::SendStatisticsToNode(TNodeId nodeId, const std::vect
     std::vector<TNodeId> nodeIds;
     nodeIds.push_back(nodeId);
 
-    PropagatePart(nodeIds, ssIds, 0, false);
+    PropagatePart(nodeIds, ssIds, 0, false, InvalidPropagationSeq);
 }
 
 void TStatisticsAggregator::PropagateStatistics() {
@@ -344,11 +352,12 @@ void TStatisticsAggregator::PropagateStatistics() {
 
     Schedule(PropagateTimeout, new TEvPrivate::TEvPropagateTimeout);
 
+    ++CurPropagationSeq;
     PropagationInFlight = true;
     PropagationNodes = std::move(nodeIds);
     PropagationSchemeShards = std::move(ssIds);
 
-    LastSSIndex = PropagatePart(PropagationNodes, PropagationSchemeShards, 0, true);
+    LastSSIndex = PropagatePart(PropagationNodes, PropagationSchemeShards, 0, true, CurPropagationSeq);
 }
 
 void TStatisticsAggregator::PropagateFastStatistics() {
@@ -373,11 +382,11 @@ void TStatisticsAggregator::PropagateFastStatistics() {
         ssIds.push_back(ssId);
     }
 
-    PropagatePart(nodeIds, ssIds, 0, false);
+    PropagatePart(nodeIds, ssIds, 0, false, InvalidPropagationSeq);
 }
 
 size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
-    size_t lastSSIndex, bool useSizeLimit)
+    size_t lastSSIndex, bool useSizeLimit, ui64 cookie)
 {
     auto propagate = std::make_unique<TEvStatistics::TEvPropagateStatistics>();
     auto* record = propagate->MutableRecord();
@@ -403,7 +412,7 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
         }
     }
 
-    Send(NStat::MakeStatServiceID(leadingNodeId), propagate.release());
+    Send(NStat::MakeStatServiceID(leadingNodeId), propagate.release(), 0, cookie);
 
     return index;
 }
@@ -977,6 +986,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
                 auto extr = [](const auto& x) { return x; };
                 PrintContainerStart(FastNodes, 8, str, extr);
             }
+            str << "CurPropagationSeq: " << CurPropagationSeq << Endl;
             str << "PropagationInFlight: " << PropagationInFlight << Endl;
             str << "PropagationSchemeShards: " << PropagationSchemeShards.size() << Endl;
             {

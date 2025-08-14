@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 SRCS(
     arrow_parser.cpp
     arrow_writer.cpp
+    blob_writer.cpp
     dsv_parser.cpp
     dsv_writer.cpp
     escape.cpp

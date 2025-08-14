@@ -30,8 +30,6 @@ void TTester::Setup(TTestActorRuntime& runtime) {
 
     NOlap::TSchemaCachesManager::DropCaches();
 
-    NOlap::TSchemaCachesManager::DropCaches();
-
     ui32 domainId = 0;
     ui32 planResolution = 500;
 

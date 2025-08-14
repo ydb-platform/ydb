@@ -377,6 +377,9 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     if (!EndPartitionSessionEvent) {
         return;
     }
+    if (!AppData(ctx)->FeatureFlags.GetEnableMirroredTopicSplitMerge()) {
+        return;
+    }
     if (WriteRequestInFlight || !Queue.empty()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " postpone split-merge event until all write operations completed");
         return;

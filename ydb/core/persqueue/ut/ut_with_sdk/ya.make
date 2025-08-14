@@ -35,5 +35,5 @@ SRCS(
     mirrorer_ut.cpp
     topic_ut.cpp
 )
-NO_OPTIMIZE()
+
 END()

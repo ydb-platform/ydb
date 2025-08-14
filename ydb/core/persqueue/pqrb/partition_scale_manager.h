@@ -14,7 +14,7 @@
 #include <util/generic/fwd.h>
 #include <util/generic/string.h>
 
-#include <unordered_map>
+#include <map>
 #include <utility>
 
 namespace NKikimr {
@@ -66,9 +66,11 @@ public:
 private:
     using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
     using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
+    using TPartitionsToSplitMap = std::map<ui32, TPartitionScaleOperationInfo>;
 
     std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> BuildScaleRequest(const TActorContext& ctx);
     TBuildSplitScaleRequestResult BuildSplitScaleRequest(const TPartitionScaleOperationInfo& splitParameters) const;
+    std::vector<TPartitionsToSplitMap::const_iterator> ReorderSplits() const;
     TString LogPrefix() const;
 
 public:
@@ -85,7 +87,7 @@ private:
     TDuration RequestTimeout = TDuration::MilliSeconds(0);
     TInstant LastResponseTime = TInstant::Zero();
 
-    std::unordered_map<ui32, TPartitionScaleOperationInfo> PartitionsToSplit;
+    TPartitionsToSplitMap PartitionsToSplit;
 
     TBalancerConfig BalancerConfig;
     const TPartitionGraph& PartitionGraph;

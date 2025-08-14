@@ -269,7 +269,7 @@ protected:
     void ExpectNoReadQuotaAcquired();
     void SendAcquireExclusiveLock();
     void SendAcquireReadQuota(ui64 cookie, const TActorId& sender);
-    void SendReadQuotaConsumed();
+    void SendReadQuotaConsumed(ui64 cookie);
     void SendReleaseExclusiveLock();
     void WaitExclusiveLockAcquired();
     void WaitReadQuotaAcquired();
@@ -2603,11 +2603,15 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
 void TPQTabletFixture::ExpectNoExclusiveLockAcquired()
 {
     EnsureReadQuoterExists();
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvExclusiveLockAcquired>(TDuration::Seconds(5));
+    UNIT_ASSERT(event == nullptr);
 }
 
 void TPQTabletFixture::ExpectNoReadQuotaAcquired()
 {
     EnsureReadQuoterExists();
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvApproveReadQuota>(TDuration::Seconds(10));
+    UNIT_ASSERT(event == nullptr);
 }
 
 void TPQTabletFixture::SendAcquireExclusiveLock()
@@ -2636,13 +2640,13 @@ void TPQTabletFixture::SendAcquireReadQuota(ui64 cookie, const TActorId& sender)
                        new TEvPQ::TEvRequestQuota(cookie, handle));
 }
 
-void TPQTabletFixture::SendReadQuotaConsumed()
+void TPQTabletFixture::SendReadQuotaConsumed(ui64 cookie)
 {
     EnsureReadQuoterExists();
 
     Ctx->Runtime->Send(ReadQuoter->Quoter,
                        Ctx->Edge,
-                       new TEvPQ::TEvConsumed(1));
+                       new TEvPQ::TEvConsumed(1024, cookie, "client"));
 }
 
 void TPQTabletFixture::SendReleaseExclusiveLock()
@@ -2657,11 +2661,15 @@ void TPQTabletFixture::SendReleaseExclusiveLock()
 void TPQTabletFixture::WaitExclusiveLockAcquired()
 {
     EnsureReadQuoterExists();
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvExclusiveLockAcquired>();
+    UNIT_ASSERT(event);
 }
 
 void TPQTabletFixture::WaitReadQuotaAcquired()
 {
     EnsureReadQuoterExists();
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvApproveReadQuota>();
+    UNIT_ASSERT(event);
 }
 
 void TPQTabletFixture::EnsureReadQuoterExists()
@@ -2681,17 +2689,23 @@ void TPQTabletFixture::EnsureReadQuoterExists()
                                                                      Ctx->Edge,
                                                                      1234567890, // TabletId
                                                                      ReadQuoter->Counters));
+    Ctx->Runtime->EnableScheduleForActor(ReadQuoter->Quoter);
+    Ctx->Runtime->Send(ReadQuoter->Quoter, TActorId{}, new TEvents::TEvBootstrap());
+    //Ctx->Runtime->DispatchEvents();
 }
 
 Y_UNIT_TEST_F(ReadQuoter_ExclusiveLock, TPQTabletFixture)
 {
+    EnsureReadQuoterExists();
+    PQTabletPrepare({.partitions = 1}, {}, *Ctx);
+    //Ctx->Runtime->DispatchEvents();
     SendAcquireReadQuota(1, Ctx->Edge);
     WaitReadQuotaAcquired();
 
     SendAcquireExclusiveLock();
     ExpectNoExclusiveLockAcquired();
 
-    SendReadQuotaConsumed();
+    SendReadQuotaConsumed(1);
     WaitExclusiveLockAcquired();
 
     SendAcquireReadQuota(2, Ctx->Edge);
@@ -2699,8 +2713,6 @@ Y_UNIT_TEST_F(ReadQuoter_ExclusiveLock, TPQTabletFixture)
 
     SendReleaseExclusiveLock();
     WaitReadQuotaAcquired();
-
-    Y_FAIL("not implemented");
 }
 }
 

@@ -332,9 +332,9 @@ ui64 TReadQuoter::GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& 
 THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const {
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     TActorId actorId;
-    Y_ENSURE(TopicConverter);
     if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
-        if(quotingConfig.GetEnableReadQuoting()) {
+        Y_ENSURE(TopicConverter);
+        if (quotingConfig.GetEnableReadQuoting()) {
             actorId = TActivationContext::Register(
                 new TAccountReadQuoter(
                     GetTabletActor(),

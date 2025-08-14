@@ -9,7 +9,6 @@ SRCS(
 PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/api/protos
-    ydb/public/sdk/cpp/src/client/arrow
     ydb/public/sdk/cpp/src/client/common_client/impl
     ydb/public/sdk/cpp/src/client/proto
 )

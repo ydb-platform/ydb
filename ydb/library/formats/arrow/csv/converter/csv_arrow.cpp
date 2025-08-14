@@ -171,14 +171,14 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                     }
 
                     auto decimalValue = NYql::NDecimal::FromString(value, precision, scale);
-                    std::string binaryValue(16, 0);
                     auto pair = NYql::NDecimal::MakePair(decimalValue);
+                    char bytes[16] = {0};
                     for (int i = 0; i < 8; ++i) {
-                        binaryValue[i] = (pair.second >> (56 - i * 8)) & 0xFF;
-                        binaryValue[8 + i] = (pair.first >> (56 - i * 8)) & 0xFF;
+                        bytes[i] = (pair.second >> (56 - i * 8)) & 0xFF;
+                        bytes[i + 8] = (pair.first >> (56 - i * 8)) & 0xFF;
                     }
 
-                    Y_ABORT_UNLESS(builder.Append(binaryValue).ok());
+                    Y_ABORT_UNLESS(builder.Append(bytes).ok());
                 }
             }
 

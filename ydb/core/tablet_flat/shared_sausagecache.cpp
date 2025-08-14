@@ -828,6 +828,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         while (auto rawPage = SharedCachePages->GCList->PopGC()) {
             auto* page = static_cast<TPage*>(rawPage.Get());
+            if (page->State == PageStateEvicted && page->GetFrequency() > 0) {
+                // page was accessed while being passive, load it back
+                // FIXME: should we limit this loop with some MaxMainQueueReinserts param?
+                TryLoadEvictedPage(page);
+                Evict(Cache.Touch(page));
+            }
             TryDrop(page, recheck);
         }
 
@@ -1099,6 +1105,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             request.PageCollection = std::move(pageCollection);
             request.Sender = owner;
             request.Priority = NBlockIO::EPriority::Bulk;
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Request page collection " << request.PageCollection->Label()
+                << " owner " << owner
+                << " class " << request.Priority
+                << " pages " << pagesToRequest);
+
             // TODO: add some counters for these fetches?
             SendRequest(request, std::move(pagesToRequest), pagesToRequestBytes, nullptr);
         }

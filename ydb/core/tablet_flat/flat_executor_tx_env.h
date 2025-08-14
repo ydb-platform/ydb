@@ -98,7 +98,7 @@ namespace NTabletFlatExecutor {
                 return nullptr;
             }
 
-            // sharedBody.IncrementFrequency();
+            sharedBody.IncrementFrequency();
             auto emplaced = pinnedCollection.emplace(pageId, TPrivatePageCache::TPinnedPage(std::move(sharedBody)));
             Y_ENSURE(emplaced.second);
             auto& pinnedBody = emplaced.first->second.PinnedBody;
@@ -120,19 +120,6 @@ namespace NTabletFlatExecutor {
                 result.emplace(pageCollectionId, std::move(pages));
             }
             ToLoad.clear();
-            return result;
-        }
-        
-        auto ObtainSharedCacheTouches() {
-            THashMap<TLogoBlobID, THashSet<TPageId>> result;
-            for (const auto& [pageCollectionId, pages] : Seat.Pinned) {
-                if (Cache.FindPageCollection(pageCollectionId)) {
-                    auto& touches = result[pageCollectionId];
-                    for (const auto& [pageId, pinnedPageRef] : pages) {
-                        touches.insert(pageId);
-                    }
-                }
-            }
             return result;
         }
 

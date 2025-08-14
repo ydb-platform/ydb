@@ -199,7 +199,7 @@ private:
         while (GetSize() > Limit.TotalLimit) {
             if (SmallQueue.Size > Limit.SmallQueueLimit) {
                 TPage* page = Pop(SmallQueue);
-                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 1) { // load inserts, first read touches, second read touches
+                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0) {
                     TPageTraits::SetFrequency(page, 0);
                     Push(MainQueue, page);
                 } else {

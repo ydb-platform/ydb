@@ -1,6 +1,8 @@
 import pytest
+import sys
 
 from datetime import datetime, timedelta
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, MixedClusterFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -13,20 +15,25 @@ class SimpleReaderWorkload:
         self.batch_size = 1000
 
     def create_table(self):
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(
-                f"""
+        query = f"""
                     CREATE TABLE `{self.table_name}` (
                         id Uint64 NOT NULL,
                         timestamp Timestamp NOT NULL,
-                        value Uint64,
-                        data Float,
+                        value Uint64 NOT NULL,
+                        data Float NOT NULL,
                         PRIMARY KEY (id, timestamp)
                     ) WITH (
                         STORE = COLUMN
                     );
                 """
-            )
+        try:
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                session_pool.execute_with_retries(query)
+        except (ydb.issues.ConnectionLost, ydb.issues.BadRequest, ydb.issues.InternalError, ydb.issues.BadSession) as e:
+            print(f"Error in create_table: {e}, waiting for connection", file=sys.stderr)
+            assert self.wait_for_connection(), "Failed to restore connection in create_table"
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                session_pool.execute_with_retries(query)
 
     def write_data_batch(self, start_id, batch_size):
         rows = []
@@ -72,15 +79,52 @@ class SimpleReaderWorkload:
             column_types.add_column("timestamp", ydb.PrimitiveType.Timestamp)
             column_types.add_column("value", ydb.PrimitiveType.Uint64)
             column_types.add_column("data", ydb.PrimitiveType.Float)
-            self.driver.table_client.bulk_upsert(self.table_name, rows, column_types)
-            total_written += len(rows)
+            try:
+                self.driver.table_client.bulk_upsert(self.table_name, rows, column_types)
+                total_written += len(rows)
+            except (ydb.issues.ConnectionLost, ydb.issues.BadRequest, ydb.issues.InternalError) as e:
+                print(f"Error in bulk_upsert: {e}, waiting for connection", file=sys.stderr)
+                assert self.wait_for_connection(), "Failed to restore connection in bulk_upsert"
+                self.driver.table_client.bulk_upsert(self.table_name, rows, column_types)
+                total_written += len(rows)
 
         return total_written
 
+    def wait_for_connection(self, timeout_seconds=30):
+        def predicate():
+            try:
+                with ydb.QuerySessionPool(self.driver) as session_pool:
+                    session_pool.execute_with_retries("SELECT 1")
+                return True
+            except (ydb.issues.ConnectionLost, ydb.issues.BadRequest, ydb.issues.InternalError, ydb.issues.BadSession):
+                return False
+
+        return wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=1)
+
     def execute_scan_query(self, query_body):
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            result = session_pool.execute_with_retries(query_body)
-            return result[0].rows
+        try:
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                result = session_pool.execute_with_retries(query_body)
+                return result[0].rows
+        except (ydb.issues.ConnectionLost, ydb.issues.BadRequest, ydb.issues.InternalError, ydb.issues.BadSession) as e:
+            error_msg = str(e)
+            print(f"Error in execute_scan_query: {e}", file=sys.stderr)
+            print(f"Failed query: {query_body}", file=sys.stderr)
+            
+            if "Expected type of TFlowType but got Stream" in error_msg or "cannot parse program/ssa program has different columns" in error_msg:
+                print(f"Compatibility error detected - this is expected during rolling upgrade", file=sys.stderr)
+                try:
+                    version_result = self.execute_scan_query("SELECT Version() as version")
+                    print(f"YDB version: {version_result[0]['version']}", file=sys.stderr)
+                except:
+                    print("Could not get YDB version", file=sys.stderr)
+                raise
+            
+            print(f"Waiting for connection...", file=sys.stderr)
+            assert self.wait_for_connection(), "Failed to restore connection in execute_scan_query"
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                result = session_pool.execute_with_retries(query_body)
+                return result[0].rows
 
     def test_simple_reader_queries(self):
         queries = [
@@ -98,15 +142,34 @@ class SimpleReaderWorkload:
                 result = self.execute_scan_query(query)
                 results.append((query, result, True))
             except Exception as e:
+                error_msg = str(e)
+                print(f"Query failed: {query}", file=sys.stderr)
+                print(f"Error: {error_msg}", file=sys.stderr)
+                
+                if "Expected type of TFlowType but got Stream" in error_msg or "cannot parse program/ssa program has different columns" in error_msg:
+                    print(f"Compatibility error detected in test_simple_reader_queries", file=sys.stderr)
+                    try:
+                        version_result = self.execute_scan_query("SELECT Version() as version")
+                        print(f"YDB version: {version_result[0]['version']}", file=sys.stderr)
+                    except:
+                        print("Could not get YDB version", file=sys.stderr)
+                
                 results.append((query, str(e), False))
 
         return results
 
     def verify_data_consistency(self, write_calls=1):
+        print(f"Starting verify_data_consistency with write_calls={write_calls}", file=sys.stderr)
+        
+        print(f"Executing COUNT query...", file=sys.stderr)
         count_result = self.execute_scan_query(f"SELECT COUNT(*) as count FROM `{self.table_name}`")
         total_count = count_result[0]["count"]
+        
+        print(f"Executing SUM query...", file=sys.stderr)
         sum_result = self.execute_scan_query(f"SELECT SUM(value) as sum_value FROM `{self.table_name}`")
         total_sum = sum_result[0]["sum_value"]
+        
+        print(f"Executing COUNT DISTINCT query...", file=sys.stderr)
         unique_count_result = self.execute_scan_query(f"SELECT COUNT(DISTINCT id) as unique_count FROM `{self.table_name}`")
         unique_count = unique_count_result[0]["unique_count"]
         expected_total_count = 6 * self.batch_size * write_calls
@@ -208,7 +271,11 @@ class TestSimpleReaderTabletTransfer(RollingUpgradeAndDowngradeFixture):
             if step_count >= 8:
                 break
 
-            workload.write_data_with_overlaps()
+            try:
+                workload.write_data_with_overlaps()
+            except (ydb.issues.ConnectionLost, ydb.issues.BadRequest, ydb.issues.InternalError) as e:
+                print(f"Error during rolling upgrade: {e}, waiting for connection", file=sys.stderr)
+                assert workload.wait_for_connection(), "Failed to restore connection after rolling upgrade"
             step_count += 1
 
         final_consistency = workload.verify_data_consistency(16)

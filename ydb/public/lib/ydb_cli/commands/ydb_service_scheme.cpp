@@ -3,6 +3,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
+#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -655,17 +656,23 @@ int TCommandDescribe::DescribeTransfer(const TDriver& driver) {
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintTransferResponsePretty);
 }
 
-int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {
-    Cout << "\nQuery text:\n" << result.GetViewDescription().GetQueryText() << Endl;
-    return EXIT_SUCCESS;
+namespace {
+
+    void PrintViewQuery(const std::string& query) {
+        Cout << "\nQuery text:\n" << query << Endl;
+    }
+
 }
 
 int TCommandDescribe::DescribeView(const TDriver& driver) {
-    NView::TViewClient client(driver);
-    auto result = client.DescribeView(Path, {}).ExtractValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
-    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintViewResponsePretty);
+    TString query;
+    auto status = NDump::DescribeViewQuery(driver, Path, query);
+    if (status.IsSuccess()) {
+        PrintViewQuery(query);
+        return EXIT_SUCCESS;
+    }
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
+    return EXIT_FAILURE;
 }
 
 int TCommandDescribe::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& description) const {

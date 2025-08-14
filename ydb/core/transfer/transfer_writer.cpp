@@ -448,6 +448,10 @@ private:
     }
 
     void PassAway() override {
+        if (TableState) {
+            TableState->PassAway();
+        }
+
         TActor::PassAway();
     }
 

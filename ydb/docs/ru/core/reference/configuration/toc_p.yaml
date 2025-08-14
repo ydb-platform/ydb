@@ -11,3 +11,5 @@ items:
   href: security_config.md
 - name: Настройка TLS
   href: tls.md
+- name: shred_config
+  href: shred_config.md

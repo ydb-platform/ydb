@@ -60,11 +60,8 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20040:Enabled verbose memory limit by default in recipe [#20040](https://github.com/ydb-platform/ydb/pull/20040). ([Ivan](https://github.com/abyss7))
 * 20272:Enabled the following feature flags by default: EnableTopicAutopartitioningForCDC, EnableTopicAutopartitioningForReplication, EnableTopicTransfer. [#20272](https://github.com/ydb-platform/ydb/pull/20272) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20253:Separated bulk statistics operations from non-bulk. [#20253](https://github.com/ydb-platform/ydb/pull/20253) ([Vladilen](https://github.com/Vladilen))
-* 22511:Add ICB control to change ReadRequestsInFlightLimit via changing dynconfig [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
-* 22385:no cache when access with user token [#22385](https://github.com/ydb-platform/ydb/pull/22385) ([Andrei Rykov](https://github.com/StekPerepolnen))
-* 22226:meta forward authorize header [#22226](https://github.com/ydb-platform/ydb/pull/22226) ([Andrei Rykov](https://github.com/StekPerepolnen))
-* 22146:More stable scan mode with deduplication on CS [#22146](https://github.com/ydb-platform/ydb/pull/22146) ([Semyon](https://github.com/swalrus1))
-* 21997:Enable the new compute scheduler based on HDRF model [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
+* 22511:Add ICB control to change ReadRequestsInFlightLimit via changing dynconfig. [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
+* 21997:Enable the new compute scheduler based on HDRF model. [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
 
 ### Bug fixes
 
@@ -122,9 +119,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17198:Fixed an issue with UUID data type handling in YDB CLI backup/restore operations. [#17198](https://github.com/ydb-platform/ydb/pull/17198) ([Semyon Danilov](https://github.com/SammyVimes))
 * 20560:Resolved an issue with memory travel when a consumer commits an offset to the topic with autopartitioning enabled. [#20560](https://github.com/ydb-platform/ydb/pull/20560) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20386:Resolved an issue with reporting of gRPC metrics for serverless databases. [#20386](https://github.com/ydb-platform/ydb/pull/20386) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
-* 22556:fix false-positive unresponsive tablet issues in healthcheck during restarts https://github.com/ydb-platform/ydb/issues/22390 [#22556](https://github.com/ydb-platform/ydb/pull/22556) ([vporyadke](https://github.com/vporyadke))
-* 22518:Fix default values for Kafka protocol [#22518](https://github.com/ydb-platform/ydb/pull/22518) ([qyryq](https://github.com/qyryq))
-* 22298:Fixed bug: Attach Stream does not send a signal on session shutdown [#20812](https://github.com/ydb-platform/ydb/issues/20812) [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
+* 22298:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20812) where attach streams remained active after session shutdown, causing unexpected BadSession errors. [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
 
 ### YDB UI
 

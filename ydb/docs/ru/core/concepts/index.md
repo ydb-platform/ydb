@@ -17,7 +17,7 @@
 - [Scan-запросы](scan_query.md)
 - [Ограничения базы данных](limits-ydb.md)
 - [Многоверсионное управление конкурентностью (MVCC)](mvcc.md)
-- [Асинхронная репликация](async-replication.md)
+{% if feature_async_replication %}- [Асинхронная репликация](async-replication.md){% endif %}
 - [Оптимизатор запросов](optimizer.md)
 - [Федеративные запросы](federated_query/index.md)
 

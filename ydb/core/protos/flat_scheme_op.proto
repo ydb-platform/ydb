@@ -63,6 +63,11 @@ enum EColumnCache {
     ColumnCacheEver = 2;
 }
 
+enum EColumnCacheMode {
+    ColumnCacheModeRegular = 0;
+    ColumnCacheModeTryKeepInMemory = 1;
+}
+
 enum EColumnStorage {
     ColumnStorage1 = 0;
     ColumnStorage2 = 1;
@@ -136,6 +141,7 @@ message TFamilyDescription {
     optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
     optional int32 ColumnCodecLevel = 10;
+    optional EColumnCacheMode ColumnCacheMode = 11;
 }
 
 message TFastSplitSettings {

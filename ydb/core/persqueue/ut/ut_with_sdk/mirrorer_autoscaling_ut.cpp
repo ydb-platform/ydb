@@ -64,14 +64,24 @@ namespace NKikimr::NPersQueueTests {
             return TStringBuilder() << "source_id_" << sourceId;
         }
 
-        void PrechargeTopic(const TString& name, NYdb::TDriver* driver, size_t sourceIdsCnt, size_t messageSize, size_t messageCount) {
+        void PrechargeTopic(const TString& name, NYdb::TDriver* driver, size_t sourceIdsCnt, size_t messageSize, size_t messageCount, TVector<ui32> partitions) {
             Cerr << "PRECHARGE BEGIN" << Endl;
+            auto getNextPartitionGroup = [&partitions, nextPartitionIt = partitions.begin()]() mutable -> std::optional<ui32> {
+                if (nextPartitionIt == partitions.end()) {
+                    return std::nullopt;
+                }
+                ui32 groupId = 1 + *nextPartitionIt++;
+                if (nextPartitionIt == partitions.end()) {
+                    nextPartitionIt = partitions.begin();
+                }
+                return groupId;
+            };
             for (size_t sourceId = 0; sourceId < sourceIdsCnt; ++sourceId) {
                 const TString sourceIdTxt = GenSourceId(sourceId);
                 const std::unordered_map<std::string, std::string> sessionMeta = {
                     {"precharge", "true"},
                 };
-                auto writer = CreateSimpleWriter(*driver, name, sourceIdTxt, std::nullopt, std::nullopt, std::nullopt, sessionMeta);
+                auto writer = CreateSimpleWriter(*driver, name, sourceIdTxt, getNextPartitionGroup(), std::nullopt, std::nullopt, sessionMeta);
                 ui64 seqNo = writer->GetInitSeqNo();
 
                 for (size_t i = 0; i < messageCount; ++i) {
@@ -105,7 +115,7 @@ namespace NKikimr::NPersQueueTests {
             }
         }
 
-        ui64 SplitPartition(ui64& txId, const TString& topicName, ui32 partitionId, const TString& boundary, TTestActorRuntime& runtime) {
+        ui64 SplitPartition(const ui64 txId, const TString& topicName, ui32 partitionId, const TString& boundary, TTestActorRuntime& runtime) {
             ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
             scheme.SetName(topicName);
             auto* split = scheme.AddSplit();
@@ -186,13 +196,13 @@ namespace NKikimr::NPersQueueTests {
             }
         }
 
-        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> ReadMessages(auto&& reader, auto&& passFilter, bool commit, TInstant deadline, TDuration nextMessageTimeout, TStringBuf description) {
+        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> ReadMessages(auto&& reader, auto&& passFilter, bool commit, TInstant deadline, TDuration nextMessageTimeout, TStringBuf description, TMaybe<ui32> expectedSize) {
             TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> result;
             TInstant prevMessage = TInstant::Max();
-            TInstant firstMessage = TInstant::Max();
+            TInstant firstMessage = TInstant::Now();
             bool noData = true;
             for (;;) {
-                const TInstant eventDeadline = Max(Min(deadline, prevMessage + nextMessageTimeout), noData ? TInstant::Zero() : firstMessage + nextMessageTimeout);
+                const TInstant eventDeadline = Max(Min(deadline, prevMessage + nextMessageTimeout), firstMessage + nextMessageTimeout);
                 TInstant now = TInstant::Now();
                 Cerr << (TStringBuilder() << "WAIT READ " << LabeledOutput(description, eventDeadline - now) << "\n") << Flush;
                 auto event = GetNextDataMessage(reader, eventDeadline);
@@ -214,7 +224,11 @@ namespace NKikimr::NPersQueueTests {
                 if (commit) {
                     event->Commit();
                 }
+                if (result.size() >= expectedSize) {
+                    break;
+                }
             }
+            Cerr << (TStringBuilder() << "READ " << LabeledOutput(result.size(), description) << "\n") << Flush;
             return result;
         }
 
@@ -223,10 +237,10 @@ namespace NKikimr::NPersQueueTests {
             return !meta.contains("precharge");
         }
 
-        void ComparePartitions(auto&& srcReader, auto&& dstReader, TStringBuf descr, TInstant deadline) {
+        void ComparePartitions(auto&& srcReader, auto&& dstReader, TStringBuf descr, TInstant deadline, TMaybe<ui32> expectedSize) {
             const TDuration nextMessageTimeout = TDuration::Seconds(3);
-            TVector srcMessages = ReadMessages(srcReader, SkipPrecharge, false, deadline, nextMessageTimeout, TString::Join("srcTopic ", descr));
-            TVector dstMessages = ReadMessages(dstReader, SkipPrecharge, false, deadline, nextMessageTimeout, TString::Join("dstTopic ", descr));
+            TVector srcMessages = ReadMessages(srcReader, SkipPrecharge, false, deadline, nextMessageTimeout, TString::Join("srcTopic ", descr), expectedSize);
+            TVector dstMessages = ReadMessages(dstReader, SkipPrecharge, false, deadline, nextMessageTimeout, TString::Join("dstTopic ", descr), expectedSize);
 
             for (size_t j = 0; j < Min(dstMessages.size(), srcMessages.size()); ++j) {
                 const TString caseDescription = TStringBuilder() << LabeledOutput(descr, j);
@@ -246,8 +260,12 @@ namespace NKikimr::NPersQueueTests {
                     UNIT_ASSERT_EQUAL(dstMeta.at(item.first), item.second);
                 }
             }
+            Cerr << (TStringBuilder() << descr << " src has " << srcMessages.size() << " messages\n");
+            Cerr << (TStringBuilder() << descr << " dst has " << dstMessages.size() << " messages\n");
             UNIT_ASSERT_VALUES_EQUAL_C(dstMessages.size(), srcMessages.size(), LabeledOutput(descr));
-            Cerr << (TStringBuilder() << descr << " has " << dstMessages.size() << " messages\n");
+            if (expectedSize) {
+                UNIT_ASSERT_VALUES_EQUAL_C(dstMessages.size(), *expectedSize, LabeledOutput(descr));
+            }
         }
 
         struct TWriteCount {
@@ -371,7 +389,7 @@ namespace NKikimr::NPersQueueTests {
             for (TString name : {srcTopicFullName, dstTopicFullName}) {
                 PrintTopicDescription(name, "2", server);
             }
-            PrechargeTopic(srcTopic, driver, sourcesCount, 1, 1);
+            PrechargeTopic(srcTopic, driver, sourcesCount, 1, 1, {});
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 2);
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 2);
             for (TString name : {srcTopicFullName, dstTopicFullName}) {
@@ -389,6 +407,7 @@ namespace NKikimr::NPersQueueTests {
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Partitions, finalPartitionsCount);
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Partitions, finalPartitionsCount);
 
+            THashMap<ui32, ui32> messagesPerPartition;
             // write to source topic
             constexpr TWriteCount writeBatch[]{
                 {0, 10},
@@ -398,6 +417,7 @@ namespace NKikimr::NPersQueueTests {
             for (const TWriteCount& wc : writeBatch) {
                 Cerr << (TStringBuilder() << "Writing to partition " << wc.Partiton << " " << wc.Count << " messages\n");
                 const auto [sourceId] = WriteToPartition(wc.Partiton, *driver, srcTopic, wc.Count);
+                messagesPerPartition[wc.Partiton] += wc.Count;
             }
 
             auto createReader = [&](const TString& topic, ui32 partition) {
@@ -411,9 +431,9 @@ namespace NKikimr::NPersQueueTests {
                 return topicClient.CreateReadSession(settings);
             };
 
-            const TInstant deadline = TDuration::Seconds(10).ToDeadLine();
+            const TInstant deadline = TDuration::Seconds(60).ToDeadLine();
             for (ui32 partition = 0; partition < finalPartitionsCount; ++partition) {
-                ComparePartitions(createReader(srcTopic, partition), createReader(dstTopic, partition), TStringBuilder() << LabeledOutput(partition), deadline);
+                ComparePartitions(createReader(srcTopic, partition), createReader(dstTopic, partition), TStringBuilder() << LabeledOutput(partition), deadline, messagesPerPartition.Value(partition, 0));
             }
         }
 
@@ -487,7 +507,7 @@ namespace NKikimr::NPersQueueTests {
             for (TString name : {srcTopicFullName, dstTopicFullName}) {
                 PrintTopicDescription(name, "2", server);
             }
-            PrechargeTopic(srcTopic, driver, sourcesCount, 1, 1);
+            PrechargeTopic(srcTopic, driver, sourcesCount, 1, 1, {});
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 2);
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 2);
             for (TString name : {srcTopicFullName, dstTopicFullName}) {
@@ -495,7 +515,7 @@ namespace NKikimr::NPersQueueTests {
             }
 
             ui64 txId = 1006;
-            SplitPartition(txId, srcTopicFullName, 1, "\xC0", *ctx.Runtime());
+            SplitPartition(txId++, srcTopicFullName, 1, "\xC0", *ctx.Runtime());
             for (TString name : {srcTopicFullName, dstTopicFullName}) {
                 PrintTopicDescription(name, "4", server);
             }
@@ -505,6 +525,7 @@ namespace NKikimr::NPersQueueTests {
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Partitions, finalPartitionsCount);
             UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Partitions, 2); // not splitted yet
 
+            THashMap<ui32, ui32> messagesPerPartition;
             // write to source topic
             constexpr TWriteCount writeBatch[]{
                 {0, 10},
@@ -514,6 +535,7 @@ namespace NKikimr::NPersQueueTests {
             for (const TWriteCount& wc : writeBatch) {
                 Cerr << (TStringBuilder() << "Writing to partition " << wc.Partiton << " " << wc.Count << " messages\n");
                 const auto [sourceId] = WriteToPartition(wc.Partiton, *driver, srcTopic, wc.Count);
+                messagesPerPartition[wc.Partiton] += wc.Count;
             }
 
             auto createReader = [&](const TString& topic, ui32 partition) {
@@ -554,10 +576,148 @@ namespace NKikimr::NPersQueueTests {
                 Cerr << "ALTER RES " << LabeledOutput(alterResult.GetIssues().ToString()) << "\n";
             }
 
+            while (CountPartitionsByStatus(dstTopicFullName, server).Partitions == 2) {
+                Cerr << "Waiting for partitions to be splitted\n";
+                Sleep(TDuration::Seconds(1));
+            }
             const TInstant deadline = TDuration::Seconds(65).ToDeadLine();
             for (ui32 partition = 0; partition < finalPartitionsCount; ++partition) {
-                ComparePartitions(createReader(srcTopic, partition), createReader(dstTopic, partition), TStringBuilder() << "stage=2 " << LabeledOutput(partition), deadline);
+                ComparePartitions(createReader(srcTopic, partition), createReader(dstTopic, partition), TStringBuilder() << "stage=2 " << LabeledOutput(partition), deadline, messagesPerPartition.Value(partition, 0));
             }
         }
+
+        Y_UNIT_TEST(TestMultisplit) {
+            TTestContext ctx;
+            NYdb::TDriver* driver = ctx.Driver();
+            NYdb::NTopic::TTopicClient topicClient(*driver);
+            auto& server = ctx.Server;
+
+            const ui32 sourcesCount = 8;
+            const ui32 partitionsCount = 2;
+            const ui32 maxPartitionsCount = 10;
+            const ui32 finalPartitionsCount = 8;
+            const TString srcTopic = "topic2_src";
+            const TString dstTopic = "topic1_dst";
+            const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
+            const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+
+            NKikimrPQ::TPQTabletConfig::TPartitionStrategy partitionStrategy;
+            partitionStrategy.SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+            partitionStrategy.SetMinPartitionCount(partitionsCount);
+            partitionStrategy.SetMaxPartitionCount(maxPartitionsCount);
+            partitionStrategy.SetScaleThresholdSeconds(2);
+            partitionStrategy.SetScaleUpPartitionWriteSpeedThresholdPercent(90);
+            partitionStrategy.SetScaleDownPartitionWriteSpeedThresholdPercent(1);
+
+            const ui64 writeSpeed = 1_MB;
+            const ui64 reeadSpeed = 1_MB;
+            ctx.AnnoyingClient()->CreateTopic(
+                srcTopicFullName,
+                partitionsCount,
+                /*ui32 lowWatermark =*/8_MB,
+                /*ui64 lifetimeS =*/86400,
+                /*ui64 writeSpeed =*/writeSpeed,
+                /*TString user =*/"",
+                /*ui64 readSpeed =*/reeadSpeed,
+                /*TVector<TString> rr =*/{},
+                /*TVector<TString> important =*/{},
+                /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
+                /*ui64 sourceIdMaxCount =*/6000000,
+                /*ui64 sourceIdLifetime =*/86400,
+                partitionStrategy);
+
+            NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
+            mirrorFrom.SetEndpoint("localhost");
+            mirrorFrom.SetEndpointPort(ctx.Server.GrpcPort);
+            mirrorFrom.SetTopic(srcTopic);
+            mirrorFrom.SetConsumer("some_user");
+            mirrorFrom.SetSyncWriteTime(true);
+
+            ctx.AnnoyingClient()->CreateTopic(
+                dstTopicFullName,
+                partitionsCount,
+                /*ui32 lowWatermark =*/8_MB,
+                /*ui64 lifetimeS =*/86400,
+                /*ui64 writeSpeed =*/writeSpeed,
+                /*TString user =*/"",
+                /*ui64 readSpeed =*/reeadSpeed,
+                /*TVector<TString> rr =*/{},
+                /*TVector<TString> important =*/{},
+                mirrorFrom,
+                /*ui64 sourceIdMaxCount =*/6000000,
+                /*ui64 sourceIdLifetime =*/86400,
+                partitionStrategy);
+
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 2);
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 2);
+            for (TString name : {srcTopicFullName, dstTopicFullName}) {
+                PrintTopicDescription(name, "2", server);
+            }
+            PrechargeTopic(srcTopic, driver, sourcesCount, 1, 1, {});
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 2);
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 2);
+            for (TString name : {srcTopicFullName, dstTopicFullName}) {
+                PrintTopicDescription(name, "3", server);
+            }
+
+            ui64 txId = 1006;
+            SplitPartition(txId++, srcTopicFullName, 0, "\x40", *ctx.Runtime()); // 0 -> 2, 3
+            SplitPartition(txId++, srcTopicFullName, 1, "\xC0", *ctx.Runtime()); // 1 -> 4, 5
+
+            THashMap<ui32, ui32> messagesPerPartition;
+            // write to source topic
+            constexpr TWriteCount writeBatch1[]{
+                {2, 2},
+                {3, 3},
+                {4, 4},
+                {5, 5},
+            };
+            for (const TWriteCount& wc : writeBatch1) {
+                Cerr << (TStringBuilder() << "Writing to partition " << wc.Partiton << " " << wc.Count << " messages\n");
+                const auto [sourceId] = WriteToPartition(wc.Partiton, *driver, srcTopic, wc.Count);
+                messagesPerPartition[wc.Partiton] += wc.Count;
+            }
+            PrechargeTopic(srcTopic, driver, sourcesCount * 2, 1, 1, {});
+            SplitPartition(txId++, srcTopicFullName, 3, "\x60", *ctx.Runtime()); // 3 -> 6, 7
+            for (TString name : {srcTopicFullName, dstTopicFullName}) {
+                PrintTopicDescription(name, "4", server);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Active, 5);
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Active, 5);
+
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(srcTopicFullName, server).Partitions, finalPartitionsCount);
+            UNIT_ASSERT_VALUES_EQUAL(CountPartitionsByStatus(dstTopicFullName, server).Partitions, finalPartitionsCount);
+
+            // write to source topic
+            constexpr TWriteCount writeBatch2[]{
+                {2, 2},
+                {4, 4},
+                {5, 5},
+                {6, 6},
+                {7, 7},
+            };
+            for (const TWriteCount& wc : writeBatch2) {
+                Cerr << (TStringBuilder() << "Writing to partition " << wc.Partiton << " " << wc.Count << " messages\n");
+                const auto [sourceId] = WriteToPartition(wc.Partiton, *driver, srcTopic, wc.Count);
+                messagesPerPartition[wc.Partiton] += wc.Count;
+            }
+
+            auto createReader = [&](const TString& topic, ui32 partition) {
+                auto settings =
+                    NYdb::NTopic::TReadSessionSettings()
+                        .AppendTopics(NYdb::NTopic::TTopicReadSettings(topic)
+                                          .AppendPartitionIds(partition))
+                        .ConsumerName("shared/user")
+                        .Decompress(true);
+
+                return topicClient.CreateReadSession(settings);
+            };
+
+            const TInstant deadline = TDuration::Seconds(60).ToDeadLine();
+            for (ui32 partition = 0; partition < finalPartitionsCount; ++partition) {
+                ComparePartitions(createReader(srcTopic, partition), createReader(dstTopic, partition), TStringBuilder() << LabeledOutput(partition), deadline, messagesPerPartition.Value(partition, 0));
+            }
+        }
+
     } // Y_UNIT_TEST_SUITE(TPersQueueMirrorerWithScaling)
 } // namespace NKikimr::NPersQueueTests

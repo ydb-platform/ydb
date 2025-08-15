@@ -217,6 +217,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 resultSet.set_format(inRsProto.format());
 
                 switch (resultSet.format()) {
+                    case Ydb::ResultSet::FORMAT_UNSPECIFIED:
                     case Ydb::ResultSet::FORMAT_VALUE: {
                         self->CollectYdbValues(resultSet, inRsProto);
                         break;

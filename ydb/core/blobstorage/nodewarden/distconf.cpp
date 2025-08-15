@@ -158,7 +158,7 @@ namespace NKikimr::NStorage {
             if (IsSelfStatic && !fromBinding) {
                 auto ev = std::make_unique<TEvNodeConfigPush>();
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, ev.get());
-                if (Binding) {
+                if (Binding && Binding->SessionId) {
                     SendEvent(*Binding, std::move(ev));
                 }
             }

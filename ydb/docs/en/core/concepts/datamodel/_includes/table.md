@@ -257,3 +257,12 @@ To manage data partitioning, use the `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` ad
 * The default value is `1`.
 
 Because it ignores all the other partitioning parameters, the system uses the same value as the upper partition limit.
+
+#### Vector Index {#vector-index}
+
+**Vector index** is an additional data structure used to speed up the [vector search](../../vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../../../yql/reference/udf/list/knn.md) does not perform satisfactorily. The capabilities of {{ ydb-short-name }} regarding vector indexes are described in a separate article [{#T}](../../../dev/vector-indexes.md).
+
+**Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks. Vector indexes are particularly important for AI applications, especially for implementing [Retrieval Augmented Generation (RAG)](../../rag.md) systems.
+
+
+#### Column family {#column-family}

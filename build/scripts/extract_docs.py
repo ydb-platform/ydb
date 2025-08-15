@@ -24,7 +24,7 @@ def main():
 
     def _valid_docslib(path):
         base = os.path.basename(path)
-        return base.endswith(('.docslib', '.docslib.fake')) or base == '_preprocessed.tar.gz'
+        return base.endswith(('.docslib', '.docslib.fake')) or base == 'preprocessed.tar.gz'
 
     for src in [p for p in args.docs if _valid_docslib(p)]:
         if src == 'preprocessed.tar.gz':

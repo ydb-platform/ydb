@@ -24,42 +24,26 @@ namespace NYql {
                 , State_(state)
             {
 #define HNDL(name) "LogicalOptimizer-" #name, Hndl(&TGenericLogicalOptProposalTransformer::name)
-                AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
-                AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
-                AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSourceWrap));
+                AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersRead<TCoRight>));
+                AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersRead<TDqReadWrap>));
+                AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersSource<TDqSourceWrap>));
+                AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersSource<TDqLookupSourceWrap>));
 #undef HNDL
             }
 
-            TMaybeNode<TExprBase> ExtractMembers(TExprBase node, TExprContext& ctx) const {
+            template <class TDqReadWrap>
+            TMaybeNode<TExprBase> ExtractMembersRead(TExprBase node, TExprContext& ctx) const {
                 const auto extract = node.Cast<TCoExtractMembers>();
                 const auto input = extract.Input();
-                const auto read = input.Maybe<TCoRight>().Input().Maybe<TGenReadTable>();
+                const auto read = input.Maybe<TDqReadWrap>().Input().template Maybe<TGenReadTable>();
                 if (!read) {
                     return node;
                 }
 
                 // clang-format off
-                return Build<TCoRight>(ctx, extract.Pos())
-                    .Input<TGenReadTable>()
-                        .InitFrom(read.Cast())
-                        .Columns(extract.Members())
-                    .Build()
-                    .Done();
-                // clang-format on
-            }
-
-            TMaybeNode<TExprBase> ExtractMembersOverDqWrap(TExprBase node, TExprContext& ctx) const {
-                auto extract = node.Cast<TCoExtractMembers>();
-                auto input = extract.Input();
-                auto read = input.Maybe<TDqReadWrap>().Input().Maybe<TGenReadTable>();
-                if (!read) {
-                    return node;
-                }
-
-                // clang-format off
-                return Build<TDqReadWrap>(ctx, node.Pos())
+                return Build<TDqReadWrap>(ctx, extract.Pos())
                     .InitFrom(input.Cast<TDqReadWrap>())
-                    .Input<TGenReadTable>()
+                    .template Input<TGenReadTable>()
                         .InitFrom(read.Cast())
                         .Columns(extract.Members())
                     .Build()
@@ -67,21 +51,22 @@ namespace NYql {
                 // clang-format on
             }
 
-            TMaybeNode<TExprBase> ExtractMembersOverDqSourceWrap(TExprBase node, TExprContext& ctx) const {
+            template <class TDqSourceWrap>
+            TMaybeNode<TExprBase> ExtractMembersSource(TExprBase node, TExprContext& ctx) const {
                 const auto extract = node.Cast<TCoExtractMembers>();
                 const auto input = extract.Input();
-                const auto read = input.Maybe<TDqSourceWrap>().Input().Maybe<TGenSourceSettings>();
+                const auto read = input.Maybe<TDqSourceWrap>().Input().template Maybe<TGenSourceSettings>();
                 if (!read) {
                     return node;
                 }
 
                 // clang-format off
                 return Build<TDqSourceWrap>(ctx, node.Pos())
-                    .Input<TGenSourceSettings>()
+                    .InitFrom(input.Cast<TDqSourceWrap>())
+                    .template Input<TGenSourceSettings>()
                         .InitFrom(read.Cast())
                         .Columns(extract.Members())
                     .Build()
-                    .DataSource(input.Cast<TDqSourceWrap>().DataSource())
                     .RowType(ExpandType(node.Pos(), GetSeqItemType(*extract.Ref().GetTypeAnn()), ctx))
                     .Done();
                 // clang-format on

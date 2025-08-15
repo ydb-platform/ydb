@@ -160,7 +160,6 @@ public:
         : Settings(settings)
     {
         const ui32 grpcPort = Settings.FirstGrpcPort ? Settings.FirstGrpcPort : PortManager.GetPort();
-        InitializeYqlLogger();
         InitializeServer(grpcPort);
         InitializeFqProxy(grpcPort);
 

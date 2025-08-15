@@ -160,50 +160,6 @@ private:
         return true;
     }
 
-    void StartTraceOpt(size_t queryId) const {
-        if (Options.TraceOptAll || Options.TraceOptIds.contains(queryId)) {
-            FqSetup.StartTraceOpt();
-        }
-    }
-
-    void PrintQueryAst(TString ast) const {
-        if (!Options.AstOutput) {
-            return;
-        }
-        if (VerboseLevel >= EVerbose::Info) {
-            Cout << CoutColors.Cyan() << "Writing query ast" << CoutColors.Default() << Endl;
-        }
-        if (Options.CanonicalOutput) {
-            ast = CanonizeEndpoints(ast, Options.FqSettings.FqConfig.GetGateways());
-            ast = CanonizeAstLogicalId(ast);
-        }
-        Options.AstOutput->Write(ast);
-        Options.AstOutput->Flush();
-    }
-
-    void PrintQueryPlan(TString plan) const {
-        if (!Options.PlanOutput) {
-            return;
-        }
-        if (VerboseLevel >= EVerbose::Info) {
-            Cout << CoutColors.Cyan() << "Writing query plan" << CoutColors.Default() << Endl;
-        }
-        if (!plan) {
-            return;
-        }
-
-        NJson::TJsonValue planJson;
-        NJson::ReadJsonTree(plan, &planJson, true);
-        plan = NJson::PrettifyJson(plan, false);
-
-        if (Options.CanonicalOutput) {
-            plan = CanonizeEndpoints(plan, Options.FqSettings.FqConfig.GetGateways());
-        }
-
-        Options.PlanOutput->Write(plan);
-        Options.PlanOutput->Flush();
-    }
-
 private:
     const TRunnerOptions Options;
     const EVerbose VerboseLevel;

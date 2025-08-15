@@ -79,7 +79,7 @@ IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::
         [&](const TExprNode::TPtr& input) {
             AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx);
 
-            PropogateTableAliasesFromChildren(input, TypeCtx);
+            //PropogateTableAliasesFromChildren(input, TypeCtx);
 
             return true;
         });

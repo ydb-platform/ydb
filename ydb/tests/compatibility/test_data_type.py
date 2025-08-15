@@ -101,7 +101,7 @@ class TestDataType(RestartToAnotherVersionFixture):
                 for row in rows:
                     for prefix in self.columns[table_index].keys():
                         for type_name in self.columns[table_index][prefix]:
-                            expected_value = row_num if prefix == "pk_" else row_num
+                            expected_value = row_num
                             self.assert_type(type_name, expected_value, row[f"{prefix}{cleanup_type_name(type_name)}"])
 
                 query_index += 1

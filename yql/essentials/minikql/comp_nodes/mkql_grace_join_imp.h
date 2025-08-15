@@ -460,6 +460,10 @@ public:
     // Forces bucket to release the space used for underlying containers.
     void ShrinkBucket(ui64 bucket);
 
+    // Borrows result memory from previous bucket
+    void BorrowPreviousBucket(ui32 bucket);
+    void BorrowBucket(ui32 bucket, ui32 previousBucket);
+
     // Clears table content
     void Clear();
 

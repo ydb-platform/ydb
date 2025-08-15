@@ -1681,7 +1681,7 @@ public:
         }
 
         bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig();
-        if (!CheckpointCoordinatorId && enableCheckpointCoordinator && QueryServiceConfig.GetCheckpointsConfig().GetEnabled()) {
+        if (request.SaveQueryPhysicalGraph && !CheckpointCoordinatorId && enableCheckpointCoordinator && QueryServiceConfig.GetCheckpointsConfig().GetEnabled()) {
             const NKikimrConfig::TCheckpointsConfig& checkpointsConfig = QueryServiceConfig.GetCheckpointsConfig();
 
             ui64 generation = QueryState ? QueryState->Generation : 0;

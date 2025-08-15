@@ -8,8 +8,4 @@ IActor* CreateStatisticsAggregator(const NActors::TActorId& tablet, TTabletStora
     return new TStatisticsAggregator(tablet, info);
 }
 
-IActor* CreateStatisticsAggregatorForTests(const NActors::TActorId& tablet, TTabletStorageInfo* info) {
-    return new TStatisticsAggregator(tablet, info);
-}
-
 } // NKikimr::NStat

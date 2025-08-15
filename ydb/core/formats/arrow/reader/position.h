@@ -232,7 +232,6 @@ protected:
         , ReverseSort(reverseSort)
         , Sorting(sorting)
         , Data(data) {
-        AFL_VERIFY(!!Sorting);
         AFL_VERIFY(IsAvailablePosition(Position));
     }
 
@@ -439,7 +438,6 @@ public:
     }
 
     std::partial_ordering Compare(const TCursor& cursor) const {
-        AFL_VERIFY(!!Sorting);
         if (ReverseSort) {
             return cursor.Compare(*Sorting, Position);
         } else {

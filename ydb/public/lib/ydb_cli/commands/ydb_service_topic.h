@@ -221,7 +221,6 @@ namespace NYdb::NConsoleClient {
         void AddAllowedTransformFormats(TConfig& config);
         void ParseTransformFormat();
         NTopic::TReadSessionSettings PrepareReadSessionSettings();
-        TTopicReaderSettings PrepareReaderSettings() const;
     };
 
     class TCommandWithCodec {

@@ -390,6 +390,7 @@ namespace NKikimr::NStorage {
 
         if (persistedConfig) { // we have a committed config, apply and spread it
             ApplyStorageConfig(*persistedConfig);
+            FanOutReversePush(StorageConfig.get(), true /*recurseConfigUpdate*/);
         }
 
         NKikimrBlobStorage::TStorageConfig tempConfig;
@@ -470,6 +471,7 @@ namespace NKikimr::NStorage {
                 *Cfg, proposition.MindPrev, &err)) {
             // apply configuration and spread it
             ApplyStorageConfig(proposition.StorageConfig);
+            FanOutReversePush(StorageConfig.get(), true /*recurseConfigUpdate*/);
 
             // this proposition came from actor -- we notify that actor and finish operation
             Y_ABORT_UNLESS(proposition.ActorId);
@@ -689,28 +691,11 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TDistributedConfigKeeper::FanOutReversePush() {
-        Y_ABORT_UNLESS(StorageConfig);
-        THashSet<ui32> nodeIdsToUpdate;
-        if (StorageConfig) {
-            for (auto& [nodeId, node] : AllBoundNodes) { // assume this gets to all bound nodes
-                for (auto& meta : node.Configs) {
-                    if (meta.GetGeneration() < StorageConfig->GetGeneration()) {
-                        // this node has a chance of holding obsolete configuration: update it
-                        nodeIdsToUpdate.insert(nodeId.NodeId());
-                        meta = *StorageConfig;
-                    }
-                }
-            }
-        }
-        const ui32 rootNodeId = GetRootNodeId();
-        for (auto& [nodeId, info] : DirectBoundNodes) {
-            const bool needToUpdateConfig = nodeIdsToUpdate.contains(nodeId);
-            if (needToUpdateConfig || info.LastReportedRootNodeId != rootNodeId) {
-                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(rootNodeId,
-                    needToUpdateConfig ? StorageConfig.get() : nullptr));
-                info.LastReportedRootNodeId = GetRootNodeId();
-            }
+    void TDistributedConfigKeeper::FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config,
+            bool recurseConfigUpdate) {
+        for (const auto& [nodeId, info] : DirectBoundNodes) {
+            SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), config,
+                recurseConfigUpdate));
         }
     }
 

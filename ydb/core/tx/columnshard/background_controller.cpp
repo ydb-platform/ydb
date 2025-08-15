@@ -22,8 +22,7 @@ void TBackgroundController::CheckDeadlines() {
     for (auto&& i : ActiveCompactionInfo) {
         if (TMonotonic::Now() - i.second.GetStartTime() > NOlap::TCompactionLimits::CompactionTimeout) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction")("path_id", i.first)("task_id", i.second.GetTaskId());
-            // uncomment it for debug purpose
-            // AFL_VERIFY_DEBUG(false);
+            AFL_VERIFY_DEBUG(false);
         }
     }
 }

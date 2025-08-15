@@ -54,8 +54,7 @@ private:
 
         if (MaxVersion) {
             bool skippedPk = false;
-            while (SortHeap.Size() && !SortHeap.Current().IsControlPoint() &&
-                   SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater && !skippedPk) {
+            while (SortHeap.Size() && SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater && !skippedPk) {
                 if (builder) {
                     builder->SkipRecord(SortHeap.Current());
                 }
@@ -65,7 +64,7 @@ private:
                     skippedPk = true;
                 }
             }
-            if (!SortHeap.Size() || SortHeap.Current().IsControlPoint() || skippedPk) {
+            if (skippedPk) {
                 SortHeap.CleanFinished();
                 return false;
             }
@@ -160,8 +159,8 @@ public:
     }
 
     template <class TDataContainer>
-    void AddSource(const std::shared_ptr<TDataContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter,
-        const TIterationOrder& order, const std::optional<ui64> sourceIdExt = std::nullopt) {
+    void AddSource(const std::shared_ptr<TDataContainer>& batch,
+        const std::shared_ptr<NArrow::TColumnFilter>& filter, const TIterationOrder& order, const std::optional<ui64> sourceIdExt = std::nullopt) {
         AFL_VERIFY(order.GetIsReversed() == Reverse);
         const ui64 sourceId = sourceIdExt.value_or(SortHeap.Size());
         if (!batch || (i64)batch->num_rows() == (i64)order.GetStart()) {

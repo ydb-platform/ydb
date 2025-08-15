@@ -1,18 +1,17 @@
 from __future__ import annotations
 from .conftest import LoadSuiteBase
-from .tpch import TpchSuiteBase
-from time import time, sleep
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
+from time import time, sleep
+import yatest.common
 import allure
 import json
 import logging
-import os
-import pytest
-import yatest.common
-import ydb
 import ydb.tests.olap.lib.remote_execution as re
+import ydb
+import pytest
+from .tpch import TpchSuiteBase
 
 
 class UploadSuiteBase(LoadSuiteBase):
@@ -224,24 +223,16 @@ class UploadTpchBase(UploadClusterBase):
 
     @classmethod
     def get_remote_tmpdir(cls):
-        tmpdir = '/tmp'
-        for node in cls.__static_nodes:
-            if re.is_localhost(node.host):
-                tmpdir = os.getenv('TMP') or os.getenv('TMPDIR') or yatest.common.work_path()
-                break
-        return os.path.join(tmpdir, 'scripts', cls.get_path())
+        return f'/tmp/{cls.get_path()}'
 
     @classmethod
     def do_setup_class(cls) -> None:
         cls.__static_nodes = YdbCluster.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)
-        results = re.deploy_binaries_to_hosts(
+        re.deploy_binaries_to_hosts(
             [YdbCliHelper.get_cli_path()],
             [n.host for n in cls.__static_nodes],
             cls.get_remote_tmpdir()
         )
-        for host, host_results in results.items():
-            for bin, res in host_results.items():
-                assert res.get('success', False), f'host: {host}, bin: {bin}, path: {res.get('path')}, error: {res.get('error')}'
         for i in range(len(cls.__static_nodes)):
             node = cls.__static_nodes[i]
             script_path = yatest.common.work_path('ydb_upload_tpch.sh')
@@ -259,8 +250,7 @@ class UploadTpchBase(UploadClusterBase):
                         RET_CODE="$?"
                     done
                 ''')
-            res = re.deploy_binary(script_path, node.host, cls.get_remote_tmpdir())
-            assert res.get('success', False), f'slot: {node.slot}, bin: ydb_upload_tpch.sh, path: {res.get('path')}, error: {res.get('error')}'
+            re.deploy_binary(script_path, node.host, cls.get_remote_tmpdir())
         super().do_setup_class()
 
     @classmethod

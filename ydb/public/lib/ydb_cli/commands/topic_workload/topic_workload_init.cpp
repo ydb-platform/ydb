@@ -58,7 +58,7 @@ void TCommandWorkloadTopicInit::Config(TConfig& config)
         .Optional()
         .StoreResult(&Scenario.DownUtilizationPercent);
 
-    config.Opts->AddLongOption("cleanup_policy_compact", "Set 'compact' cleanup policy for the topic")
+    config.Opts->AddLongOption("cleanup-policy-compact", "Set 'compact' cleanup policy for the topic")
         .Optional()
         .Hidden()
         .StoreTrue(&Scenario.CleanupPolicyCompact);

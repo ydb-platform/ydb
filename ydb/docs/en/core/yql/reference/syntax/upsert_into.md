@@ -1,5 +1,7 @@
 # UPSERT INTO
 
+{% include [column-and-row-tables-in-read-only-tx](../../../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+
 UPSERT (which stands for UPDATE or INSERT) updates or inserts multiple rows to a table based on a comparison by the primary key. Missing rows are added. For the existing rows, the values of the specified columns are updated, but the values of the other columns are preserved.
 
 {% if feature_mapreduce %}

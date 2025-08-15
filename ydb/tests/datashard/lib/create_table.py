@@ -51,7 +51,7 @@ def create_table_sql_request(
             PRIMARY KEY(
                 {", ".join(create_primary_key)}
                 )
-            {f", {", ".join(create_index)}" if create_index else ""}
+            {f", {', '.join(create_index)}" if create_index else ""}
             )
     """
     if column_table:
@@ -94,7 +94,7 @@ def create_vector_index_sql_request(
         ALTER TABLE {table_name}
         ADD INDEX {name_vector_index}
         GLOBAL {sync} USING vector_kmeans_tree
-        ON ({f"{prefix}, " if prefix != "" else ""}{embedding}) {f"COVER ({", ".join(cover)})" if len(cover) != 0 else ""}
+        ON ({f"{prefix}, " if prefix != "" else ""}{embedding}) {f"COVER ({', '.join(cover)})" if len(cover) != 0 else ""}
         WITH ({function}={distance}, vector_type="{vector_type}", vector_dimension={vector_dimension}, levels={levels}, clusters={clusters});
     """
     return create_vector_index

@@ -38,6 +38,9 @@ class TestCompatibility(RestartToAnotherVersionFixture):
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_simple(self, store_type):
+        if store_type == "column" and min(self.versions) < (25, 1, 3):
+            pytest.skip("compatibility for column tables is not supported in < 25.1.3")
+
         def upsert_and_check_sum(self, iteration_count=1, start_index=0):
             id_ = start_index
 

@@ -673,6 +673,8 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
         kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
         kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
     }
+    kqpConfig.YqlCoreOptimizerFlags.insert("normalizeequalityfilteroverjoin");
+    kqpConfig.YqlCoreOptimizerFlags.insert("equalityfilteroverjoin");
 
     switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
         case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:

@@ -7,11 +7,11 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/partition_index_generator/partition_index_generator.h>
 #include <ydb/core/persqueue/utils.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 
-#include <expected>
 #include <format>
 
 
@@ -19,129 +19,6 @@ namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
-
-class TPartitionIndexGenerator {
-public:
-    using TErrorMessage = TString;
-
-    struct TIdPair {
-        ui32 Id;
-        ui32 GroupId;
-    };
-
-public:
-    explicit TPartitionIndexGenerator(ui32 nextId, ui32 nextGroupId)
-        : First{
-              .Id = nextId,
-              .GroupId = nextGroupId,
-          }
-        , Next(First)
-    {
-    }
-
-    std::expected<void, TErrorMessage> ReservePartitionIndex(ui32 id, ui32 sourceId, bool allowToReuseExistingPartition) {
-        if (id < First.Id && !allowToReuseExistingPartition) {
-            return std::unexpected(std::format("Attempt to reserve partition id ({}) that is less than the first availiable id ({})", id, First.Id));
-        }
-        TReservationInfo res{
-            .Partition{
-                .Id = id,
-                .GroupId = GenerateGroupIdFor(id),
-            },
-            .SourceId = sourceId,
-            .Existed = (id < First.Id),
-        };
-        const auto [it, unique] = Reserved.try_emplace(id, std::move(res));
-        if (!unique) {
-            if (it->second.SourceId == sourceId) {
-                return std::unexpected(std::format("Splitting parition id ({}) has repetition in the children partition ids ({})",
-                                                   sourceId, id));
-            } else {
-                return std::unexpected(std::format("Attempt to reserve parition id ({}) for multiple split/merge operations ({}, {})",
-                                                   id, it->second.SourceId, sourceId));
-            }
-        }
-        return {};
-    }
-
-    std::expected<TIdPair, TErrorMessage> GetNextUnreservedIdAndGroupId() {
-        while (Reserved.contains(Next.Id)) {
-            Advance(Next);
-        }
-        return Allocate(Advance(Next), EAllocationType::Free);
-    }
-
-    std::expected<TIdPair, TErrorMessage> GetNextReservedIdAndGroupId(ui32 id) {
-        const TReservationInfo* res = MapFindPtr(Reserved, id);
-        if (!res) {
-            return std::unexpected(std::format("Partition id ({}) is not reserved", id));
-        }
-        return Allocate(res->Partition, EAllocationType::Reserved);
-    }
-
-    std::expected<void, TErrorMessage> ValidateAllocationSequence() {
-        for (const auto& [id, res] : Reserved) {
-            if (!Allocated.contains(id)) {
-                return std::unexpected(std::format("Partition id ({}) is reserved but not allocated", id));
-            }
-        }
-        ui32 id = First.Id;
-        for (const auto& [allocId, type] : Allocated) {
-            const TReservationInfo* reserve = MapFindPtr(Reserved, allocId);
-            if (!reserve) {
-                if (type == EAllocationType::Reserved) {
-                    return std::unexpected(std::format("Partition id ({}) is not reserved", id));
-                }
-            } else if (reserve->Existed) {
-                continue;
-            }
-            if (id != allocId) {
-                return std::unexpected(std::format("Gap in the partition indices: attempt to create new partition ({}) without creating a previous one ({})", allocId, id));
-            }
-            ++id;
-        }
-        return {};
-    }
-
-private:
-    struct TReservationInfo {
-        TIdPair Partition;
-        ui32 SourceId = 0;
-        bool Existed = false;
-    };
-
-    enum class EAllocationType {
-        Free,
-        Reserved,
-    };
-
-    static TIdPair Advance(TIdPair& pair) {
-        TIdPair prev = pair;
-        ++pair.Id;
-        ++pair.GroupId;
-        return prev;
-    }
-
-    std::expected<TIdPair, TErrorMessage> Allocate(TIdPair pair, EAllocationType type) {
-        auto [it, ins] = Allocated.try_emplace(pair.Id, type);
-        if (!ins) {
-            return std::unexpected(std::format("Attempt to allocate partition id ({}) that is already allocated", pair.Id));
-        }
-        return pair;
-    }
-
-    ui32 GenerateGroupIdFor(ui32 id) const {
-        ui32 offset = id - First.Id;
-        ui32 g = First.GroupId + offset;
-        return g;
-    }
-
-private:
-    const TIdPair First;
-    TIdPair Next;
-    std::map<ui32, TReservationInfo> Reserved;
-    std::map<ui32, EAllocationType> Allocated;
-};
 
 bool ShouldCreateSiblingAtRootLevel(const ::NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit& split, const TTopicInfo::TPtr& topic) {
     // return if we should create one child at the root level in the case when another child already exists
@@ -732,7 +609,7 @@ public:
                 return HexText(TBasicStringBuf(value));
             };
 
-            TPartitionIndexGenerator indexGenerator(topic->NextPartitionId, topic->TotalGroupCount + 1);
+            NKikimr::NPQ::TPartitionIndexGenerator indexGenerator(topic->NextPartitionId, topic->TotalGroupCount + 1);
             for (const auto& split : alter.GetSplit()) {
                 for (const ui32 childId : split.GetChildPartitionIds()) {
                     const auto reserve = indexGenerator.ReservePartitionIndex(childId, split.GetPartition(), ShouldCreateSiblingAtRootLevel(split, topic));

@@ -83,6 +83,7 @@ RECURSE(
     codecs
     config
     events
+    partition_index_generator
     partition_key_range
     pqrb
     writer

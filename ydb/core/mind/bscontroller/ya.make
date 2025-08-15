@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     bsc.cpp
     bsc.h
+    cluster_balancing.cpp
     cmds_box.cpp
     cmds_drive_status.cpp
     cmds_host_config.cpp

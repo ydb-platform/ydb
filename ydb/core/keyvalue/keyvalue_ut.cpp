@@ -2838,8 +2838,6 @@ Y_UNIT_TEST(TestWriteAndRenameWithCreationUnixTime)
 
 Y_UNIT_TEST(TestWriteAndRenameWithoutCreationUnixTimeNewApi)
 {
-    // const ui64 creationUnixTime = (TInstant::Now() - TDuration::Seconds(1000)).Seconds();
-
     TTestContext tc;
     TFinalizer finalizer(tc);
     bool activeZone = false;

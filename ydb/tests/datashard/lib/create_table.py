@@ -55,10 +55,7 @@ def create_table_sql_request(
             )
     """
     if column_table:
-        # column tables require explicit command of how to partition them, row tables get partitioned automatically
-        partition_by = ", ".join([f"{prefix}{cleanup_type_name(type_name)}" for prefix in pk_columns.keys() for type_name in pk_columns[prefix]])
         sql_create += f"""
-            PARTITION BY HASH({partition_by})
             WITH (
                 STORE = COLUMN
             )

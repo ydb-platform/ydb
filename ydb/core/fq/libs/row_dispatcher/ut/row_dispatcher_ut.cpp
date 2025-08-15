@@ -110,7 +110,7 @@ public:
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices),
-            NActors:TActorId(),
+            NActors::TActorId()
             ).release());
 
         Runtime.EnableScheduleForActor(RowDispatcher);

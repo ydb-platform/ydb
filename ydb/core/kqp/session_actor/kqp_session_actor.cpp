@@ -1698,7 +1698,7 @@ public:
                 NFq::NProto::TGraphParams(),
                 stateLoadMode,
                 streamingDisposition).Release());
-                LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId << ", generation " << generation);
+            LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId << ", generation " << generation);
         }
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,

@@ -810,7 +810,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\"")
             .Optional()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
-        config.Opts->AddLongOption("offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer.\nExactly one partition id should be specified with the '--partition-ids' option.")
+        config.Opts->AddLongOption("start-offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer.\nExactly one partition id should be specified with the '--partition-ids' option.")
             .Optional()
             .StoreResult(&Offset_);
 

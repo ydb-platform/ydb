@@ -18,6 +18,8 @@ const NYql::TKikimrTableDescription& GetTableData(const NYql::TKikimrTablesData&
 
 NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const TVector<TString>& columnNames,
     NYql::TExprContext& ctx);
+NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const TVector<TStringBuf>& columnNames,
+    NYql::TExprContext& ctx);
 NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const THashSet<TStringBuf>& columnNames,
     NYql::TExprContext& ctx);
 

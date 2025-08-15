@@ -1,12 +1,14 @@
 #include "runner_tui.h"
 
 #include "log_backend.h"
+#include "scroller.h"
 #include "runner.h"
 #include "logs_scroller.h"
 #include "util.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/component_base.hpp>
+#include <contrib/libs/ftxui/include/ftxui/screen/terminal.hpp>
 
 using namespace ftxui;
 
@@ -39,15 +41,9 @@ void TRunnerTui::Update(std::shared_ptr<TRunDisplayData> data) {
     Screen.PostEvent(Event::Custom);
 }
 
-Element TRunnerTui::BuildUpperPart() {
-    // Get window width to determine which columns to show
-    constexpr int MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS = 140;
+ftxui::Element TRunnerTui::BuildPreviewPart() {
 
     std::shared_ptr<TRunDisplayData> data = std::atomic_load(&DataToDisplay);
-
-    auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
-    const int windowWidth = screen.dimx();
-    const bool showExtendedColumns = windowWidth >= MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS;
 
     // Left side of header: runner info, efficiency, phase, progress
 
@@ -114,6 +110,19 @@ Element TRunnerTui::BuildUpperPart() {
         separator(),
         topRightTransactionStats | flex
     }));
+
+    return topSection;
+}
+
+ftxui::Element TRunnerTui::BuildThreadStatsPart() {
+    // Get window width to determine which columns to show
+    constexpr int MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS = 140;
+
+    std::shared_ptr<TRunDisplayData> data = std::atomic_load(&DataToDisplay);
+
+    auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
+    const int windowWidth = screen.dimx();
+    const bool showExtendedColumns = windowWidth >= MIN_WINDOW_WIDTH_FOR_EXTENDED_COLUMNS;
 
     // Per-thread statistics in two columns with header
 
@@ -209,30 +218,88 @@ Element TRunnerTui::BuildUpperPart() {
             rightThreadElements.push_back(text(""));
         }
 
-        threadSection = window(text("TPC-C client state"), hbox({
+        threadSection = hbox({
             vbox(leftThreadElements) | flex,
             separator(),
             vbox(rightThreadElements) | flex
-        }));
+        });
     } else {
         // a very rare case when we have just 1 thread
-        threadSection = window(text("TPC-C client state"), hbox({
-            vbox(leftThreadElements) | flex
-        }));
+        threadSection = hbox({
+            vbox(leftThreadElements)
+        });
     }
 
-    return vbox({
-        topSection,
-        threadSection,
-    });
+    return threadSection;
 }
 
 Component TRunnerTui::BuildComponent() {
     try {
-        // Main layout
-        return Container::Vertical({
-            Renderer([=]{ return BuildUpperPart(); }),
-            LogsScroller(LogBackend),
+        Component resultPreview = Renderer([=] { return BuildPreviewPart(); });
+        Component middleScroller = Scroller(Renderer([=] { return BuildThreadStatsPart(); }), "TPC-C client state");
+        Component logsScroller = LogsScroller(LogBackend);
+
+        // for focus/navigation/scrolls
+        auto container = Container::Vertical({ resultPreview, middleScroller, logsScroller });
+
+        // do all sizing/layout inside the renderer so it adapts to resizes
+        return Renderer(container, [=] {
+            const int termHeight = ftxui::Terminal::Size().dimy;  // current terminal height
+
+            // render preview at natural height
+            Element previewElement = resultPreview->Render();
+            previewElement->ComputeRequirement();
+            const int previewHeight = previewElement->requirement().min_y;
+
+            // if the terminal can't even fit the preview fully, just show it
+            if (termHeight <= previewHeight + 5) {
+                return vbox({ previewElement });
+            }
+
+            // remaining space after preview
+            const int heightLeft = termHeight - previewHeight;
+
+            // too few space: show preview + logs only
+            if (heightLeft < 16) {
+                Element logsElementSmall = logsScroller->Render() | size(HEIGHT, GREATER_THAN, 10) | flex;
+                return vbox({
+                    previewElement,
+                    logsElementSmall
+                });
+            }
+
+            // --- Full layout ---
+
+            int middleCap = 8;
+            if (termHeight >= 80) {
+                middleCap = heightLeft / 2;
+            } else if (termHeight >= 60) {
+                middleCap = 20;
+            } else if (termHeight >= 40) {
+                middleCap = 10;
+            }
+
+            if (auto data = std::atomic_load(&DataToDisplay)) {
+                const size_t threadCount = data->Statistics.StatVec.size();
+                const size_t halfThreadCount = (threadCount + 1) / 2;
+
+                // header + rows + a bit of padding for window title and border
+                middleCap = std::min<int>(middleCap, static_cast<int>(halfThreadCount + 3));
+            }
+
+            Element middleElement = middleScroller->Render()
+                                  | size(HEIGHT, GREATER_THAN, 8)
+                                  | size(HEIGHT, LESS_THAN,  middleCap);
+
+            Element logsElement = logsScroller->Render()
+                                | size(HEIGHT, GREATER_THAN, 10)
+                                | flex;
+
+            return vbox({
+                previewElement,
+                middleElement,
+                logsElement
+            });
         });
     } catch (const std::exception& ex) {
         LOG_E("Exception in TUI: " << ex.what());

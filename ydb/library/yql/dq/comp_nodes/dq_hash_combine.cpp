@@ -294,8 +294,10 @@ enum class EFillState
 
 constexpr const size_t DefaultMemoryLimit = 128ull << 20; // if the runtime limit is zero
 constexpr const float ExtraMapCapacity = 2.0; // hashmap size is target row count increased by this factor then adjusted up to a power of 2
+constexpr const float MaxCompressionRatio = 32.0;
 constexpr const size_t MemorySampleRowCount = 16384ULL; // sample size for row weight estimation, in rows
-constexpr const size_t LowerFixedRowCount = 1024ULL; // minimum viable hash table size
+constexpr const size_t LowerFixedRowCount = 1024ULL; // minimum viable hash table size, rows
+constexpr const size_t UpperFixedRowCount = 128 * 1024ULL; // maximum hash table size, rows (fixed constant for now)
 
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
 {
@@ -307,7 +309,11 @@ protected:
         if (memoryPerRow >= memoryLimit) {
             return 1;
         }
-        return memoryLimit / memoryPerRow;
+        size_t dynamicResult = memoryLimit / memoryPerRow;
+        if (dynamicResult > UpperFixedRowCount) {
+            dynamicResult = UpperFixedRowCount;
+        }
+        return dynamicResult;
     }
 
     static size_t GetMapCapacity(size_t rowCount) {
@@ -451,7 +457,15 @@ public:
 protected:
     size_t TryAllocMapForRowCount(size_t rowCount)
     {
-        Map.Reset(nullptr);
+        // Avoid reallocating the map
+        if (Map) {
+            const size_t oldCapacity = Map->GetCapacity();
+            size_t newCapacity = GetMapCapacity(rowCount);
+            if (newCapacity <= oldCapacity) {
+                return rowCount;
+            }
+            Map.Reset(nullptr);
+        }
 
         auto tryAlloc = [this](size_t rows) -> bool {
             size_t newCapacity = GetMapCapacity(rows);
@@ -478,6 +492,13 @@ protected:
 
     void UpdateRowLimitFromSample()
     {
+        // If we have achieved a "good" compression ratio (defined by a constant) then we probably don't need to resize the map further
+        if (!Map->GetSize() || static_cast<double>(MaxRowCount) / Map->GetSize() >= MaxCompressionRatio) {
+            return;
+        }
+
+        // TODO: also check if the input stream is incompressible; we need to derive a statistical criterion for that
+
         size_t totalMem = 0;
         bool unbounded = false;
 
@@ -515,9 +536,8 @@ protected:
     void PrepareForNewBatch()
     {
         if (Map->GetSize() != 0) {
-            if (IsEstimating) {
+            if (IsEstimating && !SourceEmpty) {
                 IsEstimating = false;
-                UpdateRowLimitFromSample();
                 MaxRowCount = TryAllocMapForRowCount(MaxRowCount);
             } else {
                 Map->Clear();
@@ -559,11 +579,15 @@ class TWideAggregationState: public TBaseAggregationState
 {
 private:
     void OpenDrain() override {
+        if (!SourceEmpty && IsEstimating && Map->GetSize() > 0) {
+            UpdateRowLimitFromSample();
+        }
         Draining = true;
         DrainMapIterator = Map->Begin();
     }
 
     size_t OutputRowCounter = 0;
+    size_t InputRowCounter = 0;
 
 public:
     TWideAggregationState(
@@ -578,6 +602,7 @@ public:
         const TKeyTypes& keyTypes
     )
         : TBaseAggregationState(memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes)
+        , StartMoment(TInstant::Now()) // Temporary. Helps correlate debug outputs with SVGs
         , OutputWidth(outputWidth)
         , DrainMapIterator(nullptr)
     {
@@ -604,11 +629,12 @@ public:
         if (result == NUdf::EFetchStatus::Yield) {
             return EFillState::Yield;
         } else if (result == NUdf::EFetchStatus::Finish) {
-            OpenDrain();
             SourceEmpty = true;
+            OpenDrain();
             return EFillState::SourceEmpty;
         }
 
+        ++InputRowCounter;
         return ProcessFetchedRow(fields);
     }
 
@@ -690,6 +716,7 @@ public:
     }
 
 private:
+    TInstant StartMoment;
     TUnboxedValueVector InputBuffer;
     size_t OutputWidth;
     const char* DrainMapIterator;

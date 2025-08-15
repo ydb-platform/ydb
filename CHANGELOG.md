@@ -61,6 +61,9 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20272:Enabled the following feature flags by default: EnableTopicAutopartitioningForCDC, EnableTopicAutopartitioningForReplication, EnableTopicTransfer. [#20272](https://github.com/ydb-platform/ydb/pull/20272) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 20253:Separated bulk statistics operations from non-bulk. [#20253](https://github.com/ydb-platform/ydb/pull/20253) ([Vladilen](https://github.com/Vladilen))
 * 20738:Added statistics for the grouped limiter and caches. [#20738](https://github.com/ydb-platform/ydb/pull/20738) ([Vladilen](https://github.com/Vladilen))
+* 21183:Added audit log events for [YMQ](https://yandex.cloud/ru/services/message-queue) events. [#21183](https://github.com/ydb-platform/ydb/pull/21183) ([flown4qqqq](https://github.com/flown4qqqq))
+* 21010:Added more attributes to DSProxy and VDisk [spans](https://ydb.tech/docs/ru/reference/observability/tracing/setup) to make it easier to find them in the metrics explorer. [#21010](https://github.com/ydb-platform/ydb/pull/21010) ([Sergey Belyakov](https://github.com/serbel324))
+* 19684:Added a command to dstool to move pdisk from one node to another, if both nodes have access to the underlying drive. This way we can skip data synchronization, since new disk will just use data of the "old" disk [#19684](https://github.com/ydb-platform/ydb/pull/19684) ([Semyon Danilov](https://github.com/SammyVimes))
 
 ### Bug fixes
 
@@ -83,9 +86,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 16423:Changed behavior — `SHOW CREATE TABLE` now fails on views instead of producing wrong output. [#16423](https://github.com/ydb-platform/ydb/pull/16423) ([Daniil Demin](https://github.com/jepett0))
 * 16764:Fixed redirects from cluster endpoints (storage nodes) to database nodes, resolving inconsistent behavior where some system tables were not visible. #16763 [#16764](https://github.com/ydb-platform/ydb/pull/16764) ([Alexey Efimov](https://github.com/adameat))
 * 18698:Fixed an issue where checks for enabled encryption were missing during the zero copy routine. This issue resulted in attempts to send unencrypted data via an XDC socket. https://github.com/ydb-platform/ydb/issues/18546 [#18698](https://github.com/ydb-platform/ydb/pull/18698) ([Daniil Cherednik](https://github.com/dcherednik))
-* 17157:Viewer API: Fixed the retrieval of tablet list for tables implementing secondary indexes. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 * 17230:Added more information to the error message that occurs during Generic::TPartition parsing. [#17230](https://github.com/ydb-platform/ydb/pull/17230) ([Vitaly Isaev](https://github.com/vitalyisaev2))
-* 17157:Fixed an issue with filters for tablets on nodes. Resolves issue #17103. [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 * 17009:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/16938) with compiling a `JOIN` operation, in which one side was an empty constant. [#17009](https://github.com/ydb-platform/ydb/pull/17009) ([Nikita Vasilev](https://github.com/nikvas0))
 * 16901:Changed the error response in the RateLimiter service from INTERNAL_ERROR to SCHEME_ERROR when using non-existent coordination nodes or resources. https://github.com/ydb-platform/ydb/issues/16914 [#16901](https://github.com/ydb-platform/ydb/pull/16901) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 17606:Fixed an issue with the check for unknown StatusV2 in the VDisks healthcheck. (https://github.com/ydb-platform/ydb/issues/17619) Fixed a forward compatibility issue. [#17606](https://github.com/ydb-platform/ydb/pull/17606) ([Andrei Rykov](https://github.com/StekPerepolnen))
@@ -121,6 +122,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20386:Resolved an issue with reporting of gRPC metrics for serverless databases. [#20386](https://github.com/ydb-platform/ydb/pull/20386) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 * 20785:Fixed a [data race](https://github.com/ydb-platform/ydb/issues/20741) in Jaeger settings configurator. [#20785](https://github.com/ydb-platform/ydb/pull/20785) ([Sergey Belyakov](https://github.com/serbel324))
 * 20670:Resolved the issue with DDL errors for external sources and added more information to the `ALTER TABLE ... RENAME TO` error. [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 20519:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20520) that caused VDisk to freeze in infinite local recovery mode when a ChunkRead request failed. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status. [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### YDB UI
 
@@ -129,6 +131,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20432:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20431) with the pdisk info timeout when target node is disconnected or dead. [#20432](https://github.com/ydb-platform/ydb/pull/20432) ([Alexey Efimov](https://github.com/adameat))
 * 17157: Fixed the retrieval of tablet lists for tables with secondary indexes in the Viewer API. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 * 20929:Fixed [data doubling](https://github.com/ydb-platform/ydb/issues/20116) on memory reallocation when processing an incoming chunk. [#20929](https://github.com/ydb-platform/ydb/pull/20929) ([Alexey Efimov](https://github.com/adameat))
+* 17157:Viewer API: Fixed an [issue](https://github.com/ydb-platform/ydb/issues/17103) with retrieval of tablet list for tables implementing secondary indexes. [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 
 ### Performance
 

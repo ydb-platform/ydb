@@ -62,6 +62,7 @@ PEERDIR(
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/subscriber
     ydb/core/tx/columnshard/tablet
+    ydb/core/tx/columnshard/tracing
     ydb/core/tx/columnshard/transactions
     ydb/core/tx/columnshard/transactions/operators
     ydb/core/tx/columnshard/tx_reader

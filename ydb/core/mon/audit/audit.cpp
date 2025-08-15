@@ -6,9 +6,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/aclib/aclib.h>
 
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/protobuf/json/proto2json.h>
-
 #include <util/generic/string.h>
 
 namespace NMonitoring::NAudit {
@@ -57,69 +54,6 @@ namespace {
         }
         return policy;
     }
-
-    void BuildParamsFromBody(TCgiParameters& cgiParams, const NHttp::THttpIncomingRequestPtr& request) {
-        NHttp::THeaders headers(request->Headers);
-
-        auto contentType = NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ');
-        if (contentType == "application/json") {
-            NJson::TJsonValue jsonData;
-            if (NJson::ReadJsonTree(request->Body, &jsonData) && jsonData.IsMap()) {
-                for (const auto& [key, value] : jsonData.GetMap()) {
-                    if (value.IsString()) {
-                        cgiParams.InsertUnescaped(key, value.GetStringRobust());
-                    }
-                }
-            }
-        } else if (contentType == "application/x-www-form-urlencoded") {
-            TCgiParameters bodyParams(request->Body);
-            for (const auto& [key, value] : bodyParams) {
-                cgiParams.InsertUnescaped(key, value);
-            }
-        }
-    }
-}
-
-bool IsViewerRedirectRequest(const NHttp::THttpIncomingRequestPtr& request, const TString& currentDatabase) {
-    const TString url(request->URL);
-    TStringBuf path(request->URL.Before('?'));
-    NHttp::THeaders headers(request->Headers);
-
-    if (path.StartsWith('/')) {
-        path = path.Skip(1);
-    }
-
-    static const THashSet<TString> VIEWER_HANDLERS = {"viewer", "operation", "query", "scheme", "storage"};
-
-    TStringBuf part;
-    path.NextTok('/', part);
-    if (!VIEWER_HANDLERS.contains(part)) {
-        return false;
-    }
-
-    if (headers.Has("X-Forwarded-From-Node")) {
-        return false;
-    }
-
-    const auto params = request->URL.After('?');
-    auto cgiParams = TCgiParameters(params);
-    BuildParamsFromBody(cgiParams, request);
-
-    auto database = cgiParams.Get("database");
-    if (!database) {
-        database = cgiParams.Get("tenant");
-    }
-
-    auto direct = FromStringWithDefault<bool>(cgiParams.Get("direct"), false);
-    if (direct) {
-        return false;
-    }
-
-    if ((database == currentDatabase) || database.empty()) {
-        return false;
-    }
-
-    return true;
 }
 
 void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
@@ -127,11 +61,6 @@ void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
 }
 
 bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) {
-    // we don't log redirects
-    if (IsViewerRedirectRequest(request, NKikimr::AppData()->TenantName)) {
-        return false;
-    }
-
     // only modifying methods are audited
     const TString method(request->Method);
     static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
@@ -215,9 +144,7 @@ void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrCo
         }
 
         AUDIT_PART("status", ToString(status));
-        if (status != ERequestStatus::Success) {
-            AUDIT_PART("reason", (!reason.empty() ? reason : EMPTY_VALUE));
-        }
+        AUDIT_PART("reason", reason, !reason.empty());
     );
 }
 

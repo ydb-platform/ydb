@@ -81,6 +81,8 @@ ydb/core/kqp/ut/tx KqpSinkMvcc.OlapNamedStatement
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanClientOperationTimeoutBruteForce
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/kqp/workload_service/ut DefaultPoolSettings.TestResourcePoolsSysViewFilters
+ydb/core/mind/hive/ut THiveTest.TestCreateSubHiveCreateManyTablets
+ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/sys_view/ut SystemView.AuthGroupMembers_Access

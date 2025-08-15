@@ -68,8 +68,8 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 21420:Topics are now created with the number of partitions equal to datashards/16 instead of 1 partition. This improves table replication speed by avoiding delays from autopartitioning. [#21420](https://github.com/ydb-platform/ydb/pull/21420) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 21391:Implemented an optimized HashV2 hash function that improves data distribution and enhances query execution performance. This mode is enabled by setting the `table_service_config: default_hash_shuffle_func_type: HASH_V2` parameter in the cluster configuration. [#21391](https://github.com/ydb-platform/ydb/pull/21391) ([Ivan](https://github.com/abyss7))
 * 20303:Add `--iam-token-file` argument to ydb-dstool. [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
-* 22511:Add ICB control to change ReadRequestsInFlightLimit via changing dynconfig. [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
-* 21997:Enable the new compute scheduler based on HDRF model. [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
+* 22511:Added the ICB control to change ReadRequestsInFlightLimit via changing dynconfig. [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
+* 21997:Enabled the new compute scheduler based on the HDRF model. [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
 
 ### Bug fixes
 
@@ -154,5 +154,5 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19724:Added the `buffer_page_alloc_size` configuration parameter with the default value of 4Kb. [#19724](https://github.com/ydb-platform/ydb/pull/19724) ([Ivan](https://github.com/abyss7))
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
-* 21705:Prior to the commit both tablet realtime writes and compaction writes went through one queue in PDisk's scheduler and thus realtime write could experience slowdown due to compaction. This commit brings new priority into PDisk to address the problem. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+* 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
 

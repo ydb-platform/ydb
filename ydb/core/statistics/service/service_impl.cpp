@@ -934,9 +934,10 @@ private:
     }
 
     void Handle(TEvStatistics::TEvPropagateStatistics::TPtr& ev) {
-        SA_LOG_D("EvPropagateStatistics, node id = " << SelfId().NodeId());
+        SA_LOG_D("EvPropagateStatistics, node id: " << SelfId().NodeId()
+            << " cookie: " << ev->Cookie);
 
-        Send(ev->Sender, new TEvStatistics::TEvPropagateStatisticsResponse);
+        Send(ev->Sender, new TEvStatistics::TEvPropagateStatisticsResponse, 0, ev->Cookie);
 
         IsStatisticsDisabledInSA = false;
 

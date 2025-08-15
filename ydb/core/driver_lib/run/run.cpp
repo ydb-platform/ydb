@@ -1299,6 +1299,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->BridgeModeEnabled = true;
     }
 
+    if (runConfig.AppConfig.HasStatisticsConfig()) {
+        AppData->StatisticsConfig = runConfig.AppConfig.GetStatisticsConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())

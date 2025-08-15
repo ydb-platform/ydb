@@ -24,6 +24,7 @@ message TSchemeShardStats {
 // SS -> SA
 message TEvConnectSchemeShard {
     optional fixed64 SchemeShardId = 1;
+    optional bool IsRootSubdomainServerless = 2;
 }
 
 // SS -> SA

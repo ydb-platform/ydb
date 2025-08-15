@@ -389,8 +389,7 @@ TUnversionedValueToSkiffConverter CreateTzValueConverter(const std::shared_ptr<T
                 ? ConvertSimpleValueImpl<EWireType::String32, false>
                 : ConvertSimpleValueImpl<EWireType::String32, true>;
 
-        case EWireType::Tuple:
-        {
+        case EWireType::Tuple: {
             const auto& children = skiffSchema->GetChildren();
             YT_VERIFY(children.size() == 2);
             const auto innerWireType = children[0]->GetWireType();

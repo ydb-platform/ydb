@@ -3,6 +3,7 @@ ENV(YDB_HARD_MEMORY_LIMIT_BYTES="107374182400")
 
 TEST_SRCS(
     test_clickbench.py
+    test_tpch.py
 )
 
 SIZE(MEDIUM)

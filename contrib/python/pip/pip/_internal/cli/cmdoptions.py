@@ -9,6 +9,7 @@ pass on state. To be consistent, all options will follow this design.
 
 # The following comment should be removed at some point in the future.
 # mypy: strict-optional=False
+from __future__ import annotations
 
 import importlib.util
 import logging
@@ -18,7 +19,7 @@ import textwrap
 from functools import partial
 from optparse import SUPPRESS_HELP, Option, OptionGroup, OptionParser, Values
 from textwrap import dedent
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable
 
 from pip._vendor.packaging.utils import canonicalize_name
 
@@ -48,7 +49,7 @@ def raise_option_error(parser: OptionParser, option: Option, msg: str) -> None:
     parser.error(msg)
 
 
-def make_option_group(group: Dict[str, Any], parser: ConfigOptionParser) -> OptionGroup:
+def make_option_group(group: dict[str, Any], parser: ConfigOptionParser) -> OptionGroup:
     """
     Return an OptionGroup object
     group  -- assumed to be dict with 'name' and 'options' keys
@@ -227,9 +228,13 @@ progress_bar: Callable[..., Option] = partial(
     "--progress-bar",
     dest="progress_bar",
     type="choice",
-    choices=["on", "off", "raw"],
-    default="on",
-    help="Specify whether the progress bar should be used [on, off, raw] (default: on)",
+    choices=["auto", "on", "off", "raw"],
+    default="auto",
+    help=(
+        "Specify whether the progress bar should be used. In 'auto'"
+        " mode, --quiet will suppress all progress bars."
+        " [auto, on, off, raw] (default: auto)"
+    ),
 )
 
 log: Callable[..., Option] = partial(
@@ -289,7 +294,7 @@ resume_retries: Callable[..., Option] = partial(
     "--resume-retries",
     dest="resume_retries",
     type="int",
-    default=0,
+    default=5,
     help="Maximum attempts to resume or restart an incomplete download. "
     "(default: %default)",
 )
@@ -555,7 +560,7 @@ platforms: Callable[..., Option] = partial(
 
 
 # This was made a separate function for unit-testing purposes.
-def _convert_python_version(value: str) -> Tuple[Tuple[int, ...], Optional[str]]:
+def _convert_python_version(value: str) -> tuple[tuple[int, ...], str | None]:
     """
     Convert a version string like "3", "37", or "3.7.3" into a tuple of ints.
 
@@ -1090,7 +1095,7 @@ use_deprecated_feature: Callable[..., Option] = partial(
 # groups #
 ##########
 
-general_group: Dict[str, Any] = {
+general_group: dict[str, Any] = {
     "name": "General Options",
     "options": [
         help_,
@@ -1122,7 +1127,7 @@ general_group: Dict[str, Any] = {
     ],
 }
 
-index_group: Dict[str, Any] = {
+index_group: dict[str, Any] = {
     "name": "Package Index Options",
     "options": [
         index_url,

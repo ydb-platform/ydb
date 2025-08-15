@@ -9045,3 +9045,154 @@ WITH(
         UNIT_ASSERT(res.IsOk());
     }
 }
+
+Y_UNIT_TEST_SUITE(HoppingWindow) {
+    Y_UNIT_TEST(HoppingWindow) {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42);
+        )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
+
+    Y_UNIT_TEST(HoppingWindowWithoutSource) {
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HoppingWindow(key, 39, 42);)sql",
+            "<main>:1:12: Error: HoppingWindow requires data source\n"
+        );
+    }
+
+    Y_UNIT_TEST(HoppingWindowInProjection) {
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HoppingWindow(key, 39, 42) FROM plato.Input;)sql",
+            "<main>:1:12: Error: HoppingWindow can only be used as a top-level GROUP BY expression\n"
+        );
+    }
+
+    Y_UNIT_TEST(HoppingWindowWithNonConstIntervals) {
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    key,
+                    hopping_start
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39 + subkey, 42) AS hopping_start,
+                    key;
+            )sql",
+
+            "<main>:7:21: Error: Source does not allow column references\n"
+            "<main>:7:45: Error: Column reference 'subkey'\n"
+        );
+
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    key,
+                    hopping_start
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39 + subkey, 42) AS hopping_start,
+                    key;
+            )sql",
+
+            "<main>:7:21: Error: Source does not allow column references\n"
+            "<main>:7:45: Error: Column reference 'subkey'\n"
+        );
+    }
+
+    Y_UNIT_TEST(HoppingWindowWithWrongNumberOfArgs) {
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    *
+                FROM plato.Input
+                GROUP BY HoppingWindow(key, 39);
+            )sql",
+
+            "<main>:5:26: Error: HoppingWindow requires three arguments\n"
+        );
+
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    *
+                FROM plato.Input
+                GROUP BY HoppingWindow(key, 39, 42, 63);
+            )sql",
+
+            "<main>:5:26: Error: HoppingWindow requires three arguments\n"
+        );
+    }
+
+    Y_UNIT_TEST(DuplicateHoppingWindow) {
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    *
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39, 42),
+                    subkey,
+                    HoppingWindow(ts, 42, 39);
+            )sql",
+
+            "<main>:8:21: Error: Duplicate hopping window specification:\n"
+            "<main>:6:21: Error: Previous hopping window is declared here\n"
+        );
+    }
+
+    Y_UNIT_TEST(HopStartEndWithoutSource) {
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HopStart();)sql",
+            "<main>:1:12: Error: HopStart requires data source\n"
+        );
+
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HopEnd();)sql",
+            "<main>:1:12: Error: HopEnd requires data source\n"
+        );
+    }
+
+    Y_UNIT_TEST(HopStartEndWithoutGroupByOrWindow) {
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HopStart() FROM plato.Input;)sql",
+            "<main>:1:12: Error: HopStart can not be used without aggregation by HoppingWindow\n"
+        );
+
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HopEnd() FROM plato.Input;)sql",
+            "<main>:1:12: Error: HopEnd can not be used without aggregation by HoppingWindow\n"
+        );
+    }
+
+    Y_UNIT_TEST(HopStartEndWithGroupByWithoutHopping) {
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    1 + HopStart()
+                FROM plato.Input
+                GROUP BY user;
+            )sql",
+
+            "<main>:3:25: Error: HopStart can not be used here: HoppingWindow specification is missing in GROUP BY\n"
+        );
+
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    1 + HopEnd()
+                FROM plato.Input
+                GROUP BY user;
+            )sql",
+
+            "<main>:3:25: Error: HopEnd can not be used here: HoppingWindow specification is missing in GROUP BY\n"
+        );
+    }
+}

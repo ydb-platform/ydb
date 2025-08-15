@@ -82,6 +82,24 @@ namespace {
         ui32 Indices[EOptionsField::Count];
     };
 
+    RE2::Options ExtractOptions(std::string_view pattern, TUnboxedValuePod optionsValue, const TOptionsSchema& schema, bool posix) {
+        RE2::Options options = CreateDefaultOptions();
+
+        options.set_posix_syntax(posix);
+        bool needUtf8 = (UTF8Detect(pattern) == UTF8);
+        options.set_encoding(
+            needUtf8
+                ? RE2::Options::Encoding::EncodingUTF8
+                : RE2::Options::Encoding::EncodingLatin1);
+        if (optionsValue) {
+#define FIELD_HANDLE(name, index, type, defVal, setter, conv) options.setter(conv(optionsValue.GetElement(schema.Indices[index]).Get<type>()));
+            OPTIONS_MAP(FIELD_HANDLE)
+#undef FIELD_HANDLE
+            options.set_log_errors(false);
+        }
+        return options;
+    }
+
     struct TRegexpGroups {
         TVector<TString> Names;
         TVector<ui32> Indexes;
@@ -182,22 +200,8 @@ namespace {
                 auto patternValue = runConfig.GetElement(0);
                 auto optionsValue = runConfig.GetElement(1);
                 const std::string_view pattern(patternValue.AsStringRef());
-                RE2::Options options = CreateDefaultOptions();
 
-                options.set_posix_syntax(posix);
-                bool needUtf8 = (UTF8Detect(pattern) == UTF8);
-                options.set_encoding(
-                    needUtf8
-                        ? RE2::Options::Encoding::EncodingUTF8
-                        : RE2::Options::Encoding::EncodingLatin1
-                );
-                if (optionsValue) {
-#define FIELD_HANDLE(name, index, type, defVal, setter, conv) options.setter(conv(optionsValue.GetElement(OptionsSchema_.Indices[index]).Get<type>()));
-                    OPTIONS_MAP(FIELD_HANDLE)
-#undef FIELD_HANDLE
-                    options.set_log_errors(false);
-                }
-
+                RE2::Options options = ExtractOptions(pattern, optionsValue, OptionsSchema_, posix);
                 Regexp_ = std::make_unique<RE2>(StringPiece(pattern.data(), pattern.size()), options);
 
                 if (!Regexp_->ok() && ShouldFailOnInvalidRegexp(pattern, CurrentLangVersion_)) {
@@ -385,6 +389,61 @@ namespace {
         }
     };
 
+    template <bool posix>
+    class TIsValidRegexp: public TBoxedValue {
+    public:
+        TIsValidRegexp(const TOptionsSchema optionsSchema)
+            : OptionsSchema_(std::move(optionsSchema))
+        {
+        }
+
+        TUnboxedValue Run(
+            const IValueBuilder* valueBuilder,
+            const TUnboxedValuePod* args) const override {
+            Y_UNUSED(valueBuilder);
+            if (!args[0]) {
+                return TUnboxedValuePod(false);
+            }
+            RE2::Options options = ExtractOptions(args[0].AsStringRef(), args[1], OptionsSchema_, posix);
+            RE2 regexp(args[0].AsStringRef(), options);
+            return TUnboxedValuePod(regexp.ok());
+        }
+
+        static const ::NKikimr::NUdf::TStringRef& Name() {
+            static auto name = ::NKikimr::NUdf::TStringRef::Of("IsValidRegexp");
+            return name;
+        }
+
+        static bool DeclareSignature(
+            const ::NKikimr::NUdf::TStringRef& name,
+            ::NKikimr::NUdf::TType* userType,
+            ::NKikimr::NUdf::IFunctionTypeInfoBuilder& builder,
+            bool typesOnly) {
+            Y_UNUSED(userType);
+            if (Name() == name) {
+                TOptionsSchema optionsSchema = MakeOptionsSchema(builder);
+                auto optOptionsStructType = builder.Optional()->Item(optionsSchema.StructType).Build();
+                builder.Args()
+                            ->Add(builder.Optional()->Item(builder.SimpleType<char*>()))
+                            .Add(optOptionsStructType)
+                            .Done()
+                        .Returns(builder.SimpleType<bool>());
+
+                builder.OptionalArgs(1);
+                if (!typesOnly) {
+                    builder.Implementation(new TIsValidRegexp(std::move(optionsSchema)));
+                }
+                builder.IsStrict();
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+    private:
+        const TOptionsSchema OptionsSchema_;
+    };
+
     SIMPLE_UDF_WITH_OPTIONAL_ARGS(TPatternFromLike, char*(char*, TOptional<char*>), 1) {
         const std::string_view input(args[0].AsStringRef());
         const bool hasEscape = bool(args[1]);
@@ -472,6 +531,7 @@ namespace {
             sink.Add(TEscape::Name());
             sink.Add(TPatternFromLike::Name());
             sink.Add(TOptions::Name());
+            sink.Add(TIsValidRegexp<posix>::Name());
         }
 
         void BuildFunctionTypeInfo(
@@ -567,9 +627,10 @@ namespace {
                     builder.Implementation(new TRe2Udf::TFactory<posix>(TRe2Udf::EMode::FIND_AND_CONSUME, optionsSchema, builder.GetSourcePosition(), builder.GetCurrentLangVer()));
                 }
             } else if (!(
-                            TEscape::DeclareSignature(name, userType, builder, typesOnly) ||
-                            TPatternFromLike::DeclareSignature(name, userType, builder, typesOnly) ||
-                            TOptions::DeclareSignature(name, userType, builder, typesOnly))) {
+                           TEscape::DeclareSignature(name, userType, builder, typesOnly) ||
+                           TPatternFromLike::DeclareSignature(name, userType, builder, typesOnly) ||
+                           TOptions::DeclareSignature(name, userType, builder, typesOnly) ||
+                           TIsValidRegexp<posix>::DeclareSignature(name, userType, builder, typesOnly))) {
                 builder.SetError(
                     TStringBuilder() << "Unknown function name: " << TString(name));
             }

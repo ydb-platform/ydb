@@ -184,6 +184,7 @@ struct TGraphMeta {
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;
     TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
+    bool CreateSuspended = false;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;

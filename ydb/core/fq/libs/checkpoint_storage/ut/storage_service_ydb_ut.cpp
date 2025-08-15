@@ -43,23 +43,20 @@ TRuntimePtr PrepareTestActorRuntime(const char* tablePrefix, bool enableGc = fal
     TRuntimePtr runtime(new TTestBasicRuntime(1, true));
     runtime->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
 
-    NConfig::TCheckpointCoordinatorConfig config;
+    NKikimrConfig::TCheckpointsConfig config;
     config.SetEnabled(true);
-    auto& checkpointConfig = *config.MutableStorage();
+    auto& checkpointConfig = *config.MutableExternalStorage();
     checkpointConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
     checkpointConfig.SetDatabase(GetEnv("YDB_DATABASE"));
     checkpointConfig.SetToken("");
     checkpointConfig.SetTablePrefix(tablePrefix);
-
-    NConfig::TCommonConfig commonConfig;
-    commonConfig.SetIdsPrefix("id");
 
     auto& gcConfig = *config.MutableCheckpointGarbageConfig();
     gcConfig.SetEnabled(enableGc);
 
     auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
     auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-    auto storageService = NewCheckpointStorageService(config, commonConfig, credFactory, yqSharedResources, MakeIntrusive<::NMonitoring::TDynamicCounters>());
+    auto storageService = NewCheckpointStorageService(config, "id", credFactory, yqSharedResources, MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
     runtime->AddLocalService(
         NYql::NDq::MakeCheckpointStorageID(),

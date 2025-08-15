@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
@@ -13,8 +13,8 @@
 namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewStorageProxy(
-    const NConfig::TCheckpointCoordinatorConfig& config,
-    const NConfig::TCommonConfig& commonConfig,
+    const NKikimrConfig::TCheckpointsConfig& config,
+    const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const ::NMonitoring::TDynamicCounterPtr& counters);

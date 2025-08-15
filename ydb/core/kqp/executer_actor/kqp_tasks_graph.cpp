@@ -1457,6 +1457,7 @@ void SerializeTaskToProto(
     SerializeCtxToMap(*tasksGraph.GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetDisableMetering(!enableMetering);
+    result->SetCreateSuspended(tasksGraph.GetMeta().CreateSuspended);
     FillTaskMeta(stageInfo, task, *result);
 }
 

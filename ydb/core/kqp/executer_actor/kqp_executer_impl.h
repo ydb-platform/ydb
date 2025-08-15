@@ -144,7 +144,8 @@ public:
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
-        TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing())
+        TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing(),
+        const TActorId checkpointCoordinatorId = {})
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -168,6 +169,7 @@ public:
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
+        , CheckpointCoordinatorId(checkpointCoordinatorId)
     {
         if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -560,6 +562,9 @@ protected:
 
             default:
                 ; // ignore all other states.
+        }
+        if (CheckpointCoordinatorId) {
+            TlsActivationContext->Send(ev->Forward(CheckpointCoordinatorId));
         }
 
         if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE) {
@@ -1767,6 +1772,7 @@ protected:
             .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
             .Query = Query,
+            .CheckpointCoordinator = CheckpointCoordinatorId
         });
 
         auto err = Planner->PlanExecution();
@@ -2439,8 +2445,9 @@ protected:
     bool EnableParallelPointReadConsolidation = false;
 
     bool AccountDefaultPoolInScheduler = false;
-    
+
     THashSet<ui32> SentResultIndexes;
+    TActorId CheckpointCoordinatorId;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };
@@ -2455,7 +2462,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing());
+    const TActorId checkpointCoordinatorId, TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing());
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings,

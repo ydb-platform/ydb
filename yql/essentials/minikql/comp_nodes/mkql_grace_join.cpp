@@ -847,7 +847,7 @@ private:
 
             if ( *PartialJoinCompleted) {
                 do {
-                    if (JoinedTablePtr->CurrIterBucket == NextBucketNumber) {
+                    if (JoinedTablePtr->GetCurrentBucketIterator() == NextBucketNumber) {
                         auto& leftTable = *LeftPacker->TablePtr;
                         auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
                         LeftPacker->StartTime = std::chrono::system_clock::now();
@@ -863,7 +863,7 @@ private:
                         UnpackJoinedData(output);
                         return EFetchResult::One;
                     }
-                } while(NextBucketNumber != NumberOfBuckets);
+                } while(NextBucketNumber != GraceJoin::NumberOfBuckets);
 
                 // Resets batch state for batch join
                 if (!*HaveMoreRightRows) {

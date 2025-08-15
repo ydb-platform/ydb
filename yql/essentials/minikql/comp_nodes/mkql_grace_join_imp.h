@@ -418,6 +418,10 @@ public:
         return NextJoinedData(td1, td2, JoinTable1->TableBucketsStats.size());
     }
 
+    void GetCurrentBucketIterator() const {
+        return CurrIterBucket;
+    }
+
     // Creates buckets that support spilling.
     void InitializeBucketSpillers(ISpiller::TPtr spiller);
 

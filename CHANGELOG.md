@@ -139,7 +139,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 17157:Fixed the retrieval of tablet lists for tables with secondary indexes in the Viewer API. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 * 20929:Fixed [data doubling](https://github.com/ydb-platform/ydb/issues/20116) on memory reallocation when processing an incoming chunk. [#20929](https://github.com/ydb-platform/ydb/pull/20929) ([Alexey Efimov](https://github.com/adameat))
 
-
 ### Performance
 
 * 16867:Enhanced column-oriented table query performance by applying binsearch for predicate bound detection in portions. [#16867](https://github.com/ydb-platform/ydb/pull/16867) ([Semyon](https://github.com/swalrus1))
@@ -156,5 +155,4 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Prior to the commit both tablet realtime writes and compaction writes went through one queue in PDisk's scheduler and thus realtime write could experience slowdown due to compaction. This commit brings new priority into PDisk to address the problem. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
-
 

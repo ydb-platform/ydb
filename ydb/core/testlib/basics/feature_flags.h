@@ -81,6 +81,7 @@ public:
     FEATURE_FLAG_SETTER(EnableSharedMetadataAccessorCache)
     FEATURE_FLAG_SETTER(EnableSystemNamesProtection)
     FEATURE_FLAG_SETTER(EnableRealSystemViewPaths)
+    FEATURE_FLAG_SETTER(EnableStreamingQueries)
 
     #undef FEATURE_FLAG_SETTER
 };

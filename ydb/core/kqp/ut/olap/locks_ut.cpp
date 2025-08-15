@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
             const auto result = session
                                     .ExecuteQuery(Q_(R"(
                 SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
-            )"), TTxControl::Tx(*tx2))
+            )"), TTxControl::Tx(tx2->GetId()))
                                     .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues());
             CompareYson("[[200u;[\"New\"]]]", FormatResultSetYson(result.GetResultSet(0)));

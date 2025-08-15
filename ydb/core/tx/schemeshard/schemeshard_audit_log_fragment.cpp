@@ -239,6 +239,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER EXTERNAL DATA SOURCE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         return "ALTER TABLE ADD COLUMN DEFAULT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
+        return "ALTER TABLE ADD COLUMN CANCEL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
         return "CREATE VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
@@ -589,6 +591,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         result.emplace_back(tx.GetInitiateColumnBuild().GetTable());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
+        result.emplace_back(tx.GetDropColumnBuild().GetSettings().GetTable());
         break;
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:

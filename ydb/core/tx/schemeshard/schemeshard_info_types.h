@@ -3044,10 +3044,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         Cancellation_Applying = 350,
         Cancellation_Unlocking = 360,
+        Cancellation_DroppingColumns = 370,
         Cancelled = 400,
 
         Rejection_Applying = 500,
         Rejection_Unlocking = 510,
+        Rejection_DroppingColumns = 520,
         Rejected = 550
     };
 
@@ -3193,6 +3195,7 @@ public:
     bool InitiateTxDone = false;
     bool ApplyTxDone = false;
     bool UnlockTxDone = false;
+    bool DropColumnsTxDone = false;
 
     bool BillingEventIsScheduled = false;
 
@@ -3201,12 +3204,14 @@ public:
     TTxId InitiateTxId = TTxId();
     TTxId ApplyTxId = TTxId();
     TTxId UnlockTxId = TTxId();
+    TTxId DropColumnsTxId = TTxId();
 
     NKikimrScheme::EStatus AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus LockTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus InitiateTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus ApplyTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus DropColumnsTxStatus = NKikimrScheme::StatusSuccess;
 
     TStepId SnapshotStep;
     TTxId SnapshotTxId;
@@ -3508,6 +3513,16 @@ public:
         indexInfo->AlterMainTableTxDone =
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(
                 indexInfo->AlterMainTableTxDone);
+
+        indexInfo->DropColumnsTxId =
+            row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxId>(
+                indexInfo->DropColumnsTxId);
+        indexInfo->DropColumnsTxStatus =
+            row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxStatus>(
+                indexInfo->DropColumnsTxStatus);
+        indexInfo->DropColumnsTxDone =
+            row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxDone>(
+                indexInfo->DropColumnsTxDone);
 
         indexInfo->Billed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0));
         indexInfo->Billed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0));
@@ -4014,6 +4029,10 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
     o << ", ApplyTxId: " << info.ApplyTxId;
     o << ", ApplyTxStatus: " << NKikimrScheme::EStatus_Name(info.ApplyTxStatus);
     o << ", ApplyTxDone: " << info.ApplyTxDone;
+
+    o << ", DropColumnsTxId: " << info.DropColumnsTxId;
+    o << ", DropColumnsTxStatus: " << NKikimrScheme::EStatus_Name(info.DropColumnsTxStatus);
+    o << ", DropColumnsTxDone: " << info.DropColumnsTxDone;
 
     o << ", UnlockTxId: " << info.UnlockTxId;
     o << ", UnlockTxStatus: " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus);

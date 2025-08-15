@@ -1658,6 +1658,7 @@ message TIndexBuildControl {
     optional string IndexName = 2;
     optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
+    repeated NKikimrIndexBuilder.TColumnBuildSetting ColumnsToDrop = 5;
 }
 
 message TLockConfig {
@@ -1714,6 +1715,12 @@ message TAlterShards {
         TShardingModification Modification = 20;
         TShardingTransfers Transfer = 21;
     }
+}
+
+message TDropColumnBuild {
+    optional NKikimrIndexBuilder.TColumnBuildSettings Settings = 1;
+    optional uint64 SnapshotTxId = 2;
+    optional uint64 BuildIndexId = 3;
 }
 
 // Request for scheme modification
@@ -1788,6 +1795,7 @@ message TModifyScheme {
     optional TDropBlockStoreVolume DropBlockStoreVolume = 60;
 
     optional NKikimrIndexBuilder.TColumnBuildSettings InitiateColumnBuild = 61;
+    optional TDropColumnBuild DropColumnBuild = 86;
 
     optional bool SuccessOnNotExist = 62;
 

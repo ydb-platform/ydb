@@ -1403,6 +1403,8 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return {CreateUpgradeSubDomainDecision(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         return CreateBuildColumn(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
+        return {DropBuildColumn(op.NextPartId(), tx, context)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         return CreateBuildIndex(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:

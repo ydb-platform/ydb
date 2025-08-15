@@ -193,8 +193,8 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     // TODO: default value should be auto
     config.Opts->AddLongOption(
-        "warmup", TStringBuilder() << "Warmup time. Example: 10s, 5m, 1h")
-            .RequiredArgument("DURATION").StoreResult(&RunConfig->WarmupDuration).DefaultValue(RunConfig->WarmupDuration);
+        "warmup", TStringBuilder() << "Warmup time (by default autodected). Example: 10s, 5m, 1h")
+            .RequiredArgument("DURATION").StoreResult(&RunConfig->WarmupDuration);
 
     config.Opts->AddLongOption(
         't', "time", TStringBuilder() << "Execution time. Example: 10s, 5m, 1h")

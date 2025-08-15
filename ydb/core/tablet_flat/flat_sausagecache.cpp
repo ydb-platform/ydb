@@ -9,141 +9,141 @@ TSharedPageRef UnUse(TSharedPageRef sharedBody) {
     return sharedBody;
 }
 
-TPrivatePageCache::TPage::TPage(TPageId id, size_t size, TSharedPageRef sharedBody, TInfo* info)
+TPrivatePageCache::TPage::TPage(TPageId id, size_t size, TSharedPageRef sharedBody, TPageCollection* pageCollection)
     : Id(id)
     , Size(size)
     , SharedBody(UnUse(std::move(sharedBody)))
-    , Info(info)
+    , PageCollection(pageCollection)
 {
     Y_ENSURE(SharedBody);
 }
 
-TPrivatePageCache::TInfo::TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+TPrivatePageCache::TPageCollection::TPageCollection(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
     : Id(pageCollection->Label())
     , PageCollection(std::move(pageCollection))
 {
     PageMap.resize(PageCollection->Total());
 }
 
-TPrivatePageCache::TInfo::TInfo(const TInfo &info)
-    : Id(info.Id)
-    , PageCollection(info.PageCollection)
-    , StickyPages(info.StickyPages)
-    , CacheMode(info.CacheMode)
+TPrivatePageCache::TPageCollection::TPageCollection(const TPageCollection &pageCollection)
+    : Id(pageCollection.Id)
+    , PageCollection(pageCollection.PageCollection)
+    , StickyPages(pageCollection.StickyPages)
+    , CacheMode(pageCollection.CacheMode)
 {
-    PageMap.resize(info.PageMap.size());
-    for (const auto& [pageId, page] : info.PageMap) {
+    PageMap.resize(pageCollection.PageMap.size());
+    for (const auto& [pageId, page] : pageCollection.PageMap) {
         Y_ASSERT(page);
         AddPage(pageId, page->SharedBody);
     }
 }
 
-TPrivatePageCache::TInfo* TPrivatePageCache::FindPageCollection(const TLogoBlobID &id) const {
+TPrivatePageCache::TPageCollection* TPrivatePageCache::FindPageCollection(const TLogoBlobID &id) const {
     auto *pageCollection = PageCollections.FindPtr(id);
     return pageCollection ? pageCollection->Get() : nullptr;
 }
 
-TPrivatePageCache::TInfo* TPrivatePageCache::GetPageCollection(const TLogoBlobID &id) const {
+TPrivatePageCache::TPageCollection* TPrivatePageCache::GetPageCollection(const TLogoBlobID &id) const {
     auto pageCollection = FindPageCollection(id);
     Y_ENSURE(pageCollection, "trying to get unknown page collection");
     return pageCollection;
 }
 
-THashMap<TLogoBlobID, THashSet<TPageId>> TPrivatePageCache::AddPageCollection(TIntrusivePtr<TInfo> info) {
-    auto inserted = PageCollections.insert(decltype(PageCollections)::value_type(info->Id, info));
+THashMap<TLogoBlobID, THashSet<TPageId>> TPrivatePageCache::AddPageCollection(TIntrusivePtr<TPageCollection> pageCollection) {
+    auto inserted = PageCollections.insert(decltype(PageCollections)::value_type(pageCollection->Id, pageCollection));
     Y_ENSURE(inserted.second, "double registration of page collection is forbidden");
     ++Stats.PageCollections;
 
     THashMap<TLogoBlobID, THashSet<TPageId>> sharedCacheTouches;
-    for (const auto& [pageId, page] : info->GetPageMap()) {
+    for (const auto& [pageId, page] : pageCollection->GetPageMap()) {
         Y_ASSERT(page);
         
         Stats.SharedBodyBytes += page->Size;
-        if (info->IsStickyPage(pageId)) {
+        if (pageCollection->IsStickyPage(pageId)) {
             Stats.StickyBytes += page->Size;
         }
 
         // notify shared cache that we have a page handle
-        sharedCacheTouches[page->Info->Id].insert(page->Id);
+        sharedCacheTouches[page->PageCollection->Id].insert(page->Id);
     }
 
-    if (info->GetCacheMode() == ECacheMode::TryKeepInMemory) {
-        Stats.TryKeepInMemoryBytes += info->PageCollection->BackingSize();
+    if (pageCollection->GetCacheMode() == ECacheMode::TryKeepInMemory) {
+        Stats.TryKeepInMemoryBytes += pageCollection->PageCollection->BackingSize();
     }
 
     return sharedCacheTouches;
 }
 
-void TPrivatePageCache::DropPageCollection(TInfo *info) {
-    for (const auto& [pageId, page] : info->GetPageMap()) {
+void TPrivatePageCache::DropPageCollection(TPageCollection *pageCollection) {
+    for (const auto& [pageId, page] : pageCollection->GetPageMap()) {
         Y_ASSERT(page);
 
         Stats.SharedBodyBytes -= page->Size;
-        if (info->IsStickyPage(pageId)) {
+        if (pageCollection->IsStickyPage(pageId)) {
             Stats.StickyBytes -= page->Size;
         }
     }
 
-    if (info->GetCacheMode() == ECacheMode::TryKeepInMemory) {
-        Stats.TryKeepInMemoryBytes -= info->PageCollection->BackingSize();
+    if (pageCollection->GetCacheMode() == ECacheMode::TryKeepInMemory) {
+        Stats.TryKeepInMemoryBytes -= pageCollection->PageCollection->BackingSize();
     }
 
-    info->Clear();
+    pageCollection->Clear();
 
-    PageCollections.erase(info->Id);
+    PageCollections.erase(pageCollection->Id);
     --Stats.PageCollections;
 }
 
-TSharedPageRef TPrivatePageCache::TryGetPage(TPageId pageId, TInfo *info) {
-    auto page = info->FindPage(pageId);
+TSharedPageRef TPrivatePageCache::TryGetPage(TPageId pageId, TPageCollection *pageCollection) {
+    auto page = pageCollection->FindPage(pageId);
     if (!page) {
         return {};
     }
 
     auto sharedBody = page->SharedBody;
     if (!sharedBody.Use()) {
-        DropPage(pageId, info);
+        DropPage(pageId, pageCollection);
         return {};
     }
 
     return std::move(sharedBody);
 }
 
-void TPrivatePageCache::DropPage(TPageId pageId, TInfo *info) {
-    if (info->DropPage(pageId)) {
-        Y_ENSURE(!info->IsStickyPage(pageId));
-        Stats.SharedBodyBytes -= info->GetPageSize(pageId);
+void TPrivatePageCache::DropPage(TPageId pageId, TPageCollection *pageCollection) {
+    if (pageCollection->DropPage(pageId)) {
+        Y_ENSURE(!pageCollection->IsStickyPage(pageId));
+        Stats.SharedBodyBytes -= pageCollection->GetPageSize(pageId);
     }
 }
 
-void TPrivatePageCache::AddPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info)
+void TPrivatePageCache::AddPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection)
 {
-    if (info->AddPage(pageId, std::move(sharedBody))) {
-        Stats.SharedBodyBytes += info->GetPageSize(pageId);
+    if (pageCollection->AddPage(pageId, std::move(sharedBody))) {
+        Stats.SharedBodyBytes += pageCollection->GetPageSize(pageId);
     }
 }
 
-void TPrivatePageCache::AddStickyPage(TPageId pageId, TSharedPageRef sharedBody, TInfo *info)
+void TPrivatePageCache::AddStickyPage(TPageId pageId, TSharedPageRef sharedBody, TPageCollection *pageCollection)
 {
-    AddPage(pageId, sharedBody, info);
-    if (info->AddStickyPage(pageId, std::move(sharedBody))) {
-        Stats.StickyBytes += info->GetPageSize(pageId);
+    AddPage(pageId, sharedBody, pageCollection);
+    if (pageCollection->AddStickyPage(pageId, std::move(sharedBody))) {
+        Stats.StickyBytes += pageCollection->GetPageSize(pageId);
     }
 }
 
-bool TPrivatePageCache::UpdateCacheMode(ECacheMode newCacheMode, TInfo *info)
+bool TPrivatePageCache::UpdateCacheMode(ECacheMode newCacheMode, TPageCollection *pageCollection)
 {
-    auto oldCacheMode = info->GetCacheMode();
+    auto oldCacheMode = pageCollection->GetCacheMode();
     if (oldCacheMode == newCacheMode) {
         return false;
     }
 
-    auto tryKeepInMemoryBytesDelta = info->PageCollection->BackingSize();
+    auto tryKeepInMemoryBytesDelta = pageCollection->PageCollection->BackingSize();
     if (oldCacheMode == ECacheMode::TryKeepInMemory) {
         Stats.TryKeepInMemoryBytes -= tryKeepInMemoryBytesDelta;
     }
 
-    info->SetCacheMode(newCacheMode);
+    pageCollection->SetCacheMode(newCacheMode);
 
     if (newCacheMode == ECacheMode::TryKeepInMemory) {
         Stats.TryKeepInMemoryBytes += tryKeepInMemoryBytesDelta;
@@ -152,15 +152,14 @@ bool TPrivatePageCache::UpdateCacheMode(ECacheMode newCacheMode, TInfo *info)
     return true;
 };
 
-THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> TPrivatePageCache::DetachPrivatePageCache() {
-    THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> ret;
+THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TPageCollection>> TPrivatePageCache::DetachPrivatePageCache() {
+    THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TPageCollection>> result;
 
-    for (const auto &xpair : PageCollections) {
-        TIntrusivePtr<TInfo> info(new TInfo(*xpair.second));
-        ret.insert(std::make_pair(xpair.first, info));
+    for (const auto &[pageCollectionId, pageCollection] : PageCollections) {
+        result.insert(std::make_pair(pageCollectionId, MakeIntrusive<TPageCollection>(*pageCollection)));
     }
 
-    return ret;
+    return result;
 }
 
 }}

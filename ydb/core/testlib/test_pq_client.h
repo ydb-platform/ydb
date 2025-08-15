@@ -1118,9 +1118,13 @@ public:
         return "";
     }
 
-    void ChooseProxy() {
+    void ChooseProxy(const TString& securityToken = {}) {
         NKikimrClient::TChooseProxyRequest request;
         NKikimrClient::TResponse response;
+
+        if (!securityToken.empty()) {
+            request.SetSecurityToken(securityToken);
+        }
 
         Cerr << "ChooseProxy request to server " << Client->GetConfig().Ip << ":" << Client->GetConfig().Port << "\n"
                 << PrintToString(request) << Endl;

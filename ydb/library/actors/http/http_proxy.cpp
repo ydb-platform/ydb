@@ -457,8 +457,8 @@ TString GetObfuscatedData(TString data, const THeaders& headers) {
             data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
         }
     }
-    if (data.size() > 1000) {
-        return data.substr(0, 500) + " --- <truncated> --- " + data.substr(data.size() - 500);
+    if (data.size() > 2000) {
+        return data.substr(0, 1000) + " --- <truncated> --- " + data.substr(data.size() - 1000);
     }
     return data;
 }

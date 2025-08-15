@@ -3648,11 +3648,6 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
     switch (node.Alt_case()) {
     case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
         if (node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
-            if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
-                Error() << "Cluster should not be used in limited view";
-                return false;
-            }
-
             if (!ClusterExpr(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
                 return false;
             }
@@ -3671,14 +3666,20 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
         break;
     }
     case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore2: {
+        if (node.GetAlt_simple_table_ref_core2().HasBlock1()) {
+            if (!ClusterExpr(node.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+                return false;
+            }
+        }
+
         if (cluster.Empty()) {
             Error() << "No cluster name given and no default cluster is selected";
             return false;
         }
 
-        auto at = node.GetAlt_simple_table_ref_core2().HasBlock1();
+        auto at = node.GetAlt_simple_table_ref_core2().HasBlock2();
         TString bindName;
-        if (!NamedNodeImpl(node.GetAlt_simple_table_ref_core2().GetRule_bind_parameter2(), bindName, *this)) {
+        if (!NamedNodeImpl(node.GetAlt_simple_table_ref_core2().GetRule_bind_parameter3(), bindName, *this)) {
             return false;
         }
         auto named = GetNamedNode(bindName);

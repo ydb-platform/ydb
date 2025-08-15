@@ -14,15 +14,16 @@ namespace NKikimr::NStorage {
     using TSuccessfulDisk = std::tuple<TNodeIdentifier, TString, std::optional<ui64>>;
 
     bool HasDiskQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
-        const THashMap<TString, TBridgePileId>& bridgePileNameMap, IOutputStream *out, const char *name);
+        const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId, IOutputStream *out,
+        const char *name);
 
     bool HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
-        const THashMap<TString, TBridgePileId>& bridgePileNameMap, const TNodeWardenConfig& nwConfig,
-        bool allowUnformatted, IOutputStream *out, const char *name);
+        const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
+        const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name);
 
     // Ensure configuration has quorum in both disk and storage ways for current and previous configuration.
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
-        const THashMap<TString, TBridgePileId>& bridgePileNameMap, const TNodeWardenConfig& nwConfig, bool mindPrev,
-        TStringStream *out = nullptr);
+        const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
+        const TNodeWardenConfig& nwConfig, bool mindPrev, TStringStream *out = nullptr);
 
 } // NKikimr::NStorage

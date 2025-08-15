@@ -43,11 +43,6 @@ Y_UNIT_TEST_SUITE(KqpSort) {
     }
 
     Y_UNIT_TEST_TWIN(ImaginarySortReverse, InvertPkOverSort) {
-
-        if (InvertPkOverSort) {
-            return;
-        }
-
         TKikimrRunner kikimr;
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();

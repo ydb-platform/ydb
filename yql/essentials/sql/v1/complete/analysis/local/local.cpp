@@ -278,6 +278,7 @@ namespace NSQLComplete {
 
             if (AnyOf(candidates.Rules, RuleAdapted(IsLikelyObjectRefStack))) {
                 object.Kinds.emplace(EObjectKind::Folder);
+                object.Kinds.emplace(EObjectKind::Unknown);
             }
 
             if (AnyOf(candidates.Rules, RuleAdapted(IsLikelyExistingTableStack))) {
@@ -347,6 +348,10 @@ namespace NSQLComplete {
                 (begin = context.MatchCursorPrefix({"ID_PLAIN", "DOT"})) ||
                 (begin = context.MatchCursorPrefix({"ID_PLAIN", "DOT", ""}))) {
                 column.Table = begin->Base->Content;
+            } else if (TMaybe<TRichParsedToken> begin;
+                       (begin = context.MatchCursorPrefix({"ID_QUOTED", "DOT"})) ||
+                       (begin = context.MatchCursorPrefix({"ID_QUOTED", "DOT", ""}))) {
+                column.Table = Unquoted(begin->Base->Content);
             }
             return column;
         }

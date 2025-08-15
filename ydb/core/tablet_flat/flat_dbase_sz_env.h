@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NTable {
 
     struct TSizeEnv : public IPages {
-        using TInfo = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+        using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
 
         TSizeEnv(IPages* env)
             : Env(env)
@@ -55,7 +55,7 @@ namespace NTable {
         }
 
     private:
-        void AddPageSize(TInfo *info, TPageId pageId)
+        void AddPageSize(TPageCollection *info, TPageId pageId)
         {
             if (Touched[info].insert(pageId).second) {
                 Pages++;

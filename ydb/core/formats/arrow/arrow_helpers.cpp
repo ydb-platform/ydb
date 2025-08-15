@@ -81,6 +81,8 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
         case NScheme::NTypeIds::Date:
         case NScheme::NTypeIds::Date32:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+        case NScheme::NTypeIds::Decimal:
+            return std::make_shared<arrow::FixedSizeBinaryType>(16);
         default:
             return GetArrowType(typeId);
     }

@@ -709,6 +709,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     }
 
     ReportCounters(ctx, true);
+    CreateCompacter();
 }
 
 
@@ -1916,6 +1917,8 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     if (response.HasCookie() && (response.GetCookie() == static_cast<ui64>(ERequestCookie::CompactificationWrite))) {
         Y_ABORT_UNLESS(CompacterKvRequestInflight);
         CompacterKvRequestInflight = false;
+        PQ_LOG_D("Topic '" << TopicConverter->GetClientsideName() << "'" << " partition " << Partition
+                 << ": Got compacter KV response, release RW lock");
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         if (Compacter) {
             Compacter->ProcessResponse(ev);
@@ -2072,16 +2075,16 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 
         return;
     }
-    // ToDo: !! restore PQ_LOG_D("Batching state before ContinueProcessTxsAndUserActs: " << (int)BatchingState);
+    PQ_LOG_D("Batching state before ContinueProcessTxsAndUserActs: " << (int)BatchingState);
     while (true) {
         if (CanProcessUserActionAndTransactionEvents()) {
             ContinueProcessTxsAndUserActs(ctx);
         }
         if (BatchingState == ETxBatchingState::PreProcessing) {
-            // ToDo: !! restore  PQ_LOG_D("Still preprocessing - waiting for something");
+            PQ_LOG_D("Still preprocessing - waiting for something");
             return; // Still preprocessing - waiting for something;
         }
-        // ToDo: !! restore  PQ_LOG_D("Batching state after ContinueProcessTxsAndUserActs: " << (int)BatchingState);
+        PQ_LOG_D("Batching state after ContinueProcessTxsAndUserActs: " << (int)BatchingState);
 
         // Preprocessing complete;
         if (CurrentBatchSize > 0) {
@@ -4090,12 +4093,16 @@ void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
 void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request) {
     Y_ENSURE(!CompacterKvRequestInflight);
     Y_ENSURE(!CompacterKvRequest);
+    PQ_LOG_D("Topic '" << TopicConverter->GetClientsideName() << "'" << " partition " << Partition
+                       << ": Acquire RW Lock");
     Send(ReadQuotaTrackerActor, new TEvPQ::TEvAcquireExclusiveLock());
+    CompacterKvRequestInflight = true;
     CompacterKvRequest = std::move(request);
 }
 
 void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
-    CompacterKvRequestInflight = true;
+    PQ_LOG_D("Topic '" << TopicConverter->GetClientsideName() << "'" << " partition " << Partition
+                       << ": Acquired RW Lock, send compacter KV request    ");
     Send(BlobCache, CompacterKvRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
 }
 } // namespace NKikimr::NPQ

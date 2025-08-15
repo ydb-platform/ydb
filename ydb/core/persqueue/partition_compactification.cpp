@@ -34,7 +34,6 @@ TPartitionCompaction::TPartitionCompaction(ui64 firstUncompactedOffset, ui64 par
 
 void TPartitionCompaction::TryCompactionIfPossible() {
     Y_ENSURE(PartitionActor->Config.GetEnableCompactification());
-
     if (PartitionActor->CompacterPartitionRequestInflight || PartitionActor->CompacterKvRequestInflight)
         return;
     switch (Step) {
@@ -70,21 +69,21 @@ void TPartitionCompaction::TryCompactionIfPossible() {
 }
 
 void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
-    Y_ABORT_UNLESS(PartitionActor->CompacterPartitionRequestInflight);
-    PartitionActor->CompacterPartitionRequestInflight = false;
+    PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+              << PartitionActor->Partition << " proxy response cookie: " << ev->Get()->Cookie);
     if (ev->Get()->Cookie != PartRequestCookie) {
         return;
     }
-    bool processResponseRestult = true;
+    bool processResponseResult = true;
     switch (Step) {
         case EStep::READING: {
             Y_ABORT_UNLESS(ReadState);
-            processResponseRestult = ReadState->ProcessResponse(ev);
+            processResponseResult = ReadState->ProcessResponse(ev);
             break;
         }
         case EStep::COMPACTING: {
             Y_ABORT_UNLESS(CompactState);
-            processResponseRestult = CompactState->ProcessResponse(ev);
+            processResponseResult = CompactState->ProcessResponse(ev);
             break;
         }
         case EStep::PENDING:
@@ -92,7 +91,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
         default:
             Y_ABORT();
     }
-    if (!processResponseRestult) {
+    if (!processResponseResult) {
         PartitionActor->Send(PartitionActor->Tablet, new TEvents::TEvPoisonPill());
     }
     TryCompactionIfPossible();
@@ -101,8 +100,13 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
 void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
     //Partition must reset this flag;
     Y_ABORT_UNLESS(!PartitionActor->CompacterKvRequestInflight);
+    PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+              << PartitionActor->Partition << " Process KV response");
     if (CompactState) {
         if (!CompactState->ProcessKVResponse(ev)) {
+            PQ_LOG_ERROR("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+                                              << PartitionActor->Partition << " Process KV response: BAD Status");
+
             PartitionActor->Send(PartitionActor->Tablet, new TEvents::TEvPoisonPill());
         }
     }
@@ -232,6 +236,8 @@ TPartitionCompaction::EStep TPartitionCompaction::TReadState::ContinueIfPossible
     }
     auto evRead = MakeEvRead(nextRequestCookie, OffsetToRead, LastOffset, NextPartNo);
     PartitionActor->Send(PartitionActor->SelfId(), evRead.release());
+    PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+              << PartitionActor->Partition << " Send EvRead (Read state) from offset: " << OffsetToRead << ":" << NextPartNo);
     PartitionActor->CompacterPartitionRequestInflight = true;
     return EStep::READING;
 }
@@ -298,6 +304,8 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
         //Need to read and process this blob.
         auto evRead = MakeEvRead(nextRequestCookie, currKey.GetOffset(), maxBlobOffset + 1, currKey.GetPartNo());
         PartitionActor->Send(PartitionActor->SelfId(), evRead.release());
+        PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+                  << PartitionActor->Partition << " Send EvRead (Compact state) from offset: " << currKey.GetOffset() << ":" << currKey.GetPartNo());
         PartitionActor->CompacterPartitionRequestInflight = true;
         return EStep::COMPACTING;
     }
@@ -386,7 +394,9 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
     TMaybe<TBatch> currentBatch;
     TVector<TClientBlob> currentMessageBlobs;
     bool hasNonZeroParts = false;
-
+    PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+                                      << PartitionActor->Partition << " process read result in CompState starting from: "
+                                      << readResult.GetResult(0).GetOffset() << ":" << readResult.GetResult(0).GetPartNo());
     for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
         auto& res = readResult.GetResult(i);
         if (res.GetOffset() == lastExpectedOffset && res.GetPartNo() == lastExpectedPartNo) {
@@ -617,6 +627,8 @@ void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
     CommitCookie = cookie;
     auto ev = MakeHolder<TEvPQ::TEvSetClientInfo>(CommitCookie, CLIENTID_COMPACTION_CONSUMER, *OffsetToCommit, TString{}, 0, 0, 0, TActorId{});
     ev->IsInternal = true;
+    PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+              << PartitionActor->Partition << " commit offset: " << *OffsetToCommit);
     PartitionActor->CompacterPartitionRequestInflight = true;
     PartitionActor->Send(PartitionActor->SelfId(), ev.Release());
 }

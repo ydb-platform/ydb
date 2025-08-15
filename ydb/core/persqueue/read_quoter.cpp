@@ -106,6 +106,8 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
 }
 
 void TPartitionQuoterBase::ProcessInflightQueue() {
+   if (ExclusiveLockState != EExclusiveLockState::EReleased)
+       return;
     auto now = ActorContext().Now();
     while (!WaitingInflightRequests.empty() && RequestsInflight < MaxInflightRequests) {
         StartQuoting(std::move(WaitingInflightRequests.front()));
@@ -292,7 +294,7 @@ void TReadQuoter::UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorCont
     TVector<std::pair<TString, ui64>> updatedQuotas;
     for (auto& [consumerStr, consumerQuota] : ConsumerQuotas) {
         if (consumerQuota.PartitionPerConsumerQuotaTracker.UpdateConfigIfChanged(
-                GetConsumerReadBurst(PQTabletConfig, ctx), GetConsumerReadSpeed(PQTabletConfig, consumerStr, ctx)
+                GetConsumerReadBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadSpeed(PQTabletConfig, consumerStr, ctx)
         )) {
             updatedQuotas.push_back({consumerStr, consumerQuota.PartitionPerConsumerQuotaTracker.GetTotalSpeed()});
         }
@@ -313,9 +315,10 @@ ui64 TReadQuoter::GetConsumerReadSpeed(const NKikimrPQ::TPQTabletConfig& pqTable
         : DEFAULT_READ_SPEED_AND_BURST;
 }
 
-ui64 TReadQuoter::GetConsumerReadBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const {
-    return AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota() ?
-        pqTabletConfig.GetPartitionConfig().GetBurstSize() * 2
+ui64 TReadQuoter::GetConsumerReadBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& consumerName, const TActorContext& ctx) const {
+    bool doLimitInternalConsumer = AppData(ctx)->PQConfig.GetQuotingConfig().GetEnableQuoting() && consumerName == NPQ::CLIENTID_COMPACTION_CONSUMER;
+    return (AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota() || doLimitInternalConsumer)
+        ? pqTabletConfig.GetPartitionConfig().GetBurstSize() * 2
         : DEFAULT_READ_SPEED_AND_BURST;
 }
 
@@ -326,7 +329,7 @@ ui64 TReadQuoter::GetTotalPartitionSpeed(const NKikimrPQ::TPQTabletConfig& pqTab
 
 ui64 TReadQuoter::GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const {
     auto consumersPerPartition = AppData(ctx)->PQConfig.GetQuotingConfig().GetMaxParallelConsumersPerPartition();
-    return GetConsumerReadBurst(pqTabletConfig, ctx) * consumersPerPartition;
+    return GetConsumerReadBurst(pqTabletConfig, {}, ctx) * consumersPerPartition;
 }
 
 THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const {
@@ -362,7 +365,7 @@ TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consume
     if (it == ConsumerQuotas.end()) {
         TConsumerReadQuota consumer(
                 CreateAccountQuotaTracker(consumerStr, ctx),
-                GetConsumerReadBurst(PQTabletConfig, ctx),
+                GetConsumerReadBurst(PQTabletConfig, consumerStr, ctx),
                 GetConsumerReadSpeed(PQTabletConfig, consumerStr, ctx)
         );
         Send(Parent, new NReadQuoterEvents::TEvQuotaUpdated(

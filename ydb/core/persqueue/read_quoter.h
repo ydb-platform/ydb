@@ -292,7 +292,7 @@ private:
     void ProcessPerConsumerQuotaQueue(const TActorContext& ctx);
     TConsumerReadQuota* GetConsumerQuotaIfExists(const TString& consumerStr);
     ui64 GetConsumerReadSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& consumerStr, const TActorContext& ctx) const;
-    ui64 GetConsumerReadBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const;
+    ui64 GetConsumerReadBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& consumerStr, const TActorContext& ctx) const;
 
 private:
     THashMap<TString, TConsumerReadQuota> ConsumerQuotas;

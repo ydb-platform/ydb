@@ -925,6 +925,9 @@ void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TAc
 
 void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->IsInternal) {
+        PQ_LOG_D("Topic '" << TopicConverter->GetClientsideName() << "'" <<
+            " partition " << Partition << ": Got internal ProxyResponse");
+        CompacterPartitionRequestInflight = false;
         if (Compacter) {
             Compacter->ProcessResponse(ev);
         }

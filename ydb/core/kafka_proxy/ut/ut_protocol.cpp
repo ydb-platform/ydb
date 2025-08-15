@@ -116,6 +116,7 @@ public:
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(128);
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(1_KB);
+        appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(50_MB);
 
         appConfig.MutableGRpcConfig()->SetHost("::1");
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
@@ -347,10 +348,15 @@ void AssertMessageAvaialbleThroughLogbrokerApiAndCommit(std::shared_ptr<NTopic::
     responseFromLogbrokerApi[0].GetMessages()[0].Commit();
 }
 
-void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 minActivePartitions, std::vector<TString> consumers) {
+void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 minActivePartitions, std::vector<TString> consumers,
+                 ui64 quota = 0) {
     auto topicSettings = NYdb::NTopic::TCreateTopicSettings()
-                            .PartitioningSettings(minActivePartitions, 100);
+                            .PartitioningSettings(minActivePartitions, 100)
+                            ;
 
+    if(quota) {
+        topicSettings.PartitionWriteSpeedBytesPerSecond(quota);
+    }
     for (auto& consumer : consumers) {
         topicSettings.BeginAddConsumer(consumer).EndAddConsumer();
     }
@@ -2160,7 +2166,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TStringBuilder topic1FullPath;
         topic1FullPath << "/Root/" << topic1;
 
-        CreateTopic(pqClient, topic1FullPath, 1, {"consumer1"});
+        CreateTopic(pqClient, topic1FullPath, 1, {"consumer1"});//, 50_MB);
         {
             // Creation of two topics
             auto msg = client.CreateTopics({
@@ -2297,8 +2303,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             writeMessage(TStringBuilder() << "extra-key-" << i, 3_MB);
             Cerr << "Wrote message " << i << Endl;
         }
-        writeSession->Close(TDuration::Seconds(50));
-        Sleep(TDuration::Seconds(10));
+        writeSession->Close(TDuration::Seconds(10));
+        Sleep(TDuration::Seconds(20));
 
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
         rSSettings.AppendTopics({topic1FullPath});

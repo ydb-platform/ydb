@@ -890,7 +890,6 @@ void TPartition::Initialize(const TActorContext& ctx) {
             SetupTopicCounters(ctx);
         }
     }
-    CreateCompacter();
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {

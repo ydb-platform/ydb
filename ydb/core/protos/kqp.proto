@@ -71,6 +71,7 @@ message TTopicOperationsRequest {
     optional string Consumer = 1;
     repeated TopicOffsets Topics = 2;
     optional uint32 SupportivePartition = 3;
+    optional uint64 TabletId = 4;
 
     message TopicOffsets {
         // Topic path.

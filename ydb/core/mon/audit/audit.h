@@ -31,13 +31,10 @@ private:
     bool AuditableRequest(const NHttp::THttpIncomingRequestPtr& request);
 
     TAuditParts Parts;
-    bool Redirect = false;
     bool Auditable = false;
     NACLibProto::ESubjectType SubjectType = NACLibProto::SUBJECT_TYPE_ANONYMOUS;
     TString Subject;
     TString SanitizedToken;
 };
-
-bool IsViewerRedirectRequest(const NHttp::THttpIncomingRequestPtr& request, const TString& tenantName);
 
 }

@@ -33,6 +33,7 @@ ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ClientErrorWithEmptyFilter
+ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ManyRawClients
 ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/kafka_proxy/ut KafkaProtocol.MetadataTopicAutocreationEnabledScenario
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge

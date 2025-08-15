@@ -115,7 +115,7 @@ public:
         auto result = TMaybeFetchResult::None();
         while (result.Empty()) {
             NUdf::TUnboxedValue*const* input = static_cast<const TDerived*>(this)->PrepareInput(state, ctx, output);
-            TMaybeFetchResult fetchResult = input ? SourceFlow->FetchValues(ctx, input) : TMaybeFetchResult::None();
+            TMaybeFetchResult fetchResult = input || !InWidth ? SourceFlow->FetchValues(ctx, input) : TMaybeFetchResult::None();
             result = static_cast<const TDerived*>(this)->DoProcess(state, ctx, fetchResult, output);
         }
         return result.Get();

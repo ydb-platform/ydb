@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     token_manager.cpp
     vm_metadata_token_provider_handler.cpp
+    token_provider.cpp
 )
 
 

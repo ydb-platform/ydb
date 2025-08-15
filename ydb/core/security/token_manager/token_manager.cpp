@@ -45,7 +45,7 @@ void TTokenManager::BootstrapTokenProviders() {
         };
         for (const auto& vmMetadataInfo : vmMetadataProvider.GetProvidersInfo()) {
             BLOG_TRACE("Initialize token provider# " << vmMetadataInfo.GetId());
-            TokenProviders[vmMetadataInfo.GetId()] = std::make_shared<NTokenManager::TVmMetadataTokenProvider>(this, VmMetadataProviderSettings, HttpProxyId, vmMetadataInfo);
+            TokenProviders[vmMetadataInfo.GetId()] = std::make_shared<NTokenManager::TVmMetadataTokenProvider>(this->SelfId(), VmMetadataProviderSettings, HttpProxyId, vmMetadataInfo);
         }
     }
 }

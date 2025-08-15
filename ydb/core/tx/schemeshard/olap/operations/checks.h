@@ -12,27 +12,31 @@
 
 namespace NKikimr::NSchemeShard::NOlap {
     inline bool CheckLimits(const TSchemeLimits& limits, TOlapStoreInfo::TPtr alterData, TString& errStr) {
-        for (auto& [_, preset] : alterData->SchemaPresets) {
+        for (auto& [_, preset]: alterData->SchemaPresets) {
             ui64 columnCount = preset.GetColumns().GetColumns().size();
             if (columnCount > limits.MaxColumnTableColumns) {
                 errStr = TStringBuilder()
-                         << "Too many columns"
-                         << ". new: " << columnCount
-                         << ". Limit: " << limits.MaxColumnTableColumns;
+                    << "Too many columns"
+                    << ". new: " << columnCount
+                    << ". Limit: " << limits.MaxColumnTableColumns;
                 return false;
             }
         }
         return true;
     }
 
-    inline std::expected<void, TString> CheckColumnType(const ::NKikimrSchemeOp::TOlapColumnDescription& column, const TAppData* appData) {
-        if ((column.GetType() == "Datetime64" || column.GetType() == "Timestamp64" || column.GetType() == "Interval64") && !appData->FeatureFlags.GetEnableTableDatetime64()) {
+    inline std::expected<void, TString>
+    CheckColumnType(const ::NKikimrSchemeOp::TOlapColumnDescription &column, const TAppData *appData) {
+
+        if ((column.GetType() == "Datetime64" || column.GetType() == "Timestamp64" || column.GetType() == "Interval64") &&
+            !appData->FeatureFlags.GetEnableTableDatetime64()) {
             return std::unexpected(std::format(
                 "Type '{}' specified for column '{}', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)",
                 column.GetType().data(), column.GetName().data()));
         }
 
-        if (column.GetType().StartsWith("Decimal") && !appData->FeatureFlags.GetEnableParameterizedDecimal()) {
+        if (column.GetType().StartsWith("Decimal") &&
+            !appData->FeatureFlags.GetEnableParameterizedDecimal()) {
             return std::unexpected(std::format(
                 "Type '{}' specified for column '{}', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)",
                 column.GetType().data(), column.GetName().data()));
@@ -41,17 +45,14 @@ namespace NKikimr::NSchemeShard::NOlap {
     }
 
     template <typename T>
-    inline std::expected<void, TString> CheckColumns(const T& columns, const TAppData* appData) {
+    inline std::expected<void, TString> CheckColumns(const T &columns, const TAppData *appData) {
         std::expected<void, TString> init{};
 
-        return std::accumulate(
-            columns.begin(),
-            columns.end(),
-            init,
-            [&](const auto& accumulator, const auto& column) {
+        return std::accumulate(columns.begin(), columns.end(), init,
+            [&](const auto &accumulator, const auto &column) {
                 return accumulator.and_then([&] {
                     return CheckColumnType(column, appData);
                 });
             });
     }
-} // namespace NKikimr::NSchemeShard::NOlap
+}

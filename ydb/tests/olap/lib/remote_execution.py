@@ -533,7 +533,7 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
 
         # Делаем исполняемым
         if make_executable:
-            if execute_command(host, f"chmod +x {target_path}", raise_on_error=True).exit_code != 0:
+            if execute_command(host, f"chmod +x {target_path}", raise_on_error=False).exit_code != 0:
                 execute_command(host, f"sudo chmod +x {target_path}", raise_on_error=True)
 
         return {

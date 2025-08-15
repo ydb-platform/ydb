@@ -377,14 +377,12 @@ ui64 TCheckedSkiffParser::GetReadBytesCount() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TUncheckedSkiffWriter::TUncheckedSkiffWriter(IZeroCopyOutput* underlying)
-    : UnderlyingOutputWriter_(underlying)
-    , CurrentOutputWriter_(&UnderlyingOutputWriter_)
+    : Underlying_(underlying)
 { }
 
 TUncheckedSkiffWriter::TUncheckedSkiffWriter(IOutputStream* underlying)
     : BufferedOutput_(MakeHolder<TBufferedOutput>(underlying))
-    , UnderlyingOutputWriter_(BufferedOutput_.Get())
-    , CurrentOutputWriter_(&UnderlyingOutputWriter_)
+    , Underlying_(BufferedOutput_.Get())
 { }
 
 TUncheckedSkiffWriter::TUncheckedSkiffWriter(const std::shared_ptr<TSkiffSchema>& /*schema*/, IZeroCopyOutput* underlying)
@@ -482,13 +480,13 @@ void TUncheckedSkiffWriter::WriteBoolean(bool value)
 void TUncheckedSkiffWriter::WriteString32(TStringBuf value)
 {
     WriteSimple<ui32>(value.size());
-    CurrentOutputWriter_->Write(value.data(), value.size());
+    Underlying_.Write(value.data(), value.size());
 }
 
 void TUncheckedSkiffWriter::WriteYson32(TStringBuf value)
 {
     WriteSimple<ui32>(value.size());
-    CurrentOutputWriter_->Write(value.data(), value.size());
+    Underlying_.Write(value.data(), value.size());
 }
 
 void TUncheckedSkiffWriter::WriteVariant8Tag(ui8 tag)
@@ -501,37 +499,9 @@ void TUncheckedSkiffWriter::WriteVariant16Tag(ui16 tag)
     WriteSimple<ui16>(tag);
 }
 
-void TUncheckedSkiffWriter::StartBlob()
-{
-    if (BlobOutputWriter_) {
-        throw TSkiffException() << "Blob start called before previous blob was finished";
-    }
-    BlobOutput_.emplace(Blob_);
-    BlobOutputWriter_.emplace(&*BlobOutput_);
-
-    CurrentOutputWriter_ = &*BlobOutputWriter_;
-}
-
-void TUncheckedSkiffWriter::FinishBlob()
-{
-    if (!BlobOutput_) {
-        throw TSkiffException() << "Blob finish called before blob was started";
-    }
-
-    BlobOutputWriter_->UndoRemaining();
-
-    BlobOutput_.reset();
-    BlobOutputWriter_.reset();
-
-    CurrentOutputWriter_ = &UnderlyingOutputWriter_;
-
-    WriteString32(Blob_);
-    Blob_.clear();
-}
-
 void TUncheckedSkiffWriter::Flush()
 {
-    UnderlyingOutputWriter_.UndoRemaining();
+    Underlying_.UndoRemaining();
     if (BufferedOutput_) {
         BufferedOutput_->Flush();
     }
@@ -542,9 +512,9 @@ Y_FORCE_INLINE void TUncheckedSkiffWriter::WriteSimple(T value)
 {
     if constexpr (std::is_integral_v<T>) {
         value = HostToLittle(value);
-        CurrentOutputWriter_->Write(&value, sizeof(T));
+        Underlying_.Write(&value, sizeof(T));
     } else {
-        CurrentOutputWriter_->Write(&value, sizeof(T));
+        Underlying_.Write(&value, sizeof(T));
     }
 }
 
@@ -673,17 +643,6 @@ void TCheckedSkiffWriter::WriteVariant16Tag(ui16 tag)
 {
     Validator_->OnVariant16Tag(tag);
     Writer_.WriteVariant16Tag(tag);
-}
-
-void TCheckedSkiffWriter::StartBlob()
-{
-    Validator_->OnSimpleType(EWireType::Int32);
-    Writer_.StartBlob();
-}
-
-void TCheckedSkiffWriter::FinishBlob()
-{
-    Writer_.FinishBlob();
 }
 
 void TCheckedSkiffWriter::Flush()

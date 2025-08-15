@@ -4,37 +4,25 @@
 #include "file.h"
 
 #include <util/folder/path.h>
-#include <util/generic/maybe.h>
-#include <util/generic/noncopyable.h>
 #include <util/generic/string.h>
 
-class TTempFile: TMoveOnly {
+class TTempFile {
 public:
     inline TTempFile(const TString& fname)
         : Name_(fname)
     {
     }
 
-    inline TTempFile(TTempFile&& rhs) noexcept
-        : Name_(std::move(rhs.Name_))
-    {
-        rhs.Name_.Clear();
-    }
-
     inline ~TTempFile() {
-        if (Name_.Defined()) {
-            NFs::Remove(*Name_);
-        }
+        NFs::Remove(Name());
     }
 
-    TTempFile& operator=(TTempFile&& rhs);
-
-    inline const TString& Name() const {
-        return *Name_;
+    inline const TString& Name() const noexcept {
+        return Name_;
     }
 
 private:
-    TMaybe<TString> Name_;
+    const TString Name_;
 };
 
 class TTempFileHandle: public TTempFile, public TFile {

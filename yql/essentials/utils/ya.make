@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     cast.h
-    checkpoint_map.cpp
     chunked_buffer.cpp
     chunked_buffer.h
     debug_info.cpp

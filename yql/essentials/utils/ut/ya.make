@@ -1,7 +1,6 @@
 UNITTEST_FOR(yql/essentials/utils)
 
 SRCS(
-    checkpoint_map_ut.cpp
     fp_bits_ut.cpp
     md5_stream_ut.cpp
     parse_double_ut.cpp

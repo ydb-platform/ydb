@@ -43,7 +43,6 @@ class YdbTopicWorkload(WorkloadBase):
         write_profiles: list[WriteProfile],
         tables_prefix,
         restart_interval,
-        cleanup_policy_compact,
     ):
         super().__init__(None, tables_prefix, 'topic', None)
         self.endpoint = endpoint
@@ -54,7 +53,6 @@ class YdbTopicWorkload(WorkloadBase):
         self.write_profiles = write_profiles
         self.partitions = partitions
         self.restart_interval = restart_interval
-        self.cleanup_policy_compact = cleanup_policy_compact
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
@@ -136,11 +134,8 @@ class YdbTopicWorkload(WorkloadBase):
         return run
 
     def tear_up(self):
-        subcmds = ['init', '--consumers', self.consumers, '--partitions', self.partitions]
-        if self.cleanup_policy_compact:
-            subcmds += ['--cleanup-policy-compact']
         self.cmd_run(
-            self.get_command_prefix(subcmds=subcmds)
+            self.get_command_prefix(subcmds=['init', '--consumers', self.consumers, '--partitions', self.partitions])
         )
 
     def tear_down(self):

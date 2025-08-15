@@ -21,8 +21,8 @@ class TestYdbTopicWorkload(StressFixture):
             "--consumer-threads", "2",
             "--restart-interval", "15s",
             "--partitions", "4",
-            "--write-workload", "0.01", "8000000", "2", "big_record", "1",
-            "--write-workload", "10000", "45",   "1000", "small_record", "10",
-            "--write-workload", "960", "4096",       "1", "medium_record", "10",
+            "--write-workload", "0.01", "9000000", "2", "big_record", "1",
+            "--write-workload", "8000", "45",   "1000", "small_record", "10",
+            "--write-workload", "800", "4096",       "1", "medium_record", "10",
             # MESSAGE_RATE:float MESSAGE_SIZE:int KEYS_COUNT:int KEY_PREFIX:str PRODUCERS:int
         ])

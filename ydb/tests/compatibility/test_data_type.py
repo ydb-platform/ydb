@@ -110,7 +110,7 @@ class TestDataType(RestartToAnotherVersionFixture):
         if data_type == "String" or data_type == "Yson":
             assert values_from_rows.decode("utf-8") == self.all_types[data_type](
                 values
-            ), f"{data_type}, expected {self.all_types[data_type](values)}, received {values_from_rows.decode("utf-8")}"
+            ), f"{data_type}, expected {self.all_types[data_type](values)}, received {values_from_rows.decode('utf-8')}"
         elif data_type == "Float" or data_type == "DyNumber":
             assert math.isclose(
                 float(values_from_rows), float(self.all_types[data_type](values)), rel_tol=1e-3
@@ -153,7 +153,7 @@ class TestDataType(RestartToAnotherVersionFixture):
                     sync="",
                     column_table=self.store_type == "COLUMN",
                 )
-             )
+            )
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in querys:

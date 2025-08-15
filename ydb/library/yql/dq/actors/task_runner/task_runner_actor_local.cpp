@@ -207,18 +207,20 @@ private:
 
         const auto& nextWatermark = ev->Get()->WatermarkRequest;
         if (LastWatermark < nextWatermark) {
-            LastWatermark = nextWatermark;
-            if (!WatermarkRequest) {
-                PauseInputs(*nextWatermark);
+            LastWatermark = *nextWatermark;
+            if (WatermarkRequests.empty()) {
+                    PauseInputs(*nextWatermark);
             }
+            WatermarkRequests.push_back(*nextWatermark);
         }
 
-        const bool shouldHandleWatermark = WatermarkRequest && TaskRunner->GetWatermark().WatermarkIn < *WatermarkRequest && ReadyToWatermark();
-
         if (!ev->Get()->CheckpointOnly) {
-            if (shouldHandleWatermark) {
-                LOG_T("Task runner. Inject watermark " << WatermarkRequest);
-                TaskRunner->SetWatermarkIn(*WatermarkRequest);
+            if (!WatermarkRequests.empty()) {
+                auto watermarkRequest = WatermarkRequests.front();
+                if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark()) {
+                    LOG_T("Task runner. Inject watermark " << watermarkRequest);
+                    TaskRunner->SetWatermarkIn(watermarkRequest);
+                }
             }
 
             res = TaskRunner->Run();
@@ -235,22 +237,23 @@ private:
         TMaybe<TInstant> watermarkInjectedToOutputs;
         THolder<TMiniKqlProgramState> mkqlProgramState;
         if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
-            if (WatermarkRequest == TaskRunner->GetWatermark().WatermarkIn) {
-                LOG_T("Task runner. Watermarks. Injecting requested watermark " << WatermarkRequest
+            if (!WatermarkRequests.empty() && WatermarkRequests.front() == TaskRunner->GetWatermark().WatermarkIn) {
+                auto watermarkRequest = WatermarkRequests.front();
+                WatermarkRequests.pop_front();
+                LOG_T("Task runner. Watermarks. Injecting requested watermark " << watermarkRequest
                     << " to " << OutputsWithWatermarks.size() << " outputs ");
 
                 for (const auto& channelId : OutputsWithWatermarks) {
                     NDqProto::TWatermark watermark;
-                    watermark.SetTimestampUs(WatermarkRequest->MicroSeconds());
+                    watermark.SetTimestampUs(watermarkRequest.MicroSeconds());
                     TaskRunner->GetOutputChannel(channelId)->Push(std::move(watermark));
                 }
-                ResumeByWatermark(*WatermarkRequest);
-                watermarkInjectedToOutputs = std::move(WatermarkRequest);
-                if (WatermarkRequest < LastWatermark) {
-                    LOG_T("Task runner. Re-pause on watermark " << *LastWatermark);
-                    PauseInputs(*LastWatermark);
-                } else {
-                    WatermarkRequest.Clear();
+                ResumeByWatermark(watermarkRequest);
+                watermarkInjectedToOutputs = watermarkRequest;
+                if (!WatermarkRequests.empty()) {
+                        auto nextWatermarkRequest = WatermarkRequests.front();
+                        LOG_T("Task runner. Re-pause on watermark " << nextWatermarkRequest);
+                        PauseInputs(nextWatermarkRequest);
                 }
             }
 
@@ -278,7 +281,7 @@ private:
 
         TVector<ui32> finishedInputsWithWatermarks;
         TVector<ui32> finishedSourcesWithWatermarks;
-        if (!WatermarkRequest) {
+        if (WatermarkRequests.empty()) {
             // check if any of inputs become empty and finished and drop them off
             for (ui32 i = InputsWithWatermarksPendingFinish; i < InputsWithWatermarks.size(); ) {
                 auto& channelId = InputsWithWatermarks[i];
@@ -502,7 +505,6 @@ private:
     }
 
     void PauseInputs(TInstant watermark) {
-        WatermarkRequest = watermark;
         for (const auto& inputId : InputsWithWatermarks) {
             TaskRunner->GetInputChannel(inputId)->PauseByWatermark(watermark);
         }
@@ -686,7 +688,7 @@ private:
     THolder<TDqMemoryQuota> MemoryQuota;
     ui64 ActorElapsedTicks = 0;
     TMaybe<TInstant> LastWatermark;
-    TMaybe<TInstant> WatermarkRequest;
+    std::deque<TInstant> WatermarkRequests;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

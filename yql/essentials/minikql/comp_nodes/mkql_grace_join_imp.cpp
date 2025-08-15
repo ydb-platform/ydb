@@ -945,6 +945,21 @@ void TTable::ShrinkBucket(ui64 bucket) {
     tb.JoinSlots.shrink_to_fit();
 }
 
+void TTable::BorrowPreviousBucket(ui32 bucket) {
+    BorrowBucket (bucket, (bucket == 0 ? NumberOfBuckets : bucket) - 1);
+}
+
+void TTable::BorrowBucket(ui32 bucket, ui32 previousBucket) {
+    if (JoinTable1) {
+        JoinTable1->BorrowBucket(bucket, previousBucket);
+    }
+    if (JoinTable2) {
+        JoinTable2->BorrowBucket(bucket, previousBucket);
+    }
+    std::swap(TableBuckets[bucket].LeftIds, TableBuckets[previousBucket].LeftIds);
+    std::swap(TableBuckets[bucket].JoinIds, TableBuckets[previousBucket].JoinIds);
+}
+
 void TTable::InitializeBucketSpillers(ISpiller::TPtr spiller) {
     for (size_t i = 0; i < NumberOfBuckets; ++i) {
         TableBucketsSpillers.emplace_back(spiller, 5_MB);

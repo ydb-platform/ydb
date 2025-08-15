@@ -412,6 +412,10 @@ public:
         return NextJoinedData(td1, td2, JoinTable1->TableBucketsStats.size());
     }
 
+    ui32 GetCurrentBucketIterator() const {
+        return CurrIterBucket;
+    }
+
     // Creates buckets that support spilling.
     void InitializeBucketSpillers(ISpiller::TPtr spiller);
 
@@ -453,6 +457,10 @@ public:
 
     // Forces bucket to release the space used for underlying containers.
     void ShrinkBucket(ui64 bucket);
+
+    // Borrows result memory from previous bucket
+    void BorrowPreviousBucket(ui32 bucket);
+    void BorrowBucket(ui32 bucket, ui32 previousBucket);
 
     // Clears table content
     void Clear();

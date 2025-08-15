@@ -552,6 +552,11 @@ namespace NKikimr::NStorage {
             bridgeInfo->BeingPromotedPile = &pile;
         }
 
+        for (const auto pileIdx : state.GetSuspendedPiles()) {
+            Y_ABORT_UNLESS(pileIdx < numPiles);
+            bridgeInfo->Piles[pileIdx].IsSuspended = true;
+        }
+
         return bridgeInfo;
     }
 

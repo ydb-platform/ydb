@@ -846,11 +846,33 @@ private:
         while (!*JoinCompleted ) {
 
             if ( *PartialJoinCompleted) {
-                // Returns join results (batch or full)
-                while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData)) {
-                    UnpackJoinedData(output);
-                    return EFetchResult::One;
-                }
+                do {
+                    if (JoinedTablePtr->GetCurrentBucketIterator() == NextBucketNumber) {
+                        auto& leftTable = *LeftPacker->TablePtr;
+                        auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
+                        LeftPacker->StartTime = std::chrono::system_clock::now();
+                        RightPacker->StartTime = std::chrono::system_clock::now();
+                        JoinedTablePtr->BorrowPreviousBucket(NextBucketNumber);
+                        JoinedTablePtr->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, NextBucketNumber, NextBucketNumber + 1);
+                        if (NextBucketNumber == 0) {
+                            JoinedTablePtr->ResetIterator();
+                        }
+                        ++NextBucketNumber;
+                        LeftPacker->EndTime = std::chrono::system_clock::now();
+                        RightPacker->EndTime = std::chrono::system_clock::now();
+                    }
+                    // Returns join results (batch or full)
+                    while (JoinedTablePtr->NextJoinedData(LeftPacker->JoinTupleData, RightPacker->JoinTupleData, NextBucketNumber)) {
+                        UnpackJoinedData(output);
+                        return EFetchResult::One;
+                    }
+                    if (!*HaveMoreRightRows) {
+                        LeftPacker->TablePtr->ClearBucket(NextBucketNumber - 1); // Clear bucket content on batch side
+                    }
+                    if (!*HaveMoreLeftRows) {
+                        RightPacker->TablePtr->ClearBucket(NextBucketNumber - 1); // Clear bucket content on batch side
+                    }
+                } while(NextBucketNumber != GraceJoin::NumberOfBuckets);
 
                 // Resets batch state for batch join
                 if (!*HaveMoreRightRows) {
@@ -908,12 +930,8 @@ private:
                 }
 
                 *PartialJoinCompleted = true;
-                LeftPacker->StartTime = std::chrono::system_clock::now();
-                RightPacker->StartTime = std::chrono::system_clock::now();
-                JoinedTablePtr->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                NextBucketNumber = 0;
                 JoinedTablePtr->ResetIterator();
-                LeftPacker->EndTime = std::chrono::system_clock::now();
-                RightPacker->EndTime = std::chrono::system_clock::now();
             }
 
         }
@@ -1079,6 +1097,7 @@ private:
     const bool IsSelfJoin_;
     const bool SelfJoinSameKeys_;
     const bool IsSpillingAllowed;
+    ui32 NextBucketNumber = 0;
 
     bool IsSpillingFinalized = false;
     bool IsEarlyExitDueToEmptyInput = false;

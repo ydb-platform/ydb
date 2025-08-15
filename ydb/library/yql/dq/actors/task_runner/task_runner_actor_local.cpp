@@ -209,7 +209,11 @@ private:
         if (LastWatermark < nextWatermark) {
             LastWatermark = *nextWatermark;
             if (WatermarkRequests.empty()) {
+                if (HasActiveCheckpoint) {
+                    LOG_T("Watermark delayed by checkpoint");
+                } else {
                     PauseInputs(*nextWatermark);
+                }
             }
             WatermarkRequests.push_back(*nextWatermark);
         }
@@ -251,9 +255,13 @@ private:
                 ResumeByWatermark(watermarkRequest);
                 watermarkInjectedToOutputs = watermarkRequest;
                 if (!WatermarkRequests.empty()) {
+                    if (HasActiveCheckpoint) {
+                        LOG_T("Next watermark delayed by active checkpoint");
+                    } else {
                         auto nextWatermarkRequest = WatermarkRequests.front();
                         LOG_T("Task runner. Re-pause on watermark " << nextWatermarkRequest);
                         PauseInputs(nextWatermarkRequest);
+                    }
                 }
             }
 
@@ -275,6 +283,12 @@ private:
                 } catch (const std::exception& e) {
                     LOG_E("Failed to save state: " << e.what());
                     mkqlProgramState = nullptr;
+                }
+                HasActiveCheckpoint = false;
+                if (!WatermarkRequests.empty()) {
+                    auto nextWatermarkRequest = WatermarkRequests.front();
+                    LOG_T("Task runner. Pause by watermark " << nextWatermarkRequest);
+                    PauseInputs(nextWatermarkRequest);
                 }
             }
         }
@@ -370,6 +384,7 @@ private:
             }
         }
         if (ev->Get()->PauseAfterPush) {
+            HasActiveCheckpoint = true;
             inputChannel->PauseByCheckpoint();
         }
         if (ev->Get()->WatermarkAfterPush) {
@@ -689,6 +704,7 @@ private:
     ui64 ActorElapsedTicks = 0;
     TMaybe<TInstant> LastWatermark;
     std::deque<TInstant> WatermarkRequests;
+    bool HasActiveCheckpoint = false;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

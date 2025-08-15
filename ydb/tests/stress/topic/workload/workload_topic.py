@@ -27,7 +27,7 @@ class YdbTopicWorkload(WorkloadBase):
 
     def _unpack_resource(self, name):
         self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())
-        self.working_dir = os.path.join(self.tempdir, "ydb_cli")
+        self.working_dir = os.path.join(self.tempdir.name, "ydb_cli")
         os.makedirs(self.working_dir, exist_ok=True)
         res = resource.find(name)
         path_to_unpack = os.path.join(self.working_dir, name)

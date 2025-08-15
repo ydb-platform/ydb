@@ -248,7 +248,7 @@ non_pk_types = {
     "Yson": lambda i: "[{}]".format(i),
 }
 
-types_missing_in_column_tables = {
+types_not_supported_yet_in_columnshard = {
     "Bool",
     "DyNumber",
     "UUID",

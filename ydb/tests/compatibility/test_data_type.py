@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.datashard.lib.create_table import create_table_sql_request
-from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, cleanup_type_name, format_sql_value, types_missing_in_column_tables
+from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, cleanup_type_name, format_sql_value, types_not_supported_yet_in_columnshard
 
 
 class TestDataType(RestartToAnotherVersionFixture):
@@ -21,8 +21,8 @@ class TestDataType(RestartToAnotherVersionFixture):
         self.count_rows = 30
         self.store_type = store_type
         # not all the types are supported for column tables
-        supported_pk_types = pk_types if store_type == "ROW" else {k: v for k, v in pk_types.items() if k not in types_missing_in_column_tables}
-        supported_non_pk_types = non_pk_types if store_type == "ROW" else {k: v for k, v in non_pk_types.items() if k not in types_missing_in_column_tables}
+        supported_pk_types = pk_types if store_type == "ROW" else {k: v for k, v in pk_types.items() if k not in types_not_supported_yet_in_columnshard}
+        supported_non_pk_types = non_pk_types if store_type == "ROW" else {k: v for k, v in non_pk_types.items() if k not in types_not_supported_yet_in_columnshard}
         self.all_types = {**supported_pk_types, **supported_non_pk_types}
 
         self.count_table = 0

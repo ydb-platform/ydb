@@ -96,6 +96,32 @@
 
       {% include [index.md](reference/docker/_includes/rosetta.md) %}
 
+- Docker x86_64 (macOS)
+
+   1. Создайте каталог для тестирования {{ ydb-short-name }} и используйте его в качестве текущего рабочего каталога:
+
+      ```bash
+      mkdir ~/ydbd && cd ~/ydbd
+      mkdir ydb_data
+      mkdir ydb_certs
+      ```
+
+   2. Запустите Docker-контейнер:
+
+      ```bash
+      docker run -d --rm --name ydb-local -h localhost \
+        --platform linux/amd64 \
+        -p 2135:2135 -p 2136:2136 -p 8765:8765 -p 9092:9092 \
+        -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
+        -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+        -e YDB_KAFKA_PROXY_PORT=9092 -e YDB_USE_IN_MEMORY_PDISKS=true\
+        {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+      ```
+
+      Если контейнер успешно запустился, вы увидите его идентификатор. Контейнеру может потребоваться несколько секунд для инициализации. База данных будет недоступна до окончания инициализации.
+
+      {% include [index.md](reference/docker/_includes/rosetta.md) %}
+      
 - Minikube
 
    1. Установите интерфейс командной строки Kubernetes [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl) и менеджер пакетов [Helm 3](https://helm.sh/docs/intro/install/).

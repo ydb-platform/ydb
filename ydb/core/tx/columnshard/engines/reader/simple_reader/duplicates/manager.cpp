@@ -284,7 +284,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     , Portions(MakePortionsIndex(Intervals))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
-    , FiltersCache(FILTER_CACHE_SIZE_CNT)
+    , FiltersCache(FILTER_CACHE_SIZE)
 {
 }
 
@@ -388,12 +388,13 @@ void TDuplicateManager::BuildFilterForSlice(const TPortionsSlice& slice, const s
         return;
     }
 
-    if (slice.GetRanges().size() == 1 && maxVersion >= GetPortionVerified(mainPortionId)->RecordSnapshotMax(maxVersion)) {
+    if (slice.GetRanges().size() == 1) {
         NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, mainMapInfo.GetRows().NumRows());
         AFL_VERIFY(BuildingFilters.emplace(mainMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>({constructor})).second);
         Send(SelfId(),
             new NPrivate::TEvFilterConstructionResult(THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>({ { mainMapInfo, filter } })));
+        Counters->OnRowsMerged(0, 0, mainMapInfo.GetRows().NumRows());
         return;
     }
 
@@ -402,7 +403,6 @@ void TDuplicateManager::BuildFilterForSlice(const TPortionsSlice& slice, const s
         IIndexInfo::AddSnapshotColumns(batch, maxVersion, std::numeric_limits<ui64>::max());
         return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
     }();
-
     const std::shared_ptr<TBuildDuplicateFilters> task = std::make_shared<TBuildDuplicateFilters>(
         PKSchema, maxVersionBatch, slice.GetEnd().GetKey(), slice.GetEnd().GetIsLast(), Counters, SelfId());
     for (const auto& [source, segment] : slice.GetRanges()) {

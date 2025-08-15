@@ -29,8 +29,15 @@ class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 private:
     class TPortionsSlice;
 
+    class TFilterSizeProvider {
+    public:
+        size_t operator()(const NArrow::TColumnFilter& filter) {
+            return filter.GetDataSize();
+        }
+    };
+
 private:
-    inline static const ui64 FILTER_CACHE_SIZE_CNT = 100;
+    inline static const ui64 FILTER_CACHE_SIZE = 10000000;  // 10 MiB
 
     inline static TAtomicCounter NextRequestId = 0;
 
@@ -43,7 +50,7 @@ private:
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
-    TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
+    TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
     THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
     ui64 ExpectedIntersectionCount = 0;
 

@@ -684,9 +684,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
 
     Y_UNIT_TEST(RestoreScriptPhysicalGraphOnRetryWithCheckpoints) {
-        constexpr char writeBucket[] = "test_bucket_restore_script_physical_graph_on_retry";
-        CreateBucket(writeBucket);
-
         const auto pqGateway = CreateMockPqGateway();
 
        // constexpr char topicName[] = "restoreScriptTopicOnRetry";

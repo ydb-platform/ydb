@@ -177,6 +177,8 @@ namespace NKikimr::NEvWrite {
             LastOverloadSeqNo = 0;
         }
 
+        Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
+
         TBase::Die(ctx);
     }
 

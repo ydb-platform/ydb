@@ -97,6 +97,9 @@ class TestCompatibility(RestartToAnotherVersionFixture):
         if date64 and min(self.versions) < (25, 1):
             pytest.skip("date64 is not supported in 24-4")
 
+        if store_type == "column" and min(self.versions) < (25, 1) and max(self.versions) >= (25, 1):
+            pytest.skip("no compatibility with 24-4")
+
         if date64:
             date_args = ["--datetime-types=dt64"]
         else:

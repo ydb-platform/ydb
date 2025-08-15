@@ -269,8 +269,6 @@ public:
         return false;
     }
 
-    TString LogPrefix() const;
-
 protected:
 
     TMaybe<ui32> GetWidth() const {

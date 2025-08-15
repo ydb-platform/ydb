@@ -33,10 +33,6 @@ public:
         return PopStats;
     }
 
-    TString LogPrefix() const {
-        return TStringBuilder() << "SrcStageId: " << PushStats.SrcStageId << " ChannelId: " << PushStats.ChannelId << ". ";
-    }
-
     [[nodiscard]]
     bool Empty() const override {
         return Batches.empty() || IsPaused() && BeforeBarrier.Batches == 0;

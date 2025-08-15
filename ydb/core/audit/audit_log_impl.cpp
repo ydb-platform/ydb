@@ -72,7 +72,7 @@ void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBacken
                 log.data(),
                 log.length()
             ));
-        } catch (const yexception& e) {
+        } catch (const std::exception& e) {
             LOG_E("WriteLog: unable to write audit log (error: " << e.what() << ")");
         }
     }

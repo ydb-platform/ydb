@@ -67,7 +67,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 21448:Added support for a user-defined Certificate Authority (CA) in asynchronous replication. [#21448](https://github.com/ydb-platform/ydb/pull/21448) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 * 21420:Topics are now created with the number of partitions equal to datashards/16 instead of 1 partition. This improves table replication speed by avoiding delays from autopartitioning. [#21420](https://github.com/ydb-platform/ydb/pull/21420) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 21391:Implemented an optimized HashV2 hash function that improves data distribution and enhances query execution performance. This mode is enabled by setting the `table_service_config: default_hash_shuffle_func_type: HASH_V2` parameter in the cluster configuration. [#21391](https://github.com/ydb-platform/ydb/pull/21391) ([Ivan](https://github.com/abyss7))
-* 21336:Introspection consists of human-readable strings when the stat mode is "Full" or higher. It's possible to manually override the number of tasks using pragma `OverridePlanner`. [#21336](https://github.com/ydb-platform/ydb/pull/21336) ([Ivan](https://github.com/abyss7))
 * 20303:Add `--iam-token-file` argument to ydb-dstool. [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
 
 ### Bug fixes

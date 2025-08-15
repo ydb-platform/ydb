@@ -764,7 +764,6 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         head.PartNo = dataKeysBody.back().Key.GetPartNo();
         dataKeysBody.pop_back();
     }
-
     for (const auto& p : dataKeysBody) {
         Y_ABORT_UNLESS(!p.Key.IsHead());
     }
@@ -789,9 +788,7 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
     for (auto& p : Partition()->HeadKeys) {
         keys.push_back({p.Key.Data(), p.Key.Size()});
     }
-    Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount,
-                   "keys.size=%" PRISZT ", TotalMaxCount=%" PRIu32,
-                   keys.size(), Partition()->TotalMaxCount);
+    Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount);
     if (keys.empty()) {
         Done(ctx);
         return;
@@ -847,9 +844,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
                 Y_ABORT_UNLESS(offset + 1 >= Partition()->StartOffset);
                 Y_ABORT_UNLESS(offset < Partition()->EndOffset);
-                Y_ABORT_UNLESS(size == read.GetValue().size(),
-                               "size=%" PRIu32 ", read.GetValue().size()=%" PRISZT,
-                               size, read.GetValue().size());
+                Y_ABORT_UNLESS(size == read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
                     head.AddBatch(it.GetBatch());

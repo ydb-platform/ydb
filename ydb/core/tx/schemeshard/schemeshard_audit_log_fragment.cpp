@@ -61,6 +61,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "CREATE TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
         return "ALTER TABLE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumn:
+        return "DROP COLUMN";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
         return "DROP TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables:
@@ -314,6 +316,7 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumn:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterTable().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:

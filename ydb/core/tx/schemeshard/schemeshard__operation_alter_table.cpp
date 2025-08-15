@@ -699,7 +699,10 @@ ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState:
 }
 
 TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
-    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+    Y_ABORT_UNLESS(
+        tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable ||
+        tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropColumn
+    );
 
     const auto& alter = tx.GetAlterTable();
 

@@ -901,9 +901,8 @@ namespace NYdb::NConsoleClient {
             throw TMisuseException() << "Please specify either --consumer or --partition-ids to read without consumer";
         }
 
-        if (Offset_) {
-            Y_ENSURE_EX(PartitionIds_.size() == 1,
-                        TMisuseException() << "Please specify exactly one partition id with the '--partition-ids' option from which reading will be performed, starting from the specified offset.");
+        if (Offset_ && !(PartitionIds_.size() == 1)) {
+            throw TMisuseException() << "Please specify exactly one partition id with the '--partition-ids' option from which reading will be performed, starting from the specified offset.";
         }
     }
 

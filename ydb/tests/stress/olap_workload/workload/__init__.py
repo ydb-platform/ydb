@@ -8,9 +8,9 @@ from enum import Enum
 from ydb.tests.datashard.lib.types_of_variables import non_pk_types, pk_types, types_not_supported_yet_in_columnshard
 from ydb.tests.stress.common.common import WorkloadBase
 
-supported_pk_types = pk_types.keys() - types_not_supported_yet_in_columnshard
+supported_pk_types = list(pk_types.keys() - types_not_supported_yet_in_columnshard)
 
-supported_types = (pk_types.keys() | non_pk_types.keys()) - types_not_supported_yet_in_columnshard
+supported_types = list((pk_types.keys() | non_pk_types.keys()) - types_not_supported_yet_in_columnshard)
 
 
 class WorkloadTablesCreateDrop(WorkloadBase):

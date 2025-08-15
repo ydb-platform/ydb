@@ -590,8 +590,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 }
-            } else if (pair.first == "_cleanup_policy") {
-                config->SetEnableCompactification(pair.second == "compact");
             } else {
                 error = TStringBuilder() << "Attribute " << pair.first << " is not supported";
                 return Ydb::StatusIds::BAD_REQUEST;

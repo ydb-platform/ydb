@@ -269,6 +269,7 @@ TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext& ctx, const TK
 
 TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
+    return node;
     if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->HasOptEnableOlapPushdownAggregate()) {
         return node;
     }

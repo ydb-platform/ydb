@@ -138,7 +138,7 @@ class YdbTopicWorkload(WorkloadBase):
     def tear_up(self):
         subcmds = ['init', '--consumers', self.consumers, '--partitions', self.partitions]
         if self.cleanup_policy_compact:
-            subcmds += ['--cleanup-policy-compact']
+            subcmds += ['--cleanup_policy_compact']
         self.cmd_run(
             self.get_command_prefix(subcmds=subcmds)
         )

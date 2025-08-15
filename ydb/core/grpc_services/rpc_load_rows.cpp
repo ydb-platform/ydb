@@ -29,21 +29,6 @@ using namespace Ydb;
 
 namespace {
 
-bool CheckNoDecimalTypes(const std::shared_ptr<arrow::RecordBatch>& batch, TString& errorMessage) {
-    if (!batch) {
-        return true;
-    }
-
-    for (i32 i = 0; i < batch->num_columns(); ++i) {
-        auto column = batch->column(i);
-        if (column->type()->id() == arrow::Type::DECIMAL128) {
-            errorMessage = "Decimal type is not supported";
-            return false;
-        }
-    }
-    return true;
-}
-
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
 bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, const NScheme::TTypeInfo* tableColumnType = nullptr) {
     switch (type.id()) {
@@ -299,9 +284,6 @@ private:
 
     bool ExtractBatch(TString& errorMessage) override {
         Batch = RowsToBatch(AllRows, errorMessage);
-        if (!CheckNoDecimalTypes(Batch, errorMessage)) {
-            return false;
-        }
 
         return Batch.get();
     }
@@ -504,10 +486,6 @@ private:
                     return false;
                 }
 
-                if (!CheckNoDecimalTypes(Batch, errorMessage)) {
-                    return false;
-                }
-
                 break;
             }
             case EUploadSource::CSV:
@@ -526,10 +504,6 @@ private:
 
                 if (!Batch->num_rows()) {
                     errorMessage = "No rows in CSV";
-                    return false;
-                }
-
-                if (!CheckNoDecimalTypes(Batch, errorMessage)) {
                     return false;
                 }
 

@@ -1,8 +1,6 @@
 #include "arrow_helpers.h"
 #include "permutations.h"
 
-#include "common/adapter.h"
-#include "serializer/abstract.h"
 #include "serializer/native.h"
 #include "serializer/stream.h"
 #include "switch/switch_type.h"
@@ -87,7 +85,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
         case NScheme::NTypeIds::Date32:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
         case NScheme::NTypeIds::Decimal:
-            return std::make_shared<arrow::StringType>();
+            return std::make_shared<arrow::FixedSizeBinaryType>(16);
         default:
             return GetArrowType(typeId);
     }

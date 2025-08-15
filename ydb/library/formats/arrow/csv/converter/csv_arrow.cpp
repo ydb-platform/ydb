@@ -7,6 +7,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
 #include <util/string/join.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal_serialize.h>
 
 namespace NKikimr::NFormats {
 
@@ -64,11 +65,14 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
 
         for (const auto& col: columns) {
             ResultColumns.push_back(col.Name);
-            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
-            OriginalColumnTypes[col.Name] = col.ArrowType;
             if (col.DecimalParams) {
+                ConvertOptions.column_types[col.Name] = std::make_shared<arrow::StringType>();
                 DecimalParams[col.Name] = *col.DecimalParams;
+            } else {
+                ConvertOptions.column_types[col.Name] = col.CsvArrowType;
             }
+
+            OriginalColumnTypes[col.Name] = col.ArrowType;
         }
     } else if (!columns.empty()) {
         // !autogenerate + !column_names.empty() => specified columns
@@ -76,7 +80,12 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
 
         for (const auto& col: columns) {
             ReadOptions.column_names.push_back(col.Name);
-            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
+            if (col.DecimalParams) {
+                ConvertOptions.column_types[col.Name] = std::make_shared<arrow::StringType>();
+                DecimalParams[col.Name] = *col.DecimalParams;
+            } else {
+                ConvertOptions.column_types[col.Name] = col.CsvArrowType;
+            }
             OriginalColumnTypes[col.Name] = col.ArrowType;
         }
 #if 0
@@ -171,13 +180,9 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                     }
 
                     auto decimalValue = NYql::NDecimal::FromString(value, precision, scale);
-                    auto pair = NYql::NDecimal::MakePair(decimalValue);
                     char bytes[16] = {0};
-                    for (int i = 0; i < 8; ++i) {
-                        bytes[i] = (pair.second >> (56 - i * 8)) & 0xFF;
-                        bytes[i + 8] = (pair.first >> (56 - i * 8)) & 0xFF;
-                    }
-
+                    size_t serializedSize = NYql::NDecimal::Serialize(decimalValue, bytes);
+                    Y_ABORT_UNLESS(serializedSize <= 16);
                     Y_ABORT_UNLESS(builder.Append(bytes).ok());
                 }
             }

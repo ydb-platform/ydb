@@ -58,13 +58,14 @@ class TestDataType(RestartToAnotherVersionFixture):
 
     def write_data(self):
         querys = []
+        unwrap_after_cast = self.store_type == "COLUMN"
         for i in range(self.count_table):
             values = []
             for key in range(1, self.count_rows + 1):
                 values.append(
                     f'''(
-                        {", ".join([format_sql_value(self.pk_types[i][type_name](key), type_name) for type_name in self.pk_types[i].keys()])},
-                        {", ".join([format_sql_value(self.all_types[type_name](key), type_name) for type_name in self.all_types.keys()])}
+                        {", ".join([format_sql_value(self.pk_types[i][type_name](key), type_name, unwrap_after_cast) for type_name in self.pk_types[i].keys()])},
+                        {", ".join([format_sql_value(self.all_types[type_name](key), type_name, unwrap_after_cast) for type_name in self.all_types.keys()])}
                         )
                         '''
                 )

@@ -2,18 +2,20 @@ from uuid import UUID
 from datetime import datetime
 
 
-def format_sql_value(value, type_name):
+def format_sql_value(value, type_name, unwrap_after_cast: bool = False):
     if type_name == "Datetime64" or type_name == "Datetime":
         value = value.strftime("%Y-%m-%dT%H:%M:%SZ")
     if type_name == "String" or type_name == "Utf8":
         return f"'{value}'"
 
-    # Use quoted values for types that require string representation
-    if type_name in types_requiring_quotes_in_cast:
-        return f"Unwrap(CAST('{value}' AS {type_name}))"
-
-    # Use unquoted values for numeric and other types
-    return f"Unwrap(CAST({value} AS {type_name}))"
+    casted_value = (
+        # Use quoted values for types that require string representation
+        f"CAST('{value}' AS {type_name})"
+        if type_name in types_requiring_quotes_in_cast
+        # Use unquoted values for numeric and other types
+        else f"CAST({value} AS {type_name})"
+    )
+    return f"Unwrap({casted_value})" if unwrap_after_cast else casted_value
 
 
 def generate_date_value(i):

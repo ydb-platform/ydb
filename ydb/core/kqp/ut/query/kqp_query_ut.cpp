@@ -552,8 +552,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(QuerySkipHasNoColumns) {
-        return; // https://github.com/ydb-platform/ydb/issues/22493
-
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

@@ -55,7 +55,7 @@ def create_table_sql_request(
             )
     """
     if column_table:
-        sql_create += f"""
+        sql_create += """
             WITH (
                 STORE = COLUMN
             )

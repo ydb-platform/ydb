@@ -1,10 +1,6 @@
 # Вставка данных с помощью INSERT
 
-{% note warning %}
-
-{% include [column-and-row-tables-in-read-only-tx](../../concepts/_includes/limitation-column-row-in-read-only-tx.md) %}
-
-{% endnote %}
+{% include [column-and-row-tables-in-read-only-tx](../../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
 
 Добавьте данные в таблицу с помощью конструкции [INSERT INTO](../../yql/reference/syntax/insert_into.md).
 

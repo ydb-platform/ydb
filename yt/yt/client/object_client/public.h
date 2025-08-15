@@ -72,7 +72,7 @@ using NElection::NullCellId;
 
 //! Identifies a particular cell of YT cluster.
 //! Must be globally unique to prevent object ids from colliding.
-YT_DEFINE_STRONG_TYPEDEF(TCellTag, ui16)
+YT_DEFINE_STRONG_TYPEDEF(TCellTag, ui16);
 
 //! The minimum valid cell tag.
 constexpr auto MinValidCellTag = TCellTag(0x0001);
@@ -155,7 +155,9 @@ DEFINE_ENUM(EObjectType,
     ((OverreplicatedChunkMap)                       (404))
     ((UnderreplicatedChunkMap)                      (405))
     ((DataMissingChunkMap)                          (419))
+    ((DataMissingChunksSampleMap)                   (466))
     ((ParityMissingChunkMap)                        (420))
+    ((ParityMissingChunksSampleMap)                 (467))
     ((OldestPartMissingChunkMap)                    (428))
     ((QuorumMissingChunkMap)                        (424))
     ((UnsafelyPlacedChunkMap)                       (120))

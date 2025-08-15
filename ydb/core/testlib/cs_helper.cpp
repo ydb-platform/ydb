@@ -55,7 +55,8 @@ void THelperSchemaless::CreateTestOlapTable(TString storeOrDirName, TString sche
     ExecuteModifyScheme(op);
 }
 
-void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus) const {
+void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch,
+    const Ydb::StatusIds_StatusCode& expectedStatus, const TString& expectedIssuePrefix) const {
     auto* runtime = Server.GetRuntime();
 
     UNIT_ASSERT(batch);
@@ -71,19 +72,21 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
     request.set_table(testTable);
 
     std::atomic<size_t> responses = 0;
-    using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest,
-        Ydb::Table::BulkUpsertResponse>;
+    using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
     auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(std::move(request), "", "", runtime->GetActorSystem(0));
     future.Subscribe([&](const NThreading::TFuture<Ydb::Table::BulkUpsertResponse> f) mutable {
         responses.fetch_add(1);
         auto op = f.GetValueSync().operation();
+        TStringBuilder issues;
         if (op.status() != Ydb::StatusIds::SUCCESS) {
             for (auto& issue : op.issues()) {
-                Cerr << issue.message() << " ";
+                issues << issue.message() << " ";
             }
-            Cerr << "\n";
+            issues << "\n";
         }
+        Cerr << issues;
         UNIT_ASSERT_VALUES_EQUAL(op.status(), expectedStatus);
+        UNIT_ASSERT(issues.StartsWith(expectedIssuePrefix));
     });
 
     TDispatchOptions options;

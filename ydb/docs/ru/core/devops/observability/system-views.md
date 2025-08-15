@@ -8,7 +8,7 @@
 
 {% note info %}
 
-Аналогичные системные представления существуют и для происходящего внутри конкретной базы данных, они описаны в [отдельной статье для DBA](../../dev/system-views.md).
+Аналогичные системные представления существуют и для происходящего внутри конкретной базы данных, они описаны в [отдельной статье для разработчиков](../../dev/system-views.md).
 
 {% endnote %}
 
@@ -29,7 +29,7 @@
 |-----------------------|-----------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | NodeId                | Uint32    | 0        | Идентификатор узла, на котором запущен PDisk                                                                                                                     |
 | PDiskId               | Uint32    | 1        | Идентификатор PDisk (уникален внутри узла)                                                                                                                       |
-| Type                  | String    |          | Тип носителя (ROT, SSD, NVME)                                                                                                                                    |
+| Type                  | String    |          | Тип носителя (`ROT`, `SSD`, `NVME`)                                                                                                                                    |
 | Kind                  | Uint64    |          | Числовой идентификатор, задаваемый пользователем, который нужен для объединения дисков с одинаковым типом носителя в разные подгруппы                            |
 | Path                  | String    |          | Путь к блочному устройству внутри машины                                                                                                                         |
 | Guid                  | Uint64    |          | Уникальный идентификатор, генерируемый случайно при добавлении диска в систему, предназначенный для предотвращения потери данных в случае перемены дисков местами |
@@ -38,15 +38,21 @@
 | ReadCentric           | Bool      |          | Наличие метки "ReadCentric", устанавливаемой вручную при создании PDisk. Может использоваться для фильтрации дисков при создании новых групп.                    |
 | AvailableSize         | Uint64    |          | Число доступных для выделения байт на PDisk                                                                                                                      |
 | TotalSize             | Uint64    |          | Общее число байт на PDisk                                                                                                                                        |
-| Status                | String    |          | Режим работы PDisk, который влияет на его участие в выделении групп (ACTIVE, INACTIVE, BROKEN, FAULTY, TO_BE_REMOVED)                                            |
-| StatusChangeTimestamp | Timestamp |          | Время, когда последний раз поменялся Status; если NULL, то Status не менялся с момента создания PDisk                                                            |
-| ExpectedSlotCount     | Uint32    |          | Максимальное число VSlot, которое может быть создано на этом PDisk. Либо заданное пользователем, либо вычисленное из параметра InferPDiskSlotCountFromUnitSize.  |
-| NumActiveSlots        | Uint32    |          | Количество занятых VSlot с учетом значений GroupSizeInUnits у VDisk                                                                                              |
-| SlotSizeInUnits       | Uint32    |          | Размер VSlot в условных единицах. Либо заданный пользователем, либо вычисленный из параметра InferPDiskSlotCountFromUnitSize.                                    |
-| DecommitStatus        | String    |          | Статус вывода из эксплуатации ([декоммиссии](../deployment-options/manual/decommissioning.md)) PDisk (DECOMMIT_NONE, DECOMMIT_PENDING, DECOMMIT_IMMINENT, DECOMMIT_REJECTED)                                                      |
-| InferPDiskSlotCountFromUnitSize  | Uint64    |          | Размер VSlot в байтах, исходя из которого вычисляются ExpectedSlotCount и SlotSizeInUnits если не заданы пользователем. |
+| Status                | String    |          | Режим работы PDisk, который влияет на его участие в выделении групп (`ACTIVE`, `INACTIVE`, `BROKEN`, `FAULTY`, `TO_BE_REMOVED`)                                            |
+| StatusChangeTimestamp | Timestamp |          | Время, когда последний раз поменялся `Status`; если `NULL`, то `Status` не менялся с момента создания PDisk                                                            |
+| ExpectedSlotCount     | Uint32    |          | Максимальное число VSlot, которое может быть создано на этом PDisk. Либо заданное пользователем, либо вычисленное из параметра `InferPDiskSlotCountFromUnitSize`.  |
+| NumActiveSlots        | Uint32    |          | Количество занятых VSlot с учетом значений `GroupSizeInUnits` у VDisk                                                                                              |
+| SlotSizeInUnits       | Uint32    |          | Размер VSlot в условных единицах. Либо заданный пользователем, либо вычисленный из параметра `InferPDiskSlotCountFromUnitSize`.                                    |
+| DecommitStatus        | String    |          | Статус вывода из эксплуатации ([декоммиссии](../deployment-options/manual/decommissioning.md)) PDisk (`DECOMMIT_NONE`, `DECOMMIT_PENDING`, `DECOMMIT_IMMINENT`, `DECOMMIT_REJECTED`)                                                      |
+| InferPDiskSlotCountFromUnitSize  | Uint64    |          | Размер VSlot в байтах, исходя из которого вычисляются `ExpectedSlotCount` и `SlotSizeInUnits` если не заданы пользователем. |
 
-Вычисленные значения ExpectedSlotCount и SlotSizeInUnits определяются по формуле `ExpectedSlotCount * SlotSizeInUnits = TotalSize / InferPDiskSlotCountFromUnitSize`, где `SlotSizeInUnits = 2^N` выбирается так, чтобы выполнялось условие `ExpectedSlotCount <= 16`.
+Вычисленные значения ExpectedSlotCount и SlotSizeInUnits определяются по формуле:
+
+$$
+\text{ExpectedSlotCount} \times \text{SlotSizeInUnits} = \frac{\text{TotalSize}}{\text{InferPDiskSlotCountFromUnitSize}}
+$$
+
+Где $\text{SlotSizeInUnits} = 2^N$ выбирается так, чтобы выполнялось условие $\text{ExpectedSlotCount} \leq 16$.
 
 ### ds_vslots
 
@@ -62,10 +68,10 @@
 | VDisk           | Uint32  |          | Относительный номер VSlot внутри домена отказа (fail domain)                            |
 | AllocatedSize   | Uint64  |          | Число байт, которые VSlot занимает на PDisk                                             |
 | AvailableSize   | Uint64  |          | Число байт, доступных для выделения данному VSlot                                       |
-| Status          | String  |          | Состояние запущенного VDisk в данном VSlot (INIT_PENDING, REPLICATING, READY, ERROR)    |
-| Kind            | String  |          | Предустановленная настройка режима работы VDisk (Default, Log, ...)                     |
+| Status          | String  |          | Состояние запущенного VDisk в данном VSlot (`INIT_PENDING`, `REPLICATING`, `READY`, `ERROR`)    |
+| Kind            | String  |          | Предустановленная настройка режима работы VDisk (`Default`, `Log`, ...)                     |
 
-Стоит заметить, что кортеж (NodeId, PDiskId) формируют внешний ключ к представлению `ds_pdisks`, а (GroupId) – к представлению `ds_groups`.
+Стоит заметить, что кортеж `(NodeId, PDiskId)` формируют внешний ключ к представлению `ds_pdisks`, а `(GroupId)` – к представлению `ds_groups`.
 
 ### ds_groups
 
@@ -84,13 +90,13 @@
 | PutTabletLogLatency | Interval |          | 90 процентиль времени выполнения запроса PutTabletLog                                                      |
 | PutUserDataLatency  | Interval |          | 90 процентиль времени выполнения запроса PutUserData                                                       |
 | GetFastLatency      | Interval |          | 90 процентиль времени выполнения запроса GetFast                                                           |
-| OperatingStatus     | String   |          | Статус группы по последним отчетам VDisk (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED)                 |
-| ExpectedStatus      | String   |          | Статус, основанный не только на операционном отчете, но и на статусе PDisk и планах (UNKNOWN, FULL, PARTIAL, DEGRADED, DISINTEGRATED) |
+| OperatingStatus     | String   |          | Статус группы по последним отчетам VDisk (`UNKNOWN`, `FULL`, `PARTIAL`, `DEGRADED`, `DISINTEGRATED`)                 |
+| ExpectedStatus      | String   |          | Статус, основанный не только на операционном отчете, но и на статусе PDisk и планах (`UNKNOWN`, `FULL`, `PARTIAL`, `DEGRADED`, `DISINTEGRATED`) |
 | GroupSizeInUnits    | Uint32   |          | Размер группы в абстрактных единицах. Пропорционально ему VDisk получают квоту на хранение. |
 
-Количество VSlot, занимаемых VDisk, определяется как `ceil(VDisk.GroupSizeInUnits / PDisk.SlotSizeInUnits)`.
+Количество VSlot, занимаемых VDisk, определяется как $ceil(\frac{\text{VDisk.GroupSizeInUnits}}{\text{PDisk.SlotSizeInUnits}})$.
 
-В данном представлении кортеж (BoxId, StoragePoolId) формирует внешний ключ к представлению `ds_storage_pools`.
+В данном представлении кортеж `(BoxId, StoragePoolId)` формирует внешний ключ к представлению `ds_storage_pools`.
 
 ### ds_storage_pools
 
@@ -104,10 +110,10 @@
 | VDiskKind      | String  |          | Предустановленная настройка режима работы всех VDisk для данного пула хранения                               |
 | Kind           | String  |          | Строковое описание предназначения пула, задаваемое пользователем, также может использоваться для фильтрации |
 | NumGroups      | Uint32  |          | Количество групп внутри данного пула хранения                                                               |
-| EncryptionMode | Uint32  |          | Настройка шифрования данных для всех групп (аналогично ds_groups.EncryptionMode)                            |
-| SchemeshardId  | Uint64  |          | Идентификатор SchemeShard объекта схемы, к которому относится данный пул хранения (сейчас всегда NULL)      |
+| EncryptionMode | Uint32  |          | Настройка шифрования данных для всех групп (аналогично `ds_groups.EncryptionMode`)                            |
+| SchemeshardId  | Uint64  |          | Идентификатор [SchemeShard](../../concepts/glossary.md#scheme-shard) объекта схемы, к которому относится данный пул хранения (сейчас всегда `NULL`)      |
 | PathId         | Uint64  |          | Идентификатор узла объекта схемы внутри указанного SchemeShard, к которому относится данный пул хранения    |
-| DefaultGroupSizeInUnits | Uint32   |          | Значение GroupSizeInUnits, наследуемое группами при добавлении новых групп в пул                                   |
+| DefaultGroupSizeInUnits | Uint32   |          | Значение `GroupSizeInUnits`, наследуемое группами при добавлении новых групп в пул                                   |
 
 ### ds_storage_stats
 
@@ -119,12 +125,12 @@
 | PDiskFilter             | String  | 1        | Строковое описание фильтров, отбирающих PDisk для создания групп (например, по типу носителя)   |
 | ErasureSpecies          | String  | 2        | Режим кодирования избыточности, по которому собирается статистика                               |
 | CurrentGroupsCreated    | Uint32  |          | Число созданных групп с указанными характеристиками                                             |
-| CurrentAllocatedSize    | Uint64  |          | Суммарное занятое место по всем группам, входящим в CurrentGroupsCreated                        |
-| CurrentAvailableSize    | Uint64  |          | Суммарное доступное для выделения место по всем группам, входящим в CurrentGroupsCreated        |
+| CurrentAllocatedSize    | Uint64  |          | Суммарное занятое место по всем группам, входящим в `CurrentGroupsCreated`                        |
+| CurrentAvailableSize    | Uint64  |          | Суммарное доступное для выделения место по всем группам, входящим в `CurrentGroupsCreated`        |
 | AvailableGroupsToCreate | Uint32  |          | Число групп с указанными характеристиками, которое можно создать с учётом необходимости резерва |
-| AvailableSizeToCreate   | Uint64  |          | Число доступных байт, которое получится при создании всех групп из AvailableGroupsToCreate      |
+| AvailableSizeToCreate   | Uint64  |          | Число доступных байт, которое получится при создании всех групп из `AvailableGroupsToCreate`      |
 
-Здесь стоит заметить, что AvailableGroupsToCreate показывают максимальное количество групп, которое можно создать, если не создавать другие виды групп. Таким образом, при расширении одного пула хранения могут поменяться числа AvailableGroupsToCreate в нескольких строках статистики.
+Здесь стоит заметить, что `AvailableGroupsToCreate` показывают максимальное количество групп, которое можно создать, если не создавать другие виды групп. Таким образом, при расширении одного пула хранения могут поменяться числа `AvailableGroupsToCreate` в нескольких строках статистики.
 
 {% note info %}
 

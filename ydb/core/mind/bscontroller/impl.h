@@ -79,6 +79,8 @@ public:
     class TTxUpdateNodeDrives;
     class TTxUpdateNodeDisconnectTimestamp;
     class TTxUpdateShred;
+    class TTxCheckUnsynced;
+    class TTxUpdateBridgeGroupInfo;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -873,8 +875,8 @@ public:
 
         bool IsLayoutCorrect(const TGroupFinder& finder) const {
             if (BridgeGroupInfo) {
-                for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
-                    const TGroupInfo *group = finder(TGroupId::FromValue(groupId));
+                for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    const TGroupInfo *group = finder(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
                     if (!group || !group->IsLayoutCorrect(finder)) {
                         return false;
                     }
@@ -888,8 +890,8 @@ public:
         TGroupStatus GetStatus(const TGroupFinder& finder) const {
             if (BridgeGroupInfo) {
                 std::optional<TGroupStatus> res;
-                for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
-                    const TGroupInfo *group = finder(TGroupId::FromValue(groupId));
+                for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    const TGroupInfo *group = finder(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
                     if (group) {
                         if (const TGroupStatus& s = group->GetStatus(finder); res) {
                             res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
@@ -918,6 +920,7 @@ public:
         Table::NextPDiskID::Type NextPDiskID;
         TInstant LastConnectTimestamp;
         TInstant LastDisconnectTimestamp;
+        TMonotonic DisconnectedTimestampMono;
         // in-mem only
         std::map<TString, NPDisk::TDriveData> KnownDrives;
         THashSet<TGroupId> WaitingForGroups;
@@ -1533,6 +1536,7 @@ private:
     bool Loaded = false;
     bool EnableConfigV2 = false;
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
+    TMonotonic LoadedAt;
 
     struct TLifetimeToken {};
     std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
@@ -1559,9 +1563,6 @@ private:
     class TConsoleInteraction;
     std::unique_ptr<TConsoleInteraction> ConsoleInteraction;
 
-    TBackoffTimer InvokeOnRootTimer{10, 3000};
-    std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot> InvokeOnRootCmd;
-
     struct TEvPrivate {
         enum EEv {
             EvUpdateSystemViews = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -1574,6 +1575,7 @@ private:
             EvUpdateHostRecords,
             EvUpdateShredState,
             EvCommitMetrics,
+            EvCheckSyncerDisconnectedNodes,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1773,7 +1775,6 @@ private:
     bool HostConfigEquals(const THostConfigInfo& left, const NKikimrBlobStorage::TDefineHostConfig& right) const;
     void ApplyBscSettings(const NKikimrConfig::TBlobStorageConfig& bsConfig);
     void ApplyStorageConfig(bool ignoreDistconf = false);
-    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev);
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> BuildConfigRequestFromStorageConfig(
         const NKikimrBlobStorage::TStorageConfig& storageConfig, const THostRecordMap& hostRecords, bool validationMode=false);
 
@@ -2000,6 +2001,45 @@ private:
         const NKikimrBlobStorage::TConfigRequest& cmd, std::deque<ui64> expectedSlotSize,
         NKikimrBlobStorage::TConfigResponse::TStatus& status);
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Bridge operation
+
+    static constexpr TDuration DisconnectedSyncerReactionTime = TDuration::Seconds(10);
+
+    std::set<std::tuple<TGroupId, TNodeId, TGroupId>> SyncersTargetNodeSource;
+    std::set<std::tuple<TNodeId, TGroupId, TGroupId>> SyncersNodeTargetSource;
+    THashSet<TGroupId> TargetGroupsInCommit;
+
+    void CheckUnsyncedBridgePiles();
+
+    void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
+        TSet<ui32>& groupIdsToRead);
+
+    void CheckSyncerDisconnectedNodes();
+
+    void StartRequiredSyncers();
+
+    void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
+        TSet<ui32>& groupIdsToRead);
+
+    void Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev);
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Node warden interoperation
+
+    ui64 NextInvokeOnRootCookie = 1;
+    struct TInvokeOnRootCommand {
+        NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot Request;
+        std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult&)> Callback;
+        TBackoffTimer Timer{10, 3000};
+    };
+    THashMap<ui64, TInvokeOnRootCommand> InvokeOnRootCommands;
+
+    void InvokeOnRoot(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&& request,
+        std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult&)>&& callback);
+
+    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_CONTROLLER_ACTOR;
@@ -2153,6 +2193,7 @@ public:
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
         Loaded = true;
+        LoadedAt = TActivationContext::Monotonic();
         ApplyStorageConfig();
 
         for (const auto& [id, info] : GroupMap) {
@@ -2173,18 +2214,49 @@ public:
 
         ShredState.Initialize();
         CommitMetrics();
+        CheckSyncerDisconnectedNodes();
     }
 
     void UpdatePDisksCounters() {
-        ui32 numWithoutSlotCount = 0;
+        ui32 numWithoutExpectedSlotCount = 0;
         ui32 numWithoutSerial = 0;
+        ui32 numWithoutInferredSettings = 0;
+        ui32 numWithInferredSettingsUnknown = 0;
+        ui32 numVDisksTooSmall = 0;
+        ui32 numVDisksTooLarge = 0;
         for (const auto& [id, pdisk] : PDisks) {
-            numWithoutSlotCount += !pdisk->HasExpectedSlotCount;
+            ui32 effectiveSlotCount, effectiveSlotSizeInUnits;
+            pdisk->ExtractInferredPDiskSettings(effectiveSlotCount, effectiveSlotSizeInUnits);
+            bool settingsShouldBeInferred = !pdisk->HasExpectedSlotCount && pdisk->InferPDiskSlotCountFromUnitSize;
+
+            numWithoutExpectedSlotCount += !effectiveSlotCount;
             numWithoutSerial += !pdisk->ExpectedSerial;
+            numWithoutInferredSettings += !settingsShouldBeInferred;
+            numWithInferredSettingsUnknown += settingsShouldBeInferred && !effectiveSlotCount;
+
+            if (!effectiveSlotCount) {
+                continue;
+            }
+
+            for (const auto& [_, vslot] : pdisk->VSlotsOnPDisk) {
+                if (!vslot->Group) {
+                    continue;
+                }
+                const ui32 groupSizeInUnits = Max(vslot->Group->GroupSizeInUnits, 1u);
+                if (groupSizeInUnits < effectiveSlotSizeInUnits) {
+                    numVDisksTooSmall++;
+                } else if (groupSizeInUnits > effectiveSlotSizeInUnits) {
+                    numVDisksTooLarge++;
+                }
+            }
         }
         auto& counters = TabletCounters->Simple();
-        counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutSlotCount);
+        counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutExpectedSlotCount);
         counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL].Set(numWithoutSerial);
+        counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_INFERRED_SETTINGS].Set(numWithoutInferredSettings);
+        counters[NBlobStorageController::COUNTER_PDISKS_WITH_INFERRED_SETTINGS_UNKNOWN].Set(numWithInferredSettingsUnknown);
+        counters[NBlobStorageController::COUNTER_VDISKS_WITH_SMALL_SIZE_IN_UNITS_OCCUPYING_LARGER_VSLOT].Set(numVDisksTooSmall);
+        counters[NBlobStorageController::COUNTER_VDISKS_WITH_LARGE_SIZE_IN_UNITS_OCCUPYING_MULTIPLE_SMALLER_VSLOTS].Set(numVDisksTooLarge);
 
         ui32 numFree = 0;
         ui32 numAdded = 0;

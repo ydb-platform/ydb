@@ -136,6 +136,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
     }
 
     const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
     bool allAreTables = true;
     bool hasTables = false;
     bool allAreTableContents = true;
@@ -269,7 +271,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
             if (auto sorted = child.Ref().GetConstraint<TSortedConstraintNode>()) {
                 TKeySelectorBuilder builder(child.Pos(), ctx, useNativeDescSort, outItemType);
                 builder.ProcessConstraint(*sorted);
-                builder.FillRowSpecSort(*outTable.RowSpec);
+                builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
 
                 if (builder.NeedMap()) {
                     content = Build<TExprApplier>(ctx, child.Pos())
@@ -572,6 +574,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
     }
 
     const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
     TExprNode::TListType newExtendParts;
     for (auto child: extend) {
         if (!IsYtProviderInput(child)) {
@@ -602,7 +606,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
             if (keepSort && sorted) {
                 TKeySelectorBuilder builder(child.Pos(), ctx, useNativeDescSort, outItemType);
                 builder.ProcessConstraint(*sorted);
-                builder.FillRowSpecSort(*outTable.RowSpec);
+                builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
 
                 if (builder.NeedMap()) {
                     content = Build<TExprApplier>(ctx, child.Pos())

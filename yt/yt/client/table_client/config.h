@@ -157,6 +157,9 @@ struct TChunkWriterConfig
 
     TVersionedRowDigestConfigPtr VersionedRowDigest;
 
+    // Being overwritten by mount config, not registered in TChunkWriterConfig.
+    TMinHashDigestConfigPtr MinHashDigest;
+
     TChunkWriterTestingOptionsPtr TestingOptions;
 
     TKeyFilterWriterConfigPtr KeyFilter;
@@ -454,6 +457,21 @@ struct TVersionedRowDigestConfig
 };
 
 DEFINE_REFCOUNTED_TYPE(TVersionedRowDigestConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMinHashDigestConfig
+    : public NYTree::TYsonStruct
+{
+    int WriteCount;
+    int DeleteTombstoneCount;
+
+    REGISTER_YSON_STRUCT(TMinHashDigestConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TMinHashDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

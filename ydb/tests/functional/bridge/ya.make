@@ -1,7 +1,9 @@
 PY3TEST()
 
 TEST_SRCS(
+    common.py
     test_bridge.py
+    test_discovery.py
 )
 
 SPLIT_FACTOR(10)

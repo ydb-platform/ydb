@@ -24,8 +24,8 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStati
 {
 }
 
-NSnapshot::TQuery* TQuery::TakeSnapshot() const {
-    auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), const_cast<TQuery*>(this));
+NSnapshot::TQuery* TQuery::TakeSnapshot() {
+    auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
     newQuery->Demand = Demand.load();
     newQuery->Usage = Usage.load();
     return newQuery;
@@ -96,7 +96,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
 }
 
-NSnapshot::TPool* TPool::TakeSnapshot() const {
+NSnapshot::TPool* TPool::TakeSnapshot() {
     auto* newPool = new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
 
     if (Counters) {
@@ -135,7 +135,7 @@ TDatabase::TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs)
 {
 }
 
-NSnapshot::TDatabase* TDatabase::TakeSnapshot() const {
+NSnapshot::TDatabase* TDatabase::TakeSnapshot() {
     auto* newDatabase = new NSnapshot::TDatabase(std::get<TDatabaseId>(GetId()), *this);
     ForEachChild<TPool>([&](TPool* pool, size_t) {
         newDatabase->AddPool(NSnapshot::TPoolPtr(pool->TakeSnapshot()));
@@ -168,7 +168,7 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
     return std::static_pointer_cast<TDatabase>(GetPool(databaseId));
 }
 
-NSnapshot::TRoot* TRoot::TakeSnapshot() const {
+NSnapshot::TRoot* TRoot::TakeSnapshot() {
     auto* newRoot = new NSnapshot::TRoot();
 
     Counters.TotalLimit->Set(TotalLimit * 1'000'000);

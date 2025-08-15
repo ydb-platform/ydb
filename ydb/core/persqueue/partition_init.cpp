@@ -531,6 +531,7 @@ enum EKeyPosition {
 // Calculates the location of keys relative to each other
 static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
 {
+    // Called from FilterBlobsMetaData. The keys are pre-sorted
     Y_ABORT_UNLESS(lhs.GetOffset() <= rhs.GetOffset(),
                    "lhs: %s, rhs: %s",
                    lhs.ToString().data(), rhs.ToString().data());
@@ -542,9 +543,12 @@ static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
                            lhs.ToString().data(), rhs.ToString().data());
             return RhsContainsLhs;
         }
+
+        // case lhs.GetOffset() == rhs.GetOffset() && lhs.GetPartNo() < rhs.GetPartNo()
         Y_ABORT_UNLESS(lhs.GetPartNo() + lhs.GetInternalPartsCount() == rhs.GetPartNo(),
                        "lhs: %s, rhs: %s",
                        lhs.ToString().data(), rhs.ToString().data());
+
         return RhsAfterLhs;
     }
 
@@ -590,6 +594,7 @@ static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueRespo
                 // filtered    key
                 // -------------------------
                 // xxx..xxx vs xxx..xxx|
+                // xxx..xxx vs xxx..xxx?
                 continue;
             }
             // We found a key that is wider than the previous key
@@ -660,12 +665,6 @@ THolder<TEvKeyValue::TEvRequest> MakeCompatibilityRequest(const THashSet<TString
     }
 
     Y_ABORT_UNLESS(head <= fastWrite);
-
-    //for (size_t i = fastWrite; i < keys.size(); ++i) {
-    //    const auto& e = keys[i];
-    //    Y_ABORT_UNLESS(e.back() == '?',
-    //                   "strange key: %s", e.data());
-    //}
 
     if (fastWrite < keys.size()) {
         // exist FastWrite
@@ -806,36 +805,6 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
     ctx.Send(Partition()->Tablet, request.Release());
 }
 
-void TPartition::DumpKeys(const TString& name, const std::deque<TDataKey>& keys)
-{
-    Cerr << "=== " << name << " ===" << Endl;
-    for (const auto& k : keys) {
-        Cerr << k.Key.ToString() << " " << k.Size << Endl;
-    }
-}
-
-void TPartition::DumpKeyLevels()
-{
-    Cerr << "=== key levels ===" << Endl;
-    for (size_t i = 0; i < DataKeysHead.size(); ++i) {
-        const auto& level = DataKeysHead[i];
-        Cerr << i << ") " << level.Border() << " " << level.Sum() << " " << level.RecsCount() << " " << level.InternalPartsCount() << Endl;
-        for (ui32 j = 0; j < level.KeysCount(); ++j) {
-            Cerr << "    " << j << ") " << level.GetKey(j).ToString() << " " << level.GetSize(j) << Endl;
-        }
-    }
-}
-
-void TPartition::DumpState()
-{
-    DumpKeys("body keys", DataKeysBody);
-    DumpKeys("head keys", HeadKeys);
-    DumpKeyLevels();
-    //DumpCompactedKeys();
-    //DumpHead("head");
-    //DumpHead("new head");
-}
-
 void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
     if (!ValidateResponse(*this, ev, ctx)) {
         PoisonPill(ctx);
@@ -869,9 +838,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
                 dataKeysHead[currentLevel].AddKey(key, size);
                 Y_ABORT_UNLESS(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
-                Y_ABORT_UNLESS(!dataKeysHead[currentLevel].NeedCompaction(),
-                               "currentLevel=%" PRIu32 ", key=%s, size=%" PRIu32,
-                               (Partition()->DumpState(), currentLevel), key.ToString().data(), size);
+                Y_ABORT_UNLESS(!dataKeysHead[currentLevel].NeedCompaction());
 
                 PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->EndOffset
                         << " key " << key.GetOffset() << "," << key.GetCount() << " valuesize " << read.GetValue().size()

@@ -111,7 +111,7 @@ namespace NKikimr::NBsController {
                     } else {
                         TStringStream ss;
                         ss << "VSlotId not found in vslotMap: " << key.ToString();
-                        Y_DEBUG_ABORT_UNLESS(false, ss.Str());
+                        Y_DEBUG_ABORT_UNLESS(false, ss.Str().c_str());
                         isHealthy = false;
                         break;
                     }
@@ -156,7 +156,7 @@ namespace NKikimr::NBsController {
                 default: {
                     TStringStream ss;
                     ss << "unexpected event " << ev->GetTypeName()
-                    Y_DEBUG_ABORT_UNLESS(false, ss.Str());
+                    Y_DEBUG_ABORT_UNLESS(false, ss.Str().c_str());
                 }
             }
         }

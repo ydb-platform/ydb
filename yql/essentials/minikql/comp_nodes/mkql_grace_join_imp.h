@@ -418,7 +418,7 @@ public:
         return NextJoinedData(td1, td2, JoinTable1->TableBucketsStats.size());
     }
 
-    void GetCurrentBucketIterator() const {
+    ui32 GetCurrentBucketIterator() const {
         return CurrIterBucket;
     }
 

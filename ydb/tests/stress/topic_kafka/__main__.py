@@ -30,7 +30,7 @@ if __name__ == '__main__':
         metavar=tuple(f'{field.name.upper()}:{field.type.__name__}' for field in dataclasses.fields(WriteProfile)),
     )
 
-    parser.add_argument('--no-cleanup_policy_compact', action='store_false', dest='cleanup_policy_compact', help='disable "compact" cleanup policy')
+    parser.add_argument('--no-cleanup-policy-compact', action='store_false', dest='cleanup_policy_compact', help='disable "compact" cleanup policy')
 
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
 

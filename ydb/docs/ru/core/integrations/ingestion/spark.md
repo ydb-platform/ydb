@@ -23,19 +23,19 @@
   - Spark Shell
 
     ```shell
-    ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+    ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
     ```
 
   - PySpark
 
     ```shell
-    ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+    ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
     ```
 
   - Spark SQL
 
     ```shell
-    ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+    ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
     ```
 
   {% endlist %}
@@ -183,7 +183,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 - Spark Shell
 
   ```shell
-  ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+  ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
   Spark session available as 'spark'.
   Welcome to
         ____              __
@@ -200,7 +200,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 - PySpark
 
   ```shell
-  ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+  ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
   Welcome to
         ____              __
       / __/__  ___ _____/ /__
@@ -399,7 +399,7 @@ SELECT * FROM <catalog_name>.<table-path> LIMIT 10;
 Для начала запустим `spark-sql` с настроенным каталогом `my_ydb`:
 
 ```shell
-~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 \
+~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 \
      --conf spark.sql.catalog.my_ydb=tech.ydb.spark.connector.YdbCatalog \
      --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test \
      --conf spark.sql.catalog.my_ydb.auth.token.file=~/.token \

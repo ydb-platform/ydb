@@ -23,19 +23,19 @@ To work with {{ ydb-short-name }} in {{ spark-name }}, you need to add the {{ yd
   - Spark Shell
 
     ```shell
-    ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+    ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
     ```
 
   - PySpark
 
     ```shell
-    ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+    ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
     ```
 
   - Spark SQL
 
     ```shell
-    ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+    ~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
     ```
 
   {% endlist %}
@@ -185,7 +185,7 @@ As an example, we'll show how to load a list of all Stack Overflow posts from 20
 - Spark Shell
 
   ```shell
-  ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+  ~ $ spark-shell --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
   Spark session available as 'spark'.
   Welcome to
         ____              __
@@ -202,7 +202,7 @@ As an example, we'll show how to load a list of all Stack Overflow posts from 20
 - PySpark
 
   ```shell
-  ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 --conf spark.executor.memory=4g
+  ~ $ pyspark --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 --conf spark.executor.memory=4g
   Welcome to
         ____              __
       / __/__  ___ _____/ /__
@@ -401,7 +401,7 @@ As an example, we'll show how to load a list of all Stack Overflow posts from 20
 First, let's run `spark-sql` with the configured `my_ydb` catalog:
 
 ```shell
-~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector:2.0.1 \
+~ $ spark-sql --master <master-url> --packages tech.ydb.spark:ydb-spark-connector-shaded:2.0.1 \
      --conf spark.sql.catalog.my_ydb=tech.ydb.spark.connector.YdbCatalog \
      --conf spark.sql.catalog.my_ydb.url=grpcs://ydb.my-host.net:2135/preprod/spark-test \
      --conf spark.sql.catalog.my_ydb.auth.token.file=~/.token \

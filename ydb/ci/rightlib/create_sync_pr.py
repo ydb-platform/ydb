@@ -68,7 +68,7 @@ class PrSyncCreator:
             return result[0].as_pull_request()
         return None
 
-    def git_run(self, *args):
+    def git_run(self, *args, fail=True):
         args = ["git"] + list(args)
 
         self.logger.info("run: %r", args)
@@ -76,7 +76,9 @@ class PrSyncCreator:
             output = subprocess.check_output(args).decode()
         except subprocess.CalledProcessError as e:
             self.logger.error(e.output.decode())
-            raise
+            if fail:
+                raise
+            return e.output.decode()
         else:
             self.logger.info("output:\n%s", output)
         return output
@@ -98,8 +100,20 @@ class PrSyncCreator:
 
         self.git_run("checkout", self.base_branch)
         self.git_run("checkout", "-b", dev_branch_name)
-
-        self.git_run("merge", self.head_branch, "-m", commit_msg)
+        merge_output = self.git_run("merge", self.head_branch, "-m", commit_msg, fail=False)
+        if "Automatic merge failed; fix conflicts and then commit the result." in merge_output:
+            conflict_files = self.git_run("ls-files", "-u")
+            if "CODEOWNERS" not in conflict_files:
+                raise Exception(f"Unexpected error during merge {merge_output}")
+            self.logger.warning("Conflicts while merging. Attempting to resolve only for CODEOWNERS")
+            self.git_run("checkout", "--ours", ".github/CODEOWNERS")
+            self.git_run("add", ".github/CODEOWNERS")
+            self.git_run("commit", "-m", commit_msg)
+            conflict_files = self.git_run("ls-files", "-u")
+            if len(conflict_files) > 0:
+                raise Exception(f"Resolved for CODEOWNERS, but more files were in conflict {conflict_files}")            
+        else:
+            raise Exception(f"Unexpected error during merge {merge_output}")
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)
 
         if self.workflow_url:

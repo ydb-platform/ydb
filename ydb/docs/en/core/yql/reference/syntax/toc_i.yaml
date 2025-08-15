@@ -9,6 +9,7 @@ items:
 - { name: ALTER VIEW,                   href: alter-view.md,                 when: feature_view }
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
+- { name: ALTER SEQUENCE,               href: alter-sequence.md,             when: feature_serial }
 - { name: ANALYZE,                      href: analyze.md,                    when: backend_name == "YDB" }
 - { name: BATCH DELETE,                 href: batch-delete.md,               when: feature_batch_operations }
 - { name: BATCH UPDATE,                 href: batch-update.md,               when: feature_batch_operations }

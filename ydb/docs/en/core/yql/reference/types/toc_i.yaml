@@ -3,6 +3,9 @@ items:
   href: index.md
 - name: Simple
   href: primitive.md
+- name: Serial
+  href: serial.md
+  when: feature_serial
 - name: Optional
   href: optional.md
 - name: Containers

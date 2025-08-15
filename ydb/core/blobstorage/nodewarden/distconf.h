@@ -154,10 +154,12 @@ namespace NKikimr::NStorage {
             TActorId SessionId; // interconnect session for this peer
             THashSet<ui64> ScatterTasks; // unanswered scatter queries
             THashSet<TNodeIdentifier> BoundNodeIds; // a set of provided bound nodes by this peer (not including itself)
+            ui32 LastReportedRootNodeId;
 
-            TBoundNode(ui64 cookie, TActorId sessionId)
+            TBoundNode(ui64 cookie, TActorId sessionId, ui32 lastReportedRootNodeId)
                 : Cookie(cookie)
                 , SessionId(sessionId)
+                , LastReportedRootNodeId(lastReportedRootNodeId)
             {}
 
             bool Expected(IEventHandle& ev) const {
@@ -344,7 +346,7 @@ namespace NKikimr::NStorage {
         void Bootstrap();
         void PassAway() override;
         void Halt(); // cease any distconf activity, unbind and reject any bindings
-        bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
+        bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config, bool fromBinding = false);
         void HandleConfigConfirm(STATEFN_SIG);
         void ReportStorageConfigToNodeWarden(ui64 cookie);
 
@@ -386,7 +388,7 @@ namespace NKikimr::NStorage {
         void AbortBinding(const char *reason, bool sendUnbindMessage = true, bool sendUpdate = true);
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
-        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *config, bool recurseConfigUpdate = false);
+        void FanOutReversePush();
         void UnbindNodesFromOtherPiles(const char *reason);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

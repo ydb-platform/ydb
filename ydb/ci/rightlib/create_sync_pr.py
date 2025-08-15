@@ -15,10 +15,12 @@ class PrSyncCreator:
     check_name = "checks_integrated"
     failed_comment_mark = "<!--SyncFailed-->"
 
-    def __init__(self, repo, base_branch, head_branch, token, pr_label, pr_label_failed):
+    def __init__(self, repo, base_branch, head_branch, token, pr_label, pr_label_failed, ours_on_conflict, theirs_on_conflict):
         self.repo_name = repo
         self.base_branch = base_branch
         self.head_branch = head_branch
+        self.ours_on_conflict = ours_on_conflict
+        self.their_on_conflict = theirs_on_conflict
         self.token = token
         self.pr_label = pr_label
         self.pr_label_fail = pr_label_failed
@@ -68,7 +70,7 @@ class PrSyncCreator:
             return result[0].as_pull_request()
         return None
 
-    def git_run(self, *args):
+    def git_run(self, *args, fail=True):
         args = ["git"] + list(args)
 
         self.logger.info("run: %r", args)
@@ -76,7 +78,9 @@ class PrSyncCreator:
             output = subprocess.check_output(args).decode()
         except subprocess.CalledProcessError as e:
             self.logger.error(e.output.decode())
-            raise
+            if fail:
+                raise
+            return e.output.decode()
         else:
             self.logger.info("output:\n%s", output)
         return output
@@ -98,8 +102,29 @@ class PrSyncCreator:
 
         self.git_run("checkout", self.base_branch)
         self.git_run("checkout", "-b", dev_branch_name)
-
-        self.git_run("merge", self.head_branch, "-m", commit_msg)
+        merge_output = self.git_run("merge", self.head_branch, "-m", commit_msg, fail=False)
+        if "Automatic merge failed; fix conflicts and then commit the result." in merge_output:
+            conflict_files = self.git_run("ls-files", "-u")
+            should_commit = False
+            for ours_file in self.ours_on_conflict:
+                if ours_file in conflict_files:
+                    self.logger.warning(f"Conflicts while merging. Attempting to resolve for {ours_file} with --ours")
+                    self.git_run("checkout", "--ours", ours_file)
+                    self.git_run("add", ours_file)
+                    should_commit = True
+            for theirs_file in self.their_on_conflict:
+                if ours_file in conflict_files:
+                    self.logger.warning(f"Conflicts while merging. Attempting to resolve only for {theirs_file} with --theirs")
+                    self.git_run("checkout", "--theirs", theirs_file)
+                    self.git_run("add", theirs_file)
+                    should_commit = True
+            if should_commit:
+                self.git_run("commit", "-m", commit_msg)
+            conflict_files = self.git_run("ls-files", "-u")
+            if len(conflict_files) > 0:
+                raise Exception(f"Resolved for all known files, but more files were in conflict {conflict_files}")
+        else:
+            raise Exception(f"Unexpected error during merge {merge_output}")
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)
 
         if self.workflow_url:
@@ -133,6 +158,8 @@ def main():
     parser.add_argument("--base-branch", help="Branch to merge into")
     parser.add_argument("--head-branch", help="Branch to be merged")
     parser.add_argument("--process-label", help="Label to filter PRs")
+    parser.add_argument("--merge-ours", action="extend", nargs="+", default=[], type=str, help='Files that will be merged with --ours upon conflict')
+    parser.add_argument("--merge-theirs", action="extend", nargs="+", default=[], type=str, help='Files that will be merged with --theirs upon conflict')
     args = parser.parse_args()
 
     log_fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
@@ -140,7 +167,7 @@ def main():
     repo = os.environ["REPO"]
     token = os.environ["TOKEN"]
 
-    syncer = PrSyncCreator(repo, args.base_branch, args.head_branch, token, args.process_label, f'{args.process_label}-fail')
+    syncer = PrSyncCreator(repo, args.base_branch, args.head_branch, token, args.process_label, f'{args.process_label}-fail', args.merge_ours, args.merge_theirs)
 
     syncer.cmd_create_pr()
 

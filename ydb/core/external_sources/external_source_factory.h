@@ -10,6 +10,8 @@ struct IExternalSourceFactory : public TThrRefBase {
     using TPtr = TIntrusivePtr<IExternalSourceFactory>;
 
     virtual IExternalSource::TPtr GetOrCreate(const TString& type) const = 0;
+
+    virtual bool IsAvailableProvider(const TString& provider) const = 0;
 };
 
 IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,

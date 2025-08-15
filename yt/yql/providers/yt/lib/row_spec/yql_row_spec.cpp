@@ -144,6 +144,22 @@ ui64 GetNativeYtTypeFlags(const TStructExprType& type, const NCommon::TStructMem
     return flags;
 }
 
+TColumnOrder GetNativeYtDefaultColumnOrder(const TStructExprType* type, const TVector<TString>& sortMembers) {
+    TVector<TString> order;
+    order.insert(order.end(), sortMembers.begin(), sortMembers.end());
+
+    THashSet<TStringBuf> usedColumns;
+    usedColumns.insert(sortMembers.begin(), sortMembers.end());
+    for (auto& item : type->GetItems()) {
+        if (!usedColumns.insert(item->GetName()).second) {
+            continue;
+        }
+        order.push_back(TString(item->GetName()));
+    }
+
+    return TColumnOrder(order);
+}
+
 using namespace NNodes;
 
 bool TYqlRowSpecInfo::Parse(const TString& rowSpecYson, TExprContext& ctx, const TPositionHandle& pos) {
@@ -1060,7 +1076,7 @@ TString TYqlRowSpecInfo::ToYsonString() const {
     return NYT::NodeToCanonicalYsonString(attrs);
 }
 
-void TYqlRowSpecInfo::CopyTypeOrders(const NYT::TNode& typeNode) {
+void TYqlRowSpecInfo::CopyTypeOrders(const NYT::TNode& typeNode, bool useNativeYtDefaultColumnOrder) {
     YQL_ENSURE(Type);
     if (!TypeNode.IsUndefined() || 0 == NativeYtTypeFlags) {
         return;
@@ -1079,6 +1095,9 @@ void TYqlRowSpecInfo::CopyTypeOrders(const NYT::TNode& typeNode) {
     TColumnOrder columns;
     if (Columns.Defined() && Columns->Size() == Type->GetSize()) {
         columns = *Columns;
+    } else if (useNativeYtDefaultColumnOrder && NativeYtTypeFlags != 0) {
+        // workaround for YQL-20213 - maintain column order with SortMembers columns first
+        columns = GetNativeYtDefaultColumnOrder(Type, SortMembers);
     } else {
         for (auto& item : Type->GetItems()) {
             columns.AddColumn(TString(item->GetName()));
@@ -1468,7 +1487,7 @@ const TStructExprType* TYqlRowSpecInfo::GetExtendedType(TExprContext& ctx) const
     return extended ? ctx.MakeType<TStructExprType>(items) : Type;
 }
 
-bool TYqlRowSpecInfo::CopySortness(TExprContext& ctx, const TYqlRowSpecInfo& from, ECopySort mode) {
+bool TYqlRowSpecInfo::CopySortness(TExprContext& ctx, const TYqlRowSpecInfo& from, bool useNativeYtDefaultColumnOrder, ECopySort mode) {
     SortDirections = from.SortDirections;
     SortMembers = from.SortMembers;
     SortedBy = from.SortedBy;
@@ -1493,6 +1512,12 @@ bool TYqlRowSpecInfo::CopySortness(TExprContext& ctx, const TYqlRowSpecInfo& fro
             }
         }
     }
+
+    if (useNativeYtDefaultColumnOrder && !Columns && NativeYtTypeFlags != 0) {
+        // workaround for YQL-20213 - maintain column order with SortMembers columns first
+        SetColumnOrder(GetNativeYtDefaultColumnOrder(Type, SortMembers));
+    }
+
     return sortIsChanged;
 }
 

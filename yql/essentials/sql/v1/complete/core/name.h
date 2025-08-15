@@ -8,6 +8,7 @@ namespace NSQLComplete {
     enum class EObjectKind {
         Folder,
         Table,
+        Unknown,
     };
 
     enum class ENodeKind {

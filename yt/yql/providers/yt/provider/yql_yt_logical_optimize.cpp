@@ -88,7 +88,10 @@ protected:
         }
         bool hasNewPath = false;
         TVector<TExprBase> paths;
+
         const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+        const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
         for (auto path: section.Paths()) {
             paths.push_back(path);
 
@@ -209,7 +212,7 @@ protected:
                             if (const auto sorted = s->FilterFields(ctx, [outStructType](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && outStructType->FindItem(path.front()); }) ) {
                                 TKeySelectorBuilder builder(map.Mapper().Pos(), ctx, useNativeDescSort, outStructType);
                                 builder.ProcessConstraint(*sorted);
-                                builder.FillRowSpecSort(*mapOut.RowSpec);
+                                builder.FillRowSpecSort(*mapOut.RowSpec, useNativeYtDefaultColumnOrder);
 
                                 if (builder.NeedMap()) {
                                     mapper = ctx.Builder(map.Mapper().Pos())
@@ -228,7 +231,7 @@ protected:
                             }
                         }
                     } else {
-                        mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(map.Output().Item(0).RowSpec()));
+                        mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(map.Output().Item(0).RowSpec()), useNativeYtDefaultColumnOrder);
                     }
                     mapOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), map.Mapper().Pos(), ctx);
                     mapOut.RowSpec->SetConstraints(path.Ref().GetConstraintSet());
@@ -268,9 +271,9 @@ protected:
                     }
 
                     TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), prevRowSpec.GetNativeYtTypeFlags());
-                    mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                    mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                     if (auto nativeType = prevRowSpec.GetNativeYtType()) {
-                        mergeOut.RowSpec->CopyTypeOrders(*nativeType);
+                        mergeOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
                     }
                     mergeOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), merge.Pos(), ctx);
                     mergeOut.RowSpec->SetConstraints(path.Ref().GetConstraintSet());

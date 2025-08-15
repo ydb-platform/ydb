@@ -17,7 +17,9 @@ public:
     void Update(std::shared_ptr<TRunDisplayData> data);
 
 private:
-    ftxui::Element BuildUpperPart(); // everything except bottom with logs
+    ftxui::Element BuildPreviewPart();
+    ftxui::Element BuildThreadStatsPart();
+
     ftxui::Component BuildComponent();
 
 private:

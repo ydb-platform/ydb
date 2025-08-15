@@ -209,21 +209,19 @@ namespace NSQLComplete {
             name = NormalizeName(name);
 
             if (name == "concat") {
-                object->Kinds.emplace(EObjectKind::Folder);
-                object->Kinds.emplace(EObjectKind::Table);
+                object->Kinds = {EObjectKind::Folder, EObjectKind::Table};
             } else if ((number == 0) &&
                        (name == "range" || name == "like" ||
                         name == "regexp" || name == "filter" ||
                         name == "folder" || name == "walkfolders")) {
-                object->Kinds.emplace(EObjectKind::Folder);
+                object->Kinds = {EObjectKind::Folder};
             } else if ((number == 1 || number == 2) && (name == "range")) {
                 if (TMaybe<TString> path = function->Arg0) {
                     object->Path = *path;
                     object->Path.append("/");
                 }
 
-                object->Kinds.emplace(EObjectKind::Folder);
-                object->Kinds.emplace(EObjectKind::Table);
+                object->Kinds = {EObjectKind::Folder, EObjectKind::Table};
             }
 
             return local;

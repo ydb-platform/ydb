@@ -27,13 +27,14 @@ FROM
     objectstorage.'/'
 WITH
 (
+    FORMAT = "csv_with_names",
     SCHEMA =
     (
         data String,
-        year Int32,
-        month Int32
+        year Int32 NOT NULL,
+        month Int32 NOT NULL
     ),
-    PARTITIONED_BY = "['year', 'month']"
+    PARTITIONED_BY = (year, month)
 )
 WHERE
     year=2021
@@ -44,73 +45,153 @@ WHERE
 
 Для оптимизации работы на больших объемах данных следует использовать "расширенное партицирование". В этом режиме не происходит сканирования каталогов S3 ({{ objstorage-full-name }}), вместо этого все пути вычисляются заранее и обращение происходит только к ним.
 
-Для работы расширенного партицирования необходимо задать правила работы через специальный параметр - "projection". В этом параметре описываются все правила размещения данных в каталога S3 ({{ objstorage-full-name}}).
+Для работы расширенного партицирования необходимо задать правила работы через специальный параметр - "projection". В этом параметре описываются все правила размещения данных в каталогах S3 ({{ objstorage-full-name}}).
 
-## Синтаксис { #syntax }
+## Синтаксис для внешних источников данных {#syntax-external-data-source}
 
-Расширенное партицирование называется "partition projection" и задается через параметр `projection`.
-
-Пример указания расширенного партицирования:
+Расширенное партицирование называется «partition projection» и на уровне [внешних источников данных](../../datamodel/external_data_source.md) задаётся через параметр `projection` в формате JSON. В общем виде настройка расширенного партицирования для [внешних источников данных](../../datamodel/external_data_source.md) выглядит следующим образом:
 
 ```yql
-
 SELECT
     *
 FROM
-    <connection>.`/`
+    <object_storage_external_datasource_name>.<path>
 WITH
 (
     SCHEMA =
     (
-        data String,
-        year Int32,
-        month Int32
+        <field1> <type1>,
+        <field2> <type2> NOT NULL,
+        <field3> <type3> NOT NULL
     ),
-    PARTITIONED_BY = "['year', 'month']",
-    `projection.enabled` : "true",
+    PARTITIONED_BY = (field2, field3),
+    PROJECTION = @@ {
+        "projection.enabled": <"true"|"false">,
 
-    `projection.year.type` : "integer",
-    `projection.year.min` : "2010",
-    `projection.year.max` : "2022",
-    `projection.year.interval` : "1",
+        "projection.<field2>.type": "<type>",
+        "projection.<field2>....": "<extended_properties>",
 
-    `projection.month.type` : "integer",
-    `projection.month.min` : "1",
-    `projection.month.max` : "12",
-    `projection.month.interval` : "1",
-    `projection.month.digits` : "2",
+        "projection.<field3>.type": "<type>",
+        "projection.<field3>....": "<extended_properties>",
 
-    `storage.location.template` : "${year}/${month}"
+        "storage.location.template": ".../${<field3>}/${<field2>}/..."
+    } @@,
+    <format_settings>
 )
+WHERE
+    <filter>
 ```
 
-В примере выше указывается, что данные существуют за каждый год и каждый месяц с 2010 по 2022 годы, при этом в бакете данные размещены в каталогах вида `2022/12`. Если данные за какой-то период отсутствуют внутри бакета, то это не приводит к ошибкам, запрос выполнится успешно, а данные будут пропущены в расчетах.
-
-В общем виде настройка расширенного партицирования выглядит следующим образом:
+Пример указания расширенного партицирования:
 
 ```yql
 SELECT
     *
 FROM
-    <connection>.<path>
+    objectstorage.`/`
 WITH
 (
-    SCHEMA = (<fields>, <field1>, <field2>),
-    PARTITIONED_BY = "'['field1', 'field2']",
-    `projection.enabled` : <"true"|"false">,
+    FORMAT = "csv_with_names",
+    SCHEMA =
+    (
+        data String,
+        year Int32 NOT NULL,
+        month Int32 NOT NULL
+    ),
+    PARTITIONED_BY = (year, month),
+    PROJECTION = @@ {
+        "projection.enabled": "true",
 
-    `projection.<field1_name>.type` : "<type>",
-    `projection.<field1_name>....` : "<extended_properties>",
+        "projection.year.type": "integer",
+        "projection.year.min": "2010",
+        "projection.year.max": "2022",
+        "projection.year.interval": "1",
 
-    `projection.<field2_name>.type` : "<type>",
-    `projection.<field2_name>....` : "<extended_properties>",
+        "projection.month.type": "integer",
+        "projection.month.min": "1",
+        "projection.month.max": "12",
+        "projection.month.interval": "1",
+        "projection.month.digits": "2",
 
-    `storage.location.template` : ".../${field2}/${field1}/..."
-
+        "storage.location.template": "${year}/${month}"
+    } @@
 )
+WHERE
+    year=2021
+    AND month=02
 ```
 
-## Описание полей { #field_types }
+В примере выше указывается, что данные существуют за каждый год и каждый месяц с 2010 по 2022 годы, при этом в бакете данные размещены в каталогах вида `2022/12`. Если данные за какой-то период отсутствуют внутри бакета, то это не приводит к ошибкам, запрос выполнится успешно, а данные будут пропущены в расчетах.
+
+## Синтаксис для внешних таблиц {#syntax-external-table}
+
+Рекомендованным способом работы с расширенным партицированием данных является использование [внешних таблиц](../../datamodel/external_table.md). Для них можно указать список настроек «partition projection» при создании таблицы. В общем виде синтаксис создания внешних таблиц с настройками расширенного партицирования выглядит следующим образом:
+
+```yql
+CREATE EXTERNAL TABLE <external_table> (
+    <field1> <type1>,
+    <field2> <type2> NOT NULL,
+    <field3> <type3> NOT NULL
+) WITH (
+    DATA_SOURCE = "<object_storage_external_datasource_name>",
+    LOCATION = "<path>",
+    PARTITIONED_BY = "['<field2>', '<field3>']",
+    `projection.enabled` = <"true"|"false">,
+
+    `projection.<field2>.type` = "<type>",
+    `projection.<field2>....` = "<extended_properties>",
+
+    `projection.<field3>.type` = "<type>",
+    `projection.<field3>....` = "<extended_properties>",
+
+    `storage.location.template` = ".../${<field3>}/${<field2>}/...",
+
+    <format_settings>
+);
+```
+
+Пример указания расширенного партицирования при создании [внешней таблицы](../../datamodel/external_table.md):
+
+```yql
+CREATE EXTERNAL TABLE `objectstorage_data` (
+    data String,
+    year Int32 NOT NULL,
+    month Int32 NOT NULL
+) WITH (
+    DATA_SOURCE = "objectstorage",
+    LOCATION = "/",
+    FORMAT = "csv_with_names",
+    PARTITIONED_BY = "['year', 'month']",
+    `projection.enabled` = "true",
+
+    `projection.year.type` = "integer",
+    `projection.year.min` = "2010",
+    `projection.year.max` = "2022",
+    `projection.year.interval` = "1",
+
+    `projection.month.type` = "integer",
+    `projection.month.min` = "1",
+    `projection.month.max` = "12",
+    `projection.month.interval` = "1",
+    `projection.month.digits` = "2",
+
+    `storage.location.template` = "${year}/${month}"
+);
+```
+
+Приведённая внешняя таблица задаёт расширенное партицирование так же, как внешний источник данных, описанный [выше](#syntax-external-data-source). Далее вы можете читать данные таблицы `objectstorage_data` с фильтрацией по колонкам `year` и `month`, аналогично случаю с [обычным партицированием](partitioning.md#syntax-external-table):
+
+```yql
+SELECT
+    *
+FROM
+    `objectstorage_data`
+WHERE
+    year=2021
+    AND month=02
+```
+
+## Описание полей {#field_types}
 
 |Название поля|Описание поля|Допустимые значения|
 |----|----|----|
@@ -118,7 +199,7 @@ WITH
 |`projection.<field1_name>.type`|Тип данных поля|`integer`, `enum`, `date`|
 |`projection.<field1_name>.XXX`|Свойства конкретного типа||
 
-### Поле типа integer { #integer_type }
+### Поле типа integer {#integer_type}
 
 Используется для колонок, чьи значения можно представить в виде целых чисел диапазона 2^-63^ до 2^63^-1.
 
@@ -130,7 +211,7 @@ WITH
 |`projection.<field_name>.interval`|Нет, по умолчанию `1`|Определяет шаг между элементами внутри диапазона значений. Например, шаг 3 при диапазоне значений 2, 10, приведет к следующим значениям: 2, 5, 8|2<br/>11|
 |`projection.<field_name>.digits`|Нет, по умолчанию `0`|Определяет количество цифр в числе. Если ненулевых цифр в числе меньше, чем указанное значение, то значение дополняется нулями спереди вплоть до числа указанного числа цифр. Например, если указано значение .digits=3, а передается число 2, то оно будет превращено в значение 002|2<br/>4|
 
-### Поле типа enum { #enum_type }
+### Поле типа enum {#enum_type}
 
 Используется для колонок, чьи значения можно представить в виде перечисления значений.
 
@@ -139,14 +220,14 @@ WITH
 |`projection.<field_name>.type`|Да|Тип данных поля|enum|
 |`projection.<field_name>.values`|Да|Определяет допустимые значения, указанные через запятую. Пробелы не игнорируются|1, 2<br/>A,B,C|
 
-### Поле типа date { #date_type }
+### Поле типа date {#date_type}
 
 Используется для колонок, чьи значения можно представить в виде даты. Допустимый диапазон дат с 1970-01-01 до 2105-01-01.
 
 |Название поля|Обязательное|Описание поля|Пример значений|
 |----|----|----|----|
 |`projection.<field_name>.type`|Да|Тип данных поля|date|
-|`projection.<field_name>.min`|Да|Определяет минимально допустимую дату. Разрешены значения в формате `YYYY-MM-DD` или в виде выражения, содержащего специальную макроподстановку NOW| |
+|`projection.<field_name>.min`|Да|Определяет минимально допустимую дату. Разрешены значения в формате `YYYY-MM-DD` или в виде выражения, содержащего специальную макроподстановку NOW|2018-01-01<br/>NOW-10DAYS<br/>NOW-3HOURS|
 |`projection.<field_name>.max`|Да|Определяет максимально допустимую дату. Разрешены значения в формате `YYYY-MM-DD` или в виде выражения, содержащего специальную макроподстановку NOW|2020-01-01<br/>NOW-5DAYS<br/>NOW+3HOURS|
 |`projection.<field_name>.format`|Да|Строка форматирования даты на основе [strptime](https://cplusplus.com/reference/ctime/strftime/)|%Y-%m-%d<br/>%D|
 |`projection.<field_name>.unit`|Нет, по умолчанию `DAYS`|Единицы измерения интервалов времени. Допустимые значения: `YEARS`, `MONTHS`, `WEEKS`, `DAYS`, `HOURS`, `MINUTES`, `SECONDS`, `MILLISECONDS`|SECONDS<br/>YEARS|
@@ -164,7 +245,7 @@ WITH
    - Минимальная возможная дата - `1970-01-01` года (время 0 в [Unix time](https://en.wikipedia.org/wiki/Unix_time)). Если в результате вычислений возникает дата меньше минимальной, то весь запрос завершается с ошибкой.
    - Максимальная возможная дата - `2105-12-31` года (максимальная дата в [Unix time](https://en.wikipedia.org/wiki/Unix_time)). Если в результате вычислений возникает дата больше максимальной, то весь запрос завершается с ошибкой.
 
-## Шаблоны путей { #storage_location_template}
+## Шаблоны путей {#storage_location_template}
 
 Данные в бакетах S3 ({{ objstorage-full-name }}) могут быть размещены в каталогах с произвольными названиями. С помощью настройки `storage.location.template` можно указать правила именования каталогов, где хранятся данные.
 

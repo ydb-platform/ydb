@@ -107,13 +107,14 @@ void TTopicOperationsScenario::CreateTopic(const TString& database,
                                            ui32 maxPartitionCount,
                                            ui32 stabilizationWindowSeconds,
                                            ui32 upUtilizationPercent,
-                                           ui32 downUtilizationPercent)
+                                           ui32 downUtilizationPercent,
+                                           bool cleanupPopicyCompact)
 {
     auto topicPath =
         TCommandWorkloadTopicDescribe::GenerateFullTopicName(database, topic);
 
     EnsureTopicNotExist(topicPath);
-    CreateTopic(topicPath, partitionCount, consumerCount, autoscaling, maxPartitionCount, stabilizationWindowSeconds, upUtilizationPercent, downUtilizationPercent);
+    CreateTopic(topicPath, partitionCount, consumerCount, autoscaling, maxPartitionCount, stabilizationWindowSeconds, upUtilizationPercent, downUtilizationPercent, cleanupPopicyCompact);
 }
 
 void TTopicOperationsScenario::DropTopic(const TString& database,
@@ -176,7 +177,8 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
                                            ui32 maxPartitionCount,
                                            ui32 stabilizationWindowSeconds,
                                            ui32 upUtilizationPercent,
-                                           ui32 downUtilizationPercent)
+                                           ui32 downUtilizationPercent,
+                                           bool cleanupPolicyCompact)
 {
     Y_ABORT_UNLESS(Driver);
 
@@ -196,6 +198,9 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
             .EndConfigurePartitioningSettings();
     } else {
         settings.PartitioningSettings(partitionCount, partitionCount);
+    }
+    if (cleanupPolicyCompact) {
+        settings.AddAttribute("_cleanup_policy", "compact");
     }
 
     for (unsigned consumerIdx = 0; consumerIdx < consumerCount; ++consumerIdx) {

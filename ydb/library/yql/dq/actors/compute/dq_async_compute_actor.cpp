@@ -785,7 +785,7 @@ private:
 
         for (auto sourceId : ev->Get()->FinishedSourcesWithWatermarks) {
             CA_LOG_T("Unregister watermarked async input " << sourceId);
-            WatermarksTracker.UnregisterInputChannel(sourceId);
+            WatermarksTracker.UnregisterAsyncInput(sourceId);
         }
 
         ReadyToCheckpointFlag = (bool) ev->Get()->ProgramState;

@@ -4,7 +4,7 @@ import math
 from datetime import datetime, timedelta
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_columnshard_table_sql_request
+from ydb.tests.datashard.lib.create_table import create_table_sql_request
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, cleanup_type_name, format_sql_value, types_missing_in_column_tables
 
 
@@ -142,28 +142,17 @@ class TestDataType(RestartToAnotherVersionFixture):
 
         querys = []
         for i in range(self.count_table):
-            if self.store_type == "COLUMN":
-                querys.append(
-                    create_columnshard_table_sql_request(
-                        self.table_names[i],
-                        columns=self.columns[i],
-                        pk_columns=pk_columns[i],
-                        index_columns={},
-                        unique="",
-                        sync="",
-                    )
+            querys.append(
+                create_table_sql_request(
+                    self.table_names[i],
+                    columns=self.columns[i],
+                    pk_columns=pk_columns[i],
+                    index_columns={},
+                    unique="",
+                    sync="",
+                    column_table=self.store_type == "COLUMN",
                 )
-            else:
-                querys.append(
-                    create_table_sql_request(
-                        self.table_names[i],
-                        columns=self.columns[i],
-                        pk_columns=pk_columns[i],
-                        index_columns={},
-                        unique="",
-                        sync="",
-                    )
-                )
+             )
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in querys:

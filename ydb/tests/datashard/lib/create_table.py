@@ -1,57 +1,50 @@
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name
 
 
-def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_columns: dict[str, dict[str]], index_columns: dict[str, dict[str]], unique: str, sync: str) -> str:
-    create_columns = []
+def build_columns_statements(columns: dict[str, dict[str]], make_pk_not_null: bool = False) -> list[str]:
+    res = []
     for prefix in columns.keys():
-        if (prefix != "ttl_" or columns[prefix][0] != "") and len(columns[prefix]) != 0:
-            create_columns.append(", ".join(
-                f"{prefix}{cleanup_type_name(type_name)} {type_name}" for type_name in columns[prefix]))
-    create_primary_key = []
-    for prefix in pk_columns.keys():
-        if len(pk_columns[prefix]) != 0:
-            create_primary_key.append(", ".join(
-                f"{prefix}{cleanup_type_name(type_name)}" for type_name in pk_columns[prefix]))
-    create_index = []
-    for prefix in index_columns.keys():
-        if len(index_columns[prefix]) != 0:
-            create_index.append(", ".join(
-                f"INDEX idx_{prefix}{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON ({prefix}{cleanup_type_name(type_name)})" for type_name in index_columns[prefix]))
-    sql_create = f"""
-        CREATE TABLE `{table_name}` (
-            {", ".join(create_columns)},
-            PRIMARY KEY(
-                {", ".join(create_primary_key)}
-                ),
-            {", ".join(create_index)}
-            )
-    """
-    return sql_create
-
-
-def create_columnshard_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_columns: dict[str, dict[str]], index_columns: dict[str, dict[str]], unique: str, sync: str) -> str:
-    create_columns = []
-    for prefix in columns.keys():
-        if (prefix != "ttl_" or columns[prefix][0] != "") and len(columns[prefix]) != 0:
-            if prefix == "pk_":
-                create_columns.append(", ".join(
+        if len(columns[prefix]) > 0 and (prefix != "ttl_" or columns[prefix][0] != ""):
+            if make_pk_not_null and prefix == "pk_":
+                res.append(", ".join(
                     f"{prefix}{cleanup_type_name(type_name)} {type_name} NOT NULL" for type_name in columns[prefix]))
             else:
-                create_columns.append(", ".join(
+                res.append(", ".join(
                     f"{prefix}{cleanup_type_name(type_name)} {type_name}" for type_name in columns[prefix]))
-    create_primary_key = []
+    return res
+
+
+def build_primary_key_statements(pk_columns: dict[str, dict[str]]) -> list[str]:
+    res = []
     for prefix in pk_columns.keys():
         if len(pk_columns[prefix]) != 0:
-            create_primary_key.append(", ".join(
+            res.append(", ".join(
                 f"{prefix}{cleanup_type_name(type_name)}" for type_name in pk_columns[prefix]))
-    create_index = []
+    return res
+
+
+def build_index_statements(index_columns: dict[str, dict[str]], unique: str, sync: str) -> list[str]:
+    res = []
     for prefix in index_columns.keys():
         if len(index_columns[prefix]) != 0:
-            create_index.append(", ".join(
+            res.append(", ".join(
                 f"INDEX idx_{prefix}{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON ({prefix}{cleanup_type_name(type_name)})" for type_name in index_columns[prefix]))
+    return res
 
-    partition_by = ", ".join([f"{prefix}{cleanup_type_name(type_name)}" for prefix in pk_columns.keys() for type_name in pk_columns[prefix]])
 
+def create_table_sql_request(
+    table_name: str,
+    columns: dict[str, dict[str]],
+    pk_columns: dict[str, dict[str]],
+    index_columns: dict[str, dict[str]],
+    unique: str,
+    sync: str,
+    column_table: bool = False
+) -> str:
+    # column tables do not support nullable columns for primary keys yet (maybe ever)
+    create_columns = build_columns_statements(columns, make_pk_not_null=column_table)
+    create_primary_key = build_primary_key_statements(pk_columns)
+    create_index = build_index_statements(index_columns, unique, sync)
     sql_create = f"""
         CREATE TABLE `{table_name}` (
             {", ".join(create_columns)},
@@ -60,11 +53,17 @@ def create_columnshard_table_sql_request(table_name: str, columns: dict[str, dic
                 )
             {f", {", ".join(create_index)}" if create_index else ""}
             )
-        PARTITION BY HASH({partition_by})
-        WITH (
-            STORE = COLUMN
-        )
     """
+    if column_table:
+        # column tables require explicit command of how to partition them, row tables get partitioned automatically
+        partition_by = ", ".join([f"{prefix}{cleanup_type_name(type_name)}" for prefix in pk_columns.keys() for type_name in pk_columns[prefix]])
+        sql_create += f"""
+            PARTITION BY HASH({partition_by})
+            WITH (
+                STORE = COLUMN
+            )
+        """
+    sql_create += ";"
     return sql_create
 
 

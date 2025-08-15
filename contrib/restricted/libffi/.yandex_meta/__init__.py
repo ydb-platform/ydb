@@ -1,4 +1,5 @@
 import os
+import shutil
 from collections import OrderedDict
 from glob import glob
 from os.path import basename, dirname
@@ -9,7 +10,7 @@ from devtools.yamaker.project import GNUMakeNixProject
 
 def libffi_post_build(self):
     configs_dir = self.dstdir + "/configs"
-    os.mkdir(configs_dir)
+    shutil.copytree(self.nix_spec_dir + '/files/configs', configs_dir)
     os.rename(self.dstdir + "/x86_64-pc-linux-gnu", configs_dir + "/x86_64-pc-linux-gnu")
 
     os.unlink(self.dstdir + "/libffi.map.in")
@@ -21,7 +22,10 @@ def libffi_post_install(self):
     with self.yamakes["."] as m:
         # Disable dllimport/dllexport on windows
         # We know that the library is always linked statically
-        m.CFLAGS.append(GLOBAL("-DFFI_BUILDING"))
+        m.CFLAGS.append(GLOBAL("-DFFI_STATIC_BUILD"))
+
+        # Provide compatibility for MFD_CLOEXEC constant.
+        m.PEERDIR.add("contrib/libs/libc_compat")
 
         m.ADDINCL = [path for path in m.ADDINCL if "/x86_64-pc-linux-gnu" not in path] + [
             GLOBAL(self.arcdir + "/include")
@@ -234,6 +238,24 @@ def libffi_post_install(self):
                                     ],
                                 ),
                             ),
+                            (
+                                "ARCH_WASM32 AND OS_EMSCRIPTEN",
+                                Linkable(
+                                    ADDINCL=[
+                                        configs_dir + "/wasm32-emscripten",
+                                        GLOBAL(configs_dir + "/wasm32-emscripten/include"),
+                                    ],
+                                ),
+                            ),
+                            (
+                                "ARCH_WASM64 AND OS_EMSCRIPTEN",
+                                Linkable(
+                                    ADDINCL=[
+                                        configs_dir + "/wasm64-emscripten",
+                                        GLOBAL(configs_dir + "/wasm64-emscripten/include"),
+                                    ],
+                                ),
+                            ),
                             # fix only configure-stage for OS_NONE, see YMAKE-218, DEVTOOLSSUPPORT-46190
                             (
                                 "OS_NONE",
@@ -277,15 +299,21 @@ def libffi_post_install(self):
     self.yamakes.make_recursive()
 
     with self.yamakes["testsuite"] as m:
-        m.RECURSE -= {"libffi.go", "libffi.complex"}
+        m.RECURSE -= {"libffi.go", "libffi.complex", "libffi.threads/tsan"}
         # Fails to build.
-        m.after("RECURSE", Switch({"NOT OS_IOS": Recursable(RECURSE={"libffi.go"})}))
+        m.after("RECURSE", Switch({"NOT OS_IOS AND NOT OS_EMSCRIPTEN": Recursable(RECURSE={"libffi.go"})}))
         # MSVC does not support 'T _Complex' C syntax
-        # powerpc64le is configured without complex types
+        # powerpc64le and emscripten are configured without complex types
         m.after(
             "RECURSE",
-            Switch({"NOT OS_WINDOWS AND NOT ARCH_PPC64LE": Recursable(RECURSE={"libffi.complex"})}),
+            Switch({"NOT OS_WINDOWS AND NOT ARCH_PPC64LE AND NOT OS_EMSCRIPTEN": Recursable(RECURSE={"libffi.complex"})}),
         )
+        # Requires pthread header, absed in MSVC build
+        m.after("RECURSE", Switch({"NOT OS_WINDOWS": Recursable(RECURSE={"libffi.threads/tsan"})}))
+    with self.yamakes["testsuite/libffi.go"] as m:
+        m.RECURSE -= {"closure1"}
+        # Disabled on Android. See https://github.com/libffi/libffi/pull/877/files
+        m.after("RECURSE", Switch({"NOT OS_ANDROID AND NOT OS_DARWIN": Recursable(RECURSE={"closure1"})}))
     with self.yamakes["testsuite/libffi.closures"] as m:
         recs = {
             "cls_align_longdouble_split",
@@ -312,11 +340,10 @@ libffi = GNUMakeNixProject(
     ],
     disable_includes=[
         "os2.h",
+        "ptrauth.h",
         "sunmedia_types.h",
+        "sys/memfd.h",
         "/usr/include/malloc.h",
-    ],
-    keep_paths=[
-        "configs",
     ],
     post_build=libffi_post_build,
     post_install=libffi_post_install,

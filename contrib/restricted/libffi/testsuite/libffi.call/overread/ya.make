@@ -4,7 +4,7 @@ PROGRAM()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(3.3)
+VERSION(3.5.2)
 
 LICENSE(GPL-2.0-only)
 
@@ -16,10 +16,10 @@ NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
-SRCDIR(contrib/restricted/libffi/testsuite/libffi.closures)
+SRCDIR(contrib/restricted/libffi/testsuite/libffi.call)
 
 SRCS(
-    cls_ushort_va.c
+    overread.c
 )
 
 END()

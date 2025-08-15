@@ -1,6 +1,6 @@
 --- a/testsuite/libffi.call/ffitest.h	(index)
 +++ b/testsuite/libffi.call/ffitest.h	(working tree)
-@@ -6 +6,7 @@
+@@ -9 +9,7 @@
 -#include "fficonfig.h"
 +
 +#define HAVE_STDINT_H
@@ -9,14 +9,26 @@
 +#ifndef _MSC_VER
 +#define HAVE_MMAP_ANON
 +#endif
---- a/testsuite/libffi.closures/ffitest.h	(index)
-+++ b/testsuite/libffi.closures/ffitest.h	(working tree)
-@@ -6 +6,7 @@
--#include "fficonfig.h"
-+
-+#define HAVE_STDINT_H
-+#define HAVE_INTTYPES_H
-+
-+#ifndef _MSC_VER
-+#define HAVE_MMAP_ANON
-+#endif
+--- a/testsuite/libffi.call/bpo_38748.c	(index)
++++ b/testsuite/libffi.call/bpo_38748.c	(working tree)
+@@ -5,7 +5,9 @@
+ /* { dg-do run } */
+
+ #include "ffitest.h"
+-#include "ffi_common.h"
++#include <inttypes.h>
++typedef uint64_t UINT64;
++typedef uint32_t UINT32;
+
+ static UINT32 ABI_ATTR align_arguments(UINT32 l1,
+ 		 		       UINT64 l2)
+--- a/testsuite/libffi.call/longjmp.c	(index)
++++ b/testsuite/libffi.call/longjmp.c	(working tree)
+@@ -7,7 +7,6 @@
+ /* { dg-do run } */
+
+ #include "ffitest.h"
+-#include "ffi_common.h"
+
+ #include <setjmp.h>
+

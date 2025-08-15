@@ -4,7 +4,7 @@ PROGRAM()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(3.3)
+VERSION(3.5.2)
 
 LICENSE(GPL-2.0-only)
 
@@ -19,7 +19,7 @@ NO_RUNTIME()
 SRCDIR(contrib/restricted/libffi/testsuite/libffi.call)
 
 SRCS(
-    pyobjc-tc.c
+    callback4.c
 )
 
 END()

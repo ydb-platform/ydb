@@ -736,15 +736,31 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    void Pause() override {
+    void PauseByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    void Resume() override {
+    void ResumeByCheckpoint() override {
         Y_ABORT("Checkpoints are not supported");
     }
 
-    bool IsPaused() const override {
+    bool IsPausedByCheckpoint() const override {
+        return false;
+    }
+
+    void PauseByWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    void AddWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    void ResumeByWatermark(TInstant) override {
+        Y_ABORT("Watermarks are not supported");
+    }
+
+    bool IsPausedByWatermark() const override {
         return false;
     }
 
@@ -890,18 +906,6 @@ public:
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {
         return InputType;
-    }
-
-    void Pause() override {
-        Y_ABORT("Checkpoints are not supported");
-    }
-
-    void Resume() override {
-        Y_ABORT("Checkpoints are not supported");
-    }
-
-    bool IsPaused() const override {
-        return false;
     }
 
     template<typename T>

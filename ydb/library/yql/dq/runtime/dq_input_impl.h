@@ -3,6 +3,9 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node.h>
+#include <ydb/library/actors/core/log.h>
+#include <util/stream/output.h>
+#include <util/string/join.h>
 
 namespace NYql::NDq {
 
@@ -38,7 +41,7 @@ public:
 
     [[nodiscard]]
     bool Empty() const override {
-        return Batches.empty() || (IsPaused() && GetBatchesBeforePause() == 0);
+        return Batches.empty();
     }
 
     bool IsLegacySimpleBlock(NKikimr::NMiniKQL::TStructType* structType, ui32& blockLengthIndex) {
@@ -157,6 +160,8 @@ public:
         }
     }
 
+    void AddBatchCounts(ui64, ui64) {}
+
     ui64 AddBatch(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) {
         Y_ABORT_UNLESS(batch.Width() == GetWidth());
 
@@ -169,14 +174,19 @@ public:
         }
 
         Batches.emplace_back(std::move(batch));
+        static_cast<TDerived *>(this)->AddBatchCounts(space, rows);
 
         return rows;
+    }
+
+    std::tuple<ui64, ui64, ui64> PopReadyCounts() {
+        return std::make_tuple(StoredBytes, StoredRows, Batches.size());
     }
 
     [[nodiscard]]
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
         Y_ABORT_UNLESS(batch.Width() == GetWidth());
-        if (Empty()) {
+        if (static_cast<TDerived *>(this)->Empty()) {
             static_cast<TDerived*>(this)->PushStats.TryPause();
             return false;
         }
@@ -186,12 +196,12 @@ public:
         auto& popStats = static_cast<TDerived*>(this)->PopStats;
 
         popStats.Resume(); //save timing before processing
-        ui64 popBytes = 0;
 
-        if (IsPaused()) {
-            ui64 batchesCount = GetBatchesBeforePause();
-            Y_ABORT_UNLESS(batchesCount > 0);
-            Y_ABORT_UNLESS(batchesCount <= Batches.size());
+        auto [popBytes, popRows, batchesCount] = static_cast<TDerived*>(this)->PopReadyCounts();
+        Y_ABORT_UNLESS(batchesCount > 0);
+        Y_ABORT_UNLESS(batchesCount <= Batches.size());
+
+        if (batchesCount != Batches.size()) {
 
             if (batch.IsWide()) {
                 while (batchesCount--) {
@@ -211,15 +221,8 @@ public:
                 }
             }
 
-            popBytes = StoredBytesBeforePause;
-
-            BatchesBeforePause = PauseMask;
-            Y_ABORT_UNLESS(GetBatchesBeforePause() == 0);
-            StoredBytes -= StoredBytesBeforePause;
-            StoredRows -= StoredRowsBeforePause;
-            StoredBytesBeforePause = 0;
-            StoredRowsBeforePause = 0;
         } else {
+
             if (batch.IsWide()) {
                 for (auto&& part : Batches) {
                     part.ForEachRowWide([&batch](NUdf::TUnboxedValue* values, ui32 width) {
@@ -234,16 +237,15 @@ public:
                 }
             }
 
-            popBytes = StoredBytes;
-
-            StoredBytes = 0;
-            StoredRows = 0;
             Batches.clear();
         }
 
+        StoredBytes -= popBytes;
+        StoredRows -= popRows;
+
         if (popStats.CollectBasic()) {
             popStats.Bytes += popBytes;
-            popStats.Rows += GetRowsCount(batch);
+            popStats.Rows += popRows;
             popStats.Chunks++;
         }
 
@@ -256,33 +258,18 @@ public:
     }
 
     bool IsFinished() const override {
-        return Finished && (!IsPaused() || Batches.empty());
+        return Finished && (!static_cast<const TDerived *>(this)->IsPaused() || Batches.empty());
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {
         return InputType;
     }
 
-    void Pause() override {
-        Y_ABORT_UNLESS(!IsPaused());
-        BatchesBeforePause = Batches.size() | PauseMask;
-        StoredRowsBeforePause = StoredRows;
-        StoredBytesBeforePause = StoredBytes;
-    }
-
-    void Resume() override {
-        StoredBytesBeforePause = StoredRowsBeforePause = BatchesBeforePause = 0;
-        Y_ABORT_UNLESS(!IsPaused());
-    }
-
-    bool IsPaused() const override {
-        return BatchesBeforePause;
+    bool IsPaused() const {
+        return false;
     }
 
 protected:
-    ui64 GetBatchesBeforePause() const {
-        return BatchesBeforePause & ~PauseMask;
-    }
 
     TMaybe<ui32> GetWidth() const {
         return Width;
@@ -296,10 +283,6 @@ protected:
     ui64 StoredBytes = 0;
     ui64 StoredRows = 0;
     bool Finished = false;
-    ui64 BatchesBeforePause = 0;
-    ui64 StoredBytesBeforePause = 0;
-    ui64 StoredRowsBeforePause = 0;
-    static constexpr ui64 PauseMask = 1llu << 63llu;
     TInputChannelFormat Format = FORMAT_UNKNOWN;
     ui32 LegacyBlockLengthIndex = 0;
 };

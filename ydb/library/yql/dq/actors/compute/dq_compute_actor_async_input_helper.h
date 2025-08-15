@@ -45,8 +45,9 @@ public:
     }
 
     void ResumeByWatermark(TInstant watermark) {
-        YQL_ENSURE(watermark == PendingWatermark);
-        PendingWatermark = Nothing();
+        if (watermark >= PendingWatermark) {
+            PendingWatermark = Nothing();
+        }
     }
 
     virtual i64 GetFreeSpace() const = 0;

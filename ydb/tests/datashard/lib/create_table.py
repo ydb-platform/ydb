@@ -63,7 +63,6 @@ def create_table_sql_request(
                 STORE = COLUMN
             )
         """
-    sql_create += ";"
     return sql_create
 
 

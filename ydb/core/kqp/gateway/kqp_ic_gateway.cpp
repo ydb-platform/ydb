@@ -914,6 +914,10 @@ public:
         return tablePromise.GetFuture();
     }
 
+    TFuture<TGenericResult> SetConstraint(const TString&, TVector<NYql::TSetColumnConstraintSettings>&&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> AlterDatabase(const TString& cluster, const NYql::TAlterDatabaseSettings& settings) override {
         Y_UNUSED(cluster);
         Y_UNUSED(settings);

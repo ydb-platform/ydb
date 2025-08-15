@@ -449,6 +449,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 SELECT COUNT(*) as count, MAX(PortionId) as portion_id, TabletId
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
                 GROUP BY TabletId
+                ORDER BY TabletId
             )");
 
             auto tableClient = kikimr.GetTableClient();

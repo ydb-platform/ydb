@@ -479,7 +479,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 filler(3000000, 100000000, 110000);
             }
 
-            ExecuteSQL(R"(SELECT COUNT(*) FROM `/Root/olapStore/olapTable`)", "[[230000u;]]");
+            ExecuteSQL(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                SELECT COUNT(*) FROM `/Root/olapStore/olapTable`)", "[[230000u;]]");
 
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
             AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
@@ -489,7 +491,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 3)("count", csController->GetCompactionStartedCounter().Val());
 
             {
-                ExecuteSQL(R"(SELECT COUNT(*)
+                ExecuteSQL(R"(
+                    PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                    SELECT COUNT(*)
                     FROM `/Root/olapStore/olapTable`
                     WHERE resource_id LIKE '%110a151' AND resource_id LIKE '110a%' AND resource_id LIKE '%dd%')",
                     "[[0u;]]");
@@ -499,7 +503,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ExecuteSQL(R"(SELECT COUNT(*)
+                ExecuteSQL(R"(
+                    PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                    SELECT COUNT(*)
                     FROM `/Root/olapStore/olapTable`
                     WHERE resource_id LIKE '%110a151%')",
                     "[[0u;]]");
@@ -509,7 +515,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ExecuteSQL(R"(SELECT COUNT(*)
+                ExecuteSQL(R"(
+                    PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                    SELECT COUNT(*)
                     FROM `/Root/olapStore/olapTable`
                     WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id LIKE '%11dd%')) AND uid = '222')",
                     "[[0u;]]");
@@ -524,6 +532,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res, const TString& uid, const ui32 level) {
                         TStringBuilder sb;
+                        sb << R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)" << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE(" << Endl;
                         sb << "resource_id = '" << res << "' AND" << Endl;
@@ -545,6 +554,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res) {
                         TStringBuilder sb;
+                        sb << R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)" << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '%" << res << "%'" << Endl;
@@ -563,6 +573,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res) {
                         TStringBuilder sb;
+                        sb << R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)" << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '" << res << "%'" << Endl;
@@ -581,6 +592,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [](const TString& res) {
                         TStringBuilder sb;
+                        sb << R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)" << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '%" << res << "'" << Endl;

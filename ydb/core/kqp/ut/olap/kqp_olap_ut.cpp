@@ -1630,8 +1630,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         std::vector<TString> queries = {
             R"(
-                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "false";
-
                 SELECT count(*) FROM `/Root/foo`
                 where b > a
                 GROUP BY a;

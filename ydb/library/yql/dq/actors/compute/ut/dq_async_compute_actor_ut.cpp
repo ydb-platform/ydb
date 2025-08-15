@@ -619,11 +619,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
             ack->Record.SetFreeSpace(3123); // XXX simulates limited channel size
             ack->Record.SetFinish(channelData.GetFinished());
-#if 1
             ActorSystem.Send(ev->Sender, ev->Recipient, ack);
-#else // this alternative hits bug in test framework (?)
-            ActorSystem.Schedule(new IEventHandle(ev->Sender, ev->Recipient, ack), TDuration::MicroSeconds(100));
-#endif
         }
         return !dqInputChannel->IsFinished();
     }

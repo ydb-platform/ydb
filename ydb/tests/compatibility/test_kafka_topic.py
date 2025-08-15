@@ -7,7 +7,7 @@ import time
 import uuid
 import yatest
 
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RollingUpgradeAndDowngradeFixture, RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -107,7 +107,6 @@ class Workload:
                 runner.result()
 
 def skip_if_unsupported(versions):
-    return
     if min(versions) < (25, 1, 4):
         pytest.skip("Only available since 25-1-4")
 
@@ -141,5 +140,30 @@ class TestKafkaTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
 
         for _ in self.roll():
             utils.run_stress_test(duration=10)
+
+        utils.drop_topic()
+
+
+class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        # check that cleanup-policy=compact is supported
+        # assume that RestartToAnotherVersionFixture will call test at least twice: in the old->new and in the new->old directions
+
+        if self.versions[0] < (25, 1, 4):
+            pytest.skip("Topic may be created only since 25-1-4")
+
+        yield from self.setup_cluster()
+
+    def test_workload(self):
+        utils = Workload(self.driver, self.endpoint)
+
+        utils.create_topic()
+
+        utils.run_stress_test(duration=20)
+        self.change_cluster_version()
+        utils.run_stress_test(duration=20)
+        self.change_cluster_version()
+        utils.run_stress_test(duration=20)
 
         utils.drop_topic()

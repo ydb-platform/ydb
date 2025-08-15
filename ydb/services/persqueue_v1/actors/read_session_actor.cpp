@@ -566,19 +566,16 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReleased::TP
 
     if (ev->Get()->Graceful || !DirectRead) {
         if (!partitionInfo.Releasing) {
+            auto p = partitionInfo.Partition;
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
-                << "graceful release of partition that is not requested for release is forbiden for " << partitionInfo.Partition, ctx);
+                << "graceful release of partition that is not requested for release is forbiden for " << p, ctx);
         }
-
         if (partitionInfo.Stopping) { // Ignore release for graceful request if alredy got stopping
             return;
         }
-
-        if (DirectRead) {
-            if (!partitionInfo.DirectReads.empty()) {
-                return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
-                    << "releasing partition, but not all direct reads are done " << partitionInfo.Partition, ctx);
-            }
+        if (!DirectRead) {
+            ReleasePartition(it, true, ctx);
+        } else {
             SendReleaseSignal(it->second, true, ctx);
         }
     } else {
@@ -587,11 +584,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReleased::TP
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
                 << "release of partition that is not requested is forbiden for " << partitionInfo.Partition, ctx);
         }
-
         //TODO: filter all direct reads
+        ReleasePartition(it, true, ctx);
     }
-
-    ReleasePartition(it, true, ctx);
 }
 
 template <bool UseMigrationProtocol>
@@ -1765,8 +1760,9 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessBalancerDead(ui64 tabletId,
                     if (jt->second.LockSent) {
                         SendReleaseSignal(jt->second, true, ctx);
                     }
-
-                    ReleasePartition(jt, true, ctx);
+                    if (!DirectRead || !jt->second.LockSent) { // in direct read mode wait for final release from client
+                        ReleasePartition(jt, true, ctx);
+                    }
                 } else {
                     ++it;
                 }

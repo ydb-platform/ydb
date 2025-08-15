@@ -848,7 +848,6 @@ private:
         if (Stat) {
             Stat->AddCounters2(ev->Get()->Sensors);
         }
-        CA_LOG_T("OnOutputChannelData");
         auto it = OutputChannelsMap.find(ev->Get()->ChannelId);
         Y_ABORT_UNLESS(it != OutputChannelsMap.end());
         TOutputChannelInfo& outputChannel = it->second;

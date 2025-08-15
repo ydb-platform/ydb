@@ -495,6 +495,12 @@ A **shared cache** is an [actor](#actor) that stores data pages recently accesse
 
 A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../reference/configuration/memory_controller_config.md).
 
+### Spilling {#spilling}
+
+**Spilling** is a memory management mechanism in {{ ydb-short-name }} that temporarily offloads intermediate data from computations that exceed the available node RAM capacity to external storage. In {{ ydb-short-name }}, disk storage is currently used for spilling.
+
+For more details on spilling, see [{#T}](spilling.md).
+
 ### Tablet types {#tablet-types}
 
 [Tablets](#tablet) can be considered a framework for building reliable components operating in a distributed system. {{ ydb-short-name }} has multiple components implemented using this framework, listed below.

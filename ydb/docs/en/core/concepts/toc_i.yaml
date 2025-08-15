@@ -18,6 +18,8 @@ items:
   href: secondary_indexes.md
 - name: Vector search
   href: vector_search.md
+- name: Spilling
+  href: spilling.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed

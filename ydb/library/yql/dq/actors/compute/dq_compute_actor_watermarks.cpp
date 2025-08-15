@@ -86,14 +86,15 @@ bool TDqComputeActorWatermarks::NotifyInChannelWatermarkReceived(ui64 inputId, T
 // Modifies and optionally recalc pending watermarks
 bool TDqComputeActorWatermarks::UpdateAndRecalcPendingWatermark(TMaybe<TInstant>& storedWatermark, TInstant watermark) {
     if (storedWatermark < watermark) {
-        if (PendingWatermark == std::exchange(storedWatermark, watermark)) {
-            // PendingWatermark was unset; old watermark value was unset
+        auto oldWatermark = std::exchange(storedWatermark, watermark);
+        if (LastWatermark == oldWatermark) {
+            // LastWatermark was unset; old watermark value was unset
             // -> it is possible now all channels have watermark set, needs recalc
-            // PendingWatermark was set and same as old watermark value
-            // -> it is possible PendingWatermark can be advanced, needs recalc
+            // LastWatermark was set and same as old watermark value
+            // -> it is possible LastWatermark can be advanced, needs recalc
             RecalcPendingWatermark();
         } else {
-            // otherwise PendingWatermark will be same
+            // otherwise LastWatermark will be same
         }
         return true;
     }
@@ -107,14 +108,7 @@ bool TDqComputeActorWatermarks::NotifyWatermarkWasSent(TInstant watermark) {
 
     LOG_T(logPrefix());
 
-    if (watermark <= LastWatermark) {
-        LOG_E(logPrefix() << " when LastWatermark was already forwarded to " << *LastWatermark);
-        return false;
-        // We will try to ignore this error, but something strange happened
-    }
-
     if (watermark < PendingWatermark) {
-        LastWatermark = PendingWatermark;
         LOG_D(logPrefix() << " before '" << PendingWatermark << "'");
         return false;
     }
@@ -122,8 +116,9 @@ bool TDqComputeActorWatermarks::NotifyWatermarkWasSent(TInstant watermark) {
     if (watermark > PendingWatermark) {
         LOG_E(logPrefix() << " when '" << PendingWatermark << "' was expected");
         // We will try to ignore this error, but something strange happened
+        return false;
     }
-    LastWatermark = watermark;
+
     return true;
 }
 
@@ -160,6 +155,7 @@ void TDqComputeActorWatermarks::RecalcPendingWatermark() {
     if (newWatermark > LastWatermark) {
         LOG_T("New pending watermark " << newWatermark);
         PendingWatermark = newWatermark;
+        LastWatermark = newWatermark;
     }
 }
 

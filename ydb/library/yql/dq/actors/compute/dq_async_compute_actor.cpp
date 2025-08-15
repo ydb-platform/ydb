@@ -772,7 +772,7 @@ private:
 
         if (auto watermark = ev->Get()->WatermarkInjectedToOutputs) {
             ResumeInputsByWatermark(*watermark);
-            if (WatermarksTracker.GetPendingWatermark() <= watermark) {
+            if (WatermarksTracker.NotifyWatermarkWasSent(*watermark)) {
                 MetricsReporter.ReportInjectedToOutputsWatermark(*watermark);
                 WatermarksTracker.PopPendingWatermark();
             }

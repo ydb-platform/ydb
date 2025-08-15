@@ -1,5 +1,6 @@
 #include "arrow_helpers.h"
 #include "permutations.h"
+#include "process_columns.h"
 
 #include "serializer/native.h"
 #include "serializer/stream.h"

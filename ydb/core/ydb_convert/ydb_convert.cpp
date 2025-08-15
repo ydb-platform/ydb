@@ -11,6 +11,7 @@
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
@@ -1345,6 +1346,7 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
 }
 
 void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeInfo, const TCell& cell) {
+    Cerr << "DEBUG: ProtoValueFromCell called with typeId=" << typeInfo.GetTypeId() << ", cell size=" << cell.Size() << Endl;
     auto getString = [&cell] () {
         return TString(cell.AsBuf().data(), cell.AsBuf().size());
     };
@@ -1443,7 +1445,16 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
         vb.DyNumber(getString());
         break;
     default:
-        Y_ENSURE(false, TStringBuilder() << "Unsupported type: " << primitive);
+        if (typeInfo.GetTypeId() == NScheme::NTypeIds::Decimal) {
+            Y_ENSURE(cell.Size() == 16, "Decimal cell must be 16 bytes");
+            NYql::NDecimal::TInt128 val;
+            std::memcpy(&val, cell.Data(), sizeof(val));
+            auto decimalString = NYql::NDecimal::ToString(val, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
+            Cerr << "DEBUG: Decimal cell size=" << cell.Size() << ", data=" << TStringBuf(cell.Data(), cell.Size()) << ", decimalString=" << decimalString << Endl;
+            vb.Decimal(TDecimalValue(decimalString, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale()));
+        } else {
+            Y_ENSURE(false, TStringBuilder() << "Unsupported type: " << primitive);
+        }
     }
 }
 

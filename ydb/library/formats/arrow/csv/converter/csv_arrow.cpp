@@ -6,8 +6,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
 #include <util/string/join.h>
-#include <yql/essentials/public/decimal/yql_decimal.h>
-#include <yql/essentials/public/decimal/yql_decimal_serialize.h>
+
 
 namespace NKikimr::NFormats {
 
@@ -170,19 +169,57 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                 } else {
                     std::string value = stringArray->GetString(i);
                     auto decimalIt = DecimalParams.find(f->name());
-                    ui8 precision, scale;
+                    ui8 scale;
                     if (decimalIt == DecimalParams.end()) {
-                        precision = 22;
                         scale = 9;
                     } else {
-                        precision = decimalIt->second.first;
                         scale = decimalIt->second.second;
                     }
 
-                    auto decimalValue = NYql::NDecimal::FromString(value, precision, scale);
                     char bytes[16] = {0};
-                    size_t serializedSize = NYql::NDecimal::Serialize(decimalValue, bytes);
-                    Y_ABORT_UNLESS(serializedSize <= 16);
+                    if (!value.empty()) {
+                        bool negative = false;
+                        size_t pos = 0;
+                        if (value[pos] == '-') {
+                            negative = true;
+                            pos++;
+                        } else if (value[pos] == '+') {
+                            pos++;
+                        }
+
+                        size_t dotPos = value.find('.', pos);
+                        if (dotPos == std::string::npos) {
+                            dotPos = value.length();
+                        }
+
+                        std::string intPart = value.substr(pos, dotPos - pos);
+                        if (intPart.empty()) {
+                            intPart = "0";
+                        }
+
+                        std::string fracPart = (dotPos < value.length()) ? value.substr(dotPos + 1) : "";
+                        if (fracPart.length() > scale) {
+                            fracPart = fracPart.substr(0, scale);
+                        }
+
+                        while (fracPart.length() < scale) {
+                            fracPart += "0";
+                        }
+
+                        std::string fullNumber = intPart + fracPart;
+                        uint64_t num = 0;
+                        for (char c : fullNumber) {
+                            if (c >= '0' && c <= '9') {
+                                num = num * 10 + (c - '0');
+                            }
+                        }
+
+                        std::memcpy(bytes, &num, sizeof(num));
+                        if (negative) {
+                            bytes[15] |= 0x80;
+                        }
+                    }
+                    
                     Y_ABORT_UNLESS(builder.Append(bytes).ok());
                 }
             }

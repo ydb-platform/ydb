@@ -1,5 +1,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal_serialize.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <util/string/escape.h>
@@ -710,9 +712,15 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::ActorId:
             res += ToString(r.AsValue<NActors::TActorId>());
             break;
-        case NScheme::NTypeIds::Decimal:
-            res += typeInfo.GetDecimalType().CellValueToString(r.AsValue<std::pair<ui64, i64>>());
+        case NScheme::NTypeIds::Decimal: {
+            Y_ENSURE(r.Size() == 16, "Decimal cell must be 16 bytes");
+            auto deserializeResult = NYql::NDecimal::Deserialize(r.Data(), r.Size());
+            NYql::NDecimal::TInt128 val = deserializeResult.first;
+            size_t deserializedSize = deserializeResult.second;
+            Y_ENSURE(deserializedSize == 16, "Failed to deserialize decimal");
+            res += NYql::NDecimal::ToString(val, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
             break;
+        }
         case NScheme::NTypeIds::Pg: {
             auto convert = NPg::PgNativeTextFromNativeBinary(r.AsBuf(), typeInfo.GetPgTypeDesc());
             if (!convert.Error)

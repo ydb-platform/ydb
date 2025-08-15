@@ -28,8 +28,8 @@ void TUrlMatcher::AddPattern(const TUrlPattern& pattern) {
     }
 }
 
-bool TUrlMatcher::Match(const TString& url, const TCgiParameters& params) const {
-    TStringBuf path(url);
+bool TUrlMatcher::Match(const TStringBuf originalPath, const TCgiParameters& params) const {
+    TStringBuf path(originalPath);
     if (path.StartsWith('/')) {
         path = path.Skip(1);
     }
@@ -65,9 +65,12 @@ bool TUrlMatcher::Match(const TString& url, const TCgiParameters& params) const 
     return false;
 }
 
-bool TUrlMatcher::Match(const TString& url, const TString& params) const {
-    TCgiParameters cgiParams(params);
-    return Match(url, cgiParams);
+bool TUrlMatcher::Match(const TStringBuf url) const {
+    const auto path = url.Before('?');
+    const auto params = url.After('?');
+    const auto cgiParams = TCgiParameters(params);
+
+    return Match(path, cgiParams);
 }
 
 }

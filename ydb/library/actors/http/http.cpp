@@ -430,7 +430,7 @@ THttpOutgoingRequestPtr THttpIncomingRequest::Forward(TStringBuf baseUrl) const 
     THttpOutgoingRequestPtr request = new THttpOutgoingRequest(Method, newScheme, newHost, GetURL(), Protocol, Version);
     THeadersBuilder newHeaders(Headers);
     newHeaders.Erase("Accept-Encoding");
-    newHeaders.Erase("Host"); // host being set by THttpOutgoingRequest constructor
+    newHeaders.Set("Host", newHost);
     request->Set(newHeaders);
     if (Body) {
         request->SetBody(Body);
@@ -618,7 +618,7 @@ TUrlParameters::TUrlParameters(TStringBuf url) {
     }
 }
 
-const TString TUrlParameters::operator [](TStringBuf name) const {
+TString TUrlParameters::operator [](TStringBuf name) const {
     TString value(Get(name));
     CGIUnescape(value);
     return value;
@@ -651,15 +651,6 @@ TString TUrlParameters::Render() const {
     return parameters;
 }
 
-TUrlParametersBuilder::TUrlParametersBuilder()
-    : TUrlParameters(TStringBuf())
-{}
-
-void TUrlParametersBuilder::Set(TStringBuf name, TStringBuf data) {
-    Data.emplace_back(name, data);
-    Parameters[Data.back().first] = Data.back().second;
-}
-
 TCookies::TCookies(TStringBuf cookie) {
     for (TStringBuf param = cookie.NextTok(';'); !param.empty(); param = cookie.NextTok(';')) {
         param.SkipPrefix(" ");
@@ -668,7 +659,7 @@ TCookies::TCookies(TStringBuf cookie) {
     }
 }
 
-const TStringBuf TCookies::operator [](TStringBuf name) const {
+TStringBuf TCookies::operator [](TStringBuf name) const {
     return Get(name);
 }
 
@@ -778,12 +769,7 @@ THeadersBuilder::THeadersBuilder(std::initializer_list<std::pair<TString, TStrin
 
 void THeadersBuilder::Set(TStringBuf name, TStringBuf data) {
     Data.emplace_back(name, data);
-    auto it = Headers.find(Data.back().first);
-    if (it != Headers.end()) {
-        it->second = Data.back().second; // update existing header
-    } else {
-        Headers[Data.back().first] = Data.back().second; // add new header
-    }
+    Headers[Data.back().first] = Data.back().second;
 }
 
 void THeadersBuilder::Erase(TStringBuf name) {

@@ -62,7 +62,7 @@ public:
         auto& record = ev->Get()->Record;
 
         if (!Ready) {
-            Reply(*ev, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::NOTREADY, VDiskIDFromVDiskID(record.GetVDiskID())));
+            Reply(*ev, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::NOTREADY, record.GetVDiskID()));
             if (record.GetNotifyIfNotReady()) {
                 Notify.insert(ev->Sender);
             }

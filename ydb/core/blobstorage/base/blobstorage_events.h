@@ -312,12 +312,12 @@ namespace NKikimr {
             }
         }
 
-        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk) {
+        TEvVStatusResult(NKikimrProto::EReplyStatus status, const NKikimrBlobStorage::TVDiskID &vdisk) {
             Y_ABORT_UNLESS(status != NKikimrProto::OK);
             Record.SetStatus(status);
             Record.SetJoinedGroup(false);
             Record.SetReplicated(false);
-            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
+            Record.MutableVDiskID()->CopyFrom(vdisk);
         }
     };
 

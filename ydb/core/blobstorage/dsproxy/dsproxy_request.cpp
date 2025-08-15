@@ -743,7 +743,6 @@ namespace NKikimr {
             << " Response# " << SingleLineProto(record));
 
         // process the RACE status
-        Y_ABORT_UNLESS(status == NKikimrProto::RACE);
         const TActorId& nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
         if (vdiskId.GroupGeneration < Info->GroupGeneration) { // vdisk is older than our group
             RacingDomains |= {&Info->GetTopology(), vdiskId};
@@ -755,19 +754,14 @@ namespace NKikimr {
             if (group && (group->GetGroupID() != Info->GroupID.GetRawId() || group->GetGroupGeneration() != vdiskId.GroupGeneration)) {
                 return done(NKikimrProto::ERROR, "incorrect RecentGroup for RACE response");
             }
-            RacingGeneration = Max(RacingGeneration, vdiskId.GroupGeneration);
             Send(nodeWardenId, new TEvBlobStorage::TEvUpdateGroupInfo(vdiskId.GroupID, vdiskId.GroupGeneration,
                 group ? std::make_optional(*group) : std::nullopt));
         }
 
         // make NodeWarden restart the query just after proxy reconfiguration
         if (ForceGroupGeneration) {
-            Y_VERIFY_DEBUG_S(*ForceGroupGeneration == Info->GroupGeneration && *ForceGroupGeneration != vdiskId.GroupGeneration,
-                "ForceGroupGeneration# " << *ForceGroupGeneration
-                << " Info->GroupGeneration# " << Info->GroupGeneration
-                << " VDiskId# " << vdiskId.ToString()
-                << " Record# " << SingleLineProto(record)
-                << " Type# " << type);
+            Y_DEBUG_ABORT_UNLESS(*ForceGroupGeneration == Info->GroupGeneration);
+            Y_DEBUG_ABORT_UNLESS(*ForceGroupGeneration != vdiskId.GroupGeneration);
             return done(NKikimrProto::RACE, "forced group generation mismatch");
         } else {
             Y_DEBUG_ABORT_UNLESS(RestartCounter < 100);
@@ -943,10 +937,6 @@ namespace NKikimr {
                 Y_ABORT();
 #undef XX
         }
-
-        auto *common = dynamic_cast<TEvBlobStorage::TEvResultCommon*>(ev.get());
-        Y_ABORT_UNLESS(common);
-        common->RacingGeneration = RacingGeneration;
 
         if (ExecutionRelay) {
             SetExecutionRelay(*ev, std::exchange(ExecutionRelay, {}));

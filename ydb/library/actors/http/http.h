@@ -84,18 +84,10 @@ struct TUrlParameters {
     THashMap<TStringBuf, TStringBuf> Parameters;
 
     TUrlParameters(TStringBuf url);
-    const TString operator [](TStringBuf name) const;
+    TString operator [](TStringBuf name) const;
     bool Has(TStringBuf name) const;
     TStringBuf Get(TStringBuf name) const; // raw
     TString Render() const;
-};
-
-struct TUrlParametersBuilder : TUrlParameters {
-    TDeque<std::pair<TString, TString>> Data;
-
-    using TUrlParameters::TUrlParameters;
-    TUrlParametersBuilder();
-    void Set(TStringBuf name, TStringBuf data);
 };
 
 struct TCookies {
@@ -103,7 +95,7 @@ struct TCookies {
 
     TCookies(TStringBuf cookie);
     TCookies(const TCookies&) = delete;
-    const TStringBuf operator [](TStringBuf name) const;
+    TStringBuf operator [](TStringBuf name) const;
     bool Has(TStringBuf name) const;
     TStringBuf Get(TStringBuf name) const; // raw
     TString Render() const;

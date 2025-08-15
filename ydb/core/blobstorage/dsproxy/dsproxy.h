@@ -327,7 +327,6 @@ private:
     bool ExecutionRelayUsed = false;
     bool FirstResponse = true;
     std::optional<ui32> ForceGroupGeneration;
-    ui32 RacingGeneration = 0;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,

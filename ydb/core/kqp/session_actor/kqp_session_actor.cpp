@@ -2982,6 +2982,8 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
                 hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
+
+                hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, HandleNoop);
             default:
                 UnexpectedEvent("CleanupState", ev);
             }

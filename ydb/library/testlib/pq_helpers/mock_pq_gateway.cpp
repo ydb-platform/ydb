@@ -385,12 +385,6 @@ private:
         }
     }
 
-    void CheckTopicPath(const TString& path) const {
-        with_lock (Mutex) {
-            Y_ENSURE(Topics.contains(path), "Topic " << path << " is not registered in pq gateway");
-        }
-    }
-
 private:
     TMutex Mutex;
     std::unordered_set<TString> Sessions;

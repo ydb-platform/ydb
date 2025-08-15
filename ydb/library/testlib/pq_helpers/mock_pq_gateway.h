@@ -35,7 +35,7 @@ public:
 
     virtual void AddEventProvider(const TString& topic, TEvGen evGen) = 0;
 
-    virtual TWriteResult GetWriteSessionData(const TString& topic)  = 0;
+    virtual TWriteResult GetWriteSessionData(const TString& topic) = 0;
 };
 
 NYdb::NTopic::TPartitionSession::TPtr CreatePartitionSession(const TString& path = "fake/path");

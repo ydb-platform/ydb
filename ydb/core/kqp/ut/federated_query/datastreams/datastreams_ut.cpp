@@ -65,10 +65,11 @@ std::pair<TString, TOperation::TOperationId> StartScriptQuery(TTestActorRuntime&
 
 void WaitOutputMessage(NYdb::NTopic::TTopicClient& topicClient, const TString& topicName, const TVector<TString>& expectedMessage) {
     NYdb::NTopic::TReadSessionSettings readSettings;
+    auto disposition = TDuration::Seconds(100);
     readSettings
         .WithoutConsumer()
         .AppendTopics(
-            NTopic::TTopicReadSettings(topicName).ReadFromTimestamp(TInstant::Now() - TDuration::Seconds(146))
+            NTopic::TTopicReadSettings(topicName).ReadFromTimestamp(TInstant::Now() - disposition)
                 .AppendPartitionIds(0));
 
     readSettings.EventHandlers_.StartPartitionSessionHandler(
@@ -686,7 +687,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST(RestoreScriptPhysicalGraphOnRetryWithCheckpoints) {
         const auto pqGateway = CreateMockPqGateway();
 
-       // constexpr char topicName[] = "restoreScriptTopicOnRetry";
         TString inputTopicName = "inputTopicName";
         TString outputTopicName = "outputTopicName";
 

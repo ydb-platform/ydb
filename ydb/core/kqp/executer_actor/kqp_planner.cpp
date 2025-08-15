@@ -865,7 +865,7 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
 }
 
 void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
-    if (CheckpointsReadyStateSended) {
+    if (CheckpointsReadyStateSent) {
         return;
     }
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
@@ -886,7 +886,7 @@ void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
     }
     LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
     TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
-    CheckpointsReadyStateSended = true;
+    CheckpointsReadyStateSent = true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

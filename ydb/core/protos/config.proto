@@ -1173,7 +1173,7 @@ message TCheckpointsConfig {
     }
 
     message TLocalStorage {
-        optional string TablePrefix = 1; // Default: .metadata/queries/checkpoints/
+        optional string TablePrefix = 1;
     }
     
     optional bool Enabled = 1;

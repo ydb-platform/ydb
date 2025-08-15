@@ -46,9 +46,12 @@ public:
 
         const auto& systemColumns = maybeSoSourceSettings.SystemColumns().Cast();
         const auto& labelNames = maybeSoSourceSettings.LabelNames().Cast();
+        const auto& labelNameAliases = maybeSoSourceSettings.LabelNameAliases().Cast();
+        YQL_ENSURE(labelNames.Size() == labelNameAliases.Size());
 
         TVector<TCoAtom> newSystemColumns;
         TVector<TCoAtom> newLabelNames;
+        TVector<TCoAtom> newLabelNameAliases;
 
         newSystemColumns.reserve(extractMembers.size());
         newLabelNames.reserve(extractMembers.size());
@@ -59,9 +62,13 @@ public:
             }
         }
 
-        for (const auto& atom : labelNames) {
-            if (TString column = atom.StringValue(); extractMembers.contains(column)) {
-                newLabelNames.push_back(Build<TCoAtom>(ctx, node.Pos()).Value(column).Done());
+        for (size_t i = 0; i < labelNames.Size(); ++i) {
+            TString columnName = labelNames.Item(i).StringValue();
+            TString columnAlias = labelNameAliases.Item(i).StringValue();
+
+            if (extractMembers.contains(columnAlias)) {
+                newLabelNames.push_back(Build<TCoAtom>(ctx, node.Pos()).Value(columnName).Done());
+                newLabelNameAliases.push_back(Build<TCoAtom>(ctx, node.Pos()).Value(columnAlias).Done());
             }
         }
 
@@ -87,6 +94,9 @@ public:
                     .Build()
                 .LabelNames<TCoAtomList>()
                     .Add(std::move(newLabelNames))
+                    .Build()
+                .LabelNameAliases<TCoAtomList>()
+                    .Add(std::move(newLabelNameAliases))
                     .Build()
                 .Build()
             .RowType(newRowTypeNode)

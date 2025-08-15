@@ -18,6 +18,7 @@ public:
     NThreading::TFuture<TFileLinkPtr> PutUrlAsync(const TString& url, const TString& token) override;
     TFsPath GetRoot() const override;
     TFsPath GetTemp() const override;
+    TFsPath GetLockFilePath(const TString& lockName) const override;
     const TFileStorageConfig& GetConfig() const override;
 
 protected:

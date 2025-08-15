@@ -122,11 +122,15 @@ namespace NKikimr {
                     index[species].push_back(mainGroupId);
 
                     NKikimrBlobStorage::TGroupInfo& mainGroup = groupInfo->BridgeGroupInfo.emplace();
+                    NKikimrBridge::TGroupState *mainGroupState = mainGroup.MutableBridgeGroupState();
                     const auto& bridgeInfo = State.BridgeInfo;
                     Y_ABORT_UNLESS(bridgeInfo);
                     bridgeInfo->ForEachPile([&](TBridgePileId bridgePileId) {
                         const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
-                        groupId.CopyToProto(&mainGroup, &NKikimrBlobStorage::TGroupInfo::AddBridgeGroupIds);
+                        NKikimrBridge::TGroupState::TPile *pile = mainGroupState->AddPile();
+                        groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
+                        pile->SetGroupGeneration(1);
+                        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
                     });
                 } else {
                     CreateGroup(TBridgePileId(), std::nullopt); // regular single group

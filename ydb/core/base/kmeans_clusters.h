@@ -32,6 +32,8 @@ public:
 
     virtual void RemoveEmptyClusters() = 0;
 
+    virtual std::optional<ui32> FindCluster(TArrayRef<const char> embedding) = 0;
+
     virtual std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) = 0;
 
     virtual void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight = 1) = 0;

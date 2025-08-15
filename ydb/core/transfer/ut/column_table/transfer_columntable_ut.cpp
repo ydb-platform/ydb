@@ -83,6 +83,11 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
     }
 
 
+    Y_UNIT_TEST(MessageField_Attributes)
+    {
+        MessageField_Attributes(TableType);
+    }
+
     Y_UNIT_TEST(MessageField_CreateTimestamp)
     {
         MessageField_CreateTimestamp(TableType);
@@ -134,6 +139,12 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
         ProcessingTargetTableOtherType(TableType);
     }
 
+
+    Y_UNIT_TEST(DropColumn)
+    {
+        DropColumn(TableType);
+    }
+
     void BigBatchSize(bool local) {
         MainTestCase testCase(std::nullopt, TableType);
 
@@ -163,7 +174,7 @@ Y_UNIT_TEST_SUITE(Transfer_ColumnTable)
                         return <|
                             partition_id: $x._partition,
                             offset: $x._offset,
-                            line: CAST($line.0 AS Uint32),
+                            line: Unwrap(CAST($line.0 AS Uint32)),
                             message: $line.1 || '%s'
                         |>;
                     };

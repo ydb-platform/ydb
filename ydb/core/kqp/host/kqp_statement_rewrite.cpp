@@ -124,7 +124,7 @@ namespace {
             .AddExpressionEvaluation(funcRegistry)
             .AddPreTypeAnnotation()
             .AddIOAnnotation()
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
+            .AddTypeAnnotationTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
             .Build(false);
 
         return TPrepareRewriteInfo{

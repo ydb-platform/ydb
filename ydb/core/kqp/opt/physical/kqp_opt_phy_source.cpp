@@ -74,7 +74,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         return node;
     }
 
-    bool stageContainsEmptyProgram = true;
+    bool stageContainsEmptyProgram = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimization;
     if (stage.Program().Body().Raw() != matched->Expr.Raw()) {
         stageContainsEmptyProgram = false;
     }

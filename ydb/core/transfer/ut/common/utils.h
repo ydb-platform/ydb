@@ -71,17 +71,27 @@ struct Timestamp64Checker : public Checker<TInstant> {
     }
 
     TInstant Get(const ::Ydb::Value& value) override {
-        return TInstant::MilliSeconds(value.int64_value());
+        return TInstant::MicroSeconds(value.uint64_value());
     }
 
     void Assert(const std::string& msg, const ::Ydb::Value& value) override {
         auto v = Get(value);
         if (Expected - Precision > v || Expected + Precision < v) {
-            UNIT_ASSERT_VALUES_EQUAL_C(Get(value), Expected, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(v, Expected, msg);
         }
     }
 
     TDuration Precision;
+};
+
+struct NullChecker : public IChecker {
+    bool Get(const ::Ydb::Value& value) {
+        return value.has_null_flag_value();
+    }
+
+    void Assert(const std::string& msg, const ::Ydb::Value& value) override {
+        UNIT_ASSERT_VALUES_EQUAL_C(Get(value), true, msg);
+    }
 };
 
 template<>
@@ -162,6 +172,7 @@ struct TMessage {
     std::optional<std::string> MessageGroupId = std::nullopt;
     std::optional<ui64> SeqNo = std::nullopt;
     std::optional<TInstant> CreateTimestamp = std::nullopt;
+    std::map<std::string, std::string> Attributes = {};
 };
 
 inline TMessage _withSeqNo(ui64 seqNo) {
@@ -201,7 +212,19 @@ inline TMessage _withCreateTimestamp(const TInstant& timestamp) {
         .ProducerId = std::nullopt,
         .MessageGroupId = std::nullopt,
         .SeqNo = std::nullopt,
-        .CreateTimestamp = timestamp,
+        .CreateTimestamp = timestamp
+    };
+}
+
+inline TMessage _withAttributes(std::map<std::string, std::string>&& attributes) {
+    return {
+        .Message = TStringBuilder() << "Message",
+        .Partition = 0,
+        .ProducerId = std::nullopt,
+        .MessageGroupId = std::nullopt,
+        .SeqNo = std::nullopt,
+        .CreateTimestamp = std::nullopt,
+        .Attributes = std::move(attributes)
     };
 }
 
@@ -226,7 +249,7 @@ struct MainTestCase {
         return config;
     }
 
-    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "COLUMN")
+    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "ROW")
         : TableType(std::move(tableType))
         , Id(RandomNumber<size_t>())
         , ConnectionString(GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE"))
@@ -298,8 +321,16 @@ struct MainTestCase {
     }
 
     void Grant(const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
+        ChangePermissions("GRANT", "TO", object, username, permissions);
+    }
+
+    void Revoke(const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
+        ChangePermissions("REVOKE", "FROM", object, username, permissions);
+    }
+
+    void ChangePermissions(const std::string& statement, const std::string& statementClause, const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
         TStringBuilder sql;
-        sql << "GRANT ";
+        sql << statement << " ";
         for (size_t i = 0; i < permissions.size(); ++i) {
             if (i) {
                 sql << ", ";
@@ -314,7 +345,7 @@ struct MainTestCase {
         if (!object.empty()) {
             sql << "/" << object;
         }
-        sql << "` TO `" << username << "@builtin`";
+        sql << "` " << statementClause << " `" << username << "@builtin`";
 
         ExecuteDDL(sql);
     }
@@ -615,8 +646,8 @@ struct MainTestCase {
     }
 
     auto DescribeConsumer() {
-        auto topic = DescribeTopic();
-        auto consumers = topic.GetTopicDescription().GetConsumers();
+        const auto topic = DescribeTopic();
+        const auto& consumers = topic.GetTopicDescription().GetConsumers();
         UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
         return DescribeConsumer(consumers[0].GetConsumerName());
     }
@@ -733,7 +764,19 @@ struct MainTestCase {
         }
         auto writeSession = TopicClient.CreateSimpleBlockingWriteSession(writeSettings);
 
-        UNIT_ASSERT(writeSession->Write(message.Message, message.SeqNo, message.CreateTimestamp));
+        TWriteMessage msg(message.Message);
+        msg.SeqNo(message.SeqNo);
+        msg.CreateTimestamp(message.CreateTimestamp);
+
+        if (!message.Attributes.empty()) {
+            TWriteMessage::TMessageMeta meta;
+            for (auto& [k, v] : message.Attributes) {
+                meta.push_back({k , v});
+            }
+            msg.MessageMeta(meta);
+        }
+
+        UNIT_ASSERT(writeSession->Write(std::move(msg)));
         writeSession->Close(TDuration::Seconds(1));
     }
 

@@ -3,11 +3,13 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -25,6 +27,21 @@
 #include <util/stream/file.h>
 
 namespace NKikimr::NKqp {
+
+namespace {
+
+    bool ValidateExternalSink(const NKqpProto::TKqpExternalSink& sink) {
+        if (sink.GetType() != "S3Sink") {
+            return false;
+        }
+
+        NYql::NS3::TSink sinkSettings;
+        sink.GetSettings().UnpackTo(&sinkSettings);
+
+        return sinkSettings.GetAtomicUploadCommit();
+    }
+
+}  // anonymous namespace
 
     bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth) {
         if (!maxDepth) {
@@ -326,5 +343,17 @@ namespace NKikimr::NKqp {
                 return NThreading::MakeFuture<TGetSchemeEntryResult>(entry.Type);
             });
     };
-    
+
+    std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {
+        std::vector<NKqpProto::TKqpExternalSink> filteredSinks;
+        filteredSinks.reserve(sinks.size());
+        for (const auto& sink : sinks) {
+            if (ValidateExternalSink(sink)) {
+                filteredSinks.push_back(sink);
+            }
+        }
+
+        return filteredSinks;
+    }
+
 }  // namespace NKikimr::NKqp

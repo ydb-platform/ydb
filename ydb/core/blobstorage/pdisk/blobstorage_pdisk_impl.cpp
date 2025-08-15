@@ -1837,14 +1837,15 @@ void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str,
     P_LOG(PRI_ERROR, BPD01, error.Str());
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
     PCtx->ActorSystem->Send(evYardInit.Sender, new NPDisk::TEvYardInitResult(status,
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(),
         Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), OwnerSystem, 0,
-        0, Cfg->SlotSizeInUnits,
+        Cfg->SlotSizeInUnits,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), TVector<TChunkIdx>(),
-        Cfg->RetrieveDeviceType(), error.Str()));
+        Cfg->RetrieveDeviceType(), isTinyDisk, error.Str()));
     Mon.YardInit.CountResponse();
 }
 
@@ -1892,13 +1893,16 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
     ui32 ownerWeight = Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits);
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
+
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(NKikimrProto::OK,
                 DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
                 DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
                 DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner,
-                ownerRound, ownerWeight, Cfg->SlotSizeInUnits,
+                ownerRound, Cfg->SlotSizeInUnits,
                 GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), ownedChunks,
-                Cfg->RetrieveDeviceType(), ""));
+                Cfg->RetrieveDeviceType(), isTinyDisk, ""));
+
     GetStartingPoints(owner, result->StartingPoints);
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
@@ -2053,15 +2057,17 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
 
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(
         NKikimrProto::OK,
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner, ownerRound,
-        Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits), Cfg->SlotSizeInUnits,
+        Cfg->SlotSizeInUnits,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType) | ui32(NKikimrBlobStorage::StatusNewOwner), TVector<TChunkIdx>(),
-        Cfg->RetrieveDeviceType(), ""));
+        Cfg->RetrieveDeviceType(), isTinyDisk, ""));
+
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});

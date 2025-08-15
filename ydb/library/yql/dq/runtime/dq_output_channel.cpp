@@ -228,7 +228,8 @@ public:
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
-        YQL_ENSURE(!Watermark);
+        // if there were already watermark in-fly replace it with latest one
+        YQL_ENSURE(!Watermark || Watermark->GetTimestampUs() <= watermark.GetTimestampUs());
         Watermark.ConstructInPlace(std::move(watermark));
     }
 

@@ -362,6 +362,7 @@ PEERDIR(
 
     yt/yt_proto/yt/core
 
+    library/cpp/containers/concurrent_hash
     library/cpp/yt/assert
     library/cpp/yt/backtrace
     library/cpp/yt/coding

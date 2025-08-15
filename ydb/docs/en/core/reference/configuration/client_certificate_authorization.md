@@ -1,6 +1,6 @@
-# `client_certificate_authorization` configuration section
+# client_certificate_authorization
 
-Database node authentication within the {{ ydb-short-name }} cluster ensures that service connections between cluster nodes are assigned the correct security identifiers, or [SIDs](../../concepts/glossary.md#access-sid). The process of database node authentication applies to connections that use the gRPC protocol and provide functions for registering nodes in the cluster, as well as for accessing configuration information. SIDs assigned to connections are considered when checking the authorization rules that apply to the corresponding gRPC service calls.
+The `client_certificate_authorization` section configures authentication of database nodes within the {{ ydb-short-name }} cluster using client certificates. This ensures that service connections between cluster nodes are assigned the correct security identifiers, or [SIDs](../../concepts/glossary.md#access-sid). The process applies to connections that use the gRPC protocol for registering nodes in the cluster and accessing configuration information.
 
 Node authentication settings are configured within the [static configuration](./index.md) of the cluster.
 

@@ -78,6 +78,13 @@ void PrepareCreationUnixTime(const R& request, I& interm)
     }
 }
 
+template <class R, class I>
+void PrepareCreationUnixTimeInNewApi(const R& request, I& interm)
+{
+    Y_UNUSED(request);
+    interm.CreationUnixTime = TAppData::TimeProvider->Now().Seconds();
+}
+
 // Guideline:
 // Check SetError calls: there must be no changes made to the DB before SetError call (!)
 
@@ -2673,6 +2680,7 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Rename &request, TH
     auto &cmd = std::get<TIntermediate::TRename>(intermediate->Commands.back());
     cmd.OldKey = request.old_key();
     cmd.NewKey = request.new_key();
+    PrepareCreationUnixTimeInNewApi(request, cmd);
     return {};
 }
 
@@ -2741,6 +2749,7 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THo
         }
     }
     SplitIntoBlobs(cmd, isInline, storageChannelIdx);
+    PrepareCreationUnixTimeInNewApi(request, cmd);
     return {};
 }
 

@@ -38,22 +38,13 @@ namespace NKikimr::NStorage {
 
         if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
             Y_ABORT_UNLESS(!Self->Binding);
-
-            switch (auto& state = Self->RootState) {
-                case ERootState::INITIAL:
-                    state = ERootState::LOCAL_QUORUM_OP;
-                    break;
-
-                case ERootState::RELAX:
-                    state = ERootState::IN_PROGRESS;
-                    break;
-
-                case ERootState::LOCAL_QUORUM_OP:
-                case ERootState::IN_PROGRESS:
-                case ERootState::ERROR_TIMEOUT:
-                    Y_ABORT_S("unexpected RootState# " << state);
+            if (Self->RootState == ERootState::RELAX) {
+                Y_ABORT_UNLESS(Self->Scepter); // node must have scepter
+                Self->RootState = ERootState::IN_PROGRESS;
+            } else {
+                Y_ABORT_UNLESS(Self->RootState == ERootState::INITIAL);
+                Y_ABORT_UNLESS(!Self->Scepter); // this operation is invoked without a scepter
             }
-
             ExecuteQuery();
         } else {
             // TEvAbortQuery will come soon (must be already in mailbox)
@@ -167,6 +158,9 @@ namespace NKikimr::NStorage {
                     case TQuery::kNotifyBridgeSyncFinished:
                         return NotifyBridgeSyncFinished(op.Command.GetNotifyBridgeSyncFinished());
 
+                    case TQuery::kUpdateBridgeGroupInfo:
+                        return UpdateBridgeGroupInfo(op.Command.GetUpdateBridgeGroupInfo());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
                 }
@@ -187,7 +181,6 @@ namespace NKikimr::NStorage {
                     } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                         throw TExError() << *r.ErrorReason;
                     } else if (r.ConfigToPropose) {
-                        CheckSyncersAfterCommit = r.CheckSyncersAfterCommit;
                         StartProposition(&r.ConfigToPropose.value(), /*acceptLocalQuorum=*/ true,
                             /*requireScepter=*/ false, /*mindPrev=*/ true,
                             r.PropositionBase ? &r.PropositionBase.value() : nullptr);
@@ -197,7 +190,6 @@ namespace NKikimr::NStorage {
                 });
             },
             [&](TProposeConfig& op) {
-                CheckSyncersAfterCommit = op.CheckSyncersAfterCommit;
                 StartProposition(&op.Config);
             }
         }, Query);
@@ -242,9 +234,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum,
             bool requireScepter, bool mindPrev, const NKikimrBlobStorage::TStorageConfig *propositionBase) {
-        if (auto error = UpdateClusterState(config)) {
-            throw TExError() << *error;
-        } else if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
+        if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
             throw TExError() << "No quorum to start propose/commit configuration";
         } else if (requireScepter && !Self->Scepter) {
             throw TExError() << "No scepter";
@@ -296,7 +286,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-            SelfId(), CheckSyncersAfterCommit, mindPrev);
+            SelfId(), mindPrev);
         if (error) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
                 (Error, *error), (ProposedConfig, *config));
@@ -321,13 +311,6 @@ namespace NKikimr::NStorage {
     // Query termination and result delivery
 
     void TInvokeRequestHandlerActor::RunCommonChecks(bool requireScepter) {
-        Y_ABORT_UNLESS(
-            Self->RootState == ERootState::LOCAL_QUORUM_OP ||
-            Self->RootState == ERootState::IN_PROGRESS
-        );
-
-        Y_ABORT_UNLESS(!Self->CurrentProposition);
-
         if (!Self->StorageConfig) {
             throw TExError() << "No agreed StorageConfig";
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
@@ -335,6 +318,12 @@ namespace NKikimr::NStorage {
         } else if (requireScepter && !Self->Scepter) {
             throw TExError() << "No scepter";
         }
+
+        if (requireScepter) {
+            Y_ABORT_UNLESS(Self->RootState == ERootState::IN_PROGRESS);
+        }
+
+        Y_ABORT_UNLESS(!Self->CurrentProposition);
     }
 
     void TInvokeRequestHandlerActor::Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
@@ -368,12 +357,16 @@ namespace NKikimr::NStorage {
                 TActivationContext::Send(handle.release());
             },
             [&](TCollectConfigsAndPropose&) {
-                // this is just temporary failure
-                // TODO(alexvru): backoff?
+                if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+                    // reschedule operation
+                    TActivationContext::Schedule(TDuration::MilliSeconds(Self->CollectConfigsBackoffTimer.NextBackoffMs()),
+                        new IEventHandle(TEvPrivate::EvRetryCollectConfigsAndPropose, 0, Self->SelfId(), {}, nullptr,
+                            InvokePipelineGeneration));
+                }
             },
             [&](TProposeConfig&) {
-                Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
-                if (status != TResult::OK) { // we were asked to commit config, but error has occured
+                if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+                    // we were asked to commit config, but error has occured
                     Y_ABORT_UNLESS(errorReason);
                     switchToError.emplace(*errorReason);
                 }
@@ -385,24 +378,15 @@ namespace NKikimr::NStorage {
 
         // reset root state in keeper actor if this query is still valid and there is no pending proposition
         if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition) {
-            switch (auto& state = Self->RootState) {
-                case ERootState::IN_PROGRESS:
-                    state = ERootState::RELAX;
-                    break;
-
-                case ERootState::LOCAL_QUORUM_OP:
-                    state = Self->Scepter ? ERootState::RELAX : ERootState::INITIAL;
-                    break;
-
-                case ERootState::INITIAL:
-                case ERootState::ERROR_TIMEOUT:
-                case ERootState::RELAX:
-                    Y_ABORT_S("unexpected RootState# " << state);
+            if (Self->RootState == ERootState::IN_PROGRESS) {
+                Self->RootState = ERootState::RELAX;
+            } else {
+                Y_ABORT_UNLESS(Self->RootState == ERootState::INITIAL); // this operation has been executed without a scepter
             }
         }
 
         if (switchToError) {
-            InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, std::move(*switchToError), true);
+            InvokeOtherActor(*Self, &TDistributedConfigKeeper::SwitchToError, std::move(*switchToError));
         }
     }
 

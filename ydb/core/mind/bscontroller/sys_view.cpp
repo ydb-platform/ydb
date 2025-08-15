@@ -498,8 +498,8 @@ void TBlobStorageController::UpdateSystemViews() {
                     SysViewChangedGroups.insert(*group->BridgeProxyGroupId);
                 }
                 if (group->BridgeGroupInfo) {
-                    for (auto id : group->BridgeGroupInfo->GetBridgeGroupIds()) {
-                        SysViewChangedGroups.insert(TGroupId::FromValue(id));
+                    for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                        SysViewChangedGroups.insert(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
                     }
                 }
             }
@@ -625,7 +625,9 @@ void TBlobStorageController::UpdateSystemViews() {
 
         for (auto& [groupId, g] : state.Groups) {
             if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeGroupInfo) {
-                aggr(g, group->BridgeGroupInfo->GetBridgeGroupIds());
+                aggr(g, group->BridgeGroupInfo->GetBridgeGroupState().GetPile() | std::views::transform([](const auto& pile) {
+                    return TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                }));
             } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end()) {
                 aggr(g, it->second.Info->GetBridgeGroupIds());
             }

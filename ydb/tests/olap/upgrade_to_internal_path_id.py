@@ -1,5 +1,6 @@
 import pytest
 import ydb
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 import logging
@@ -17,8 +18,11 @@ class TestUpgradeToInternalPathId:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.config = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
             use_in_memory_pdisks=False,
-            column_shard_config={"generate_internal_path_id": False}
+            column_shard_config={
+                "generate_internal_path_id": False
+            }
         )
 
         self.cluster = KiKiMR(self.config)

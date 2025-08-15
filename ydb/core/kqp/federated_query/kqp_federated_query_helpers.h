@@ -23,7 +23,11 @@
 
 namespace NKikimrConfig {
     class TQueryServiceConfig;
-}
+}  // namespace NKikimrConfig
+
+namespace NKqpProto {
+    class TKqpExternalSink;
+}  // namespace NKqpProto
 
 namespace NKikimr::NKqp {
 
@@ -199,5 +203,7 @@ namespace NKikimr::NKqp {
         bool useTls,
         const TString& structuredTokenJson,
         const TString& path);
+
+    std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks);
 
 }  // namespace NKikimr::NKqp

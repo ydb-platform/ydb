@@ -334,6 +334,33 @@ namespace NKikimr::NBsController {
                 TTransactionContext& txc, TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
             NIceDb::TNiceDb db(txc.DB);
 
+            // when bridged non-proxy groups get updated, we update parent group too
+            THashSet<TGroupId> updates;
+            for (TGroupId groupId : state.GroupContentChanged) {
+                if (const TGroupInfo *group = state.Groups.Find(groupId)) {
+                    if (group->BridgeProxyGroupId && !state.GroupContentChanged.contains(*group->BridgeProxyGroupId)) {
+                        updates.insert(*group->BridgeProxyGroupId);
+                    }
+                }
+            }
+            state.GroupContentChanged.insert(updates.begin(), updates.end());
+
+            // also do the reverse: when bridged proxy group gets changed, all its descendants change too
+            updates.clear();
+            for (TGroupId groupId : state.GroupContentChanged) {
+                if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->BridgeGroupInfo) {
+                    for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                        const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                        if (!state.GroupContentChanged.contains(groupId)) {
+                            updates.insert(groupId);
+                        }
+                    }
+                }
+            }
+            state.GroupContentChanged.insert(updates.begin(), updates.end());
+
+            // spin generation for every changed group
+            THashSet<TGroupId> bridgeProxyGroupIds;
             for (TGroupId groupId : state.GroupContentChanged) {
                 TGroupInfo *group = state.Groups.FindForUpdate(groupId);
                 Y_ABORT_UNLESS(group);
@@ -344,6 +371,26 @@ namespace NKikimr::NBsController {
                         Y_ABORT_UNLESS(mutableSlot);
                         mutableSlot->GroupGeneration = group->Generation;
                     }
+                }
+                if (group->BridgeGroupInfo) {
+                    bridgeProxyGroupIds.insert(groupId);
+                }
+            }
+
+            // now adjust referenced groups for bridge mode groups
+            for (TGroupId bridgeProxyGroupId : bridgeProxyGroupIds) {
+                TGroupInfo *group = state.Groups.FindForUpdate(bridgeProxyGroupId);
+                Y_ABORT_UNLESS(group);
+                Y_ABORT_UNLESS(group->BridgeGroupInfo);
+
+                // set correct generations for bridge groups
+                for (auto& pile : *group->BridgeGroupInfo->MutableBridgeGroupState()->MutablePile()) {
+                    const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                    Y_ABORT_UNLESS(state.GroupContentChanged.contains(groupId));
+                    const TGroupInfo *referenced = state.Groups.Find(groupId);
+                    Y_ABORT_UNLESS(referenced);
+                    Y_DEBUG_ABORT_UNLESS(pile.GetGroupGeneration() + 1 == referenced->Generation);
+                    pile.SetGroupGeneration(referenced->Generation);
                 }
             }
 
@@ -1117,7 +1164,7 @@ namespace NKikimr::NBsController {
             pb->SetExpectedStatus(status.ExpectedStatus);
 
             if (group.BridgeGroupInfo) {
-                pb->SetIsProxyGroup(group.BridgeGroupInfo->BridgeGroupIdsSize() != 0);
+                pb->SetIsProxyGroup(true);
             }
             
             if (group.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE || group.VirtualGroupState) {

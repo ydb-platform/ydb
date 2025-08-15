@@ -475,6 +475,20 @@
             "uri": "https://{canondata_backend}/1942415/9fad3ce3e91e30529937a7e90c1c9c5e144ec28e/resource.tar.gz#test.test_Optimizers-FoldConstMax-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Optimizers-FuseLambdasWithDependsOn-default.txt-Debug]": [
+        {
+            "checksum": "b8237c4cc7ae022eb7822c2035648581",
+            "size": 1588,
+            "uri": "https://{canondata_backend}/1777230/28a0f04f04b492decd76cca678588bb071eeeabe/resource.tar.gz#test.test_Optimizers-FuseLambdasWithDependsOn-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-FuseLambdasWithDependsOn-default.txt-Results]": [
+        {
+            "checksum": "b363dabffd3b0be4e935b3ff8bcec679",
+            "size": 5300,
+            "uri": "https://{canondata_backend}/1777230/28a0f04f04b492decd76cca678588bb071eeeabe/resource.tar.gz#test.test_Optimizers-FuseLambdasWithDependsOn-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Optimizers-GroupBySingleKeyListUnused-default.txt-Debug]": [
         {
             "checksum": "381934f15093c807298b51ab2083fe99",

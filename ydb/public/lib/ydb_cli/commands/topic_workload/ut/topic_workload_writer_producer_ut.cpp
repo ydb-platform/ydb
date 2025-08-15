@@ -64,7 +64,7 @@ namespace NTests {
             std::shared_ptr<TLog> Log;
             std::vector<TString> GeneratedMessages;
 
-            TTopicWorkloadWriterProducer CreateProducer();
+            THolder<TTopicWorkloadWriterProducer> CreateProducer();
             TWriteSessionEvent::TAcksEvent CreateAckEvent(ui64 seqno);
             TTopicWorkloadWriterParams CreateParams();
             std::shared_ptr<TLog> CreateLogger();
@@ -72,8 +72,8 @@ namespace NTests {
             void InitContinuationToken(TTopicWorkloadWriterProducer& producer);
         };
 
-        TTopicWorkloadWriterProducer TFixture::CreateProducer() {
-            auto producer = TTopicWorkloadWriterProducer(
+        THolder<TTopicWorkloadWriterProducer> TFixture::CreateProducer() {
+            auto producer = MakeHolder<TTopicWorkloadWriterProducer>(
                 std::move(CreateParams()),
                 StatsCollector,
                 "my-test-producer",
@@ -81,7 +81,7 @@ namespace NTests {
                 Clock
             );
 
-            producer.SetWriteSession(WriteSession);
+            producer->SetWriteSession(WriteSession);
 
             return producer;
         }
@@ -168,9 +168,9 @@ namespace NTests {
             auto producer = CreateProducer();
             auto mockNow = TInstant::MilliSeconds(1730111051000);
             Clock.SetBase(mockNow);
-            InitContinuationToken(producer);
+            InitContinuationToken(*producer);
             auto createTime = TInstant::MilliSeconds(1730111050000);
-            producer.Send(createTime, {});
+            producer->Send(createTime, {});
             UNIT_ASSERT_EQUAL(0, StatsCollector->GetTotalWriteMessages());
             // We need this call, cause only this call initializes StatsCollector.WarmupTime.
             // If it is not initialized, no events will be accepted.
@@ -178,7 +178,7 @@ namespace NTests {
             StatsCollector->PrintWindowStatsLoop();
 
             auto ackEvent = CreateAckEvent(1);
-            producer.HandleAckEvent(ackEvent);
+            producer->HandleAckEvent(ackEvent);
 
             // We need this call, cause only this way collector will deque wrtie events to statisitcs.
             StatsCollector->PrintWindowStatsLoop();
@@ -190,8 +190,8 @@ namespace NTests {
             auto producer = CreateProducer();
             uint64_t initSeqNo = 0;
             ON_CALL(*WriteSession, GetInitSeqNo()).WillByDefault(testing::Return(NThreading::MakeFuture(initSeqNo)));
-            producer.WaitForInitSeqNo();
-            InitContinuationToken(producer);
+            producer->WaitForInitSeqNo();
+            InitContinuationToken(*producer);
             auto createTs = TInstant::MilliSeconds(1730111050000);
 
             // assert
@@ -207,16 +207,16 @@ namespace NTests {
                 ));
 
             // act
-            producer.Send(createTs, {});
+            producer->Send(createTs, {});
         }
 
         Y_UNIT_TEST_F(WaitForContinuationToken_ShouldExtractContinuationTokenFromEvent, TFixture) {
             auto producer = CreateProducer();
-            UNIT_ASSERT(!producer.ContinuationTokenDefined());
+            UNIT_ASSERT(!producer->ContinuationTokenDefined());
 
-            InitContinuationToken(producer);
+            InitContinuationToken(*producer);
 
-            UNIT_ASSERT(producer.ContinuationTokenDefined());
+            UNIT_ASSERT(producer->ContinuationTokenDefined());
         }
 
         Y_UNIT_TEST_F(WaitForContinuationToken_ShouldThrowExceptionIfEventOfTheWrongType, TFixture) {
@@ -229,7 +229,7 @@ namespace NTests {
             ON_CALL(*WriteSession, GetEvent(_)).WillByDefault(testing::Return(event));
             ON_CALL(*WriteSession, WaitEvent()).WillByDefault(testing::Return(NThreading::MakeFuture()));
 
-            UNIT_ASSERT_EXCEPTION(producer.WaitForContinuationToken(TDuration::Zero()), yexception);
+            UNIT_ASSERT_EXCEPTION(producer->WaitForContinuationToken(TDuration::Zero()), yexception);
         }
     }
 }

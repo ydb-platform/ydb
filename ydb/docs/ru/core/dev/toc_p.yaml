@@ -22,6 +22,8 @@ items:
   href: vector-indexes.md
 - name: Оптимизация планов запросов
   href: query-plans-optimization.md
+- name: Подсказки оптимизатора
+  href: query-hints.md
 - name: Пакетная загрузка
   href: batch-upload.md
 - name: Постраничный вывод

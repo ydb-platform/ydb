@@ -41,7 +41,7 @@ class Workload:
              'init',
              '--consumers', str(self.consumers),
              '--partitions', '4',
-             '--cleanup_policy_compact',
+             '--cleanup-policy-compact',
         ]
         yatest.common.execute(
             self.get_command(subcmds=subcmds)
@@ -78,7 +78,6 @@ class Workload:
             '--seconds', str(duration),
             '--consumers', str(self.consumers),
             '--no-commit',
-            '--restart-interval', str(self.restart_interval),
         ]
         yatest.common.execute(
             self.get_command(subcmds=subcmds)
@@ -88,12 +87,12 @@ class Workload:
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
             logging.info("Starting workload")
             readers = [
-                executor.submit(utils.read_from_topic, duration=durtation),
+                executor.submit(self.read_from_topic, duration=duration),
             ]
             writers = [
-                executor.submit(utils.write_to_topic, duration=durtation, message_rate=3000, message_size=45, keys_count=10, key_prefix="small_record", producers=1),
-                executor.submit(utils.write_to_topic, duration=durtation, message_rate=300, message_size=450, keys_count=10, key_prefix="medium_record", producers=1),
-                executor.submit(utils.write_to_topic, duration=durtation, message_rate=1, message_size=100000, keys_count=10, key_prefix="big_record", producers=1),
+                executor.submit(self.write_to_topic, duration=duration, message_rate=3000, message_size=45, keys_count=10, key_prefix="small_record", producers=1),
+                executor.submit(self.write_to_topic, duration=duration, message_rate=300, message_size=450, keys_count=10, key_prefix="medium_record", producers=1),
+                executor.submit(self.write_to_topic, duration=duration, message_rate=1, message_size=100000, keys_count=10, key_prefix="big_record", producers=1),
             ]
             runners = readers + writers
             logging.info("Waiting for workload task")
@@ -107,12 +106,16 @@ class Workload:
             for runner in runners:
                 runner.result()
 
+def skip_if_unsupported(versions):
+    return
+    if min(versions) < (25, 1, 4):
+        pytest.skip("Only available since 25-1-4")
+
+
 class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        #
-        # Setup cluster
-        #
+        skip_if_unsupported(self.versions)
         yield from self.setup_cluster()
 
     def test_workload(self):
@@ -128,9 +131,7 @@ class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
 class TestKafkaTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        #
-        # Setup cluster
-        #
+        skip_if_unsupported(self.versions)
         yield from self.setup_cluster()
 
     def test_workload(self):

@@ -284,7 +284,7 @@ public:
 
         if (Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasAlterSchema()) {
             if (auto checkResult = CheckColumns(Transaction.GetAlterColumnTable().GetAlterSchema().GetAddColumns(), AppData()); !checkResult) {
-                result->SetError(NKikimrScheme::StatusSchemeError, checkResult.error());
+                result->SetError(NKikimrScheme::StatusInvalidParameter, checkResult.error());
                 return result;
             }
         }

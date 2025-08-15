@@ -488,7 +488,7 @@ public:
         for (auto& schemaPreset : Transaction.GetAlterColumnStore().GetAlterSchemaPresets()) {
             if (schemaPreset.HasAlterSchema()) {
                 if (auto checkResult = NKikimr::NSchemeShard::NOlap::CheckColumns(schemaPreset.GetAlterSchema().GetAddColumns(), AppData()); !checkResult) {
-                    result->SetError(NKikimrScheme::StatusSchemeError, checkResult.error());
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, checkResult.error());
                     return result;
                 }
             }

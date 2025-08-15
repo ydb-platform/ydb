@@ -1,6 +1,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/read_quoter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -291,6 +292,17 @@ protected:
     template<class EventType>
     void AddOneTimeEventObserver(bool& seenEvent, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback = [](){return TTestActorRuntimeBase::EEventAction::PROCESS;});
 
+    void ExpectNoExclusiveLockAcquired();
+    void ExpectNoReadQuotaAcquired();
+    void SendAcquireExclusiveLock();
+    void SendAcquireReadQuota();
+    void SendReadQuotaConsumed();
+    void SendReleaseExclusiveLock();
+    void WaitExclusiveLockAcquired();
+    void WaitReadQuotaAcquired();
+
+    void EnsureReadQuoterExists();
+
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
     //
@@ -303,6 +315,17 @@ protected:
     TTestActorRuntimeBase::TEventObserver PrevEventObserver;
 
     TActorId Pipe;
+
+    struct TReadQuoter {
+        NKikimrPQ::TPQConfig PQConfig;
+        NPersQueue::TTopicConverterPtr TopicConverter;
+        NKikimrPQ::TPQTabletConfig PQTabletConfig;
+        TPartitionId PartitionId;
+        TTabletCountersBase Counters;
+        TActorId Quoter;
+    };
+
+    TMaybe<TReadQuoter> ReadQuoter;
 };
 
 void TPQTabletFixture::SetUp(NUnitTest::TTestContext&)
@@ -2920,6 +2943,102 @@ Y_UNIT_TEST_F(PQTablet_App_SendReadSet_Invalid_Step, TPQTabletFixture)
     WaitForAppSendRsResponse({.Status = false,});
 }
 
+void TPQTabletFixture::ExpectNoExclusiveLockAcquired()
+{
+    EnsureReadQuoterExists();
+}
+
+void TPQTabletFixture::ExpectNoReadQuotaAcquired()
+{
+    EnsureReadQuoterExists();
+}
+
+void TPQTabletFixture::SendAcquireExclusiveLock()
+{
+    EnsureReadQuoterExists();
+
+    Ctx->Runtime->Send(ReadQuoter->Quoter,
+                       Ctx->Edge,
+                       new TEvPQ::TEvAcquireExclusiveLock());
+}
+
+void TPQTabletFixture::SendAcquireReadQuota(ui64 cookie)
+{
+    EnsureReadQuoterExists();
+
+    auto request = MakeHolder<TEvPQ::TEvRead>();
+
+    Ctx->Runtime->Send(ReadQuoter->Quoter,
+                       Ctx->Edge,
+                       new TEvPQ::TEvRequestQuota(cookie, std::move(request)));
+}
+
+void TPQTabletFixture::SendReadQuotaConsumed()
+{
+    EnsureReadQuoterExists();
+
+    Ctx->Runtime->Send(ReadQuoter->Quoter,
+                       Ctx->Edge,
+                       new TEvPQ::TEvConsumed());
+}
+
+void TPQTabletFixture::SendReleaseExclusiveLock()
+{
+    EnsureReadQuoterExists();
+
+    Ctx->Runtime->Send(ReadQuoter->Quoter,
+                       Ctx->Edge,
+                       new TEvPQ::TEvReleaseExclusiveLock());
+}
+
+void TPQTabletFixture::WaitExclusiveLockAcquired()
+{
+    EnsureReadQuoterExists();
+}
+
+void TPQTabletFixture::WaitReadQuotaAcquired()
+{
+    EnsureReadQuoterExists();
+}
+
+void TPQTabletFixture::EnsureReadQuoterExists()
+{
+    if (ReadQuoter) {
+        return;
+    }
+
+    Cerr << "Ctx->Edge=" << Ctx->Edge << Endl;
+
+    ReadQuoter.ConstructInPlace();
+    ReadQuoter->Quoter = Ctx->Runtime->Register(new NPQ::TReadQuoter(ReadQuoter->PQConfig,
+                                                                     ReadQuoter->TopicConverter,
+                                                                     ReadQuoter->PQTabletConfig,
+                                                                     ReadQuoter->PartitionId,
+                                                                     TActorId{}, // TabletActor
+                                                                     Ctx->Edge,
+                                                                     1234567890, // TabletId
+                                                                     ReadQuoter->Counters));
+}
+
+Y_UNIT_TEST_F(ReadQuoter_ExclusiveLock, TPQTabletFixture)
+{
+    SendAcquireReadQuota();
+    WaitReadQuotaAcquired();
+
+    SendAcquireExclusiveLock();
+    ExpectNoExclusiveLockAcquired();
+
+    SendReadQuotaConsumed();
+    WaitExclusiveLockAcquired();
+
+    SendAcquireReadQuota();
+    ExpectNoReadQuotaAcquired();
+
+    SendReleaseExclusiveLock();
+    WaitReadQuotaAcquired();
+
+    Y_FAIL("not implemented");
+}
 
 }
 

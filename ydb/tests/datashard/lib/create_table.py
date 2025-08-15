@@ -29,6 +29,44 @@ def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_
     return sql_create
 
 
+def create_columnshard_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_columns: dict[str, dict[str]], index_columns: dict[str, dict[str]], unique: str, sync: str) -> str:
+    create_columns = []
+    for prefix in columns.keys():
+        if (prefix != "ttl_" or columns[prefix][0] != "") and len(columns[prefix]) != 0:
+            if prefix == "pk_":
+                create_columns.append(", ".join(
+                    f"{prefix}{cleanup_type_name(type_name)} {type_name} NOT NULL" for type_name in columns[prefix]))
+            else:
+                create_columns.append(", ".join(
+                    f"{prefix}{cleanup_type_name(type_name)} {type_name}" for type_name in columns[prefix]))
+    create_primary_key = []
+    for prefix in pk_columns.keys():
+        if len(pk_columns[prefix]) != 0:
+            create_primary_key.append(", ".join(
+                f"{prefix}{cleanup_type_name(type_name)}" for type_name in pk_columns[prefix]))
+    create_index = []
+    for prefix in index_columns.keys():
+        if len(index_columns[prefix]) != 0:
+            create_index.append(", ".join(
+                f"INDEX idx_{prefix}{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON ({prefix}{cleanup_type_name(type_name)})" for type_name in index_columns[prefix]))
+
+    partition_by = ", ".join([f"{prefix}{cleanup_type_name(type_name)}" for prefix in pk_columns.keys() for type_name in pk_columns[prefix]])
+
+    sql_create = f"""
+        CREATE TABLE `{table_name}` (
+            {", ".join(create_columns)},
+            PRIMARY KEY(
+                {", ".join(create_primary_key)}
+                )
+            {f", {", ".join(create_index)}" if create_index else ""}
+            )
+        PARTITION BY HASH({partition_by})
+        WITH (
+            STORE = COLUMN
+        )
+    """
+    return sql_create
+
 def create_ttl_sql_request(ttl: str, inteval: dict[str, str], time: str, table_name: str) -> str:
     create_ttl = []
     for pt in inteval.keys():

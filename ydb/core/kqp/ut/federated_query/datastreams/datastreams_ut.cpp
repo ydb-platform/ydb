@@ -91,7 +91,7 @@ void WaitOutputMessage(NYdb::NTopic::TTopicClient& topicClient, const TString& t
     }
     UNIT_ASSERT_VALUES_EQUAL(received.size(), expectedMessage.size());
     for (size_t i = 0; i < received.size(); ++i) {
-        UNIT_ASSERT_EQUAL(received[i], expectedMessage[i]);
+        UNIT_ASSERT_VALUES_EQUAL(received[i], expectedMessage[i]);
     }
 };
 

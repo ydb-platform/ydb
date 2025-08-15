@@ -298,7 +298,7 @@ def libffi_post_install(self):
 
 libffi = GNUMakeNixProject(
     nixattr="libffi",
-    owners=["borman", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/restricted/libffi",
     makeflags=["libffi.la", "libffi.map"],
     copy_sources=[

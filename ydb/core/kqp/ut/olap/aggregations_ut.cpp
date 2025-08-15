@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "Aggregate-TableFullScan");
         }
     }
 
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]])");
 
             // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "Aggregate-TableFullScan");
 //            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
         }
     }
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "Aggregate-TableFullScan");
         }
     }
 
@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[23000u;]])");
 
             // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "Aggregate-TableFullScan");
         }
     }
 
@@ -1033,7 +1033,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 ORDER BY c, resource_id DESC LIMIT 3
             )")
             .SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .SetExpectedReadNodeType("TableFullScan");
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
         testCase.FillExpectedAggregationGroupByPlanOptions();
         TestAggregations({ testCase });
     }

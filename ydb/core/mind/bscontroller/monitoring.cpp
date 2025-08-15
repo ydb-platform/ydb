@@ -1428,6 +1428,7 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
                     TABLEH() { out << "Donors"; }
+                    TABLEH() { out << "Bridge"; }
                 }
             }
             TABLEBODY() {
@@ -1498,6 +1499,21 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
                     numDonors += vdisk->Donors.size();
                 }
                 out << numDonors;
+            }
+
+            TStringBuilder bridge;
+            if (group.BridgeGroupInfo) {
+                for (const auto& pile : group.BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    if (bridge) {
+                        bridge << ' ';
+                    }
+                    bridge << pile.GetGroupId() << ':' << pile.GetGroupGeneration()
+                        << '#' << NKikimrBridge::TGroupState::EStage_Name(pile.GetStage())
+                        << '@' << pile.GetBecameUnsyncedGeneration();
+                }
+            }
+            TABLED() {
+                out << bridge;
             }
         }
     }

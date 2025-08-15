@@ -10,6 +10,8 @@
 
 namespace NSQLComplete {
 
-    TMaybe<TUseContext> FindUseStatement(TParsedInput input, const TNamedNodes& nodes);
+    TMaybe<TClusterContext> ParseClusterContext(SQLv1::Cluster_exprContext* ctx, const TNamedNodes& nodes);
+
+    TMaybe<TClusterContext> FindUseStatement(TParsedInput input, const TNamedNodes& nodes);
 
 } // namespace NSQLComplete

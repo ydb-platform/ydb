@@ -560,7 +560,6 @@ namespace NKikimr::NStorage {
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
-                CheckSyncersAfterCommit = r.CheckSyncersAfterCommit;
                 StartProposition(&r.ConfigToPropose.value());
             } else { // no new proposition has been made
                 Finish(TResult::OK, std::nullopt);

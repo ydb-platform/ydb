@@ -47,7 +47,7 @@ namespace NYql {
                 case NYql::EGenericDataSourceKind::MONGO_DB:
                     return "MongoDBGeneric";
                 case NYql::EGenericDataSourceKind::OPENSEARCH:
-                    return "OpenSearchGeneric";  
+                    return "OpenSearchGeneric";
                 default:
                     throw yexception() << "Data source kind is unknown or not specified";
             }
@@ -72,9 +72,15 @@ namespace NYql {
                 return Nothing();
             }
 
-            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
+            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
+
+                    if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
+                        ctx.AddError(TIssue(ctx.GetPosition(genReadTable.Pos()), "Cannot use watermarks"));
+                        return {};
+                    }
+
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
                     const auto token = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
                     const auto rowType = genReadTable.Ref()
@@ -301,7 +307,7 @@ namespace NYql {
                             break;
                         case NYql::EGenericDataSourceKind::OPENSEARCH:
                             properties["SourceType"] = "OpenSearch";
-                            break;    
+                            break;
                         case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:

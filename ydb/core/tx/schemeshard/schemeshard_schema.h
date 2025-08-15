@@ -2167,7 +2167,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<ShardIdx>;
         using TColumns = TableColumns<ShardIdx>;
     };
-  
+
     struct IncrementalBackups : Table<125> {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
         struct State : Column<2, NScheme::NTypeIds::Uint8> {};

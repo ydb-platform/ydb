@@ -22,12 +22,14 @@ SRCS(
     kqp_stream_lookup_worker.h
     kqp_tasks_runner.cpp
     kqp_transport.cpp
+    kqp_vector_actor.cpp
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
     kqp_write_table.cpp
 
     scheduler/kqp_compute_scheduler_service.cpp
     scheduler/kqp_schedulable_actor.cpp
+    scheduler/kqp_schedulable_task.cpp
     scheduler/tree/dynamic.cpp
     scheduler/tree/snapshot.cpp
 )

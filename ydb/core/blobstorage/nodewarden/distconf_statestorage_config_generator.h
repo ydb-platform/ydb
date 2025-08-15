@@ -10,7 +10,8 @@ namespace NKikimr::NStorage {
         TStateStoragePerPileGenerator(THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>& nodes,
             const std::unordered_map<ui32, ui32>& selfHealNodesState,
             TBridgePileId pileId,
-            std::unordered_set<ui32>& usedNodes);
+            std::unordered_set<ui32>& usedNodes,
+            const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig);
         bool IsGoodConfig() const;
         void AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss);
 
@@ -26,6 +27,7 @@ namespace NKikimr::NStorage {
         void FillNodeGroups(THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>& nodes);
         void CalculateRingsParameters();
         bool PickNodesSimpleStrategy(TNodeGroup& group, ui32 stateLimit, bool ignoreRacks);
+        bool PickOldNodesStrategy(TNodeGroup& group);
         void PickNodes(TNodeGroup& group);
         ui32 CalcNodeState(ui32 nodeId, bool disconnected) const;
 
@@ -33,6 +35,7 @@ namespace NKikimr::NStorage {
         const std::unordered_map<ui32, ui32>& SelfHealNodesState;
         std::vector<TNodeGroup> NodeGroups;
         std::unordered_set<ui32>& UsedNodes;
+        const NKikimrConfig::TDomainsConfig::TStateStorage& OldConfig;
         std::vector<std::vector<ui32>> Rings;
         ui32 RingsInGroupCount = 1;
         ui32 ReplicasInRingCount = 1;

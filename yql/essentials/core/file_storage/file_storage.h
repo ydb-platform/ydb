@@ -30,6 +30,7 @@ struct IFileStorage: public TThrRefBase {
 
     virtual TFsPath GetRoot() const = 0;
     virtual TFsPath GetTemp() const = 0;
+    virtual TFsPath GetLockFilePath(const TString& lockName) const = 0;
     virtual const TFileStorageConfig& GetConfig() const = 0;
 };
 

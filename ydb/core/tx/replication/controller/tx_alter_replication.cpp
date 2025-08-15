@@ -88,6 +88,8 @@ public:
         }
 
         Replication->SetConfig(std::move(*record.MutableConfig()));
+        Replication->ResetCredentials(ctx);
+
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
@@ -110,6 +112,9 @@ public:
 
             target->Shutdown(ctx);
             target->SetDstState(TReplication::EDstState::Alter);
+            if (target->GetStreamState() == TReplication::EStreamState::Error && desiredState == TReplication::EState::Ready) {
+                target->SetStreamState(TReplication::EStreamState::Creating);
+            }
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
             );

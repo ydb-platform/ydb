@@ -155,7 +155,7 @@ namespace NKikimr::NBsController {
                    throw TPoison();
                 default: {
                     TStringStream ss;
-                    ss << "unexpected event " << ev->GetTypeName()
+                    ss << "unexpected event " << ev->GetTypeName();
                     Y_DEBUG_ABORT_UNLESS(false, ss.Str().c_str());
                 }
             }

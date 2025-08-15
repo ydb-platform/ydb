@@ -3,6 +3,14 @@ from datetime import datetime
 
 
 def format_sql_value(value, type_name, unwrap_after_cast: bool = False):
+    """
+    Format a value for SQL insertion.
+
+    Args:
+        value: The value to format.
+        type_name: The type of the value.
+        unwrap_after_cast: Whether to unwrap the value after casting. Unwrap makes the value type not nullable.
+    """
     if type_name == "Datetime64" or type_name == "Datetime":
         value = value.strftime("%Y-%m-%dT%H:%M:%SZ")
     if type_name == "String" or type_name == "Utf8":

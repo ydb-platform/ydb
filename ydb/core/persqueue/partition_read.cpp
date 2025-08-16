@@ -3,6 +3,7 @@
 #include "partition_log.h"
 #include "partition_util.h"
 #include "partition_common.h"
+#include "partition_compactification.h"
 #include "read.h"
 #include "dread_cache_service/caching_service.h"
 

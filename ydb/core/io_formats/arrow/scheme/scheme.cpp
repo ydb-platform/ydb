@@ -19,7 +19,11 @@ arrow::Result<TArrowCSV> TArrowCSVScheme::Create(const TVector<std::pair<TString
             errors.emplace_back("column " + name + ": " + csvArrowType.status().ToString());
             continue;
         }
-        convertedColumns.emplace_back(TColumnInfo{name, *arrowType, *csvArrowType});
+        std::optional<std::pair<ui8, ui8>> decimalParams;
+        if (type.GetTypeId() == NScheme::NTypeIds::Decimal) {
+            decimalParams = std::make_pair(type.GetDecimalType().GetPrecision(), type.GetDecimalType().GetScale());
+        }
+        convertedColumns.emplace_back(TColumnInfo{name, *arrowType, *csvArrowType, decimalParams});
     }
     if (!errors.empty()) {
         return arrow::Status::TypeError(ErrorPrefix() + "columns errors: " + JoinSeq("; ", errors));

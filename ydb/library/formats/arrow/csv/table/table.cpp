@@ -19,7 +19,12 @@ arrow::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::
             errors.emplace_back("column " + column.Name + ": " + csvArrowType.status().ToString());
             continue;
         }
-        convertedColumns.emplace_back(TColumnInfo{TString{column.Name}, *arrowType, *csvArrowType});
+        auto tp = ExtractType(column.Type);
+        std::optional<std::pair<ui8, ui8>> decimalParams;
+        if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Decimal) {
+            decimalParams = std::make_pair(tp.GetDecimal().Precision, tp.GetDecimal().Scale);
+        }
+        convertedColumns.emplace_back(TColumnInfo{TString{column.Name}, *arrowType, *csvArrowType, decimalParams});
         if (NYdb::TTypeParser(column.Type).GetKind() != NYdb::TTypeParser::ETypeKind::Optional || column.NotNull.value_or(false)) {
             notNullColumns.emplace(column.Name);
         }
@@ -42,7 +47,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetArrowType(con
     auto tp = ExtractType(type);
     switch (tp.GetKind()) {
     case NYdb::TTypeParser::ETypeKind::Decimal:
-        return arrow::decimal(tp.GetDecimal().Precision, tp.GetDecimal().Scale);
+        return std::make_shared<arrow::FixedSizeBinaryType>(16);
     case NYdb::TTypeParser::ETypeKind::Primitive:
         switch (tp.GetPrimitive()) {
             case NYdb::EPrimitiveType::Bool:

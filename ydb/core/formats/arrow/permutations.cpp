@@ -1,6 +1,7 @@
 #include "arrow_helpers.h"
 #include "permutations.h"
 #include "size_calcer.h"
+#include "process_columns.h"
 
 #include "hash/calcer.h"
 

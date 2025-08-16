@@ -6,6 +6,7 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
+#include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/io_formats/arrow/scheme/scheme.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/path.h>

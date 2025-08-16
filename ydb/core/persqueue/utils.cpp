@@ -130,8 +130,6 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
         consumer->SetReadFromTimestampsMs(0);
         consumer->SetImportant(true);
     }
-
-
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {

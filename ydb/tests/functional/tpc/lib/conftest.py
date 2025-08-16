@@ -14,6 +14,9 @@ class FunctionalTestBase:
             domain_name='local',
             extra_feature_flags=["enable_resource_pools"],
             use_in_memory_pdisks=True,
+            column_shard_config={
+                "alter_object_enabled": True,
+            },
         )
         if table_service_config:
             config_generator.yaml_config["table_service_config"] = table_service_config

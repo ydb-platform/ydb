@@ -925,6 +925,7 @@ private:
 
                 *PartialJoinCompleted = true;
                 NextBucketNumber = 0;
+                JoinedTablePtr->ResetIterator();
             }
 
         }

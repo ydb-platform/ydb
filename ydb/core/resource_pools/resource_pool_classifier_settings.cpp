@@ -55,7 +55,7 @@ std::optional<TString> TClassifierSettings::Validate() const {
     }
     NACLib::TUserToken token(*MemberName, TVector<NACLib::TSID>{});
     if (token.IsSystemUser()) {
-        return TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << MemberName;
+        return TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << *MemberName;
     }
     return std::nullopt;
 }

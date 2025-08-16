@@ -88,7 +88,7 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
         yaml_dict["table_service_config"]["enable_htap_tx"] = True
         yaml_dict["table_service_config"]["enable_olap_sink"] = True
         yaml_dict["table_service_config"]["enable_create_table_as"] = True
-        yaml_dict["feature_flags"]["enable_table_datetime_64"] = True
+        yaml_dict["feature_flags"]["enable_table_datetime64"] = True
     return yaml_dict
 
 

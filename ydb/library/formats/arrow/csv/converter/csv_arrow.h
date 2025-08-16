@@ -55,6 +55,8 @@ protected:
         TString Name;
         std::shared_ptr<arrow::DataType> ArrowType;
         std::shared_ptr<arrow::DataType>CsvArrowType;
+        ui32 Precision = 0;
+        ui32 Scale = 0;
     };
     using TColummns = TVector<TColumnInfo>;
     TArrowCSV(const TColummns& columns, bool header, const std::set<std::string>& notNullColumns);
@@ -71,6 +73,7 @@ private:
     std::vector<TString> ResultColumns;
     std::unordered_map<std::string, std::shared_ptr<arrow::DataType>> OriginalColumnTypes;
     std::set<std::string> NotNullColumns;
+    std::unordered_map<std::string, std::pair<ui32, ui32>> DecimalParams; // column name -> (precision, scale)
 
     std::shared_ptr<arrow::RecordBatch> ConvertColumnTypes(std::shared_ptr<arrow::RecordBatch> parsedBatch) const;
 };

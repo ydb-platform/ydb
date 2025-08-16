@@ -625,10 +625,13 @@ bool TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResp
             }
         }
     }
-    if (LastProcessedOffset > CommittedOffset) {
-        OffsetToCommit = LastProcessedOffset;
+    if (LastProcessedOffset) {
+        if (LastProcessedOffset > CommittedOffset) {
+            OffsetToCommit = LastProcessedOffset;
+        }
+        SavedLastProcessedOffset = *LastProcessedOffset;
     }
-    SavedLastProcessedOffset = LastProcessedOffset;
+
     UpdateDataKeysBody();
     return true;
 }

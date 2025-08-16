@@ -71,8 +71,6 @@ bool IsImportantClient(const NKikimrPQ::TPQTabletConfig& config, const TString& 
 void Migrate(NKikimrPQ::TPQTabletConfig& config) {
     // if ReadRules isn`t empty than it is old configuration format
     // when modify new format (add or alter a consumer) readRules is cleared
-    bool doAddCompactionConsumer = config.GetEnableCompactification();
-
     if (config.ReadRulesSize()) {
         config.ClearConsumers();
 
@@ -80,9 +78,6 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             auto* consumer = config.AddConsumers();
 
             consumer->SetName(config.GetReadRules(i));
-            if (doAddCompactionConsumer && consumer->GetName() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
-                doAddCompactionConsumer = false;
-            }
             if (i < config.ReadFromTimestampsMsSize()) {
                 consumer->SetReadFromTimestampsMs(config.GetReadFromTimestampsMs(i));
             }
@@ -105,12 +100,6 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             }
             consumer->SetImportant(IsImportantClient(config, consumer->GetName()));
         }
-        if (doAddCompactionConsumer) {
-            auto* consumer = config.AddConsumers();
-            consumer->SetName(NPQ::CLIENTID_COMPACTION_CONSUMER);
-            consumer->SetReadFromTimestampsMs(0);
-            consumer->SetImportant(true);
-        }
         config.ClearReadRules();
         config.ClearReadFromTimestampsMs();
         config.ClearConsumerFormatVersions();
@@ -131,6 +120,18 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             config.AddAllPartitions()->CopyFrom(partition);
         }
     }
+
+    bool doAddCompactionConsumer = config.GetEnableCompactification() && AllOf(config.GetConsumers(), [](const auto& consumer) {
+        return NPQ::CLIENTID_COMPACTION_CONSUMER != consumer.GetName();
+    });
+    if (doAddCompactionConsumer) {
+        auto* consumer = config.AddConsumers();
+        consumer->SetName(NPQ::CLIENTID_COMPACTION_CONSUMER);
+        consumer->SetReadFromTimestampsMs(0);
+        consumer->SetImportant(true);
+    }
+
+
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {

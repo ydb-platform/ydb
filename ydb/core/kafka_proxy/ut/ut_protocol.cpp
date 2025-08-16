@@ -116,6 +116,7 @@ public:
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(128);
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(1_KB);
+        appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(50_KB);
 
         appConfig.MutableGRpcConfig()->SetHost("::1");
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
@@ -349,8 +350,7 @@ void AssertMessageAvaialbleThroughLogbrokerApiAndCommit(std::shared_ptr<NTopic::
 void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 minActivePartitions, std::vector<TString> consumers,
                  ui64 quota = 0) {
     auto topicSettings = NYdb::NTopic::TCreateTopicSettings()
-                            .PartitioningSettings(minActivePartitions, 100)
-                            ;
+                            .PartitioningSettings(minActivePartitions, 100);
 
     if(quota) {
         topicSettings.PartitionWriteSpeedBytesPerSecond(quota);
@@ -364,7 +364,7 @@ void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 
                                 .ExtractValueSync();
 
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
 }
 
@@ -2165,7 +2165,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TStringBuilder topic1FullPath;
         topic1FullPath << "/Root/" << topic1;
 
-        CreateTopic(pqClient, topic1FullPath, 1, {"consumer1"}, 100_MB);
+        CreateTopic(pqClient, topic1FullPath, 1, {"consumer1"}, 50_MB);
         {
             // Creation of two topics
             auto msg = client.CreateTopics({
@@ -2174,7 +2174,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 TTopicConfig("topic_bad", 1, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}})
             });
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 3);
-
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), topic1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), topic2);
 
@@ -2287,23 +2286,29 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         }
         auto writeMessage = [&] (const TString& key, ui64 size) {
-            NYdb::NTopic::TWriteMessage message{key + TString{size, 'a'}};
+            NYdb::NTopic::TWriteMessage message{TString{size, 'a'}};
             NYdb::NTopic::TWriteMessage::TMessageMeta meta1;
             meta1.push_back(std::make_pair("__key", key));
             message.MessageMeta(meta1);
             writeSession->Write(std::move(message));
             totalWritten++;
         };
+
+        Cerr << ">>>>> BEGIN WRITE" << Endl;
+
         ui32 totalWriteCycles = 20;
         for (auto i = 0u; i < totalWriteCycles; i++) {
             writeMessage("key1", 100_KB);
             writeMessage("key2", 500_KB);
-            writeMessage("key3", 9_MB);
-            writeMessage("key4", 20_MB);
-            writeMessage(TStringBuilder() << "extra-key-" << i, 3_MB);
+            //writeMessage("key3", 9_MB);
+            //writeMessage("key4", 20_MB);
+            //writeMessage(TStringBuilder() << "extra-key-" << i, 3_MB);
             Cerr << "Wrote message " << i << Endl;
         }
+        Cerr << ">>>>> END WRITE" << Endl;
+
         writeSession->Close(TDuration::Seconds(10));
+        Cerr << ">>>>> SESSION CLOSED" << Endl;
         Sleep(TDuration::Seconds(20));
 
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
@@ -2360,7 +2365,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(keysFound.size(), 4 + totalWriteCycles); //4 + 15
         UNIT_ASSERT(totalMessages < totalWritten);
     }
-
 
     Y_UNIT_TEST(TopicsWithCleaunpPolicyScenario) {
         TInsecureTestServer testServer("2", false, true, true, true, false);

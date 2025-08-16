@@ -375,30 +375,43 @@ Y_UNIT_TEST_LLVM(TestImp1) {
     CTEST << "Time for get 2 = " << std::chrono::duration_cast<std::chrono::milliseconds>(end041 - begin041).count() << "[ms]" << Endl;
     CTEST << Endl;
 
-    std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::duration joinTime {};
+    std::chrono::steady_clock::duration getTime {};
 
-    joinTable.Join(smallTable, bigTable);
-
-    std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
-    CTEST << "Time for join = " << std::chrono::duration_cast<std::chrono::milliseconds>(end05 - begin05).count() << "[ms]" << Endl;
-    CTEST << Endl;
-
-    mi = NMemInfo::GetMemInfo();
-    CTEST << "Mem usage after tables join (MB): " << mi.RSS / (1024 * 1024) << Endl;
-
-    joinTable.ResetIterator();
     ui64 numJoinedTuples = 0;
 
-    std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
+    for (ui32 bucket = 0; bucket != GraceJoin::NumberOfBuckets; ++bucket) {
+        std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
 
-    while (joinTable.NextJoinedData(td1, td2)) {
-        numJoinedTuples++;
+        joinTable.Join(bucket, smallTable, bigTable);
+
+        std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
+
+        joinTime += end05 - begin05;
+
+        joinTable.ResetIterator();
+
+        std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
+
+        while (joinTable.NextJoinedData(td1, td2)) {
+            numJoinedTuples++;
+        }
+
+        std::chrono::steady_clock::time_point end042 = std::chrono::steady_clock::now();
+
+        getTime += end042 - begin042;
     }
 
-    CTEST << "Num of joined tuples : " << numJoinedTuples << Endl;
+    mi = NMemInfo::GetMemInfo();
 
-    std::chrono::steady_clock::time_point end042 = std::chrono::steady_clock::now();
-    CTEST << "Time for get joined tuples: = " << std::chrono::duration_cast<std::chrono::milliseconds>(end042 - begin042).count() << "[ms]" << Endl;
+    CTEST << "Mem usage after tables join (MB): " << mi.RSS / (1024 * 1024) << Endl;
+    CTEST << Endl;
+
+    CTEST << "Time for join = " << std::chrono::duration_cast<std::chrono::milliseconds>(joinTime).count() << "[ms]" << Endl;
+    CTEST << Endl;
+
+    CTEST << "Time for get joined tuples: = " << std::chrono::duration_cast<std::chrono::milliseconds>(getTime).count() << "[ms]" << Endl;
+    CTEST << "Num of joined tuples : " << numJoinedTuples << Endl;
     CTEST << Endl;
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -541,22 +554,27 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
 
         millisecondsNextTuple += std::chrono::duration_cast<std::chrono::milliseconds>(end04 - begin04).count();
 
-        std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
+        std::chrono::steady_clock::duration joinTime {};
+        std::chrono::steady_clock::duration getTime {};
 
-        joinTable.Join(smallTable, bigTable, EJoinKind::Inner, false, pos < BigTableTuples);
+        for (ui32 bucket = 0; bucket != GraceJoin::NumberOfBuckets; ++bucket) {
+            std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
+            joinTable.Join(bucket, smallTable, bigTable, EJoinKind::Inner, false, pos < BigTableTuples);
+            std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
 
-        std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
-        millisecondsJoin += std::chrono::duration_cast<std::chrono::milliseconds>(end05 - begin05).count();
+            joinTime += end05 - begin05;
 
-        joinTable.ResetIterator();
+            joinTable.ResetIterator();
 
-        std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
-        while (joinTable.NextJoinedData(td1, td2)) {
-            numJoinedTuples++;
+            std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
+            while (joinTable.NextJoinedData(td1, td2)) {
+                numJoinedTuples++;
+            }
+            std::chrono::steady_clock::time_point end042 = std::chrono::steady_clock::now();
+            getTime += end042 - begin042;
         }
-
-        std::chrono::steady_clock::time_point end042 = std::chrono::steady_clock::now();
-        millisecondsNextJoinTuple += std::chrono::duration_cast<std::chrono::milliseconds>(end042 - begin042).count();
+        millisecondsJoin += std::chrono::duration_cast<std::chrono::milliseconds>(joinTime).count();
+        millisecondsNextJoinTuple += std::chrono::duration_cast<std::chrono::milliseconds>(getTime).count();
     }
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
@@ -687,28 +705,35 @@ Y_UNIT_TEST_LLVM(TestImp2) {
     CTEST << "Time for get 2 = " << std::chrono::duration_cast<std::chrono::milliseconds>(end041 - begin041).count() << "[ms]" << Endl;
     CTEST << Endl;
 
-    std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::duration joinTime {};
+    std::chrono::steady_clock::duration getTime {};
 
-    joinTable.Join(smallTable, bigTable);
-
-    std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
-    CTEST << "Time for join = " << std::chrono::duration_cast<std::chrono::milliseconds>(end05 - begin05).count() << "[ms]" << Endl;
-    CTEST << Endl;
-
-    joinTable.ResetIterator();
     ui64 numJoinedTuples = 0;
 
-    std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
+    for (ui32 bucket = 0; bucket != GraceJoin::NumberOfBuckets; ++bucket) {
+        std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
+        joinTable.Join(bucket, smallTable, bigTable);
 
-    while (joinTable.NextJoinedData(td1, td2)) {
-        numJoinedTuples++;
+        std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
+        joinTime += end05 - begin05;
+
+        joinTable.ResetIterator();
+
+        std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
+
+        while (joinTable.NextJoinedData(td1, td2)) {
+            numJoinedTuples++;
+        }
+        std::chrono::steady_clock::time_point end042 = std::chrono::steady_clock::now();
+        getTime += end042 - begin042;
     }
 
-    CTEST << "Num of joined tuples : " << numJoinedTuples << Endl;
-
-    std::chrono::steady_clock::time_point end042 = std::chrono::steady_clock::now();
-    CTEST << "Time for get joined tuples: = " << std::chrono::duration_cast<std::chrono::milliseconds>(end042 - begin042).count() << "[ms]" << Endl;
+    CTEST << "Time for join = " << std::chrono::duration_cast<std::chrono::milliseconds>(joinTime).count() << "[ms]" << Endl;
     CTEST << Endl;
+    CTEST << "Time for get joined tuples: = " << std::chrono::duration_cast<std::chrono::milliseconds>(getTime).count() << "[ms]" << Endl;
+    CTEST << Endl;
+
+    CTEST << "Num of joined tuples : " << numJoinedTuples << Endl;
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     CTEST << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << Endl;
@@ -819,27 +844,35 @@ Y_UNIT_TEST_LLVM(TestImp3) {
     CTEST << "Time for get 2 = " << std::chrono::duration_cast<std::chrono::milliseconds>(end041 - begin041).count() << "[ms]" << Endl;
     CTEST << Endl;
 
-    std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::duration joinTime {};
+    std::chrono::steady_clock::duration getTime {};
 
-    joinTable.Join(bigTable, bigTable);
-
-    std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
-    CTEST << "Time for join = " << std::chrono::duration_cast<std::chrono::milliseconds>(end05 - begin05).count() << "[ms]" << Endl;
-    CTEST << Endl;
-
-    joinTable.ResetIterator();
     ui64 numJoinedTuples = 0;
+    for (ui32 bucket = 0; bucket != GraceJoin::NumberOfBuckets; ++bucket) {
+        std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
 
-    std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
+        joinTable.Join(bigTable, bigTable);
 
-    while (joinTable.NextJoinedData(td1, td2)) {
-        numJoinedTuples++;
+        std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
+
+        joinTime += end05 - begin05;
+
+        joinTable.ResetIterator();
+
+        std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
+
+        while (joinTable.NextJoinedData(td1, td2)) {
+           numJoinedTuples++;
+        }
+        std::chrono::steady_clock::time_point end042 = std::chrono::steady_clock::now();
+        getTime += end042 - begin042;
     }
 
-    CTEST << "Num of joined tuples : " << numJoinedTuples << Endl;
+    CTEST << "Time for join = " << std::chrono::duration_cast<std::chrono::milliseconds>(joinTime).count() << "[ms]" << Endl;
+    CTEST << "Time for get joined tuples: = " << std::chrono::duration_cast<std::chrono::milliseconds>(getTime).count() << "[ms]" << Endl;
+    CTEST << Endl;
 
-    std::chrono::steady_clock::time_point end042 = std::chrono::steady_clock::now();
-    CTEST << "Time for get joined tuples: = " << std::chrono::duration_cast<std::chrono::milliseconds>(end042 - begin042).count() << "[ms]" << Endl;
+    CTEST << "Num of joined tuples : " << numJoinedTuples << Endl;
     CTEST << Endl;
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();

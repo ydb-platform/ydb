@@ -164,7 +164,7 @@ TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> TProgramCo
     if (Program) {
         return Program->Apply(source, std::move(collection));
     } else if (OverrideProcessingColumnsVector) {
-        collection->RemainOnly(*OverrideProcessingColumnsVector, true);
+        collection->InitResultSequence(*OverrideProcessingColumnsVector);
     }
     return std::move(collection);
 }

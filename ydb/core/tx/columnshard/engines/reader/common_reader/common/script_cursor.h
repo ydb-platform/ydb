@@ -16,6 +16,10 @@ public:
         AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     }
 
+    const IFetchingStep& GetCurrentStep() const {
+        return *Script->GetStep(CurrentStepIdx);
+    }
+
     const TString& GetName() const {
         return Script->GetStep(CurrentStepIdx)->GetName();
     }

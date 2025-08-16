@@ -21,7 +21,8 @@ private:
 
 public:
     TSourceData(const ui32 sourceId, const ui32 sourceIdx, const ui64 tabletId, std::vector<ISnapshotSchema::TPtr>&& schemas,
-        NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
+        NArrow::TSimpleRowContent&& start, NArrow::TSimpleRowContent&& finish,
+        const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(
               sourceId, sourceIdx, tabletId, std::move(start), std::move(finish), schemas.size(), TSnapshot::Zero(), TSnapshot::Zero(), context)
         , Schemas(std::move(schemas)) {

@@ -83,6 +83,7 @@ public:
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);
         FeatureFlags.SetEnableTableDatetime64(true);
+        FeatureFlags.SetEnableCSSchemasCollapsing(true);
         InitDefaultConfig();
     }
 

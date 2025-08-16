@@ -3,6 +3,9 @@
 #include "key.h"
 #include "blob.h"
 
+#include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/persqueue/events/internal.h>
+
 namespace NKikimr::NPQ {
 
 class TPartition;
@@ -61,7 +64,6 @@ public:
         constexpr static const ui64 MAX_REQUEST_DATA_SIZE = 24_MB;
         constexpr static const ui64 MAX_BLOB_SIZE = 8_MB;
 
-        ui64 RequestSize;
         ui64 MaxOffset;
         THashMap<TString, ui64> TopicData;
         TPartition* PartitionActor;

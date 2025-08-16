@@ -14,7 +14,6 @@
 #include "read_quoter.h"
 #include "partition_blob_encoder.h"
 
-#include <ydb/core/keyvalue/keyvalue_events.h>
 #include "partition_compactification.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -57,6 +56,9 @@ enum class ECommitState {
     Committed,
     Aborted
 };
+
+
+class TPartitionCompaction;
 
 struct TTransaction {
 

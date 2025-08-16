@@ -66,7 +66,7 @@ public:
         THashMap<TString, ui64> TopicData;
         TPartition* PartitionActor;
 
-        ui64 LastProcessedOffset;
+        TMaybe<ui64> LastProcessedOffset;
         TMaybe<ui64> OffsetToCommit;
         ui64 CommitCookie = 0;
         TKeysIter KeysIter;

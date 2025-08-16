@@ -570,6 +570,17 @@ class KtlintBaselineFile:
                 return {cls.KEY: baseline_path_relative}
 
 
+class KtlintRuleset:
+    KEY = 'KTLINT_RULESET'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        if unit.get('_USE_KTLINT_OLD') != 'yes':
+            ruleset_rel_path = unit.get('_KTLINT_RULESET')
+            if ruleset_rel_path:
+                return {cls.KEY: ruleset_rel_path}
+
+
 class KtlintBinary:
     KEY = 'KTLINT_BINARY'
 

@@ -30,6 +30,7 @@ struct TExecutionOptions {
     std::vector<TString> Queries;
     std::vector<FederatedQuery::ConnectionContent> Connections;
     std::vector<FederatedQuery::BindingContent> Bindings;
+    bool UseTemplates = false;
 
     ui32 LoopCount = 1;
     TDuration QueryDelay;
@@ -74,13 +75,19 @@ struct TExecutionOptions {
         return GetValue<TString>(index, Scopes, "fqrun");
     }
 
-    TRequestOptions GetQueryOptions(size_t index, ui64 queryId) const {
+    TRequestOptions GetQueryOptions(size_t index, ui64 loopId, ui64 queryId) const {
         Y_ABORT_UNLESS(index < Queries.size());
+
+        TString sql = Queries[index];
+        if (UseTemplates) {
+            SubstGlobal(sql, "${LOOP_ID}", ToString(loopId));
+            SubstGlobal(sql, "${QUERY_ID}", ToString(queryId));
+        }
 
         const auto executionCase = GetExecutionCase(index);
         const bool isAnalytics = executionCase == EExecutionCase::Analytics || executionCase == EExecutionCase::AsyncAnalytics;
         return {
-            .Query = Queries[index],
+            .Query = sql,
             .Action = GetQueryAction(index),
             .Type = isAnalytics ? FederatedQuery::QueryContent::ANALYTICS : FederatedQuery::QueryContent::STREAMING,
             .QueryId = queryId,
@@ -148,13 +155,13 @@ private:
     }
 };
 
-void RunArgumentQuery(size_t index, ui64 queryId, const TExecutionOptions& executionOptions, TFqRunner& runner) {
+void RunArgumentQuery(size_t index, ui64 loopId, ui64 queryId, const TExecutionOptions& executionOptions, TFqRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     switch (executionOptions.GetExecutionCase(index)) {
         case TExecutionOptions::EExecutionCase::Analytics:
         case TExecutionOptions::EExecutionCase::Stream: {
-            if (!runner.ExecuteQuery(executionOptions.GetQueryOptions(index, queryId))) {
+            if (!runner.ExecuteQuery(executionOptions.GetQueryOptions(index, loopId, queryId))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching query results..." << colors.Default() << Endl;
@@ -166,7 +173,7 @@ void RunArgumentQuery(size_t index, ui64 queryId, const TExecutionOptions& execu
 
         case TExecutionOptions::EExecutionCase::AsyncAnalytics:
         case TExecutionOptions::EExecutionCase::AsyncStream: {
-            runner.ExecuteQueryAsync(executionOptions.GetQueryOptions(index, queryId));
+            runner.ExecuteQueryAsync(executionOptions.GetQueryOptions(index, loopId, queryId));
             break;
         }
     }
@@ -225,7 +232,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
         }
 
         try {
-            RunArgumentQuery(idx, queryId, executionOptions, runner);
+            RunArgumentQuery(idx, loopId, queryId, executionOptions, runner);
         } catch (const yexception& exception) {
             if (executionOptions.ContinueAfterFail) {
                 Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
@@ -281,6 +288,8 @@ class TMain : public TMainBase {
     using TBase = TMainBase;
     using EVerbose = TFqSetupSettings::EVerbose;
 
+    inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
+
 protected:
     void RegisterLogOptions(NLastGetopt::TOpts& options) override {
         TBase::RegisterLogOptions(options);
@@ -309,25 +318,15 @@ protected:
 
         options.AddLongOption('c', "connection", "External datasource connection protobuf FederatedQuery::ConnectionContent")
             .RequiredArgument("file")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                auto& connection = ExecutionOptions.Connections.emplace_back();
-                const TString file(TString(option->CurValOrDef()));
-                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &connection)) {
-                    ythrow yexception() << "Bad format of FQ connection in file '" << file << "'";
-                }
-                SetupAcl(connection.mutable_acl());
-            });
+            .EmplaceTo(&ConnectionsRaw);
 
         options.AddLongOption('b', "binding", "External datasource binding protobuf FederatedQuery::BindingContent")
             .RequiredArgument("file")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                auto& binding = ExecutionOptions.Bindings.emplace_back();
-                const TString file(TString(option->CurValOrDef()));
-                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &binding)) {
-                    ythrow yexception() << "Bad format of FQ binding in file '" << file << "'";
-                }
-                SetupAcl(binding.mutable_acl());
-            });
+            .EmplaceTo(&BindingsRaw);
+
+        options.AddLongOption("templates", "Enable templates for connections, bindings and queries, such as ${YQL_TOKEN} and ${QUERY_ID}")
+            .NoArgument()
+            .SetFlag(&ExecutionOptions.UseTemplates);
 
         options.AddLongOption("cfg", "File with actor system config (TActorSystemConfig), use '-' for default")
             .RequiredArgument("file")
@@ -557,11 +556,33 @@ protected:
     int DoRun(NLastGetopt::TOptsParseResult&&) override {
         ExecutionOptions.Validate(RunnerOptions);
 
+        for (auto& connectionRaw : ConnectionsRaw) {
+            ReplaceTemplates(connectionRaw.Content);
+            auto& connection = ExecutionOptions.Connections.emplace_back();
+            if (!google::protobuf::TextFormat::ParseFromString(connectionRaw.Content, &connection)) {
+                ythrow yexception() << "Bad format of FQ connection in file '" << connectionRaw.FileName << "'";
+            }
+            SetupAcl(connection.mutable_acl());
+        }
+
+        for (auto& bindingRaw : BindingsRaw) {
+            ReplaceTemplates(bindingRaw.Content);
+            auto& binding = ExecutionOptions.Bindings.emplace_back();
+            if (!google::protobuf::TextFormat::ParseFromString(bindingRaw.Content, &binding)) {
+                ythrow yexception() << "Bad format of FQ binding in file '" << bindingRaw.FileName << "'";
+            }
+            SetupAcl(binding.mutable_acl());
+        }
+
+        for (auto& sql : ExecutionOptions.Queries) {
+            ReplaceTemplates(sql);
+        }
+
         if (ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::Analytics) || ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::AsyncAnalytics)) {
             RunnerOptions.FqSettings.EnableYdbCompute = true;
         }
 
-        RunnerOptions.FqSettings.YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
+        RunnerOptions.FqSettings.YqlToken = YqlToken;
         RunnerOptions.FqSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
         auto& fqConfig = *RunnerOptions.FqSettings.AppConfig.MutableFederatedQueryConfig();
@@ -624,6 +645,17 @@ private:
         }
     }
 
+    void ReplaceTemplates(TString& text) const {
+        if (ExecutionOptions.UseTemplates) {
+            const TString tokenVariableName = TStringBuilder() << "${" << YQL_TOKEN_VARIABLE << "}";
+            if (YqlToken) {
+                SubstGlobal(text, tokenVariableName, YqlToken);
+            } else if (text.Contains(tokenVariableName)) {
+                ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable";
+            }
+        }
+    }
+
     void SetupLogsConfig() {
         auto& logConfig = *RunnerOptions.FqSettings.AppConfig.MutableLogConfig();
 
@@ -664,6 +696,18 @@ private:
     std::unordered_map<TString, NYql::TDummyTopic> PqFilesMapping;
 
     std::optional<NActors::NLog::EPriority> FqLogPriority;
+
+    struct TFileContent {
+        TString FileName;
+        TString Content;
+
+        explicit TFileContent(TStringBuf fileName)
+            : FileName(fileName)
+            , Content(LoadFile(FileName))
+        {}
+    };
+    std::vector<TFileContent> ConnectionsRaw;
+    std::vector<TFileContent> BindingsRaw;
 };
 
 }  // anonymous namespace

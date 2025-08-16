@@ -967,8 +967,8 @@ private:
         }
         if (ExecutionOptions.UseTemplates) {
             const TString tokenVariableName = TStringBuilder() << "${" << YQL_TOKEN_VARIABLE << "}";
-            if (const TString& yqlToken = GetEnv(YQL_TOKEN_VARIABLE)) {
-                SubstGlobal(sql, tokenVariableName, yqlToken);
+            if (YqlToken) {
+                SubstGlobal(sql, tokenVariableName, YqlToken);
             } else if (sql.Contains(tokenVariableName)) {
                 ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable";
             }

@@ -85,6 +85,9 @@ public:
     }
 
     ~TSpecialReadContext() {
+        if (NActors::TActorSystem::IsStopped()) {
+            return;
+        }
         AFL_VERIFY(!DuplicatesManager);
     }
 };

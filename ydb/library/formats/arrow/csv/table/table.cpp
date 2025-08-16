@@ -42,7 +42,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetArrowType(con
     auto tp = ExtractType(type);
     switch (tp.GetKind()) {
     case NYdb::TTypeParser::ETypeKind::Decimal:
-        return arrow::decimal(tp.GetDecimal().Precision, tp.GetDecimal().Scale);
+        return std::make_shared<arrow::FixedSizeBinaryType>(16);
     case NYdb::TTypeParser::ETypeKind::Primitive:
         switch (tp.GetPrimitive()) {
             case NYdb::EPrimitiveType::Bool:

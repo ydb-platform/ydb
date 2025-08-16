@@ -30,6 +30,8 @@ enum ESimpleCounters {
     COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE = 0      [(CounterOpts) = {Name: "ForceTraversalsInflightSize"}];
     COUNTER_AGGREGATION_TIME = 1                    [(CounterOpts) = {Name: "AggregationTime"}];
     COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME = 2   [(CounterOpts) = {Name: "ForceTraversalsInflightMaxTime"}];
+    COUNTER_BASE_STATISTICS_TOTAL_ROW_COUNT = 3   [(CounterOpts) = {Name: "BaseStatisticsTotalRowCount"}];
+    COUNTER_BASE_STATISTICS_TOTAL_BYTES_SIZE = 4   [(CounterOpts) = {Name: "BaseStatisticsTotalBytesSize"}];
 }
 
 enum ECumulativeCounters {

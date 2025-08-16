@@ -232,6 +232,10 @@ private:
     void FullValidation() const;
     TPortionDataAccessor() = default;
 
+private:
+    THashMap<TChunkAddress, TString> DecodeBlobAddressesImpl(
+        NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
+
 public:
     using TColumnAssemblingInfo = NAssembling::TColumnAssemblingInfo;
     using TAssembleBlobInfo = NAssembling::TAssembleBlobInfo;
@@ -367,7 +371,7 @@ public:
         }
     }
 
-    static TConclusion<TPortionDataAccessor> BuildFromProto(
+    static TConclusion<std::shared_ptr<TPortionDataAccessor>> BuildFromProto(
         const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector);
 
     std::vector<TString> GetIndexInplaceDataOptional(const ui32 indexId) const {
@@ -472,6 +476,8 @@ public:
     std::vector<const TIndexChunk*> GetIndexChunksPointers(const ui32 indexId) const;
 
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
+    static std::vector<THashMap<TChunkAddress, TString>> DecodeBlobAddresses(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors,
+        const std::vector<ISnapshotSchema::TPtr>& schemas, NBlobOperations::NRead::TCompositeReadBlobs&& blobs);
 
     THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage(const TIndexInfo& indexInfo) const {
         THashMap<TString, THashSet<TUnifiedBlobId>> result;

@@ -58,9 +58,7 @@ public:
 
     static std::shared_ptr<arrow::Array> BuildArrayFromScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
         AFL_VERIFY(scalar);
-        auto builder = NArrow::MakeBuilder(scalar->type, 1);
-        TStatusValidator::Validate(builder->AppendScalar(*scalar));
-        return NArrow::FinishBuilder(std::move(builder));
+        return TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*scalar, 1));
     }
 
     static std::shared_ptr<arrow::Array> BuildArrayFromOptionalScalar(

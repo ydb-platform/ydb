@@ -51,6 +51,14 @@ public:
             ACFL_TRACE(NKikimrServices::OBJECTS_MONITORING)("event", "create")("object_type", TypeName<TObject>())("count", Counter.Val());
         }
     }
+    TMonitoringObjectsCounter(const TMonitoringObjectsCounter&)
+        : TMonitoringObjectsCounter()
+    {
+    }
+    TMonitoringObjectsCounter(TMonitoringObjectsCounter&&)
+        : TMonitoringObjectsCounter()
+    {
+    }
     ~TMonitoringObjectsCounter() {
         if (UseSignals) {
             Singleton<TMonitoringObjectsCounterImpl<TObject>>()->Dec();

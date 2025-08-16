@@ -13,10 +13,13 @@ IFetchingStep::EStepResult IFetchingStep::Execute(const std::shared_ptr<TPortion
     return DoExecute(fetchingContext);
 }
 
-TRequestInput::TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<TVersionedIndex>& versions,
-    const NBlobOperations::EConsumer consumer, const TString& externalTaskId)
+TRequestInput::TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
+    const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
+    const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard)
     : Consumer(consumer)
-    , ExternalTaskId(externalTaskId) {
+    , ExternalTaskId(externalTaskId)
+    , MemoryProcessGuard(memoryProcessGuard)
+{
     AFL_VERIFY(portions.size());
     ActualSchema = versions->GetLastSchema();
     for (auto&& i : portions) {

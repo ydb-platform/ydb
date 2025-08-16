@@ -1,10 +1,9 @@
 #pragma once
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "ro_controller.h"
 
 #include <ydb/core/tx/columnshard/blob.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -53,11 +52,12 @@ private:
 
     using TInternalPathId = NKikimr::NColumnShard::TInternalPathId;
     using TSchemeShardLocalPathId = NKikimr::NColumnShard::TSchemeShardLocalPathId;
-    using TUnifiedPathId =  NKikimr::NColumnShard::TUnifiedPathId;
+    using TUnifiedPathId = NKikimr::NColumnShard::TUnifiedPathId;
 
     class TPathIdTranslator: public NOlap::IPathIdTranslator {
-        THashMap<TInternalPathId,TSchemeShardLocalPathId> InternalToSchemeShardLocal;
+        THashMap<TInternalPathId, TSchemeShardLocalPathId> InternalToSchemeShardLocal;
         THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
+
     public:
         void AddPathId(const TUnifiedPathId& pathId) {
             AFL_VERIFY(InternalToSchemeShardLocal.emplace(pathId.InternalPathId, pathId.SchemeShardLocalPathId).second);
@@ -67,38 +67,41 @@ private:
             InternalToSchemeShardLocal.erase(pathId.InternalPathId);
             SchemeShardLocalToInternal.erase(pathId.SchemeShardLocalPathId);
         }
+
     public:
         THashSet<TInternalPathId> GetInternalPathIds() const {
             THashSet<TInternalPathId> result;
-            for (const auto& [internalPathId, schemeShardLocalPathId]: InternalToSchemeShardLocal) {
+            for (const auto& [internalPathId, schemeShardLocalPathId] : InternalToSchemeShardLocal) {
                 result.emplace(internalPathId);
             }
             return result;
         }
         THashSet<TSchemeShardLocalPathId> GetSchemeShardLocalPathIds() const {
             THashSet<TSchemeShardLocalPathId> result;
-            for (const auto& [internalPathId, schemeShardLocalPathId]: InternalToSchemeShardLocal) {
+            for (const auto& [internalPathId, schemeShardLocalPathId] : InternalToSchemeShardLocal) {
                 result.emplace(schemeShardLocalPathId);
             }
             return result;
         }
 
-    public: //NOlap::IPathIdTranslator
-        virtual std::optional<TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const override {
+    public:   //NOlap::IPathIdTranslator
+        virtual std::optional<TSchemeShardLocalPathId> ResolveSchemeShardLocalPathIdOptional(
+            const TInternalPathId internalPathId) const override {
             if (const auto* p = InternalToSchemeShardLocal.FindPtr(internalPathId)) {
-                return {*p};
+                return { *p };
             }
             return std::nullopt;
         }
-        virtual std::optional<TInternalPathId> ResolveInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const override  {
+        virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(
+            const TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const override {
             if (const auto* p = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
-                return {*p};
+                return { *p };
             }
+            AFL_VERIFY(!withTabletPathId);
             return std::nullopt;
         }
     };
     THashMap<ui64, std::shared_ptr<TPathIdTranslator>> ActiveTablets;
-
 
     THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> ExternalLocks;
 
@@ -108,11 +111,10 @@ private:
         std::optional<ui64> OwnerTabletId;
         THashSet<ui64> SharedTabletIdsFromShared;
         THashSet<ui64> SharedTabletIdsFromOwner;
+
     public:
         TBlobInfo(const NOlap::TUnifiedBlobId& blobId)
-            : BlobId(blobId)
-        {
-
+            : BlobId(blobId) {
         }
         void AddOwner(const ui64 tabletId) {
             if (!OwnerTabletId) {
@@ -130,7 +132,8 @@ private:
         }
         void Check() const {
             AFL_VERIFY(OwnerTabletId);
-            AFL_VERIFY(SharedTabletIdsFromShared == SharedTabletIdsFromOwner)("blob_id", BlobId.ToStringNew())("shared", JoinSeq(",", SharedTabletIdsFromShared))("owned", JoinSeq(",", SharedTabletIdsFromOwner));
+            AFL_VERIFY(SharedTabletIdsFromShared == SharedTabletIdsFromOwner)("blob_id", BlobId.ToStringNew())(
+                "shared", JoinSeq(",", SharedTabletIdsFromShared))("owned", JoinSeq(",", SharedTabletIdsFromOwner));
         }
 
         void DebugString(const TString& delta, TStringBuilder& sb) const {
@@ -146,6 +149,7 @@ private:
     class TCheckContext {
     private:
         THashMap<TString, THashMap<NOlap::TUnifiedBlobId, TBlobInfo>> Infos;
+
     public:
         void Check() const {
             for (auto&& i : Infos) {
@@ -192,6 +196,7 @@ private:
     THashSet<TString> SharingIds;
 
     std::optional<TString> RestartOnLocalDbTxCommitted;
+
 protected:
     virtual const NOlap::NSplitter::TSplitSettings& DoGetBlobSplitSettings(const NOlap::NSplitter::TSplitSettings& defaultValue) const override {
         if (OverrideBlobSplitSettings) {
@@ -206,7 +211,6 @@ protected:
     virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const override {
         return OverrideLimitForPortionsMetadataAsk.value_or(defaultValue);
     }
-
 
     virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const override {
         return OverrideMemoryLimitForPortionReading.value_or(defaultValue);
@@ -225,7 +229,6 @@ protected:
     virtual TDuration DoGetCompactionActualizationLag(const TDuration def) const override {
         return OverrideCompactionActualizationLag.value_or(def);
     }
-
 
     virtual bool IsBackgroundEnabled(const EBackground id) const override {
         TGuard<TMutex> g(Mutex);
@@ -389,7 +392,6 @@ public:
     virtual void OnAfterLocalTxCommitted(
         const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
 
-
     virtual void OnAddPathId(const ui64 tabletId, const TUnifiedPathId& pathId) override {
         TGuard<TMutex> g(ActiveTabletsMutex);
         auto* tablet = ActiveTablets.FindPtr(tabletId);
@@ -409,7 +411,6 @@ public:
     void SetForcedGenerateInternalPathId(const bool value) {
         ForcedGenerateInternalPathId = value;
     }
-
 };
 
-}
+}   // namespace NKikimr::NYDBTest::NColumnShard

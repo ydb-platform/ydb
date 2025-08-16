@@ -7,6 +7,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/signals/owner.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -172,6 +173,8 @@ private:
     const TActorId LeaderPipeCache;
     NWilson::TProfileSpan ActorSpan;
     const std::optional<TDuration> Timeout;
+    const bool RetryBySubscription;
+    ui64 LastOverloadSeqNo = 0;
 
     void SendWriteRequest();
     static TDuration OverloadTimeout() {
@@ -180,10 +183,6 @@ private:
     void SendToTablet(THolder<IEventBase> event) {
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
             ActorSpan.GetTraceId());
-    }
-    virtual void PassAway() override {
-        Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
-        TBase::PassAway();
     }
 
 public:
@@ -195,6 +194,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
+            hFunc(TEvColumnShard::TEvOverloadReady, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
         }
     }
@@ -204,8 +204,14 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
+    void Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev);
+
+protected:
+    void Die(const NActors::TActorContext& ctx) override;
+    void PassAway() override;
 
 private:
     bool RetryWriteRequest(const bool delayed = true);
+    bool IsMaxRetriesReached() const;
 };
 }   // namespace NKikimr::NEvWrite

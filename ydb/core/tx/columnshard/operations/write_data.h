@@ -30,7 +30,7 @@ public:
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;
     NOlap::ISnapshotSchema::TPtr BatchSchema;
-    std::shared_ptr<arrow::Schema> PayloadSchema;
+    NKikimrDataEvents::TEvWrite::TOperation Operation;
     TString IncomingData;
     NEvWrite::EModificationType ModificationType = NEvWrite::EModificationType::Upsert;
 };

@@ -38,7 +38,7 @@ protected:
         }
 
         auto entryPath = CanonizePath(entry.Path);
-        
+
         TVector<std::pair<TString, TString>> permissions;
         for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
             if (ace.GetAccessType() != (ui32)NACLib::EAccessType::Allow) {

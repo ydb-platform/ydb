@@ -1,6 +1,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/test_client.h>
 
+#include <string_view>
+#include <ranges>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -101,7 +104,7 @@ Y_UNIT_TEST_SUITE(KqpTypes) {
 
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-    }    
+    }
 
     Y_UNIT_TEST(DyNumberCompare) {
         TKikimrRunner kikimr;
@@ -196,61 +199,190 @@ Y_UNIT_TEST_SUITE(KqpTypes) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    enum class DataType {
+        DateTime64,
+        Decimal
+    };
 
-    Y_UNIT_TEST_TWIN(Time64Columns, EnableTableDatetime64) {
+    void CheckTypeIsRestricted(DataType type, bool isColumn, bool isAllowed) {
+
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTableDatetime64(EnableTableDatetime64);
+        std::vector<std::tuple<std::string, std::string, std::string, std::string>> nameTypeValueAnswer;
+        std::function<std::string(std::string, std::string)> getErrorMessage;
+
+        switch (type) {
+            case DataType::DateTime64:
+                featureFlags.SetEnableTableDatetime64(isAllowed);
+                nameTypeValueAnswer = {
+                    {"Datetime", "Datetime64", "Datetime64('1970-01-01T01:01:01Z')", "3661"},
+                    {"Interval", "Interval64", "Interval64('P222D')", "19180800000000"},
+                    {"Timestamp", "Timestamp64", "Timestamp64('1970-03-03T03:03:03Z')", "5281383000000"}
+                };
+                getErrorMessage = [](const std::string& name, const std::string& type) {
+                    return std::format("Type '{}' specified for column '{}', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)", type, name);
+                };
+
+                break;
+            case DataType::Decimal:
+                featureFlags.SetEnableParameterizedDecimal(isAllowed);
+                nameTypeValueAnswer = {
+                    {"Decimal_15_0", "Decimal(15,0)", "Decimal('12345', 15, 0)", "\"12345\""},
+                    {"Decimal_22_9", "Decimal(22,9)", "Decimal('123456.789', 22, 9)", "\"123456.789\""},
+                    {"Decimal_35_10", "Decimal(35,10)", "Decimal('123456789.123456', 35, 10)", "\"123456789.123456\""}
+                };
+
+                getErrorMessage = [](const std::string& name, const std::string& type) {
+                    return std::format("Type '{}' specified for column '{}', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)", type, name);
+                };
+        }
 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetFeatureFlags(featureFlags);
 
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
+        std::string tableName = "/Root/Test" + get<0>(nameTypeValueAnswer[0]);
+
         {
-            const auto query = Q_(R"(
-                CREATE TABLE `/Root/TestTime64` (
-                    DatetimePK Datetime64,
-                    IntervalPK Interval64,
-                    TimestampPK Timestamp64,
-                    Datetime Datetime64,
-                    Interval Interval64,
-                    Timestamp Timestamp64,
-                    PRIMARY KEY (DatetimePK, IntervalPK, TimestampPK))
-            )");
+            std::vector<std::string> columns;
+            std::vector<std::string> pk;
+
+            for (const auto& [name, type, _value, _answer] : nameTypeValueAnswer) {
+                pk.push_back(name + "PK");
+                columns.push_back(std::format("{}PK {} NOT NULL", name, type));
+            }
+
+            for (const auto& [name, type, _value, _answer] : nameTypeValueAnswer) {
+                columns.push_back(std::format("{} {}", name, type));
+            }
+
+
+            const auto query = Q_(std::format(R"(
+                CREATE TABLE `{}` (
+                    {},
+                    PRIMARY KEY ({})
+                )
+                {}
+                )",
+                tableName,
+                JoinSeq(",\n", columns).c_str(),
+                JoinSeq(',', pk).c_str(),
+                isColumn ? " WITH (STORE = COLUMN)" : ""
+            ));
+
 
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
-            
-            if constexpr (EnableTableDatetime64) {
+
+            if (isAllowed) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
             else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().contains("Type 'Datetime64' specified for column 'DatetimePK', but support for new date/time 64 types is disabled (EnableTableDatetime64 feature flag is off)"));
-                return;
+                auto& [name, type, _value, _answer] = nameTypeValueAnswer[0];
+                UNIT_ASSERT_C(result.GetIssues().ToString().contains(getErrorMessage(name + "PK", type)), result.GetIssues().ToString());
             }
         }
 
-        {
-            const auto query = Q_(R"(
-                UPSERT INTO `/Root/TestTime64` (DatetimePK, IntervalPK, TimestampPK, Datetime, Interval, Timestamp) VALUES
-                    (Datetime64('1970-01-01T01:01:01Z'), Interval64('P222D'), Timestamp64('1970-03-03T03:03:03Z')
-                    ,Datetime64('1970-04-04T04:04:04Z'), Interval64('P555D'), Timestamp64('1970-06-06T06:06:06Z'));
-            )");
+
+        std::vector<std::string> columns;
+
+        for (const auto& [name, _type, _value, _answer] : nameTypeValueAnswer) {
+            columns.push_back(std::format("{}PK", name));
+        }
+
+        for (const auto& [name, _type, _value, _answer] : nameTypeValueAnswer) {
+            columns.push_back(std::format("{}", name));
+        }
+
+        if (isAllowed) {
+            std::vector<std::string> values;
+
+            for (const auto& [_name, type, value, _answer] : nameTypeValueAnswer) {
+                values.push_back(std::format("{}", value));
+            }
+
+            values.insert(values.end(), values.begin(), values.end());
+
+            const auto query = Q_(std::format(R"(
+                UPSERT INTO `{}` ({}) VALUES
+                    ({});
+                )",
+                tableName,
+                JoinSeq(',', columns).c_str(),
+                JoinSeq(',', values).c_str()
+            ));
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        {
-            const auto query = Q_("SELECT * FROM `/Root/TestTime64`");
+        if (isAllowed) {
+
+            std::vector<std::string> answers;
+
+            for (const auto& [_name, _type, _value, answer] : nameTypeValueAnswer) {
+                answers.push_back(std::format("{}", answer));
+            }
+
+            for (const auto& [_name, _type, _value, answer] : nameTypeValueAnswer) {
+                answers.push_back(std::format("[{}]", answer));
+            }
+
+            const auto query = Q_(std::format(R"(
+                SELECT {} FROM `{}`)",
+                JoinSeq(',', columns).c_str(),
+                tableName
+            ));
+
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[8049844];[3661];[47952000000000];[19180800000000];[13500366000000];[5281383000000]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(std::format(R"([[{}]])", JoinSeq(';', answers).c_str() ), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = Q_(std::format(R"(CREATE TABLE `/Root/KeyValue` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)) {}
+            )", isColumn ? "WITH (STORE = COLUMN)" : ""));
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            for (const auto& [name, type, _value, answer] : nameTypeValueAnswer) {
+                const auto query = Q_(std::format(R"(
+                    ALTER TABLE `/Root/KeyValue` ADD COLUMN {} {})", name, type));
+                auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+                if (isAllowed) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                }
+                else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                    UNIT_ASSERT_C(result.GetIssues().ToString().contains(getErrorMessage(name, type)), result.GetIssues().ToString());
+                    return;
+                }
+            }
         }
     }
+
+    Y_UNIT_TEST_QUAD(Time64Columns, EnableTableDatetime64, IsColumn) {
+        CheckTypeIsRestricted(DataType::DateTime64, IsColumn, EnableTableDatetime64);
+    }
+
+    Y_UNIT_TEST_QUAD(ParametrizedDecimalColumns, EnableParameterizedDecimal, IsColumn) {
+        CheckTypeIsRestricted(DataType::Decimal, IsColumn, EnableParameterizedDecimal);
+    }
+
+
 }
 
 } // namespace NKqp

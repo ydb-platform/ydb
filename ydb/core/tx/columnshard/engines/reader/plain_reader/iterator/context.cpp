@@ -24,7 +24,8 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
     return result;
 }
 
-std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& sourceExt) {
+std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
+    const std::shared_ptr<NCommon::IDataSource>& sourceExt, const bool /*isFinalSyncPoint*/) {
     auto source = std::static_pointer_cast<IDataSource>(sourceExt);
     if (source->NeedAccessorsFetching()) {
         if (!AskAccumulatorsScript) {

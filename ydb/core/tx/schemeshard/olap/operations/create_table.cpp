@@ -1,3 +1,5 @@
+#include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/tx/schemeshard/olap/operations/checks.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -605,6 +607,13 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Incoming tx message has initialized shard ids");
             return result;
+        }
+
+        if (createDescription.HasSchema()) {
+            if (auto checkResult = NOlap::CheckColumns(createDescription.GetSchema().GetColumns(), AppData()); !checkResult) {
+                result->SetError(NKikimrScheme::StatusSchemeError, checkResult.error());
+                return result;
+            }
         }
 
         TOlapStoreInfo::TPtr storeInfo;

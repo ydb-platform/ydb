@@ -132,10 +132,10 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("propose_execute", "move_table")("src", srcSchemeShardLocalPathId)("dst", dstSchemeShardLocalPathId);
-            if (!owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId)) {
+            if (!owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No such table");
             }
-            if (owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId)) {
+            if (owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Rename to existing table");
             }
             auto txIdsToWait = owner.GetProgressTxController().GetTxs();  //TODO #8650 Get transaction for moving pathId only
@@ -246,7 +246,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             THashSet<TInternalPathId> waitPathIdsToErase;
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
                 const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(i);
-                if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId)) {
+                if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
                     if (owner.TablesManager.HasTable(*internalPathId, true)) {
                         waitPathIdsToErase.emplace(*internalPathId);
                     }
@@ -266,8 +266,8 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
 
-            AFL_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId));
-            AFL_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId));
+            AFL_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false));
+            AFL_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false));
             //TODO recover txIdsToWait
             //WaitOnPropose = std::make_shared<TWaitTransactions>(GetTxId(), txIds);
         }

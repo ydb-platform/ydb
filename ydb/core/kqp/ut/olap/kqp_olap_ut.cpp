@@ -1147,7 +1147,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
 
-        // TODO: Add support for DqPhyPrecompute push-down: Cast((2+2) as Uint64) 
+        // TODO: Add support for DqPhyPrecompute push-down: Cast((2+2) as Uint64)
         // - this is not needed because constant folding eliminates this now
         std::vector<TString> testData = {
             R"(`resource_id` = `uid`)",
@@ -1487,7 +1487,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto session = queryClient.GetSession().GetValueSync().GetSession();
         {
             const auto res = session.ExecuteQuery(R"(
-                INSERT INTO `/Root/foo` (id, str, u_str) VALUES 
+                INSERT INTO `/Root/foo` (id, str, u_str) VALUES
                     (1, "hello", "hello")
             )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
@@ -1541,7 +1541,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             const auto& query = TString(R"(
                 PRAGMA OptimizeSimpleILike;
                 PRAGMA AnsiLike;
-                SELECT id FROM `/Root/foo` WHERE 
+                SELECT id FROM `/Root/foo` WHERE
                 )") + predicates[i];
             Cerr
                 << "QUERY " << i << Endl
@@ -1625,7 +1625,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ts64    Timestamp64,
                 --inter  Interval, -- NOT SUPPORTED?
                 inter64  Interval64,
-                primary key(id)	
+                primary key(id)
             )
             PARTITION BY HASH(id)
             WITH (STORE = COLUMN);
@@ -1633,12 +1633,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(res.IsSuccess());
 
         auto insertRes = session2.ExecuteQuery(R"(
-            INSERT INTO `/Root/foo` (id, dt, dt32, dtm, dtm64, ts, ts64, inter64) 
-            VALUES (1, 
-                CAST('1998-12-01' AS Date), 
-                CAST('1998-12-01' AS Date32), 
-                CAST('1998-12-01' AS DateTime), 
-                CAST('1998-12-01' AS DateTime64), 
+            INSERT INTO `/Root/foo` (id, dt, dt32, dtm, dtm64, ts, ts64, inter64)
+            VALUES (1,
+                CAST('1998-12-01' AS Date),
+                CAST('1998-12-01' AS Date32),
+                CAST('1998-12-01' AS DateTime),
+                CAST('1998-12-01' AS DateTime64),
                 CAST('1998-12-01' AS Timestamp),
                 CAST('1998-12-01' AS Timestamp64),
                 CAST('1D' AS Interval64));
@@ -1649,26 +1649,26 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
             // TPCH Q1:
             R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
-            R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
+            R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))", 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
-            R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))",
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
+            R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
 
             // TPCH Q6:
             R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))",
 
             // Other tests:
 
-            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
+            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
 
             R"(CAST(dt as Timestamp) <= dt - inter64)",
             R"(CAST(dt as Timestamp64) <= dt - inter64)",
             R"(CAST(dt as Timestamp64) <= dt32 - inter64)",
-            R"(dt <= dt - inter64)", 
+            R"(dt <= dt - inter64)",
             R"(dt32 <= dt - inter64)",
             R"(CAST(dt32 as Date) <= dt - inter64)",
             R"(dt <= dt - CAST(inter64 as Interval))",
@@ -1698,7 +1698,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             TString plan = *result.GetStats()->GetPlan();
             auto ast = *result.GetStats()->GetAst();
-    
+
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                               TStringBuilder() << "Predicate not pushed down. Query: " << query);
             //if (ast.find("KqpOlapFilter") != std::string::npos) {
@@ -1744,7 +1744,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ts64    Timestamp64,
                 --inter  Interval, -- NOT SUPPORTED?
                 inter64  Interval64,
-                primary key(id)	
+                primary key(id)
             )
             PARTITION BY HASH(id)
             WITH (STORE = COLUMN);
@@ -1752,42 +1752,42 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(res.IsSuccess());
 
         auto insertRes = queryClient.ExecuteQuery(R"(
-            INSERT INTO `/Root/foo` (id, dt, dt32, dtm, dtm64, ts, ts64, inter64) 
-            VALUES (1, 
-                CAST('1998-12-01' AS Date), 
-                CAST('1998-12-01' AS Date32), 
-                CAST('1998-12-01' AS DateTime), 
-                CAST('1998-12-01' AS DateTime64), 
+            INSERT INTO `/Root/foo` (id, dt, dt32, dtm, dtm64, ts, ts64, inter64)
+            VALUES (1,
+                CAST('1998-12-01' AS Date),
+                CAST('1998-12-01' AS Date32),
+                CAST('1998-12-01' AS DateTime),
+                CAST('1998-12-01' AS DateTime64),
                 CAST('1998-12-01' AS Timestamp),
                 CAST('1998-12-01' AS Timestamp64),
                 CAST('1D' AS Interval64));
             )", NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).GetValueSync();
-        UNIT_ASSERT(insertRes.IsSuccess());    
-        
+        UNIT_ASSERT(insertRes.IsSuccess());
+
         std::vector<TString> testData = {
             // TPC-H Datetime predicates. Commented out predicates currently fail, need to be fixed
             // TPCH Q1:
             R"(CAST(dt AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
-            R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
+            R"(CAST(dt AS Timestamp64) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))", 
-            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
-            R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval("P100D")))",
+            R"(CAST(dt32 AS Timestamp) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
+            R"(CAST(dt32 AS Timestamp64) <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
 
             // TPCH Q6:
             R"(cast(dt as Timestamp) < (Date("1995-01-01") + Interval("P365D")))",
 
             // Other tests:
 
-            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))", 
-            R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))", 
+            R"(dt <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(dt32 <= (CAST('1998-12-01' AS Date) - Interval("P100D")))",
+            R"(dt <= (CAST('1998-12-01' AS Date32) - Interval64("P100D")))",
 
             R"(CAST(dt as Timestamp) <= dt - inter64)",
             R"(CAST(dt as Timestamp64) <= dt - inter64)",
             R"(CAST(dt as Timestamp64) <= dt32 - inter64)",
-            R"(dt <= dt - inter64)", 
+            R"(dt <= dt - inter64)",
             R"(dt32 <= dt - inter64)",
             R"(CAST(dt32 as Date) <= dt - inter64)",
             R"(dt <= dt - CAST(inter64 as Interval))",
@@ -1812,7 +1812,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto result = CollectStreamResult(it);
             auto ast = result.QueryStats->Getquery_ast();
-    
+
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                               TStringBuilder() << "Predicate not pushed down. Query: " << query);
 
@@ -2064,7 +2064,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto sender = runtime->AllocateEdgeActor();
 
             InitRoot(server, sender);
-            Tests::NCommon::TLoggerInit(runtime).Initialize();
+//            Tests::NCommon::TLoggerInit(runtime).Initialize();
 
             ui32 numShards = NSan::PlainOrUnderSanitizer(100, 10);
             ui32 numIterations = NSan::PlainOrUnderSanitizer(100, 10);
@@ -2456,12 +2456,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     void TestOlapUpsert(ui32 numShards) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
@@ -3105,13 +3102,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     void RunBlockChannelTest(auto blockChannelsMode) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
-        appConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -3551,11 +3545,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(MultiInsertWithSinks) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -3677,10 +3669,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(ScanFailedSnapshotTooOld) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(5000);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(5000);
+
         TTestHelper testHelper(settings);
 
         TTestHelper::TColumnTable cnt;
@@ -3702,10 +3694,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(InsertIntoNullablePK) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -3751,10 +3742,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(InsertEmptyString) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);
+
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -3892,9 +3883,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(CountWithPredicate) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto runnerSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(true);
+        auto runnerSettings = TKikimrSettings().SetWithSampleTables(true);
+        runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TTestHelper testHelper(runnerSettings);
         auto client = testHelper.GetKikimr().GetQueryClient();
@@ -3919,51 +3909,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest` WHERE time > CurrentUtcTimestamp()", "[[1u]]");
     }
 
-    Y_UNIT_TEST(ReverseMerge) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto runnerSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true);
-
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-
-        TTestHelper testHelper(runnerSettings);
-        auto client = testHelper.GetKikimr().GetQueryClient();
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("k").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("v").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "k" }).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add(0);
-            tableInserter.AddRow().Add(2).Add(0);
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(0).Add(0);
-            tableInserter.AddRow().Add(1).Add(0);
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(2).Add(0);
-            tableInserter.AddRow().Add(3).Add(0);
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData(
-            "SELECT k, v FROM (SELECT * FROM `/Root/ColumnTableTest` WHERE k >= 0 AND k < 1000) ORDER BY k DESC LIMIT 3", "[[3u;0u];[2u;0u];[1u;0u]]");
-}
-
     Y_UNIT_TEST(WithDefaultValue) {
         std::unique_ptr<TKikimrRunner> Kikimr;
         auto settings = TKikimrSettings().SetWithSampleTables(false);
@@ -3983,6 +3928,33 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Default values are not supported in column tables", result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(PredicateWithLimit) {
+        auto runnerSettings =
+            TKikimrSettings().SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true).SetColumnShardReaderClassName("SIMPLE");
+        runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
+        TTestHelper testHelper(runnerSettings);
+        auto client = testHelper.GetKikimr().GetQueryClient();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("a").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "a", "b" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(1);
+            tableInserter.AddRow().Add(2).Add(2);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT a, b FROM `/Root/ColumnTableTest` WHERE b = 2 LIMIT 2", "[[2u;2u]]");
     }
 
     Y_UNIT_TEST(SimpleRequestHasProjections) {
@@ -4023,85 +3995,49 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(GroupByWithMakeDatetime) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetAppConfig(appConfig);
-        TKikimrRunner kikimr(settings);
+    Y_UNIT_TEST(ReverseMerge) {
+        auto runnerSettings =
+            TKikimrSettings().SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true);
+        runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
-        auto tableClient = kikimr.GetTableClient();
-        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
-
-        auto queryClient = kikimr.GetQueryClient();
-        auto result = queryClient.GetSession().GetValueSync();
-        NStatusHelpers::ThrowOnError(result);
-        auto querySession = result.GetSession();
-
-        {
-            auto result = tableSession.ExecuteSchemeQuery(R"(
-                CREATE TABLE `/Root/query_stat` (
-                    ts      Timestamp NOT NULL,
-                    folder_id String,
-                    primary key(ts)	
-                )
-                PARTITION BY HASH(ts)
-                WITH (STORE = COLUMN);
-            )").GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto result = querySession.ExecuteQuery(R"(
-                    INSERT INTO `/Root/query_stat` (ts, folder_id) 
-                    VALUES (
-                        CurrentUtcTimestamp(),
-                        "abc"
-                    )
-                )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto result = querySession.ExecuteQuery(R"(
-                    SELECT 
-                        ts1, count(*)
-                    FROM 
-                        query_stat 
-                    where 
-                        folder_id not in [ "b1g0gammoel2iuh0hir6" ] 
-                    GROUP BY DateTime::MakeDatetime(DateTime::StartOf(ts, DateTime::IntervalFromDays(1))) as ts1
-                )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(DropTable) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTable();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 20);
-        auto client = kikimr.GetTableClient();
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+        TTestHelper testHelper(runnerSettings);
+        auto client = testHelper.GetKikimr().GetQueryClient();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("k").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("v").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "k" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
 
         {
-            auto result = kikimr.GetQueryClient().ExecuteQuery("DROP TABLE `olapStore/olapTable`", NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(0);
+            tableInserter.AddRow().Add(2).Add(0);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
-
-        csController->WaitCleaning(TDuration::Seconds(5));
 
         {
-            auto result = kikimr.GetQueryClient()
-                              .ExecuteQuery("SELECT * FROM `olapStore/.sys/store_primary_index_portion_stats`", NQuery::TTxControl::NoTx())
-                              .GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(0).Add(0);
+            tableInserter.AddRow().Add(1).Add(0);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(2).Add(0);
+            tableInserter.AddRow().Add(3).Add(0);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData(
+            "SELECT k, v FROM (SELECT * FROM `/Root/ColumnTableTest` WHERE k >= 0 AND k < 1000) ORDER BY k DESC LIMIT 3", "[[3u;0u];[2u;0u];[1u;0u]]");
     }
 }
 }

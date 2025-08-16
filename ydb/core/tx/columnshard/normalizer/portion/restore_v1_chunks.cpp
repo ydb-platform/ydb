@@ -159,9 +159,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TPortionLoadContext portion(rowset);
             existPortions0.emplace(portion.GetPortionId());
-            if (!portion.GetMetaProto().BlobIdsSize()) {
-                AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
-            }
+            AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");

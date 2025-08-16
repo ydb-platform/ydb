@@ -298,6 +298,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             Self->Navigate();
         }
 
+        Self->ReportBaseStatisticsCounters();
         Self->Become(&TThis::StateWork);
     }
 };

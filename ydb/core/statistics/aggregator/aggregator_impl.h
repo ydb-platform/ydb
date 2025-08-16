@@ -170,6 +170,8 @@ private:
     void StartTraversal(NIceDb::TNiceDb& db);
     void FinishTraversal(NIceDb::TNiceDb& db);
 
+    void ReportBaseStatisticsCounters();
+
     std::optional<bool> IsColumnTable(const TPathId& pathId) const;
 
     TString LastTraversalWasForceString() const;
@@ -344,7 +346,7 @@ private:
     bool LastTraversalWasForce = false;
 
 private: // stored in local db
-    
+
     TString ForceTraversalOperationId;
 
     TPathId TraversalPathId;
@@ -352,11 +354,11 @@ private: // stored in local db
     TSerializedCellVec TraversalStartKey;
     TInstant TraversalStartTime;
 
-    size_t GlobalTraversalRound = 1; 
+    size_t GlobalTraversalRound = 1;
 
-    std::unordered_map<ui32, std::unique_ptr<TCountMinSketch>> CountMinSketches;   
+    std::unordered_map<ui32, std::unique_ptr<TCountMinSketch>> CountMinSketches;
 
-    std::unordered_map<TPathId, TScheduleTraversal> ScheduleTraversals; 
+    std::unordered_map<TPathId, TScheduleTraversal> ScheduleTraversals;
     std::unordered_map<ui64, std::unordered_set<TPathId>> ScheduleTraversalsBySchemeShard;
     typedef TIntrusiveHeap<TScheduleTraversal, TScheduleTraversal::THeapIndexByTime, TScheduleTraversal::TLessByTime>
         TTraversalsByTime;

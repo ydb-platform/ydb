@@ -19,7 +19,7 @@ class TestZipBomb(object):
             additional_log_configs={'MEMORY_CONTROLLER': LogLevels.INFO, "TX_COLUMNSHARD": LogLevels.DEBUG},
             extra_feature_flags={'enable_write_portions_on_insert': True},
             static_pdisk_size=10 * 1024 * 1024,
-            dynamic_pdisk_size=5 * 1024 * 1024
+            dynamic_pdisk_size=5 * 1024 * 1024,
         ))
         cls.cluster.start()
 

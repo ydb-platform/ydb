@@ -240,10 +240,10 @@ class TGranuleMeta;
 
 class TDataAccessorsInitializationContext {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<TVersionedIndex>, VersionedIndex);
+    YDB_READONLY_DEF(std::shared_ptr<const TVersionedIndex>, VersionedIndex);
 
 public:
-    TDataAccessorsInitializationContext(const std::shared_ptr<TVersionedIndex>& versionedIndex)
+    TDataAccessorsInitializationContext(const std::shared_ptr<const TVersionedIndex>& versionedIndex)
         : VersionedIndex(versionedIndex) {
         AFL_VERIFY(VersionedIndex);
     }
@@ -262,7 +262,7 @@ protected:
     virtual NDataLocks::ELockCategory GetLockCategory() const = 0;
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
-    virtual void DoOnAfterCompile() {
+    virtual void DoOnAfterCompile(const TFinalizationContext& /*context*/) {
     }
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) = 0;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) = 0;

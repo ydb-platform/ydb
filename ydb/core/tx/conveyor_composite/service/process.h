@@ -145,8 +145,8 @@ public:
         IncRegistration();
     }
 
-    void RegisterTask(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category) {
-        TWorkerTaskPrepare wTask(task, AverageTaskDuration.GetValue(), category, Scope, ProcessId);
+    void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category) {
+        TWorkerTaskPrepare wTask(std::move(task), AverageTaskDuration.GetValue(), category, Scope, ProcessId);
         Tasks.push(std::move(wTask));
         WaitingTasksCount->Inc();
     }

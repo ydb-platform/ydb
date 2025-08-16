@@ -1091,7 +1091,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             const auto& pathIdTranslator = csDefaultControllerGuard->GetPathIdTranslator(TTestTxConfig::TxTablet0);
             const auto pathIds = pathIdTranslator->GetSchemeShardLocalPathIds();
             for (const auto& pathId : pathIds) {
-                const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId);
+                const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId, true);
                 UNIT_ASSERT(internalPathId);
                 if (generateInternalPathId) {
                     UNIT_ASSERT_VALUES_UNEQUAL(internalPathId->GetRawValue(), pathId.GetRawValue());

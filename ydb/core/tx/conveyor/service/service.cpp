@@ -1,8 +1,13 @@
 #include "service.h"
-#include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/tx/conveyor/tracing/probes.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
+
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 namespace NKikimr::NConveyor {
+
+LWTRACE_USING(YDB_CONVEYOR_PROVIDER);
 
 TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const TConfig& config, const TCounters& counters)
     : WorkersCount(config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads()))
@@ -90,6 +95,7 @@ TDistributor::~TDistributor() {
 }
 
 void TDistributor::Bootstrap() {
+    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CONVEYOR_PROVIDER));
     WorkersPool = std::make_shared<TWorkersPool>(ConveyorName, SelfId(), Config, Counters);
     if (!EnableProcesses) {
         AddProcess(0, TCPULimitsConfig(WorkersPool->GetMaxWorkerThreads(), ""));
@@ -100,33 +106,34 @@ void TDistributor::Bootstrap() {
 }
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
-    auto* ev = evExt->Get();
-    WorkersPool->ReleaseWorker(ev->GetWorketIdx());
+    auto& event = *evExt->Get();
+    WorkersPool->ReleaseWorker(event.GetWorketIdx());
     AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "result")("sender", evExt->Sender)
-        ("queue", ProcessesOrdered.size())("count", ev->GetProcessIds().size())("d", ev->GetInstants().back() - ev->GetInstants().front());
-    for (ui32 idx = 0; idx < ev->GetProcessIds().size(); ++idx) {
-        AddCPUTime(ev->GetProcessIds()[idx], ev->GetInstants()[idx + 1] - std::max(LastAddProcessInstant, ev->GetInstants()[idx]));
-        Counters.TaskExecuteHistogram->Collect((ev->GetInstants()[idx + 1] - ev->GetInstants()[idx]).MicroSeconds());
+        ("queue", ProcessesOrdered.size())("count", event.GetProcessIds().size())("d", event.GetInstants().back() - event.GetInstants().front());
+    for (ui32 idx = 0; idx < event.GetProcessIds().size(); ++idx) {
+        LWPROBE(TaskProcessedResult, ConveyorName, event.GetProcessIds()[idx], TDuration::MilliSeconds((event.GetInstants().back() - event.GetInstants().front()).MilliSeconds()), WaitingTasksCount.Val(), event.GetProcessIds().size());
+        AddCPUTime(event.GetProcessIds()[idx], event.GetInstants()[idx + 1] - std::max(LastAddProcessInstant, event.GetInstants()[idx]));
+        Counters.TaskExecuteHistogram->Collect((event.GetInstants()[idx + 1] - event.GetInstants()[idx]).MicroSeconds());
     }
-    const TDuration dExecution = ev->GetInstants().back() - ev->GetInstants().front();
+    const TDuration dExecution = event.GetInstants().back() - event.GetInstants().front();
     Counters.PackExecuteHistogram->Collect(dExecution.MicroSeconds());
     Counters.ExecuteDuration->Add(dExecution.MicroSeconds());
 
     const TMonotonic now = TMonotonic::Now();
-    const TDuration dBackSend = now - ev->GetConstructInstant();
-    const TDuration dForwardSend = ev->GetForwardSendDuration();
+    const TDuration dBackSend = now - event.GetConstructInstant();
+    const TDuration dForwardSend = event.GetForwardSendDuration();
 
-    const TDuration predictedDurationPerTask = std::max<TDuration>(dExecution / ev->GetProcessIds().size(), TDuration::MicroSeconds(10));
+    const TDuration predictedDurationPerTask = std::max<TDuration>(dExecution / event.GetProcessIds().size(), TDuration::MicroSeconds(10));
     const double alpha = 0.1;
     const ui32 countTheory = (dBackSend + dForwardSend).GetValue() / (alpha * predictedDurationPerTask.GetValue());
     const ui32 countPredicted = std::max<ui32>(1, std::min<ui32>(WaitingTasksCount.Val() / WorkersPool->GetWorkersCount(), countTheory));
     AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "prediction")("alpha", alpha)
-        ("send_forward", dForwardSend)("send_back", dBackSend)("count", ev->GetProcessIds().size())("exec", dExecution)("theory_count", countTheory)
+        ("send_forward", dForwardSend)("send_back", dBackSend)("count", event.GetProcessIds().size())("exec", dExecution)("theory_count", countTheory)
         ("real_count", countPredicted);
 
     Counters.SendBackHistogram->Collect(dBackSend.MicroSeconds());
     Counters.SendBackDuration->Add(dBackSend.MicroSeconds());
-    Counters.SolutionsRate->Add(ev->GetProcessIds().size());
+    Counters.SolutionsRate->Add(event.GetProcessIds().size());
 
     const bool hasFreeWorker = WorkersPool->HasFreeWorker();
     if (ProcessesOrdered.size() && hasFreeWorker) {
@@ -149,9 +156,11 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
     AFL_VERIFY(EnableProcesses);
-    auto it = Processes.find(ev->Get()->GetProcessId());
+    auto& event = *ev->Get();
+    auto it = Processes.find(event.GetProcessId());
+    LWPROBE(RegisterProcess, ConveyorName, event.GetProcessId(), WaitingTasksCount.Val());
     if (it == Processes.end()) {
-        AddProcess(ev->Get()->GetProcessId(), ev->Get()->GetCPULimits());
+        AddProcess(event.GetProcessId(), event.GetCPULimits());
     } else {
         it->second.IncRegistration();
     }
@@ -159,9 +168,11 @@ void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
+    auto& event = *ev->Get();
     AFL_VERIFY(EnableProcesses);
-    auto it = Processes.find(ev->Get()->GetProcessId());
+    auto it = Processes.find(event.GetProcessId());
     AFL_VERIFY(it != Processes.end());
+    LWPROBE(UnregisterProcess, ConveyorName, event.GetProcessId(), WaitingTasksCount.Val());
     if (it->second.DecRegistration()) {
         if (it->second.GetTasks().size()) {
             AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress(WorkersPool->GetAmountCPULimit())));
@@ -189,6 +200,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
 
     TWorkerTask wTask(ev->Get()->GetTask(), itSignal->second, processId);
     AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "add_task")("proc", processId)("queue", WaitingTasksCount.Val());
+    LWPROBE(NewTask, ConveyorName, processId, taskClass, WaitingTasksCount.Val());
 
     if (WorkersPool->HasFreeWorker()) {
         Counters.WaitingHistogram->Collect(0);

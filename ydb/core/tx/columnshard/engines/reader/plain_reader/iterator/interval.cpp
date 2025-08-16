@@ -38,8 +38,7 @@ TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPositi
     , TaskGuard(Context->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , Sources(sources)
     , IntervalIdx(intervalIdx)
-    , IntervalGroupGuard(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
-          Context->GetProcessMemoryControlId(), context->GetCommonContext()->GetScanId()))
+    , IntervalGroupGuard(Context->GetProcessScopeGuard()->BuildGroupGuard())
     , IntervalStateGuard(Context->GetCommonContext()->GetCounters().CreateIntervalStateGuard()) {
     AFL_VERIFY(Sources.size());
     for (auto&& [_, i] : Sources) {

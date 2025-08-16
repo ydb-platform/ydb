@@ -60,21 +60,21 @@ void TMainBase::RegisterKikimrOptions(NLastGetopt::TOpts& options, TServerSettin
         .RequiredArgument("file")
         .StoreMappedResultT<TString>(&ProfileAllocationsOutput, &GetDefaultOutput);
 
-    options.AddLongOption('M', "monitoring", "Embedded UI port (use 0 to start on random free port), if used will be run as daemon")
+    options.AddLongOption('M', "monitoring", "Embedded UI ports range start (use 0 to start on random free port), if used will be run as daemon")
         .RequiredArgument("uint")
         .Handler1([&settings](const NLastGetopt::TOptsParser* option) {
             if (const TString& port = option->CurVal()) {
                 settings.MonitoringEnabled = true;
-                settings.MonitoringPortOffset = FromString(port);
+                settings.FirstMonitoringPort = FromString(port);
             }
         });
 
-    options.AddLongOption('G', "grpc", "gRPC port (use 0 to start on random free port), if used will be run as daemon")
+    options.AddLongOption('G', "grpc", "gRPC ports range start (use 0 to start on random free port), if used will be run as daemon")
         .RequiredArgument("uint")
         .Handler1([&settings](const NLastGetopt::TOptsParser* option) {
             if (const TString& port = option->CurVal()) {
                 settings.GrpcEnabled = true;
-                settings.GrpcPort = FromString(port);
+                settings.FirstGrpcPort = FromString(port);
             }
         });
 

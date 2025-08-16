@@ -11,8 +11,8 @@ ENDIF()
 SRCS(
     alloc.proto
     auth.proto
-    base.proto
     backup.proto
+    base.proto
     bind_channel_storage_pool.proto
     blob_depot.proto
     blob_depot_config.proto
@@ -85,8 +85,8 @@ SRCS(
     http_config.proto
     import.proto
     index_builder.proto
-    kesus.proto
     kafka.proto
+    kesus.proto
     key.proto
     kqp.proto
     kqp_physical.proto
@@ -151,6 +151,7 @@ SRCS(
     tx_sequenceshard.proto
     whiteboard_disk_states.proto
     whiteboard_flags.proto
+    workload_manager_config.proto
     ydb_result_set_old.proto
     ydb_table_impl.proto
     yql_translation_settings.proto

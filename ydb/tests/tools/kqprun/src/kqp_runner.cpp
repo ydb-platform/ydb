@@ -248,6 +248,7 @@ private:
                 Cout << CoutColors_.Cyan() << "Writing scheme query ast" << CoutColors_.Default() << Endl;
             }
             Options_.SchemeQueryAstOutput->Write(ast);
+            Options_.SchemeQueryAstOutput->Flush();
         }
     }
 
@@ -257,6 +258,7 @@ private:
                 Cout << CoutColors_.Cyan() << "Writing script query ast" << CoutColors_.Default() << Endl;
             }
             output->Write(ast);
+            output->Flush();
         }
     }
 

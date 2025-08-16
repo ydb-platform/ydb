@@ -84,4 +84,11 @@ public:
     }
 };
 
+class TDeduplicationServiceOperator {
+public:
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Deduplication, 0);
+    }
+};
+
 }   // namespace NKikimr::NConveyorComposite

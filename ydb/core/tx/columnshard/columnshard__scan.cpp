@@ -2,7 +2,6 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include "columnshard.h"
 #include "columnshard_impl.h"
-#include "engines/reader/sys_view/abstract/policy.h"
 #include "engines/reader/transaction/tx_scan.h"
 #include "engines/reader/transaction/tx_internal_scan.h"
 
@@ -32,22 +31,6 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
         return;
     }
 
-    const auto schemeShardLocalPath = TSchemeShardLocalPathId::FromProto(record);
-    auto internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPath);
-    if (!internalPathId && NOlap::NReader::NSysView::NAbstract::ISysViewPolicy::BuildByPath(record.GetTablePath())) {
-        internalPathId = TInternalPathId::FromRawValue(schemeShardLocalPath.GetRawValue());  //TODO register ColumnStore in tablesmanager
-    }
-    if (!internalPathId) {
-        const auto& request = ev->Get()->Record;
-        auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(request.GetGeneration(), TabletID());
-        error->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST,TStringBuilder() << "table: " << request.GetTablePath() << "not found");
-        NYql::IssueToMessage(issue, error->Record.MutableIssues()->Add());
-
-        ctx.Send(ev->Sender, error.Release());
-        return;
-    }
-    Counters.GetColumnTablesCounters()->GetPathIdCounter(*internalPathId)->OnReadEvent();
     ScanTxInFlight.insert({txId, TAppData::TimeProvider->Now()});
     Counters.GetTabletCounters()->SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new NOlap::NReader::TTxScan(this, ev), ctx);

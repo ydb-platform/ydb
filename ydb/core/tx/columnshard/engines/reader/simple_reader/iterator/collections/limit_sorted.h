@@ -1,6 +1,8 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
+
 #include <ydb/library/accessor/positive_integer.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -30,12 +32,11 @@ private:
     };
 
     virtual bool DoHasData() const override {
-        return HeapSources.size();
+        return !SourcesConstructor->IsFinished() || !!NextSource;
     }
-    ui32 SourceIdxCurrent = 0;
-    std::shared_ptr<IDataSource> NextSource;
-    std::deque<TSourceConstructor> HeapSources;
+    std::shared_ptr<NCommon::IDataSource> NextSource;
     ui64 Limit = 0;
+
     ui64 InFlightLimit = 1;
     std::set<ui32> FetchingInFlightSources;
     bool Aborted = false;
@@ -43,37 +44,61 @@ private:
 
     void DrainToLimit();
 
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor(
+        const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceId(), readyRecords);
     }
     virtual void DoClear() override {
         Cleared = true;
-        HeapSources.clear();
+        SourcesConstructor->Clear();
         FetchingInFlightSources.clear();
+        NextSource.reset();
     }
     virtual void DoAbort() override {
         Aborted = true;
-        HeapSources.clear();
+        SourcesConstructor->Abort();
         FetchingInFlightSources.clear();
+        NextSource.reset();
+    }
+    virtual TString DoDebugString() const override {
+        TStringBuilder sb;
+        sb << "{";
+        sb << "N:" << (NextSource ? true : false) << ";";
+        if (Cleared) {
+            sb << "C:" << Cleared << ";";
+        }
+        if (Aborted) {
+            sb << "A:" << Aborted << ";";
+        }
+        sb << "SCF:" << SourcesConstructor->IsFinished() << ";";
+        sb << "FFS:" << FetchingInFlightSources.size() << ";";
+        sb << "IN_FLY:" << GetSourcesInFlightCount() << ";";
+        sb << "HAS_DATA:" << HasData() << ";";
+        sb << "}";
+        return sb;
     }
     virtual bool DoIsFinished() const override {
-        return HeapSources.empty() && FetchingInFlightSources.empty();
+        return !NextSource && SourcesConstructor->IsFinished() && FetchingInFlightSources.empty();
     }
-    virtual std::shared_ptr<IDataSource> DoExtractNext() override;
+    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override;
     virtual bool DoCheckInFlightLimits() const override {
-        return FetchingInFlightSources.size() < InFlightLimit;
+        return GetSourcesInFlightCount() < InFlightLimit;
     }
 
-    virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) override;
+    virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override;
     ui32 GetInFlightIntervalsCount(const TCompareKeyForScanSequence& from, const TCompareKeyForScanSequence& to) const;
 
 public:
-    const std::shared_ptr<IDataSource>& GetNextSource() const {
+    virtual TString GetClassName() const override {
+        return "SORT_LIMIT";
+    }
+
+    const std::shared_ptr<NCommon::IDataSource>& GetNextSource() const {
         return NextSource;
     }
 
-    TScanWithLimitCollection(const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources,
-        const std::shared_ptr<IScanCursor>& cursor);
+    TScanWithLimitCollection(
+        const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

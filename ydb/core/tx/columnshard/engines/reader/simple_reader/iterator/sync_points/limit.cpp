@@ -40,15 +40,16 @@ bool TSyncPointLimitControl::DrainToLimit() {
     return false;
 }
 
-ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const std::shared_ptr<IDataSource>& source, TPlainReadData& /*reader*/) {
+ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
+    const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/) {
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;
     }
     const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
     const auto& g = source->GetStageResult().GetBatch();
     AFL_VERIFY(Iterators.size());
-    AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId())("front", Iterators.front().DebugString())(
-                                                    "source", source->GetStart().DebugString())("source_id", source->GetSourceId());
+    AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId())("front", Iterators.front().DebugString())("source",
+                                                    source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_id", source->GetSourceId());
     std::pop_heap(Iterators.begin(), Iterators.end());
     if (!g || !g->GetRecordsCount()) {
         Iterators.pop_back();
@@ -89,7 +90,7 @@ TString TSyncPointLimitControl::TSourceIterator::DebugString() const {
     sb << "id=" << Source->GetSourceId() << ";";
     sb << "f=" << IsFilled() << ";";
     sb << "record=" << SortableRecord->DebugJson() << ";";
-    sb << "start=" << Source->GetStart().DebugString() << ";";
+    sb << "start=" << Source->GetAs<TPortionDataSource>()->GetStart().DebugString() << ";";
     return sb;
 }
 

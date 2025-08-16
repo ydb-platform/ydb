@@ -130,6 +130,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
     void Complete(const TActorContext&) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxSchemeShardStats::Complete");
+        Self->ReportBaseStatisticsCounters();
     }
 };
 

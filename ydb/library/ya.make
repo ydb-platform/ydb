@@ -28,6 +28,7 @@ RECURSE(
     pretty_types_print
     protobuf_printer
     query_actor
+    range_treap
     schlab
     security
     signal_backtrace

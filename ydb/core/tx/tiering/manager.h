@@ -48,23 +48,36 @@ public:
 
 class TTiersManager: public ITiersManager {
 public:
+    enum class ETierState {
+        REQUESTED = 1,
+        UNAVAILABLE = 2,
+        AVAILABLE = 3,
+    };
+
     class TTierGuard : NNonCopyable::TMoveOnly {
     private:
         NTiers::TExternalStorageId StorageId;
-        std::optional<NTiers::TTierConfig> Config;
+        NTiers::TTierConfig Config;
         TTiersManager* Owner;
+        YDB_READONLY(ETierState, State, TTiersManager::ETierState::REQUESTED);
 
     public:
         bool HasConfig() const {
-            return !!Config;
+            return State == ETierState::AVAILABLE;
         }
 
         const NTiers::TTierConfig& GetConfigVerified() const {
-            return *TValidator::CheckNotNull(Config);
+            AFL_VERIFY(HasConfig());
+            return Config;
         }
 
         void UpsertConfig(NTiers::TTierConfig config) {
+            State = ETierState::AVAILABLE;
             Config = std::move(config);
+        }
+
+        void ResetConfig() {
+            State = ETierState::UNAVAILABLE;
         }
 
         const NTiers::TExternalStorageId& GetStorageId() const {
@@ -121,7 +134,7 @@ public:
         , Secrets(std::make_shared<NMetadata::NSecret::TSnapshot>(TInstant::Zero())) {
     }
     TActorId GetActorId() const;
-    void ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers);
+    void ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers, const bool resubscribeToConfig);
 
     void UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
     void UpdateTierConfig(std::optional<NTiers::TTierConfig> config, const NTiers::TExternalStorageId& tierId, const bool notifyShard = true);

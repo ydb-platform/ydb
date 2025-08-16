@@ -8,9 +8,9 @@ namespace NKikimr::NGeneralCache::NPublic {
 
 class TConfig {
 private:
-    YDB_READONLY(ui32, MemoryLimit, ((ui64)1 << 30));
-    YDB_READONLY(ui32, DirectInflightSourceLimit, 2000);
-    YDB_READONLY(ui32, DirectInflightGlobalLimit, 20000);
+    YDB_READONLY_DEF(std::optional<ui64>, MemoryLimit);
+    YDB_READONLY(ui64, DirectInflightSourceLimit, 2000);
+    YDB_READONLY(ui64, DirectInflightGlobalLimit, 20000);
 
     TConfig() = default;
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TGeneralCacheConfig& config);

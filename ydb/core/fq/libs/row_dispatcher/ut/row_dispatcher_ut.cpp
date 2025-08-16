@@ -109,7 +109,8 @@ public:
             TestActorFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            CreatePqNativeGateway(pqServices)
+            CreatePqNativeGateway(pqServices),
+            NActors::TActorId()
             ).release());
 
         Runtime.EnableScheduleForActor(RowDispatcher);

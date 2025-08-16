@@ -340,6 +340,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TUserPoolMetrics UserPoolMetrics;
     NYql::IPqGateway::TPtr PqGateway;
     NActors::TMon* Monitoring;
+    NActors::TActorId NodesManagerId;
     TNodesTracker NodesTracker;
     NYql::TCounters::TEntry AllSessionsDateRate;
     TAggregatedStats AggrStats; 
@@ -422,6 +423,7 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
+        NActors::TActorId nodesManagerId,
         NActors::TMon* monitoring = nullptr);
 
     void Bootstrap();
@@ -503,6 +505,7 @@ TRowDispatcher::TRowDispatcher(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
+    NActors::TActorId nodesManagerId,
     NActors::TMon* monitoring)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -517,6 +520,7 @@ TRowDispatcher::TRowDispatcher(
     , UserPoolMetrics(countersRoot->GetSubgroup("counters", "utils"))
     , PqGateway(pqGateway)
     , Monitoring(monitoring)
+    , NodesManagerId(nodesManagerId)
 {
 }
 
@@ -525,7 +529,7 @@ void TRowDispatcher::Bootstrap() {
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId() << ", tenant " << Tenant);
 
     const auto& config = Config.GetCoordinator();
-    auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters).release());
+    auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters, NodesManagerId).release());
     Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
@@ -1289,6 +1293,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
+    NActors::TActorId nodesManagerId,
     NActors::TMon* monitoring)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
@@ -1301,6 +1306,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         counters,
         countersRoot,
         pqGateway,
+        nodesManagerId,
         monitoring));
 }
 

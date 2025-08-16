@@ -14,6 +14,7 @@ std::unique_ptr<NActors::IActor> NewCoordinator(
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters);
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    NActors::TActorId nodesManagerId);
 
 } // namespace NFq

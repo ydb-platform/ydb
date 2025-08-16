@@ -1,4 +1,6 @@
 #include "nodes_manager.h"
+#include "nodes_manager_events.h"
+
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -266,6 +268,7 @@ private:
         hFunc(NFq::TEvInternalService::TEvHealthCheckResponse, HandleResponse)
         hFunc(NActors::TEvAddressInfo, Handle)
         hFunc(NActors::TEvResolveError, Handle)
+        hFunc(NFq::TEvNodesManager::TEvGetNodesRequest, Handle)
         )
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -291,6 +294,16 @@ private:
     void Handle(NActors::TEvResolveError::TPtr& ev) {
         LOG_E("TNodesManagerActor::TEvResolveError: " << ev->Get()->Explain << ", Host: " << ev->Get()->Host);
         ResolveSelfAddress();
+    }
+
+    void Handle(NFq::TEvNodesManager::TEvGetNodesRequest::TPtr& ev) {
+        LOG_D("TNodesManagerActor::TEvGetNodesRequest");
+        auto response = MakeHolder<NFq::TEvNodesManager::TEvGetNodesResponse>();
+        response->NodeIds.reserve(Peers.size());
+        for (const auto& info : Peers) {
+            response->NodeIds.push_back(info.NodeId);
+        }
+        Send(ev->Sender, response.Release());
     }
 
     void ResolveSelfAddress() {

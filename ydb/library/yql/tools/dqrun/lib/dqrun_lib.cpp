@@ -481,7 +481,8 @@ TVector<std::pair<TActorId, TActorSetupCmd>> TDqRunTool::GetFqServices() {
             credentialsFactory,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            GetPqGateway());
+            GetPqGateway(),
+            NActors::TActorId());
 
         services.emplace_back(
             NFq::RowDispatcherServiceActorId(),

@@ -327,6 +327,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         Partition()->EndOffset = meta.GetEndOffset();
         if (Partition()->StartOffset == Partition()->EndOffset) {
            Partition()->NewHead.Offset = Partition()->Head.Offset = Partition()->EndOffset;
+
         }
         if (meta.HasStartOffset()) {
             GetContext().StartOffset = meta.GetStartOffset();
@@ -448,6 +449,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             Cerr << "ERROR " << range.GetStatus() << "\n";
             Y_ABORT("bad status");
     };
+    Partition()->CreateCompacter();
 }
 
 void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
@@ -455,10 +457,8 @@ void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
     for (auto& [_, userInfo] : usersInfoStorage->GetAll()) {
         userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->StartOffset;
     }
-
     Done(ctx);
 }
-
 
 
 //
@@ -928,7 +928,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     WriteCycleStartTime = ctx.Now();
 
     ReadQuotaTrackerActor = Register(new TReadQuoter(
-        ctx,
+        AppData(ctx)->PQConfig,
         TopicConverter,
         Config,
         Partition,
@@ -1216,6 +1216,25 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 void TPartition::InitSplitMergeSlidingWindow() {
     using Tui64SumSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
     SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
+}
+
+void TPartition::CreateCompacter() {
+    if (!Config.GetEnableCompactification() || !AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() || IsSupportive()) {
+        if (!IsSupportive()) {
+            Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
+        }
+        Compacter.Reset();
+        return;
+    }
+    if (Compacter) {
+        Compacter->TryCompactionIfPossible();
+        return;
+    }
+
+    auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext()); //ToDo: Fix!
+    ui64 compStartOffset = userInfo.Offset;
+    Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
+    Compacter->TryCompactionIfPossible();
 }
 
 //

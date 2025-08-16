@@ -143,7 +143,7 @@ namespace NKikimr::NPQ {
 
         void Verify(const TRequestedBlob& blob) const {
             TKey key(TKeyPrefix::TypeData, TPartitionId(0), blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, false);
-            Y_ABORT_UNLESS(blob.Value.size() == blob.Size);
+            Y_ABORT_UNLESS(blob.Value.size() <= blob.Size);
             TClientBlob::CheckBlob(key, blob.Value);
         }
     };
@@ -420,10 +420,11 @@ namespace NKikimr::NPQ {
             }
 
             auto sp = it->second.GetBlob();
-            Y_ABORT_UNLESS(sp.get() == value.get(),
-                "Evicting strange blob. Partition %d offset %ld partNo %d size %ld. L1 ptr %p vs L2 ptr %p",
-                blob.Partition.InternalPartitionId, blob.Offset, blob.PartNo, value->DataSize(), sp.get(), value.get());
-
+            if (sp.get() != value.get()) {
+                LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE, "Evicting strange blob. Partition " << blob.Partition.InternalPartitionId
+                           << "offset " << blob.Offset << " partNo " << blob.PartNo << " size " << value->DataSize()
+                           << " L1 ptr " << ((void*)sp.get()) << " vs L2 ptr " << ((void*)value.get()));
+            }
             RemoveBlob(it);
 
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Erasing blob in L1. Partition "

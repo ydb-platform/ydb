@@ -451,7 +451,6 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             Cerr << "ERROR " << range.GetStatus() << "\n";
             Y_ABORT("bad status");
     };
-    Partition()->CreateCompacter();
 }
 
 void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
@@ -459,6 +458,9 @@ void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
     for (auto& [_, userInfo] : usersInfoStorage->GetAll()) {
         userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->BlobEncoder.StartOffset;
     }
+
+    Partition()->CreateCompacter();
+
     Done(ctx);
 }
 

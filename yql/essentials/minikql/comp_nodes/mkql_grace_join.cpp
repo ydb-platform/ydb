@@ -848,6 +848,7 @@ private:
             if ( *PartialJoinCompleted) {
                 do {
                     if (JoinedTablePtr->GetCurrentBucketIterator() == NextBucketNumber) {
+                        Y_DEBUG_ABORT_UNLESS(NextBucketNumber < GraceJoin::NumberOfBuckets);
                         auto& leftTable = *LeftPacker->TablePtr;
                         auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
                         LeftPacker->StartTime = std::chrono::system_clock::now();

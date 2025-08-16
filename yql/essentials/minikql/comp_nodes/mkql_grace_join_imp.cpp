@@ -393,6 +393,7 @@ bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind /
 // Joins two tables and returns join result in joined table. Tuples of joined table could be received by
 // joined table iterator
 void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples, ui32 fromBucket, ui32 toBucket ) {
+    Cerr << "GJ join " << fromBucket << " to " << toBucket << '\n';
     if ( hasMoreLeftTuples )
         LeftTableBatch_ = true;
 
@@ -906,6 +907,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2, ui64 bucketLimit)
         CurrIterIndex = 0;
         JoinTable1->CurrIterIndex = 0;
         JoinTable2->CurrIterIndex = 0;
+        Cerr << "NextJoinedData: reached " << CurrIterBucket << "/" << bucketLimit << '\n';
     }
 
     return false;
@@ -955,6 +957,7 @@ void TTable::BorrowPreviousBucket(ui32 bucket) {
 }
 
 void TTable::BorrowBucket(ui32 bucket, ui32 previousBucket) {
+    Cerr << "GJ Borrow " << bucket << " from " << previousBucket << '\n';
     if (JoinTable1) {
         JoinTable1->BorrowBucket(bucket, previousBucket);
     }

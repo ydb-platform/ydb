@@ -212,9 +212,9 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
 
                         std::string fullNumber = intPartStr + fracPartStr;
                         __int128_t num = 0;
-                        for (char c : fullNumber) {
-                            if (c >= '0' && c <= '9') {
-                                num = num * 10 + (c - '0');
+                        for (auto&& ch : fullNumber) {
+                            if (ch >= '0' && ch <= '9') {
+                                num = num * 10 + (ch - '0');
                             }
                         }
 

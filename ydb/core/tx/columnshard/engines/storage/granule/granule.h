@@ -225,6 +225,7 @@ public:
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
         AFL_VERIFY(InsertedPortionsById.contains(it->second->GetPortionId()));
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort")("snapshot", ssRemove.DebugString());
         it->second->SetCommitSnapshot(ssRemove);
         it->second->SetRemoveSnapshot(ssRemove);
         TDbWrapper wrapper(txc.DB, nullptr);

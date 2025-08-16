@@ -190,7 +190,7 @@ public:
 
     virtual TString DebugString() const {
         return TStringBuilder() << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
-                                << " " << Sorting << " sorted";
+                                << " " << Sorting << " sorted;snapshot{" << RequestSnapshot.DebugString() << "}";
     }
 
     std::set<ui32> GetProcessingColumnIds() const {

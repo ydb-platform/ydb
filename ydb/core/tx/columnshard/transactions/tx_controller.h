@@ -86,7 +86,7 @@ public:
         : TBasicTxInfo(txKind, txId) {
     }
 
-    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 minAllowedPlanStep, 
+    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 minAllowedPlanStep,
         const ui64 cookie, const std::optional<TMessageSeqNo>& seqNo)
         : TBasicTxInfo(txKind, txId)
         , MinStep(minAllowedPlanStep)
@@ -161,18 +161,26 @@ public:
     struct TPlanQueueItem {
         const ui64 Step = 0;
         const ui64 TxId = 0;
+        const ui64 SeqId = 0;
 
-        TPlanQueueItem(const ui64 step, const ui64 txId)
+        TPlanQueueItem(const TPlanQueueItem& item)
+            : Step(item.Step)
+            , TxId(item.TxId)
+            , SeqId(item.SeqId) {
+        }
+
+        TPlanQueueItem(const ui64 step, const ui64 txId, const ui64 seqId)
             : Step(step)
-            , TxId(txId) {
+            , TxId(txId)
+            , SeqId(seqId) {
         }
 
         inline bool operator<(const TPlanQueueItem& rhs) const {
-            return Step < rhs.Step || (Step == rhs.Step && TxId < rhs.TxId);
+            return std::tie(Step, SeqId) < std::tie(rhs.Step, rhs.SeqId);
         }
 
         TString DebugString() const {
-            return TStringBuilder() << "step=" << Step << ";txId=" << TxId << ";";
+            return TStringBuilder() << "step=" << Step << ";txId=" << TxId << ";seqId=" << SeqId << ";";
         }
     };
 
@@ -182,6 +190,9 @@ public:
 
     class ITransactionOperator {
     public:
+        static inline TAtomicCounter AtomicId = 0;
+        const ui64 Identifier = AtomicId.Inc();
+
         enum class EStatus {
             Created,
             Parsed,
@@ -418,6 +429,7 @@ private:
     TTxProgressCounters Counters;
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
+
 private:
     bool AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc);
 
@@ -489,7 +501,7 @@ public:
     std::optional<TTxInfo> PopFirstPlannedTx();
     void ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void ProgressOnComplete(const TPlanQueueItem& tx);
-    THashSet<ui64> GetTxs() const; //TODO #8650 GetTxsByPathId
+    THashSet<ui64> GetTxs() const;   //TODO #8650 GetTxsByPathId
 
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;

@@ -33,11 +33,11 @@ ui64 TTxController::GetMemoryUsage() const {
 
 TTxController::TPlanQueueItem TTxController::GetFrontTx() const {
     if (!RunningQueue.empty()) {
-        return TPlanQueueItem(RunningQueue.begin()->Step, RunningQueue.begin()->TxId);
+        return TPlanQueueItem(*RunningQueue.begin());
     } else if (!PlanQueue.empty()) {
-        return TPlanQueueItem(PlanQueue.begin()->Step, PlanQueue.begin()->TxId);
+        return TPlanQueueItem(*PlanQueue.begin());
     }
-    return TPlanQueueItem(Owner.LastPlannedStep, 0);
+    return TPlanQueueItem(Owner.LastPlannedStep, 0, 0);
 }
 
 bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
@@ -78,9 +78,10 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         txInfo.DeserializeSeqNoFromString(rowset.GetValue<Schema::TxInfo::SeqNo>());
 
         if (txInfo.PlanStep != 0) {
-            PlanQueue.emplace(txInfo.PlanStep, txInfo.TxId);
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "plan_step_info")("tx_id", txInfo.TxId)("plan_step", txInfo.PlanStep);
+            PlanQueue.emplace(txInfo.PlanStep, txInfo.TxId, txOperator->Identifier);
         } else if (txInfo.MaxStep != Max<ui64>()) {
-            DeadlineQueue.emplace(txInfo.MaxStep, txInfo.TxId);
+            DeadlineQueue.emplace(txInfo.MaxStep, txInfo.TxId, txOperator->Identifier);
         }
         AFL_VERIFY(Operators.emplace(txId, txOperator).second);
 
@@ -132,7 +133,7 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_p
     AFL_VERIFY(Operators.emplace(txOperator->GetTxId(), txOperator).second);
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "RegisterTxWithDeadline")("tx_id", txInfo.TxId)("plan_step", txInfo.PlanStep);
     Schema::SaveTxInfo(db, txInfo, txBody);
-    DeadlineQueue.emplace(txInfo.MaxStep, txOperator->GetTxId());
+    DeadlineQueue.emplace(txInfo.MaxStep, txOperator->GetTxId(), txOperator->Identifier);
     Counters.OnRegisterTx(txOperator->GetOpType());
     return txInfo;
 }
@@ -165,7 +166,7 @@ bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) 
     opIt->second->CompleteOnAbort(Owner, ctx);
 
     if (opIt->second->GetTxInfo().MaxStep != Max<ui64>()) {
-        DeadlineQueue.erase(TPlanQueueItem(opIt->second->GetTxInfo().MaxStep, txId));
+        DeadlineQueue.erase(TPlanQueueItem(opIt->second->GetTxInfo().MaxStep, txId, opIt->second->Identifier));
     }
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "cancel_tx")("tx_id", txId);
     OnTxCompleted(txId);
@@ -200,9 +201,9 @@ std::optional<TTxController::TTxInfo> TTxController::PopFirstPlannedTx() {
     if (!PlanQueue.empty()) {
         auto node = PlanQueue.extract(PlanQueue.begin());
         auto& item = node.value();
-        TPlanQueueItem tx(item.Step, item.TxId);
+        TPlanQueueItem tx = item;
         RunningQueue.emplace(std::move(item));
-        return GetTxInfoVerified(item.TxId);
+        return GetTxInfoVerified(tx.TxId);
     }
     return std::nullopt;
 }
@@ -307,9 +308,10 @@ TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64
         txInfo.PlanStep = planStep;
         NIceDb::TNiceDb db(txc.DB);
         Schema::UpdateTxInfoPlanStep(db, txId, planStep);
-        PlanQueue.emplace(planStep, txId);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "add_plan_step")("tx_id", txId)("plan_step", planStep);
+        PlanQueue.emplace(planStep, txId, it->second->Identifier);
         if (txInfo.MaxStep != Max<ui64>()) {
-            DeadlineQueue.erase(TPlanQueueItem(txInfo.MaxStep, txId));
+            DeadlineQueue.erase(TPlanQueueItem(txInfo.MaxStep, txId, it->second->Identifier));
         }
         return EPlanResult::Planned;
     } else {

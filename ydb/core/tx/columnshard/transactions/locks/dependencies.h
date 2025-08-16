@@ -1,7 +1,9 @@
 #pragma once
-#include <util/generic/hash_set.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+
+#include <util/generic/hash_set.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 
@@ -10,6 +12,16 @@ private:
     THashMap<ui64, THashSet<ui64>> TxIdsFromCommitToBroken;
 
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{";
+        for (auto&& i : TxIdsFromCommitToBroken) {
+            sb << i.first << ":[" << JoinSeq(",", i.second) << "],";
+        }
+        sb << "}";
+        return sb;
+    }
+
     bool IsEmpty() const {
         return TxIdsFromCommitToBroken.empty();
     }

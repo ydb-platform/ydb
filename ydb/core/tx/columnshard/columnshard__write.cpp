@@ -320,10 +320,11 @@ private:
 
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     TMemoryProfileGuard mpg("NEvents::TDataEvents::TEvWrite");
-    NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletID())("event", "TEvWrite");
-
     const auto& record = ev->Get()->Record;
+
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletID())(
+        "event", "TEvWrite")("ev_write", record.DebugString());
+
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
 
@@ -354,6 +355,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
     auto behaviour = *behaviourConclusion;
 
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_WRITE)("behaviour", behaviour);
     if (behaviour == EOperationBehaviour::AbortWriteLock) {
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "AbortWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED), "");
         Execute(new TAbortWriteTransaction(this, record.GetLocks().GetLocks()[0].GetLockId(), source, cookie), ctx);
@@ -406,8 +408,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         LWPROBE(EvWriteResult, TabletID(), source.ToString(), record.GetTxId(), cookie, "immediate error", false, "only single operation is supported");
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "only single operation is supported");
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "only single operation is supported");
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+            "only single operation is supported (incoming: " + ::ToString(record.GetOperations().size()) + ")");
         ctx.Send(source, result.release(), 0, cookie);
         return;
     }

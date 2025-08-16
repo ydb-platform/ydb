@@ -60,6 +60,9 @@ void TWrittenPortionInfo::FillDefaultColumn(NAssembling::TColumnAssemblingInfo& 
 }
 
 bool TWrittenPortionInfo::DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const {
+    if (CommitSnapshot && IsRemovedFor(*CommitSnapshot)) {
+        return false;
+    }
     if (!checkCommitSnapshot) {
         return true;
     }

@@ -8,13 +8,13 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
-class TStageFeatures {
+class TStageFeatures: TMoveOnly {
 private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY(ui64, Limit, 0);
     YDB_READONLY_DEF(std::optional<ui64>, HardLimit);
-    YDB_ACCESSOR_DEF(TPositiveControlInteger, Usage);
-    YDB_ACCESSOR_DEF(TPositiveControlInteger, Waiting);
+    YDB_READONLY_DEF(TPositiveControlInteger, Usage);
+    YDB_READONLY_DEF(TPositiveControlInteger, Waiting);
     std::shared_ptr<TStageFeatures> Owner;
     std::shared_ptr<TStageCounters> Counters;
     std::function<void(ui64)> MemoryConsumptionUpdate;

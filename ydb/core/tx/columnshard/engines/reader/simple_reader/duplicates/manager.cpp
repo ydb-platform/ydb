@@ -289,11 +289,18 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
+    ui64 intersectionsCount = 0;
+    const auto collector = [&intersectionsCount](
+                               const TPortionIntervalTree::TRange& /*interval*/, const std::shared_ptr<TPortionInfo>& /*portion*/) {
+        ++intersectionsCount;
+    };
+    const std::shared_ptr<TPortionInfo>& source = GetPortionVerified(ev->Get()->GetSourceId());
+    Intervals.EachIntersection(TPortionIntervalTree::TRange(source->IndexKeyStart(), true, source->IndexKeyEnd(), true), collector);
     auto constructor = std::make_shared<TInternalFilterConstructor>(ev);
     NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(constructor->GetMemoryProcessId(),
         constructor->GetMemoryScopeId(), constructor->GetMemoryGroupId(),
-        { std::make_shared<TPortionIntersectionsAllocation>(SelfId(), constructor,
-            ExpectedIntersectionCount * sizeof(TPortionInfo::TConstPtr)) }, (ui64)TInternalFilterConstructor::EFetchingStage::INTERSECTIONS);
+        { std::make_shared<TPortionIntersectionsAllocation>(SelfId(), constructor, intersectionsCount * sizeof(TPortionInfo::TConstPtr)) },
+        (ui64)TInternalFilterConstructor::EFetchingStage::INTERSECTIONS);
 }
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {
@@ -324,6 +331,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         constructor->AddFilter(TDuplicateMapInfo(request->Get()->GetMaxVersion(), TRowRange(0, source->GetRecordsCount()),
                                    source->GetPortionId()), std::move(filter));
         AFL_VERIFY(constructor->IsDone());
+        Counters->OnRowsMerged(0, 0, source->GetRecordsCount());
         return;
     }
 

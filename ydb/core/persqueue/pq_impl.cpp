@@ -170,22 +170,19 @@ private:
         responseRecord.SetErrorCode(NPersQueue::NErrorCode::OK);
 
         Y_ABORT_UNLESS(readResult.ResultSize() > 0 || isDirectRead);
-        bool isStart = false;
+
+        ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
+                                   ? (responseRecord.HasPartitionResponse()
+                                        ? responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs()
+                                        : readResult.GetReadFromTimestampMs())
+                                   : 0;
+
         if (!responseRecord.HasPartitionResponse()) {
-            if (readResult.ResultSize() > 0) {
-                Y_ABORT_UNLESS(!readResult.GetResult(0).HasPartNo() || readResult.GetResult(0).GetPartNo() == 0); //starts from begin of record
-            }
             auto partResp = responseRecord.MutablePartitionResponse();
             auto readRes = partResp->MutableCmdReadResult();
             readRes->SetBlobsFromDisk(readRes->GetBlobsFromDisk() + readResult.GetBlobsFromDisk());
             readRes->SetBlobsFromCache(readRes->GetBlobsFromCache() + readResult.GetBlobsFromCache());
-            isStart = true;
         }
-        ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
-                                    ? (isStart ? readResult.GetReadFromTimestampMs()
-                                                : responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs())
-                                    : 0;
-
         if (record.GetPartitionResponse().HasCookie())
             responseRecord.MutablePartitionResponse()->SetCookie(record.GetPartitionResponse().GetCookie());
 
@@ -199,31 +196,92 @@ private:
 
         partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), readResult.GetRealReadOffset()));
 
+        auto removeIncompleteMessageIfAny = [&] () {
+            if (partResp->ResultSize() == 0)
+                return;
+            auto& back = partResp->GetResult(partResp->ResultSize() - 1);
+            if (back.GetPartNo() + 1 < back.GetTotalParts()) {
+                partResp->MutableResult()->RemoveLast();
+            }
+        };
+
+        auto makeErrorResponse = [&] (const TString& errorMessage) {
+            partResp->MutableResult()->Clear();
+            responseRecord.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+            responseRecord.SetErrorCode(NPersQueue::NErrorCode::READ_NOT_DONE);
+            responseRecord.SetErrorReason(errorMessage);
+            InitialRequest = false; //So we don't make any more retries but return error;
+        };
+
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
-            bool isNewMsg = !readResult.GetResult(i).HasPartNo() || readResult.GetResult(i).GetPartNo() == 0;
-            if (!isStart) {
-                Y_ABORT_UNLESS(partResp->ResultSize() > 0);
-                auto& back = partResp->GetResult(partResp->ResultSize() - 1);
-                bool lastMsgIsNotFull = back.GetPartNo() + 1 < back.GetTotalParts();
-                bool trancate = lastMsgIsNotFull && isNewMsg;
-                if (trancate) {
-                    partResp->MutableResult()->RemoveLast();
-                    if (partResp->GetResult().empty()) isStart = false;
+            auto currentReadResult = readResult.GetResult(i);
+            if (currentReadResult.GetData().empty()) { // This is empty parted removed by compactification
+                LastSkipOffset = currentReadResult.GetOffset();
+                continue; // Skip the empty part;
+            }
+            if (LastSkipOffset.Defined() && currentReadResult.GetOffset() == *LastSkipOffset) {
+                continue; // This is part of the message which is already being skipped due to empty parts. Skip all other parts as well;
+            }
+            if (!InitialRequest) {
+                // This is followup request to read missing parts;
+                // There must be some data in response already.
+                if (partResp->ResultSize() == 0) {
+                    makeErrorResponse("Internal error - got message part on followup read request with empty current response");
+                    PQ_LOG_CRIT("Handle TEvRead got message part on followup read request with empty current response. Readed now "
+                                << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
+                                << " full request(now): " << Request);
+                    break;
+                }
+                if (currentReadResult.GetPartNo() == 0) {
+                    // This is new message. If we still have another incomplete message stored previously, its' last parts were probably deleted by retention of compactification.
+                    // This is fine, we can drop last message;
+                    break;
+                }
+                auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
+                if (rr->GetSeqNo() != readResult.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != readResult.GetResult(i).GetPartNo()) {
+                    break;
                 }
             }
 
-            if (isNewMsg) {
-                if (!isStart && readResult.GetResult(i).HasTotalParts()
-                             && readResult.GetResult(i).GetTotalParts() + i > readResult.ResultSize()) //last blob is not full
-                    break;
+            // If we already have some data and encounter new message that doesn't fit into current response, we don't go any further, just stop;
+            // (And throw away that message to)
+            if (partResp->ResultSize() > 1 && currentReadResult.GetPartNo() == 0 &&
+                currentReadResult.HasTotalParts() && currentReadResult.GetTotalParts() + i > readResult.ResultSize())
+            {
+                break;
+            }
+
+            // Now actually add some data;
+            if (currentReadResult.GetPartNo() == 0) {
+                if (partResp->ResultSize()) {
+                    const auto& back = partResp->GetResult(partResp->ResultSize() - 1);
+                    if (back.GetPartNo() + 1 < back.GetTotalParts()) {
+                        makeErrorResponse("Internal error - got message part from the middle when expecting first part");
+                        PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << back.GetSeqNo() << "," << back.GetPartNo() << " readed now "
+                                    << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
+                                    << " full request(now): " << Request);
+                        break;
+                    }
+                }
+                // Create new message for first part;
                 partResp->AddResult()->CopyFrom(readResult.GetResult(i));
-                isStart = false;
-            } else { //glue to last res
+            } else { // Glue next part to prevous otherwise
+                if(partResp->ResultSize() == 0) {
+                    // This is error, Must have some data at this point;
+                    PQ_LOG_CRIT("Handle TEvRead, have last read pos, readed now "
+                                    << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
+                                    << " full request(now): " << Request);
+                    makeErrorResponse("Internal error - got message part from the middle when current response if empty");
+                    break;
+
+                }
                 auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
                 if (rr->GetSeqNo() != readResult.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != readResult.GetResult(i).GetPartNo()) {
                     PQ_LOG_CRIT("Handle TEvRead last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
                                     << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
                                     << " full request(now): " << Request);
+                    makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
+                    break;
                 }
                 Y_ABORT_UNLESS(rr->GetSeqNo() == readResult.GetResult(i).GetSeqNo());
                 (*rr->MutableData()) += readResult.GetResult(i).GetData();
@@ -232,14 +290,30 @@ private:
                 rr->SetPartNo(readResult.GetResult(i).GetPartNo());
                 rr->SetUncompressedSize(rr->GetUncompressedSize() + readResult.GetResult(i).GetUncompressedSize());
                 if (readResult.GetResult(i).GetPartNo() + 1 == readResult.GetResult(i).GetTotalParts()) {
+                    // This is the last part, validate data size;
                     Y_ABORT_UNLESS((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
                 }
             }
         }
-
+        // We got no data during initial request - possibly skipped all the data due to compactification.
+        if (InitialRequest && partResp->GetResult().empty() && LastSkipOffset.Defined()
+            // Check if we did actually skip anything so we don't request the same offset again.
+            && (ui64)Request.GetPartitionRequest().GetCmdRead().GetOffset() < *LastSkipOffset
+        ) {
+            //Try another read. Set TMP_MARKER so that response is redirected to proxy, but here we will treat is as "initial" response still.
+            Request.SetRequestId(TMP_REQUEST_MARKER);
+            Cerr << "==Read proxy: extra read\n!";
+            Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
+            Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
+            THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+            req->Record = Request;
+            Send(Tablet, req.Release());
+            return;
+        }
         if (!partResp->GetResult().empty()) {
             const auto& lastRes = partResp->GetResult(partResp->GetResult().size() - 1);
-            if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) { //last res is not full
+            if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) {
+                // Need more data to complete the big message. Send followup read request (and switch to non-initial request state)
                 Request.SetRequestId(TMP_REQUEST_MARKER);
 
                 auto read = Request.MutablePartitionRequest()->MutableCmdRead();
@@ -253,10 +327,12 @@ private:
 
                 THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
                 req->Record = Request;
-                ctx.Send(Tablet, req.Release());
+                Send(Tablet, req.Release());
+                InitialRequest = false;
                 return;
             }
         }
+        removeIncompleteMessageIfAny();
         //filter old messages
         ::google::protobuf::RepeatedPtrField<NKikimrClient::TCmdReadResult::TResult> records;
         records.Swap(partResp->MutableResult());
@@ -284,8 +360,8 @@ private:
             if (readResult.ResultSize()) {
                 prepareResponse->SetWriteTimestampMS(readResult.GetResult(readResult.ResultSize() - 1).GetWriteTimestampMS());
             }
-            Response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
-            Response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+            Response->Record.SetStatus(responseRecord.GetStatus());
+            Response->Record.SetErrorCode(responseRecord.GetErrorCode());
             ctx.Send(
                 MakePQDReadCacheServiceActorId(),
                 new TEvPQ::TEvStageDirectReadData(DirectReadKey, TabletGeneration, PreparedResponse)
@@ -312,7 +388,8 @@ private:
     THolder<TEvPersQueue::TEvResponse> Response;
     std::shared_ptr<NKikimrClient::TResponse> PreparedResponse;
     TDirectReadKey DirectReadKey;
-
+    bool InitialRequest = true;
+    TMaybe<ui64> LastSkipOffset;
 };
 
 
@@ -1960,7 +2037,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
         }
         if (cmd.GetRestoreSession()) {
             Y_ABORT_UNLESS(isDirectRead);
-            auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+            auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
             auto& record = *fakeResponse->Response;
             record.SetStatus(NMsgBusProxy::MSTATUS_OK);
             auto& partResponse = *record.MutablePartitionResponse();
@@ -2328,6 +2405,10 @@ void TPersQueue::HandleReadRequest(
     } else if (cmd.HasMaxTimeLagMs() && cmd.GetMaxTimeLagMs() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid maxTimeLagMs in read request: " << ToString(req).data());
+
+    } else if (cmd.GetClientId() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "cannot read with internal clinetId: " << cmd.GetClientId());
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_READ);
         ui32 count = cmd.HasCount() ? cmd.GetCount() : Max<ui32>();
@@ -2409,7 +2490,7 @@ void TPersQueue::HandlePublishReadRequest(
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, error);
     }
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_PUBLISH_READ);
-    THolder<TEvPQ::TEvProxyResponse> publishDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+    THolder<TEvPQ::TEvProxyResponse> publishDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
     publishDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     publishDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -2439,7 +2520,7 @@ void TPersQueue::HandleForgetReadRequest(
         return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, error);
     }
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_FORGET_READ);
-    THolder<TEvPQ::TEvProxyResponse> forgetDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+    THolder<TEvPQ::TEvProxyResponse> forgetDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
     forgetDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     forgetDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
     forgetDoneEvent->Response->MutablePartitionResponse()->MutableCmdForgetReadResult()->SetDirectReadId(key.ReadId);
@@ -2682,7 +2763,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
 
     if (writeId.KafkaApiTransaction && TxWrites.contains(writeId) && !TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
         // This branch happens when previous Kafka transaction has committed and we recieve write for next one
-        // after PQ has deleted supportive partition and before it has deleted writeId from TxWrites (tx has not transaitioned to DELETED state) 
+        // after PQ has deleted supportive partition and before it has deleted writeId from TxWrites (tx has not transaitioned to DELETED state)
         PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%01");
         KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId] = event;
         return;
@@ -2724,7 +2805,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         if (!req.GetNeedSupportivePartition()) {
             // missing supportivce partition in kafka transaction means that we already committed and deleted transaction for current producerId + producerEpoch
             NPersQueue::NErrorCode::EErrorCode errorCode = writeId.KafkaApiTransaction ?
-                NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION : 
+                NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION :
                 NPersQueue::NErrorCode::PRECONDITION_FAILED;
             TString error = writeId.KafkaApiTransaction ?
                 "Kafka transaction and there is no supportive partition for current producerId and producerEpoch. It means GetOwnership request was not called from TPartitionWriter" :
@@ -5320,7 +5401,6 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const T
         ctx.Send(ReadBalancerActorId, ev->Release().Release());
     }
 }
-
 void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorContext& ctx)
 {
     auto p = Partitions.find(partitionId);

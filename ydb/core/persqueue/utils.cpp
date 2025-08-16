@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "user_info.h"
 
 #include <deque>
 
@@ -99,7 +100,6 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             }
             consumer->SetImportant(IsImportantClient(config, consumer->GetName()));
         }
-
         config.ClearReadRules();
         config.ClearReadFromTimestampsMs();
         config.ClearConsumerFormatVersions();
@@ -120,6 +120,18 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             config.AddAllPartitions()->CopyFrom(partition);
         }
     }
+
+    bool doAddCompactionConsumer = config.GetEnableCompactification() && AllOf(config.GetConsumers(), [](const auto& consumer) {
+        return NPQ::CLIENTID_COMPACTION_CONSUMER != consumer.GetName();
+    });
+    if (doAddCompactionConsumer) {
+        auto* consumer = config.AddConsumers();
+        consumer->SetName(NPQ::CLIENTID_COMPACTION_CONSUMER);
+        consumer->SetReadFromTimestampsMs(0);
+        consumer->SetImportant(true);
+    }
+
+
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {

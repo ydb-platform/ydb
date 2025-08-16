@@ -255,14 +255,12 @@ namespace NPQ {
             } else {
                 response->Record.SetCookie(kvReq.CookiePQ);
             }
-
             ctx.Send(kvReq.Sender, response.Release()); // -> Partition
 
             UpdateCounters(ctx);
         }
 
-        static ui64 GetKeyValueRequestCookie(const NKikimrClient::TKeyValueRequest& request)
-        {
+        static ui64 GetKeyValueRequestCookie(const NKikimrClient::TKeyValueRequest& request) {
             return request.HasCookie() ? request.GetCookie() : Max<ui64>();
         }
 

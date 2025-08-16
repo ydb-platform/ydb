@@ -738,10 +738,10 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                    ev->Get()->IsInternal);
         return;
     }
-    if (read->Offset < StartOffset) {
+    if (read->Offset < StartOffset && !read->IsInternal) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
         read->Offset = StartOffset;
-        if (!read->IsInternal && read->PartNo > 0) {
+        if (read->PartNo > 0) {
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
             PQ_LOG_ERROR(
                         "I was right, there could be rewinds and deletions at once! Topic " << TopicConverter->GetClientsideName() <<

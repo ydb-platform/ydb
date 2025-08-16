@@ -34,12 +34,14 @@ void TEvReadStart::DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) 
 
 void TEvReadStart::DoAddToInteraction(const ui64 txId, TInteractionsContext& context) const {
     for (auto&& i : *Filter) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "add_to_interaction");
         context.AddInterval(txId, PathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
     }
 }
 
 void TEvReadStart::DoRemoveFromInteraction(const ui64 txId, TInteractionsContext& context) const {
     for (auto&& i : *Filter) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "remove_from_interaction");
         context.RemoveInterval(txId, PathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
     }
 }

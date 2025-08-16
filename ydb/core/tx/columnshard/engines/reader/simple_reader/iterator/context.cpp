@@ -28,6 +28,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     }();
     const auto* source = sourceExt->GetAs<IDataSource>();
     const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax();
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("needSnapshots", needSnapshots)("partial_pk", partialUsageByPK)("id", source->GetSourceId())(
+        "lock_id", GetReadMetadata()->GetLockId())("max", source->GetRecordSnapshotMax())("req", GetReadMetadata()->GetRequestSnapshot())("debug", source->DebugJson());
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -92,7 +94,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         }
         if (preventDuplicates) {
-            acc.AddStep(std::make_shared<TDuplicateFilter>());
+//            acc.AddStep(std::make_shared<TDuplicateFilter>());
         }
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
         acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));

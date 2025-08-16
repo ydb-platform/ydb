@@ -11,6 +11,7 @@ private:
 
     virtual bool DoCheckInteraction(
         const ui64 /*selfTxId*/, TInteractionsContext& /*context*/, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "interactions")("conflicts", Conflicts.DebugString());
         conflicts = Conflicts;
         return true;
     }

@@ -51,7 +51,7 @@ void TWriteOperation::Start(
 void TWriteOperation::CommitOnExecute(
     TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const {
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared || InsertWriteIds.empty());
-
+    const NActors::TLogContextGuard lGuard(NActors::TLogContextBuilder::Build()("lock_id", LockId));
     TBlobGroupSelector dsGroupSelector(owner.Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
@@ -61,6 +61,7 @@ void TWriteOperation::CommitOnExecute(
 }
 
 void TWriteOperation::CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& /*snapshot*/) const {
+    const NActors::TLogContextGuard lGuard(NActors::TLogContextBuilder::Build()("lock_id", LockId));
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared || InsertWriteIds.empty());
     for (auto&& i : InsertWriteIds) {
         owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId.InternalPathId).CommitPortionOnComplete(
@@ -118,6 +119,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
 }
 
 void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
+    const NActors::TLogContextGuard lGuard(NActors::TLogContextBuilder::Build()("lock_id", LockId));
     Y_ABORT_UNLESS(Status != EOperationStatus::Draft);
     StopWriting();
     TBlobGroupSelector dsGroupSelector(owner.Info());

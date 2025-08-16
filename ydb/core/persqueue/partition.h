@@ -12,7 +12,6 @@
 #include "user_info.h"
 #include "utils.h"
 #include "read_quoter.h"
-#include "partition_compactification.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
@@ -59,6 +58,8 @@ enum class ERequestCookie : ui64 {
     CompactificationWrite,
     End
 };
+
+class TPartitionCompaction;
 
 struct TTransaction {
 

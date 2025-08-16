@@ -1,5 +1,6 @@
 #include "offload_actor.h"
 #include "partition.h"
+#include "partition_compactification.h"
 #include "partition_log.h"
 #include "partition_util.h"
 

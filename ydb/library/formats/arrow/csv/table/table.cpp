@@ -14,19 +14,30 @@ arrow::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::
             errors.emplace_back("column " + column.Name + ": " + arrowType.status().ToString());
             continue;
         }
+
         const auto csvArrowType = GetCSVArrowType(column.Type);
         if (!csvArrowType.ok()) {
             errors.emplace_back("column " + column.Name + ": " + csvArrowType.status().ToString());
             continue;
         }
-        convertedColumns.emplace_back(TColumnInfo{TString{column.Name}, *arrowType, *csvArrowType});
+
+        auto tp = ExtractType(column.Type);
+        TColumnInfo columnInfo{TString{column.Name}, *arrowType, *csvArrowType};
+        if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Decimal) {
+            columnInfo.Precision = tp.GetDecimal().Precision;
+            columnInfo.Scale = tp.GetDecimal().Scale;
+        }
+
+        convertedColumns.emplace_back(columnInfo);
         if (NYdb::TTypeParser(column.Type).GetKind() != NYdb::TTypeParser::ETypeKind::Optional || column.NotNull.value_or(false)) {
             notNullColumns.emplace(column.Name);
         }
     }
+
     if (!errors.empty()) {
         return arrow::Status::TypeError(ErrorPrefix() + "columns errors: " + JoinSeq("; ", errors));
     }
+
     return TArrowCSVTable(convertedColumns, header, notNullColumns);
 }
 
@@ -35,6 +46,7 @@ NYdb::TTypeParser TArrowCSVTable::ExtractType(const NYdb::TType& type) {
     if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
         tp.OpenOptional();
     }
+
     return std::move(tp);
 }
 
@@ -114,6 +126,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetCSVArrowType(
             break;
         }
     }
+
     return GetArrowType(type);
 }
 

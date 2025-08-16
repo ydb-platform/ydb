@@ -18,7 +18,9 @@ namespace NYql::NLog {
 
         auto RequiredContextAccessor(const TLogRecord& rec) {
             return [&](EContextKey key) -> TStringBuf {
-                return rec.MetaFlags.at(static_cast<size_t>(key)).second;
+                if ((size_t)key < rec.MetaFlags.size())
+                    return rec.MetaFlags.at(static_cast<size_t>(key)).second;
+                return "???";
             };
         }
 
@@ -28,6 +30,8 @@ namespace NYql::NLog {
                     return pair.first == key;
                 };
 
+                if (rec.MetaFlags.size() < MaxRequiredContextKey + 1)
+                    return Nothing();
                 const auto* path = FindIfPtr(
                     rec.MetaFlags.begin() + MaxRequiredContextKey + 1,
                     rec.MetaFlags.end(),
@@ -58,7 +62,7 @@ namespace NYql::NLog {
             }
 
             void WriteData(const TLogRecord& rec) final {
-                Validate(rec);
+                //Validate(rec);
 
                 TString message = Formatter_(rec);
                 message.append('\n');

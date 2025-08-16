@@ -867,6 +867,12 @@ private:
                         UnpackJoinedData(output);
                         return EFetchResult::One;
                     }
+                    if (!*HaveMoreRightRows) {
+                        LeftPacker->TablePtr->ClearBucket(NextBucketNumber - 1); // Clear bucket content on batch side
+                    }
+                    if (!*HaveMoreLeftRows) {
+                        RightPacker->TablePtr->ClearBucket(NextBucketNumber - 1); // Clear bucket content on batch side
+                    }
                 } while(NextBucketNumber != GraceJoin::NumberOfBuckets);
 
                 // Resets batch state for batch join

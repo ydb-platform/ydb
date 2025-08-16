@@ -680,6 +680,8 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     InitDone = true;
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_INIT].IncrementFor(InitDuration.MilliSeconds());
 
+    CreateCompacter();
+
     FillReadFromTimestamps(ctx);
     ProcessPendingEvents(ctx);
     ProcessTxsAndUserActs(ctx);
@@ -717,7 +719,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     }
 
     ReportCounters(ctx, true);
-    CreateCompacter();
 }
 
 

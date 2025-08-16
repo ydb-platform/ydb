@@ -459,8 +459,6 @@ void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
         userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->BlobEncoder.StartOffset;
     }
 
-    Partition()->CreateCompacter();
-
     Done(ctx);
 }
 

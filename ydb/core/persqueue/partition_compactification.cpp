@@ -531,7 +531,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         KeysIter++;
         return true;
     }
-    if (isTruncatedBlob) {
+    if (isTruncatedBlob && hasNonZeroParts) {
         CurrMsgPartsFromLastBatch = std::move(currentMessageBlobs);
         LastBatchKey = KeysIter->Key;
         LastBatch = std::move(currentBatch);

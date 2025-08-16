@@ -854,6 +854,9 @@ private:
                         RightPacker->StartTime = std::chrono::system_clock::now();
                         JoinedTablePtr->BorrowPreviousBucket(NextBucketNumber);
                         JoinedTablePtr->Join(leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows, NextBucketNumber, NextBucketNumber + 1);
+                        if (NextBucketNumber == 0) {
+                            JoinedTablePtr->ResetIterator();
+                        }
                         ++NextBucketNumber;
                         LeftPacker->EndTime = std::chrono::system_clock::now();
                         RightPacker->EndTime = std::chrono::system_clock::now();

@@ -75,7 +75,7 @@ struct TExecutionOptions {
         return GetValue<TString>(index, Scopes, "fqrun");
     }
 
-    TRequestOptions GetQueryOptions(size_t index, ui64 loopId, ui64 queryId) const {
+    TRequestOptions GetQueryOptions(size_t index, size_t loopId, size_t queryId) const {
         Y_ABORT_UNLESS(index < Queries.size());
 
         TString sql = Queries[index];
@@ -155,7 +155,7 @@ private:
     }
 };
 
-void RunArgumentQuery(size_t index, ui64 loopId, ui64 queryId, const TExecutionOptions& executionOptions, TFqRunner& runner) {
+void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, const TExecutionOptions& executionOptions, TFqRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     switch (executionOptions.GetExecutionCase(index)) {

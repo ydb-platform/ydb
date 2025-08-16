@@ -2285,8 +2285,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
 
         }
+
+        std::unordered_map<size_t, TString> messages;
+        for (auto size : std::vector{100_KB, 500_KB, 9_MB, 20_MB, 3_MB}) {
+            messages[size] = TString{size, 'a'};
+        }
+
         auto writeMessage = [&] (const TString& key, ui64 size) {
-            NYdb::NTopic::TWriteMessage message{TString{size, 'a'}};
+            NYdb::NTopic::TWriteMessage message{messages[size]};
             NYdb::NTopic::TWriteMessage::TMessageMeta meta1;
             meta1.push_back(std::make_pair("__key", key));
             message.MessageMeta(meta1);

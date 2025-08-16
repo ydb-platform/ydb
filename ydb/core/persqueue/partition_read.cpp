@@ -752,21 +752,23 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, "no infinite flows allowed - count is not set or 0");
         return;
     }
-    if (read->Offset < CompactionBlobEncoder.StartOffset) {
+    if (read->Offset < CompactionBlobEncoder.StartOffset && !read->IsInternal) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
         read->Offset = CompactionBlobEncoder.StartOffset;
-        if (!read->IsInternal && read->PartNo > 0) {
-            TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
-            PQ_LOG_ERROR(
-                        "I was right, there could be rewinds and deletions at once! Topic " << TopicConverter->GetClientsideName() <<
-                        " partition " << Partition <<
-                        " readOffset " << read->Offset <<
-                        " readPartNo " << read->PartNo <<
-                        " startOffset " << CompactionBlobEncoder.StartOffset);
-            ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
-                       "client requested not from first part, and this part is lost");
-            return;
-        }
+        if (read->PartNo > 0) {
+        TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(
+            0);
+        PQ_LOG_ERROR(
+            "I was right, there could be rewinds and deletions at once! Topic "
+            << TopicConverter->GetClientsideName() << " partition " << Partition
+            << " readOffset " << read->Offset << " readPartNo " << read->PartNo
+            << " startOffset " << CompactionBlobEncoder.StartOffset);
+        ReplyError(
+            ctx, read->Cookie,
+            NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
+            "client requested not from first part, and this part is lost");
+        return;
+      }
     }
     if (read->Offset > BlobEncoder.EndOffset || read->Offset == BlobEncoder.EndOffset && read->PartNo > 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_BIG_OFFSET].Increment(1);

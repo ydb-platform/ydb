@@ -241,6 +241,7 @@ Y_UNIT_TEST_SUITE(KqpTypes) {
             .SetFeatureFlags(featureFlags);
 
         settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();

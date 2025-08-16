@@ -82,6 +82,7 @@ public:
         FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);
+        FeatureFlags.SetEnableTableDatetime64(true);
         InitDefaultConfig();
     }
 

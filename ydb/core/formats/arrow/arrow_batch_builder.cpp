@@ -147,7 +147,7 @@ NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::InitColumns(c
     return *this;
 }
 
-NKikimr::NArrow::TRecordBatchReader TRecordBatchConstructor::Finish() {
+TRecordBatchReader TRecordBatchConstructor::Finish() {
     Y_ABORT_UNLESS(!InConstruction);
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(Builders.size());

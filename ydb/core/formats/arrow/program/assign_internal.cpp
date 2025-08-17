@@ -8,7 +8,7 @@ namespace NKikimr::NArrow::NSSA {
 TConclusion<IResourceProcessor::EExecutionResult> TCalculationProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     if (KernelLogic) {
-        auto resultKernel = KernelLogic->Execute(GetInput(), GetOutput(), context.GetResources());
+        auto resultKernel = KernelLogic->Execute(GetInput(), GetOutput(), context.MutableResources());
         if (resultKernel.IsFail()) {
             return resultKernel;
         } else if (*resultKernel) {
@@ -16,11 +16,11 @@ TConclusion<IResourceProcessor::EExecutionResult> TCalculationProcessor::DoExecu
         } else {
         }
     }
-    auto result = Function->Call(GetInput(), context.GetResources());
+    auto result = Function->Call(GetInput(), context.MutableResources());
     if (result.IsFail()) {
         return result;
     }
-    context.GetResources()->AddVerified(GetOutputColumnIdOnce(), std::move(*result), false);
+    context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), std::move(*result));
     return IResourceProcessor::EExecutionResult::Success;
 }
 
@@ -41,6 +41,7 @@ TConclusion<std::shared_ptr<TCalculationProcessor>> TCalculationProcessor::Build
 NJson::TJsonValue TCalculationProcessor::DoDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     result.InsertValue("kernel", KernelLogic->DebugJson());
+    result.InsertValue("function", Function->DebugJson());
     return result;
 }
 

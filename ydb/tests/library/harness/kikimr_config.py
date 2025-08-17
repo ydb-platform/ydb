@@ -88,6 +88,7 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
         yaml_dict["table_service_config"]["enable_htap_tx"] = True
         yaml_dict["table_service_config"]["enable_olap_sink"] = True
         yaml_dict["table_service_config"]["enable_create_table_as"] = True
+        yaml_dict["feature_flags"]["enable_table_datetime64"] = True
     return yaml_dict
 
 
@@ -166,6 +167,7 @@ class KikimrConfigGenerator(object):
             enable_resource_pools=None,
             scan_grouped_memory_limiter_config=None,
             comp_grouped_memory_limiter_config=None,
+            deduplication_grouped_memory_limiter_config=None,
             query_service_config=None,
             domain_login_only=None,
             use_self_management=False,
@@ -406,6 +408,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config
         if comp_grouped_memory_limiter_config:
             self.yaml_config["comp_grouped_memory_limiter_config"] = comp_grouped_memory_limiter_config
+        if deduplication_grouped_memory_limiter_config:
+            self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
 
         self.__build()
 
@@ -437,8 +441,13 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             security_config_root["security_config"]["default_user_sids"] = [default_user_sid]
 
+        if memory_controller_config:
+            self.yaml_config["memory_controller_config"] = memory_controller_config
+
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
-            self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
+            if "memory_controller_config" not in self.yaml_config:
+                self.yaml_config["memory_controller_config"] = {}
+            self.yaml_config["memory_controller_config"]["hard_limit_bytes"] = int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))
 
         if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))

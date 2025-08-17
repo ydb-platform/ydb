@@ -14,6 +14,9 @@ class TestYdbWorkload(object):
             column_shard_config={
                 "disabled_on_scheme_shard": False,
                 "allow_nullable_columns_in_pk": True,
+            },
+            extra_feature_flags={
+                "enable_parameterized_decimal": True
             }
         ))
         cls.cluster.start()

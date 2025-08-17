@@ -11,11 +11,16 @@ namespace NKikimr::NOlap::NReader {
 class IDataReader;
 
 class IApplyAction {
+private:
+    bool AppliedFlag = false;
+
 protected:
-    virtual bool DoApply(IDataReader& indexedDataRead) const = 0;
+    virtual bool DoApply(IDataReader& indexedDataRead) = 0;
 
 public:
-    bool Apply(IDataReader& indexedDataRead) const {
+    bool Apply(IDataReader& indexedDataRead) {
+        AFL_VERIFY(!AppliedFlag);
+        AppliedFlag = true;
         return DoApply(indexedDataRead);
     }
     virtual ~IApplyAction() = default;
@@ -28,7 +33,7 @@ public:
         using TBase = NConveyor::ITask;
         const NActors::TActorId OwnerId;
         NColumnShard::TCounterGuard Guard;
-        virtual TConclusionStatus DoExecuteImpl() = 0;
+        virtual TConclusion<bool> DoExecuteImpl() = 0;
 
     protected:
         virtual void DoExecute(const std::shared_ptr<NConveyor::ITask>& taskPtr) override final;

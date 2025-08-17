@@ -113,12 +113,12 @@ private:
     const ui32 PortionsCountLimit = 10000;
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessors;
     std::shared_ptr<TResultAccumulator> Result;
-    const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+    const std::shared_ptr<const NOlap::TVersionedIndex> VersionedIndex;
 
 public:
     TColumnPortionsAccumulator(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<TResultAccumulator>& result, const ui32 portionsCountLimit, const std::set<ui32>& originalColumnTags,
-        const std::shared_ptr<NOlap::TVersionedIndex>& vIndex,
+        const std::shared_ptr<const NOlap::TVersionedIndex>& vIndex,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager)
         : StoragesManager(storagesManager)
         , ColumnTagsRequested(originalColumnTags)
@@ -141,7 +141,7 @@ public:
             for (auto&& [columnId, data] : RangesByColumn) {
                 for (auto&& [storageId, blobs] : data) {
                     for (auto&& b : blobs) {
-                        const TString blob = blobsData.Extract(storageId, b);
+                        const TString blob = blobsData.ExtractVerified(storageId, b);
                         auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(blob.data(), blob.size()));
                         auto it = SketchesByColumns.find(columnId);
                         AFL_VERIFY(it != SketchesByColumns.end());
@@ -179,7 +179,7 @@ public:
     private:
         const std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
         const std::shared_ptr<TResultAccumulator> Result;
-        std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+        std::shared_ptr<const NOlap::TVersionedIndex> VersionedIndex;
         const std::set<ui32> ColumnTagsRequested;
         virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
             return Default<std::shared_ptr<const TAtomicCounter>>();
@@ -195,7 +195,7 @@ public:
             THashMap<ui32, ui32> indexIdToColumnId;
 
             for (const auto& [id, portionInfo] : result.GetPortions()) {
-                std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo.GetPortionInfo().GetSchema(*VersionedIndex);
+                std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo->GetPortionInfo().GetSchema(*VersionedIndex);
                 for (const ui32 columnId : ColumnTagsRequested) {
                     auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaCountMinSketch({ columnId });
 
@@ -206,9 +206,9 @@ public:
                     AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
                     indexIdToColumnId.emplace(indexMeta->GetIndexId(), columnId);
                     if (!indexMeta->IsInplaceData()) {
-                        portionInfo.FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
+                        portionInfo->FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
-                        const std::vector<TString> data = portionInfo.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
+                        const std::vector<TString> data = portionInfo->GetIndexInplaceDataOptional(indexMeta->GetIndexId());
 
                         for (const auto& sketchAsString : data) {
                             auto sketch =
@@ -241,7 +241,7 @@ public:
 
     public:
         TMetadataSubscriber(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TResultAccumulator>& result,
-            const std::shared_ptr<NOlap::TVersionedIndex>& vIndex, const std::set<ui32>& tags)
+            const std::shared_ptr<const NOlap::TVersionedIndex>& vIndex, const std::set<ui32>& tags)
             : StoragesManager(storagesManager)
             , Result(result)
             , VersionedIndex(vIndex)
@@ -290,7 +290,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
 
     AFL_VERIFY(HasIndex());
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(record.GetTable().GetPathId());
-    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
     auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();
     auto spg = index.GetGranuleOptional(*internalPathId);
@@ -309,12 +309,12 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     NOlap::TDataAccessorsRequest request(NOlap::NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::STATISTICS);
     std::shared_ptr<TResultAccumulator> resultAccumulator =
         std::make_shared<TResultAccumulator>(columnTagsRequested, ev->Sender, ev->Cookie, std::move(response));
-    auto versionedIndex = std::make_shared<NOlap::TVersionedIndex>(index.GetVersionedIndex());
+    auto versionedIndex = index.GetVersionedIndexReadonlyCopy();
     TColumnPortionsAccumulator portionsPack(
         StoragesManager, resultAccumulator, 1000, columnTagsRequested, versionedIndex, DataAccessorsManager.GetObjectPtrVerified());
 
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
-        if (!portionInfo->IsVisible(GetMaxReadVersion())) {
+        if (!portionInfo->IsVisible(GetMaxReadVersion(), true)) {
             continue;
         }
         portionsPack.AddTask(portionInfo);

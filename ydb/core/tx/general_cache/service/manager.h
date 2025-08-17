@@ -1,6 +1,7 @@
 #pragma once
 #include "counters.h"
 
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
 #include <ydb/core/tx/general_cache/usage/abstract.h>
 #include <ydb/core/tx/general_cache/usage/config.h>
@@ -23,6 +24,7 @@ private:
     static inline TAtomicCounter Counter = 0;
     YDB_READONLY(ui64, RequestId, Counter.Inc());
     YDB_READONLY(TMonotonic, Created, TMonotonic::Now());
+    YDB_READONLY(TMonotonic, StartRequest, TMonotonic::Zero());
     THashSet<ui64> Cookies;
     THashMap<TSourceId, THashSet<TAddress>> Wait;
     THashMap<TAddress, TObject> Result;
@@ -51,6 +53,27 @@ private:
     }
 
 public:
+    bool TakeFromCache(const TManagerCounters& counters, TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer>& cache) {
+        std::vector<TAddress> toRemove;
+        for (auto&& [sourceId, addresses] : Wait) {
+            for (auto&& addr : addresses) {
+                auto it = cache.Find(addr);
+                if (it == cache.End()) {
+                    counters.ObjectCacheMiss->Inc();
+                } else {
+                    counters.ObjectCacheHit->Inc();
+                    AFL_VERIFY(Result.emplace(addr, it.Value()).second);
+                    WaitObjectsCount.Dec();
+                    toRemove.emplace_back(addr);
+                }
+            }
+        }
+        for (auto&& i : toRemove) {
+            Y_UNUSED(RemoveAddrOnFinished(i));
+        }
+        return Wait.empty();
+    }
+
     ui64 GetWaitObjectsCount() {
         return WaitObjectsCount.Val();
     }
@@ -91,8 +114,10 @@ public:
         return RemoveAddrOnFinished(addr);
     }
 
-    TRequest(THashSet<TAddress>&& addresses, std::shared_ptr<ICallback>&& callback, const EConsumer consumer)
-        : Callback(callback)
+    TRequest(
+        THashSet<TAddress>&& addresses, std::shared_ptr<ICallback>&& callback, const EConsumer consumer, const TMonotonic startRequestInstant)
+        : StartRequest(startRequestInstant)
+        , Callback(std::move(callback))
         , Consumer(consumer) {
         for (auto&& i : addresses) {
             Wait[TPolicy::GetSourceId(i)].emplace(i);
@@ -148,7 +173,7 @@ public:
                     continue;
                 }
                 RequestsInProgress.erase(r->GetRequestId());
-                Counters->OnRequestFinished(now - r->GetCreated());
+                Counters->OnMissCacheRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 if (isAdditional) {
                     Counters->AdditionalObjectInfo->Inc();
                 } else {
@@ -168,7 +193,7 @@ public:
                 Counters->FailedObject->Inc();
                 if (r->AddError(i.first, i.second)) {
                     RequestsInProgress.erase(r->GetRequestId());
-                    Counters->OnRequestFinished(now - r->GetCreated());
+                    Counters->OnMissCacheRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 }
             }
             RequestedObjects.erase(it);
@@ -187,7 +212,7 @@ public:
                     continue;
                 }
                 RequestsInProgress.erase(r->GetRequestId());
-                Counters->OnRequestFinished(now - r->GetCreated());
+                Counters->OnMissCacheRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 if (isAdditional) {
                     Counters->RemovedObjectInfo->Inc();
                 } else {
@@ -212,7 +237,7 @@ public:
                 Counters->FailedObject->Inc();
                 if (r->AddError(objAddr, "source broken: " + ::ToString(SourceId))) {
                     RequestsInProgress.erase(r->GetRequestId());
-                    Counters->OnRequestFinished(now - r->GetCreated());
+                    Counters->OnMissCacheRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 }
             }
         }
@@ -227,6 +252,8 @@ public:
 
     void DrainQueue() {
         THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
+        THashSet<TAddress>* consumerAddresses = nullptr;
+        std::optional<EConsumer> currentConsumer;
         while (RequestsQueue.size() && RequestedObjects.size() < Counters->GetConfig().GetDirectInflightSourceLimit() &&
                Counters->CheckTotalLimit()) {
             auto request = std::move(RequestsQueue.front());
@@ -238,14 +265,16 @@ public:
                 continue;
             }
             AFL_VERIFY(RequestsInProgress.emplace(request->GetRequestId()).second);
-            auto& addresses = requestedAddresses[request->GetConsumer()];
+            if (!currentConsumer || *currentConsumer != request->GetConsumer()) {
+                consumerAddresses = &requestedAddresses[request->GetConsumer()];
+            }
             Counters->DirectRequests->Inc();
             for (auto&& i : sourceWaitObjects) {
                 auto it = RequestedObjects.find(i);
                 if (it == RequestedObjects.end()) {
                     it = RequestedObjects.emplace(i, std::vector<std::shared_ptr<TRequest>>()).first;
                     Counters->GetTotalInFlight()->Inc();
-                    AFL_VERIFY(addresses.emplace(i).second);
+                    AFL_VERIFY(consumerAddresses->emplace(i).second);
                     Counters->DirectObjects->Inc();
                 }
                 it->second.emplace_back(request);
@@ -271,8 +300,12 @@ private:
     const std::shared_ptr<TManagerCounters> Counters;
     std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
     TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer> Cache;
+    const bool UseCacheSizeFromConfig;
+    static constexpr ui64 DEFAULT_CACHE_SIZE = (ui64)1 << 30;
 
     THashMap<TSourceId, TSourceInfo> SourcesInfo;
+
+    TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
 
     void DrainQueue(const TSourceId sourceId) {
         MutableSourceInfo(sourceId).DrainQueue();
@@ -314,16 +347,55 @@ private:
             Cache.Insert(i.first, i.second);
         }
         Counters->CacheSizeCount->Set(Cache.Size());
-        Counters->CacheSizeBytes->Set(Cache.TotalSize());
+
+        const auto cacheTotalSize = Cache.TotalSize();
+        Counters->CacheSizeBytes->Set(cacheTotalSize);
+        if (MemoryConsumer) {
+            MemoryConsumer->SetConsumption(cacheTotalSize);
+        }
+    }
+
+    void RemoveObjectsFromCache(const THashSet<TAddress>& remove) {
+        for (auto&& i : remove) {
+            auto it = Cache.Find(i);
+            if (it != Cache.End()) {
+                Cache.Erase(it);
+            }
+        }
+        Counters->CacheSizeCount->Set(Cache.Size());
+
+        const auto cacheTotalSize = Cache.TotalSize();
+        Counters->CacheSizeBytes->Set(cacheTotalSize);
+        if (MemoryConsumer) {
+            MemoryConsumer->SetConsumption(cacheTotalSize);
+        }
     }
 
 public:
     TManager(const NActors::TActorId& ownerActorId, const std::shared_ptr<TManagerCounters>& counters)
         : Counters(counters)
         , ObjectsProcessor(TPolicy::BuildObjectsProcessor(ownerActorId))
-        , Cache(Counters->GetConfig().GetMemoryLimit()) {
+        , Cache(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE))
+        , UseCacheSizeFromConfig(Counters->GetConfig().GetMemoryLimit().has_value()) {
         AFL_NOTICE(NKikimrServices::GENERAL_CACHE)("event", "general_cache_manager")("owner_actor_id", ownerActorId)(
             "config", Counters->GetConfig().DebugString());
+        Counters->CacheSizeLimitBytes->Set(Cache.GetMaxSize());
+        Counters->CacheConfigSizeLimitBytes->Set(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE));
+    }
+
+    void CleanUseless(const ui32 countLimit) {
+        for (ui32 idx = 0; idx < countLimit; ++idx) {
+            auto it = Cache.FindOldest();
+            if (it == Cache.End()) {
+                break;
+            }
+            if (!SourcesInfo.contains(TPolicy::GetSourceId(it.Key()))) {
+                Counters->UselessCleaningCount->Inc();
+                Cache.Erase(it);
+            } else {
+                break;
+            }
+        }
     }
 
     TSourceId GetSourceByCookie(const ui64 cookie) const {
@@ -345,28 +417,14 @@ public:
 
     void AddRequest(const std::shared_ptr<TRequest>& request) {
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "add_request");
-        THashMap<TAddress, TObject> objectsResult;
         if (request->IsAborted()) {
             Counters->IncomingAbortedRequestsCount->Inc();
             return;
         } else {
             Counters->IncomingRequestsCount->Inc();
         }
-        for (auto&& [sourceId, addresses] : request->GetWaitBySource()) {
-            for (auto&& addr : addresses) {
-                auto it = Cache.Find(addr);
-                if (it == Cache.End()) {
-                    Counters->ObjectCacheMiss->Inc();
-                } else {
-                    Counters->ObjectCacheHit->Inc();
-                    AFL_VERIFY(objectsResult.emplace(addr, it.Value()).second);
-                }
-            }
-        }
-        for (auto&& i : objectsResult) {
-            Y_UNUSED(request->AddResult(i.first, std::move(i.second)));
-        }
-        if (request->GetWaitBySource().empty()) {
+        if (request->TakeFromCache(*Counters, Cache)) {
+            Counters->OnHitCacheRequestFinished(request->GetStartRequest(), request->GetCreated(), TMonotonic::Now());
             Counters->RequestCacheHit->Inc();
             return;
         } else {
@@ -383,7 +441,10 @@ public:
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "objects_info");
         const TMonotonic now = TMonotonic::Now();
         const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
+        CleanUseless(add.size());
         AddObjectsToCache(add);
+        RemoveObjectsFromCache(remove);
+
         auto& sourceInfo = UpsertSourceInfo(sourceId);
         sourceInfo.AddObjects(std::move(add), true, now);
         sourceInfo.RemoveObjects(std::move(remove), true, now);
@@ -400,7 +461,9 @@ public:
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "on_result");
         const TMonotonic now = TMonotonic::Now();
         const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
+        CleanUseless(add.size());
         AddObjectsToCache(add);
+        RemoveObjectsFromCache(removed);
         if (auto* sourceInfo = MutableSourceInfoOptional(sourceId)) {
             sourceInfo->AddObjects(std::move(add), false, now);
             sourceInfo->RemoveObjects(std::move(removed), false, now);
@@ -414,6 +477,25 @@ public:
         } else {
             AFL_VERIFY(Counters->CheckTotalLimit() == !inFlightLimitBrokenBefore);
         }
+    }
+
+    void UpdateMaxCacheSize(const size_t maxCacheSize) {
+        if (UseCacheSizeFromConfig) {
+            return;
+        }
+
+        if (Cache.GetMaxSize() == maxCacheSize) {
+            return;
+        }
+
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "update_max_cache_size")("id", TPolicy::GetCacheName())("new_value", maxCacheSize)(
+            "old_value", Cache.GetMaxSize());
+        Cache.SetMaxSize(maxCacheSize);
+        Counters->CacheSizeLimitBytes->Set(Cache.GetMaxSize());
+    }
+
+    void SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
+        MemoryConsumer = std::move(consumer);
     }
 };
 

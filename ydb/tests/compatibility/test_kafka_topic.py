@@ -3,12 +3,10 @@ import concurrent.futures
 import logging
 import os
 import pytest
-import time
 import uuid
 import yatest
 
 from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RollingUpgradeAndDowngradeFixture, RestartToAnotherVersionFixture
-from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class Workload:
@@ -38,10 +36,10 @@ class Workload:
 
     def create_topic(self):
         subcmds = [
-             'init',
-             '--consumers', str(self.consumers),
-             '--partitions', '4',
-             '--cleanup-policy-compact',
+            'init',
+            '--consumers', str(self.consumers),
+            '--partitions', '4',
+            '--cleanup-policy-compact',
         ]
         yatest.common.execute(
             self.get_command(subcmds=subcmds)
@@ -100,11 +98,12 @@ class Workload:
                 try:
                     runner.result()
                     logging.info("Workload task #%d completed", nn)
-                except Exception as e:
+                except Exception:
                     logging.exception("Workload task #%d failed", nn)
             logging.info("Checking results")
             for runner in runners:
                 runner.result()
+
 
 def skip_if_unsupported(versions):
     if min(versions) < (25, 1, 4):
@@ -149,7 +148,7 @@ class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         # create topic with a version that supports cleanup-policy=compact
-        start_version_indices = [i for i, v in enumerate(self.versions) if not (v  < (25, 1, 4))]
+        start_version_indices = [i for i, v in enumerate(self.versions) if not (v < (25, 1, 4))]
         if not start_version_indices:
             pytest.skip("Topic may be created only since 25-1-4")
         assert self.current_binary_paths_index is not None
@@ -162,7 +161,7 @@ class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
 
         utils.create_topic()
         self.current_binary_paths_index = -1
-        self.change_cluster_version() # current_binary_paths_index -> 0
+        self.change_cluster_version()  # current_binary_paths_index -> 0
 
         utils.run_stress_test(duration=20)
         self.change_cluster_version()

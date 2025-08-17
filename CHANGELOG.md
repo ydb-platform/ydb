@@ -70,6 +70,19 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20303:Add `--iam-token-file` argument to ydb-dstool. [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
 * 22511:Added the ICB control to change ReadRequestsInFlightLimit via changing dynconfig. [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
 * 21997:Enabled the new compute scheduler based on the HDRF model. [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
+* 22837:Remove finished queries from compute scheduler [#22837](https://github.com/ydb-platform/ydb/pull/22837) ([Ivan](https://github.com/abyss7))
+* 22800:Secondary index creation will require `ydb.granular.describe_schema` and `ydb.granular.alter_schema` grants instead of `ydb.generic.read` and `ydb.generic.write` [#22800](https://github.com/ydb-platform/ydb/pull/22800) ([Yury Kiselev](https://github.com/yurikiselev))
+* 22602:Add more detailed output to Distconf cache VERIFY assertion, re-enable Encryption UT [#22602](https://github.com/ydb-platform/ydb/pull/22602) ([Sergey Belyakov](https://github.com/serbel324))
+* 22549:Added pile info in Discovery/ListEndpoints response for 2DC configuration, that allows to implement PreferPrimaryPile policy in SDKs [#22549](https://github.com/ydb-platform/ydb/pull/22549) ([Bulat](https://github.com/Gazizonoki))
+* 22522:Implement basic update support for global vector indexes. Clusters are not recalculated, rows are just reclassified according to the existing clusters. [#22522](https://github.com/ydb-platform/ydb/pull/22522) ([Vitaliy Filippov](https://github.com/vitalif))
+* 22232:New settings have been added to get ResultSet data in different formats to the QueryService API:
+
+* Added format `Arrow`, which columns of record batches is written as binary data with selected compression.
+* Implemented Schema inclusion mode to customize addition the schema of the result data in ResultSet (`ALWAYS` or `FIRST_ONLY`).
+* New settings is supported in the YBD C++ SDK.
+
+... [#22232](https://github.com/ydb-platform/ydb/pull/22232) ([Daniil Timizhev](https://github.com/dahbka-lis))
+* 21593:Adds ability to manually approve scheduled CMS request and receive permissions. This allows, for example, locking an already failed node. [#21593](https://github.com/ydb-platform/ydb/pull/21593) ([Semyon Danilov](https://github.com/SammyVimes))
 
 ### Bug fixes
 
@@ -130,6 +143,19 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20670:Resolved the issue with DDL errors for external sources and added more information to the `ALTER TABLE ... RENAME TO` error. [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20519:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20520) that caused VDisk to freeze in infinite local recovery mode when a ChunkRead request failed. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status. [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
 * 22298:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20812) where attach streams remained active after session shutdown, causing unexpected BadSession errors. [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
+* 22907:Fix crashing on CS reader destruction when actor system is stopped [#22907](https://github.com/ydb-platform/ydb/pull/22907) ([Semyon](https://github.com/swalrus1))
+* 22778:Add pool to compute scheduler as soon as possible #22621 [#22778](https://github.com/ydb-platform/ydb/pull/22778) ([Ivan](https://github.com/abyss7))
+* 22752:Issue: https://github.com/ydb-platform/ydb/issues/22751 [#22752](https://github.com/ydb-platform/ydb/pull/22752) ([Semyon Danilov](https://github.com/SammyVimes))
+* 22705:Fix OOM crash when many column shards with tiering enabled are initialized. [#22705](https://github.com/ydb-platform/ydb/pull/22705) ([Semyon](https://github.com/swalrus1))
+* 22663:Fixed a parallel modification of the HierarchyData variable in the topic SDK, which could lead to rare crashes of the process. [#22663](https://github.com/ydb-platform/ydb/pull/22663) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 22564:Incorrect arg position was used
+
+Fixed as part of SOLOMON-16506 [#22564](https://github.com/ydb-platform/ydb/pull/22564) ([jsjant](https://github.com/jsjant))
+* 21642:Changes from #20020
+
+There was a T1 transaction in the EXECUTED queue. She is waiting for the signal to continue working. The T2 transaction was queued and its state was saved to disk. Transaction T1 was running at that moment. As a result, the T2 transaction continued to run when its state had not yet been saved to disk. She sent TEvReadSetAck to her "colleagues" and they deleted the T2 transaction. If the tablet restarts at this moment, the T2 transaction will be in the PLANNED state and will never receive a TEvReadSet from "colleagues".
+
+Before continuing to execute a transaction, you need to make sure that its state is saved to disk. Added a check. [#21642](https://github.com/ydb-platform/ydb/pull/21642) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 
 ### YDB UI
 
@@ -155,4 +181,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+* 22620:![profdata](https://github.com/user-attachments/assets/81a7f464-2890-4c8f-81f4-01cebe274b49) [#22620](https://github.com/ydb-platform/ydb/pull/22620) ([Oleg Doronin](https://github.com/dorooleg))
+* 22473:The compute scheduler tries to utilize all pools fair-share by resuming throttled tasks [#22473](https://github.com/ydb-platform/ydb/pull/22473) ([Ivan](https://github.com/abyss7))
+* 22311:Invoke TRope::Compact in OnVGetResult only when occupied memory exceeds threshold [#22311](https://github.com/ydb-platform/ydb/pull/22311) ([Anton Myagkov](https://github.com/antonmyagkov))
 

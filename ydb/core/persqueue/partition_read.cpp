@@ -307,7 +307,7 @@ void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& 
     if (size_t count = GetUserActCount(ev->Get()->ClientId); count > MAX_USER_ACTS) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::OVERLOAD,
-            TStringBuilder() << "too big inflight: " << count);
+            TStringBuilder() << "too big inflight: " << count, ev->Get()->IsInternal);
         return;
     }
 
@@ -734,7 +734,8 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
-        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, "no infinite flows allowed - count is not set or 0");
+        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, "no infinite flows allowed - count is not set or 0",
+                   ev->Get()->IsInternal);
         return;
     }
     if (read->Offset < StartOffset) {
@@ -749,7 +750,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                         " readPartNo " << read->PartNo <<
                         " startOffset " << StartOffset);
             ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
-                       "client requested not from first part, and this part is lost");
+                       "client requested not from first part, and this part is lost", ev->Get()->IsInternal);
             return;
         }
     }
@@ -764,7 +765,8 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                     " offset " << read->Offset);
         ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
                                       TStringBuilder() << "trying to read from future. ReadOffset " <<
-                                      read->Offset << ", " << read->PartNo << " EndOffset " << EndOffset);
+                                      read->Offset << ", " << read->PartNo << " EndOffset " << EndOffset,
+                                    ev->Get()->IsInternal);
         return;
     }
 
@@ -777,7 +779,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
             ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
-                TStringBuilder() << "no such session '" << read->SessionId << "'");
+                TStringBuilder() << "no such session '" << read->SessionId << "'", ev->Get()->IsInternal);
             return;
         }
     }
@@ -843,7 +845,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
     if (offset >= EndOffset) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << EndOffset);
+            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << EndOffset, read->IsInternal);
         return;
     }
 

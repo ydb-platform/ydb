@@ -495,15 +495,17 @@ struct TEvPQ {
     };
 
     struct TEvError : public TEventLocal<TEvError, EvError> {
-        TEvError(const NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, ui64 cookie)
+        TEvError(const NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, ui64 cookie, bool internal = false)
         : ErrorCode(errorCode)
         , Error(error)
         , Cookie(cookie)
+        , IsInternal(internal)
         {}
 
         NPersQueue::NErrorCode::EErrorCode ErrorCode;
         TString Error;
         ui64 Cookie;
+        bool IsInternal = false;
     };
 
     struct TEvBlobRequest : public TEventLocal<TEvBlobRequest, EvBlobRequest> {

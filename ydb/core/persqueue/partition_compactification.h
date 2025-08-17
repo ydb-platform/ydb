@@ -120,6 +120,7 @@ public:
     void UpdatePartitionConifg();
     void ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
     void ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev);
+    void ProcessResponse(TEvPQ::TEvError::TPtr& ev);
 };
 
 } // namespace NKikimr::NPQ

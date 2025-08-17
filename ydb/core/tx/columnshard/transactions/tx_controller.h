@@ -176,7 +176,7 @@ public:
         }
 
         inline bool operator<(const TPlanQueueItem& rhs) const {
-            return std::tie(Step, SeqId) < std::tie(rhs.Step, rhs.SeqId);
+            return std::tie(Step, TxId) < std::tie(rhs.Step, rhs.TxId);
         }
 
         TString DebugString() const {

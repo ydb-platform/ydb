@@ -147,10 +147,14 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     std::optional<TSnapshot> ss;
     if (Portion->GetPortionType() == EPortionType::Written) {
         const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        if (portion->HasCommitSnapshot()) {
+        if (portion->IsRemovedFor(GetContext()->GetReadMetadata()->GetRequestSnapshot())) {
+            ss = GetContext()->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot();
+        } else if (portion->HasCommitSnapshot()) {
             ss = portion->GetCommitSnapshotVerified();
         } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(portion->GetInsertWriteId())) {
             ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
+        } else {
+            ss = GetContext()->GetReadMetadata()->GetRequestSnapshot().GetNextSnapshot();
         }
     }
 

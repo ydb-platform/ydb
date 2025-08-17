@@ -1,0 +1,10 @@
+--- a/gen/sources.cmake	2024-07-01 15:20:41.878680589 +0300
++++ b/gen/sources.cmake	2024-07-01 15:21:51.959206184 +0300
+@@ -405,7 +405,6 @@
+   crypto/rand_extra/ios.c
+   crypto/rand_extra/passive.c
+   crypto/rand_extra/rand_extra.c
+-  crypto/rand_extra/trusty.c
+   crypto/rand_extra/windows.c
+   crypto/rc4/rc4.c
+   crypto/refcount.c

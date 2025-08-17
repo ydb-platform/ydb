@@ -11,8 +11,10 @@ namespace NKikimr::NReplication::NTransfer {
 template<typename TData>
 class TTableUploader : public TActorBootstrapped<TTableUploader<TData>> {
     using TThis = TTableUploader<TData>;
+    using TBase = TActorBootstrapped<TTableUploader<TData>>;
 
     static constexpr size_t MaxRetries = 9;
+    static constexpr size_t BaseTimeoutMs = 1000;
 
 public:
     TTableUploader(const TActorId& parentActor, const TScheme::TPtr& scheme, std::unordered_map<TString, std::shared_ptr<TData>>&& data)
@@ -39,10 +41,10 @@ private:
     void DoUpload(const TString& tablePath, const std::shared_ptr<TData>& data) {
         auto cookie = ++Cookie;
 
-        TActivationContext::AsActorContext().RegisterWithSameMailbox(
+        auto actorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
             CreateUploaderInternal(tablePath, data, cookie)
         );
-        CookieMapping[cookie] = tablePath;
+        CookieMapping[cookie] = {tablePath, actorId};
     }
 
     std::string GetLogPrefix() const {
@@ -56,7 +58,7 @@ private:
             return;
         }
 
-        auto& tablePath = it->second;
+        auto& tablePath = it->second.first;
 
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
             Data.erase(tablePath);
@@ -71,7 +73,8 @@ private:
         auto withRetry = ev->Get()->Status != Ydb::StatusIds::SCHEME_ERROR;
         auto& retry = Retries[tablePath];
         if (withRetry && retry < MaxRetries) {
-            TThis::Schedule(TDuration::Seconds(1 << retry), new NTransferPrivate::TEvRetryTable(tablePath));
+            size_t timeout = BaseTimeoutMs << retry;
+            TThis::Schedule(TDuration::MilliSeconds(timeout + RandomNumber<size_t>(timeout >> 2)), new NTransferPrivate::TEvRetryTable(tablePath));
             ++retry;
             CookieMapping.erase(ev->Cookie);
             return;
@@ -100,6 +103,14 @@ private:
         }
     }
 
+    void PassAway() override {
+        for (auto& [_, v] : CookieMapping) {
+            TThis::Send(v.second, new TEvents::TEvPoison());
+        }
+
+        TBase::PassAway();
+    }
+
     void ReplyOkAndDie() {
         NYql::TIssues issues;
         TThis::Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(Ydb::StatusIds::SUCCESS, std::move(issues)));
@@ -124,8 +135,8 @@ private:
     std::unordered_map<TString, std::shared_ptr<TData>> Data;
 
     ui64 Cookie = 0;
-    // Cookie -> Table path
-    std::unordered_map<ui64, TString> CookieMapping;
+    // Cookie -> <Table path, Actor>
+    std::unordered_map<ui64, std::pair<TString, TActorId>> CookieMapping;
     std::unordered_map<TString, size_t> Retries;
 };
 

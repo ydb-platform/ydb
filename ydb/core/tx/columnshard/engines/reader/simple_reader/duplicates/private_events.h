@@ -8,6 +8,25 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering::NPrivate {
 
+class TEvFilterRequestResourcesAllocated
+    : public NActors::TEventLocal<TEvFilterRequestResourcesAllocated, NColumnShard::TEvPrivate::EvFilterRequestResourcesAllocated> {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Request);
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
+
+public:
+    TEvFilterRequestResourcesAllocated(
+        const std::shared_ptr<TInternalFilterConstructor>& request, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard)
+        : Request(request)
+        , AllocationGuard(guard)
+    {
+    }
+
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& ExtractAllocationGuard() {
+        return std::move(AllocationGuard);
+    }
+};
+
 class TEvFilterConstructionResult
     : public NActors::TEventLocal<TEvFilterConstructionResult, NColumnShard::TEvPrivate::EvFilterConstructionResult> {
 private:

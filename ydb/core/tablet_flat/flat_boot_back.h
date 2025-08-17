@@ -107,7 +107,7 @@ namespace NBoot {
         TDeque<TBody> TurnsLog;
         TDeque<TSwitch> Switches;
         THashMap<ui32, NTable::TSnapEdge> Edges;
-        THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
+        THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
         THashMap<TLogoBlobID, TSharedData> TxStatusCaches;
     };
 

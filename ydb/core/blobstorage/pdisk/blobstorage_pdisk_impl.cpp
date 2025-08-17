@@ -1843,7 +1843,7 @@ void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str,
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(),
         Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), OwnerSystem, 0,
-        0, Cfg->SlotSizeInUnits,
+        Cfg->SlotSizeInUnits,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), TVector<TChunkIdx>(),
         Cfg->RetrieveDeviceType(), isTinyDisk, error.Str()));
     Mon.YardInit.CountResponse();
@@ -1899,7 +1899,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
                 DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
                 DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
                 DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner,
-                ownerRound, ownerWeight, Cfg->SlotSizeInUnits,
+                ownerRound, Cfg->SlotSizeInUnits,
                 GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), ownedChunks,
                 Cfg->RetrieveDeviceType(), isTinyDisk, ""));
 
@@ -2064,7 +2064,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner, ownerRound,
-        Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits), Cfg->SlotSizeInUnits,
+        Cfg->SlotSizeInUnits,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType) | ui32(NKikimrBlobStorage::StatusNewOwner), TVector<TChunkIdx>(),
         Cfg->RetrieveDeviceType(), isTinyDisk, ""));
 

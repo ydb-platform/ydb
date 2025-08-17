@@ -12,8 +12,6 @@ namespace NKikimr::NStorage {
         const ui64 InvokePipelineGeneration;
         TInvokeQuery Query;
 
-        bool CheckSyncersAfterCommit = false;
-
         ui32 WaitingReplyFromNode = 0;
 
         using TQuery = NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot;
@@ -91,6 +89,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenBaseConfig::TPtr ev);
         void CheckReassignGroupDisk();
         void ReassignGroupDiskExecute();
+        void UpdateBridgeGroupInfo(const TQuery::TUpdateBridgeGroupInfo& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // VDiskSlain/DropDonor logic

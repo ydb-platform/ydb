@@ -293,6 +293,9 @@ public:
             }
         }
 
+        Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead);
+        Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
+
         Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
@@ -592,6 +595,7 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
     }
 
     node.LastConnectTimestamp = TInstant::Now();
+    node.DisconnectedTimestampMono = TMonotonic::Max();
 
     ShredState.OnWardenConnected(nodeId);
 }
@@ -658,6 +662,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         GroupToNode.erase(std::make_tuple(groupId, nodeId));
     }
     node.LastDisconnectTimestamp = now;
+    node.DisconnectedTimestampMono = mono;
     Execute(new TTxUpdateNodeDisconnectTimestamp(nodeId, this));
 }
 

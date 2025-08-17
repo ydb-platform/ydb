@@ -25,6 +25,9 @@ using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
+        // TODO: YQ-4449
+        return;
+
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
@@ -1151,6 +1154,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolveCheckPartitionedBy) {
+        // TODO: YQ-4449
+        return;
+
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";

@@ -9,30 +9,30 @@
 namespace NKikimr {
 namespace NTable {
 
-TLoader::TLoader(TVector<TIntrusivePtr<TCache>> pageCollections,
+TLoader::TLoader(TVector<TIntrusivePtr<TPageCollection>> pageCollections,
         TString legacy,
         TString opaque,
         TVector<TString> deltas,
         TEpoch epoch)
-    : Packs(std::move(pageCollections))
+    : PageCollections(std::move(pageCollections))
     , Legacy(std::move(legacy))
     , Opaque(std::move(opaque))
     , Deltas(std::move(deltas))
     , Epoch(epoch)
 {
-    if (Packs.size() < 1) {
-        Y_TABLET_ERROR("Cannot load TPart from " << Packs.size() << " page collections");
+    if (PageCollections.size() < 1) {
+        Y_TABLET_ERROR("Cannot load TPart from " << PageCollections.size() << " page collections");
     }
-    LoaderEnv = MakeHolder<TLoaderEnv>(Packs[0]);
+    LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[0]);
 }
 
 TLoader::~TLoader() { }
 
 void TLoader::StageParseMeta()
 {
-    auto* metaPacket = dynamic_cast<const NPageCollection::TPageCollection*>(Packs.at(0)->PageCollection.Get());
+    auto* metaPacket = dynamic_cast<const NPageCollection::TPageCollection*>(PageCollections.at(0)->PageCollection.Get());
     if (!metaPacket) {
-        Y_TABLET_ERROR("Unexpected IPageCollection type " << TypeName(*Packs.at(0)->PageCollection));
+        Y_TABLET_ERROR("Unexpected IPageCollection type " << TypeName(*PageCollections.at(0)->PageCollection));
     }
 
     auto &meta = metaPacket->Meta;
@@ -134,11 +134,11 @@ void TLoader::StageParseMeta()
 
     if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())
-        || (Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()) + (SmallId == Max<TPageId>() ? 0 : 1)) != Packs.size())
+        || (Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()) + (SmallId == Max<TPageId>() ? 0 : 1)) != PageCollections.size())
     {
-        Y_TABLET_ERROR("Part " << Packs[0]->PageCollection->Label() << " has"
+        Y_TABLET_ERROR("Part " << PageCollections[0]->PageCollection->Label() << " has"
             << " invalid layout : " << (Rooted ? "rooted" : "legacy")
-            << " " << Packs.size() << "s " << meta.TotalPages() << "pg"
+            << " " << PageCollections.size() << "s " << meta.TotalPages() << "pg"
             << ", Scheme " << SchemeId 
             << ", FlatIndex " << (FlatGroupIndexes.size() ? FlatGroupIndexes[0] : Max<TPageId>())
             << ", BTreeIndex " << (BTreeGroupIndexes.size() ? BTreeGroupIndexes[0].GetPageId() : Max<TPageId>())
@@ -152,7 +152,7 @@ void TLoader::StageParseMeta()
 TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
 {
     Y_ENSURE(!PartView, "PartView already initialized in CreatePartView stage");
-    Y_ENSURE(Packs && Packs.front());
+    Y_ENSURE(PageCollections && PageCollections.front());
 
     auto getPage = [&](TPageId pageId) {
         return pageId == Max<TPageId>() 
@@ -180,7 +180,7 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
     }
 
     for (auto pageId: { SchemeId, GlobsId, SmallId, LargeId, ByKeyId, GarbageStatsId, TxIdStatsId }) {
-        Y_DEBUG_ABORT_UNLESS(pageId == Max<TPageId>() || NeedIn(Packs[0]->GetPageType(pageId)));
+        Y_DEBUG_ABORT_UNLESS(pageId == Max<TPageId>() || NeedIn(PageCollections[0]->GetPageType(pageId)));
         getPage(pageId);
     }
 
@@ -200,11 +200,11 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
         Y_TABLET_ERROR("Scheme page is not loaded");
     } else if (ByKeyId != Max<TPageId>() && !byKey) {
         Y_TABLET_ERROR("Filter page must be loaded if it exists");
-    } else if (small && Packs.size() != (1 + Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()))) {
-        Y_TABLET_ERROR("TPart has small blobs, " << Packs.size() << " page collections");
+    } else if (small && PageCollections.size() != (1 + Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()))) {
+        Y_TABLET_ERROR("TPart has small blobs, " << PageCollections.size() << " page collections");
     }
 
-    const auto extra = BlobsLabelFor(Packs[0]->PageCollection->Label());
+    const auto extra = BlobsLabelFor(PageCollections[0]->PageCollection->Label());
 
     auto *stat = Root.HasStat() ? &Root.GetStat() : nullptr;
 
@@ -223,15 +223,15 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
         // Note: although we also have flat index, it shouldn't be loaded; so let's not count it here
     } else {
         for (auto indexPage : FlatGroupIndexes) {
-            indexesRawSize += Packs[0]->GetPageSize(indexPage);
+            indexesRawSize += PageCollections[0]->GetPageSize(indexPage);
         }
         for (auto indexPage : FlatHistoricIndexes) {
-            indexesRawSize += Packs[0]->GetPageSize(indexPage);
+            indexesRawSize += PageCollections[0]->GetPageSize(indexPage);
         }
     }
 
     auto *partStore = new TPartStore(
-        Packs.front()->PageCollection->Label(),
+        PageCollections.front()->PageCollection->Label(),
         {
             epoch,
             TPartScheme::Parse(*scheme, Rooted),
@@ -258,12 +258,12 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
         }
     );
 
-    partStore->PageCollections = std::move(Packs);
+    partStore->PageCollections = std::move(PageCollections);
 
     if (partStore->Blobs) {
         Y_ENSURE(partStore->Large, "Cannot use blobs without frames");
 
-        partStore->Pseudo = new TCache(partStore->Blobs);
+        partStore->Pseudo = new TPageCollection(partStore->Blobs);
     }
 
     auto overlay = TOverlay::Decode(Legacy, Opaque);

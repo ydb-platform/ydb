@@ -107,15 +107,17 @@ private:
     TVector<std::shared_ptr<TCounters>> Counters;
     TVector<std::shared_ptr<TStageFeatures>> DefaultStages;
     const NMemory::EMemoryConsumerKind ConsumerKind;
+    const ui64 HardLimitMultiplier;
     TIntrusivePtr<TMemoryConsumptionAggregator> MemoryConsumptionAggregator;
 
 public:
     TMemoryLimiterActor(const TConfig& config, const TString& name, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals,
-        const NMemory::EMemoryConsumerKind consumerKind)
+        const NMemory::EMemoryConsumerKind consumerKind, ui64 hardLimitMultiplier)
         : Config(config)
         , Name(name)
         , Signals(signals)
         , ConsumerKind(consumerKind)
+        , HardLimitMultiplier(hardLimitMultiplier)
         , MemoryConsumptionAggregator(new TMemoryConsumptionAggregator(Config.GetCountBuckets())) {
     }
 

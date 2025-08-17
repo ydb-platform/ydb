@@ -9,9 +9,13 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.3)
+VERSION(3.5.2)
 
-ORIGINAL_SOURCE(https://github.com/libffi/libffi/archive/v3.3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libffi/libffi/archive/v3.5.2.tar.gz)
+
+PEERDIR(
+    contrib/libs/libc_compat
+)
 
 ADDINCL(
     contrib/restricted/libffi
@@ -26,7 +30,7 @@ NO_RUNTIME()
 
 CFLAGS(
     -DHAVE_CONFIG_H
-    GLOBAL -DFFI_BUILDING
+    GLOBAL -DFFI_STATIC_BUILD
 )
 
 SRCS(
@@ -34,6 +38,7 @@ SRCS(
     src/java_raw_api.c
     src/prep_cif.c
     src/raw_api.c
+    src/tramp.c
     src/types.c
 )
 
@@ -123,6 +128,16 @@ ELSEIF (ARCH_PPC64LE AND OS_LINUX)
         src/powerpc/linux64_closure.S
         src/powerpc/ppc_closure.S
         src/powerpc/sysv.S
+    )
+ELSEIF (ARCH_WASM32 AND OS_EMSCRIPTEN)
+    ADDINCL(
+        contrib/restricted/libffi/configs/wasm32-emscripten
+        GLOBAL contrib/restricted/libffi/configs/wasm32-emscripten/include
+    )
+ELSEIF (ARCH_WASM64 AND OS_EMSCRIPTEN)
+    ADDINCL(
+        contrib/restricted/libffi/configs/wasm64-emscripten
+        GLOBAL contrib/restricted/libffi/configs/wasm64-emscripten/include
     )
 ELSEIF (ARCH_X86_64 AND OS_ANDROID)
     ADDINCL(

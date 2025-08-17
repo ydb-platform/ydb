@@ -56,7 +56,10 @@ namespace NKikimr::NStorage {
                     for (int i = 0; i < piles.size(); ++i) {
                         prefix << "pile# " << i << ' ';
                         allocateGroup(TBridgePileId::FromPileIndex(i), bridgeProxyGroupId);
-                        groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::AddBridgeGroupIds);
+                        auto *pile = group->MutableBridgeGroupState()->AddPile();
+                        groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
+                        pile->SetGroupGeneration(1);
+                        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
                         ++groupId;
                     }
                 } else {
@@ -121,10 +124,6 @@ namespace NKikimr::NStorage {
         }
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
-
-        if (auto error = UpdateClusterState(config)) {
-            return error;
-        }
 
         return std::nullopt;
     }
@@ -593,8 +592,8 @@ namespace NKikimr::NStorage {
         return goodConfig;
     }
 
-    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config, bool& checkSyncersAfterCommit) {
-        return UpdateBridgeConfig(config, checkSyncersAfterCommit);
+    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {
+        return UpdateBridgeConfig(config);
     }
 
 } // NKikimr::NStorage

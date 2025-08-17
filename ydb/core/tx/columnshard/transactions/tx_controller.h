@@ -161,18 +161,15 @@ public:
     struct TPlanQueueItem {
         const ui64 Step = 0;
         const ui64 TxId = 0;
-        const ui64 SeqId = 0;
 
         TPlanQueueItem(const TPlanQueueItem& item)
             : Step(item.Step)
-            , TxId(item.TxId)
-            , SeqId(item.SeqId) {
+            , TxId(item.TxId) {
         }
 
-        TPlanQueueItem(const ui64 step, const ui64 txId, const ui64 seqId)
+        TPlanQueueItem(const ui64 step, const ui64 txId)
             : Step(step)
-            , TxId(txId)
-            , SeqId(seqId) {
+            , TxId(txId) {
         }
 
         inline bool operator<(const TPlanQueueItem& rhs) const {
@@ -180,7 +177,7 @@ public:
         }
 
         TString DebugString() const {
-            return TStringBuilder() << "step=" << Step << ";txId=" << TxId << ";seqId=" << SeqId << ";";
+            return TStringBuilder() << "step=" << Step << ";txId=" << TxId << ";";
         }
     };
 
@@ -190,9 +187,6 @@ public:
 
     class ITransactionOperator {
     public:
-        static inline TAtomicCounter AtomicId = 0;
-        const ui64 Identifier = AtomicId.Inc();
-
         enum class EStatus {
             Created,
             Parsed,

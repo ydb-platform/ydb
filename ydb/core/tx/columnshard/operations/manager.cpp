@@ -71,6 +71,15 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
+void TOperationsManager::CheckBrokenOnCommit(const TLockFeatures& lock) const {
+    for (auto&& i : lock.GetBrokeOnCommit()) {
+        if (TLockFeatures* lockNotify = GetLockOptional(i)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
+            lockNotify->SetBroken();
+        }
+    }
+}
+
 void TOperationsManager::CommitTransactionOnExecute(
     TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) {
     auto& lock = GetLockFeaturesForTxVerified(txId);
@@ -81,12 +90,7 @@ void TOperationsManager::CommitTransactionOnExecute(
         opPtr->CommitOnExecute(owner, txc, snapshot);
         commited.emplace_back(opPtr);
     }
-    for (auto&& i : lock.GetBrokeOnCommit()) {
-        if (auto lockNotify = GetLockOptional(i)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
-            lockNotify->SetBroken();
-        }
-    }
+    CheckBrokenOnCommit(lock);
     OnTransactionFinishOnExecute(commited, lock, txId, txc);
 }
 
@@ -94,12 +98,7 @@ void TOperationsManager::CommitTransactionOnComplete(TColumnShard& owner, const 
     auto& lock = GetLockFeaturesForTxVerified(txId);
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)(
         "commit_lock_id", lock.GetLockId())("state", "TOperationsManager::CommitTransactionOnComplete"));
-    for (auto&& i : lock.GetBrokeOnCommit()) {
-        if (auto lockNotify = GetLockOptional(i)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
-            lockNotify->SetBroken();
-        }
-    }
+    CheckBrokenOnCommit(lock);
 
     for (auto&& i : lock.GetNotifyOnCommit()) {
         if (auto lockNotify = GetLockOptional(i)) {

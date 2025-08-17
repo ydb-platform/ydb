@@ -1882,6 +1882,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 4096,
             DefaultValue: 3
+        }];
     }
 
     message TKQPSessionControls {

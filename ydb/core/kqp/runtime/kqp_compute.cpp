@@ -86,14 +86,24 @@ private:
 
 class TKqpIndexLookupJoinWrapper : public TMutableComputationNode<TKqpIndexLookupJoinWrapper> {
 public:
+    struct TState : public TComputationValue<TState> {
+        using TComputationValue::TComputationValue;
+
+        std::optional<NUdf::TUnboxedValue> PrevEmptyLeftRow;
+        std::optional<NUdf::TUnboxedValue> UnprocessedRow;
+        bool Finish = false;
+    };
+
     class TStreamValue : public TComputationValue<TStreamValue> {
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream, TComputationContext& ctx,
-            const TKqpIndexLookupJoinWrapper* self)
+            const TKqpIndexLookupJoinWrapper* self, ui32 stateIndex)
             : TComputationValue<TStreamValue>(memInfo)
             , Stream(std::move(stream))
             , Self(self)
-            , Ctx(ctx) {
+            , Ctx(ctx)
+            , StateIndex(stateIndex)
+        {
         }
 
     private:
@@ -101,6 +111,14 @@ public:
             OnlyLeftRow,
             Both
         };
+
+        TState& GetState() const {
+            auto& result = Ctx.MutableValues[StateIndex];
+            if (!result.HasValue()) {
+                result = Ctx.HolderFactory.Create<TState>();
+            }
+            return *static_cast<TState*>(result.AsBoxed().Get());
+        }
 
         NUdf::TUnboxedValue FillResultItems(NUdf::TUnboxedValue leftRow, NUdf::TUnboxedValue rightRow, EOutputMode mode) {
             auto resultRowSize = (mode == EOutputMode::OnlyLeftRow) ? Self->LeftColumnsIndices.size()
@@ -128,7 +146,7 @@ public:
             return resultRow;
         }
 
-        bool TryBuildResultRow(NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result) {
+        bool TryBuildResultRow(TState& state, NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result, ui64 rowNumber) {
             auto leftRow = inputRow.GetElement(0);
             auto rightRow = inputRow.GetElement(1);
 
@@ -144,6 +162,19 @@ public:
                     break;
                 }
                 case EJoinKind::Left: {
+                    if (!rightRow.HasValue()) {
+                        if (rowNumber == 1) {
+                            state.PrevEmptyLeftRow = std::move(leftRow);
+                        }
+
+                        ok = false;
+                        break;
+                    }
+
+                    if (rowNumber >= 2 && rightRow.HasValue()) {
+                        state.PrevEmptyLeftRow.reset();
+                    }
+
                     result = FillResultItems(std::move(leftRow), std::move(rightRow), EOutputMode::Both);
                     break;
                 }
@@ -172,19 +203,53 @@ public:
             return ok;
         }
 
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            NUdf::TUnboxedValue row;
-            NUdf::EFetchStatus status = Stream.Fetch(row);
+        void BuildFromPrevEmptyLeftRow(TState& state, NUdf::TUnboxedValue& result) {
+            result = FillResultItems(std::move(*state.PrevEmptyLeftRow), NUdf::TUnboxedValuePod(), EOutputMode::Both);
+            state.PrevEmptyLeftRow.reset();
+        }
 
-            while (status == NUdf::EFetchStatus::Ok) {
-                if (TryBuildResultRow(std::move(row), result)) {
-                    break;
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            auto& state = GetState();
+            for(;;) {
+                if (state.Finish) {
+                    if (state.PrevEmptyLeftRow.has_value()) {
+                        BuildFromPrevEmptyLeftRow(state, result);
+                        return NUdf::EFetchStatus::Ok;
+                    }
+
+                    return NUdf::EFetchStatus::Finish;
                 }
 
-                status = Stream.Fetch(row);
-            }
+                NUdf::TUnboxedValue item;
+                if (state.UnprocessedRow) {
+                    item = std::move(*state.UnprocessedRow);
+                    state.UnprocessedRow.reset();
+                } else {
+                    auto status = Stream.Fetch(item);
 
-            return status;
+                    if (status == NUdf::EFetchStatus::Yield) {
+                        return status;
+                    }
+
+                    if (status == NUdf::EFetchStatus::Finish) {
+                        state.Finish = true;
+                        continue;
+                    }
+                }
+
+                ui64 rowNumber = item.GetElement(2).Get<ui64>();
+                if (rowNumber == 1 && state.PrevEmptyLeftRow.has_value()) {
+                    BuildFromPrevEmptyLeftRow(state, result);
+                    state.UnprocessedRow = std::move(item);
+                    return NUdf::EFetchStatus::Ok;
+                }
+
+                bool buildRow = TryBuildResultRow(state, item, result, rowNumber);
+                if (buildRow) {
+                    return NUdf::EFetchStatus::Ok;
+                }
+            }
+            return NUdf::EFetchStatus::Ok;
         }
 
     private:
@@ -192,6 +257,7 @@ public:
         const TKqpIndexLookupJoinWrapper* Self;
         TComputationContext& Ctx;
         NUdf::TUnboxedValue* ResultItems = nullptr;
+        ui32 StateIndex;
     };
 
 public:
@@ -202,11 +268,13 @@ public:
         , JoinType(joinType)
         , LeftColumnsIndices(std::move(leftColumnsIndices))
         , RightColumnsIndices(std::move(rightColumnsIndices))
-        , ResultRowCache(mutables) {
+        , ResultRowCache(mutables)
+        , StateIndex(mutables.CurValueIndex++)
+    {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(InputNode->GetValue(ctx), ctx, this);
+        return ctx.HolderFactory.Create<TStreamValue>(InputNode->GetValue(ctx), ctx, this, StateIndex);
     }
 
 private:
@@ -220,6 +288,7 @@ private:
     const TVector<ui32> LeftColumnsIndices;
     const TVector<ui32> RightColumnsIndices;
     const TContainerCacheOnContext ResultRowCache;
+    const ui32 StateIndex;
 };
 
 } // namespace

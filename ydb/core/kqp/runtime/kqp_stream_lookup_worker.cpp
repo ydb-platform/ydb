@@ -926,6 +926,7 @@ private:
         std::unordered_set<ui64> PendingReads;
         bool RightRowExist = false;
         const ui64 SeqNo;
+        ui64 MatchedRows = 0;
     };
 
     struct TResultBatch {
@@ -1010,7 +1011,7 @@ private:
         YQL_ENSURE(outputType->GetKind() == NMiniKQL::TType::EKind::Tuple, "Unexpected stream lookup output type");
 
         const auto outputTupleType = AS_TYPE(NMiniKQL::TTupleType, outputType);
-        YQL_ENSURE(outputTupleType->GetElementsCount() == 2);
+        YQL_ENSURE(outputTupleType->GetElementsCount() == 3);
 
         const auto outputLeftRowType = outputTupleType->GetElementType(0);
         YQL_ENSURE(outputLeftRowType->GetKind() == NMiniKQL::TType::EKind::Struct);
@@ -1023,7 +1024,7 @@ private:
         TReadResultStats& rowStats, TMaybe<ui64> shardId = {}) {
 
         NUdf::TUnboxedValue* resultRowItems = nullptr;
-        auto resultRow = HolderFactory.CreateDirectArrayHolder(2, resultRowItems);
+        auto resultRow = HolderFactory.CreateDirectArrayHolder(3, resultRowItems);
 
         ui64 leftRowSize = 0;
         ui64 rightRowSize = 0;
@@ -1061,6 +1062,8 @@ private:
         } else {
             resultRowItems[1] = NUdf::TUnboxedValuePod();
         }
+
+        resultRowItems[2] = NUdf::TUnboxedValuePod(++leftRowInfo.MatchedRows);
 
         rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
         // TODO: use datashard statistics KIKIMR-16924

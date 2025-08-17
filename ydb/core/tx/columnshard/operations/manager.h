@@ -155,7 +155,7 @@ class TOperationsManager: public IResolveWriteIdToLockId {
     THashMap<TOperationWriteId, TWriteOperation::TPtr> Operations;
     TOperationWriteId LastWriteId = TOperationWriteId(0);
 
-    void CheckBrokenOnCommit(const TLockFeatures& lock) const;
+    void CheckBrokenOnCommit(const TLockFeatures& lock);
 
 public:   //IResolveWriteIdToLockId
     virtual std::optional<ui64> ResolveWriteIdToLockId(const TInsertWriteId& writeId) const override {

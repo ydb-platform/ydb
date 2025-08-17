@@ -71,7 +71,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
-void TOperationsManager::CheckBrokenOnCommit(const TLockFeatures& lock) const {
+void TOperationsManager::CheckBrokenOnCommit(const TLockFeatures& lock) {
     for (auto&& i : lock.GetBrokeOnCommit()) {
         if (TLockFeatures* lockNotify = GetLockOptional(i)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);

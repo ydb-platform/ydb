@@ -37,6 +37,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
     Y_ENSURE(PartitionActor->Config.GetEnableCompactification());
     if (PartitionActor->CompacterPartitionRequestInflight || PartitionActor->CompacterKvRequestInflight)
         return;
+    FirstUncompactedOffset = Max(PartitionActor->StartOffset, FirstUncompactedOffset);
     switch (Step) {
     case EStep::PENDING:
         ReadState = TReadState(FirstUncompactedOffset, PartitionActor);
@@ -69,6 +70,14 @@ void TPartitionCompaction::TryCompactionIfPossible() {
     }
 }
 
+void TPartitionCompaction::ProcessResponse(TEvPQ::TEvError::TPtr& ev) {
+    PQ_LOG_ERROR("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+                                      << PartitionActor->Partition << " proxy ERROR response: " << ev->Get()->Error);
+    PartitionActor->Send(PartitionActor->Tablet, new TEvents::TEvPoisonPill());
+    Step = EStep::PENDING;
+    return;
+}
+
 void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
     PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
               << PartitionActor->Partition << " proxy response cookie: " << ev->Get()->Cookie);
@@ -85,6 +94,9 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
         case EStep::COMPACTING: {
             Y_ABORT_UNLESS(CompactState);
             processResponseResult = CompactState->ProcessResponse(ev);
+            if (CompactState->SavedLastProcessedOffset > FirstUncompactedOffset) {
+                FirstUncompactedOffset = CompactState->SavedLastProcessedOffset;
+            }
             break;
         }
         case EStep::PENDING:
@@ -257,6 +269,8 @@ TPartitionCompaction::TCompactState::TCompactState(
     : MaxOffset(maxOffset)
     , TopicData(std::move(data))
     , PartitionActor(partitionActor)
+    , LastProcessedOffset(partitionActor->StartOffset)
+    , SavedLastProcessedOffset(partitionActor->StartOffset)
     , CommittedOffset(firstUncompactedOffset)
     , DataKeysBody(partitionActor->DataKeysBody)
 {
@@ -361,7 +375,7 @@ void TPartitionCompaction::TCompactState::SaveLastBatch() {
     LastBatchKey = TKey();
 }
 
-//TPartitionCompaction::EStep
+
 bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
     auto status = CheckResponse(ev);
     if (!status) {

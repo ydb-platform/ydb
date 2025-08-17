@@ -127,6 +127,7 @@ class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
         utils.drop_topic()
 
 
+@pytest.mark.skip(reason="Redundant")
 class TestKafkaTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -147,11 +148,12 @@ class TestKafkaTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
 class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        # check that cleanup-policy=compact is supported
-        # assume that RestartToAnotherVersionFixture will call test at least twice: in the old->new and in the new->old directions
-
-        if self.versions[0] < (25, 1, 4):
+        # create topic with a version that supports cleanup-policy=compact
+        start_version_indices = [i for i, v in enumerate(self.versions) if not (v  < (25, 1, 4))]
+        if not start_version_indices:
             pytest.skip("Topic may be created only since 25-1-4")
+        assert self.current_binary_paths_index is not None
+        self.current_binary_paths_index = start_version_indices[0]
 
         yield from self.setup_cluster()
 
@@ -159,6 +161,8 @@ class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
         utils = Workload(self.driver, self.endpoint)
 
         utils.create_topic()
+        self.current_binary_paths_index = -1
+        self.change_cluster_version() # current_binary_paths_index -> 0
 
         utils.run_stress_test(duration=20)
         self.change_cluster_version()

@@ -282,6 +282,11 @@ void DoTabletStateRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityPro
     f.RegisterActor(CreateMessageBusTabletStateRequest(ctx));
 }
 
+void DoLocalSchemeTx(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_LOCAL_SCHEME_TX);
+    f.RegisterActor(NMsgBusProxy::CreateMessageBusLocalSchemeTx(ctx));
+}
+
 } // namespace NLegacyGrpcService
 
 } // namespace NKikimr::NGRpcService

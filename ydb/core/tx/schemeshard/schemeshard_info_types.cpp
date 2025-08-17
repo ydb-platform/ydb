@@ -1094,10 +1094,6 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
             dstFamily.SetColumnCache(changesFamily.GetColumnCache());
         }
 
-        if (changesFamily.HasColumnCacheMode()) {
-            dstFamily.SetColumnCacheMode(changesFamily.GetColumnCacheMode());
-        }
-
         if (changesFamily.HasStorage()) {
             dstFamily.SetStorage(changesFamily.GetStorage());
         }

@@ -157,4 +157,4 @@ TEST(TForkAwareSpinLockTest, ForkSafety)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NThreading
+} // namespace NYT::NConcurrency

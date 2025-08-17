@@ -6,7 +6,6 @@ TEST_SRCS(
     test_parallel.py
     test_s_float.py
     test_s1.py
-    test_duplicates.py
 )
 
 SIZE(MEDIUM)

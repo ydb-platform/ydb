@@ -3,6 +3,7 @@
 #include <library/cpp/yt/threading/spin_wait.h>
 #include <library/cpp/yt/threading/spin_wait_hook.h>
 
+#include <thread>
 #include <mutex>
 
 namespace NYT::NThreading {

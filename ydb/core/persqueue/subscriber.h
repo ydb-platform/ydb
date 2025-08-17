@@ -18,7 +18,6 @@ struct TUserInfo;
 struct TReadAnswer {
     ui64 Size = 0;
     THolder<IEventBase> Event;
-    bool IsInternal = false;
 };
 
 struct TReadInfo {
@@ -45,7 +44,6 @@ struct TReadInfo {
     ui64 RealReadOffset = 0;
     ui64 LastOffset = 0;
     bool Error = false;
-    bool IsInternal = false;
 
     TBlobKeyTokens BlobKeyTokens;
     size_t CompactedBlobsCount = 0;
@@ -63,8 +61,7 @@ struct TReadInfo {
         ui64 readTimestampMs,
         TDuration waitQuotaTime,
         const bool isExternalRead,
-        const TActorId& pipeClient,
-        bool isInternal
+        const TActorId& pipeClient
     )
         : User(user)
         , ClientDC(clientDC)
@@ -81,7 +78,6 @@ struct TReadInfo {
         , CachedOffset(0)
         , PipeClient(pipeClient)
         , LastOffset(lastOffset)
-        , IsInternal(isInternal)
     {}
 
     TReadAnswer FormAnswer(

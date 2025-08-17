@@ -1,7 +1,6 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/partition.h>
-#include <ydb/core/persqueue/read_quoter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -292,17 +291,6 @@ protected:
     template<class EventType>
     void AddOneTimeEventObserver(bool& seenEvent, std::function<TTestActorRuntimeBase::EEventAction(TAutoPtr<IEventHandle>&)> callback = [](){return TTestActorRuntimeBase::EEventAction::PROCESS;});
 
-    void ExpectNoExclusiveLockAcquired();
-    void ExpectNoReadQuotaAcquired();
-    void SendAcquireExclusiveLock();
-    void SendAcquireReadQuota(ui64 cookie, const TActorId& sender);
-    void SendReadQuotaConsumed(ui64 cookie);
-    void SendReleaseExclusiveLock();
-    void WaitExclusiveLockAcquired();
-    void WaitReadQuotaAcquired();
-
-    void EnsureReadQuoterExists();
-
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
     //
@@ -315,17 +303,6 @@ protected:
     TTestActorRuntimeBase::TEventObserver PrevEventObserver;
 
     TActorId Pipe;
-
-    struct TReadQuoter {
-        NKikimrPQ::TPQConfig PQConfig;
-        NPersQueue::TTopicConverterPtr TopicConverter;
-        NKikimrPQ::TPQTabletConfig PQTabletConfig;
-        TPartitionId PartitionId;
-        TTabletCountersBase Counters;
-        TActorId Quoter;
-    };
-
-    TMaybe<TReadQuoter> ReadQuoter;
 };
 
 void TPQTabletFixture::SetUp(NUnitTest::TTestContext&)
@@ -1397,7 +1374,7 @@ void TPQTabletFixture::AddOneTimeEventObserver(bool& seenEvent, std::function<TT
             seenEvent = true;
             return callback(input);
         }
-
+        
         return TTestActorRuntimeBase::EEventAction::PROCESS;
     };
     Ctx->Runtime->SetObserverFunc(observer);
@@ -2540,7 +2517,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
     // send data to create blobs for supportive partitions
     SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
     ui32 fisrtSupportivePartitionId = WaitForExactTxWritesCount(1).GetTxWrites(0).GetInternalPartitionId();
-
+    
     TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
     bool seenEvent = false;
     // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
@@ -2562,7 +2539,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
                      .NeedSupportivePartition=true,
                      .Owner=DEFAULT_OWNER,
                      .Cookie=5});
-    // now we can eventually send TEvPQ::TEvDeletePartitionDone
+    // now we can eventually send TEvPQ::TEvDeletePartitionDone 
     Ctx->Runtime->SendToPipe(Pipe,
                              Ctx->Edge,
                              deleteDoneEvent.Release(),
@@ -2587,7 +2564,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
     // send data to create blobs for supportive partitions
     SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
     WaitForExactTxWritesCount(1);
-
+    
     TAutoPtr<TEvKeyValue::TEvResponse> keyValueResponse;
     bool seenDeletePartitionsDoneEvent = false;
     bool seenKeyValResponse = false;
@@ -2601,7 +2578,7 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
             seenKeyValResponse = true;
             return TTestActorRuntimeBase::EEventAction::DROP;
         }
-
+        
         return TTestActorRuntimeBase::EEventAction::PROCESS;
     };
     Ctx->Runtime->SetObserverFunc(observer);
@@ -2620,12 +2597,12 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
                      .Owner=DEFAULT_OWNER,
                      .Cookie=5});
 
-    // eventually send TEvKeyValue::TEvResponse
+    // eventually send TEvKeyValue::TEvResponse 
     Ctx->Runtime->SendToPipe(Pipe,
                              Ctx->Edge,
                              keyValueResponse.Release(),
                              0, 0);
-
+    
     // wait for a deferred response for last GetOwnership request we sent
     TString ownerCookie2 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
@@ -2943,121 +2920,6 @@ Y_UNIT_TEST_F(PQTablet_App_SendReadSet_Invalid_Step, TPQTabletFixture)
     WaitForAppSendRsResponse({.Status = false,});
 }
 
-
-void TPQTabletFixture::ExpectNoExclusiveLockAcquired()
-{
-    EnsureReadQuoterExists();
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvExclusiveLockAcquired>(TDuration::Seconds(5));
-    UNIT_ASSERT(event == nullptr);
-}
-
-void TPQTabletFixture::ExpectNoReadQuotaAcquired()
-{
-    EnsureReadQuoterExists();
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvApproveReadQuota>(TDuration::Seconds(10));
-    UNIT_ASSERT(event == nullptr);
-}
-
-void TPQTabletFixture::SendAcquireExclusiveLock()
-{
-    EnsureReadQuoterExists();
-
-    Ctx->Runtime->Send(ReadQuoter->Quoter,
-                       Ctx->Edge,
-                       new TEvPQ::TEvAcquireExclusiveLock());
-}
-
-class TEvReadTestEventHandle: public NActors::IEventHandle {
-public:
-    TEvReadTestEventHandle(THolder<TEvPQ::TEvRead>&& event, const TActorId& sender)
-        : NActors::IEventHandle(TActorId{}, sender, event.Release())
-    {}
-};
-
-void TPQTabletFixture::SendAcquireReadQuota(ui64 cookie, const TActorId& sender) {
-    EnsureReadQuoterExists();
-
-    auto request = MakeHolder<TEvPQ::TEvRead>(cookie, 0, 99999, 0, 9999, "", "client", 999, 99999, 99999, 0, "", false, TActorId{});
-    auto handle = new TEvReadTestEventHandle(std::move(request), sender);
-    Ctx->Runtime->Send(ReadQuoter->Quoter,
-                       Ctx->Edge,
-                       new TEvPQ::TEvRequestQuota(cookie, handle));
-}
-
-void TPQTabletFixture::SendReadQuotaConsumed(ui64 cookie)
-{
-    EnsureReadQuoterExists();
-
-    Ctx->Runtime->Send(ReadQuoter->Quoter,
-                       Ctx->Edge,
-                       new TEvPQ::TEvConsumed(1024, cookie, "client"));
-}
-
-void TPQTabletFixture::SendReleaseExclusiveLock()
-{
-    EnsureReadQuoterExists();
-
-    Ctx->Runtime->Send(ReadQuoter->Quoter,
-                       Ctx->Edge,
-                       new TEvPQ::TEvReleaseExclusiveLock());
-}
-
-void TPQTabletFixture::WaitExclusiveLockAcquired()
-{
-    EnsureReadQuoterExists();
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvExclusiveLockAcquired>();
-    UNIT_ASSERT(event);
-}
-
-void TPQTabletFixture::WaitReadQuotaAcquired()
-{
-    EnsureReadQuoterExists();
-    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvApproveReadQuota>();
-    UNIT_ASSERT(event);
-}
-
-void TPQTabletFixture::EnsureReadQuoterExists()
-{
-    if (ReadQuoter) {
-        return;
-    }
-
-    Cerr << "Ctx->Edge=" << Ctx->Edge << Endl;
-
-    ReadQuoter.ConstructInPlace();
-    ReadQuoter->Quoter = Ctx->Runtime->Register(new NPQ::TReadQuoter(ReadQuoter->PQConfig,
-                                                                     ReadQuoter->TopicConverter,
-                                                                     ReadQuoter->PQTabletConfig,
-                                                                     ReadQuoter->PartitionId,
-                                                                     TActorId{}, // TabletActor
-                                                                     Ctx->Edge,
-                                                                     1234567890, // TabletId
-                                                                     ReadQuoter->Counters));
-    Ctx->Runtime->EnableScheduleForActor(ReadQuoter->Quoter);
-    Ctx->Runtime->Send(ReadQuoter->Quoter, TActorId{}, new TEvents::TEvBootstrap());
-    //Ctx->Runtime->DispatchEvents();
-}
-
-Y_UNIT_TEST_F(ReadQuoter_ExclusiveLock, TPQTabletFixture)
-{
-    EnsureReadQuoterExists();
-    PQTabletPrepare({.partitions = 1}, {}, *Ctx);
-    //Ctx->Runtime->DispatchEvents();
-    SendAcquireReadQuota(1, Ctx->Edge);
-    WaitReadQuotaAcquired();
-
-    SendAcquireExclusiveLock();
-    ExpectNoExclusiveLockAcquired();
-
-    SendReadQuotaConsumed(1);
-    WaitExclusiveLockAcquired();
-
-    SendAcquireReadQuota(2, Ctx->Edge);
-    ExpectNoReadQuotaAcquired();
-
-    SendReleaseExclusiveLock();
-    WaitReadQuotaAcquired();
-}
 
 }
 

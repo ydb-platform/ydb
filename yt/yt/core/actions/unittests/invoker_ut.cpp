@@ -59,7 +59,7 @@ struct TTraverser final
     }
 };
 
-TEST(TSyncInvokerTest, TraverseLinear)
+TEST(TestSyncInvoker, TraverseLinear)
 {
     auto traverser = New<TTraverser>(/*binary*/ false);
 
@@ -71,7 +71,7 @@ TEST(TSyncInvokerTest, TraverseLinear)
     EXPECT_EQ(expectedNodes, traverser->VisitedNodes);
 }
 
-TEST(TSyncInvokerTest, TraverseBinary)
+TEST(TestSyncInvoker, TraverseBinary)
 {
     auto traverser = New<TTraverser>(/*binary*/ true);
 
@@ -83,7 +83,7 @@ TEST(TSyncInvokerTest, TraverseBinary)
     EXPECT_EQ(expectedNodes, traverser->VisitedNodes);
 }
 
-TEST(TSyncInvokerTest, SleepyFiber)
+TEST(TestSyncInvoker, SleepyFiber)
 {
     // This test ensures that deferred callbacks in the sync invoker
     // are tracked per-fiber, which allows them to sleep without
@@ -166,7 +166,7 @@ const NProfiling::NProto::TSummaryDuration& GetSummaryDuration(
     return empty;
 }
 
-TEST(TInvokerWaitTimeTest, SerializedInvoker)
+TEST(TestInvokersWaitTime, SerializedInvoker)
 {
     auto registry = New<NProfiling::TSolomonRegistry>();
     registry->SetWindowSize(5);
@@ -208,7 +208,7 @@ TEST(TInvokerWaitTimeTest, SerializedInvoker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TInvokerWaitTimeTest, PrioritizedInvoker)
+TEST(TestInvokersWaitTime, PrioritizedInvoker)
 {
     auto registry = New<NProfiling::TSolomonRegistry>();
     registry->SetWindowSize(5);

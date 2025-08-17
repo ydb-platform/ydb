@@ -24,7 +24,6 @@ template <class T>
 [[nodiscard]] TErrorOr<T> WaitForFast(TFuture<T> future)
 {
     YT_ASSERT(future);
-    YT_ASSERT(!IsContextSwitchForbidden());
 
     if (!future.IsSet()) {
         WaitUntilSet(future.AsVoid(), GetCurrentInvoker());

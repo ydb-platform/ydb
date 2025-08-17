@@ -257,7 +257,6 @@ struct TTableSettings {
     TResetableSetting<TTtlSettings, void> TtlSettings;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
-    TMaybe<ui64> ExternalDataChannelsCount;
 
     // These parameters are only used for external sources
     TMaybe<TString> DataSourcePath;

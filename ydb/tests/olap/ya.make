@@ -4,11 +4,10 @@ PY3TEST()
     ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
     TEST_SRCS(
-        order_by_with_limit.py
-        test_cs_many_updates.py
         test_log_scenario.py
         upgrade_to_internal_path_id.py
         zip_bomb.py
+        test_cs_many_updates.py
     )
     FORK_SUBTESTS()
 

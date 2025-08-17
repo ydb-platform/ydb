@@ -235,9 +235,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
             Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
 
-        case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
-            Y_ABORT("no implementation for ESchemeOpDropColumnBuild");
-
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
             Y_ABORT("no implementation for ESchemeOpCreateIndexBuild");
 
@@ -1055,7 +1052,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropTableIndex:
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
-        case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
         case NKikimrSchemeOp::ESchemeOpCreateLock:

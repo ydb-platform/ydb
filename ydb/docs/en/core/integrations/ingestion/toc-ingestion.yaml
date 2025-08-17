@@ -5,5 +5,3 @@ items:
   href: logstash.md
 - name: Importing from JDBC data sources
   href: import-jdbc.md
-- name: Apache Spark™
-  href: spark.md

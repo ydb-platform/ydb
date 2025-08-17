@@ -88,7 +88,7 @@ void EnrichTracingForLookupRequest(NTracing::TTraceContext::TTagList& tagList, T
         tagList.emplace_back("yt.table_path", path);
         std::string columnsTag = columns.empty()
             ? "universal"
-            : SanitizeTracingTag(ConvertToYsonString(columns, EYsonFormat::Text).ToString());
+            : SanitizeTracingTag(ConvertToYsonString(columns).ToString());
         tagList.emplace_back("yt.column_filter", std::move(columnsTag));
     }
 }
@@ -980,17 +980,12 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
             if (columnFiltersTagLength <= MaxTracingTagLength) {
                 std::string columnsTag = subrequest.Options.ColumnFilter.IsUniversal()
                     ? "universal"
-                    : SanitizeTracingTag(
-                        NYson::ConvertToYsonString(protoSubrequest.columns(), EYsonFormat::Text).ToString());
+                    : SanitizeTracingTag(NYson::ConvertToYsonString(protoSubrequest.columns()).ToString());
                 columnFiltersTagLength += columnFilterTags.emplace_back(std::move(columnsTag)).size();
             }
         }
-        req->TracingTags().emplace_back(
-            "yt.table_paths",
-            SanitizeTracingTag(NYson::ConvertToYsonString(paths, EYsonFormat::Text).ToString()));
-        req->TracingTags().emplace_back(
-            "yt.column_filters",
-            SanitizeTracingTag(NYson::ConvertToYsonString(columnFilterTags, EYsonFormat::Text).ToString()));
+        req->TracingTags().emplace_back("yt.table_paths", SanitizeTracingTag(NYson::ConvertToYsonString(paths).ToString()));
+        req->TracingTags().emplace_back("yt.column_filters", SanitizeTracingTag(NYson::ConvertToYsonString(columnFilterTags).ToString()));
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));

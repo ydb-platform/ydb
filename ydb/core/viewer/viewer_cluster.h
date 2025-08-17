@@ -4,7 +4,6 @@
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
-#include <ydb/public/api/protos/ydb_bridge_common.pb.h>
 
 namespace NKikimr::NViewer {
 
@@ -244,26 +243,6 @@ private:
         return true;
     }
 
-    static Ydb::Bridge::PileState::State GetPileStateFromPile(const TBridgeInfo::TPile& pile) {
-        if (pile.IsPrimary) {
-            return Ydb::Bridge::PileState::PRIMARY;
-        } else if (pile.IsBeingPromoted) {
-            return Ydb::Bridge::PileState::PROMOTE;
-        } else {
-            switch (pile.State) {
-                case NKikimrBridge::TClusterState::DISCONNECTED:
-                    return Ydb::Bridge::PileState::DISCONNECTED;
-                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
-                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
-                    return Ydb::Bridge::PileState::NOT_SYNCHRONIZED;
-                case NKikimrBridge::TClusterState::SYNCHRONIZED:
-                    return Ydb::Bridge::PileState::SYNCHRONIZED;
-                default:
-                    return Ydb::Bridge::PileState::UNSPECIFIED;
-            }
-        }
-    }
-
     void ProcessResponses() {
         if (NodesInfoResponse && NodesInfoResponse->IsDone()) {
             if (NodesInfoResponse->IsOk()) {
@@ -382,7 +361,9 @@ private:
                         auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
                         pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
                         pbBridgePileInfo.SetName(pile.Name);
-                        pbBridgePileInfo.SetState(GetPileStateFromPile(pile));
+                        pbBridgePileInfo.SetState(pile.State);
+                        pbBridgePileInfo.SetIsPrimary(pile.IsPrimary);
+                        pbBridgePileInfo.SetIsBeingPromoted(pile.IsBeingPromoted);
                     }
                     for (const auto& node : NodeData) {
                         if (node.PileNum) {

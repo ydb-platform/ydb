@@ -19,14 +19,17 @@ TEST(TCountDownLatch, TwoThreads)
 {
     TCountDownLatch latch(2);
 
-    std::jthread t1(std::bind(&WaitForLatch, std::cref(latch)));
-    std::jthread t2(std::bind(&WaitForLatch, std::cref(latch)));
+    std::thread t1(std::bind(&WaitForLatch, std::cref(latch)));
+    std::thread t2(std::bind(&WaitForLatch, std::cref(latch)));
 
     EXPECT_EQ(2, latch.GetCount());
     latch.CountDown();
     EXPECT_EQ(1, latch.GetCount());
     latch.CountDown();
     EXPECT_EQ(0, latch.GetCount());
+
+    t1.join();
+    t2.join();
 }
 
 TEST(TCountDownLatch, TwoThreadsPredecremented)
@@ -39,8 +42,11 @@ TEST(TCountDownLatch, TwoThreadsPredecremented)
     latch.CountDown();
     EXPECT_EQ(0, latch.GetCount());
 
-    std::jthread t1(std::bind(&WaitForLatch, std::cref(latch)));
-    std::jthread t2(std::bind(&WaitForLatch, std::cref(latch)));
+    std::thread t1(std::bind(&WaitForLatch, std::cref(latch)));
+    std::thread t2(std::bind(&WaitForLatch, std::cref(latch)));
+
+    t1.join();
+    t2.join();
 }
 
 TEST(TCountDownLatch, TwoThreadsTwoLatches)
@@ -48,19 +54,22 @@ TEST(TCountDownLatch, TwoThreadsTwoLatches)
     TCountDownLatch first(1);
     TCountDownLatch second(1);
 
-    std::jthread t1([&] () {
+    std::thread t1([&] () {
         first.Wait();
         second.CountDown();
         EXPECT_EQ(0, first.GetCount());
         EXPECT_EQ(0, second.GetCount());
     });
 
-    std::jthread t2([&] () {
+    std::thread t2([&] () {
         first.CountDown();
         second.Wait();
         EXPECT_EQ(0, first.GetCount());
         EXPECT_EQ(0, second.GetCount());
     });
+
+    t1.join();
+    t2.join();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

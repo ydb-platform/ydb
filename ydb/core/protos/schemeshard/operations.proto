@@ -137,7 +137,6 @@ enum EOperationType {
     ESchemeOpAlterExternalDataSource = 91;
 
     ESchemeOpCreateColumnBuild = 92;
-    ESchemeOpDropColumnBuild = 125;
 
     // View
     ESchemeOpCreateView = 93;

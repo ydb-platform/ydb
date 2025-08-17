@@ -30,7 +30,7 @@ public:
         MarkSourceId = 's',
         MarkUserDeprecated = 'u'
     };
-
+    
     enum EServiceType : char {
         ServiceTypeInfo = 'M',
         ServiceTypeData = 'D',
@@ -251,21 +251,6 @@ public:
     bool operator==(const TKey& key) const
     {
         return Size() == key.Size() && strncmp(Data(), key.Data(), Size()) == 0;
-    }
-    bool operator<(const TKey& key) const
-    {
-        if (GetPartition() < key.GetPartition())
-            return true;
-
-        if (GetPartition() == key.GetPartition()) {
-            if (GetOffset() < key.GetOffset())
-                return true;
-            if (GetOffset() == key.GetOffset()) {
-                if (GetPartNo() < key.GetPartNo())
-                    return true;
-            }
-        }
-        return false;
     }
 
     void SetFastWrite();

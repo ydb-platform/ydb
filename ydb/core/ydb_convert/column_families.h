@@ -133,10 +133,6 @@ namespace NKikimr {
                 }
             }
 
-            if (settings.has_external_data_channels_count()) {
-                MutableDefaultFamily()->MutableStorageConfig()->SetExternalChannelsCount(settings.external_data_channels_count());
-            }
-
             return true;
         }
 

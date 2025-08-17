@@ -741,6 +741,14 @@ TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Enables runtime checks ensuring that no fiber context switch can happen
+//! during excution of a future handler.
+//! See YT-25879 for more details.
+void ForbidContextSwitchInFutureHandler();
+bool IsContextSwitchInFutureHandlerForbidden();
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T>
 concept CFuture = NDetail::IsFuture<T>;
 
@@ -752,8 +760,6 @@ concept CFuture = NDetail::IsFuture<T>;
 
 //! Used for marking unused futures for easier search.
 #define YT_UNUSED_FUTURE(var) Y_UNUSED(var)
-
-////////////////////////////////////////////////////////////////////////////////
 
 #define FUTURE_INL_H_
 #include "future-inl.h"

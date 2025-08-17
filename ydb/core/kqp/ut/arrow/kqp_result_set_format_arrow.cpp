@@ -791,12 +791,12 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 std::make_pair("Uint64Value", TTypeInfo(NTypeIds::Uint64)),
                 std::make_pair("FloatValue", TTypeInfo(NTypeIds::Float)),
                 std::make_pair("DoubleValue", TTypeInfo(NTypeIds::Double)),
-                std::make_pair("DecimalValue", TTypeInfo(NTypeIds::Double)) // ydb/core/scheme_types/scheme_type_info.h:32
+                std::make_pair("DecimalValue", TTypeInfo(NScheme::TDecimalType(22, 2)))
             }));
 
-            builder.AddRow().AddNull().Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add<double>(7.77);
-            builder.AddRow().Add<bool>(false).Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add<double>(7.77);
-            builder.AddRow().Add<bool>(true).Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add<double>(7.77);
+            builder.AddRow().AddNull().Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add(TDecimalValue("7.77", 22, 2));
+            builder.AddRow().Add<bool>(false).Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add(TDecimalValue("7.77", 22, 2));
+            builder.AddRow().Add<bool>(true).Add<i8>(-1).Add<ui8>(1).Add<i16>(-2).Add<ui16>(2).Add<i32>(-3).Add<ui32>(3).Add<i64>(-4).Add<ui64>(4).Add<float>(5.0).Add<double>(6.0).Add(TDecimalValue("7.77", 22, 2));
 
             auto expected = builder.BuildArrow();
             UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected->ToString());

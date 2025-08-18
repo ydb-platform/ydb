@@ -218,7 +218,7 @@ static void EscapeNonUtf8(TString& s) {
     }
 }
 
-void EscapeNonUtf8LogParts(TAuditLogParts& parts) {
+void EscapeNonUtf8LogParts(TVector<std::pair<TString, TString>>& parts) {
     for (auto& [k, v] : parts) {
         EscapeNonUtf8(k);
         EscapeNonUtf8(v);

@@ -114,7 +114,7 @@ public:
         return backends;
     }
 
-    TString SendAuditLog(TAuditLogParts&& parts) { // Send log and wait for result
+    TString SendAuditLog(TVector<std::pair<TString, TString>>&& parts) { // Send log and wait for result
         NAudit::SendAuditLog(Runtime.SingleSys(), std::move(parts));
         return LogQueue->Pop();
     }
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
     Y_UNIT_TEST(LoggingTxt) {
         TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
 
-        TAuditLogParts parts = {
+        TVector<std::pair<TString, TString>> parts = {
             {"name", "value"},
             {"fe", "\xfe\xfe"},
         };
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
     Y_UNIT_TEST(LoggingJson) {
         TTestAuditLogService test(NKikimrConfig::TAuditConfig::JSON);
 
-        TAuditLogParts parts = {
+        TVector<std::pair<TString, TString>> parts = {
             {"name", "value"},
             {"fe", "\xfe\xfe"},
         };
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
     Y_UNIT_TEST(LoggingJsonLog) {
         TTestAuditLogService test(NKikimrConfig::TAuditConfig::JSON_LOG_COMPATIBLE);
 
-        TAuditLogParts parts = {
+        TVector<std::pair<TString, TString>> parts = {
             {"name", "value"},
             {"fe", "\xfe\xfe"},
         };

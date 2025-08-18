@@ -6,7 +6,7 @@ namespace NKikimr::NAudit {
 
 Y_UNIT_TEST_SUITE(EscapeNonUtf8LogPartsTest) {
     Y_UNIT_TEST(Escape) {
-        TAuditLogParts parts = {
+        TVector<std::pair<TString, TString>> parts = {
             {"name", "value"}, // utf8, OK
             {"", ""}, // utf8, OK
             {"valid-utf-8", "🤺 ברוך הבא"}, // nonusual, but valid utf8
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(EscapeNonUtf8LogPartsTest) {
         EscapeNonUtf8LogParts(parts);
 
 
-        TAuditLogParts expectedParts = {
+        TVector<std::pair<TString, TString>> expectedParts = {
             {"name", "value"},
             {"", ""},
             {"valid-utf-8", "🤺 ברוך הבא"},

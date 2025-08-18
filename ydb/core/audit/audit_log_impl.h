@@ -3,6 +3,6 @@
 
 namespace NKikimr::NAudit {
 
-void EscapeNonUtf8LogParts(TAuditLogParts& parts);
+void EscapeNonUtf8LogParts(TVector<std::pair<TString, TString>>& parts);
 
 } // namespace NKikimr::NAudit

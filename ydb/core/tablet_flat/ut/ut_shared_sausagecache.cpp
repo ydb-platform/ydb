@@ -5,6 +5,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/actors/wait_events.h>
 
 namespace NKikimr::NSharedCache {
 
@@ -233,7 +234,10 @@ void SetupSharedCache(TMyEnvBase& env, ui64 limit = 8_MB, bool resetMemoryLimit 
 // simulates other tablet shared cache usage
 void WakeupSharedCache(TMyEnvBase& env) {
     env->Send(MakeSharedPageCacheId(), TActorId{}, new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCManual)));
-    env.WaitForWakeUp();
+    TWaitForFirstEvent<TKikimrEvents::TEvWakeup>(*env, [&](const auto& ev) {
+        return ev->Get()->Tag == static_cast<ui64>(EWakeupTag::DoGCManual) 
+            && env->FindActorName(ev->GetRecipientRewrite()) == "SAUSAGE_CACHE";
+    }).Wait(TDuration::Seconds(5));
 }
 
 void DoReadRows(TMyEnvBase& env, TTxReadRows* read, bool retry = false) {

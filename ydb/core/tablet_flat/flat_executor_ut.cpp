@@ -591,6 +591,19 @@ THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
     return MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(env->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
 };
 
+void ZeroSharedCache(TMyEnvBase &env) {
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
+}
+
+// simulates other tablet shared cache usage
+void WakeupSharedCache(TMyEnvBase& env) {
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCManual)));
+    TWaitForFirstEvent<TKikimrEvents::TEvWakeup>(*env, [&](const auto& ev) {
+        return ev->Get()->Tag == static_cast<ui64>(EWakeupTag::DoGCManual) 
+            && env->FindActorName(ev->GetRecipientRewrite()) == "SAUSAGE_CACHE";
+    }).Wait(TDuration::Seconds(5));
+}
+
 /**
  * Test scan going in parallel with compactions.
  *
@@ -5600,15 +5613,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
         }
     };
 
-    void ZeroSharedCache(TMyEnvBase &env) {
-        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
-    }
-
-    // simulates other tablet shared cache usage
-    void WakeupSharedCache(TMyEnvBase& env) {
-        env->Send(MakeSharedPageCacheId(), TActorId{}, new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCManual)));
-    }
-
     Y_UNIT_TEST(CalculateReadSize_FlatIndex) {
         TMyEnvBase env;
         TRowsModel rows;
@@ -6336,15 +6340,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
-    
-    void ZeroSharedCache(TMyEnvBase &env) {
-        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
-    }
-
-    // simulates other tablet shared cache usage
-    void WakeupSharedCache(TMyEnvBase& env) {
-        env->Send(MakeSharedPageCacheId(), TActorId{}, new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCManual)));
-    }
 
     void DoFullScan(TMyEnvBase& env, int& failedAttempts, bool retry = false) {
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, retry);
@@ -6846,11 +6841,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         SetSharedCacheSize(env, 0_MB);
         SetSharedCacheSize(env, memoryLimit);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-    }
-
-    // simulates other tablet shared cache usage
-    void WakeupSharedCache(TMyEnvBase& env) {
-        env->Send(MakeSharedPageCacheId(), TActorId{}, new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCManual)));
     }
 
     void DoFullScan(TMyEnvBase& env, int& failedAttempts, bool retry = false) {

@@ -20,7 +20,8 @@ namespace NKikimr::NBlobDepot {
                 NumKeep = Request.Keep ? Request.Keep->size() : 0;
                 NumDoNotKeep = Request.DoNotKeep ? Request.DoNotKeep->size() : 0;
 
-                if (CheckBlockForTablet(Request.TabletId, Request.RecordGeneration) == NKikimrProto::OK) {
+                if (Request.IgnoreBlock || CheckBlockForTablet(Request.TabletId,
+                        Request.RecordGeneration) == NKikimrProto::OK) {
                     IssueCollectGarbage();
                 }
             }
@@ -52,6 +53,9 @@ namespace NKikimr::NBlobDepot {
                     record.SetHard(Request.Hard);
                     record.SetCollectGeneration(Request.CollectGeneration);
                     record.SetCollectStep(Request.CollectStep);
+                    if (Request.IgnoreBlock) {
+                        record.SetIgnoreBlock(true);
+                    }
 
                     BDEV_QUERY(BDEV04, "TEvCollectGarbage_barrier", (U.TabletId, Request.TabletId),
                         (U.Generation, Request.RecordGeneration), (U.PerGenerationCounter, Request.PerGenerationCounter),

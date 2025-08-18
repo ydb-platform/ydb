@@ -1797,13 +1797,31 @@ TUserTable::TPtr TDataShard::AlterTableSwitchCdcStreamState(
     return tableInfo;
 }
 
-TUserTable::TPtr TDataShard::AlterTableDropCdcStream(
+TUserTable::TPtr TDataShard::AlterTableDropCdcStreams(
     const TActorContext& ctx, TTransactionContext& txc,
     const TPathId& pathId, ui64 tableSchemaVersion,
-    const TPathId& streamPathId)
+    const TVector<TPathId>& streamPathIds)
 {
     auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
-    tableInfo->DropCdcStream(streamPathId);
+    for (const auto& streamPathId : streamPathIds) {
+        tableInfo->DropCdcStream(streamPathId);
+    }
+
+    NIceDb::TNiceDb db(txc.DB);
+    PersistUserTable(db, pathId.LocalPathId, *tableInfo);
+
+    return tableInfo;
+}
+
+TUserTable::TPtr TDataShard::AlterTableRotateCdcStream(
+    const TActorContext& ctx, TTransactionContext& txc,
+    const TPathId& pathId, ui64 tableSchemaVersion,
+    const TPathId& oldStreamPathId,
+    const NKikimrSchemeOp::TCdcStreamDescription& newStreamDesc)
+{
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    tableInfo->SwitchCdcStreamState(oldStreamPathId, NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled);
+    tableInfo->AddCdcStream(newStreamDesc);
 
     NIceDb::TNiceDb db(txc.DB);
     PersistUserTable(db, pathId.LocalPathId, *tableInfo);

@@ -12,6 +12,7 @@ namespace NActors {
     public:
         struct TKeys {
             enum E : int {
+                BridgePileName = 5,
                 DataCenter = 10,
                 Module = 20,
                 Rack = 30,
@@ -88,6 +89,17 @@ namespace NActors {
         TLegacyValue GetLegacyValue() const;
 
         const std::vector<std::pair<TKeys::E, TString>>& GetItems() const { return Items; }
+
+        const std::optional<TString> GetBridgePileName() const {
+            if (Items.empty()) {
+                return std::nullopt;
+            }
+
+            auto& [key, value] = Items.front();
+            return key == TKeys::BridgePileName
+                ? std::make_optional(value)
+                : std::nullopt;
+        }
 
         bool HasKey(TKeys::E key) const {
             auto comp = [](const auto& p, TKeys::E value) { return p.first < value; };
@@ -322,19 +334,23 @@ namespace NActors {
         };
 
         struct TEvCheckIncomingConnectionResult : TEventLocal<TEvCheckIncomingConnectionResult, EvCheckIncomingConnectionResult> {
-            std::variant<TString, THashMap<TString, TString>> Conclusion;
+            std::optional<TString> ErrorReason;
+            THashMap<TString, TString> ParamsToSend;
 
-            TEvCheckIncomingConnectionResult(std::variant<TString, THashMap<TString, TString>>&& conclusion)
-                : Conclusion(std::move(conclusion))
+            TEvCheckIncomingConnectionResult(std::optional<TString>&& errorReason, THashMap<TString, TString>&& paramsToSend)
+                : ErrorReason(std::move(errorReason))
+                , ParamsToSend(std::move(paramsToSend))
              {}
         };
 
         struct TEvNotifyOutgoingConnectionEstablished : TEventLocal<TEvNotifyOutgoingConnectionEstablished, EvNotifyOutgoingConnectionEstablished> {
             const ui32 PeerNodeId;
-            THashMap<TString, TString> Params; // parameters received upon successful handshake
+            const bool Success;
+            THashMap<TString, TString> Params;
 
-            TEvNotifyOutgoingConnectionEstablished(ui32 peerNodeId, THashMap<TString, TString>&& params)
+            TEvNotifyOutgoingConnectionEstablished(ui32 peerNodeId, const bool success, THashMap<TString, TString>&& params)
                 : PeerNodeId(peerNodeId)
+                , Success(success)
                 , Params(std::move(params))
             {}
         };

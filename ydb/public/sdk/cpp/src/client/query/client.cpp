@@ -858,8 +858,8 @@ public:
 
 private:
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
-    std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
-    std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
+    mutable std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
+    mutable std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
 
     std::mutex PrecommitCallbacksMutex;
     std::mutex OnFailureCallbacksMutex;

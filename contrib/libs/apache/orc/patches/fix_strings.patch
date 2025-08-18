@@ -1,0 +1,36 @@
+--- a/c++/include/orc/Common.hh
++++ b/c++/include/orc/Common.hh
+@@ -23,10 +23,14 @@
+ #include "orc/Type.hh"
+ #include "orc/Vector.hh"
+
++#include <google/protobuf/message.h>
++
+ #include <string>
+
+ namespace orc {
+
++  using TProtobufString = decltype(std::declval<::google::protobuf::MessageLite>().GetTypeName());
++
+   class FileVersion {
+    private:
+     uint32_t majorVersion;
+--- a/c++/src/Reader.cc
++++ b/c++/src/Reader.cc
+@@ -566,4 +566,4 @@ namespace orc {
+-    std::string result;
++    TProtobufString result;
+     if (!tail.SerializeToString(&result)) {
+       throw ParseError("Failed to serialize file tail");
+     }
+--- a/c++/src/sargs/PredicateLeaf.cc
++++ b/c++/src/sargs/PredicateLeaf.cc
+@@ -533,5 +533,5 @@ namespace orc {
+-  static std::vector<std::string> literal2String(const std::vector<Literal>& values) {
++  static std::vector<TProtobufString> literal2String(const std::vector<Literal>& values) {
+-    std::vector<std::string> result;
++    std::vector<TProtobufString> result;
+     std::for_each(values.cbegin(), values.cend(), [&](const Literal& val) {
+       if (!val.isNull()) {
+-        result.emplace_back(val.getString());
++        result.emplace_back(TProtobufString(val.getString()));

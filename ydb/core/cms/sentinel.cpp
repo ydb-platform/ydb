@@ -8,6 +8,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -18,6 +19,7 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
+
 
 namespace NKikimr::NCms {
 
@@ -40,6 +42,46 @@ namespace NKikimr::NCms {
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << stream)
 
 namespace NSentinel {
+
+/// TNodeStatusComputer
+
+ui32 TNodeStatusComputer::GetCurrentNodeState() const {
+    return (ui32)(ActualState == ENodeState::PRETTY_GOOD ? ENodeState::GOOD : ActualState);
+}
+
+bool TNodeStatusComputer::Compute() {
+    if (DefinitelyBad() || DefinitelyGood()) {
+        if(ActualState != CurrentState) {
+            ActualState = CurrentState;
+            return true;
+        }
+        return false;
+    }
+    if (MaybeBad()) {
+        ActualState = ENodeState::MAY_BE_BAD;
+        return false;
+    }
+    if (PrettyGood()) {
+        ActualState = ENodeState::PRETTY_GOOD;
+        return false;
+    }
+    if (MaybeGood()) {
+        ActualState = ENodeState::MAY_BE_GOOD;
+        return false;
+    }
+    return false;
+}
+
+void TNodeStatusComputer::AddState(ENodeState newState) {
+    if (newState == CurrentState) {
+        if (StateCounter != Max<ui64>()) {
+            StateCounter++;
+        }
+    } else {
+        CurrentState = newState;
+        StateCounter = 1;
+    }
+}
 
 /// TPDiskStatusComputer
 
@@ -270,7 +312,7 @@ TClusterMap::TClusterMap(TSentinelState::TPtr state)
 
 void TClusterMap::AddPDisk(const TPDiskID& id, const bool inGoodState) {
     Y_ABORT_UNLESS(State->Nodes.contains(id.NodeId));
-    const auto& node = State->Nodes[id.NodeId];
+    const auto& node = State->Nodes.at(id.NodeId);
     const auto& location = node.Location;
 
     ByDataCenter[location.HasKey(TNodeLocation::TKeys::DataCenter) ? location.GetDataCenterId() : ""].insert(id);
@@ -520,21 +562,29 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
         }
 
         if (record.HasState()) {
-            SentinelState->Nodes.clear();
+            std::unordered_set<ui32> nodesToDelete;
+            for (const auto& [nodeId, _] : SentinelState->Nodes) {
+                nodesToDelete.insert(nodeId);
+            }
             for (const auto& host : record.GetState().GetHosts()) {
                 if (host.HasNodeId() && host.HasLocation() && host.HasName()) {
                     THashSet<NKikimrCms::EMarker> markers;
                     for (auto marker : host.GetMarkers()) {
                         markers.insert(static_cast<NKikimrCms::EMarker>(marker));
                     }
-
-                    SentinelState->Nodes.emplace(host.GetNodeId(), TNodeInfo{
-                        .Host = host.GetName(),
-                        .Location = NActors::TNodeLocation(host.GetLocation()),
-                        .PileId = host.HasPileId() ? TMaybeFail<ui32>(host.GetPileId()) : Nothing(),
-                        .Markers = std::move(markers),
-                    });
+                    auto &node = SentinelState->Nodes[host.GetNodeId()];
+                    nodesToDelete.erase(host.GetNodeId());
+                    node.Host = host.GetName();
+                    node.Location = NActors::TNodeLocation(host.GetLocation());
+                    node.PileId = host.HasPileId() ? TMaybeFail<ui32>(host.GetPileId()) : Nothing();
+                    node.Markers = std::move(markers);
+                    node.BadStateLimit = Config.StateStorageSelfHealConfig.NodeBadStateLimit;
+                    node.GoodStateLimit = Config.StateStorageSelfHealConfig.NodeGoodStateLimit;
+                    node.PrettyGoodStateLimit = Config.StateStorageSelfHealConfig.NodePrettyGoodStateLimit;
                 }
+            }
+            for (const auto nodeId : nodesToDelete) {
+                SentinelState->Nodes.erase(nodeId);
             }
         }
 
@@ -678,6 +728,13 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         return false;
     }
 
+    void MarkNode(ui32 nodeId, TNodeInfo::ENodeState status) {
+        auto node = SentinelState->Nodes.find(nodeId);
+        if (node != SentinelState->Nodes.end()) {
+            node->second.AddState(status);
+        }
+    }
+
     void MarkNodePDisks(ui32 nodeId, EPDiskState state, bool skipTouched = false) {
         bool isNodeLocked = IsNodeLocked(nodeId);
         auto it = SentinelState->PDisks.lower_bound(TPDiskID(nodeId, 0));
@@ -686,7 +743,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 ++it;
                 continue;
             }
-            
+
             Y_ABORT_UNLESS(!it->second->IsTouched());
             it->second->AddState(state, isNodeLocked);
             ++it;
@@ -716,6 +773,8 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 << ": nodeId# " << nodeId);
             return;
         }
+
+        MarkNode(nodeId, TNodeInfo::ENodeState::GOOD);
 
         if (!record.PDiskStateInfoSize()) {
             LOG_E("There is no pdisk info"
@@ -761,6 +820,8 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             return;
         }
 
+        MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
+
         LOG_E("Cannot get pdisks state"
             << ": nodeId# " << nodeId
             << ", reason# " << reason);
@@ -786,6 +847,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             const ui32 nodeId = *SentinelState->StateUpdaterWaitNodes.begin();
 
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Timeout);
+            MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
             AcceptNodeReply(nodeId);
         }
 
@@ -804,9 +866,9 @@ public:
     using TBase::TBase;
 
     void Bootstrap() {
-        for (const auto& [id, _] : SentinelState->PDisks) {
-            if (SentinelState->StateUpdaterWaitNodes.insert(id.NodeId).second) {
-                RequestPDiskState(id.NodeId);
+        for (const auto& [nodeId, _] : SentinelState->Nodes) {
+            if (SentinelState->StateUpdaterWaitNodes.insert(nodeId).second) {
+                RequestPDiskState(nodeId);
             }
         }
 
@@ -1080,6 +1142,31 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         );
 
         SendBSCRequests();
+        SendDistconfRequest();
+    }
+
+    void SendDistconfRequest() {
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto* updateRequest = request->Record.MutableSelfHealNodesStateUpdate();
+        updateRequest->SetWaitForConfigStep(Config.StateStorageSelfHealConfig.WaitForConfigStep.GetValue() / 1000000); // milliseconds -> seconds
+        updateRequest->SetEnableSelfHealStateStorage(Config.StateStorageSelfHealConfig.Enable);
+        updateRequest->SetPileupReplicas(Config.StateStorageSelfHealConfig.PileupReplicas);
+        for (auto& [nodeId, node] : SentinelState->Nodes) {
+            SentinelState->NeedSelfHealStateStorage |= node.Compute();
+            auto* nodeState = updateRequest->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(node.GetCurrentNodeState());
+        }
+        if (SentinelState->LastStateStorageSelfHeal == TInstant::Zero()) {
+            SentinelState->LastStateStorageSelfHeal = Now();
+        }
+        if (SentinelState->NeedSelfHealStateStorage
+            && (Now() - SentinelState->LastStateStorageSelfHeal > Config.StateStorageSelfHealConfig.RelaxTime)) {
+            SentinelState->NeedSelfHealStateStorage = false;
+            LOG_D("Sending self heal request");
+            SentinelState->LastStateStorageSelfHeal = Now();
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        }
     }
 
     void SendBSCRequests() {

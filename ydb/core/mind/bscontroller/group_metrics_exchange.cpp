@@ -40,7 +40,7 @@ namespace NKikimr::NBsController {
                     if (TGroupInfo *group = Self->FindGroup(TGroupId::FromValue(groupId))) {
                         auto *item = outRecord.AddGroupMetrics();
                         item->SetGroupId(group->ID.GetRawId());
-                        group->FillInGroupParameters(item->MutableGroupParameters());
+                        group->FillInGroupParameters(item->MutableGroupParameters(), Self);
                     }
                 }
             }

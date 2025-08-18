@@ -90,6 +90,7 @@ class TController::TTxInit: public TTxBase {
             );
             const auto transformLambda = rowset.GetValue<Schema::Targets::TransformLambda>();
             const auto runAsUser = rowset.GetValue<Schema::Targets::RunAsUser>();
+            const auto directoryPath = rowset.GetValue<Schema::Targets::DirectoryPath>();
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
@@ -105,7 +106,7 @@ class TController::TTxInit: public TTxBase {
                     break;
 
                 case TReplication::ETargetKind::Transfer:
-                    config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, transformLambda, runAsUser);
+                    config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, transformLambda, runAsUser, directoryPath);
                     break;
             }
 

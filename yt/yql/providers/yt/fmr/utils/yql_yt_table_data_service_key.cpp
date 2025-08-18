@@ -4,16 +4,15 @@
 
 namespace NYql::NFmr {
 
-TString GetTableDataServiceKey(const TString& tableId, const TString& partId, ui64 chunk) {
-    return TStringBuilder() << tableId << "_" << partId << ":" << chunk;
+TString GetTableDataServiceGroup(const TString& tableId, const TString& partId) {
+    return TStringBuilder() << tableId << "_" << partId;
 }
 
-std::pair<TString, ui64> GetTableDataServiceGroupAndChunk(const TString& fullKey) {
-    std::vector<TString> splittedKey;
-    StringSplitter(fullKey).Split(':').AddTo(&splittedKey);
-    YQL_ENSURE(splittedKey.size() == 2);
-    ui64 chunkNum = FromString<ui64>(splittedKey[1]);
-    return {splittedKey[0], chunkNum};
+TString GetTableDataServiceChunkId(ui64 chunkNum, const TString& columnGroupName) {
+    if (columnGroupName.empty()) {
+        return ToString(chunkNum);
+    }
+    return TStringBuilder() << columnGroupName << "_" << chunkNum;
 }
 
 } // namespace NYql::NFmr

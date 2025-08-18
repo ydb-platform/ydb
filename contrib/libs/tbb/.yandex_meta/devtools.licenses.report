@@ -102,7 +102,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [65:66]
+        README.md [66:67]
 
 SKIP     LicenseRef-scancode-free-unknown 9accd516d3540c66a5ed71248361870b
 BELONGS ya.make

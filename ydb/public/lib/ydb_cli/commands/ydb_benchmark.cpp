@@ -564,7 +564,7 @@ void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmar
     TResultSetPrinter printer(TResultSetPrinter::TSettings()
         .SetOutput(&out)
         .SetMaxRowsCount(std::max(StringSplitter(expected.c_str()).Split('\n').Count(), (size_t)100))
-        .SetFormat(EDataFormat::Pretty).SetMaxWidth(120)
+        .SetFormat(EDataFormat::Pretty).SetMaxWidth(GetBenchmarkTableWidth())
     );
     for (const auto& [i, rr]: res.GetRawResults()) {
         for(const auto& r: rr) {
@@ -584,7 +584,7 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
     if (res.GetQueryPlan()) {
         {
             TFileOutput out(planFName + "table");
-            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out);
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out, GetBenchmarkTableWidth());
             queryPlanPrinter.Print(res.GetQueryPlan());
         }
         {

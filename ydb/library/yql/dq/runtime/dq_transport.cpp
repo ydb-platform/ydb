@@ -19,7 +19,7 @@ using namespace NYql;
 
 namespace {
 
-TDqSerializedBatch SerializeValue(NDqProto::EDataTransportVersion version, const TType* type, const NUdf::TUnboxedValuePod& value) {
+TDqSerializedBatch SerializeValue(NDqProto::EDataTransportVersion version, const TType* type, const NUdf::TUnboxedValuePod& value, EValuePackerVersion packerVersion) {
     TChunkedBuffer packResult;
     switch (version) {
         case NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED:
@@ -27,13 +27,13 @@ TDqSerializedBatch SerializeValue(NDqProto::EDataTransportVersion version, const
             [[fallthrough]];
         case NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0:
         case NDqProto::DATA_TRANSPORT_OOB_PICKLE_1_0: {
-            TValuePackerTransport<false> packer(/* stable */ false, type);
+            TValuePackerTransport<false> packer(/* stable */ false, type, packerVersion);
             packResult = packer.Pack(value);
             break;
         }
         case NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0:
         case NDqProto::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0: {
-            TValuePackerTransport<true> packer(/* stable */ false, type);
+            TValuePackerTransport<true> packer(/* stable */ false, type, packerVersion);
             packResult = packer.Pack(value);
             break;
         }
@@ -50,10 +50,10 @@ TDqSerializedBatch SerializeValue(NDqProto::EDataTransportVersion version, const
 }
 
 template<bool Fast>
-TChunkedBuffer DoSerializeBuffer(const TType* type, const TUnboxedValueBatch& buffer) {
+TChunkedBuffer DoSerializeBuffer(const TType* type, const TUnboxedValueBatch& buffer, EValuePackerVersion packerVersion) {
     using TPacker = TValuePackerTransport<Fast>;
 
-    TPacker packer(/* stable */ false, type);
+    TPacker packer(/* stable */ false, type, packerVersion);
     if (type->IsMulti()) {
         buffer.ForEachRowWide([&packer](const auto* values, ui32 width) {
             packer.AddWideItem(values, width);
@@ -66,7 +66,7 @@ TChunkedBuffer DoSerializeBuffer(const TType* type, const TUnboxedValueBatch& bu
     return packer.Finish();
 }
 
-TDqSerializedBatch SerializeBuffer(NDqProto::EDataTransportVersion version, const TType* type, const TUnboxedValueBatch& buffer) {
+TDqSerializedBatch SerializeBuffer(NDqProto::EDataTransportVersion version, const TType* type, const TUnboxedValueBatch& buffer, EValuePackerVersion packerVersion) {
     TChunkedBuffer packResult;
     switch (version) {
         case NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED:
@@ -74,12 +74,12 @@ TDqSerializedBatch SerializeBuffer(NDqProto::EDataTransportVersion version, cons
             [[fallthrough]];
         case NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0:
         case NDqProto::DATA_TRANSPORT_OOB_PICKLE_1_0: {
-            packResult = DoSerializeBuffer<false>(type, buffer);
+            packResult = DoSerializeBuffer<false>(type, buffer, packerVersion);
             break;
         }
         case NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0:
         case NDqProto::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0: {
-            packResult = DoSerializeBuffer<true>(type, buffer);
+            packResult = DoSerializeBuffer<true>(type, buffer, packerVersion);
             break;
         }
         default:
@@ -95,18 +95,18 @@ TDqSerializedBatch SerializeBuffer(NDqProto::EDataTransportVersion version, cons
 }
 
 template<bool Fast>
-void DeserializeValue(const TType* type, TChunkedBuffer&& data, const THolderFactory& holderFactory, NUdf::TUnboxedValue& value)
+void DeserializeValue(const TType* type, TChunkedBuffer&& data, const THolderFactory& holderFactory, NUdf::TUnboxedValue& value, EValuePackerVersion packerVersion)
 {
     using TPacker = TValuePackerTransport<Fast>;
-    TPacker packer(/* stable */ false, type);
+    TPacker packer(/* stable */ false, type, packerVersion);
     value = packer.Unpack(std::move(data), holderFactory);
 }
 
 template<bool Fast>
-void DeserializeBuffer(const TType* itemType, TChunkedBuffer&& data, const THolderFactory& holderFactory, TUnboxedValueBatch& buffer)
+void DeserializeBuffer(const TType* itemType, TChunkedBuffer&& data, const THolderFactory& holderFactory, TUnboxedValueBatch& buffer, EValuePackerVersion packerVersion)
 {
     using TPacker = TValuePackerTransport<Fast>;
-    TPacker packer(/* stable */ false, itemType);
+    TPacker packer(/* stable */ false, itemType, packerVersion);
     packer.UnpackBatch(std::move(data), holderFactory, buffer);
 }
 
@@ -118,14 +118,14 @@ NDqProto::EDataTransportVersion TDqDataSerializer::GetTransportVersion() const {
 
 TDqSerializedBatch TDqDataSerializer::Serialize(const NUdf::TUnboxedValue& value, const TType* itemType) const {
     auto guard = TypeEnv.BindAllocator();
-    return SerializeValue(TransportVersion, itemType, value);
+    return SerializeValue(TransportVersion, itemType, value, ValuePackerVersion);
 }
 
 TDqSerializedBatch TDqDataSerializer::Serialize(const NKikimr::NMiniKQL::TUnboxedValueBatch& buffer,
     const NKikimr::NMiniKQL::TType* itemType) const
 {
     auto guard = TypeEnv.BindAllocator();
-    return SerializeBuffer(TransportVersion, itemType, buffer);
+    return SerializeBuffer(TransportVersion, itemType, buffer, ValuePackerVersion);
 }
 
 void TDqDataSerializer::Deserialize(TDqSerializedBatch&& data, const TType* itemType, TUnboxedValueBatch& buffer) const
@@ -135,10 +135,10 @@ void TDqDataSerializer::Deserialize(TDqSerializedBatch&& data, const TType* item
         case NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED:
         case NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0:
         case NDqProto::DATA_TRANSPORT_OOB_PICKLE_1_0:
-            return DeserializeBuffer<false>(itemType, data.PullPayload(), HolderFactory, buffer);
+            return DeserializeBuffer<false>(itemType, data.PullPayload(), HolderFactory, buffer, ValuePackerVersion);
         case NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0:
         case NDqProto::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0:
-            return DeserializeBuffer<true>(itemType, data.PullPayload(), HolderFactory, buffer);
+            return DeserializeBuffer<true>(itemType, data.PullPayload(), HolderFactory, buffer, ValuePackerVersion);
         default:
             YQL_ENSURE(false, "Unsupported TransportVersion");
     }
@@ -151,10 +151,10 @@ void TDqDataSerializer::Deserialize(TDqSerializedBatch&& data, const TType* item
         case NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED:
         case NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0:
         case NDqProto::DATA_TRANSPORT_OOB_PICKLE_1_0:
-            return DeserializeValue<false>(itemType, data.PullPayload(), HolderFactory, value);
+            return DeserializeValue<false>(itemType, data.PullPayload(), HolderFactory, value, ValuePackerVersion);
         case NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0:
         case NDqProto::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0:
-            return DeserializeValue<true>(itemType, data.PullPayload(), HolderFactory, value);
+            return DeserializeValue<true>(itemType, data.PullPayload(), HolderFactory, value, ValuePackerVersion);
         default:
             YQL_ENSURE(false, "Unsupported TransportVersion");
     }

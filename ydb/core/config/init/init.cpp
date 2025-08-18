@@ -168,9 +168,6 @@ class TDefaultNodeBrokerClient
                         nodeInfo.SetName(TString{result.GetNodeName()});
                         outNodeName = result.GetNodeName();
                     }
-                    if (node.BridgePileId) {
-                        nodeInfo.SetBridgePileId(*node.BridgePileId);
-                    }
                 } else {
                     auto &info = *nsConfig.AddNode();
                     info.SetNodeId(node.NodeId);
@@ -179,9 +176,6 @@ class TDefaultNodeBrokerClient
                     info.SetHost(TString{node.Host});
                     info.SetInterconnectHost(TString{node.ResolveHost});
                     NConfig::CopyNodeLocation(info.MutableLocation(), node.Location);
-                    if (node.BridgePileId && appConfig.HasBridgeConfig()) {
-                        info.SetBridgePileName(appConfig.GetBridgeConfig().GetPiles(*node.BridgePileId).GetName());
-                    }
                 }
             }
         }
@@ -262,9 +256,6 @@ class TDefaultNodeBrokerClient
         result.FixedNodeId(settings.FixedNodeID);
         if (settings.Path) {
             result.Path(*settings.Path);
-        }
-        if (settings.BridgePileName) {
-            result.BridgePileName(*settings.BridgePileName);
         }
 
         auto loc = settings.Location;
@@ -636,6 +627,9 @@ void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDisc
     if (src.Body) {
         dst->SetBody(src.Body.value());
     }
+    if (src.BridgePileName) {
+        dst->SetBridgePileName(TString{src.BridgePileName.value()});
+    }
     if (src.DataCenter) {
         dst->SetDataCenter(TString{src.DataCenter.value()});
     }
@@ -665,6 +659,9 @@ void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterco
     }
     if (src.HasBody()) {
         dst->Body = src.GetBody();
+    }
+    if (src.HasBridgePileName()) {
+        dst->BridgePileName = src.GetBridgePileName();
     }
     if (src.HasDataCenter()) {
         dst->DataCenter = src.GetDataCenter();

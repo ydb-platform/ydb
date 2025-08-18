@@ -714,8 +714,16 @@ public:
     {}
 
 private:
-    const TString* GetGenericKey() const final {
-        return Column_;
+    TMaybe<TString> GetGenericKey() const final {
+        if (!Column_) {
+            return Nothing();
+        }
+
+        TStringBuilder key;
+        if (Source_) {
+            key << *Source_ << ".";
+        }
+        return key << *Column_;
     }
 
     void Join(IAggregation* aggr) final {
@@ -736,7 +744,16 @@ private:
         }
 
         if (!isFactory) {
-            Column_ = exprs.front()->GetColumnName();
+            Source_ = Nothing();
+            Column_ = Nothing();
+
+            const auto& expr = exprs.front();
+            if (const TString* source = expr->GetSourceName()) {
+                Source_ = *source;
+            }
+            if (const TString* column = expr->GetColumnName()) {
+                Column_ = *column;
+            }
         }
 
         if (!TAggregationFactory::InitAggr(ctx, isFactory, src, node, isFactory ? TVector<TNodePtr>() : TVector<TNodePtr>(1, exprs.front())))
@@ -828,7 +845,8 @@ private:
     TSourcePtr FakeSource_;
     std::multimap<TString, TNodePtr> Percentiles_;
     TNodePtr FactoryPercentile_;
-    const TString* Column_ = nullptr;
+    TMaybe<TString> Source_;
+    TMaybe<TString> Column_;
 };
 
 TAggregationPtr BuildPercentileFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {

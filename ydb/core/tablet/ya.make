@@ -58,6 +58,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/actors/helpers
     ydb/library/actors/protos

@@ -1120,7 +1120,8 @@ void TTransaction::DoValidateActive()
         THROW_ERROR_EXCEPTION(
             NTransactionClient::EErrorCode::InvalidTransactionState,
             "Transaction %v is not active",
-            GetId());
+            GetId())
+            << TErrorAttribute("state", State_);
     }
 }
 

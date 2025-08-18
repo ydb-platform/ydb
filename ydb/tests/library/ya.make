@@ -76,6 +76,7 @@ PEERDIR(
     contrib/python/importlib-resources
     contrib/python/protobuf
     contrib/python/pytest
+    contrib/python/requests
     contrib/python/setuptools
     contrib/python/six
     ydb/public/sdk/python

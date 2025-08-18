@@ -32,8 +32,6 @@ class TMockClient
     : public IClient
 {
 public:
-    using TRange = std::pair<int, int>;
-
     const NTabletClient::ITableMountCachePtr& GetTableMountCache() override;
     void SetTableMountCache(NTabletClient::ITableMountCachePtr value);
 
@@ -904,7 +902,7 @@ public:
     MOCK_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<TRange> writerIndexRange,
+        std::optional<TIndexRange> writerIndexRange,
         const TShuffleReaderOptions& options),
         (override));
 

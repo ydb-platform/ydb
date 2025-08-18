@@ -4,19 +4,13 @@
 #include "private.h"
 #include "serialize.h"
 
-#include <yt/yt/core/logging/log.h>
-
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/serialize.h>
 
 namespace NYT::NTableClient {
 
-using namespace NLogging;
 using namespace NYson;
 using namespace NYTree;
-
-//! Used only for YT_LOG_FATAL below.
-constinit const auto Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,20 +33,20 @@ int TComparator::GetLength() const
 
 void TComparator::ValidateKey(const TKey& key) const
 {
-    YT_LOG_FATAL_IF(
+    THROW_ERROR_EXCEPTION_IF(
         key.GetLength() != GetLength(),
-        "Comparator is used with key of different length (Key: %v, Comparator: %v)",
-        key,
-        *this);
+        "Comparator %v is used with key %v of different length",
+        *this,
+        key);
 }
 
 void TComparator::ValidateKeyBound(const TKeyBound& keyBound) const
 {
-    YT_LOG_FATAL_IF(
+    THROW_ERROR_EXCEPTION_IF(
         static_cast<int>(keyBound.Prefix.GetCount()) > GetLength(),
-        "Comparator is used with longer key bound (KeyBound: %v, Comparator: %v)",
-        keyBound,
-        *this);
+        "Comparator %v is used with longer key bound %v",
+        *this,
+        keyBound);
 }
 
 int TComparator::CompareValues(int index, const TUnversionedValue& lhs, const TUnversionedValue& rhs) const

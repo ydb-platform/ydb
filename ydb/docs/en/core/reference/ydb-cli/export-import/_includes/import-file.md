@@ -10,6 +10,14 @@ If the table already includes data, it's replaced by imported data on primary ke
 
 The imported file must be in the [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding. Line feeds aren't supported in the data field.
 
+{% note info %}
+
+If the table doesn't exist yet, you can use the [{{ ydb-cli }} tools infer csv](../../tools-infer.md) command to generate the `CREATE TABLE` statement based on an existing CSV file.
+
+You can also try to import into a non-existent table. In that case, the command will suggest running [{{ ydb-cli }} tools infer csv](../../tools-infer.md) with the correct options.
+
+{% endnote %}
+
 General format of the command:
 
 ```bash

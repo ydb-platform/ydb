@@ -34,11 +34,6 @@ namespace NKikimr::NSharedCache {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
 
-    enum class ECacheMode {
-        Regular,
-        TryKeepInMemory,
-    };
-
     struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {
     };
 
@@ -83,23 +78,28 @@ namespace NKikimr::NSharedCache {
     };
 
     struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
-        const EPriority Priority;
-        TAutoPtr<NPageCollection::TFetch> Fetch;
-
-        TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch)
+        TEvRequest(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TVector<TPageId> pages, ui64 cookie = 0)
             : Priority(priority)
-            , Fetch(fetch)
-        {
-        }
+            , PageCollection(std::move(pageCollection))
+            , Pages(std::move(pages))
+            , Cookie(cookie)
+        { }
+
+        const EPriority Priority;
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TPageId> Pages;
+        TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
+        NWilson::TTraceId TraceId;
+        const ui64 Cookie;
     };
 
     struct TEvResult : public TEventLocal<TEvResult, EvResult> {
         using EStatus = NKikimrProto::EReplyStatus;
 
-        TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ui64 cookie, EStatus status)
+        TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, EStatus status, ui64 cookie)
             : Status(status)
+            , PageCollection(std::move(pageCollection))
             , Cookie(cookie)
-            , PageCollection(pageCollection)
         { }
 
         void Describe(IOutputStream &out) const
@@ -120,19 +120,20 @@ namespace NKikimr::NSharedCache {
         }
 
         struct TLoaded {
-            TLoaded(ui32 pageId, TSharedPageRef page)
+            TLoaded(TPageId pageId, TSharedPageRef page)
                 : PageId(pageId)
                 , Page(std::move(page))
             { }
 
-            ui32 PageId;
+            TPageId PageId;
             TSharedPageRef Page;
         };
 
         const EStatus Status;
-        const ui64 Cookie;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TVector<TLoaded> Pages;
+        TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
+        const ui64 Cookie;
     };
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {

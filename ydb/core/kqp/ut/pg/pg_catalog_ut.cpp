@@ -52,9 +52,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
 
         {
             // Base checks
-            auto serverSettings = TKikimrSettings()
-                .SetAppConfig(appConfig)
-                .SetKqpSettings({setting});
+            auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
 
             TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
             auto db = kikimr.GetQueryClient();
@@ -119,8 +117,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         {
             // Check for disabled ast cache
             appConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
-            auto serverSettings = TKikimrSettings()
-                .SetAppConfig(appConfig)
+            auto serverSettings = TKikimrSettings(appConfig)
                 .SetKqpSettings({setting});
             TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
             auto db = kikimr.GetQueryClient();
@@ -212,9 +209,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         {
             // Check for enabled ast cache
             appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-            auto serverSettings = TKikimrSettings()
-                .SetAppConfig(appConfig)
-                .SetKqpSettings({setting});
+            auto serverSettings = TKikimrSettings(appConfig).SetKqpSettings({setting});
             TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
             auto db = kikimr.GetQueryClient();
             auto session = db.GetSession().GetValueSync().GetSession();
@@ -288,8 +283,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
             // Check enable per statement
             appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
             appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-            auto serverSettings = TKikimrSettings()
-                .SetAppConfig(appConfig)
+            auto serverSettings = TKikimrSettings(appConfig)
                 .SetKqpSettings({setting});
 
             TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
@@ -355,7 +349,7 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
     Y_UNIT_TEST_TWIN(PgDatabase, useSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
         {

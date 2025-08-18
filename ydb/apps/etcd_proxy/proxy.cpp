@@ -55,6 +55,7 @@ int TProxy::Discovery() {
 
         const auto driver = NYdb::TDriver(config);
         Stuff->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
+        Stuff->TopicClient = std::make_unique<NYdb::NTopic::TTopicClient>(driver);
         return 0;
     } else {
         std::cout << res.GetIssues().ToString() << std::endl;
@@ -345,6 +346,7 @@ TProxy::TProxy(int argc, char** argv)
     }
 
     if (!Folder.empty()) {
+        Stuff->Folder = Folder;
         std::ostringstream prefix;
         prefix << "pragma TablePathPrefix = '" << Database << Folder << "';" << std::endl;
         Stuff->TablePrefix = prefix.str();

@@ -18,6 +18,7 @@
 
 #include <util/string/vector.h>
 #include <util/generic/size_literals.h>
+#include <algorithm>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -26,6 +27,37 @@ using namespace NActors;
 using namespace Ydb;
 
 namespace {
+
+std::shared_ptr<arrow::RecordBatch> ConvertDecimalToFixedSizeBinaryBatch(std::shared_ptr<arrow::RecordBatch> batch) {
+    if (!batch) {
+        return batch;
+    }
+
+    bool needConversion = std::any_of(batch->columns().begin(), batch->columns().end(),
+        [](const auto& column) { return column->type()->id() == arrow::Type::DECIMAL128; });
+
+    if (!needConversion) {
+        return batch;
+    }
+
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    fields.reserve(batch->num_columns());
+    columns.reserve(batch->num_columns());
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
+        auto field = batch->schema()->field(i);
+        auto column = batch->column(i);
+        if (column->type()->id() == arrow::Type::DECIMAL128) {
+            const_cast<arrow::ArrayData*>(column->data().get())->type = arrow::fixed_size_binary(16);
+            field = field->WithType(arrow::fixed_size_binary(16));
+        }
+
+        fields.push_back(std::move(field));
+        columns.push_back(std::move(column));
+    }
+
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), batch->num_rows(), std::move(columns));
+}
 
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
 bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) {
@@ -279,6 +311,7 @@ private:
 
     bool ExtractBatch(TString& errorMessage) override {
         Batch = RowsToBatch(AllRows, errorMessage);
+        Batch = ConvertDecimalToFixedSizeBinaryBatch(Batch);
         return Batch.get();
     }
 
@@ -463,6 +496,8 @@ private:
                     errorMessage = "Cannot deserialize arrow batch with specified schema";
                     return false;
                 }
+
+                Batch = ConvertDecimalToFixedSizeBinaryBatch(Batch);
                 break;
             }
             case EUploadSource::CSV:
@@ -484,6 +519,7 @@ private:
                     return false;
                 }
 
+                Batch = ConvertDecimalToFixedSizeBinaryBatch(Batch);
                 break;
             }
         }

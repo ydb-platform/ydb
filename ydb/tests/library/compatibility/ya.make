@@ -1,4 +1,5 @@
 RECURSE(binaries)
+RECURSE(configs)
 
 PY23_LIBRARY()
 

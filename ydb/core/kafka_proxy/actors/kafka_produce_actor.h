@@ -170,6 +170,7 @@ private:
         TString TopicPath;
         ui32 PartitionId;
         size_t Position;
+        bool RuPerRequest;
 
         TPendingRequest::TPtr Request;
     };
@@ -196,6 +197,14 @@ private:
     std::unordered_map<TString, std::unordered_map<ui32, TWriterInfo>> NonTransactionalWriters;
     std::unordered_map<TTopicPartition, TWriterInfo, TTopicPartitionHashFn> TransactionalWriters;
 
+    void RecreatePartitionWriterAndRetry(ui64 cookie, const TActorContext& ctx);
+    void SendWriteRequest(const TProduceRequestData::TTopicProduceData::TPartitionProduceData& partitionData,
+                            const TString& topicName,
+                            TPendingRequest::TPtr pendingRequest,
+                            size_t position,
+                            bool& ruPerRequest,
+                            const TActorContext& ctx
+                        );
     void CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateNonTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);

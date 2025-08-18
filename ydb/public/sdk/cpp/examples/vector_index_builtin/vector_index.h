@@ -22,7 +22,12 @@ void DropVectorTable(NYdb::NQuery::TQueryClient& client, const std::string& tabl
 
 void CreateVectorTable(NYdb::NQuery::TQueryClient& client, const std::string& tableName);
 
-void InsertItems(
+void InsertItemsAsBytes(
+    NYdb::NQuery::TQueryClient& client,
+    const std::string& tableName,
+    const std::vector<TItem>& items);
+
+void InsertItemsAsFloatList(
     NYdb::NQuery::TQueryClient& client,
     const std::string& tableName,
     const std::vector<TItem>& items);
@@ -38,7 +43,15 @@ void AddIndex(
     std::uint64_t levels,
     std::uint64_t clusters);
 
-std::vector<TResultItem> SearchItems(
+std::vector<TResultItem> SearchItemsAsBytes(
+    NYdb::NQuery::TQueryClient& client,
+    const std::string& tableName,
+    const std::vector<float>& embedding,
+    const std::string& strategy,
+    std::uint64_t limit,
+    const std::optional<std::string>& indexName = std::nullopt);
+
+std::vector<TResultItem> SearchItemsAsFloatList(
     NYdb::NQuery::TQueryClient& client,
     const std::string& tableName,
     const std::vector<float>& embedding,

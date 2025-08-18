@@ -527,7 +527,7 @@ void TTableLocks::AddShardLock(TLockInfo* lock) {
 void TTableLocks::AddPointLock(const TPointKey& point, TLockInfo* lock) {
     Y_ENSURE(lock->MayHavePointsAndRanges());
     Y_ENSURE(point.Table == this);
-    TRangeTreeBase::TOwnedRange added(
+    TRangeTreapTraits::TOwnedRange added(
             point.Key,
             true,
             point.Key,
@@ -544,7 +544,7 @@ void TTableLocks::AddRangeLock(const TRangeKey& range, TLockInfo* lock) {
     // notion of missing border columns meaning "any", thus non-inclusive
     // empty key would not include anything. Thankfully when there's at least
     // one column present engines tend to use inclusive for partial keys.
-    TRangeTreeBase::TOwnedRange added(
+    TRangeTreapTraits::TOwnedRange added(
             range.From,
             range.InclusiveFrom || !range.From,
             range.To,
@@ -1315,7 +1315,7 @@ void TSysLocks::BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>
     if (auto* table = Locker.FindTablePtr(tableId)) {
         if (table->HasRangeLocks()) {
             // Note: avoid copying the key, find all locks here
-            table->Ranges.EachIntersection(key, [update = Update](const TRangeTreeBase::TRange&, TLockInfo* lock) {
+            table->Ranges.EachIntersection(key, [update = Update](const TRangeTreapTraits::TRange&, TLockInfo* lock) {
                 update->AddBreakLock(lock);
             });
         }
@@ -1352,7 +1352,7 @@ void TSysLocks::AddWriteConflict(const TTableId& tableId, const TArrayRef<const 
     if (auto* table = Locker.FindTablePtr(tableId)) {
         if (table->HasRangeLocks()) {
             // Note: avoid copying the key, find all locks here
-            table->Ranges.EachIntersection(key, [update = Update](const TRangeTreeBase::TRange&, TLockInfo* lock) {
+            table->Ranges.EachIntersection(key, [update = Update](const TRangeTreapTraits::TRange&, TLockInfo* lock) {
                 if (lock->GetLockId() != update->LockTxId) {
                     update->AddWriteConflictLock(lock);
                 }

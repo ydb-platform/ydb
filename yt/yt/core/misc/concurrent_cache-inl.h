@@ -48,10 +48,9 @@ TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t 
     }
 
     // Rotate lookup table.
-    auto memoryUsageGuard = TMemoryUsageTrackerGuard::TryAcquire(
+    auto memoryUsageGuard = TMemoryUsageTrackerGuard::Acquire(
         MemoryUsageTracker_,
-        TLookupTable::GetByteSize(capacity))
-        .ValueOrThrow();
+        TLookupTable::GetByteSize(capacity));
     auto newHead = New<TLookupTable>(capacity, std::move(memoryUsageGuard));
     newHead->Next = head;
 

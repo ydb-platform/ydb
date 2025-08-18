@@ -499,6 +499,8 @@ public:
     {
         static auto poller = NConcurrency::CreateThreadPoolPoller(4, "HttpChannelTest");
         auto credentials = New<NHttps::TClientCredentialsConfig>();
+        credentials->CertificateAuthority = New<NCrypto::TPemBlobConfig>();
+        credentials->CertificateAuthority->Value = RootCert;
         credentials->PrivateKey = New<NCrypto::TPemBlobConfig>();
         credentials->PrivateKey->Value = ClientKey;
         credentials->CertificateChain = New<NCrypto::TPemBlobConfig>();

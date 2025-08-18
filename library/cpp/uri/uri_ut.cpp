@@ -794,7 +794,7 @@ namespace NUri {
 
         Y_UNIT_TEST(test_NonRfcUrls) {
             TUri url;
-            const long flags = TFeature::FeaturesRobot;
+            const ui64 flags = TFeature::FeaturesRobot;
             for (size_t i = 0;; ++i) {
                 const TStringBuf& buf = NonRfcUrls[i];
                 if (!buf.IsInited())
@@ -809,7 +809,7 @@ namespace NUri {
 
         Y_UNIT_TEST(test_CheckParseException) {
             TUri url;
-            const long flags = TFeature::FeaturesRobot | TFeature::FeaturesEncode;
+            const ui64 flags = TFeature::FeaturesRobot | TFeature::FeaturesEncode;
             for (size_t i = 0;; ++i) {
                 const TStringBuf& buf = CheckParseException[i];
                 if (!buf.IsInited())

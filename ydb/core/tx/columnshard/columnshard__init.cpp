@@ -50,7 +50,6 @@ void TTxInit::SetDefaults() {
     Self->LastPlannedStep = 0;
     Self->LastPlannedTxId = 0;
     Self->LastCompletedTx = NOlap::TSnapshot::Zero();
-    Self->OwnerPathId = 0;
     Self->OwnerPath.clear();
 }
 
@@ -287,7 +286,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     // Enable compression for the SmallBlobs table
     const auto* smallBlobsDefaultColumnFamily = txc.DB.GetScheme().DefaultFamilyFor(Schema::SmallBlobs::TableId);
     if (!smallBlobsDefaultColumnFamily || smallBlobsDefaultColumnFamily->Codec != NTable::TAlter::ECodec::LZ4) {
-        txc.DB.Alter().SetFamily(Schema::SmallBlobs::TableId, 0, NTable::TAlter::ECache::None, NTable::TAlter::ECodec::LZ4);
+        txc.DB.Alter().SetFamilyCompression(Schema::SmallBlobs::TableId, 0, NTable::TAlter::ECodec::LZ4);
     }
 
     // SmallBlobs table has compaction policy suitable for a big table

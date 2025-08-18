@@ -709,13 +709,15 @@ ui64 AsyncAlterDropReplicationConfig(
 ui64 AsyncCreateContinuousBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
-        const TString& tableName);
+        const TString& tableName,
+        const TString& streamName = "0_continuousBackupImpl");
 
 ui64 AsyncAlterTakeIncrementalBackup(
         Tests::TServer::TPtr server,
         const TString& workingDir,
         const TString& srcTableName,
-        const TString& dstTableName);
+        const TString& dstTableName,
+        const TString& dstStreamName);
 
 ui64 AsyncAlterRestoreIncrementalBackup(
         Tests::TServer::TPtr server,
@@ -808,6 +810,7 @@ NKikimrDataEvents::TEvWriteResult Insert(TTestActorRuntime& runtime, TActorId se
 NKikimrDataEvents::TEvWriteResult Update(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
 NKikimrDataEvents::TEvWriteResult Increment(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells);
 NKikimrDataEvents::TEvWriteResult Increment(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus);
+NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus);
 NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells);
 NKikimrDataEvents::TEvWriteResult UpsertWithDefaultValues(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const ui32 defaultFilledColumnCount);
 NKikimrDataEvents::TEvWriteResult UpsertWithDefaultValues(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const ui32 defaultFilledColumnCount, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus);

@@ -181,7 +181,7 @@ namespace {
                 }
                 Scratch_ = MakeScratch(Database_);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -223,7 +223,7 @@ namespace {
                 return Mode_ == THyperscanMatch::EMode::MULTI ? tuple : TUnboxedValue(TUnboxedValuePod(false));
             }
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
     private:
@@ -249,7 +249,7 @@ namespace {
                 const TUnboxedValuePod* args) const final try {
                 return TUnboxedValuePod(new THyperscanCapture(args[0], Pos_));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
 
         private:
@@ -293,7 +293,7 @@ namespace {
 
             return TUnboxedValue();
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
         TSourcePosition Pos_;
@@ -315,7 +315,7 @@ namespace {
                 const TUnboxedValuePod* args) const final try {
                 return TUnboxedValuePod(new THyperscanReplace(args[0], Pos_));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
 
         private:
@@ -370,7 +370,7 @@ namespace {
 
             return TUnboxedValue();
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
         TSourcePosition Pos_;

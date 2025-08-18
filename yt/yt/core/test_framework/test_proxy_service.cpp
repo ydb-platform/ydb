@@ -87,7 +87,7 @@ void TTestChannel::HandleRequestResult(
     IClientResponseHandlerPtr response,
     const TError& error)
 {
-    auto busIt = RequestToBus_.find(std::make_pair(address, requestId));
+    auto busIt = RequestToBus_.find(std::pair(address, requestId));
     auto bus = busIt->second;
 
     if (error.IsOK() && bus->GetMessage().Size() >= 2) {
@@ -120,7 +120,7 @@ IClientRequestControlPtr TTestChannel::Send(
         requestId);
 
     auto bus = New<TTestBus>(Address_);
-    EmplaceOrCrash(RequestToBus_, std::make_pair(Address_, requestId), bus);
+    EmplaceOrCrash(RequestToBus_, std::pair(Address_, requestId), bus);
 
     try {
         // Serialization modifies the request header and should be called prior to header copying.

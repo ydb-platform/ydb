@@ -64,7 +64,7 @@ namespace NKikimr::NBlobDepot {
 
             void CheckBlocks() {
                 bool someBlocksMissing = false;
-                for (size_t i = 0; i <= Request.ExtraBlockChecks.size(); ++i) {
+                for (size_t i = Request.IgnoreBlock; i <= Request.ExtraBlockChecks.size(); ++i) {
                     const auto *blkp = i ? &Request.ExtraBlockChecks[i - 1] : nullptr;
                     const ui64 tabletId = blkp ? blkp->first : Request.Id.TabletID();
                     const ui32 generation = blkp ? blkp->second : Request.Id.Generation();
@@ -87,6 +87,12 @@ namespace NKikimr::NBlobDepot {
                     Y_ABORT_UNLESS(CommitBlobSeq.ItemsSize() == 0);
                     auto *commitItem = CommitBlobSeq.AddItems();
                     commitItem->SetKey(Request.Id.AsBinaryString());
+                    if (Request.IssueKeepFlag) {
+                        commitItem->SetIssueKeepFlag(true);
+                    }
+                    if (Request.IgnoreBlock) {
+                        commitItem->SetIgnoreBlock(true);
+                    }
                     for (const auto& [tabletId, generation] : Request.ExtraBlockChecks) {
                         auto *p = commitItem->AddExtraBlockChecks();
                         p->SetTabletId(tabletId);

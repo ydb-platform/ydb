@@ -39,10 +39,15 @@ namespace NSQLComplete {
                         without.insert(begin(it->second), end(it->second));
                     }
 
+                    TString columnPrefix = request.Prefix;
+                    if (tableName.StartsWith(request.Prefix)) {
+                        columnPrefix = "";
+                    }
+
                     TDescribeTableRequest describeRequest = {
                         .TableCluster = "",
                         .TablePath = Escaped(tableName),
-                        .ColumnPrefix = request.Prefix,
+                        .ColumnPrefix = columnPrefix,
                         .ColumnsLimit = request.Limit,
                     };
 

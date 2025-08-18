@@ -2,29 +2,32 @@ from ._base_response import EC2BaseResponse
 
 
 class DHCPOptions(EC2BaseResponse):
-    def associate_dhcp_options(self):
+    def associate_dhcp_options(self) -> str:
         dhcp_opt_id = self._get_param("DhcpOptionsId")
         vpc_id = self._get_param("VpcId")
 
-        dhcp_opt = self.ec2_backend.describe_dhcp_options([dhcp_opt_id])[0]
         vpc = self.ec2_backend.get_vpc(vpc_id)
 
-        self.ec2_backend.associate_dhcp_options(dhcp_opt, vpc)
+        if dhcp_opt_id == "default":
+            self.ec2_backend.disassociate_dhcp_options(vpc)
+        else:
+            dhcp_opt = self.ec2_backend.describe_dhcp_options([dhcp_opt_id])[0]
+            self.ec2_backend.associate_dhcp_options(dhcp_opt, vpc)
 
         template = self.response_template(ASSOCIATE_DHCP_OPTIONS_RESPONSE)
         return template.render()
 
-    def create_dhcp_options(self):
-        dhcp_config = self._get_multi_param("DhcpConfiguration")
-        dhcp_config = {f["Key"]: f["Value"] for f in dhcp_config}
+    def create_dhcp_options(self) -> str:
+        provided_config = self._get_multi_param("DhcpConfiguration")
+        flat_config = {f["Key"]: f["Value"] for f in provided_config}
 
         # TODO validate we only got the options we know about
 
-        domain_name_servers = dhcp_config.get("domain-name-servers", None)
-        domain_name = dhcp_config.get("domain-name", None)
-        ntp_servers = dhcp_config.get("ntp-servers", None)
-        netbios_name_servers = dhcp_config.get("netbios-name-servers", None)
-        netbios_node_type = dhcp_config.get("netbios-node-type", None)
+        domain_name_servers = flat_config.get("domain-name-servers", None)
+        domain_name = flat_config.get("domain-name", None)
+        ntp_servers = flat_config.get("ntp-servers", None)
+        netbios_name_servers = flat_config.get("netbios-name-servers", None)
+        netbios_node_type = flat_config.get("netbios-node-type", None)
 
         dhcp_options_set = self.ec2_backend.create_dhcp_options(
             domain_name_servers=domain_name_servers,
@@ -37,13 +40,13 @@ class DHCPOptions(EC2BaseResponse):
         template = self.response_template(CREATE_DHCP_OPTIONS_RESPONSE)
         return template.render(dhcp_options_set=dhcp_options_set)
 
-    def delete_dhcp_options(self):
+    def delete_dhcp_options(self) -> str:
         dhcp_opt_id = self._get_param("DhcpOptionsId")
-        delete_status = self.ec2_backend.delete_dhcp_options_set(dhcp_opt_id)
+        self.ec2_backend.delete_dhcp_options_set(dhcp_opt_id)
         template = self.response_template(DELETE_DHCP_OPTIONS_RESPONSE)
-        return template.render(delete_status=delete_status)
+        return template.render(delete_status="true")
 
-    def describe_dhcp_options(self):
+    def describe_dhcp_options(self) -> str:
         dhcp_opt_ids = self._get_multi_param("DhcpOptionsId")
         filters = self._filters_from_querystring()
         dhcp_opts = self.ec2_backend.describe_dhcp_options(dhcp_opt_ids, filters)

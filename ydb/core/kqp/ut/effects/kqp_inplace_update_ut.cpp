@@ -69,14 +69,10 @@ void Test(
     setting.SetValue("true");
 
     // source read and stream lookup use iterator interface, that doesn't use datashard transactions
-    NKikimrConfig::TAppConfig appConfig;
+    auto settings = TKikimrSettings().SetKqpSettings({ setting });
     if (useSink) {
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(*useSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(*useSink);
     }
-
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig)
-        .SetKqpSettings({setting});
 
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
@@ -419,11 +415,7 @@ Y_UNIT_TEST(BigRow) {
     unsafeCommitSetting.SetValue("true");
 
     // source read use iterator interface, that doesn't use datashard transactions
-    NKikimrConfig::TAppConfig appConfig;
-
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig)
-        .SetKqpSettings({keysLimitSetting, unsafeCommitSetting});
+    auto settings = TKikimrSettings().SetKqpSettings({keysLimitSetting, unsafeCommitSetting});
 
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();

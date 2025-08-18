@@ -30,7 +30,7 @@ class InitBase(object):
                 '--endpoint', 'grpc://localhost',
                 '--database', '/Root/db',
                 'workload', cls.workload, '-p', f'/Root/db/{cls.workload}/s{scale}',
-                'init', '--dry-run'
+                'init', '--dry-run', '--datetime-types=dt64'
             ]
             + [str(arg) for arg in args]
         ).stdout.decode('utf8')

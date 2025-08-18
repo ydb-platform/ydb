@@ -262,6 +262,7 @@
 
   - sys/stat.h:
      - contrib/restricted/emscripten/system/include/compat/sys/stat.h
+     - contrib/restricted/emscripten/system/lib/libc/musl/src/include/sys/stat.h
      - contrib/restricted/emscripten/system/lib/libc/musl/include/sys/stat.h
 
   - sys/statvfs.h:          contrib/restricted/emscripten/system/lib/libc/musl/include/sys/statvfs.h

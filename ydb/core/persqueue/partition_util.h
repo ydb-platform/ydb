@@ -2,6 +2,33 @@
 
 #include "partition.h"
 
+namespace NKafka {
+
+    static const ui64 MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER = std::numeric_limits<i32>::max() / 2;
+    enum class ECheckDeduplicationResult {
+        OK,
+        INVALID_PRODUCER_EPOCH,
+        OUT_OF_ORDER_SEQUENCE_NUMBER,
+        DUPLICATE_SEQUENCE_NUMBER
+    };
+
+    // IsDuplicate is only needed for Kafka protocol deduplication.
+    // baseSequence field in Kafka protocol has type int32 and the numbers loop back from the maximum possible value back to 0.
+    // I.e. the next seqno after int32max is 0.
+    // To decide if we got a duplicate seqno or an out of order seqno,
+    // we are comparing the difference between maxSeqNo and seqNo with MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER.
+    // The value of MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER is half of the int32 range.
+    bool IsDuplicate(ui64 maxSeqNo, ui64 seqNo);
+
+    bool InSequence(ui64 maxSeqNo, ui64 seqNo);
+
+    ECheckDeduplicationResult CheckDeduplication(i16 lastEpoch, ui64 lastSeqNo, i16 messageEpoch, ui64 messageSeqNo);
+
+    std::pair<NPersQueue::NErrorCode::EErrorCode, TString> MakeDeduplicationError(
+        ECheckDeduplicationResult res, const TString& topicName, ui32 partitionId, const TString& sourceId, ui64 poffset,
+        i16 lastEpoch, ui64 lastSeqNo, i16 messageEpoch, ui64 messageSeqNo);
+}
+
 namespace NKikimr::NPQ {
 
 class TKeyLevel {
@@ -136,5 +163,7 @@ bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig,
 void AddCmdDeleteRange(TEvKeyValue::TEvRequest& request,
                        TKeyPrefix::EType c,
                        const TPartitionId& partitionId);
+
+bool SeqnoViolation(TMaybe<i16> lastEpoch, ui64 lastSeqNo, TMaybe<i16> messageEpoch, ui64 messageSeqNo);
 
 } // namespace NKikimr::NPQ

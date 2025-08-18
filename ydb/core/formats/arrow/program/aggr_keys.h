@@ -18,8 +18,7 @@ private:
     std::vector<std::string> GetRegistryFunctionNames() const override {
         return { GetFunctionName(AggregationType), GetHouseFunctionName(AggregationType) };
     }
-    virtual TConclusion<arrow::Datum> Call(
-        const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const override;
+    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
 
     TConclusion<arrow::Datum> PrepareResult(arrow::Datum&& datum) const override {
         if (!datum.is_scalar()) {
@@ -42,6 +41,14 @@ private:
         }
         return std::move(datum);
     }
+
+    virtual NJson::TJsonValue DoDebugJson() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("function", ::ToString(GetAggregationType()));
+        return result;
+    }
+
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator(const TColumnChainInfo& output) const override;
 
 public:
     virtual bool IsAggregation() const override {
@@ -122,6 +129,10 @@ private:
     const EAggregate AggregationId;
 
 public:
+    EAggregate GetSecondaryAggregationId() const {
+        return TAggregationsHelper::GetSecondaryAggregationId(AggregationId);
+    }
+
     EAggregate GetAggregationId() const {
         return AggregationId;
     }
@@ -132,6 +143,8 @@ public:
         , AggregationId(aggregationId) {
         AFL_VERIFY(Inputs.size() <= 1);
     }
+
+    TString DebugString() const;
 
     const std::vector<TColumnChainInfo>& GetInputs() const {
         return Inputs;
@@ -150,6 +163,8 @@ private:
     std::vector<TColumnChainInfo> AggregationKeys;
     std::vector<TWithKeysAggregationOption> Aggregations;
 
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator() const override;
+
     virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     TWithKeysAggregationProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
@@ -160,6 +175,21 @@ private:
     }
     virtual bool IsAggregation() const override {
         return true;
+    }
+    virtual NJson::TJsonValue DoDebugJson() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("type", "AGGREGATION");
+        if (AggregationKeys.size()) {
+            auto& jsonKeys = result.InsertValue("keys", NJson::JSON_ARRAY);
+            for (auto&& i : AggregationKeys) {
+                jsonKeys.AppendValue(i.GetColumnId());
+            }
+        }
+        auto& jsonOptions = result.InsertValue("options", NJson::JSON_ARRAY);
+        for (auto&& i : Aggregations) {
+            jsonOptions.AppendValue(i.DebugString());
+        }
+        return result;
     }
 
 public:

@@ -420,7 +420,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
 void TClientCommandRootCommon::Parse(TConfig& config) {
     TClientCommandRootBase::Parse(config);
-    config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
+    config.VerbosityLevel = VerbosityLevel;
 }
 
 void TClientCommandRootCommon::ExtractParams(TConfig& config) {
@@ -635,10 +635,8 @@ int TClientCommandRootCommon::Run(TConfig& config) {
         prompt = "ydb> ";
     }
 
-    TInteractiveCLI interactiveCLI(config, prompt);
-    interactiveCLI.Run();
-
-    return EXIT_SUCCESS;
+    TInteractiveCLI interactiveCLI(prompt);
+    return interactiveCLI.Run(config);
 }
 
 void TClientCommandRootCommon::ParseCredentials(TConfig& config) {

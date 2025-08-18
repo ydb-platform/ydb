@@ -32,7 +32,7 @@ void TTpchWorkloadDataInitializerGenerator::ConfigureOpts(NLastGetopt::TOpts& op
 }
 
 TBulkDataGeneratorList TTpchWorkloadDataInitializerGenerator::DoGetBulkInitialData() {
-    InitTpchGen(GetScale());
+    InitTpchGen(std::ceil(GetScale()));
     const auto tables = GetTables() ? GetTables() : TBulkDataGenerator::TFactory::GetRegisteredKeys();
     TVector<std::shared_ptr<TBulkDataGenerator>> gens;
     for (const auto& table: tables) {
@@ -103,7 +103,7 @@ TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(co
         Size = owner.GetProcessIndex() ? 0 : tdefs[tableNum].base;
     } else {
         DSS_HUGE extraRows = 0;
-        Size = set_state(TableNum, Owner.GetScale(), Owner.GetProcessCount(), Owner.GetProcessIndex() + 1, &extraRows);
+        Size = SetState(TableNum, Owner.GetScale(), Owner.GetProcessCount(), Owner.GetProcessIndex() + 1, &extraRows);
         FirstRow += Size * Owner.GetProcessIndex();
         if (Owner.GetProcessIndex() + 1 == Owner.GetProcessCount()) {
             Size += extraRows;

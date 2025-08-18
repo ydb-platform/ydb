@@ -1,6 +1,12 @@
 import os
+import struct
 
 import ydb
+
+
+def convert_vector_to_bytes(vector: list[float]) -> bytes:
+    b = struct.pack("f" * len(vector), *vector)
+    return b + b"\x01"
 
 
 def drop_vector_table_if_exists(pool: ydb.QuerySessionPool, table_name: str) -> None:
@@ -23,15 +29,53 @@ def create_vector_table(pool: ydb.QuerySessionPool, table_name: str) -> None:
     print("Vector table created")
 
 
-def insert_document(
+def insert_items_vector_as_bytes(
     pool: ydb.QuerySessionPool,
     table_name: str,
-    id: str,
-    document: str,
-    embedding: list[float],
+    items: list[dict],
 ) -> None:
     query = f"""
-    DECLARE $documents AS List<Struct<
+    DECLARE $items AS List<Struct<
+        id: Utf8,
+        document: Utf8,
+        embedding: String
+    >>;
+
+    UPSERT INTO `{table_name}`
+    (
+    id,
+    document,
+    embedding
+    )
+    SELECT
+        id,
+        document,
+        embedding,
+    FROM AS_TABLE($items);
+    """
+
+    items_struct_type = ydb.StructType()
+    items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+    items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+    items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
+
+    for item in items:
+        item["embedding"] = convert_vector_to_bytes(item["embedding"])
+
+    pool.execute_with_retries(
+        query, {"$items": (items, ydb.ListType(items_struct_type))}
+    )
+
+    print(f"{len(items)} items inserted")
+
+
+def insert_items_vector_as_float_list(
+    pool: ydb.QuerySessionPool,
+    table_name: str,
+    items: list[dict],
+) -> None:
+    query = f"""
+    DECLARE $items AS List<Struct<
         id: Utf8,
         document: Utf8,
         embedding: List<Float>
@@ -47,48 +91,41 @@ def insert_document(
         id,
         document,
         Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-    FROM AS_TABLE($documents);
+    FROM AS_TABLE($items);
     """
 
-    documents = [
-        {
-            "id": id,
-            "document": document,
-            "embedding": embedding,
-        }
-    ]
-
-    document_struct_type = ydb.StructType()
-    document_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
-    document_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
-    document_struct_type.add_member("embedding", ydb.ListType(ydb.PrimitiveType.Float))
+    items_struct_type = ydb.StructType()
+    items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+    items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+    items_struct_type.add_member("embedding", ydb.ListType(ydb.PrimitiveType.Float))
 
     pool.execute_with_retries(
-        query, {"$documents": (documents, ydb.ListType(document_struct_type))}
+        query, {"$items": (items, ydb.ListType(items_struct_type))}
     )
 
-    print(f"Document with id={id} inserted")
+    print(f"{len(items)} items inserted")
 
 
-def add_index(
+def add_vector_index(
     pool: ydb.QuerySessionPool,
     driver: ydb.Driver,
     table_name: str,
     index_name: str,
     strategy: str,
-    dim: int,
+    dimension: int,
     levels: int = 2,
     clusters: int = 128,
 ):
+    temp_index_name = f"{index_name}__temp"
     query = f"""
     ALTER TABLE `{table_name}`
-    ADD INDEX {index_name}__temp
+    ADD INDEX {temp_index_name}
     GLOBAL USING vector_kmeans_tree
     ON (embedding)
     WITH (
         {strategy},
         vector_type="Float",
-        vector_dimension={dim},
+        vector_dimension={dimension},
         levels={levels},
         clusters={clusters}
     );
@@ -99,7 +136,7 @@ def add_index(
         f"{driver._driver_config.database}/{table_name}",
         rename_indexes=[
             ydb.RenameIndexItem(
-                source_name=f"{index_name}__temp",
+                source_name=temp_index_name,
                 destination_name=f"{index_name}",
                 replace_destination=True,
             ),
@@ -109,7 +146,7 @@ def add_index(
     print(f"Table index {index_name} created.")
 
 
-def search_documents(
+def search_items_vector_as_bytes(
     pool: ydb.QuerySessionPool,
     table_name: str,
     embedding: list[float],
@@ -117,19 +154,69 @@ def search_documents(
     limit: int = 1,
     index_name: str | None = None,
 ) -> list[dict]:
-    view_index = "" if not index_name else f"VIEW {index_name}"
+    view_index = f"VIEW {index_name}" if index_name else ""
+
+    sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+    query = f"""
+    DECLARE $embedding as String;
+
+    SELECT
+        id,
+        document,
+        Knn::{strategy}(embedding, $embedding) as score
+    FROM {table_name} {view_index}
+    ORDER BY score
+    {sort_order}
+    LIMIT {limit};
+    """
+
+    result = pool.execute_with_retries(
+        query,
+        {
+            "$embedding": (
+                convert_vector_to_bytes(embedding),
+                ydb.PrimitiveType.String,
+            ),
+        },
+    )
+
+    items = []
+
+    for result_set in result:
+        for row in result_set.rows:
+            items.append(
+                {
+                    "id": row["id"],
+                    "document": row["document"],
+                    "score": row["score"],
+                }
+            )
+
+    return items
+
+
+def search_items_vector_as_float_list(
+    pool: ydb.QuerySessionPool,
+    table_name: str,
+    embedding: list[float],
+    strategy: str = "CosineSimilarity",
+    limit: int = 1,
+    index_name: str | None = None,
+) -> list[dict]:
+    view_index = f"VIEW {index_name}" if index_name else ""
 
     sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
     query = f"""
     DECLARE $embedding as List<Float>;
 
-    $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
+    $target_embedding = Knn::ToBinaryStringFloat($embedding);
 
     SELECT
         id,
         document,
-        Knn::{strategy}(embedding, $TargetEmbedding) as score
+        Knn::{strategy}(embedding, $target_embedding) as score
     FROM {table_name} {view_index}
     ORDER BY score
     {sort_order}
@@ -143,11 +230,11 @@ def search_documents(
         },
     )
 
-    documents = []
+    items = []
 
     for result_set in result:
         for row in result_set.rows:
-            documents.append(
+            items.append(
                 {
                     "id": row["id"],
                     "document": row["document"],
@@ -155,12 +242,16 @@ def search_documents(
                 }
             )
 
-    return documents
+    return items
 
 
-def print_results(docs):
-    for document in docs:
-        print(f"[score={document['score']}] {document['id']}: {document['document']}")
+def print_results(items):
+    if len(items) == 0:
+        print("No items found")
+        return
+
+    for item in items:
+        print(f"[score={item['score']}] {item['id']}: {item['document']}")
 
 
 def main(
@@ -182,37 +273,41 @@ def main(
 
     create_vector_table(pool, table_name)
 
-    insert_document(pool, table_name, "1", "vector 1", [0.98, 0.1, 0.01])
-    insert_document(pool, table_name, "2", "vector 2", [1.0, 0.05, 0.05])
-    insert_document(pool, table_name, "3", "vector 3", [0.9, 0.1, 0.1])
-    insert_document(pool, table_name, "4", "vector 4", [0.03, 0.0, 0.99])
-    insert_document(pool, table_name, "5", "vector 5", [0.0, 0.0, 0.99])
-    insert_document(pool, table_name, "5", "vector 6", [0.0, 0.02, 1.0])
-    insert_document(pool, table_name, "5", "vector 7", [0.0, 1.05, 0.05])
-    insert_document(pool, table_name, "5", "vector 8", [0.02, 0.98, 0.1])
-    insert_document(pool, table_name, "5", "vector 9", [0.0, 1.0, 0.05])
+    items = [
+        {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
+        {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
+        {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
+        {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
+        {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
+        {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
+        {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
+        {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
+        {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
+    ]
 
-    docs = search_documents(
+    insert_items_vector_as_bytes(pool, table_name, items)
+
+    items = search_items_vector_as_bytes(
         pool,
         table_name,
         embedding=[1, 0, 0],
         strategy="CosineSimilarity",
         limit=3,
     )
-    print_results(docs)
+    print_results(items)
 
-    add_index(
+    add_vector_index(
         pool,
         driver,
         table_name,
         index_name=index_name,
         strategy="similarity=cosine",
-        dim=3,
+        dimension=3,
         levels=1,
         clusters=3,
     )
 
-    docs = search_documents(
+    items = search_items_vector_as_bytes(
         pool,
         table_name,
         embedding=[1, 0, 0],
@@ -220,7 +315,7 @@ def main(
         strategy="CosineSimilarity",
         limit=3,
     )
-    print_results(docs)
+    print_results(items)
 
     pool.stop()
     driver.stop()

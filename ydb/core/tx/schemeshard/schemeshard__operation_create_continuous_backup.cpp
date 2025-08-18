@@ -1,3 +1,4 @@
+#include "schemeshard__backup_collection_common.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard__operation_part.h"
@@ -5,7 +6,6 @@
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/tx/schemeshard/backup/constants.h>
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -25,7 +25,14 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
     const auto& cbOp = tx.GetCreateContinuousBackup();
     const auto& tableName = cbOp.GetTableName();
 
-    const auto checksResult = NCdc::DoNewStreamPathChecks(context, opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME, acceptExisted);
+    TString streamName;
+    if (cbOp.GetContinuousBackupDescription().HasStreamName()) {
+        streamName = cbOp.GetContinuousBackupDescription().GetStreamName();
+    } else {
+        streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
+    }
+
+    const auto checksResult = NCdc::DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }
@@ -60,14 +67,14 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
     NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
     createCdcStreamOp.SetTableName(tableName);
     auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
-    streamDescription.SetName(NBackup::CB_CDC_STREAM_NAME);
-    streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+    streamDescription.SetName(streamName);
+    streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeNewImage);
     streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
     TVector<ISubOperation::TPtr> result;
 
     NCdc::DoCreateStream(result, createCdcStreamOp, opId, workingDirPath, tablePath, acceptExisted, false);
-    NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, NBackup::CB_CDC_STREAM_NAME, table, boundaries, acceptExisted);
+    NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, streamName, table, boundaries, acceptExisted);
 
     return result;
 }

@@ -115,19 +115,27 @@ public:
             return ExprContext.MakeType<TBlockExprType>(resultItemType);
     }
 
-    const TTypeAnnotationNode* GetReturnType(TPositionHandle pos, const TTypeAnnotationNode& left, const TTypeAnnotationNode& right, const TTypeAnnotationNode* resultItemType, bool optionalityFromRight) const {
+    const TTypeAnnotationNode *GetReturnType(TPositionHandle pos, const TTypeAnnotationNode &left,
+                                             const TTypeAnnotationNode &right, const TTypeAnnotationNode *resultItemType,
+                                             bool optionalityFromRight) const {
         bool isScalarLeft, isScalarRight;
         const auto leftItemType = GetBlockItemType(left, isScalarLeft);
         const auto rightItemType = GetBlockItemType(right, isScalarRight);
 
         if (!resultItemType) {
-            const auto& leftCleanType = RemoveOptionality(*leftItemType);
-            const auto& rightCleanType = RemoveOptionality(*rightItemType);
+            const auto &leftCleanType = RemoveOptionality(*leftItemType);
+            const auto &rightCleanType = RemoveOptionality(*rightItemType);
             resultItemType = CommonType<true>(pos, &leftCleanType, &rightCleanType, ExprContext);
+        } else {
+            if (resultItemType->GetKind() == ETypeAnnotationKind::Optional) {
+                resultItemType = resultItemType->Cast<TOptionalExprType>()->GetItemType();
+            }
         }
-        YQL_ENSURE(resultItemType);
 
-        if ((ETypeAnnotationKind::Optional == leftItemType->GetKind() && !optionalityFromRight) || ETypeAnnotationKind::Optional == rightItemType->GetKind()) {
+        Y_ENSURE(resultItemType, "KqpOlapCompiler: Result type is nullptr.");
+
+        if ((ETypeAnnotationKind::Optional == leftItemType->GetKind() && !optionalityFromRight) ||
+            ETypeAnnotationKind::Optional == rightItemType->GetKind()) {
             resultItemType = ExprContext.MakeType<TOptionalExprType>(resultItemType);
         }
 
@@ -137,17 +145,23 @@ public:
             return ExprContext.MakeType<TBlockExprType>(resultItemType);
     }
 
-    std::pair<ui32, const TTypeAnnotationNode*> AddYqlKernelIfFunc(TPositionHandle pos, const TTypeAnnotationNode& conditionType, const TTypeAnnotationNode& thenType, const TTypeAnnotationNode& elseType) const {
+    std::pair<ui32, const TTypeAnnotationNode *> AddYqlKernelIfFunc(TPositionHandle pos, const TTypeAnnotationNode &conditionType,
+                                                                    const TTypeAnnotationNode &thenType,
+                                                                    const TTypeAnnotationNode &elseType) const {
         const auto retBlockType = GetReturnType(pos, thenType, elseType, nullptr, false);
         return std::make_pair(YqlKernelRequestBuilder->AddIf(&conditionType, &thenType, &elseType), retBlockType);
     }
 
-    std::pair<ui32, const TTypeAnnotationNode*> AddYqlKernelBinaryFunc(TPositionHandle pos, TKernelRequestBuilder::EBinaryOp op, const TTypeAnnotationNode& argTypeOne, const TTypeAnnotationNode& argTypeTwo, const TTypeAnnotationNode* retType) const {
+    std::pair<ui32, const TTypeAnnotationNode *> AddYqlKernelBinaryFunc(TPositionHandle pos, TKernelRequestBuilder::EBinaryOp op,
+                                                                        const TTypeAnnotationNode &argTypeOne,
+                                                                        const TTypeAnnotationNode &argTypeTwo,
+                                                                        const TTypeAnnotationNode *retType) const {
         const auto retBlockType = GetReturnType(pos, argTypeOne, argTypeTwo, retType, TKernelRequestBuilder::EBinaryOp::Coalesce == op);
         return std::make_pair(YqlKernelRequestBuilder->AddBinaryOp(op, &argTypeOne, &argTypeTwo, retBlockType), retBlockType);
     }
 
-    ui32 AddYqlKernelBinaryFunc(TPositionHandle pos, TKernelRequestBuilder::EBinaryOp op, const TExprBase& arg1, const TExprBase& arg2, const TTypeAnnotationNode* retType) const {
+    ui32 AddYqlKernelBinaryFunc(TPositionHandle pos, TKernelRequestBuilder::EBinaryOp op, const TExprBase &arg1, const TExprBase &arg2,
+                                const TTypeAnnotationNode *retType) const {
         const auto arg1Type = GetArgType(arg1);
         const auto arg2Type = GetArgType(arg2);
         return AddYqlKernelBinaryFunc(pos, op, *arg1Type, *arg2Type, retType).first;
@@ -665,9 +679,15 @@ TTypedColumn CompileYqlKernelUnaryOperation(const TKqpOlapFilterUnaryOp& operati
     return {command->GetColumn().GetId(), resultType};
 }
 
-[[maybe_unused]]
-TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp& operation, TKqpOlapCompileContext& ctx)
-{
+const TTypeAnnotationNode *TryToGetType(const TKqpOlapFilterBinaryOp &operation) {
+    const auto opPtr = operation.Ptr();
+    if (opPtr->ChildrenSize() > TKqpOlapFilterBinaryOp::idx_OpType) {
+        return opPtr->Child(TKqpOlapFilterBinaryOp::idx_OpType)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    }
+    return nullptr;
+}
+
+TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp &operation, TKqpOlapCompileContext &ctx) {
     // Columns should be created before operation, otherwise operation fail to find columns
     const auto leftColumn = GetOrCreateColumnIdAndType(operation.Left(), ctx);
     const auto rightColumn = GetOrCreateColumnIdAndType(operation.Right(), ctx);
@@ -697,22 +717,22 @@ TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp& opera
         op = TKernelRequestBuilder::EBinaryOp::GreaterOrEqual;
     } else if (oper == "+"sv) {
         op = TKernelRequestBuilder::EBinaryOp::Add;
-        type = nullptr;
+        type = TryToGetType(operation);
     } else if (oper == "-"sv) {
         op = TKernelRequestBuilder::EBinaryOp::Sub;
-        type = nullptr;
+        type = TryToGetType(operation);
     } else if (oper == "*"sv) {
         op = TKernelRequestBuilder::EBinaryOp::Mul;
-        type = nullptr;
+        type = TryToGetType(operation);
     } else if (oper == "/"sv) {
         op = TKernelRequestBuilder::EBinaryOp::Div;
-        type = nullptr;
+        type = TryToGetType(operation);
     } else if (oper == "%"sv) {
         op = TKernelRequestBuilder::EBinaryOp::Mod;
-        type = nullptr;
+        type = TryToGetType(operation);
     } else if (oper == "??"sv) {
         op = TKernelRequestBuilder::EBinaryOp::Coalesce;
-        type = nullptr;
+        type = TryToGetType(operation);
     } else {
         YQL_ENSURE(false, "Unknown binary OLAP operation: " << oper);
     }

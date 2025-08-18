@@ -222,6 +222,7 @@ public:
                                                    groups.GetValueOrDefault<T::Down>(),
                                                    groups.GetValueOrDefault<T::SeenOperational>(),
                                                    groups.GetValueOrDefault<T::GroupSizeInUnits>(),
+                                                   groups.GetValueOrDefault<T::BridgePileId>(),
                                                    storagePoolId,
                                                    std::get<0>(geom),
                                                    std::get<1>(geom),
@@ -237,8 +238,6 @@ public:
                     group.NAME = groups.GetValue<T::NAME>(); \
                 }
 
-                OPTIONAL(BridgeGroupInfo)
-
                 OPTIONAL(VirtualGroupName)
                 OPTIONAL(VirtualGroupState)
                 OPTIONAL(HiveId)
@@ -250,6 +249,10 @@ public:
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
                     Y_DEBUG_ABORT_UNLESS(success);
+                }
+
+                if (groups.HaveValue<T::BridgeGroupInfo>()) {
+                    group.BridgeGroupInfo.emplace(groups.GetValue<T::BridgeGroupInfo>());
                 }
 
 #undef OPTIONAL
@@ -278,7 +281,7 @@ public:
         std::map<std::tuple<TNodeId, TString>, TBoxId> driveToBox;
         for (const auto& [boxId, box] : Self->Boxes) {
             for (const auto& [host, value] : box.Hosts) {
-                const auto& nodeId = Self->HostRecords->ResolveNodeId(host, value);
+                const auto& nodeId = value.EnforcedNodeId ? value.EnforcedNodeId : Self->HostRecords->ResolveNodeId(host);
                 Y_VERIFY_S(nodeId, "HostKey# " << host.Fqdn << ":" << host.IcPort << " does not resolve to a node");
                 if (const auto it = Self->HostConfigs.find(value.HostConfigId); it != Self->HostConfigs.end()) {
                     for (const auto& [drive, info] : it->second.Drives) {
@@ -348,7 +351,8 @@ public:
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
                     disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage,
-                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>());
+                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>(),
+                    disks.GetValueOrDefault<T::InferPDiskSlotCountFromUnitSize>());
 
                 if (!disks.Next())
                     return false;
@@ -518,6 +522,21 @@ public:
         }
 
         THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+
+        // fill in correct relations between bridged groups
+        for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
+            if (proxyGroup->BridgeGroupInfo) {
+                const auto& state = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
+                for (size_t i = 0; i < state.PileSize(); ++i) {
+                    const auto& pile = state.GetPile(i);
+                    auto *group = Self->FindGroup(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+                    Y_ABORT_UNLESS(group);
+                    Y_ABORT_UNLESS(group->BridgePileId == TBridgePileId::FromPileIndex(i));
+                    Y_ABORT_UNLESS(!group->BridgeProxyGroupId);
+                    group->BridgeProxyGroupId = proxyGroupId;
+                }
+            }
+        }
 
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {

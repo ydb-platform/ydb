@@ -1431,7 +1431,15 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
 
             auto checkAllPruneExtractorPassthroughLambda = [&columns](const TCoLambda& lambda) {
                 TMaybe<THashSet<TStringBuf>> passthroughFields;
-                if (IsPassthroughLambda(lambda, &passthroughFields) && passthroughFields) {
+                /*
+                    PruneKeys can only be reordered with filtration if all filtration keys are PruneKeys keys.
+                    To simplify, we only support projections. Because of this, we shouldn't consider
+                    OptionalIf or ListIf as passthrough. Just is ok for PruneKeys.
+                */
+                if (IsJustOrSingleAsList(lambda.Body().Ref()) &&
+                    IsPassthroughLambda(lambda, &passthroughFields, /*analyzeJustMember*/true) &&
+                    passthroughFields) {
+
                     for (const auto& column : columns) {
                         if (!passthroughFields->contains(column)) {
                             return false;

@@ -629,9 +629,7 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
 
     Y_UNIT_TEST_TWIN(UpdateWhereInNoFullScan, UseSink) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -824,10 +822,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST_TWIN(UpdateWhereInFullScan, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrSettings settings;
-        settings.SetAppConfig(app);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1057,10 +1053,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST_TWIN(DeleteNotFullScan, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrSettings serverSettings;
-        serverSettings.SetAppConfig(app);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

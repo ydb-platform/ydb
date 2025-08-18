@@ -618,7 +618,7 @@ public:
                     ui64 channelId = inputChannelDesc.GetId();
                     auto inputChannel = CreateDqInputChannel(channelId, inputChannelDesc.GetSrcStageId(), *inputType,
                         memoryLimits.ChannelBufferSize, StatsModeToCollectStatsLevel(Settings.StatsMode), typeEnv, holderFactory,
-                        inputChannelDesc.GetTransportVersion());
+                        inputChannelDesc.GetTransportVersion(), FromProto(task.GetValuePackerVersion()));
                     auto ret = AllocatedHolder->InputChannels.emplace(channelId, inputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated input channelId: " << channelId);
                     inputs.emplace_back(inputChannel);
@@ -697,6 +697,7 @@ public:
                     settings.BufferPageAllocSize = memoryLimits.BufferPageAllocSize;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
+                    settings.ValuePackerVersion = task.GetValuePackerVersion();
 
                     if (!outputChannelDesc.GetInMemory()) {
                         settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());

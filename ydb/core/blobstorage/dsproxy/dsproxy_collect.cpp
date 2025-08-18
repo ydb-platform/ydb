@@ -25,6 +25,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     const bool Hard;
     const bool Collect;
     const bool Decommission;
+    const bool IgnoreBlock;
 
     TGroupQuorumTracker QuorumTracker;
 
@@ -117,6 +118,9 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         const ui64 cookie = TVDiskIdShort(vdiskId).GetRaw();
         auto msg = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter,
             Channel, Collect, CollectGeneration, CollectStep, Hard, Keep.get(), DoNotKeep.get(), vdiskId, Deadline);
+        if (IgnoreBlock) {
+            msg->Record.SetIgnoreBlock(true);
+        }
         SendToQueue(std::move(msg), cookie);
         RequestsSent++;
     }
@@ -124,7 +128,8 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartCollectGarbage;
         auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter,
-            Channel, Collect, CollectGeneration, CollectStep, Keep.release(), DoNotKeep.release(), Deadline, false, Hard);
+            Channel, Collect, CollectGeneration, CollectStep, Keep.release(), DoNotKeep.release(), Deadline, false, Hard,
+            IgnoreBlock);
         ev->RestartCounter = counter;
         ev->Decommission = Decommission;
         return ev;
@@ -153,6 +158,7 @@ public:
         , Hard(params.Common.Event->Hard)
         , Collect(params.Common.Event->Collect)
         , Decommission(params.Common.Event->Decommission)
+        , IgnoreBlock(params.Common.Event->IgnoreBlock)
         , QuorumTracker(Info.Get())
     {}
 
@@ -169,6 +175,7 @@ public:
             << " CollectStep# " << CollectStep
             << " Collect# " << (Collect ? "true" : "false")
             << " Hard# " << (Hard ? "true" : "false")
+            << " IgnoreBlock# " << (IgnoreBlock ? "true" : "false")
             << " RestartCounter# " << RestartCounter);
 
         for (const auto& item : Keep ? *Keep : TVector<TLogoBlobID>()) {

@@ -421,7 +421,7 @@ void TTopicSession::SubscribeOnNextEvent() {
 
     LOG_ROW_DISPATCHER_TRACE("SubscribeOnNextEvent");
     IsWaitingEvents = true;
-    Metrics.InFlySubscribe->Inc();
+    Metrics.InFlySubscribe->Set(1);
     TActorSystem* actorSystem = TActivationContext::ActorSystem();
     WaitEventStartedAt = TInstant::Now();
     ReadSession->WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
@@ -503,7 +503,7 @@ void TTopicSession::CreateTopicSession() {
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
     LOG_ROW_DISPATCHER_TRACE("TEvPqEventsReady");
-    Metrics.InFlySubscribe->Dec();
+    Metrics.InFlySubscribe->Set(0);
     IsWaitingEvents = false;
     auto waitEventDurationMs = (TInstant::Now() - WaitEventStartedAt).MilliSeconds();
     Metrics.WaitEventTimeMs->Collect(waitEventDurationMs);
@@ -846,7 +846,11 @@ void TTopicSession::SendSessionError(TActorId readActorId, TStatus status, bool 
     LOG_ROW_DISPATCHER_WARN("SendSessionError to " << readActorId << ", status: " << status.GetErrorMessage());
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionError>();
     event->Record.SetStatusCode(status.GetStatus());
+    event->Record.SetPartitionId(PartitionId);
     NYql::IssuesToMessage(status.GetErrorDescription(), event->Record.MutableIssues());
+    auto& issue = *event->Record.AddIssues();
+    issue.set_message(TStringBuilder() << "Topic " << TopicPathPartition);
+    issue.set_severity(NYql::TSeverityIds::S_INFO);
     event->ReadActorId = readActorId;
     event->IsFatalError = isFatalError;
     Send(RowDispatcherActorId, event.release());

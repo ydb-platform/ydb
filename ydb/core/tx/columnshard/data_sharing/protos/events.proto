@@ -1,4 +1,3 @@
-import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/tx/columnshard/data_sharing/protos/links.proto";
 import "ydb/core/tx/columnshard/data_sharing/protos/data.proto";
 import "ydb/core/tx/columnshard/data_sharing/protos/sessions.proto";

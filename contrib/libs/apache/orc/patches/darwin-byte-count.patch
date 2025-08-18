@@ -1,0 +1,20 @@
+--- a/c++/src/io/InputStream.cc
++++ b/c++/src/io/InputStream.cc
+@@ -115,1 +115,1 @@ namespace orc {
+-  google::protobuf::int64 SeekableArrayInputStream::ByteCount() const {
++  int64_t SeekableArrayInputStream::ByteCount() const {
+--- a/c++/src/io/InputStream.hh
++++ b/c++/src/io/InputStream.hh
+@@ -76,1 +76,1 @@ namespace orc {
+-    virtual google::protobuf::int64 ByteCount() const override;
++    virtual int64_t ByteCount() const override;
+--- a/c++/src/io/OutputStream.cc
++++ b/c++/src/io/OutputStream.cc
+@@ -67,1 +67,1 @@ namespace orc {
+-  google::protobuf::int64 BufferedOutputStream::ByteCount() const {
++  int64_t BufferedOutputStream::ByteCount() const {
+--- a/c++/src/io/OutputStream.hh
++++ b/c++/src/io/OutputStream.hh
+@@ -55,1 +55,1 @@ namespace orc {
+-    virtual google::protobuf::int64 ByteCount() const override;
++    virtual int64_t ByteCount() const override;

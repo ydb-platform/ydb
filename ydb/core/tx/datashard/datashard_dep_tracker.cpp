@@ -18,11 +18,11 @@ namespace {
         tmp.swap(value);
     }
 
-    TRangeTreeBase::TRange MakeSearchRange(const TTableRange& range) {
+    TRangeTreapTraits::TRange MakeSearchRange(const TTableRange& range) {
         if (range.Point) {
-            return TRangeTreeBase::TRange(range.From, true, range.From, true);
+            return TRangeTreapTraits::TRange(range.From, true, range.From, true);
         } else {
-            return TRangeTreeBase::TRange(
+            return TRangeTreapTraits::TRange(
                 range.From,
                 range.InclusiveFrom || !range.From,
                 range.To,
@@ -30,11 +30,11 @@ namespace {
         }
     }
 
-    TRangeTreeBase::TOwnedRange MakeOwnedRange(const TOwnedTableRange& range) {
+    TRangeTreapTraits::TOwnedRange MakeOwnedRange(const TOwnedTableRange& range) {
         if (range.Point) {
-            return TRangeTreeBase::TOwnedRange(range.GetOwnedFrom(), true, range.GetOwnedFrom(), true);
+            return TRangeTreapTraits::TOwnedRange(range.GetOwnedFrom(), true, range.GetOwnedFrom(), true);
         } else {
-            return TRangeTreeBase::TOwnedRange(
+            return TRangeTreapTraits::TOwnedRange(
                 range.GetOwnedFrom(),
                 range.InclusiveFrom || !range.From,
                 range.GetOwnedTo(),
@@ -53,10 +53,10 @@ namespace {
 
 void TDependencyTracker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) {
     auto& state = Tables[tableId.LocalPathId];
-    state.PlannedReads.SetKeyTypes(tableInfo.KeyColumnTypes);
-    state.PlannedWrites.SetKeyTypes(tableInfo.KeyColumnTypes);
-    state.ImmediateReads.SetKeyTypes(tableInfo.KeyColumnTypes);
-    state.ImmediateWrites.SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.PlannedReads.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.PlannedWrites.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.ImmediateReads.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.ImmediateWrites.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
 }
 
 void TDependencyTracker::RemoveSchema(const TPathId& tableId) {
@@ -368,15 +368,15 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
         }
     };
 
-    auto processImmediatePlanned = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
+    auto processImmediatePlanned = [&](const TRangeTreapTraits::TRange&, const TOperation::TPtr& conflict) {
         onImmediateConflict(*conflict);
     };
 
-    auto processPlannedPlanned = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
+    auto processPlannedPlanned = [&](const TRangeTreapTraits::TRange&, const TOperation::TPtr& conflict) {
         op->AddDependency(conflict);
     };
 
-    auto processPlannedImmediate = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
+    auto processPlannedImmediate = [&](const TRangeTreapTraits::TRange&, const TOperation::TPtr& conflict) {
         op->AddImmediateConflict(conflict);
     };
 

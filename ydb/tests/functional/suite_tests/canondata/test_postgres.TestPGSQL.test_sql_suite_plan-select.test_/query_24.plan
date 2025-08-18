@@ -64,13 +64,9 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_select.test_plan/onek2",
                                                         "ReadColumns": [
-                                                            "stringu1",
-                                                            "unique1",
-                                                            "unique2"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "unique1 (-\u221e, +\u221e)",
-                                                            "unique2 (-\u221e, +\u221e)"
+                                                            "unique2 (-\u221e, +\u221e)",
+                                                            "stringu1"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",

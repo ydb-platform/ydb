@@ -68,6 +68,7 @@ message TYdbComputeControlPlane {
         string Id = 3;
         TYdbStorageConfig Connection = 1;
         TWorkloadManagerConfig WorkloadManagerConfig = 2;
+        TAccessConfig AccessConfig = 4;
     }
 
     message TCms {

@@ -62,6 +62,18 @@ BELONGS ya.make
     Files with this license:
         COPYING [1:1]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 22cee558f632090fc14247ac86e6ec0f
+BELONGS ya.make
+    License text:
+        // Copyright 2025 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/dsp/lossless_avx2.c [1:1]
+        src/dsp/lossless_enc_avx2.c [1:1]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 6229b3029004c1905fe5e24a63be2311
 BELONGS ya.make
     License text:

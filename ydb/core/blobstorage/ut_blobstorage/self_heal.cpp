@@ -210,4 +210,27 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
 
     SELF_HEAL_MAINTENANCE_TEST(OneFaultyMaintenanceRequestOneMaintenanceRequest, Mirror3dc, TPDisks({ Active, Active, Active, Active, Active, FaultyMaintenance, Active, ActiveMaintenance, Active }));
     SELF_HEAL_MAINTENANCE_TEST(OneFaultyMaintenanceRequestOneMaintenanceRequest, 4Plus2Block, TPDisks({ ActiveMaintenance, Active, Active, Active, Active, Active, FaultyMaintenance, Active }));
+
+    Y_UNIT_TEST(DefaultMaintenanceStatusValue) {
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3dc;
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Minutes(1));
+
+        auto base = env.FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), 1);
+
+        for (const auto& pdisk : base.GetPDisk()) {
+            NKikimrBlobStorage::EDriveStatus driveStatus = pdisk.GetDriveStatus();
+            NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus = pdisk.GetMaintenanceStatus();
+            UNIT_ASSERT_C(driveStatus == NKikimrBlobStorage::ACTIVE,
+                    "Got DriveStatus# " << NKikimrBlobStorage::EDriveStatus_Name(driveStatus));
+            UNIT_ASSERT_C(maintenanceStatus == NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST,
+                    "Got MaintenanceStatus# " << NKikimrBlobStorage::TMaintenanceStatus::E_Name(maintenanceStatus));
+        }
+    }
 }

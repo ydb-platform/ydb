@@ -15,15 +15,16 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
 
     const bool needActualization = indexInfo->GetSchemeNeedActualization();
     auto newVersion = indexInfo->GetVersion();
-    auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
+    auto itVersion =
+        SnapshotByVersion.emplace(newVersion, TSchemaInfoByVersion(std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot)));
     AFL_VERIFY(itVersion.second)("message", "duplication for registered version")("version", LastSchemaVersion);
     if (needActualization) {
         if (!SchemeVersionForActualization || *SchemeVersionForActualization < newVersion) {
             SchemeVersionForActualization = newVersion;
-            SchemeForActualization = itVersion.first->second;
+            SchemeForActualization = itVersion.first->second.GetSchema();
         }
     }
-    auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second);
+    auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second.GetSchema());
     Y_ABORT_UNLESS(itSnap.second);
     LastSchemaVersion = std::max(newVersion, LastSchemaVersion);
     return &itVersion.first->second->GetIndexInfo();

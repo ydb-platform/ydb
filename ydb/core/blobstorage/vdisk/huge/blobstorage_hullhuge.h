@@ -20,6 +20,7 @@ namespace NKikimr {
         const TIngress Ingress;
         TRope Data;
         const bool IgnoreBlock;
+        const bool IssueKeepFlag;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
@@ -33,6 +34,7 @@ namespace NKikimr {
                              const TIngress &ingress,
                              TRope&& data,
                              bool ignoreBlock,
+                             bool issueKeepFlag,
                              NKikimrBlobStorage::EPutHandleClass handleClass,
                              std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                              NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
@@ -43,6 +45,7 @@ namespace NKikimr {
             , Ingress(ingress)
             , Data(std::move(data))
             , IgnoreBlock(ignoreBlock)
+            , IssueKeepFlag(issueKeepFlag)
             , HandleClass(handleClass)
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
@@ -73,6 +76,7 @@ namespace NKikimr {
         const TIngress Ingress;
         const TDiskPart HugeBlob;
         const bool IgnoreBlock;
+        const bool IssueKeepFlag;
         const TActorId OrigClient;
         const ui64 OrigCookie;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
@@ -85,6 +89,7 @@ namespace NKikimr {
                            const TIngress &ingress,
                            const TDiskPart &hugeBlob,
                            bool ignoreBlock,
+                           bool issueKeepFlag,
                            const TActorId &origClient,
                            ui64 origCookie,
                            NKikimrBlobStorage::EPutHandleClass handleClass,
@@ -96,6 +101,7 @@ namespace NKikimr {
             , Ingress(ingress)
             , HugeBlob(hugeBlob)
             , IgnoreBlock(ignoreBlock)
+            , IssueKeepFlag(issueKeepFlag)
             , OrigClient(origClient)
             , OrigCookie(origCookie)
             , HandleClass(handleClass)

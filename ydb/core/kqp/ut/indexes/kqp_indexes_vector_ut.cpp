@@ -228,6 +228,26 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return session;
     }
 
+    TSession DoCreateTableAndVectorIndex(TTableClient& db, bool nullable) {
+        auto session = DoCreateTableForVectorIndex(db, nullable);
+
+        // Add an index
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index1
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        return session;
+    }
+
     Y_UNIT_TEST_QUAD(OrderByCosineLevel1, Nullable, UseSimilarity) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
@@ -369,12 +389,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST(BuildIndexTimesAndUser) {
-        NKikimrConfig::TAppConfig appConfig;
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
@@ -414,7 +432,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(VectorIndexIsNotUpdatable) {
+    Y_UNIT_TEST(VectorIndexNoBulkUpsert) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -426,63 +444,286 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, true);
-
-        // Add first index
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index1
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb)
-                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        auto session = DoCreateTableAndVectorIndex(db, true);
 
         const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
 
-        // Upsert to the table with index should succeed
+        // BulkUpsert to the table with index should fail
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("pk").Int64(11)
+                .AddMember("emb").String("\x77\x77\x03")
+                .AddMember("data").String("43")
+                .EndStruct();
+            rows.EndList();
+            auto result = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+            auto issues = result.GetIssues().ToString();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SCHEME_ERROR, result.GetStatus());
+            UNIT_ASSERT_C(issues.contains("Only async-indexed tables are supported by BulkUpsert"), issues);
+        }
+
+        const TString postingTable1_bulk = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_bulk);
+    }
+
+    void DoTestVectorIndexDelete(const TString& deleteQuery, bool returning) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, true);
+
+        {
+            auto result = session.ExecuteDataQuery(deleteQuery, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            if (returning) {
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"vv\\3\"];[9]]]");
+            }
+        }
+
+        // Check that PK 9 is not present in the posting table
         {
             const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES)"
-                "(10, \"\x76\x76\x03\", \"10\");"
-            ));
+                SELECT COUNT(*) FROM `/Root/TestTable/index1/indexImplPostingTable`
+                WHERE pk=9;
+            )"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[0u]]");
+        }
+    }
 
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                          .ExtractValueSync();
+    Y_UNIT_TEST(VectorIndexDeletePk) {
+        // DELETE WHERE from the table with index should succeed
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=9;)"), false);
+    }
+
+    Y_UNIT_TEST(VectorIndexDeleteFilter) {
+        // DELETE WHERE with non-PK filter from the table with index should succeed
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9";)"), false);
+    }
+
+    Y_UNIT_TEST(VectorIndexDeleteOn) {
+        // DELETE ON from the table with index should succeed too (it uses a different code path)
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk`;)"), false);
+    }
+
+    Y_UNIT_TEST(VectorIndexDeletePkReturning) {
+        // DELETE WHERE from the table with index should succeed
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=9 RETURNING data, emb, pk;)"), true);
+    }
+
+    Y_UNIT_TEST(VectorIndexDeleteFilterReturning) {
+        // DELETE WHERE with non-PK filter from the table with index should succeed
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9" RETURNING data, emb, pk;)"), true);
+    }
+
+    Y_UNIT_TEST(VectorIndexDeleteOnReturning) {
+        // DELETE ON from the table with index should succeed too (it uses a different code path)
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk` RETURNING data, emb, pk;)"), true);
+    }
+
+    void DoTestVectorIndexInsert(bool returning) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, true);
+
+        const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+
+        // Insert to the table with index should succeed
+        {
+            TString query1(Q_(R"(
+                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
+                (10, "\x11\x62\x03", "10"),
+                (11, "\x77\x75\x03", "11")
+            )"));
+            query1 += (returning ? " RETURNING data, emb, pk;" : ";");
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            if (returning) {
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"10\"];[\"\\021b\\3\"];[10]];[[\"11\"];[\"wu\\3\"];[11]]]");
+            }
+        }
+
+        // Index is updated
+        const TString postingTable1_ins = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable1_ins);
+
+        // Check that PK 7 and 10 are now in the same cluster
+        // Check that PK 8 and 11 are now in the same cluster
+        {
+            const TString query1(Q_(R"(
+                SELECT COUNT(DISTINCT __ydb_parent) FROM `/Root/TestTable/index1/indexImplPostingTable`
+                WHERE pk IN (7, 10)
+                UNION ALL
+                SELECT COUNT(DISTINCT __ydb_parent) FROM `/Root/TestTable/index1/indexImplPostingTable`
+                WHERE pk IN (8, 11)
+                ;
+            )"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u];[1u]]");
+        }
+    }
+
+    Y_UNIT_TEST(VectorIndexInsert) {
+        DoTestVectorIndexInsert(false);
+    }
+
+    Y_UNIT_TEST(VectorIndexInsertReturning) {
+        DoTestVectorIndexInsert(true);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpdateNoChange) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, true);
+
+        const TString orig = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+
+        // Update to the table with index should succeed (but embedding does not change)
+        {
+            const TString query1(Q_(R"(
+                UPDATE `/Root/TestTable` SET `data`="20" WHERE `pk`=9;
+            )"));
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
         }
 
-        const TString postingTable1 = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
-        
-        // First index is not updated
-        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1);
+        const TString updated = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
+    }
 
-        // Add second index
+    Y_UNIT_TEST(VectorIndexUpdateNoClusterChange) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, true);
+
+        const TString orig = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+
+        // Update to the table with index should succeed (embedding changes, but the cluster does not)
         {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index2
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb)
-                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            const TString query1(Q_(R"(
+                UPDATE `/Root/TestTable` SET `emb`="\x76\x75\x03" WHERE `pk`=9;
             )"));
 
-            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }     
-        
-        const TString postingTable2 = ReadTablePartToYson(session, "/Root/TestTable/index2/indexImplPostingTable");
-        
-        // Second index is different
-        UNIT_ASSERT_STRINGS_UNEQUAL(originalPostingTable, postingTable2);
+        const TString updated = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
+    }
+
+    void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery, bool returning) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, true);
+
+        const TString orig = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+
+        // Update/upsert to the table with index should succeed (and the cluster should change)
+        {
+            auto result = session.ExecuteDataQuery(updateQuery, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            if (returning) {
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"\\0031\\3\"];[9]]]");
+            }
+        }
+
+        const TString updated = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_UNEQUAL(orig, updated);
+
+        // Check that PK 9 and 0 are now in the same cluster
+        {
+            const TString query1(Q_(R"(
+                SELECT COUNT(DISTINCT __ydb_parent) FROM `/Root/TestTable/index1/indexImplPostingTable`
+                WHERE pk IN (0, 9);
+            )"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u]]");
+        }
+    }
+
+    Y_UNIT_TEST(VectorIndexUpdatePkClusterChange) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9;)"), false);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpdateFilterClusterChange) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9";)"), false);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpsertClusterChange) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9");)"), false);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpdatePkClusterChangeReturning) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9 RETURNING `data`, `emb`, `pk`;)"), true);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpdateFilterClusterChangeReturning) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9" RETURNING `data`, `emb`, `pk`;)"), true);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpsertClusterChangeReturning) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9") RETURNING `data`, `emb`, `pk`;)"), true);
     }
 
     Y_UNIT_TEST_TWIN(SimpleVectorIndexOrderByCosineDistanceWithCover, Nullable) {
@@ -536,7 +777,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     Y_UNIT_TEST_TWIN(CoveredVectorIndexWithFollowers, StaleRO) {
         std::vector<TString> tableNames = {
             "/Root/TestTable/index/indexImplLevelTable",
-            "/Root/TestTable/index/indexImplPostingTable"
+            //"/Root/TestTable/index/indexImplPostingTable"
         };
 
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -551,7 +792,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         TKikimrRunner kikimr(serverSettings);
         //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        
+
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForVectorIndex(db, false);
         {
@@ -588,9 +829,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         };
 
         for (const TString& tableName: tableNames) {
-                setFollowers(tableName);
-                checkFollowerDescription(tableName);
-            }
+            setFollowers(tableName);
+            checkFollowerDescription(tableName);
+        }
 
         DoPositiveQueriesVectorIndexOrderByCosine(session, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW(), true /*covered*/);
 

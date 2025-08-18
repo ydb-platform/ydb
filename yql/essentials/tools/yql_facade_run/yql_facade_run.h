@@ -10,6 +10,7 @@
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
@@ -238,6 +239,7 @@ private:
     IPipelineConfigurator* OptPipelineConfigurator_ = nullptr;
     IPipelineConfigurator* PeepholePipelineConfigurator_ = nullptr;
     TFacadeRunOptions RunOptions_;
+    std::unique_ptr<NYql::NLog::YqlLoggerScope> YqlLogger_;
 };
 
 } // NYql

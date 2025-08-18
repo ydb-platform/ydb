@@ -11,6 +11,7 @@ namespace NYdb::NConsoleClient {
 class ILineReader {
 public:
     virtual std::optional<std::string> ReadLine() = 0;
+    virtual void ClearHints() = 0;
 
     virtual ~ILineReader() = default;
 };

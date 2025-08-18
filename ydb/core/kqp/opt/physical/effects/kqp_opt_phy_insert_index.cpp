@@ -1,3 +1,5 @@
+#include <ydb/core/base/table_vector_index.h>
+
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
@@ -88,6 +90,29 @@ TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TK
 
 } // namespace
 
+TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription& table,
+    const TIndexDescription* indexDesc) {
+    TVector<TStringBuf> indexTableColumns;
+    THashSet<TStringBuf> indexTableColumnSet;
+
+    indexTableColumns.emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
+    indexTableColumnSet.insert(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
+
+    for (const auto& column : table.Metadata->KeyColumnNames) {
+        if (indexTableColumnSet.insert(column).second) {
+            indexTableColumns.emplace_back(column);
+        }
+    }
+
+    for (const auto& column : indexDesc->DataColumns) {
+        if (indexTableColumnSet.insert(column).second) {
+            indexTableColumns.emplace_back(column);
+        }
+    }
+
+    return indexTableColumns;
+}
+
 TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlInsertRowsIndex>()) {
         return node;
@@ -99,7 +124,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     const bool isSink = NeedSinks(table, kqpCtx);
 
-    auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx);
+    auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx, nullptr);
     YQL_ENSURE(indexes);
     const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
         && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
@@ -196,6 +221,11 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
             auto upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
                 insert.Pos(), ctx, true);
+
+            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns, upsertIndexRows, insert.Pos(), ctx);
+                indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+            }
 
             auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
                 .Table(tableNode)

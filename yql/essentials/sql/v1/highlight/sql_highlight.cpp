@@ -4,6 +4,9 @@
 
 #include <contrib/libs/re2/re2/re2.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/resource/resource.h>
+
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -72,6 +75,8 @@ namespace NSQLHighlight {
         }
 
         unit.Patterns = {Merged(std::move(unit.Patterns))};
+        unit.IsPlain = false;
+        unit.IsCodeGenExcluded = true;
         return unit;
     }
 
@@ -82,62 +87,34 @@ namespace NSQLHighlight {
             .Patterns = {
                 {s.Get("ID_QUOTED")},
             },
+            .IsPlain = false,
         };
     }
 
     template <>
-    TUnit MakeUnit<EUnitKind::BindParamterIdentifier>(Syntax& s) {
+    TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(Syntax& s) {
         return {
-            .Kind = EUnitKind::BindParamterIdentifier,
+            .Kind = EUnitKind::BindParameterIdentifier,
             .Patterns = {
                 {s.Concat({"DOLLAR", "ID_PLAIN"})},
             },
+            .IsPlain = false,
         };
     }
 
     template <>
     TUnit MakeUnit<EUnitKind::TypeIdentifier>(Syntax& s) {
+        TVector<NSQLTranslationV1::TRegexPattern> types;
+        NJson::TJsonValue json = NJson::ReadJsonFastTree(NResource::Find("types.json"));
+        for (const NJson::TJsonValue& value : json.GetArraySafe()) {
+            types.emplace_back(CaseInsensitive(value["name"].GetStringSafe()));
+        }
+
         return {
             .Kind = EUnitKind::TypeIdentifier,
             .Patterns = {
                 {s.Get("ID_PLAIN"), s.Get("LESS")},
-                {Merged({
-                    CaseInsensitive("Decimal"),
-                    CaseInsensitive("Bool"),
-                    CaseInsensitive("Int8"),
-                    CaseInsensitive("Int16"),
-                    CaseInsensitive("Int32"),
-                    CaseInsensitive("Int64"),
-                    CaseInsensitive("Uint8"),
-                    CaseInsensitive("Uint16"),
-                    CaseInsensitive("Uint32"),
-                    CaseInsensitive("Uint64"),
-                    CaseInsensitive("Float"),
-                    CaseInsensitive("Double"),
-                    CaseInsensitive("DyNumber"),
-                    CaseInsensitive("String"),
-                    CaseInsensitive("Utf8"),
-                    CaseInsensitive("Json"),
-                    CaseInsensitive("JsonDocument"),
-                    CaseInsensitive("Yson"),
-                    CaseInsensitive("Uuid"),
-                    CaseInsensitive("Date"),
-                    CaseInsensitive("Datetime"),
-                    CaseInsensitive("Timestamp"),
-                    CaseInsensitive("Interval"),
-                    CaseInsensitive("TzDate"),
-                    CaseInsensitive("TzDateTime"),
-                    CaseInsensitive("TzTimestamp"),
-                    CaseInsensitive("Callable"),
-                    CaseInsensitive("Resource"),
-                    CaseInsensitive("Tagged"),
-                    CaseInsensitive("Generic"),
-                    CaseInsensitive("Unit"),
-                    CaseInsensitive("Null"),
-                    CaseInsensitive("Void"),
-                    CaseInsensitive("EmptyList"),
-                    CaseInsensitive("EmptyDict"),
-                })},
+                {Merged(std::move(types))},
             },
         };
     }
@@ -168,9 +145,9 @@ namespace NSQLHighlight {
         return {
             .Kind = EUnitKind::Literal,
             .Patterns = {
-                {s.Get("DIGITS")},
-                {s.Get("INTEGER_VALUE")},
                 {s.Get("REAL")},
+                {s.Get("INTEGER_VALUE")},
+                {s.Get("DIGITS")},
             },
         };
     }
@@ -183,6 +160,11 @@ namespace NSQLHighlight {
             .PatternsANSI = TVector<TRegexPattern>{
                 TRegexPattern{s.Get("STRING_VALUE", /* ansi = */ true)},
             },
+            .RangePattern = TRangePattern{
+                .Begin = R"(@@)",
+                .End = R"(@@)",
+            },
+            .IsPlain = false,
         };
     }
 
@@ -192,6 +174,11 @@ namespace NSQLHighlight {
             .Kind = EUnitKind::Comment,
             .Patterns = {{s.Get("COMMENT")}},
             .PatternsANSI = Nothing(),
+            .RangePattern = TRangePattern{
+                .Begin = R"(/*)",
+                .End = R"(*/)",
+            },
+            .IsPlain = false,
         };
     }
 
@@ -202,6 +189,8 @@ namespace NSQLHighlight {
             .Patterns = {
                 {s.Get("WS")},
             },
+            .IsPlain = false,
+            .IsCodeGenExcluded = true,
         };
     }
 
@@ -227,16 +216,16 @@ namespace NSQLHighlight {
         Syntax s = MakeSyntax(grammar);
 
         THighlighting h;
-        h.Units.emplace_back(MakeUnit<EUnitKind::Keyword>(s));
+        h.Units.emplace_back(MakeUnit<EUnitKind::Comment>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Punctuation>(s));
-        h.Units.emplace_back(MakeUnit<EUnitKind::QuotedIdentifier>(s));
-        h.Units.emplace_back(MakeUnit<EUnitKind::BindParamterIdentifier>(s));
-        h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::FunctionIdentifier>(s));
+        h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
+        h.Units.emplace_back(MakeUnit<EUnitKind::Keyword>(s));
+        h.Units.emplace_back(MakeUnit<EUnitKind::QuotedIdentifier>(s));
+        h.Units.emplace_back(MakeUnit<EUnitKind::BindParameterIdentifier>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Identifier>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Literal>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::StringLiteral>(s));
-        h.Units.emplace_back(MakeUnit<EUnitKind::Comment>(s));
         h.Units.emplace_back(MakeUnit<EUnitKind::Whitespace>(s));
 
         return h;
@@ -256,8 +245,8 @@ void Out<NSQLHighlight::EUnitKind>(IOutputStream& out, NSQLHighlight::EUnitKind 
         case NSQLHighlight::EUnitKind::QuotedIdentifier:
             out << "quoted-identifier";
             break;
-        case NSQLHighlight::EUnitKind::BindParamterIdentifier:
-            out << "bind-paramter-identifier";
+        case NSQLHighlight::EUnitKind::BindParameterIdentifier:
+            out << "bind-parameter-identifier";
             break;
         case NSQLHighlight::EUnitKind::TypeIdentifier:
             out << "type-identifier";

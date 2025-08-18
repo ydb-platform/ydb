@@ -4,8 +4,8 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
-namespace NKikimr::NStorage::NBridge {
+namespace NKikimr::NBridge {
 
-    IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TBridgePileId targetPileId);
+    IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId);
 
-} // NKikimr::NStorage::NBridge
+} // NKikimr::NBridge

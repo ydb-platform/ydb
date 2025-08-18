@@ -28,7 +28,7 @@ static ui64 CalculateIteratorLength(PyObject* iter, const TPyCastContext::TPtr& 
     }
 
     if (PyErr_Occurred()) {
-        UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).c_str());
     }
 
     return length;
@@ -41,7 +41,7 @@ static bool IsIteratorHasItems(PyObject* iter, const TPyCastContext::TPtr& castC
     }
 
     if (PyErr_Occurred()) {
-        UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).c_str());
     }
 
     return false;
@@ -77,12 +77,12 @@ class TBaseLazyList: public NUdf::TBoxedValue
             }
 
             if (PyErr_Occurred()) {
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
             }
 
             return false;
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
         bool Next(NUdf::TUnboxedValue& value) override try {
@@ -94,12 +94,12 @@ class TBaseLazyList: public NUdf::TBoxedValue
             }
 
             if (PyErr_Occurred()) {
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
             }
 
             return false;
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
     private:
@@ -129,7 +129,7 @@ private:
         return static_cast<const TDerived*>(this)->GetIteratorImpl();
     }
     catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     bool HasFastListLength() const override {
@@ -149,7 +149,7 @@ private:
 
         return *Length_;
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     bool HasListItems() const override try {
@@ -165,7 +165,7 @@ private:
         return hasItems;
     }
     catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetListIterator() const override try {
@@ -174,7 +174,7 @@ private:
         auto* self = const_cast<TListSelf*>(this);
         return NUdf::TUnboxedValuePod(new TIterator(self->CastCtx_, self->ItemType_, std::move(pyIter)));
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     const NUdf::TOpaqueListRepresentation* GetListRepresentation() const override {
@@ -240,7 +240,7 @@ public:
         UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos
             << "Cannot get iterator from object: "
             << PyObjectRepr(PyObject_.Get()) << ", error: "
-            << GetLastErrorAsString()).data());
+            << GetLastErrorAsString()).c_str());
     }
 
 private:
@@ -261,7 +261,7 @@ private:
         return *Length_;
     }
     catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     bool HasListItems() const override try {
@@ -280,7 +280,7 @@ private:
         return hasItems;
     }
     catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 };
 
@@ -303,7 +303,7 @@ public:
         if (IteratorDrained_) {
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos <<
                 "Lazy list was build under python iterator. "
-                "Iterator was already used.").data());
+                "Iterator was already used.").c_str());
         }
         IteratorDrained_ = true;
         return PyObject_;
@@ -343,7 +343,7 @@ public:
     TPyObjectPtr GetIteratorImpl() const {
         TPyObjectPtr generator = PyObject_CallObject(PyObject_.Get(), nullptr);
         if (!generator || !PyGen_Check(generator.Get())) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Expected generator as a result of function call").data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Expected generator as a result of function call").c_str());
         }
         return PyObject_GetIter(generator.Get());
     }

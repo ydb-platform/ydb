@@ -20,10 +20,7 @@ TKafkaWritable& TKafkaWritable::operator<<(const TKafkaUuid& val) {
 }
 
 void TKafkaWritable::write(const char* val, size_t length) {
-    ssize_t res = Buffer.write(val, length);
-    if (res < 0) {
-        ythrow yexception() << "Error during flush of the written to socket data. Error code: " << strerror(-res) << " (" << res << ")";
-    }
+    Buffer.write(val, length);
 }
 
 TKafkaReadable& TKafkaReadable::operator>>(TKafkaUuid& val) {

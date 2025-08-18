@@ -38,7 +38,7 @@ inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& working
 
 class PQGroupReserve {
 public:
-    PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions);
+    PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions, ui64 currentStorageUsage = 0);
 
     ui64 Storage;
     ui64 Throughput;

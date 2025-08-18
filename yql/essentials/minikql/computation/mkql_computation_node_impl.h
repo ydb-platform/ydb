@@ -39,7 +39,7 @@ class TUnboxedImmutableComputationNode: public TRefCountedComputationNode<ICompu
 public:
     TUnboxedImmutableComputationNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value);
 
-    ~TUnboxedImmutableComputationNode();
+    ~TUnboxedImmutableComputationNode() override;
 
 private:
     void InitNode(TComputationContext&) const override {}
@@ -866,7 +866,7 @@ public:
     {
     }
 
-    ~TComputationValueBaseNotSupportedStub() {
+    ~TComputationValueBaseNotSupportedStub() override {
     }
 
 private:
@@ -933,7 +933,7 @@ public:
     {
     }
 
-    ~TComputationValueBase() {
+    ~TComputationValueBase() override {
     }
 
     TString DebugString() const {
@@ -1038,6 +1038,7 @@ IComputationNode* LocateNode(const TNodeLocator& nodeLocator, TNode& node, bool 
 IComputationExternalNode* LocateExternalNode(const TNodeLocator& nodeLocator, TCallable& callable, ui32 index, bool pop = true);
 
 using TPasstroughtMap = std::vector<std::optional<size_t>>;
+using TPassthroughSpan = std::vector<std::optional<size_t>>;
 
 template<class TContainerOne, class TContainerTwo>
 TPasstroughtMap GetPasstroughtMap(const TContainerOne& from, const TContainerTwo& to);

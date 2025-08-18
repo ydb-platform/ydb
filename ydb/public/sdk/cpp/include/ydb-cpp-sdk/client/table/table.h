@@ -25,6 +25,7 @@ class Changefeed;
 class ChangefeedDescription;
 class DescribeExternalDataSourceResult;
 class DescribeExternalTableResult;
+class DescribeSystemViewResult;
 class DescribeTableResult;
 class ExplicitPartitions;
 class GlobalIndexSettings;
@@ -1082,6 +1083,7 @@ private:
 
 class TDescribeExternalDataSourceResult;
 class TDescribeExternalTableResult;
+class TDescribeSystemViewResult;
 
 using TAsyncCreateSessionResult = NThreading::TFuture<TCreateSessionResult>;
 using TAsyncDataQueryResult = NThreading::TFuture<TDataQueryResult>;
@@ -1090,6 +1092,7 @@ using TAsyncExplainDataQueryResult = NThreading::TFuture<TExplainQueryResult>;
 using TAsyncDescribeTableResult = NThreading::TFuture<TDescribeTableResult>;
 using TAsyncDescribeExternalDataSourceResult = NThreading::TFuture<TDescribeExternalDataSourceResult>;
 using TAsyncDescribeExternalTableResult = NThreading::TFuture<TDescribeExternalTableResult>;
+using TAsyncDescribeSystemViewResult = NThreading::TFuture<TDescribeSystemViewResult>;
 using TAsyncBeginTransactionResult = NThreading::TFuture<TBeginTransactionResult>;
 using TAsyncCommitTransactionResult = NThreading::TFuture<TCommitTransactionResult>;
 using TAsyncTablePartIterator = NThreading::TFuture<TTablePartIterator>;
@@ -1718,6 +1721,8 @@ struct TDescribeExternalDataSourceSettings : public TOperationRequestSettings<TD
 
 struct TDescribeExternalTableSettings : public TOperationRequestSettings<TDescribeExternalTableSettings> {};
 
+struct TDescribeSystemViewSettings : public TOperationRequestSettings<TDescribeSystemViewSettings> {};
+
 struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {
     FLUENT_SETTING_DEFAULT(bool, WithCollectFullDiagnostics, false);
 };
@@ -1805,6 +1810,9 @@ public:
 
     TAsyncDescribeExternalTableResult DescribeExternalTable(const std::string& path,
         const TDescribeExternalTableSettings& settings = {});
+
+    TAsyncDescribeSystemViewResult DescribeSystemView(const std::string& path,
+        const TDescribeSystemViewSettings& settings = {});
 
     TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings = TTxSettings(),
         const TBeginTxSettings& settings = TBeginTxSettings());
@@ -2285,6 +2293,46 @@ public:
 
 private:
     TExternalTableDescription ExternalTableDescription_;
+};
+
+//! Represents system view description
+class TSystemViewDescription {
+public:
+    TSystemViewDescription(Ydb::Table::DescribeSystemViewResult&& desc);
+
+    // System view id
+    uint64_t GetSysViewId() const;
+    const std::string& GetSysViewName() const;
+
+    // Columns info
+    const std::vector<std::string>& GetPrimaryKeyColumns() const;
+    std::vector<TTableColumn> GetTableColumns() const;
+
+    // Attributes
+    const std::unordered_map<std::string, std::string>& GetAttributes() const;
+
+private:
+    TSystemViewDescription();
+
+    friend class NYdb::TProtoAccessor;
+    const Ydb::Table::DescribeSystemViewResult& GetProto() const;
+
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+};
+
+//! Represents the result of a DescribeSystemView call.
+class TDescribeSystemViewResult : public NScheme::TDescribePathResult {
+public:
+    TDescribeSystemViewResult(
+        TStatus&& status,
+        Ydb::Table::DescribeSystemViewResult&& desc
+    );
+
+    TSystemViewDescription GetSystemViewDescription() const;
+
+private:
+    TSystemViewDescription SystemViewDescription_;
 };
 
 } // namespace NTable

@@ -9,6 +9,8 @@ SRCS(
     actors/kafka_sasl_handshake_actor.cpp
     actors/kafka_metrics_actor.cpp
     actors/kafka_list_offsets_actor.cpp
+    actors/kafka_list_groups_actor.cpp
+    actors/kafka_describe_groups_actor.cpp
     actors/kafka_topic_offsets_actor.cpp
     actors/kafka_fetch_actor.cpp
     actors/kafka_find_coordinator_actor.cpp
@@ -24,6 +26,7 @@ SRCS(
     actors/txn_actor_response_builder.cpp
     actors/kafka_transaction_actor_sql.cpp
     actors/kafka_transaction_actor.cpp
+    actors/kafka_state_name_to_int.cpp
     kafka_connection.cpp
     kafka_connection.h
     kafka_constants.h

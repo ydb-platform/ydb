@@ -9,9 +9,7 @@ using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(SerialTypeNegative1) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -33,9 +31,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(SerialTypeForNonKeyColumn) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -116,9 +112,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
 
     void TestSerialType(TString serialType) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -185,12 +179,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(AddSerialColumnForbidden) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetWithSampleTables(false));
 
-        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -220,9 +211,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DropCreateSerial) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -305,9 +294,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultsAndDeleteAndUpdate) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -364,12 +351,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(AddColumnWithDefaultForbidden) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetWithSampleTables(false));
 
-        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -399,10 +383,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultValue) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
+            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -492,9 +474,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultValuesForTable) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -537,9 +517,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultValuesForTableNegative2) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -560,9 +538,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultValuesForTableNegative3) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -584,9 +560,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultValuesForTableNegative4) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -608,9 +582,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(IndexedTableAndNotNullColumn) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -706,9 +678,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(IndexAutoChooseAndNonReadyIndex) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false)
-            .SetAppConfig(appConfig)
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetUseRealThreads(false)
             .SetWithSampleTables(false));
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); } );
@@ -807,12 +778,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(AddNonColumnDoesnotReturnInternalError) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
-
         TKikimrRunner kikimr(TKikimrSettings()
             .SetUseRealThreads(false)
-            .SetAppConfig(appConfig)
+            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); } );
@@ -961,12 +929,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(IndexedTableAndNotNullColumnAddNotNullColumn) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
-        appConfig.MutableFeatureFlags()->SetEnableParameterizedDecimal(true);
-
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
+            .SetEnableAddColumsWithDefaults(true)
+            .SetEnableParameterizedDecimal(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1192,9 +1157,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultAndIndexesTestDefaultColumnNotIncludedInIndex) {
-        NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1249,11 +1212,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(Utf8AndDefault) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
-
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
+            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1331,11 +1291,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(AlterTableAddNotNullWithDefault) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
-
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
+            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();

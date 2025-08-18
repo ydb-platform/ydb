@@ -86,6 +86,12 @@ public:
         return std::move(*result);
     }
 
+    const TString& GetBlobRangeVerified(const TBlobRange& bRange) const {
+        auto it = Blobs.find(bRange);
+        AFL_VERIFY(it != Blobs.end());
+        return it->second;
+    }
+
     bool IsEmpty() const {
         return Blobs.empty();
     }

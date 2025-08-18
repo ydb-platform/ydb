@@ -129,8 +129,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(
     } else {
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
     }
-
-    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings serverSettings(appConfig);
     serverSettings.FeatureFlags.SetEnableSeparationComputeActorsFromRead(params.EnableSeparationComputeActorsFromRead);
     serverSettings.SetKqpSettings(settings);
 
@@ -802,6 +801,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(CheckNoSortings(plan));
     }
 
+    Y_UNIT_TEST_TWIN(SortingsPropagateThroughMapJoin, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_propagate_through_map_join.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
     Y_UNIT_TEST_TWIN(SortingsDifferentDirs, RemoveLimitOperator) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_different_dirs.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
         UNIT_ASSERT(CheckSorting(plan));
@@ -948,15 +952,15 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
         auto joinFinder = TFindJoinWithLabels(plan);
         {
-            auto join = joinFinder.Find({"test/ds/customer", "test/ds/customer_address"});
+            auto join = joinFinder.Find({"customer", "customer_address"});
             UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
         }
         {
-            auto join = joinFinder.Find({"test/ds/customer_demographics", "test/ds/customer", "test/ds/customer_address"});
+            auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address"});
             UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
         }
         {
-            auto join = joinFinder.Find({"test/ds/customer_demographics", "test/ds/customer", "test/ds/customer_address", "test/ds/store_sales"});
+            auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address", "store_sales"});
             UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (Grace)");
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
@@ -1092,14 +1096,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(TPCDSEveryQueryWorks, ColumnStore) {
+    Y_UNIT_TEST(TPCDSEveryQueryWorks) {
         auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpcds1000s.json"), true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
         NStatusHelpers::ThrowOnError(result);
         auto session = result.GetSession();
 
-        CreateTables(session, "schema/tpcds.sql", ColumnStore);
+        CreateTables(session, "schema/tpcds.sql", true);
 
         RunBenchmarkQueries(
             session,

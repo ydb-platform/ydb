@@ -1,6 +1,6 @@
 IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE OR OPENSOURCE_PROJECT != "yt")
 
-PROGRAM()
+PROGRAM(sql2yql)
 
 PEERDIR(
     contrib/libs/antlr3_cpp_runtime
@@ -19,7 +19,12 @@ PEERDIR(
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/utils
+    yql/essentials/core/pg_ext
+    yql/essentials/providers/common/gateways_utils
 )
+
+ALLOCATOR(J)
 
 ADDINCL(
     GLOBAL contrib/libs/antlr3_cpp_runtime/include

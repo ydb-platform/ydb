@@ -134,6 +134,9 @@ namespace NKikimr {
         ui64 AnubisOsirisMaxInFly;
         bool AddHeader;
 
+        static const ui32 TinyDiskHullCompLevel0MaxSstsAtOnce;
+        static const ui32 TinyDiskHullCompSortedPartsNum;
+
         //////////////// LOG CUTTER SETTINGS ////////////////
         TDuration RecoveryLogCutterFirstDuration;
         TDuration RecoveryLogCutterRegularDuration;
@@ -260,6 +263,9 @@ namespace NKikimr {
         TControlWrapper ThrottlingMaxOccupancyPerMille;
         TControlWrapper ThrottlingMinLogChunkCount;
         TControlWrapper ThrottlingMaxLogChunkCount;
+
+        ///////////// DEEP SCRUBBING ////////////////////////
+        TControlWrapper EnableDeepScrubbing;
 
         ///////////// SYNC SETTINGS //////////////////
         TControlWrapper MaxInProgressSyncCount;

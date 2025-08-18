@@ -67,19 +67,16 @@ public:
                     TEvNodeBroker::TEvRegistrationRequest::TPtr request,
                     NActors::TScopeId scopeId,
                     TSubDomainKey servicedSubDomain,
-                    std::optional<TBridgePileId> bridgePileId,
                     TString error)
                 : Request(request)
                 , ScopeId(scopeId)
                 , ServicedSubDomain(servicedSubDomain)
-                , BridgePileId(bridgePileId)
                 , Error(std::move(error))
             {}
 
             TEvNodeBroker::TEvRegistrationRequest::TPtr Request;
             NActors::TScopeId ScopeId;
             TSubDomainKey ServicedSubDomain;
-            std::optional<TBridgePileId> BridgePileId;
             TString Error;
         };
 
@@ -144,7 +141,6 @@ private:
         TSubDomainKey ServicedSubDomain;
         ENodeState State = ENodeState::Removed;
         ui64 Version = 0;
-        std::optional<TBridgePileId> BridgePileId;
     };
 
     // State changes to apply while moving to the next epoch.

@@ -82,8 +82,10 @@ def test_no_warnings(import_path: str) -> None:
         # fmt: off
         sys.executable,
         "-I",
-        "-W", "error",
-        "-c", f"import {import_path!s}",
+        "-W",
+        "error",
+        "-c",
+        f"import {import_path!s}",
         # fmt: on
     )
 
@@ -99,8 +101,10 @@ def test_c_extension_preferred_by_default(monkeypatch: pytest.MonkeyPatch) -> No
         # fmt: off
         sys.executable,
         "-I",
-        "-W", "error",
-        "-c", "import multidict; raise SystemExit(int("
+        "-W",
+        "error",
+        "-c",
+        "import multidict; raise SystemExit(int("
         "multidict.istr.__module__ != 'multidict._multidict' "
         "or multidict.USE_EXTENSIONS is not True))",
         # fmt: on

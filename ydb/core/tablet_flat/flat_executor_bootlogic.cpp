@@ -133,7 +133,7 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
 
     State_ = new NBoot::TBack(follower, Info->TabletID, gen);
     State().Scheme = new NTable::TScheme;
-    State().PageCaches = std::move(caches.PageCaches);
+    State().PageCollections = std::move(caches.PageCollections);
     State().TxStatusCaches = std::move(caches.TxStatusCaches);
 
     Steps = new NBoot::TRoot(this, State_.Get(), logger);
@@ -176,8 +176,8 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     }
 }
 
-NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPageCollection::TFetch> req) {
-    auto success = Loads.insert(std::make_pair(req->PageCollection.Get(), step)).second;
+NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoader::TFetch&& fetch) {
+    auto success = Loads.insert(std::make_pair(fetch.PageCollection.Get(), step)).second;
 
     Y_ENSURE(success, "IPageCollection queued twice for loading");
 
@@ -185,8 +185,9 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPage
         NSharedCache::MakeSharedPageCacheId(),
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
-            req),
-        0, (ui64)EPageCollectionRequest::BootLogic);
+            std::move(fetch.PageCollection),
+            std::move(fetch.Pages)),
+        0, (ui64)ESharedCacheRequestType::BootLogic);
 
     return NBoot::TSpawned(true);
 }
@@ -268,7 +269,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
             return OpResultBroken;
 
     } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) {
-        if (EPageCollectionRequest(ev.Cookie) != EPageCollectionRequest::BootLogic)
+        if (ESharedCacheRequestType(ev.Cookie) != ESharedCacheRequestType::BootLogic)
             return OpResultUnhandled;
 
         auto it = Loads.find(msg->PageCollection.Get());
@@ -320,11 +321,11 @@ void TExecutorBootLogic::FollowersSyncComplete() {
 
 TExecutorCaches TExecutorBootLogic::DetachCaches() {
     if (Result_) {
-        for (auto &x : Result().PageCaches)
-            State().PageCaches[x->Id] = x;
+        for (auto &x : Result().PageCollections)
+            State().PageCollections[x->Id] = x;
     }
     return TExecutorCaches{
-        .PageCaches = std::move(State().PageCaches),
+        .PageCollections = std::move(State().PageCollections),
         .TxStatusCaches = std::move(State().TxStatusCaches),
     };
 }

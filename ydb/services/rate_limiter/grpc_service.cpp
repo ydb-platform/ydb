@@ -28,15 +28,15 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
     using namespace NGRpcService;
 
-    #define SETUP_RL_METHOD(methodName, method, rlMode, requestType) \
-        SETUP_METHOD(methodName, method, rlMode, requestType, RateLimiter, rate_limiter)
+    #define SETUP_RL_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
+        SETUP_METHOD(methodName, method, rlMode, requestType, RateLimiter, rate_limiter, auditModeFlags)
 
-    SETUP_RL_METHOD(CreateResource, DoCreateRateLimiterResource, Rps, RATELIMITER_CREATE_RESOURCE);
-    SETUP_RL_METHOD(AlterResource, DoAlterRateLimiterResource, Rps, RATELIMITER_ALTER_RESOURCE);
-    SETUP_RL_METHOD(DropResource, DoDropRateLimiterResource, Rps, RATELIMITER_DROP_RESOURCE);
-    SETUP_RL_METHOD(ListResources, DoListRateLimiterResources, Rps, RATELIMITER_LIST_RESOURCES);
-    SETUP_RL_METHOD(DescribeResource, DoDescribeRateLimiterResource, Rps, RATELIMITER_DESCRIBE_RESOURCE);
-    SETUP_RL_METHOD(AcquireResource, DoAcquireRateLimiterResource, Off, RATELIMITER_ACQUIRE_RESOURCE);
+    SETUP_RL_METHOD(CreateResource, DoCreateRateLimiterResource, Rps, RATELIMITER_CREATE_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_RL_METHOD(AlterResource, DoAlterRateLimiterResource, Rps, RATELIMITER_ALTER_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_RL_METHOD(DropResource, DoDropRateLimiterResource, Rps, RATELIMITER_DROP_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_RL_METHOD(ListResources, DoListRateLimiterResources, Rps, RATELIMITER_LIST_RESOURCES, TAuditMode::NonModifying());
+    SETUP_RL_METHOD(DescribeResource, DoDescribeRateLimiterResource, Rps, RATELIMITER_DESCRIBE_RESOURCE, TAuditMode::NonModifying());
+    SETUP_RL_METHOD(AcquireResource, DoAcquireRateLimiterResource, Off, RATELIMITER_ACQUIRE_RESOURCE, TAuditMode::NonModifying());
 
     #undef SETUP_RL_METHOD
 }

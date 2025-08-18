@@ -401,7 +401,6 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
     }
 
     Y_UNIT_TEST_TWIN(OlapInsertWithBulkUpsert, UseBulkUpsert) {
-        return; // Fix it
         TInsertWithBulkUpsert tester;
         tester.SetIsOlap(true);
         tester.SetUseBulkUpsert(UseBulkUpsert);
@@ -450,7 +449,6 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
     }
 
     Y_UNIT_TEST(OlapVisibleUncommittedRows) {
-        return; // Fix it
         TVisibleUncommittedRows tester;
         tester.SetIsOlap(true);
         tester.Execute();

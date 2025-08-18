@@ -381,7 +381,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             {GetMessage(firstOffset, R"({"com_col": "event1", "col_second": "str_second"})")},
             ClientIds[0],
             EStatusId::PRECONDITION_FAILED,
-            TStringBuilder() << "Failed to parse json messages, found 1 missing values from offset " << firstOffset << " in non optional column 'col_first' with type [DataType; String]"
+            TStringBuilder() << "Failed to parse json messages, found 1 missing values in non optional column 'col_first' with type [DataType; String], buffered offsets: " << firstOffset
         );
     }
 }

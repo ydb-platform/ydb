@@ -136,6 +136,7 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 MaxQueuedCompletionActions;
     bool UseSpdkNvmeDriver;
 
+    // Next 2 are either user-defined or inferred from drive size
     ui64 ExpectedSlotCount = 0;
     ui32 SlotSizeInUnits = 0;
 
@@ -169,6 +170,8 @@ struct TPDiskConfig : public TThrRefBase {
     bool UseNoopScheduler = false;
 
     bool PlainDataChunks = false;
+
+    bool SeparateHugePriorities = false;
 
     bool MetadataOnly = false;
 
@@ -330,6 +333,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
+        str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
         str << "}";
         return str.Str();
     }
@@ -428,6 +432,10 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasSlotSizeInUnits()) {
             SlotSizeInUnits = cfg->GetSlotSizeInUnits();
+        }
+
+        if (cfg->HasSeparateHugePriorities()) {
+            SeparateHugePriorities = cfg->GetSeparateHugePriorities();
         }
     }
 

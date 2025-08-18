@@ -115,8 +115,7 @@
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
                                                                 "Path": "/local/base_explain_script_script/ScriptingTest",
-                                                                "ReadColumns": null,
-                                                                "ReadRanges": [
+                                                                "ReadColumns": [
                                                                     "Key (-\u221e, +\u221e)"
                                                                 ],
                                                                 "ReadRangesPointPrefixLen": "0",
@@ -240,8 +239,7 @@
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/base_explain_script_script/ScriptingTest",
-                                                        "ReadColumns": null,
-                                                        "ReadRanges": [
+                                                        "ReadColumns": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
                                                         "Scan": "Parallel",
@@ -349,8 +347,7 @@
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
                                                                 "Path": "/local/base_explain_script_script/ScriptingTest",
-                                                                "ReadColumns": null,
-                                                                "ReadRanges": [
+                                                                "ReadColumns": [
                                                                     "Key (-\u221e, +\u221e)"
                                                                 ],
                                                                 "ReadRangesPointPrefixLen": "0",
@@ -474,8 +471,7 @@
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/base_explain_script_script/ScriptingTest",
-                                                        "ReadColumns": null,
-                                                        "ReadRanges": [
+                                                        "ReadColumns": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
                                                         "Scan": "Parallel",

@@ -89,7 +89,7 @@
                                                                 "PlanNodeId": 3,
                                                                 "Plans": [
                                                                     {
-                                                                        "HashFunc": "HashV1",
+                                                                        "HashFunc": "HashV2",
                                                                         "KeyColumns": [
                                                                             "WindowClientHeight",
                                                                             "WindowClientWidth"

@@ -33,13 +33,10 @@ using NYql::TExprNode;
 Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
     Y_UNIT_TEST_TWIN(TestNoLocksIssue, withSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
-
-        auto setting = NKikimrKqp::TKqpSetting();
         TKikimrSettings settings;
-        settings.SetAppConfig(appConfig);
         settings.SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
+
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
@@ -134,13 +131,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST_TWIN(TestNoLocksIssueInteractiveTx, withSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
 
-        auto setting = NKikimrKqp::TKqpSetting();
-        TKikimrSettings settings;
-        settings.SetAppConfig(appConfig);
-        settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
@@ -257,13 +250,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST(TestNoWrite) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
-        auto setting = NKikimrKqp::TKqpSetting();
-        TKikimrSettings settings;
-        settings.SetAppConfig(appConfig);
-        settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
@@ -342,13 +331,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST(TestSnapshotIfInsertRead) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
-        auto setting = NKikimrKqp::TKqpSetting();
-        TKikimrSettings settings;
-        settings.SetAppConfig(appConfig);
-        settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
@@ -419,13 +404,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST(TestSecondaryIndexWithoutSnapshot) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
-        auto setting = NKikimrKqp::TKqpSetting();
-        TKikimrSettings settings;
-        settings.SetAppConfig(appConfig);
-        settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
@@ -477,13 +458,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 
     Y_UNIT_TEST_TWIN(TestSnapshotWithDependentReads, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
-        auto setting = NKikimrKqp::TKqpSetting();
-        TKikimrSettings settings;
-        settings.SetAppConfig(appConfig);
-        settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });

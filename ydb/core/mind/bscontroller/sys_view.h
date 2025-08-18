@@ -26,7 +26,7 @@ struct TEvControllerUpdateSystemViews :
     std::unordered_set<TVSlotId, THash<TVSlotId>> DeletedVSlots;
     std::unordered_set<TGroupId, THash<TGroupId>> DeletedGroups;
     std::unordered_set<TBoxStoragePoolId, THash<TBoxStoragePoolId>> DeletedStoragePools;
-    TBlobStorageController::THostRecordMap HostRecords;
+    THostRecordMap HostRecords;
     ui32 GroupReserveMin;
     ui32 GroupReservePart;
 };

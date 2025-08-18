@@ -200,6 +200,7 @@ namespace NActors {
         void AppendPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept;
         void PrependPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept;
         IEventHandle* PreProcessEvents() noexcept;
+        void CleanupActor(IActor* actor) noexcept;
 
     public:
         ui32 Hint = 0;

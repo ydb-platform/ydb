@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
@@ -503,6 +504,8 @@ public:
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .Add(CreateKqpBuildPhyStagesTransformer(config->EnableSpilling, typesCtx, config->BlockChannelsMode), "BuildPhysicalStages")
+            .Add(CreateKqpPhyOptTransformer(kqpCtx, typesCtx, config,
+                CreateTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(kqpCtx->Cluster, kqpCtx->Tables, typesCtx, config), typesCtx)), "KqpPhysicalOptimize")
             // TODO(ilezhankin): "BuildWideBlockChannels" transformer is required only for BLOCK_CHANNELS_FORCE mode.
             .Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->BlockChannelsMode), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")

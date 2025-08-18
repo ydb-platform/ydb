@@ -6,14 +6,13 @@ pkgs: attrs: with pkgs; with attrs; rec {
     hash = "sha256-R9LWjny1rzKW3H5psPSnZVifGy9K9LnELnckFMQotCE=";
   };
 
+  nativeBuildInputs = [ cmake ];
+
   buildInputs = [
     gtest
     gbenchmark
   ];
 
-  # FIXME: 
-  # It looks like CMake build is not functional.
-  # Understand and make it work.
   cmakeFlags = [
     "-DBUILD_TESTING=ON"
     "-DBUILD_TOOLS=OFF"

@@ -403,8 +403,10 @@ namespace NActors {
                             TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), ev->GetRecipientRewrite());
                             TActivationContext *prevTlsActivationContext = TlsActivationContext;
                             TlsActivationContext = &ctx;
+                            Y_DEFER {
+                                TlsActivationContext = prevTlsActivationContext;
+                            };
                             recipientActor->Receive(ev);
-                            TlsActivationContext = prevTlsActivationContext;
                             // we expect the logger to never die in tests
                         }
                     }
@@ -557,7 +559,7 @@ namespace NActors {
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
         }
 
-        node->ActorSystem->Start();
+        StartActorSystem(nodeIndex, node);
     }
 
     bool TTestActorRuntimeBase::AllowSendFrom(TNodeDataBase* node, TAutoPtr<IEventHandle>& ev) {
@@ -1348,7 +1350,7 @@ namespace NActors {
                 return true;
             }
 
-            if (options.FinalEvents.empty()) {
+            if (options.FinalEvents.empty() && !options.CustomFinalCondition) {
                 for (auto& mbox : currentMailboxes) {
                     if (!mbox.second->IsActive(TInstant::MicroSeconds(CurrentTimestamp)))
                         continue;
@@ -1606,12 +1608,12 @@ namespace NActors {
         TGuard<TMutex> guard(Mutex);
         if (allow) {
             if (VERBOSE) {
-                Cerr << "Actor " << actorId << " added to schedule whitelist";
+                Cerr << "Actor " << actorId << " added to schedule whitelist\n";
             }
             ScheduleWhiteList.insert(actorId);
         } else {
             if (VERBOSE) {
-                Cerr << "Actor " << actorId << " removed from schedule whitelist";
+                Cerr << "Actor " << actorId << " removed from schedule whitelist\n";
             }
             ScheduleWhiteList.erase(actorId);
         }
@@ -1693,6 +1695,10 @@ namespace NActors {
             TActivationContext *prevTlsActivationContext = TlsActivationContext;
             TlsActivationContext = &ctx;
             CurrentRecipient = actorId;
+            Y_DEFER {
+                CurrentRecipient = TActorId();
+                TlsActivationContext = prevTlsActivationContext;
+            };
             {
                 TInverseGuard<TMutex> inverseGuard(Mutex);
 #ifdef USE_ACTOR_CALLSTACK
@@ -1702,8 +1708,6 @@ namespace NActors {
                 recipientActor->Receive(ev);
                 node->ExecutorThread->DropUnregistered();
             }
-            CurrentRecipient = TActorId();
-            TlsActivationContext = prevTlsActivationContext;
         } else {
             if (VERBOSE) {
                 Cerr << "Failed to find actor with local id: " << recipientLocalId << "\n";
@@ -1842,6 +1846,27 @@ namespace NActors {
         return actorSystem;
     }
 
+    void TTestActorRuntimeBase::StartActorSystem(ui32 nodeIndex, TNodeDataBase* node) {
+        Y_UNUSED(nodeIndex);
+
+        node->ActorSystem->Start();
+
+        if (!UseRealThreads) {
+            for (const auto& cmd : node->LocalServices) {
+                auto it = ScheduleWhiteList.find(cmd.first);
+                if (it != ScheduleWhiteList.end()) {
+                    if (TActorId actorId = node->ActorSystem->LookupLocalService(cmd.first)) {
+                        if (VERBOSE) {
+                            Cerr << "Service " << cmd.first << " actor " << actorId << " added to schedule whitelist\n";
+                        }
+                        ScheduleWhiteList.insert(actorId);
+                        ScheduleWhiteListParent[actorId] = cmd.first;
+                    }
+                }
+            }
+        }
+    }
+
     TActorSystem* TTestActorRuntimeBase::SingleSys() const {
         Y_ABORT_UNLESS(Nodes.size() == 1, "Works only for single system env");
 
@@ -1886,14 +1911,21 @@ namespace NActors {
         return actorId.ToString();
     }
 
+    void TTestActorRuntimeBase::SimulateSleep(TDuration duration) {
+        if (!SleepEdgeActor) {
+            SleepEdgeActor = AllocateEdgeActor();
+        }
+        Schedule(new IEventHandle(SleepEdgeActor, SleepEdgeActor, new TEvents::TEvWakeup()), duration);
+        GrabEdgeEventRethrow<TEvents::TEvWakeup>(SleepEdgeActor);
+    }
+
     struct TStrandingActorDecoratorContext : public TThrRefBase {
         TStrandingActorDecoratorContext()
-            : Queue(new TQueueType)
         {
         }
 
-        typedef TOneOneQueueInplace<IEventHandle*, 32> TQueueType;
-        TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> Queue;
+        typedef TOneOneQueueInplace<IEventHandle*, 32, TDelete> TQueueType;
+        TQueueType Queue;
     };
 
     class TStrandingActorDecorator : public TActorBootstrapped<TStrandingActorDecorator> {
@@ -1950,8 +1982,8 @@ namespace NActors {
         }
 
         STFUNC(StateFunc) {
-            bool wasEmpty = !Context->Queue->Head();
-            Context->Queue->Push(ev.Release());
+            bool wasEmpty = !Context->Queue.Head();
+            Context->Queue.Push(ev.Release());
             if (wasEmpty) {
                 SendHead(ActorContext());
             }
@@ -1959,15 +1991,15 @@ namespace NActors {
 
         STFUNC(Reply) {
             Y_ABORT_UNLESS(!HasReply);
-            IEventHandle *requestEv = Context->Queue->Head();
+            IEventHandle *requestEv = Context->Queue.Head();
             TActorId originalSender = requestEv->Sender;
             HasReply = !ReplyChecker->IsWaitingForMoreResponses(ev.Get());
             if (HasReply) {
-                delete Context->Queue->Pop();
+                delete Context->Queue.Pop();
             }
             auto ctx(ActorContext());
             ctx.Send(IEventHandle::Forward(ev, originalSender));
-            if (!IsSync && Context->Queue->Head()) {
+            if (!IsSync && Context->Queue.Head()) {
                 SendHead(ctx);
             }
         }
@@ -1977,7 +2009,7 @@ namespace NActors {
             if (!IsSync) {
                 ctx.Send(GetForwardedEvent().Release());
             } else {
-                while (Context->Queue->Head()) {
+                while (Context->Queue.Head()) {
                     ctx.Send(GetForwardedEvent().Release());
                     int count = 100;
                     while (!HasReply && count > 0) {
@@ -1995,7 +2027,7 @@ namespace NActors {
         }
 
         TAutoPtr<IEventHandle> GetForwardedEvent() {
-            IEventHandle* ev = Context->Queue->Head();
+            IEventHandle* ev = Context->Queue.Head();
             RequestType = ev->GetTypeRewrite();
             HasReply = !ReplyChecker->OnRequest(ev);
             TAutoPtr<IEventHandle> forwardedEv = ev->HasEvent()
@@ -2003,7 +2035,7 @@ namespace NActors {
                     : new IEventHandle(ev->GetTypeRewrite(), ev->Flags, Delegatee, ReplyId, ev->ReleaseChainBuffer(), ev->Cookie);
 
             if (HasReply) {
-                delete Context->Queue->Pop();
+                delete Context->Queue.Pop();
             }
             return forwardedEv;
         }

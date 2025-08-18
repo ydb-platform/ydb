@@ -27,6 +27,7 @@ private:
         , KernelLogic(kernelLogic)
         , Function(function) {
         AFL_VERIFY(KernelLogic);
+        AFL_VERIFY(Function);
     }
 
     virtual bool IsAggregation() const override {
@@ -34,6 +35,12 @@ private:
     }
 
     virtual ui64 DoGetWeight() const override;
+
+
+    virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator() const override {
+        return Function->BuildResultsAggregator(GetOutputColumnIdOnce());
+    }
+
 
 public:
     static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, 

@@ -57,6 +57,7 @@ YTEST_FIELDS_BASE = (
 
 YTEST_FIELDS_EXTRA = (
     df.Blob.value,
+    df.ParallelTestsInSingleNode.value,
     df.ForkMode.from_macro_and_unit,
     df.Size.from_macro_args_and_unit,
     df.Tag.from_macro_args_and_unit,
@@ -575,9 +576,16 @@ def check_resource(fields, unit, *args):
         df.KtlintBinary.value,
         df.UseKtlintOld.value,
         df.KtlintBaselineFile.value,
+        df.KtlintRuleset.value,
     )
 )
 def ktlint(fields, unit, *args):
+    ruleset_dict = df.KtlintRuleset.value(unit, [], [])
+    if ruleset_dict:
+        ruleset = ruleset_dict[df.KtlintRuleset.KEY]
+        unit.ondepends(ruleset)
+        args = (*args, "DEPENDS", ruleset)
+
     flat_args, spec_args = _common.sort_by_keywords(
         {
             "DEPENDS": -1,

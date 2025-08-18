@@ -163,6 +163,7 @@ message TEvCollectGarbage {
     optional bool Hard = 7;
     optional uint32 CollectGeneration = 8;
     optional uint64 CollectStep = 9;
+    optional bool IgnoreBlock = 10;
 }
 
 message TEvCollectGarbageResult {
@@ -184,6 +185,8 @@ message TEvCommitBlobSeq {
         optional bool CommitNotify = 5;
         optional TS3Locator S3Locator = 6; // if blob has been written to S3
         repeated TExtraBlockCheck ExtraBlockChecks = 7;
+        optional bool IssueKeepFlag = 8;
+        optional bool IgnoreBlock = 9;
     }
 
     repeated TItem Items = 1;

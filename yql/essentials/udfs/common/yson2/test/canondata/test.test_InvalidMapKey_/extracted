@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Execution
+
+    <tmp_path>/program.sql:<main>:2:1: Error: Execution of node: Result
+    	select ToBytes(Yson::SerializeJson(Yson::From({"\xff":1})))
+	^
+        <tmp_path>/program.sql:<main>:2:22: Error: JSON writer: invalid UTF-8
+        	select ToBytes(Yson::SerializeJson(Yson::From({"\xff":1})))
+	                     ^

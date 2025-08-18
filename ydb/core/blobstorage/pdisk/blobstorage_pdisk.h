@@ -188,7 +188,7 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)
         , StatusFlags(0)
-        , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DEVICE_TYPE_ROT))
+        , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DEVICE_TYPE_ROT, false))
         , ErrorReason(std::move(errorReason))
     {
         Y_VERIFY(status != NKikimrProto::OK, "Single-parameter constructor is for error responses only");
@@ -197,15 +197,14 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TEvYardInitResult(NKikimrProto::EReplyStatus status, ui64 seekTimeUs, ui64 readSpeedBps,
             ui64 writeSpeedBps, ui64 readBlockSize, ui64 writeBlockSize,
             ui64 bulkWriteBlockSize, ui32 chunkSize, ui32 appendBlockSize,
-            TOwner owner, TOwnerRound ownerRound, ui32 ownerWeight, ui32 slotSizeInUnits,
+            TOwner owner, TOwnerRound ownerRound, ui32 slotSizeInUnits,
             TStatusFlags statusFlags, TVector<TChunkIdx> ownedChunks,
-            EDeviceType trueMediaType, TString errorReason)
+            EDeviceType trueMediaType, bool isTinyDisk, TString errorReason)
         : Status(status)
         , StatusFlags(statusFlags)
         , PDiskParams(new TPDiskParams(
                     owner,
                     ownerRound,
-                    ownerWeight,
                     slotSizeInUnits,
                     chunkSize,
                     appendBlockSize,
@@ -215,7 +214,8 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
                     readBlockSize,
                     writeBlockSize,
                     bulkWriteBlockSize,
-                    trueMediaType))
+                    trueMediaType,
+                    isTinyDisk))
         , OwnedChunks(std::move(ownedChunks))
         , ErrorReason(std::move(errorReason))
     {}

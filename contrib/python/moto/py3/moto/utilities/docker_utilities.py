@@ -1,18 +1,22 @@
 import functools
 import requests.adapters
+from typing import Any, Tuple, TYPE_CHECKING
 
 from moto import settings
+
+if TYPE_CHECKING:
+    from docker import DockerClient
 
 
 _orig_adapter_send = requests.adapters.HTTPAdapter.send
 
 
 class DockerModel:
-    def __init__(self):
+    def __init__(self) -> None:
         self.__docker_client = None
 
     @property
-    def docker_client(self):
+    def docker_client(self) -> "DockerClient":  # type: ignore
         if self.__docker_client is None:
             # We should only initiate the Docker Client at runtime.
             # The docker.from_env() call will fall if Docker is not running
@@ -25,18 +29,25 @@ class DockerModel:
             if requests.adapters.HTTPAdapter.send != _orig_adapter_send:
                 _orig_get_adapter = self.docker_client.api.get_adapter
 
-                def replace_adapter_send(*args, **kwargs):
+                def replace_adapter_send(*args: Any, **kwargs: Any) -> Any:
                     adapter = _orig_get_adapter(*args, **kwargs)
 
                     if isinstance(adapter, requests.adapters.HTTPAdapter):
-                        adapter.send = functools.partial(_orig_adapter_send, adapter)
+                        adapter.send = functools.partial(_orig_adapter_send, adapter)  # type: ignore
                     return adapter
 
                 self.docker_client.api.get_adapter = replace_adapter_send
         return self.__docker_client
 
+    def ensure_image_exists(self, name: str) -> None:
+        full_name = ":".join(parse_image_ref(name))
+        try:
+            self.docker_client.images.get(full_name)
+        except:  # noqa: E722 Do not use bare except
+            self.docker_client.images.pull(full_name)
 
-def parse_image_ref(image_name):
+
+def parse_image_ref(image_name: str) -> Tuple[str, str]:
     # podman does not support short container image name out of box - try to make a full name
     # See ParseDockerRef() in https://github.com/distribution/distribution/blob/main/reference/normalize.go
     parts = image_name.split("/")

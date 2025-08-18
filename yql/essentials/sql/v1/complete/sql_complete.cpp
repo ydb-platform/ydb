@@ -63,17 +63,21 @@ namespace NSQLComplete {
 
             TGlobalContext global = GlobalAnalysis_->Analyze(input, std::move(env));
 
+            local = Enriched(std::move(local), global);
+
             TNameRequest request = NameRequestFrom(input, local, global);
             if (request.IsEmpty()) {
                 return NThreading::MakeFuture<TCompletion>({
-                    .CompletedToken = GetCompletedToken(input, local.EditRange),
+                    .CompletedToken = GetCompletedToken(input, local.ReplaceRange),
                     .Candidates = {},
                 });
             }
 
             TVector<INameService::TPtr> children;
 
-            children.emplace_back(MakeBindingNameService(std::move(global.Names)));
+            if (!local.IsQuoted) {
+                children.emplace_back(MakeBindingNameService(std::move(global.Names)));
+            }
 
             if (!local.Binding && global.Column) {
                 children.emplace_back(MakeColumnNameService(std::move(global.Column->Columns)));
@@ -103,7 +107,7 @@ namespace NSQLComplete {
             const TLocalSyntaxContext& local,
             const TGlobalContext& global) const {
             TNameRequest request = {
-                .Prefix = TString(GetCompletedToken(input, local.EditRange).Content),
+                .Prefix = TString(GetCompletedToken(input, local.FilterRange).Content),
                 .Limit = Configuration_.Limit,
             };
 
@@ -124,6 +128,7 @@ namespace NSQLComplete {
             if (local.Function) {
                 TFunctionName::TConstraints constraints;
                 constraints.Namespace = local.Function->Namespace;
+                constraints.ReturnType = local.Function->ReturnType;
                 request.Constraints.Function = std::move(constraints);
             }
 
@@ -141,7 +146,7 @@ namespace NSQLComplete {
 
             if (local.Object && global.Use) {
                 request.Constraints.Object->Provider = global.Use->Provider;
-                request.Constraints.Object->Cluster = global.Use->Cluster;
+                request.Constraints.Object->Cluster = global.Use->Name;
             }
 
             if (local.Object && local.Object->HasCluster()) {
@@ -153,14 +158,6 @@ namespace NSQLComplete {
                 TClusterName::TConstraints constraints;
                 constraints.Namespace = ""; // TODO(YQL-19747): filter by provider
                 request.Constraints.Cluster = std::move(constraints);
-            }
-
-            if (auto name = global.EnclosingFunction.Transform(NormalizeName);
-                name && name == "concat") {
-                auto& object = request.Constraints.Object;
-                object = object.Defined() ? object : TObjectNameConstraints();
-                object->Kinds.emplace(EObjectKind::Folder);
-                object->Kinds.emplace(EObjectKind::Table);
             }
 
             if (local.Column && global.Column) {
@@ -178,7 +175,7 @@ namespace NSQLComplete {
 
         TCompletion ToCompletion(TCompletionInput input, TLocalSyntaxContext local, TNameResponse response) const {
             TCompletion completion = {
-                .CompletedToken = GetCompletedToken(input, local.EditRange),
+                .CompletedToken = GetCompletedToken(input, local.ReplaceRange),
                 .Candidates = ToCandidate(std::move(response.RankedNames), std::move(local)),
             };
 
@@ -192,6 +189,42 @@ namespace NSQLComplete {
             }
 
             return completion;
+        }
+
+        static TLocalSyntaxContext Enriched(TLocalSyntaxContext local, const TGlobalContext& global) {
+            TMaybe<TFunctionContext> function = global.EnclosingFunction;
+            TMaybe<TLocalSyntaxContext::TObject>& object = local.Object;
+            if (!function || !object) {
+                return local;
+            }
+
+            if (TMaybe<TClusterContext> cluster = function->Cluster) {
+                object->Provider = cluster->Provider;
+                object->Cluster = cluster->Name;
+            }
+
+            auto& name = function->Name;
+            size_t number = function->ArgumentNumber;
+
+            name = NormalizeName(name);
+
+            if (name == "concat") {
+                object->Kinds = {EObjectKind::Folder, EObjectKind::Table};
+            } else if ((number == 0) &&
+                       (name == "range" || name == "like" ||
+                        name == "regexp" || name == "filter" ||
+                        name == "folder" || name == "walkfolders")) {
+                object->Kinds = {EObjectKind::Folder};
+            } else if ((number == 1 || number == 2) && (name == "range")) {
+                if (TMaybe<TString> path = function->Arg0) {
+                    object->Path = *path;
+                    object->Path.append("/");
+                }
+
+                object->Kinds = {EObjectKind::Folder, EObjectKind::Table};
+            }
+
+            return local;
         }
 
         TConfiguration Configuration_;

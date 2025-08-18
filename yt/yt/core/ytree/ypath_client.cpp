@@ -163,6 +163,11 @@ bool TYPathRequest::IsAttachmentCompressionEnabled() const
     return false;
 }
 
+bool TYPathRequest::HasAttachments() const
+{
+    return false;
+}
+
 bool TYPathRequest::IsStreamingEnabled() const
 {
     return false;

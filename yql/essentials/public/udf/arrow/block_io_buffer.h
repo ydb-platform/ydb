@@ -89,6 +89,10 @@ public:
         return TStringBuf(Vec_.data(), Vec_.data() + Pos_);
     }
 
+    char* Data() {
+        return Vec_.data();
+    }
+
 private:
     void Ensure(size_t delta) {
         if (Pos_ + delta > Vec_.size()) {

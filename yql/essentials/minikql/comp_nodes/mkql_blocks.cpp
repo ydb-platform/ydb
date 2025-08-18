@@ -1756,7 +1756,9 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TExpanderState>(ctx, std::move(Stream_->GetValue(ctx)), Width_);
     }
-    void RegisterDependencies() const override {}
+    void RegisterDependencies() const override {
+        DependsOn(Stream_);
+    }
 private:
     IComputationNode* const Stream_;
     const size_t Width_;

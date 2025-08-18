@@ -1,6 +1,6 @@
 #include "schemeshard__operation_common.h"
 
-#include "schemeshard__data_erasure_manager.h"
+#include "schemeshard__shred_manager.h"
 
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -346,12 +346,12 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
 
         if (context.SS->AdoptedShards.contains(shard.Idx)) {
             auto ev = AdoptRequest(shard.Idx, context);
-            context.OnComplete.BindMsgToPipe(OperationId, context.SS->GetGlobalHive(context.Ctx), shard.Idx, ev.Release());
+            context.OnComplete.BindMsgToPipe(OperationId, context.SS->GetGlobalHive(), shard.Idx, ev.Release());
         } else {
             auto path = context.SS->PathsById.at(txState->TargetPathId);
             auto ev = CreateEvCreateTablet(path, shard.Idx, context);
 
-            auto hiveToRequest = context.SS->ResolveHive(shard.Idx, context.Ctx);
+            auto hiveToRequest = context.SS->ResolveHive(shard.Idx);
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " CreateRequest"
@@ -469,6 +469,9 @@ bool TDone::Process(TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->PathsById.contains(txState->SourcePathId));
         TPathElement::TPtr srcPath = context.SS->PathsById.at(txState->SourcePathId);
         if (srcPath->PathState == TPathElement::EPathState::EPathStateCopying) {
+            context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
+        }
+        if (txState->TxType == TTxState::TxRotateCdcStream) {
             context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
         }
     }
@@ -796,6 +799,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
         commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
+        commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else {
@@ -968,8 +973,8 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
         newShardsIdx.push_back(part.ShardIdx);
     }
     context.SS->SetPartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
-    if (context.SS->EnableDataErasure && context.SS->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToDataErasure(std::move(newShardsIdx)));
+    if (context.SS->EnableShred && context.SS->ShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
     }
 
     ui32 newShardCout = dstTableInfo->GetPartitions().size();

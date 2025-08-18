@@ -187,11 +187,21 @@ NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
     }
 }
 
+TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(const NYql::TKikimrConfiguration& config) {
+    // only options that should be specified for all types of queries
+    // including views and etc..
+    SetLangVer(config.LangVer);
+    SetIsEnableAntlr4Parser(config.EnableAntlr4Parser || config.FeatureFlags.GetEnableAntlr4Parser());
+    return *this;
+}
+
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PgParser = UsePgParser && *UsePgParser;
     settings.Antlr4Parser = false;
     settings.EmitReadsForExists = true;
+    settings.LangVer = LangVer;
+    settings.BackportMode = BackportMode;
     if (settings.PgParser) {
         settings.AutoParametrizeEnabled = IsEnablePgConstsToParams ;
         settings.AutoParametrizeValuesStmt = IsEnablePgConstsToParams;

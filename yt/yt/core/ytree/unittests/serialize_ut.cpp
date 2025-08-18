@@ -277,9 +277,22 @@ TEST(TSerializationTest, Map)
     TestSerializationDeserialization(original, EYsonType::MapFragment);
 }
 
+TEST(TSerializationTest, CompactMap)
+{
+    TCompactFlatMap<TString, size_t, 4> original{{"First", 12U}, {"Second", 7883U}, {"Third", 7U}};
+    TestSerializationDeserialization(original);
+}
+
 TEST(TSerializationTest, Set)
 {
     std::set<TString> original{"First", "Second", "Third"};
+    TestSerializationDeserialization(original);
+    TestSerializationDeserialization(original, EYsonType::ListFragment);
+}
+
+TEST(TSerializationTest, CompactSet)
+{
+    TCompactSet<TString, 4> original{"First", "Second", "Third"};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }

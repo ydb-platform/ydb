@@ -1324,56 +1324,25 @@ namespace {
             packageModuleName << Sep << part;
         }
 
-        auto queue = TVector<std::pair<TString, TString>> {
-            {packageModuleName, url}
-        };
+        auto entries = ctx.UrlListerManager->ListUrlRecursive(url, token, TString(Sep), 0);
 
-        while (queue) {
-            auto [prefix, url] = queue.back();
-            queue.pop_back();
-
-            TVector<TUrlListEntry> urlListEntries;
-            try {
-                urlListEntries = ctx.UrlListerManager->ListUrl(url, token);
-            } catch (const std::exception& e) {
-                ctx.AddError(*nameNode,
-                    TStringBuilder()
-                        << "UrlListerManager: failed to list URL \"" << url
-                        << "\", details: " << e.what()
-                );
-
-                return false;
+        for (auto& entry : entries) {
+            if (ctx.OverrideLibraries.contains(
+                    TStringBuilder() << packageModuleName << entry.Name))
+            {
+                continue;
             }
 
-            for (auto& urlListEntry: urlListEntries) {
-                switch (urlListEntry.Type) {
-                case EUrlListEntryType::FILE: {
-                    auto moduleName = TStringBuilder()
-                        << prefix << Sep << urlListEntry.Name;
-
-                    if (ctx.OverrideLibraries.contains(moduleName)) {
-                        continue;
-                    }
-
-                    if (!ctx.ModuleResolver->AddFromUrl(
-                        moduleName, urlListEntry.Url, token, ctx.Expr,
-                        ctx.SyntaxVersion, 0, nameNode->GetPosition()
-                    )) {
-                        return false;
-                    }
-
-                    break;
-                }
-
-                case EUrlListEntryType::DIRECTORY: {
-                    queue.push_back({
-                        TStringBuilder() << prefix << Sep << urlListEntry.Name,
-                        urlListEntry.Url
-                    });
-
-                    break;
-                }
-                }
+            if (!ctx.ModuleResolver->AddFromUrl(
+                    TStringBuilder() << packageModuleName << entry.Name,
+                    entry.Url,
+                    token,
+                    ctx.Expr,
+                    ctx.SyntaxVersion,
+                    0,
+                    nameNode->GetPosition()))
+            {
+                return false;
             }
         }
 

@@ -65,6 +65,7 @@ namespace NYT::NYTree {
  */
 class TAttributeFilter
 {
+public:
     //! Whitelist of top-level keys to be returned.
     DEFINE_BYREF_RO_PROPERTY(std::vector<IAttributeDictionary::TKey>, Keys);
     DEFINE_BYREF_RO_PROPERTY(std::vector<NYPath::TYPath>, Paths);

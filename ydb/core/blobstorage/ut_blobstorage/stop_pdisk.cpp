@@ -19,7 +19,6 @@ Y_UNIT_TEST_SUITE(BSCStopPDisk) {
         ui32 targetNodeId = it->first.first;
         ui32 targetPDiskId = it->first.second;
 
-        // However making the owner of a single good disk ReadOnly must be prohibited
         NKikimrBlobStorage::TConfigRequest request;
 
         NKikimrBlobStorage::TStopPDisk* cmd = request.AddCommand()->MutableStopPDisk();

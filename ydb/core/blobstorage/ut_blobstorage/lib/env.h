@@ -28,6 +28,8 @@ struct TEnvironmentSetup {
 
     using TIcbControlKey = std::pair<ui32, TString>;  // { nodeId, name }
 
+    static const std::initializer_list<ui32> DebugLogComponents;
+
     std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
 
     struct TSettings {
@@ -60,6 +62,9 @@ struct TEnvironmentSetup {
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
         const bool SelfManagementConfig = false;
+        const bool EnableDeepScrubbing = false;
+        const ui32 NumPiles = 0;
+        const bool AutomaticBootstrap = false;
     };
 
     const TSettings Settings;
@@ -262,7 +267,17 @@ struct TEnvironmentSetup {
             domainsInfo->AddHive(MakeDefaultHiveID());
         }
 
-        return std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR, domainsInfo, featureFlags);
+        auto res = std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR, domainsInfo, featureFlags);
+
+        if (Settings.NumPiles) {
+            auto& bridgeConfig = res->GetAppDataBridgeConfig();
+            for (ui32 i = 0; i < Settings.NumPiles; ++i) {
+                auto *pile = bridgeConfig.AddPiles();
+                pile->SetName(TStringBuilder() << "pile_" << i + 1);
+            }
+        }
+
+        return res;
     }
 
     void Initialize() {
@@ -366,40 +381,7 @@ struct TEnvironmentSetup {
         Runtime->SetLogPriority(NKikimrServices::BOOTSTRAPPER, prio);
         Runtime->SetLogPriority(NKikimrServices::BS_NODE, prio);
 
-        std::initializer_list<ui32> debug{
-//            NKikimrServices::BS_CONTROLLER,
-//            NKikimrServices::BS_SELFHEAL,
-//            NKikimrServices::BS_PDISK,
-//            NKikimrServices::BS_SKELETON,
-//            NKikimrServices::BS_HULLCOMP,
-//            NKikimrServices::BS_HULLRECS,
-//            NKikimrServices::BS_HULLHUGE,
-//            NKikimrServices::BS_REPL,
-//            NKikimrServices::BS_SYNCER,
-//            NKikimrServices::BS_SYNCLOG,
-//            NKikimrServices::BS_SYNCJOB,
-//            NKikimrServices::BS_QUEUE,
-//            NKikimrServices::BS_VDISK_GET,
-//            NKikimrServices::BS_VDISK_PATCH,
-//            NKikimrServices::BS_VDISK_PUT,
-//            NKikimrServices::BS_VDISK_OTHER,
-//            NKikimrServices::BS_PROXY,
-//            NKikimrServices::BS_PROXY_RANGE,
-//            NKikimrServices::BS_PROXY_GET,
-//            NKikimrServices::BS_PROXY_PUT,
-//            NKikimrServices::BS_PROXY_PATCH,
-//            NKikimrServices::BS_PROXY_INDEXRESTOREGET,
-//            NKikimrServices::BS_PROXY_STATUS,
-            NActorsServices::TEST,
-//            NKikimrServices::BLOB_DEPOT,
-//            NKikimrServices::BLOB_DEPOT_AGENT,
-//            NKikimrServices::HIVE,
-//            NKikimrServices::LOCAL,
-//            NActorsServices::INTERCONNECT,
-//            NActorsServices::INTERCONNECT_SESSION,
-//            NKikimrServices::BS_VDISK_BALANCING,
-        };
-        for (const auto& comp : debug) {
+        for (const auto& comp : DebugLogComponents) {
             Runtime->SetLogPriority(comp, NLog::PRI_DEBUG);
         }
 
@@ -413,6 +395,9 @@ struct TEnvironmentSetup {
     }
 
     void SetupStaticStorage() {
+        if (Settings.SelfManagementConfig && Settings.AutomaticBootstrap && Settings.LocationGenerator) {
+            return;
+        }
         const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
         for (const ui32 nodeId : Runtime->GetNodes()) {
             Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(Group0), nodeId));
@@ -434,6 +419,68 @@ struct TEnvironmentSetup {
                 if (Settings.SelfManagementConfig) {
                     config->SelfManagementConfig = std::make_optional(NKikimrConfig::TSelfManagementConfig());
                     config->SelfManagementConfig->SetEnabled(true);
+                    if (Settings.AutomaticBootstrap) {
+                        config->SelfManagementConfig->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
+                        config->SelfManagementConfig->SetPDiskType(NKikimrBlobStorage::EPDiskType::NVME);
+                        config->SelfManagementConfig->SetAutomaticBootstrap(true);
+                    }
+                    if (Settings.AutomaticBootstrap && Settings.LocationGenerator) {
+                        auto *hostconf = config->BlobStorageConfig.AddDefineHostConfig();
+                        hostconf->SetHostConfigId(1);
+                        auto *drive = hostconf->AddDrive();
+                        drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
+
+                        auto& ns = config->NameserviceConfig;
+                        auto *box = config->BlobStorageConfig.MutableDefineBox();
+                        for (ui32 nodeId : Runtime->GetNodes()) {
+                            auto *node = ns.AddNode();
+                            node->SetNodeId(nodeId);
+                            node->SetHost(TStringBuilder() << "host_" << nodeId);
+                            node->SetInterconnectHost(node->GetHost());
+                            node->SetPort(19001);
+                            Settings.LocationGenerator(nodeId).Serialize(node->MutableLocation(), false);
+                            auto *host = box->AddHost();
+                            host->SetEnforcedNodeId(nodeId);
+                            host->SetHostConfigId(hostconf->GetHostConfigId());
+                        }
+
+                        auto makeHosts = [&] {
+                            TStringBuilder res;
+                            for (ui32 nodeId : Runtime->GetNodes()) {
+                                res << "  - {host: host_" << nodeId << ", location: {data_center: my_dc, rack: rack_"
+                                    << nodeId << ", unit: unit_" << nodeId << ", bridge_pile_name: pile_"
+                                    << (nodeId - 1) / 8 + 1 << "}}\n";
+                            }
+                            return res;
+                        };
+
+                        config->StartupConfigYaml = TStringBuilder() <<
+R"(
+metadata:
+  kind: MainConfig
+  cluster: \"\"
+  version: 0
+config:
+  erasure: block-4-2
+  default_disk_type: NVME
+  self_management_config:
+    enabled: true
+    automatic_bootstrap: true
+  bridge_config:
+    piles:
+    - name: pile_1
+    - name: pile_2
+    - name: pile_3
+  host_configs:
+  - nvme:
+    - SectorMap:0:1000
+    - SectorMap:1:1000
+    - SectorMap:2:1000
+    - SectorMap:3:1000
+    - SectorMap:4:1000
+  hosts:
+)" << makeHosts();
+                    }
                 }
                 config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
@@ -459,6 +506,10 @@ struct TEnvironmentSetup {
                     config->CacheAccessor = std::make_unique<TAccessor>(Cache[nodeId]);
                 }
                 config->FeatureFlags = Settings.FeatureFlags;
+
+                if (Settings.NumPiles) {
+                    config->BridgeConfig.emplace().CopyFrom(Runtime->GetAppDataBridgeConfig());
+                }
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
 
@@ -487,6 +538,8 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
+
+                ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
                 
 #undef ADD_ICB_CONTROL
 
@@ -555,7 +608,7 @@ struct TEnvironmentSetup {
     }
 
     void CreateBoxAndPool(ui32 numDrivesPerNode = 0, ui32 numGroups = 0, ui32 numStorageNodes = 0,
-            NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::ROT) {
+            NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::ROT, const std::optional<NKikimrBlobStorage::TGroupGeometry>& geometry = std::nullopt) {
         NKikimrBlobStorage::TConfigRequest request;
 
         auto *cmd = request.AddCommand()->MutableDefineHostConfig();
@@ -578,6 +631,30 @@ struct TEnvironmentSetup {
             host->SetHostConfigId(numStorageNodes == 0 || index < numStorageNodes ? 1 : 2);
             ++index;
         }
+
+        auto *cmd2 = request.AddCommand()->MutableDefineStoragePool();
+        cmd2->SetBoxId(1);
+        cmd2->SetStoragePoolId(1);
+        cmd2->SetName(StoragePoolName);
+        cmd2->SetKind(StoragePoolName);
+        cmd2->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
+        cmd2->SetVDiskKind("Default");
+        cmd2->SetNumGroups(numGroups ? numGroups : NumGroups);
+        cmd2->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
+        if (Settings.Encryption) {
+            cmd2->SetEncryptionMode(TBlobStorageGroupInfo::EEncryptionMode::EEM_ENC_V1);
+        }
+
+        if (geometry) {
+            cmd2->MutableGeometry()->CopyFrom(*geometry);
+        }
+
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    void CreatePool(ui32 numGroups = 0, NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::NVME) {
+        NKikimrBlobStorage::TConfigRequest request;
 
         auto *cmd2 = request.AddCommand()->MutableDefineStoragePool();
         cmd2->SetBoxId(1);
@@ -904,9 +981,9 @@ struct TEnvironmentSetup {
         NKikimrBlobStorage::TConfigRequest request;
         auto *cmd = request.AddCommand();
         auto *us = cmd->MutableUpdateSettings();
-        us->SetEnableSelfHeal(selfHeal);
-        us->SetEnableDonorMode(donorMode);
-        us->SetEnableGroupLayoutSanitizer(groupLayoutSanitizer);
+        us->AddEnableSelfHeal(selfHeal);
+        us->AddEnableDonorMode(donorMode);
+        us->AddEnableGroupLayoutSanitizer(groupLayoutSanitizer);
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
@@ -1075,6 +1152,31 @@ struct TEnvironmentSetup {
         return ctr;
     }
 
+    template <class TCallback>
+    ui64 AggregateVDiskCountersWithCallback(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
+            const std::vector<ui32>& pdiskLayout, TCallback callback) {
+        ui64 ctr = 0;
+
+        for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
+            auto* appData = Runtime->GetNode(nodeId)->AppData.get();
+            for (ui32 i = 0; i < groupSize; ++i) {
+                TStringStream ss;
+                ss << LeftPad(i, 2, '0');
+                TString orderNumber = ss.Str();
+                ss.Clear();
+                ss << LeftPad(pdiskLayout[i], 9, '0');
+                TString pdisk = ss.Str();
+                ctr += callback(GetServiceCounters(appData->Counters, "vdisks")->
+                        GetSubgroup("storagePool", storagePool)->
+                        GetSubgroup("group", std::to_string(groupId))->
+                        GetSubgroup("orderNumber", orderNumber)->
+                        GetSubgroup("pdisk", pdisk)->
+                        GetSubgroup("media", "rot"));
+            }
+        }
+        return ctr;
+    }
+
     ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
         const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
         return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout, 
@@ -1100,5 +1202,4 @@ struct TEnvironmentSetup {
             it->second = value;
         }
     }
-
 };

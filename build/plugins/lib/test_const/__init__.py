@@ -47,6 +47,7 @@ TESTING_OUT_RAM_DRIVE_DIR_NAME = "ram_drive_output"
 TESTING_OUT_TAR_NAME = TESTING_OUT_DIR_NAME + ".tar.zstd"
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 TRACE_FILE_NAME = "ytest.report.trace"
+TEMPORARY_TRACE_DIR_NAME = "temporary_traces"
 TRUNCATING_IGNORE_FILE_LIST = {TRACE_FILE_NAME, SUITE_CONTEXT_FILE_NAME, "run_test.log"}
 YT_RUN_TEST_DIR_NAME = "yt_run_test"
 YT_RUN_TEST_TAR_NAME = "yt_run_test.tar"
@@ -606,8 +607,8 @@ Highlight = _Highlight()
 
 
 class _StatusColorMap(object):
-    # There should be no XFAILDIFF, because it's internal status.
-    # It should be replaced with XFAIL or XPASS during verification of canon data.
+    # XFAILDIFF is internal status and should be replaced
+    # with XFAIL or XPASS during verification stage of canon data
 
     _MAP = {
         'crashed': Highlight.WARNING,
@@ -622,6 +623,7 @@ class _StatusColorMap(object):
         'skipped': Highlight.UNIMPORTANT,
         'timeout': Highlight.BAD,
         'xfail': Highlight.WARNING,
+        'xfaildiff': Highlight.WARNING,
         'xpass': Highlight.WARNING,
     }
 

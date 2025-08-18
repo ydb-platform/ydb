@@ -284,7 +284,7 @@ public:
     bool ProgressState(TOperationContext& context) override;
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult__HandlePtr& ev, TOperationContext& context) override;
 
-private:
+protected:
     const TOperationId OperationId;
 }; // TConfigurePartsAtTable
 

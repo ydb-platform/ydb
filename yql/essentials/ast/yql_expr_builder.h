@@ -12,6 +12,7 @@ struct TExprContext;
 class TExprNode;
 typedef TIntrusivePtr<TExprNode> TExprNodePtr;
 typedef std::vector<TExprNodePtr> TExprNodeList;
+typedef std::span<const TExprNodePtr> TExprNodeSpan;
 
 class TExprNodeReplaceBuilder;
 
@@ -43,6 +44,7 @@ public:
     TExprNodeBuilder& Add(ui32 index, TExprNodePtr&& child);
     TExprNodeBuilder& Add(ui32 index, const TExprNodePtr& child);
     TExprNodeBuilder& Add(TExprNodeList&& children);
+
     // only for lambda bodies
     TExprNodeBuilder& Set(TExprNodePtr&& body);
     TExprNodeBuilder& Set(const TExprNodePtr& body);
@@ -136,6 +138,7 @@ public:
     TExprNodeReplaceBuilder& With(const TStringBuf& toName, ui32 toIndex);
     TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, TExprNodePtr&& toNode);
     TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, const TStringBuf& toName);
+    TExprNodeReplaceBuilder& WithArguments(TExprNodeSpan nodes);
     TExprNodeBuilder With(ui32 argIndex);
     TExprNodeBuilder WithNode(TExprNodePtr&& fromNode);
 

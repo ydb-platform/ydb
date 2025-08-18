@@ -6,7 +6,7 @@ LICENSE(BSD-3-Clause WITH Google-Patent-License-Webm)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.5.0)
+VERSION(1.6.0)
 
 IF (OS_ANDROID)
     PEERDIR(

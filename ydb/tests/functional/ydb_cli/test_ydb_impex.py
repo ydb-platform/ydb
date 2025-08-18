@@ -360,3 +360,19 @@ class TestImpex(BaseTestTableService):
         self.init_test(tmp_path, table_type, request.node.name)
         self.run_import_from_stdin(ftype, DATA[ftype], additional_args, True)
         return self.run_export(ftype)
+
+    @pytest.mark.parametrize("ftype", ["csv"])
+    def test_import_minimal_parallelism(self, tmp_path, request, table_type, ftype):
+        """
+        Tests import of 5 rows with minimal values for threads, max-in-flight, and batch-bytes.
+        """
+        self.init_test(tmp_path, table_type, request.node.name)
+        # Use only the header and first 5 rows from DATA[ftype]
+        data_lines = DATA[ftype].splitlines(keepends=True)
+        data = ''.join(data_lines[:6])
+        self.run_import(
+            ftype,
+            data,
+            additional_args=["--threads", "1", "--max-in-flight", "1", "--batch-bytes", "1"]
+        )
+        return self.run_export(ftype)

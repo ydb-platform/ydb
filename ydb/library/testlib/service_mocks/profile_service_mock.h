@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/client/nc_private/iam/profile_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/v1/profile_service.grpc.pb.h>
 
 class TProfileServiceMock : public nebius::iam::v1::ProfileService::Service {
 public:

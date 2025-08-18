@@ -26,9 +26,6 @@ namespace NKikimr {
         NMonGroup::TDefragGroup DefragMonGroup;
         bool RunDefragBySchedule;
 
-        // free up to this number of chunks in one quantum
-        ui32 MaxChunksToDefrag = 1u;
-
         TDefragCtx(
                 const TIntrusivePtr<TVDiskContext> &vctx,
                 const TIntrusivePtr<TVDiskConfig> &vconfig,

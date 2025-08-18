@@ -63,7 +63,8 @@
                 {"Index": 12, "Name": "DownsamplingFill", "Type": "TCoAtom"},
                 {"Index": 13, "Name": "DownsamplingGridSec", "Type": "TCoUint32"},
                 {"Index": 14, "Name": "RequiredLabelNames", "Type": "TCoAtomList"},
-                {"Index": 15, "Name": "TotalMetricsCount", "Type": "TCoAtom"}
+                {"Index": 15, "Name": "TotalMetricsCount", "Type": "TCoAtom"},
+                {"Index": 16, "Name": "LabelNameAliases", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -85,10 +86,11 @@
                 {"Index": 2, "Name": "Object", "Type": "TSoObject"},
                 {"Index": 3, "Name": "SystemColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "LabelNames", "Type": "TCoAtomList"},
-                {"Index": 5, "Name": "RequiredLabelNames", "Type": "TCoAtomList"},
-                {"Index": 6, "Name": "TotalMetricsCount", "Type": "TCoAtom"},
-                {"Index": 7, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 8, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
+                {"Index": 5, "Name": "LabelNameAliases", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "RequiredLabelNames", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "TotalMetricsCount", "Type": "TCoAtom"},
+                {"Index": 8, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 9, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

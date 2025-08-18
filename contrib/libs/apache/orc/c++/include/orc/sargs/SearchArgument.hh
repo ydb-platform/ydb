@@ -251,6 +251,12 @@ namespace orc {
      * @return the new SearchArgument
      */
     virtual std::unique_ptr<SearchArgument> build() = 0;
+
+    /**
+     * Add a maybe leaf to the current item on the stack.
+     * @return this
+     */
+    virtual SearchArgumentBuilder& maybe() = 0;
   };
 
   /**

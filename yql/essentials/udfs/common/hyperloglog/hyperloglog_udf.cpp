@@ -149,7 +149,7 @@ namespace {
                 hll->Get()->Update(args[0].Get<ui64>());
                 return TUnboxedValuePod(hll.Release());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -196,7 +196,7 @@ namespace {
                 resource->Get()->Update(args[1].Get<ui64>());
                 return TUnboxedValuePod(args[0]);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -244,7 +244,7 @@ namespace {
                 static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get()->Save(result);
                 return valueBuilder->NewString(result.Str());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -292,7 +292,7 @@ namespace {
                 THolder<THyperLogLogResource> hll(new THyperLogLogResource(THybridHyperLogLog::Load(input)));
                 return TUnboxedValuePod(hll.Release());
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -339,7 +339,7 @@ namespace {
                 static_cast<THyperLogLogResource*>(args[1].AsBoxed().Get())->Get()->Merge(*left);
                 return TUnboxedValuePod(args[1]);
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 

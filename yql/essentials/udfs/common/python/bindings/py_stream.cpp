@@ -215,7 +215,7 @@ private:
                         PyIter_.Reset();
                         TPyObjectPtr result(PyObject_CallObject(PyGeneratorCallable_.Get(), PyGeneratorCallableArgs_.Get()));
                         if (!result) {
-                            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Failed to execute:\n" << GetLastErrorAsString()).data());
+                            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Failed to execute:\n" << GetLastErrorAsString()).c_str());
                         }
 
                         if (PyGen_Check(result.Get())) {
@@ -223,7 +223,7 @@ private:
                         } else if (PyIter_Check(result.Get())) {
                             iter = std::move(result);
                         } else {
-                            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Expected iterator or generator, but got " << PyObjectRepr(result.Get())).data());
+                            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Expected iterator or generator, but got " << PyObjectRepr(result.Get())).c_str());
                         }
                     } else {
                         return NUdf::EFetchStatus::Yield;
@@ -232,7 +232,7 @@ private:
                     if (!iter) {
                         iter.ResetSteal(PyObject_GetIter(iterable.Get()));
                         if (!iter) {
-                            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
                         }
                     }
 
@@ -240,13 +240,13 @@ private:
                     return NUdf::EFetchStatus::Yield;
                 }
 
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
             }
 
             return NUdf::EFetchStatus::Finish;
         }
         catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
     }
 
@@ -287,7 +287,7 @@ NKikimr::NUdf::TUnboxedValue FromPyStream(
     if (PyGen_Check(value.Get())) {
         TPyObjectPtr iter(PyObject_GetIter(value.Get()));
         if (!iter) {
-            UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).data());
+            UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).c_str());
         }
         return NUdf::TUnboxedValuePod(new TStreamOverPyIter(castCtx, itemType, std::move(iter), nullptr,
             originalCallable, originalCallableClosure, originalCallableArgs));
@@ -308,11 +308,11 @@ NKikimr::NUdf::TUnboxedValue FromPyStream(
     if (PyCallable_Check(value.Get())) {
         TPyObjectPtr generator(PyObject_CallObject(value.Get(), nullptr));
         if (!generator || !PyGen_Check(generator.Get())) {
-            UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << "Expected generator as a result of function call").data());
+            UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << "Expected generator as a result of function call").c_str());
         }
         TPyObjectPtr iter(PyObject_GetIter(generator.Get()));
         if (!iter) {
-            UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).data());
+            UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).c_str());
         }
 
         TPyObjectPtr callableClosure;
@@ -331,13 +331,13 @@ NKikimr::NUdf::TUnboxedValue FromPyStream(
     if (PySequence_Check(value.Get()) || PyObject_HasAttrString(value.Get(), "__iter__")) {
         TPyObjectPtr iter(PyObject_GetIter(value.Get()));
         if (!iter) {
-            UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).data());
+            UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).c_str());
         }
         return NUdf::TUnboxedValuePod(new TStreamOverPyIter(castCtx, itemType, std::move(iter), originalCallable ? value : nullptr, nullptr, nullptr, nullptr));
     }
 
     UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << "Expected iterator, generator, generator factory, "
-                          "or iterable object, but got " << PyObjectRepr(value.Get())).data());
+                          "or iterable object, but got " << PyObjectRepr(value.Get())).c_str());
 }
 
 } // namespace NPython

@@ -378,6 +378,14 @@ class YtError(Exception):
         """Backup checkpoint rejected."""
         return self.contains_code(1733)
 
+    def is_sorting_order_violated(self):
+        """Sort order violation."""
+        return self.contains_code(301)
+
+    def is_command_not_supported(self):
+        """Command is not supported/Command is not supported by api."""
+        return self.contains_text("is not supported")
+
 
 class YtResponseError(YtError):
     """Represents an error in YT response."""

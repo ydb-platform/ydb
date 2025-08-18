@@ -23,5 +23,6 @@ jobs:
     with:
       test_targets: ydb/
       test_size: large
-      branches: ${{ (inputs.use_default_branches == true || github.event_name == 'schedule') && '["main", "stable-25-1", "stable-25-1-analytics"]' || github.ref_name }}
+      branches: ''
+      branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}

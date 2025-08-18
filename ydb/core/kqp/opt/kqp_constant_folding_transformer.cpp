@@ -10,7 +10,7 @@ using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
 namespace {
-    THashSet<TString> notAllowedDataTypeForSafeCast{"JsonDocument"};
+    THashSet<TString> notAllowedDataTypeForSafeCast{"JsonDocument", "DyNumber"};
 
     bool IsSuitableToExtractExpr(const TExprNode::TPtr &input) {
         if (auto maybeSafeCast = TExprBase(input).Maybe<TCoSafeCast>()) {

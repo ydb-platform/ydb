@@ -1,4 +1,7 @@
 #include "fastcheck.h"
+
+#include "settings.h"
+
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
@@ -16,6 +19,18 @@
 
 namespace NYql {
 namespace NFastCheck {
+
+namespace {
+
+void FillSettings(NSQLTranslation::TTranslationSettings& settings, const TOptions& options) {
+    settings.LangVer = options.LangVer;
+    settings.ClusterMapping = options.ClusterMapping;
+    settings.SyntaxVersion = options.SyntaxVersion;
+    settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+    settings.Flags = TranslationFlags();
+}
+
+}
 
 bool CheckProgram(const TString& program, const TOptions& options, TIssues& errors) {
     TMaybe<TIssue> verIssue;
@@ -44,10 +59,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     TAstParseResult astRes;
     if (options.IsSql) {
         NSQLTranslation::TTranslationSettings settings;
-        settings.LangVer = options.LangVer;
-        settings.ClusterMapping = options.ClusterMapping;
-        settings.SyntaxVersion = options.SyntaxVersion;
-        settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+        FillSettings(settings, options);
         settings.EmitReadsForExists = true;
         if (options.IsLibrary) {
             settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
@@ -71,10 +83,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
         // parse SQL libs
         for (const auto& x : options.SqlLibs) {
             NSQLTranslation::TTranslationSettings settings;
-            settings.LangVer = options.LangVer;
-            settings.ClusterMapping = options.ClusterMapping;
-            settings.SyntaxVersion = options.SyntaxVersion;
-            settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
+            FillSettings(settings, options);
             settings.File = x.first;
             settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
 

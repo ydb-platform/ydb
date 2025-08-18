@@ -106,7 +106,7 @@ namespace {
                             if (Fsm_) try {
                                 *Fsm_ = *Fsm_ | TFsm(TString(part), options);
                             } catch (const yexception&) {
-                                UdfTerminate((TStringBuilder() << Pos_ << " Failed to glue up regexes, probably the finite state machine appeared to be too large").data());
+                                UdfTerminate((TStringBuilder() << Pos_ << " Failed to glue up regexes, probably the finite state machine appeared to be too large").c_str());
                             } else {
                                 Fsm_.Reset(new TFsm(TString(part), options));
                             }
@@ -116,7 +116,7 @@ namespace {
                     Fsm_.Reset(new TFsm(TString(regex), options));
                 }
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -159,7 +159,7 @@ namespace {
                 return MultiMode_ ? tuple : TUnboxedValue(TUnboxedValuePod(false));
             }
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
     private:
@@ -181,7 +181,7 @@ namespace {
             TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
                 return TUnboxedValuePod(new TPireCapture(args[0], Pos_));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         };
 
@@ -217,7 +217,7 @@ namespace {
 
             return TUnboxedValue();
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
         TUniquePtr<TSlowCapturingFsm> Fsm_;
@@ -235,7 +235,7 @@ namespace {
             TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
                 return TUnboxedValuePod(new TPireReplace(args[0], Pos_));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         };
 
@@ -275,7 +275,7 @@ namespace {
                 return TUnboxedValue();
             }
         } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
         TUniquePtr<TSlowCapturingFsm> Fsm_;

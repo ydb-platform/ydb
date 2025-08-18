@@ -598,6 +598,25 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
 bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
     TInputChannelState& inputChannel = InCh(channelId);
 
+    // XXX This must be reverted after YQ-4412
+    inputChannel.PollDebugInfo.ConstructInPlace();
+    inputChannel.PollDebugInfo->Time = TInstant::Now();
+    inputChannel.PollDebugInfo->FreeSpace = freeSpace;
+    inputChannel.PollDebugInfo->RetryState.Clear();
+    if (inputChannel.PollDebugInfo->RetryState) {
+        inputChannel.PollDebugInfo->RetryState.ConstructInPlace(*inputChannel.RetryState);
+    }
+    inputChannel.PollDebugInfo->Rbegin.Clear();
+    if (!inputChannel.InFlight.empty()) {
+        inputChannel.PollDebugInfo->Rbegin.ConstructInPlace(inputChannel.InFlight.rbegin()->second);
+    }
+    inputChannel.PollDebugInfo->LastRecvSeqNo = inputChannel.LastRecvSeqNo;
+    inputChannel.PollDebugInfo->PollRequest.Clear();
+    if (inputChannel.PollRequest) {
+        inputChannel.PollDebugInfo->PollRequest.ConstructInPlace(*inputChannel.PollRequest);
+    }
+    // XXX end
+
     if (!inputChannel.Peer || (inputChannel.Finished && !SupportCheckpoints) || inputChannel.RetryState ||
         inputChannel.LastRecvSeqNo == 0 || freeSpace <= 0)
     {
@@ -737,6 +756,7 @@ void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChanne
         << ", seqNo: " << inputChannel.LastRecvSeqNo
         << ", finished: " << inputChannel.Finished);
 
+    inputChannel.LastFreeSpace = freeSpace;
     inputChannel.InFlight.emplace(
         inputChannel.LastRecvSeqNo,
         TInputChannelState::TInFlightMessage(

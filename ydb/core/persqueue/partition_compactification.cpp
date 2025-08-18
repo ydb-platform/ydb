@@ -266,12 +266,15 @@ TPartitionCompaction::TCompactState::TCompactState(
     , CommittedOffset(firstUncompactedOffset)
     , DataKeysBody(partitionActor->CompactionBlobEncoder.DataKeysBody)
 {
-    if (!PartitionActor->BlobEncoder.DataKeysBody.empty()) {
+    if (!PartitionActor->CompactionBlobEncoder.HeadKeys.empty()) {
+        FirstHeadOffset = PartitionActor->CompactionBlobEncoder.HeadKeys.front().Key.GetOffset();
+        FirstHeadPartNo = PartitionActor->CompactionBlobEncoder.HeadKeys.front().Key.GetPartNo();
+    } else if (!PartitionActor->BlobEncoder.DataKeysBody.empty()) {
         FirstHeadOffset = PartitionActor->BlobEncoder.DataKeysBody.front().Key.GetOffset();
         FirstHeadPartNo = PartitionActor->BlobEncoder.DataKeysBody.front().Key.GetPartNo();
     } else {
-        FirstHeadOffset = PartitionActor->BlobEncoder.Head.Offset;
-        FirstHeadPartNo = PartitionActor->BlobEncoder.Head.PartNo;
+        FirstHeadPartNo = 0;
+        FirstHeadOffset = PartitionActor->BlobEncoder.EndOffset;
     }
     if (DataKeysBody.empty()) {
         Failure = true; //Probably, also an internal error ?

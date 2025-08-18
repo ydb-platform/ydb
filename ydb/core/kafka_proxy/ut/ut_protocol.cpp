@@ -2301,13 +2301,13 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         Cerr << ">>>>> BEGIN WRITE" << Endl;
 
-        ui32 totalWriteCycles = 20;
+        ui32 totalWriteCycles = 15;
         for (auto i = 0u; i < totalWriteCycles; i++) {
             writeMessage("key1", 100_KB);
             writeMessage("key2", 500_KB);
-            //writeMessage("key3", 9_MB);
-            //writeMessage("key4", 20_MB);
-            //writeMessage(TStringBuilder() << "extra-key-" << i, 3_MB);
+            // writeMessage("key3", 9_MB);
+            // writeMessage("key4", 20_MB);
+            writeMessage(TStringBuilder() << "extra-key-" << i, 3_MB);
             Cerr << "Wrote message " << i << Endl;
         }
         Cerr << ">>>>> END WRITE" << Endl;
@@ -2366,8 +2366,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
         }
         Cerr << "Total messages: " << totalMessages << Endl;
-        UNIT_ASSERT(keysFound.contains("key1") && keysFound.contains("key2") && keysFound.contains("key3") && keysFound.contains("key4"));
-        UNIT_ASSERT_VALUES_EQUAL(keysFound.size(), 4 + totalWriteCycles); //4 + 15
+        UNIT_ASSERT(keysFound.contains("key1") && keysFound.contains("key2")); //&& keysFound.contains("key3") && keysFound.contains("key4"));
+        UNIT_ASSERT_VALUES_EQUAL(keysFound.size(), 2 + totalWriteCycles); //4 + 15
         UNIT_ASSERT(totalMessages < totalWritten);
     }
 

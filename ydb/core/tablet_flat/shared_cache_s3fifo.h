@@ -198,10 +198,15 @@ private:
         while (GetSize() > Limit.TotalLimit) {
             if (SmallQueue.Size > Limit.SmallQueueLimit) {
                 TPage* page = Pop(SmallQueue);
-                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0) {
+                // TODO: replace with frequency > 0
+                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 1) { // load inserts, first read touches, second read touches
                     TPageTraits::SetFrequency(page, 0);
                     Push(MainQueue, page);
-                } else { // frequency = 0
+                } else {
+                    // TODO: replace with frequency = 0
+                    if (frequency) { // the page is used only once
+                        TPageTraits::SetFrequency(page, 0);
+                    }
                     AddGhost(page);
                     return page;
                 }

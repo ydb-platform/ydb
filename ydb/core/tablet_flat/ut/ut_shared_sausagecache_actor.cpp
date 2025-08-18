@@ -1924,10 +1924,12 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         // touch page#2
         UNIT_ASSERT(results[2].Use());
         results[2].IncrementFrequency();
+        results[2].IncrementFrequency();
         UNIT_ASSERT(!results[2].UnUse()); // still used by shared cache
         
         // touch page#3
         UNIT_ASSERT(results[3].Use());
+        results[3].IncrementFrequency();
         results[3].IncrementFrequency();
         results[3].IncrementFrequency();
         UNIT_ASSERT(!results[3].UnUse()); // still used by shared cache

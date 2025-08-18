@@ -298,8 +298,7 @@ SELECT --эти выражения всегда true для любых тайм�
 | **Timestamp64** | Да             | Да   | Нет  | Нет  | Нет  |
 | **Interval64**  | Да             | Да   | Нет  | Нет  | Нет  |
 
-<sup>1</sup> При помощи встроенной функции [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
-
+<sup>1</sup> С помощью встроенной функции [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
 ##### Примеры
 
 {% include [x](../_includes/cast_examples.md) %}

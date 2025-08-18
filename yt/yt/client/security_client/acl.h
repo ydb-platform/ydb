@@ -23,6 +23,8 @@ struct TSerializableAccessControlEntry
     std::optional<TBooleanFormula> SubjectTagFilter;
     std::optional<std::vector<std::string>> Columns;
     std::optional<bool> Vital;
+    std::optional<std::string> Expression;
+    std::optional<EInapplicableExpressionMode> InapplicableExpressionMode;
 
     TSerializableAccessControlEntry(
         ESecurityAction action,
@@ -37,6 +39,9 @@ struct TSerializableAccessControlEntry
     void Persist(const TStreamPersistenceContext& context);
 
     bool operator==(const TSerializableAccessControlEntry& other) const = default;
+
+    static constexpr TStringBuf ExpressionKey = "expression";
+    static constexpr TStringBuf InapplicableExpressionModeKey = "inapplicable_expression_mode";
 };
 
 void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer* consumer);
@@ -58,6 +63,15 @@ bool operator == (const TSerializableAccessControlList& lhs, const TSerializable
 void Serialize(const TSerializableAccessControlList& acl, NYson::IYsonConsumer* consumer);
 void Deserialize(TSerializableAccessControlList& acl, NYTree::INodePtr node);
 void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCursor* cursor);
+
+//! A small container to allow reader to selectively apply expressions based on
+//! their InapplicableExpressionMode.
+//! RLACE stands for Row-Level Access Control Entry.
+struct TRowLevelAccessControlEntry
+{
+    std::string Expression;
+    EInapplicableExpressionMode InapplicableExpressionMode;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

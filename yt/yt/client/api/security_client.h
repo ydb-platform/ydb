@@ -2,6 +2,7 @@
 
 #include "client_common.h"
 
+#include <yt/yt/client/security_client/acl.h>
 #include <yt/yt/client/security_client/public.h>
 
 namespace NYT::NApi {
@@ -48,6 +49,7 @@ struct TCheckPermissionResponse
     : public TCheckPermissionResult
 {
     std::optional<std::vector<TCheckPermissionResult>> Columns;
+    std::optional<std::vector<NSecurityClient::TRowLevelAccessControlEntry>> Rlaces;
 };
 
 struct TCheckPermissionByAclOptions

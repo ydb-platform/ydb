@@ -41,6 +41,8 @@ void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer*
             .OptionalItem("subject_tag_filter", ace.SubjectTagFilter)
             .OptionalItem("columns", ace.Columns)
             .OptionalItem("vital", ace.Vital)
+            .OptionalItem("expression", ace.Expression)
+            .OptionalItem(TSerializableAccessControlEntry::ExpressionKey, ace.InapplicableExpressionMode)
         .EndMap();
 }
 
@@ -72,6 +74,16 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node)
         Deserialize(ace.Vital, vitalNode);
     } else {
         ace.Vital.reset();
+    }
+    if (auto expressionNode = mapNode->FindChild(std::string(TSerializableAccessControlEntry::ExpressionKey))) {
+        Deserialize(ace.Expression, expressionNode);
+    } else {
+        ace.Expression.reset();
+    }
+    if (auto inapplicableExpressionModeNode = mapNode->FindChild(std::string(TSerializableAccessControlEntry::InapplicableExpressionModeKey))) {
+        Deserialize(ace.InapplicableExpressionMode, inapplicableExpressionModeNode);
+    } else {
+        ace.InapplicableExpressionMode.reset();
     }
     CheckAceCorrect(ace)
         .ThrowOnError();
@@ -110,6 +122,12 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
         } else if (key == TStringBuf("vital")) {
             cursor->Next();
             Deserialize(ace.Vital, cursor);
+        } else if (key == TSerializableAccessControlEntry::ExpressionKey) {
+            cursor->Next();
+            Deserialize(ace.Expression, cursor);
+        } else if (key == TSerializableAccessControlEntry::InapplicableExpressionModeKey) {
+            cursor->Next();
+            Deserialize(ace.InapplicableExpressionMode, cursor);
         } else {
             cursor->Next();
             cursor->SkipComplexValue();

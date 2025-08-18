@@ -167,6 +167,26 @@ void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
                             .EndMap();
                     });
             })
+            .DoIf(response.Rlaces.has_value(), [&] (auto fluent) {
+                fluent
+                    .Item("rlaces")
+                    .DoListFor(*response.Rlaces, [&] (auto fluent, const auto& rlace) {
+                        fluent
+                            .Item().BeginMap()
+                                .Item(TSerializableAccessControlEntry::ExpressionKey).Value(rlace.Expression)
+                                // NB(coteeq): The DoIf will try to hide the whole inapplicable_expression_mode
+                                // mechanism from too curious users.
+                                // EInapplicableExpressionMode::Ignore is not a good choice in the common case
+                                // from security perspective, but it may be necessary to be able to have
+                                // tables with completely different schemas in one directory.
+                                .DoIf(rlace.InapplicableExpressionMode != EInapplicableExpressionMode::Deny, [&] (auto fluent) {
+                                    fluent
+                                        .Item(TSerializableAccessControlEntry::InapplicableExpressionModeKey)
+                                        .Value(rlace.InapplicableExpressionMode);
+                                })
+                            .EndMap();
+                    });
+            })
         .EndMap());
 }
 

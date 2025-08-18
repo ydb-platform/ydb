@@ -258,7 +258,6 @@ TPartitionCompaction::TCompactState::TCompactState(
     : MaxOffset(maxOffset)
     , TopicData(std::move(data))
     , PartitionActor(partitionActor)
-    , LastProcessedOffset(partitionActor->StartOffset)
     , CommittedOffset(firstUncompactedOffset)
     , DataKeysBody(partitionActor->DataKeysBody)
 {
@@ -396,7 +395,8 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
     bool hasNonZeroParts = false;
     PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
                                       << PartitionActor->Partition << " process read result in CompState starting from: "
-                                      << readResult.GetResult(0).GetOffset() << ":" << readResult.GetResult(0).GetPartNo());
+                                      << readResult.GetResult(0).GetOffset() << ":" << readResult.GetResult(0).GetPartNo()
+                                      << " isTruncatedBlob " << isTruncatedBlob);
     for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
         auto& res = readResult.GetResult(i);
         if (res.GetOffset() == lastExpectedOffset && res.GetPartNo() == lastExpectedPartNo) {
@@ -416,21 +416,24 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             blob.PartData = TPartData{static_cast<ui16>(res.GetPartNo()), static_cast<ui16>(res.GetTotalParts()), res.GetTotalSize()};
         }
         if (SkipOffset && res.GetOffset() == SkipOffset) { // skip parts of zeroed message
+            ClearBlob(blob);
             currentBatch->AddBlob(std::move(blob));
             continue;
         }
-        if (res.GetData().empty()) {
+        if (res.GetData().empty() || res.GetOffset() < PartitionActor->StartOffset) {
             SkipOffset = res.GetOffset();
+            ClearBlob(blob);
             currentBatch->AddBlob(std::move(blob));
             continue;
         }
-        hasNonZeroParts = hasNonZeroParts || res.GetData().size() > 0;
 
-        if (res.GetOffset() <= PartitionActor->StartOffset
+        hasNonZeroParts = true;
+
+        if ((LastProcessedOffset.Defined() && res.GetOffset() <= *LastProcessedOffset)
             // These are parts of last message that we don't wan't to process
             || (CurrentMessage.Defined() && res.GetOffset() == CurrentMessage->GetOffset() && res.GetPartNo() <= CurrentMessage->GetPartNo())
-             // We reached max offset and don't want to process more messages, but still need to add them to batch
-             || res.GetOffset() >= MaxOffset
+            // We reached max offset and don't want to process more messages, but still need to add them to batch
+            || res.GetOffset() >= MaxOffset
         ) {
             // This is either first parts of blob we processed before or parts of last message that we don't wan't to process,
             // so just add these to batch instantly.
@@ -496,6 +499,13 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             auto iter = TopicData.find(key);
             bool keepMessage = (iter.IsEnd() || iter->second == offset);
 
+            PQ_LOG_D("Compaction for topic LastPart '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+                                      << PartitionActor->Partition << " processed read result in CompState starting from: "
+                                      << readResult.GetResult(0).GetOffset() << ":" << readResult.GetResult(0).GetPartNo()
+                                      << " res.GetOffset() " << res.GetOffset() << " isTruncatedBlob " << isTruncatedBlob << " hasNonZeroParts " << hasNonZeroParts
+                                      << " keepMessage " << keepMessage << " LastBatch " << !!LastBatch );
+
+
             if (LastBatch) {
                 if (!keepMessage) {
                     for (auto& blob: CurrMsgPartsFromLastBatch) {
@@ -521,6 +531,14 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             CurrentMessage = Nothing();
         }
     }
+
+    PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
+                                      << PartitionActor->Partition << " processed read result in CompState starting from: "
+                                      << readResult.GetResult(0).GetOffset() << ":" << readResult.GetResult(0).GetPartNo()
+                                      << " isTruncatedBlob " << isTruncatedBlob << " hasNonZeroParts " << hasNonZeroParts
+                                      << " isMiddlePartOfMessage " << isMiddlePartOfMessage
+                                      << " " );
+
     Y_ENSURE(KeysIter->Key.GetInternalPartsCount() + KeysIter->Key.GetCount() == partsCount);
     if (!hasNonZeroParts) {
         EmptyBlobs.emplace(isTruncatedBlob ? lastExpectedOffset : lastExpectedOffset - 1, KeysIter->Key);
@@ -543,10 +561,11 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             SaveLastBatch();
             return true;
         }
-    } else {
+    } else if (hasNonZeroParts) {
         AddCmdWrite(KeysIter->Key, currentBatch.GetRef());
         currentBatch = Nothing();
     }
+
     KeysIter++; //Blob processed, go on.
     return true;
 }
@@ -568,17 +587,16 @@ void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
 }
 
 void TPartitionCompaction::TCompactState::RunKvRequest() {
+    // TODO verify that the last message is full
     CurrentMessage.Clear();
     Y_ABORT_UNLESS(Request);
     Y_ABORT_UNLESS(!PartitionActor->CompacterKvRequestInflight);
-    TVector<ui64> deleted;
+
     for (const auto&[offset, key] : EmptyBlobs) {
         AddDeleteRange(key);
-        deleted.push_back(offset);
     }
-    for (auto offset : deleted) {
-        EmptyBlobs.erase(offset);
-    }
+    EmptyBlobs.clear();
+
     Request->Record.SetCookie(static_cast<ui64>(ERequestCookie::CompactificationWrite));
     PartitionActor->SendCompacterWriteRequest(std::move(Request));
     BlobsToWriteInRequest = 0;

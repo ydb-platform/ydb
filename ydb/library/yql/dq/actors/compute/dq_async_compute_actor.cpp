@@ -270,7 +270,7 @@ private:
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
             DUMP(info, LastFreeSpace);
-            
+            DUMP(info, PollChannelFreeSpace);
 
             if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
                 DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
@@ -764,7 +764,6 @@ private:
         const TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(inputChannel, "task: " << Task.GetId() << ", unknown input channelId: " << channelId);
 
-        inputChannel->LastFreeSpace = inputChannel->FreeSpace;
         return inputChannel->FreeSpace;
     }
 

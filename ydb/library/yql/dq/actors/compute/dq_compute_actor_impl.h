@@ -477,7 +477,9 @@ protected:
             // and sends us a new batch of data.
             bool pollSent = false;
             for (auto& [channelId, inputChannel] : InputChannelsMap) {
-                pollSent |= Channels->PollChannel(channelId, GetInputChannelFreeSpace(channelId));
+                auto freeSpace =  GetInputChannelFreeSpace(channelId);
+                pollSent |= Channels->PollChannel(channelId, freeSpace);
+                inputChannel.PollChannelFreeSpace = freeSpace
             }
             if (!pollSent) {
                 if (ProcessOutputsState.DataWasSent) {

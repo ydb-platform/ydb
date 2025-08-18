@@ -12,10 +12,10 @@ class TestYdbTopicWorkload(StressFixture):
         port_manager = yatest.common.network.PortManager()
         self.kafka_api_port = port_manager.get_port()
         yield from self.setup_cluster(
-            kafka_api_port=self.kafka_api_port ,
+            kafka_api_port=self.kafka_api_port,
             extra_feature_flags={
-                "enable_kafka_native_balancing": True,
-                "enable_kafka_transactions": True
+                "enable_kafka_native_balancing": False,
+                "enable_kafka_transactions": False
             }
         )
 

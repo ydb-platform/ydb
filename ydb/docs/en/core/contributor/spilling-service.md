@@ -33,7 +33,7 @@ Compute nodes continuously monitor memory state through the allocator. The alloc
 
 ### Event Dispatch
 
-When spilling is required, the compute component (data transfer channel or compute core) performs the following actions:
+When spilling is required, the compute component (data transfer system or compute core) performs the following actions:
 
 1. Serializes data into a blob.
 2. Generates a unique identifier for the blob.

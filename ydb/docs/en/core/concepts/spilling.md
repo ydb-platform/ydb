@@ -67,10 +67,10 @@ This type of spilling operates at the level of data transfer between different q
 
 The data transfer system continuously monitors its state:
 
-1. **Buffering**: Incoming data accumulates in the channel’s internal buffers  
+1. **Buffering**: Incoming data accumulates in the transfer system's internal buffers  
 2. **Fill control**: The system tracks buffer fill levels  
 3. **Automatic spilling**: When limits are reached, data is automatically serialized and transferred to the Spilling Service  
-4. **Continued operation**: The channel continues accepting new data after freeing memory space  
+4. **Continued operation**: The transfer system continues accepting new data after freeing memory space  
 5. **Recovery**: When the next stage is ready, data is read from external storage and passed further  
 
 ## Interaction with Memory Controller

@@ -2,6 +2,7 @@ items:
 - name: File structure of data export
   href: file-structure.md
 - name: Backup collections
+  href: backup-collections/index.md
   items:
   - name: Overview
     href: backup-collections/overview.md

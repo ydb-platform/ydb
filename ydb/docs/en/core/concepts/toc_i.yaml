@@ -28,6 +28,7 @@ items:
 - name: Multi-Version Concurrency Control (MVCC)
   href: mvcc.md
 - name: Backup and restore
+  href: backup.md
   items:
   - name: Backup collections
     href: backup/collections.md

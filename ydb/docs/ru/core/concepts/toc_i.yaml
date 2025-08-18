@@ -28,6 +28,7 @@ items:
 - name: Многоверсионное управление конкурентным доступом (MVCC)
   href: mvcc.md
 - name: Резервное копирование и восстановление
+  href: backup.md
   items:
   - name: Коллекции резервных копий
     href: backup/collections.md

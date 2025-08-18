@@ -1,9 +1,11 @@
 #include "partition_scale_manager.h"
 #include "read_balancer_log.h"
+#include "partition_scale_manager_graph_cmp.h"
 
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <fmt/format.h>
 #include <algorithm>
+#include <ranges>
 
 namespace NKikimr {
 namespace NPQ {
@@ -50,12 +52,13 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
         return;
     }
 
-    auto splitMergePair = BuildScaleRequest(ctx);
-    if (splitMergePair.first.empty() && splitMergePair.second.empty()) {
+    auto splitMergeRequest = BuildScaleRequest(ctx);
+    if (splitMergeRequest.Empty()) {
         return;
     }
 
     RequestInflight = true;
+    RootPartitionsResetRequestInflight = !splitMergeRequest.SetBoundary.empty();
     PQ_LOG_D("send split request");
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
@@ -63,8 +66,9 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
         DatabasePath,
         BalancerConfig.PathId,
         BalancerConfig.PathVersion,
-        splitMergePair.first,
-        splitMergePair.second,
+        splitMergeRequest.Split,
+        splitMergeRequest.Merge,
+        splitMergeRequest.SetBoundary,
         ctx.SelfID
     ));
 }
@@ -99,12 +103,81 @@ std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> TPart
     return result;
 }
 
-std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartitionScaleManager::BuildScaleRequest(const TActorContext&) {
-    std::vector<TPartitionSplit> splitsToApply;
-    std::vector<TPartitionMerge> mergesToApply;
-
+TPartitionScaleManager::TScaleRequest TPartitionScaleManager::BuildScaleRequest(const TActorContext&) {
     const size_t allowedSplitsCountLimit = BalancerConfig.MaxActivePartitions > BalancerConfig.CurPartitions ? BalancerConfig.MaxActivePartitions - BalancerConfig.CurPartitions : 0;
     size_t allowedSplitsCount = allowedSplitsCountLimit;
+
+    auto boundsToApply = BuildSetBoundaryRequest(allowedSplitsCount);
+    if (!boundsToApply.Empty()) {
+        // Root partitions boundary reset is a rare operation.
+        // We should not mix them with other split/merge operations, as they may depend on non-existent partitions.
+        return {
+            .SetBoundary = std::move(boundsToApply.Requests),
+        };
+    }
+
+    auto mergesToApply = BuildMergeRequest(allowedSplitsCount);
+    auto splitsToApply = BuildSplitRequest(allowedSplitsCount);
+
+    PQ_LOG_D(fmt::format("Scale request: #splits={}, #unprocessed={}, splitsLimit={}, #merges={}",
+        splitsToApply.Requests.size(),
+        splitsToApply.Unprocessed,
+        allowedSplitsCountLimit,
+        mergesToApply.Requests.size()
+    ));
+
+    return {
+        .Split = std::move(splitsToApply.Requests),
+        .Merge = std::move(mergesToApply.Requests),
+        .SetBoundary = std::move(boundsToApply.Requests),
+    };
+}
+
+TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionBoundary> TPartitionScaleManager::BuildSetBoundaryRequest(size_t& allowedSplitsCount) {
+    std::vector<TPartitionBoundary> boundsToApply;
+    UpdateMirrorRootPartitionsSet();
+    if (RootPartitionsToCreate.has_value() && !RootPartitionsToCreate->empty()) {
+        size_t modifyPartitions = 0;
+        size_t createPartitions = 0;
+        for (const auto& p : RootPartitionsToCreate.value()) {
+            TPartitionBoundary part;
+            part.SetPartition(p.Id);
+            if (p.FromBound.has_value()) {
+                part.MutableKeyRange()->SetFromBound(TString{p.FromBound.value()});
+            }
+            if (p.ToBound.has_value()) {
+                part.MutableKeyRange()->SetToBound(TString{p.ToBound.value()});
+            }
+            part.SetCreatePartition(p.Action == NMirror::EPartitionAction::Create);
+            size_t cost = (p.Action == NMirror::EPartitionAction::Create) ? 1 : 0;
+            modifyPartitions += (p.Action == NMirror::EPartitionAction::Modify) ? 1 : 0;
+            createPartitions += (p.Action == NMirror::EPartitionAction::Create) ? 1 : 0;
+            if (allowedSplitsCount >= cost) {
+                allowedSplitsCount -= cost;
+                boundsToApply.push_back(std::move(part));
+            } else {
+                PQ_LOG_W(fmt::format("MaxActivePartitions ({}) is too low to recreate {} root partitions from the mirror source topic",
+                                     BalancerConfig.MaxActivePartitions,
+                                     RootPartitionsToCreate->size()));
+                // don't send request at all, if there is not enough quota
+                return {
+                    .Unprocessed = RootPartitionsToCreate->size(),
+                };
+            }
+        }
+        PQ_LOG_D(fmt::format("Set partition boundaries requsts: #modify={}, #create{}",
+            modifyPartitions,
+            createPartitions
+        ));
+    }
+    return {
+        .Requests = std::move(boundsToApply),
+        .Unprocessed = 0,
+    };
+}
+
+TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionSplit> TPartitionScaleManager::BuildSplitRequest(size_t& allowedSplitsCount) {
+    std::vector<TPartitionSplit> splitsToApply;
     const std::vector splitCandidates = ReorderSplits();
     size_t checkedSplits = 0;
     for (const auto& partitionIt : splitCandidates) {
@@ -122,14 +195,15 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
             PartitionsToSplit.erase(partitionIt);
         }
     }
-    const size_t unprocessedSplits = splitCandidates.size() - checkedSplits;
-    PQ_LOG_D(fmt::format("Scale request: #splits={}, #unprocessed={}, splitsLimit={}, #merges={}",
-        splitsToApply.size(),
-        unprocessedSplits,
-        allowedSplitsCountLimit,
-        mergesToApply.size()
-    ));
-    return {splitsToApply, mergesToApply};
+    return {
+        .Requests = std::move(splitsToApply),
+        .Unprocessed = splitCandidates.size() - checkedSplits,
+    };
+}
+
+TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionMerge> TPartitionScaleManager::BuildMergeRequest(size_t& allowedSplitsCount) {
+    Y_UNUSED(allowedSplitsCount);
+    return {};
 }
 
 
@@ -213,6 +287,64 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     }
 }
 
+void TPartitionScaleManager::ClearMirrorInfo() {
+    MirrorTopicDescription.reset();
+    RootPartitionsToCreate.reset();
+    MirrorTopicError.reset();
+}
+
+void TPartitionScaleManager::UpdateMirrorRootPartitionsSet() {
+    if (!MirrorTopicDescription.has_value() || !MirroredFromSomewhere) {
+        ClearMirrorInfo();
+        return;
+    }
+
+    NMirror::TMirrorGraphComparisonResult cmp = NMirror::ComparePartitionGraphs(PartitionGraph, MirrorTopicDescription->GetPartitions());
+    if (!cmp.RootPartitionsMismatch.has_value()) {
+        PQ_LOG_D("Topic has all root partitions from the source topic");
+        RootPartitionsToCreate.reset();
+        MirrorTopicError.reset();
+        return;
+    }
+    auto& rootPartitionsMismatch = cmp.RootPartitionsMismatch.value();
+    if (rootPartitionsMismatch.Error.has_value()) {
+        std::string msg = TStringBuilder() << "Incompatable configuration of root partitions between source and target topics:" << rootPartitionsMismatch.Error.value();
+        PQ_LOG_ERROR(msg);
+        RootPartitionsToCreate.reset();
+        MirrorTopicError = std::move(*rootPartitionsMismatch.Error);
+        return;
+    }
+    const size_t existingPartitions = std::ranges::count(rootPartitionsMismatch.AlterRootPartitions, NMirror::EPartitionAction::Modify, &NMirror::TPartitionWithBounds::Action);
+    const size_t newPartitions = std::ranges::count(rootPartitionsMismatch.AlterRootPartitions, NMirror::EPartitionAction::Create, &NMirror::TPartitionWithBounds::Action);
+    PQ_LOG_I(fmt::format("Topic has less root partitions than the mirror source. New configuration has {}+{} partitions.",
+                         existingPartitions,
+                         newPartitions));
+
+    RootPartitionsToCreate = std::move(rootPartitionsMismatch.AlterRootPartitions);
+    MirrorTopicError.reset();
+}
+
+std::expected<void, std::string> TPartitionScaleManager::HandleMirrorTopicDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx) {
+    if (!MirroredFromSomewhere) {
+        ClearMirrorInfo();
+    } else {
+        auto& description = ev->Get()->Description;
+        if (!description.has_value() || !description.value().IsSuccess()) {
+            PQ_LOG_W("Ignoring invalid mirror source description");
+            return {};
+        }
+        MirrorTopicDescription.emplace(std::move(description->GetTopicDescription()));
+    }
+    UpdateMirrorRootPartitionsSet();
+
+    if (MirrorTopicError.has_value()) {
+        return std::unexpected(MirrorTopicError.value());
+    }
+
+    TrySendScaleRequest(ctx);
+    return {};
+}
+
 void TPartitionScaleManager::Die(const TActorContext& ctx) {
     if (CurrentScaleRequest) {
         ctx.Send(CurrentScaleRequest, new TEvents::TEvPoisonPill());
@@ -222,6 +354,9 @@ void TPartitionScaleManager::Die(const TActorContext& ctx) {
 void TPartitionScaleManager::UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config) {
     BalancerConfig = TBalancerConfig(pathId, version, config);
     MirroredFromSomewhere = MirroringEnabled(config);
+    if (!MirroredFromSomewhere) {
+        ClearMirrorInfo();
+    }
 }
 
 void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {

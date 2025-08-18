@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     partition_key_range.cpp
+    partition_key_range_sequence.cpp
 )
 
 PEERDIR(
@@ -10,3 +11,5 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

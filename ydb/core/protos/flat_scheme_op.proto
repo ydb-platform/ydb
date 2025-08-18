@@ -1455,6 +1455,13 @@ message TPersQueueGroupDescription {
         optional uint32 ChildPartitionId = 3; // use the prescribed id instead of auto generating new one
     }
     repeated TPartitionMerge Merge = 16;
+
+    message TPartitionBoundary {
+        required uint32 Partition = 1;
+        optional NKikimrPQ.TPartitionKeyRange KeyRange = 2;
+        optional bool CreatePartition = 3;
+    }
+    repeated TPartitionBoundary RootPartitionBoundaries = 17;
 }
 
 message TRtmrVolumeDescription {

@@ -411,11 +411,15 @@ private:
 
         const NSchemeCache::TSchemeCacheNavigate* resolveResult = GetResolveNameResult();
         THashMap<TString, NScheme::TTypeInfo> tableColumnTypes;
-        if (resolveResult && resolveResult->ResultSet.size() == 1) {
-            const auto& entry = resolveResult->ResultSet.front();
-            for (auto&& [_, colInfo] : entry.Columns) {
-                tableColumnTypes[colInfo.Name] = colInfo.PType;
-            }
+        if (!resolveResult || resolveResult->ResultSet.size() != 1) {
+            return TConclusionStatus::Fail(TStringBuilder() <<
+                "Wrong table resolve result: expected exactly one entry, got " <<
+                (resolveResult ? std::to_string(resolveResult->ResultSet.size()) : "none"));
+        }
+
+        const auto& entry = resolveResult->ResultSet.front();
+        for (auto&& [_, colInfo] : entry.Columns) {
+            tableColumnTypes[colInfo.Name] = colInfo.PType;
         }
 
         for (auto& field : schema->fields()) {

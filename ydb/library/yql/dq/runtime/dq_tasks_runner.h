@@ -267,8 +267,8 @@ public:
             Task_ = HeapTask_.get();
             Y_ABORT_UNLESS(!task.Arena);
         } else {
-             Task_ = task.GetTask();
-             Arena = const_cast<TIntrusivePtr<NActors::TProtoArenaHolder>&>(task.GetArena());
+            Task_ = task.GetTask();
+            Arena = const_cast<TIntrusivePtr<NActors::TProtoArenaHolder>&>(task.GetArena());
         }
     }
 

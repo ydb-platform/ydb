@@ -31,10 +31,10 @@ using namespace NApi;
 
 void TGetCurrentUserCommand::DoExecute(ICommandContextPtr context)
 {
-    auto userInfo = WaitFor(context->GetClient()->GetCurrentUser())
+    auto result = WaitFor(context->GetClient()->GetCurrentUser())
         .ValueOrThrow();
 
-    context->ProduceOutputValue(ConvertToYsonString(userInfo));
+    context->ProduceOutputValue(ConvertToYsonString(result));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

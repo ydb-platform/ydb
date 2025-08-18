@@ -17,7 +17,7 @@ class TGenericListTransformer : public TGraphTransformerBase {
         std::unordered_map<TGenericState::TTableAddress, TListResponse::TPtr, THash<TGenericState::TTableAddress>>;
 
 public:
-    TGenericListTransformer(TGenericState::TPtr state);
+    explicit TGenericListTransformer(TGenericState::TPtr state);
 
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;

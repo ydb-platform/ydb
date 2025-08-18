@@ -59,18 +59,21 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
     ReadOptions.block_size = DEFAULT_BLOCK_SIZE;
     ReadOptions.use_threads = false;
     ReadOptions.autogenerate_column_names = false;
+    auto SetOptionsForColumns = [&](const auto& col) {
+        if (col.Precision > 0) {
+            ConvertOptions.column_types[col.Name] = arrow::decimal128(static_cast<int32_t>(col.Precision), static_cast<int32_t>(col.Scale));
+        } else {
+            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
+        }
+    };
+    
     if (header) {
         // !autogenerate + column_names.empty() => read from CSV
         ResultColumns.reserve(columns.size());
 
         for (const auto& col: columns) {
             ResultColumns.push_back(col.Name);
-            if (col.Precision > 0) {
-                ConvertOptions.column_types[col.Name] = arrow::decimal128(static_cast<int32_t>(col.Precision), static_cast<int32_t>(col.Scale));
-            } else {
-                ConvertOptions.column_types[col.Name] = col.CsvArrowType;
-            }
-
+            SetOptionsForColumns(col);
             OriginalColumnTypes[col.Name] = col.ArrowType;
         }
     } else if (!columns.empty()) {
@@ -79,12 +82,7 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
 
         for (const auto& col: columns) {
             ReadOptions.column_names.push_back(col.Name);
-            if (col.Precision > 0) {
-                ConvertOptions.column_types[col.Name] = arrow::decimal128(static_cast<int32_t>(col.Precision), static_cast<int32_t>(col.Scale));
-            } else {
-                ConvertOptions.column_types[col.Name] = col.CsvArrowType;
-            }
-
+            SetOptionsForColumns(col);
             OriginalColumnTypes[col.Name] = col.ArrowType;
         }
 #if 0

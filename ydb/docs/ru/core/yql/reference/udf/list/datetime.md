@@ -502,8 +502,8 @@ SELECT
 
 ```yql
 SELECT
-    CAST("2019-09-16T00:00:00,Europe/Moscow" AS TzDatetime), -- 2019-09-16T00:00:00,Europe/Moscow
-    CAST("2019-09-16" AS Date) -- 2019-09-16
+CAST("2019-09-16T00:00:00,Europe/Moscow" AS TzDatetime), -- «2019-09-16T00:00:00,Europe/Moscow»
+    CAST("2019-09-16" AS Date) -- «2019-09-16»
 ```
 
 ### Преобразование времени в дату

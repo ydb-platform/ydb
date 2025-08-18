@@ -44,6 +44,7 @@ public:
     size_t RecallThreads = 0;
     ui64 TableRowCount = 0;
     bool Recall = false;
+    bool NonIndexedSearch = false;
     bool KeyIsInt = false;
 };
 

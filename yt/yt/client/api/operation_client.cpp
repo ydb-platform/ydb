@@ -57,7 +57,27 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .Default()
         .DontSerializeDefault();
 
+    registrar.ExternalBaseClassParameter("with_interruption_info", &TThat::WithInterruptionInfo)
+        .Default()
+        .DontSerializeDefault();
+
     registrar.ExternalBaseClassParameter("task_name", &TThat::TaskName)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("operation_incarnation", &TThat::OperationIncarnation)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("from_time", &TThat::FromTime)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("to_time", &TThat::ToTime)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("attributes", &TThat::Attributes)
         .Default()
         .DontSerializeDefault();
 
@@ -186,7 +206,7 @@ void Deserialize(TOperation& operation, NYTree::IAttributeDictionaryPtr attribut
         attributes = attributes->Clone();
     }
 
-    auto setField = [&] (auto& field, const TString& name) {
+    auto setField = [&] (auto& field, const std::string& name) {
         using T = std::remove_reference_t<decltype(field)>;
         if constexpr (std::is_same_v<T, NYson::TYsonString>) {
             if (auto value = attributes->FindYson(name)) {
@@ -400,4 +420,3 @@ TGetJobStderrResponse TGetJobStderrResponse::MakeJobStderr(const TSharedRef& dat
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

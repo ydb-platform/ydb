@@ -293,6 +293,9 @@ public:
             }
         }
 
+        Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead);
+        Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
+
         Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
@@ -484,6 +487,9 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
             STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXRN02, "PDiskConfig invalid", (NodeId, pdiskId.NodeId),
                 (PDiskId, pdiskId.PDiskId));
         }
+        if (pdisk.InferPDiskSlotCountFromUnitSize) {
+            pDisk->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+        }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
     pDisk->SetManagementStage(SerialManagementStage);
@@ -589,6 +595,7 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
     }
 
     node.LastConnectTimestamp = TInstant::Now();
+    node.DisconnectedTimestampMono = TMonotonic::Max();
 
     ShredState.OnWardenConnected(nodeId);
 }
@@ -655,6 +662,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         GroupToNode.erase(std::make_tuple(groupId, nodeId));
     }
     node.LastDisconnectTimestamp = now;
+    node.DisconnectedTimestampMono = mono;
     Execute(new TTxUpdateNodeDisconnectTimestamp(nodeId, this));
 }
 
@@ -664,7 +672,7 @@ void TBlobStorageController::EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo)
 
 void TBlobStorageController::SendToWarden(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie) {
     Y_ABORT_UNLESS(nodeId);
-    if (auto *node = FindNode(nodeId); node && node->ConnectedServerId) {
+    if (TNodeInfo* node = FindNode(nodeId); node && node->ConnectedServerId) {
         auto h = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), SelfId(), ev.release(), 0, cookie);
         if (node->InterconnectSessionId) {
             h->Rewrite(TEvInterconnect::EvForward, node->InterconnectSessionId);
@@ -684,4 +692,3 @@ void TBlobStorageController::SendInReply(const IEventHandle& query, std::unique_
 }
 
 } // NKikimr::NBsController
-

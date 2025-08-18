@@ -39,8 +39,8 @@ struct TEvKqpExecuter {
         THashSet<ui32> ParticipantNodes;
 
         // For BATCH operations only
-        TVector<TSerializedCellVec> SerializedEndRows;
-        TVector<ui32> EndRowColumnIds;
+        TVector<TSerializedCellVec> BatchOperationMaxKeys;
+        TVector<ui32> BatchOperationKeyIds;
 
         enum class EExecutionType {
             Data,
@@ -148,14 +148,14 @@ struct TExecuterConfig : TNonCopyable {
 };
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const TExecuterConfig& executerConfig,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings,
+    TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPruner::TConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing());
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings);
 
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,

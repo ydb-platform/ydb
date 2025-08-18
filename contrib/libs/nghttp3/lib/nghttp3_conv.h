@@ -56,6 +56,8 @@
 
 #include <nghttp3/nghttp3.h>
 
+#define NGHTTP3_VARINT_MAX ((1ull << 62) - 1)
+
 #if HAVE_DECL_BE64TOH
 #  define nghttp3_ntohl64(N) be64toh(N)
 #  define nghttp3_htonl64(N) htobe64(N)

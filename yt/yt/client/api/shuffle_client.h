@@ -51,6 +51,8 @@ struct TShuffleWriterOptions
 
 struct IShuffleClient
 {
+    using TIndexRange = std::pair<int, int>;
+
     virtual ~IShuffleClient() = default;
 
     virtual TFuture<TSignedShuffleHandlePtr> StartShuffle(
@@ -62,7 +64,7 @@ struct IShuffleClient
     virtual TFuture<IRowBatchReaderPtr> CreateShuffleReader(
         const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange = {},
+        std::optional<TIndexRange> writerIndexRange = {},
         const TShuffleReaderOptions& options = {}) = 0;
 
     virtual TFuture<IRowBatchWriterPtr> CreateShuffleWriter(

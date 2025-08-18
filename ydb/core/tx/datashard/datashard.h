@@ -360,6 +360,8 @@ namespace TEvDataShard {
         EvValidateUniqueIndexRequest,
         EvValidateUniqueIndexResponse,
 
+        EvIncrementalRestoreResponse,
+
         EvEnd
     };
 
@@ -1551,6 +1553,43 @@ namespace TEvDataShard {
         : public TEventPB<TEvPrefixKMeansResponse,
                           NKikimrTxDataShard::TEvPrefixKMeansResponse,
                           TEvDataShard::EvPrefixKMeansResponse> {
+    };
+
+    struct TEvIncrementalRestoreResponse
+        : public TEventPB<TEvIncrementalRestoreResponse,
+                          NKikimrTxDataShard::TEvIncrementalRestoreResponse,
+                          TEvDataShard::EvIncrementalRestoreResponse> {
+        TEvIncrementalRestoreResponse() = default;
+        
+        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx, 
+                                     NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, const TString& errorMessage = "") {
+            Record.SetTxId(txId);
+            Record.SetTableId(tableId);
+            Record.SetOperationId(operationId);
+            Record.SetIncrementalIdx(incrementalIdx);
+            Record.SetRestoreStatus(status);
+            if (!errorMessage.empty()) {
+                Record.SetErrorMessage(errorMessage);
+            }
+        }
+        
+        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx, 
+                                     NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, ui64 processedRows, ui64 processedBytes,
+                                     const TString& lastProcessedKey = "", const TString& errorMessage = "") {
+            Record.SetTxId(txId);
+            Record.SetTableId(tableId);
+            Record.SetOperationId(operationId);
+            Record.SetIncrementalIdx(incrementalIdx);
+            Record.SetRestoreStatus(status);
+            Record.SetProcessedRows(processedRows);
+            Record.SetProcessedBytes(processedBytes);
+            if (!lastProcessedKey.empty()) {
+                Record.SetLastProcessedKey(lastProcessedKey);
+            }
+            if (!errorMessage.empty()) {
+                Record.SetErrorMessage(errorMessage);
+            }
+        }
     };
 
     struct TEvKqpScan

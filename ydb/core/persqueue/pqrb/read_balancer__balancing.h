@@ -104,7 +104,7 @@ struct TPartitionFamily {
 
     bool IsActive() const;
     bool IsFree() const;
-    bool IsRelesing() const;
+    bool IsReleasing() const;
 
     bool IsCommon() const;
     bool IsLonely() const;

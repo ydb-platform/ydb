@@ -1184,6 +1184,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TShardIdx BalancerShardIdx = InvalidShardIdx;
     THashMap<ui32, TTopicTabletInfo::TTopicPartitionInfo*> Partitions;
     size_t ActivePartitionCount = 0;
+    THashSet<ui32> OffloadDonePartitions;
 
     TString PreSerializedPathDescription; // Cached path description
     TString PreSerializedPartitionsDescription; // Cached partition description
@@ -3284,7 +3285,7 @@ public:
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ " 
+                << "{ "
                 << "State = " << State
                 << ", Rows = " << Rows.size()
                 << ", MaxProbability = " << MaxProbability
@@ -3708,14 +3709,16 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
     NKikimrSchemeOp::TExternalTableReferences ExternalTableReferences;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
 
-    void FillProto(NKikimrSchemeOp::TExternalDataSourceDescription& proto) const {
+    void FillProto(NKikimrSchemeOp::TExternalDataSourceDescription& proto, bool withReferences = true) const {
         proto.SetVersion(AlterVersion);
         proto.SetSourceType(SourceType);
         proto.SetLocation(Location);
         proto.SetInstallation(Installation);
         proto.MutableAuth()->CopyFrom(Auth);
         proto.MutableProperties()->CopyFrom(Properties);
-        proto.MutableReferences()->CopyFrom(ExternalTableReferences);
+        if (withReferences) {
+            proto.MutableReferences()->CopyFrom(ExternalTableReferences);
+        }
     }
 };
 
@@ -3758,6 +3761,191 @@ struct TSysViewInfo : TSimpleRefCount<TSysViewInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSysView::ESysViewType Type;
+};
+
+struct TIncrementalRestoreState {
+    TPathId BackupCollectionPathId;
+    ui64 OriginalOperationId;
+
+    // Sequential incremental backup processing
+    struct TIncrementalBackup {
+        TPathId BackupPathId;
+        TString BackupPath;
+        ui64 Timestamp;
+        bool Completed = false;
+
+        TIncrementalBackup(const TPathId& pathId, const TString& path, ui64 timestamp)
+            : BackupPathId(pathId), BackupPath(path), Timestamp(timestamp)
+        {}
+    };
+
+    // Table operation state for tracking DataShard completion
+    struct TTableOperationState {
+        TOperationId OperationId;
+        THashSet<TShardIdx> ExpectedShards;
+        THashSet<TShardIdx> CompletedShards;
+        THashSet<TShardIdx> FailedShards;
+
+        TTableOperationState() = default;
+        explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
+
+        bool AllShardsComplete() const {
+            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() &&
+                    !ExpectedShards.empty();
+        }
+
+        bool HasFailures() const {
+            return !FailedShards.empty();
+        }
+    };
+
+    TVector<TIncrementalBackup> IncrementalBackups; // Sorted by timestamp
+    ui32 CurrentIncrementalIdx = 0;
+    bool CurrentIncrementalStarted = false;
+
+    // Operation completion tracking for current incremental backup
+    THashSet<TOperationId> InProgressOperations;
+    THashSet<TOperationId> CompletedOperations;
+
+    // Table operation state tracking for DataShard completion
+    THashMap<TOperationId, TTableOperationState> TableOperations;
+
+    bool AllIncrementsProcessed() const {
+        return CurrentIncrementalIdx >= IncrementalBackups.size();
+    }
+
+    bool IsCurrentIncrementalComplete() const {
+        return CurrentIncrementalIdx < IncrementalBackups.size() &&
+                IncrementalBackups[CurrentIncrementalIdx].Completed;
+    }
+
+    bool AreAllCurrentOperationsComplete() const {
+        // If we started processing the current incremental but there are no operations at all,
+        // it means no table backups were found in this incremental backup, so consider it complete
+        // TODO: probably have to ensure that empty backups are impossible
+        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()) {
+            return true;
+        }
+        // Normal case: all operations have moved from InProgress to Completed
+        return InProgressOperations.empty() && !CompletedOperations.empty();
+    }
+
+    void MarkCurrentIncrementalComplete() {
+        if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+            IncrementalBackups[CurrentIncrementalIdx].Completed = true;
+        }
+    }
+
+    void MoveToNextIncremental() {
+        if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+            CurrentIncrementalIdx++;
+            CurrentIncrementalStarted = false;
+
+            // Reset operation tracking for next incremental
+            InProgressOperations.clear();
+            CompletedOperations.clear();
+            TableOperations.clear();
+        }
+    }
+
+    const TIncrementalBackup* GetCurrentIncremental() const {
+        if (CurrentIncrementalIdx < IncrementalBackups.size()) {
+            return &IncrementalBackups[CurrentIncrementalIdx];
+        }
+
+        return nullptr;
+    }
+
+    void AddIncrementalBackup(const TPathId& pathId, const TString& path, ui64 timestamp) {
+        IncrementalBackups.emplace_back(pathId, path, timestamp);
+
+        // Sort by timestamp to ensure chronological order
+        std::sort(IncrementalBackups.begin(), IncrementalBackups.end(),
+                    [](const TIncrementalBackup& a, const TIncrementalBackup& b) {
+                        return a.Timestamp < b.Timestamp;
+                    });
+    }
+
+    void AddCurrentIncrementalOperation(const TOperationId& opId) {
+        InProgressOperations.insert(opId);
+    }
+
+    void MarkOperationComplete(const TOperationId& opId) {
+        InProgressOperations.erase(opId);
+        CompletedOperations.insert(opId);
+    }
+
+    bool AllCurrentIncrementalOperationsComplete() const {
+        return InProgressOperations.empty() && !CompletedOperations.empty();
+    }
+};
+
+struct TIncrementalBackupInfo : public TSimpleRefCount<TIncrementalBackupInfo> {
+    using TPtr = TIntrusivePtr<TIncrementalBackupInfo>;
+
+    enum class EState: ui8 {
+        Invalid = 0,
+        Transferring = 1,
+        Done = 240,
+        Cancellation = 250,
+        Cancelled = 251,
+    };
+
+    struct TItem {
+        enum class EState: ui8 {
+            Invalid = 0,
+            Transferring = 1,
+            Dropping = 230,
+            Done = 240,
+            Cancellation = 250,
+            Cancelled = 251,
+        };
+
+        TPathId PathId;
+        EState State;
+
+        bool IsDone() const {
+            return State == EState::Done;
+        }
+    };
+
+    ui64 Id;
+    EState State;
+    TPathId DomainPathId;
+
+    THashMap<TPathId, TItem> Items;
+
+    TMaybe<TString> UserSID;
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
+    explicit TIncrementalBackupInfo(
+            const ui64 id,
+            const TPathId domainPathId)
+        : Id(id)
+        , DomainPathId(domainPathId)
+    {}
+
+    bool IsDone() const {
+        return State == EState::Done;
+    }
+
+    bool IsCancelled() const {
+        return State == EState::Cancelled;
+    }
+
+    bool IsFinished() const {
+        return IsDone() || IsCancelled();
+    }
+
+    bool IsAllItemsDone() const {
+        for (const auto& item : Items) {
+            if (!item.second.IsDone()) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

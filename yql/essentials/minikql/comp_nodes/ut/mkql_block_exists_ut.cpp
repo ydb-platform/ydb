@@ -2,7 +2,7 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_helper.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -11,11 +11,10 @@ namespace {
 
 template <typename T, typename U>
 void TestScalarExistsKernel(T operand, U expected) {
-    TSetup<false> setup;
-    TestScalarKernel(operand, expected, setup,
-                     [&](TRuntimeNode node) {
-                         return setup.PgmBuilder->BlockExists(node);
-                     });
+    TBlockHelper().TestKernel(operand, expected,
+                              [](TSetup<false>& setup, TRuntimeNode node) {
+                                  return setup.PgmBuilder->BlockExists(node);
+                              });
 }
 
 void DoBlockExistsOffset(size_t length, size_t offset) {
@@ -63,7 +62,7 @@ void DoBlockExistsOffset(size_t length, size_t offset) {
             pb.Nth(item, 3)
         };
     });
-    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
+    node = pb.WideToBlocks(pb.FromFlow(node));
     if (offset > 0) {
         node = pb.WideSkipBlocks(node, pb.NewDataLiteral<ui64>(offset));
     }
@@ -76,7 +75,7 @@ void DoBlockExistsOffset(size_t length, size_t offset) {
             items[4],
         };
     });
-    node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
+    node = pb.ToFlow(pb.WideFromBlocks(node));
     node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.NewTuple(outputTupleType, {items[0], items[1], items[2], items[3]});
     });

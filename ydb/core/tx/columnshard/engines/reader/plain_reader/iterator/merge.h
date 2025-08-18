@@ -62,7 +62,7 @@ protected:
     std::shared_ptr<arrow::Table> ResultBatch;
     std::shared_ptr<arrow::RecordBatch> LastPK;
     std::shared_ptr<TSpecialReadContext> Context;
-    mutable std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
+    std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
     std::shared_ptr<TMergingContext> MergingContext;
     const ui32 IntervalIdx;
     std::optional<NArrow::TShardedRecordBatch> ShardedBatch;
@@ -73,7 +73,7 @@ protected:
     TConclusionStatus PrepareResultBatch();
 
 private:
-    virtual bool DoApply(IDataReader& indexedDataRead) const override;
+    virtual bool DoApply(IDataReader& indexedDataRead) override;
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
@@ -97,7 +97,7 @@ private:
     THashMap<ui32, std::shared_ptr<IDataSource>> Sources;
 
 protected:
-    virtual TConclusionStatus DoExecuteImpl() override;
+    virtual TConclusion<bool> DoExecuteImpl() override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {
@@ -113,7 +113,7 @@ private:
     using TBase = TBaseMergeTask;
 
 protected:
-    virtual TConclusionStatus DoExecuteImpl() override;
+    virtual TConclusion<bool> DoExecuteImpl() override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {

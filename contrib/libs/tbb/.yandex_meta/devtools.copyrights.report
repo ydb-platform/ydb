@@ -44,6 +44,17 @@ BELONGS ya.make
         src/tbb/small_object_pool_impl.h [2:2]
         src/tbb/version.cpp [2:2]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 156954a63470c6ce7ae02f6d3083e7b6
+BELONGS ya.make
+    License text:
+            Copyright (c) 2019-2025 Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/oneapi/tbb/detail/_concurrent_skip_list.h [2:2]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 183dae8f315abe7f52eca9c76d0e9cbb
 BELONGS ya.make
     License text:
@@ -56,7 +67,6 @@ BELONGS ya.make
         include/oneapi/tbb/detail/_flow_graph_node_set_impl.h [2:2]
         include/oneapi/tbb/detail/_task.h [2:2]
         include/oneapi/tbb/detail/_task_handle.h [2:2]
-        src/tbb/task_dispatcher.h [2:2]
         src/tbb/thread_data.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 37f751c87d04968f0f9f061a184f9a3b
@@ -69,7 +79,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         src/tbb/tcm.h [2:2]
-        src/tbb/tcm_adaptor.cpp [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 386e9140344d54f8b754c4445aff38ff
 BELONGS ya.make
@@ -86,7 +95,6 @@ BELONGS ya.make
         include/oneapi/tbb/partitioner.h [2:2]
         include/oneapi/tbb/profiling.h [2:2]
         include/oneapi/tbb/scalable_allocator.h [2:2]
-        src/tbb/arena_slot.h [2:2]
         src/tbb/market.cpp [2:2]
         src/tbb/market.h [2:2]
         src/tbb/rml_tbb.cpp [2:2]
@@ -107,6 +115,17 @@ BELONGS ya.make
         include/oneapi/tbb/rw_mutex.h [2:2]
         include/tbb/collaborative_call_once.h [2:2]
         src/tbb/address_waiter.cpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49a64d23a06f6a24f569c76549fcdecf
+BELONGS ya.make
+    License text:
+            Copyright (c) 2023-2025 Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/tbb/tcm_adaptor.cpp [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 58712991d6dcb330c78b0224b7cdd4db
 BELONGS ya.make
@@ -158,6 +177,8 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         src/tbb/small_object_pool.cpp [2:2]
+        src/tbb/task_dispatcher.cpp [2:2]
+        src/tbb/task_dispatcher.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 766614077ece9f54dcc96e471051491a
 BELONGS ya.make
@@ -177,8 +198,6 @@ BELONGS ya.make
         include/oneapi/tbb/detail/_scoped_lock.h [2:2]
         include/oneapi/tbb/queuing_mutex.h [2:2]
         include/oneapi/tbb/queuing_rw_mutex.h [2:2]
-        src/tbb/co_context.h [2:2]
-        src/tbb/dynamic_link.h [2:2]
         src/tbb/exception.cpp [2:2]
         src/tbb/itt_notify.cpp [2:2]
         src/tbb/itt_notify.h [2:2]
@@ -230,7 +249,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/oneapi/tbb/detail/_concurrent_skip_list.h [2:2]
         include/oneapi/tbb/info.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a64887874f771449c9238549356cdf97
@@ -242,7 +260,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/oneapi/tbb.h [2:2]
         include/oneapi/tbb/concurrent_unordered_map.h [2:2]
         include/oneapi/tbb/concurrent_unordered_set.h [2:2]
         include/oneapi/tbb/concurrent_vector.h [2:2]
@@ -271,9 +288,7 @@ BELONGS ya.make
         include/oneapi/tbb/task_group.h [2:2]
         src/tbb/allocator.cpp [2:2]
         src/tbb/concurrent_monitor.h [2:2]
-        src/tbb/dynamic_link.cpp [2:2]
         src/tbb/global_control.cpp [2:2]
-        src/tbb/governor.cpp [2:2]
         src/tbb/governor.h [2:2]
         src/tbb/main.cpp [2:2]
         src/tbb/misc.cpp [2:2]
@@ -282,7 +297,6 @@ BELONGS ya.make
         src/tbb/queuing_rw_mutex.cpp [2:2]
         src/tbb/scheduler_common.h [2:2]
         src/tbb/semaphore.h [2:2]
-        src/tbb/task.cpp [2:2]
         src/tbb/tools_api/ittnotify.h [2:2]
         src/tbb/tools_api/ittnotify_config.h [2:2]
         src/tbb/tools_api/ittnotify_static.c [2:2]
@@ -310,6 +324,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        include/oneapi/tbb.h [2:2]
         include/oneapi/tbb/blocked_range.h [2:2]
         include/oneapi/tbb/concurrent_hash_map.h [2:2]
         include/oneapi/tbb/concurrent_queue.h [2:2]
@@ -323,7 +338,13 @@ BELONGS ya.make
         include/oneapi/tbb/version.h [2:2]
         src/tbb/arena.cpp [2:2]
         src/tbb/arena.h [2:2]
+        src/tbb/arena_slot.h [2:2]
+        src/tbb/co_context.h [2:2]
         src/tbb/def/lin64-tbb.def [2:2]
+        src/tbb/dynamic_link.cpp [2:2]
+        src/tbb/dynamic_link.h [2:2]
+        src/tbb/governor.cpp [2:2]
+        src/tbb/task.cpp [2:2]
         src/tbb/waiters.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ca359ffcc18a725e17810fbe93800626
@@ -408,17 +429,6 @@ BELONGS ya.make
         src/tbb/main.h [2:2]
         src/tbb/rml_base.h [2:2]
         src/tbb/rml_tbb.h [2:2]
-
-KEEP     COPYRIGHT_SERVICE_LABEL da3083268e79dd67d6ab0935b4c82192
-BELONGS ya.make
-    License text:
-            Copyright (c) 2020-2022 Intel Corporation
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/tbb/task_dispatcher.cpp [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e04ccdccba3352213c1a6a6e7806095f
 BELONGS ya.make

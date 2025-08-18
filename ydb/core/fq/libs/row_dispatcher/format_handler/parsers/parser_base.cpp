@@ -139,7 +139,7 @@ TString TruncateString(std::string_view rawString, size_t maxSize) {
     if (rawString.size() <= maxSize) {
         return TString(rawString);
     }
-    return TStringBuilder() << rawString.substr(0, maxSize) << " truncated...";
+    return TStringBuilder() << rawString.substr(0, maxSize) << " truncated (full length was " << rawString.size() << ")...";
 }
 
 }  // namespace NFq::NRowDispatcher

@@ -14,6 +14,7 @@ class TKqpRunner::TImpl {
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
 
     static constexpr TDuration RETRY_PERIOD = TDuration::MilliSeconds(100);
+    static constexpr TDuration SCRIPT_RETRY_CYCLE = TDuration::Minutes(1);
 
 public:
     enum class EQueryType {
@@ -29,7 +30,21 @@ public:
         , StatsPrinter_(Options_.PlanOutputFormat)
         , CerrColors_(NColorizer::AutoColors(Cerr))
         , CoutColors_(NColorizer::AutoColors(Cout))
-    {}
+    {
+        if (const auto& retryStatuses = Options_.RetryableStatuses; !retryStatuses.empty()) {
+            NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
+            mapping.MutableStatusCode()->Assign(retryStatuses.begin(), retryStatuses.end());
+
+            auto& policy = *mapping.MutableBackoffPolicy();
+            policy.SetRetryPeriodMs(SCRIPT_RETRY_CYCLE.MilliSeconds());
+            policy.SetBackoffPeriodMs(RETRY_PERIOD.MilliSeconds());
+
+            // Minimal retry rate limit for infinite retries
+            policy.SetRetryRateLimit((1.0 + std::sqrt(1.0 + 4.0 * policy.GetRetryPeriodMs() / policy.GetBackoffPeriodMs())) / 2.0);
+
+            RetryMapping_ = {mapping};
+        }
+    }
 
     bool ExecuteWithRetries(std::function<Ydb::StatusIds::StatusCode()> queryRunner) {
         RetryState_ = nullptr;
@@ -80,7 +95,7 @@ public:
             Cout << CoutColors_.Cyan() << "Starting script request:\n" << CoutColors_.Default() << script.Query << Endl;
         }
 
-        TRequestResult status = YdbSetup_.ScriptRequest(script, ExecutionOperation_);
+        TRequestResult status = YdbSetup_.ScriptRequest({.Options = script, .RetryMapping = RetryMapping_}, ExecutionOperation_);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to start script execution, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -207,6 +222,7 @@ private:
         }
 
         TRequestResult status;
+        TString previousIssues;
         while (true) {
             status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, ExecutionMeta_);
             PrintScriptProgress(queryId, ExecutionMeta_.Plan);
@@ -218,6 +234,11 @@ private:
             if (!status.IsSuccess()) {
                 Cerr << CerrColors_.Red() << "Failed to get script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
                 return status.Status;
+            }
+
+            if (const auto newIssues = status.Issues.ToString(); newIssues && previousIssues != newIssues && Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
+                previousIssues = newIssues;
+                Cerr << CerrColors_.Red() << "Script execution issues updated:" << CerrColors_.Default() << Endl << newIssues << Endl;
             }
 
             if (Options_.ScriptCancelAfter && TInstant::Now() - StartTime_ > Options_.ScriptCancelAfter) {
@@ -238,7 +259,7 @@ private:
         PrintScriptFinish(ExecutionMeta_, "Script");
 
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
-            Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status " << ExecutionMeta_.ExecutionStatus << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return status.Status;
         }
 
@@ -353,6 +374,7 @@ private:
     EVerbose VerboseLevel_;
     IRetryPolicy::TPtr RetryPolicy_;
     IRetryPolicy::IRetryState::TPtr RetryState_;
+    std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> RetryMapping_;
 
     TYdbSetup YdbSetup_;
     TStatsPrinter StatsPrinter_;

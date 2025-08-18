@@ -52,7 +52,7 @@ namespace NYdb::NConsoleClient {
                     return Coloring.operation;
                 case NSQLHighlight::EUnitKind::QuotedIdentifier:
                     return Coloring.identifier.quoted;
-                case NSQLHighlight::EUnitKind::BindParamterIdentifier:
+                case NSQLHighlight::EUnitKind::BindParameterIdentifier:
                     return Coloring.identifier.variable;
                 case NSQLHighlight::EUnitKind::TypeIdentifier:
                     return Coloring.identifier.type;

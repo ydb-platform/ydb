@@ -5,8 +5,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
-#include <ydb/public/api/protos/draft/ydb_bridge.pb.h>
-
 #include <memory>
 #include <string>
 
@@ -17,15 +15,17 @@ struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClu
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {};
 
 enum class EPileState {
-    DISCONNECTED = Ydb::Bridge::DISCONNECTED,
-    NOT_SYNCHRONIZED = Ydb::Bridge::NOT_SYNCHRONIZED,
-    SYNCHRONIZED = Ydb::Bridge::SYNCHRONIZED,
-    PROMOTE = Ydb::Bridge::PROMOTE,
-    PRIMARY = Ydb::Bridge::PRIMARY,
+    UNSPECIFIED = 0,
+    PRIMARY = 1,
+    PROMOTE = 2,
+    SYNCHRONIZED = 3,
+    NOT_SYNCHRONIZED = 4,
+    SUSPENDED = 5,
+    DISCONNECTED = 6,
 };
 
 struct TPileStateUpdate {
-    std::uint32_t PileId = 0;
+    std::string PileName;
     EPileState State = EPileState::DISCONNECTED;
 };
 
@@ -52,7 +52,7 @@ public:
     ~TBridgeClient();
 
     TAsyncStatus UpdateClusterState(const std::vector<TPileStateUpdate>& updates,
-        const std::vector<std::uint32_t>& specificPileIds, const TUpdateClusterStateSettings& settings = {});
+        const std::vector<std::string>& quorumPiles, const TUpdateClusterStateSettings& settings = {});
 
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings = {});
 

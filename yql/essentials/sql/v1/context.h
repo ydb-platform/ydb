@@ -378,6 +378,8 @@ namespace NSQLTranslationV1 {
         bool FailOnGroupByExprOverride = false;
         bool EmitUnionMerge = false;
         bool OptimizeSimpleIlike = false;
+        bool PersistableFlattenAndAggrExprs = false;
+        bool DebugPositions = false;
         TVector<size_t> ForAllStatementsParts;
 
         TMaybe<TString> Engine;

@@ -13,6 +13,17 @@ namespace NYT::NFormats {
 ////////////////////////////////////////////////////////////////////////////////
 
 ISchemalessFormatWriterPtr CreateWriterForArrow(
+    TArrowFormatConfigPtr attributes,
+    NTableClient::TNameTablePtr nameTable,
+    const std::vector<NTableClient::TTableSchemaPtr>& schemas,
+    const std::vector<std::optional<std::vector<std::string>>>& columns,
+    NConcurrency::IAsyncOutputStreamPtr output,
+    bool enableContextSaving,
+    TControlAttributesConfigPtr controlAttributesConfig,
+    int keyColumnCount);
+
+ISchemalessFormatWriterPtr CreateWriterForArrow(
+    const NYTree::IAttributeDictionary& attributes,
     NTableClient::TNameTablePtr nameTable,
     const std::vector<NTableClient::TTableSchemaPtr>& schemas,
     const std::vector<std::optional<std::vector<std::string>>>& columns,

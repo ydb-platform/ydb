@@ -832,6 +832,7 @@ public:
                     SessionCtx->Config().BindingsMode,
                     GUCSettings
                 );
+                settingsBuilder.SetFromConfig(SessionCtx->Config());
                 return RewriteReadFromView(node, ctx, settingsBuilder, Types.Modules, viewData);
             }
         }

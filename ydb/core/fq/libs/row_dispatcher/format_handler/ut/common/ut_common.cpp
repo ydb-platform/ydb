@@ -207,7 +207,7 @@ void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expect
     with_lock(Alloc) {
         // Parse messages
         const auto rowType = ProgramBuilder->NewMultiType(columnTypes);
-        const auto dataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType);
+        const auto dataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
         NKikimr::NMiniKQL::TUnboxedValueBatch parsedData(rowType);
         dataUnpacker->UnpackBatch(NYql::MakeChunkedBuffer(std::move(serializedBatch)), *HolderFactory, parsedData);

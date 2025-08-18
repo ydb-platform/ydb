@@ -26,6 +26,7 @@ namespace NSQLComplete {
 
         struct TFunction {
             TString Namespace;
+            ENodeKind ReturnType = ENodeKind::Any;
         };
 
         struct THint {
@@ -45,6 +46,10 @@ namespace NSQLComplete {
             bool HasCluster() const {
                 return !Cluster.empty();
             }
+
+            bool IsDeferred() const {
+                return Kinds.empty();
+            }
         };
 
         struct TColumn {
@@ -54,6 +59,10 @@ namespace NSQLComplete {
         struct TQuotation {
             bool AtLhs = false;
             bool AtRhs = false;
+
+            explicit operator bool() const {
+                return AtLhs || AtRhs;
+            }
         };
 
         TKeywords Keywords;
@@ -67,7 +76,8 @@ namespace NSQLComplete {
         bool Binding = false;
 
         TQuotation IsQuoted;
-        TEditRange EditRange;
+        TEditRange ReplaceRange;
+        TEditRange FilterRange;
     };
 
     // TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.

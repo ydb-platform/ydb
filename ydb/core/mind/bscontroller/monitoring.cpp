@@ -1428,6 +1428,7 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
                     TABLEH() { out << "Donors"; }
+                    TABLEH() { out << "Bridge"; }
                 }
             }
             TABLEBODY() {
@@ -1459,6 +1460,8 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             }
         };
 
+        TGroupInfo::TGroupFinder finder = [this](TGroupId groupId) { return FindGroup(groupId); };
+
         TABLER() {
             TString storagePool = "<strong>none</strong>";
             if (auto it = StoragePools.find(group.StoragePoolId); it != StoragePools.end()) {
@@ -1485,9 +1488,9 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             renderLatency(group.LatencyStats.PutUserData);
             renderLatency(group.LatencyStats.GetFast);
             TABLED() { out << (group.SeenOperational ? "YES" : ""); }
-            TABLED() { out << (group.LayoutCorrect ? "" : "NO"); }
+            TABLED() { out << (group.IsLayoutCorrect(finder) ? "" : "NO"); }
 
-            const auto& status = group.Status;
+            const auto& status = group.GetStatus(finder);
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); }
             TABLED() {
@@ -1496,6 +1499,21 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
                     numDonors += vdisk->Donors.size();
                 }
                 out << numDonors;
+            }
+
+            TStringBuilder bridge;
+            if (group.BridgeGroupInfo) {
+                for (const auto& pile : group.BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    if (bridge) {
+                        bridge << ' ';
+                    }
+                    bridge << pile.GetGroupId() << ':' << pile.GetGroupGeneration()
+                        << '#' << NKikimrBridge::TGroupState::EStage_Name(pile.GetStage())
+                        << '@' << pile.GetBecameUnsyncedGeneration();
+                }
+            }
+            TABLED() {
+                out << bridge;
             }
         }
     }

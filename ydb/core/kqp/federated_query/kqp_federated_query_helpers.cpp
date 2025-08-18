@@ -3,11 +3,13 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -25,6 +27,21 @@
 #include <util/stream/file.h>
 
 namespace NKikimr::NKqp {
+
+namespace {
+
+    bool ValidateExternalSink(const NKqpProto::TKqpExternalSink& sink) {
+        if (sink.GetType() != "S3Sink") {
+            return false;
+        }
+
+        NYql::NS3::TSink sinkSettings;
+        sink.GetSettings().UnpackTo(&sinkSettings);
+
+        return sinkSettings.GetAtomicUploadCommit();
+    }
+
+}  // anonymous namespace
 
     bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth) {
         if (!maxDepth) {
@@ -305,24 +322,38 @@ namespace NKikimr::NKqp {
         }
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
         auto driver = federatedQuerySetup->Driver;
-        
+
         NYdb::TCommonClientSettings opts;
         opts
             .DiscoveryEndpoint(endpoint)
             .Database(database)
             .SslCredentials(NYdb::TSslCredentials(useTls))
+            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
             .CredentialsProviderFactory(credentialsProviderFactory);
-        auto schemeClient = NYdb::NScheme::TSchemeClient(*driver, opts);
-        return schemeClient.DescribePath(path)
-            .Apply([actorSystem = NActors::TActivationContext::ActorSystem()](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
+        auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
+
+        return schemeClient->DescribePath(path)
+            .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), p = path, sc = schemeClient, database, endpoint](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
                 if (!describePathResult.IsSuccess()) {
-                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribePath failed, " << describePathResult.GetIssues().ToString());
-                    return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing()); 
+                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed: " << describePathResult.GetIssues().ToString());
+                    return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing());
                 }
                 NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();
                 return NThreading::MakeFuture<TGetSchemeEntryResult>(entry.Type);
             });
     };
-    
+
+    std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {
+        std::vector<NKqpProto::TKqpExternalSink> filteredSinks;
+        filteredSinks.reserve(sinks.size());
+        for (const auto& sink : sinks) {
+            if (ValidateExternalSink(sink)) {
+                filteredSinks.push_back(sink);
+            }
+        }
+
+        return filteredSinks;
+    }
+
 }  // namespace NKikimr::NKqp

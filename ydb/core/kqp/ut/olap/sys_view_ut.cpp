@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             for (const auto& [tabletId, pathIdTranslator]  : tablets) {
                 const auto& pathIds = pathIdTranslator->GetSchemeShardLocalPathIds();
                 for (const auto& pathId : pathIds) {
-                    const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId);
+                    const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId, false);
                     UNIT_ASSERT(internalPathId.has_value());
                     UNIT_ASSERT(result.contains(pathId) && result[pathId].contains(tabletId));
                     UNIT_ASSERT_VALUES_EQUAL(result[pathId][tabletId], *internalPathId);
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             UNIT_ASSERT_VALUES_EQUAL(result[pathId].size(), tableShardsCount);
 
             for (const auto& [tabletId, pathIdTranslator]  : tablets) {
-                if (const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId)) {
+                if (const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId, false)) {
                     UNIT_ASSERT(result[pathId].contains(tabletId));
                     UNIT_ASSERT_VALUES_EQUAL(result[pathId][tabletId], *internalPathId);
                 }
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         UNIT_ASSERT_VALUES_EQUAL(result[pathId].size(), tableShardsCount);
 
         for (const auto& [tabletId, pathIdTranslator]  : tablets) {
-            const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId);
+            const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId, false);
             UNIT_ASSERT(internalPathId.has_value());
             UNIT_ASSERT(result[pathId].contains(tabletId));
             UNIT_ASSERT_VALUES_EQUAL(result[pathId][tabletId], *internalPathId);
@@ -343,11 +343,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 count3;
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        NKikimrConfig::TAppConfig appConfig;
-        auto* CSConfig = appConfig.MutableColumnShardConfig();
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* CSConfig = settings.AppConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         CSConfig->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
+
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore");
@@ -419,11 +419,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytes1;
         ui64 count1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        NKikimrConfig::TAppConfig appConfig;
-        auto* CSConfig = appConfig.MutableColumnShardConfig();
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* CSConfig = settings.AppConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         CSConfig->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
@@ -463,11 +462,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         csController->SetSmallSizeDetector(Max<ui32>());
-        NKikimrConfig::TAppConfig appConfig;
-        auto* CSConfig = appConfig.MutableColumnShardConfig();
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* CSConfig = settings.AppConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         CSConfig->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);

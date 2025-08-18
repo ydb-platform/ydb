@@ -6,9 +6,9 @@ namespace NSQLComplete {
 
     namespace {
 
-        class TDocumentation: public IDocumentation {
+        class TStaticDocumentation: public IDocumentation {
         public:
-            explicit TDocumentation(TDocByNormalizedNameMap docs)
+            explicit TStaticDocumentation(TDocByNormalizedNameMap docs)
                 : Docs_(std::move(docs))
             {
             }
@@ -28,10 +28,35 @@ namespace NSQLComplete {
             TDocByNormalizedNameMap Docs_;
         };
 
+        class TReservedDocumentation: public IDocumentation {
+        public:
+            TReservedDocumentation(
+                IDocumentation::TPtr primary, IDocumentation::TPtr fallback)
+                : Primary_(std::move(primary))
+                , Fallback_(std::move(fallback))
+            {
+            }
+
+            TMaybe<TString> Lookup(TStringBuf name) const override {
+                return Primary_->Lookup(name).Or([name, f = Fallback_] {
+                    return f->Lookup(name);
+                });
+            }
+
+        private:
+            IDocumentation::TPtr Primary_;
+            IDocumentation::TPtr Fallback_;
+        };
+
     } // namespace
 
     IDocumentation::TPtr MakeStaticDocumentation(TDocByNormalizedNameMap docs) {
-        return new TDocumentation(std::move(docs));
+        return new TStaticDocumentation(std::move(docs));
+    }
+
+    IDocumentation::TPtr MakeReservedDocumentation(
+        IDocumentation::TPtr primary, IDocumentation::TPtr fallback) {
+        return new TReservedDocumentation(std::move(primary), std::move(fallback));
     }
 
 } // namespace NSQLComplete

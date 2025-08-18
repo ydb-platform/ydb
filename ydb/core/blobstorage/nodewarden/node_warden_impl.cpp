@@ -34,7 +34,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
     , DefaultHugeGarbagePerMille(300, 1, 1000)
     , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
-    , MaxChunksToDefragInflight(10, 1, 50)
+    , MaxChunksToDefragInflight(10, 1, 1000)
     , FreshCompMaxInFlightWrites(10, 1, 1000)
     , FreshCompMaxInFlightReads(10, 1, 1000)
     , HullCompMaxInFlightWrites(10, 1, 1000)
@@ -71,6 +71,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerBucketSize(1, 1, 100'000)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
+    , EnableDeepScrubbing(false, false, true)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
     AvailDomainId = 1;
@@ -150,6 +151,7 @@ STATEFN(TNodeWarden::StateOnline) {
         // proxy requests for the NodeWhiteboard to prevent races
         hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
 
+        hFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
         hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
 
         cFunc(TEvPrivate::EvReadCache, HandleReadCache);
@@ -180,7 +182,7 @@ STATEFN(TNodeWarden::StateOnline) {
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
-        hFunc(TEvNodeWardenManageSyncers, HandleManageSyncers);
+        hFunc(TEvNodeWardenNotifySyncerFinished, Handle);
 
         default:
             EnqueuePendingMessage(ev);
@@ -425,6 +427,8 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ReportingControllerBucketSize, "DSProxyControls.RequestReportingSettings.BucketSize");
         icb->RegisterSharedControl(ReportingControllerLeakDurationMs, "DSProxyControls.RequestReportingSettings.LeakDurationMs");
         icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
+
+        icb->RegisterSharedControl(EnableDeepScrubbing, "VDiskControls.EnableDeepScrubbing");
     }
 
     // start replication broker
@@ -470,6 +474,7 @@ void TNodeWarden::Bootstrap() {
     auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
     const bool success = DeriveStorageConfig(appConfig, config.get(), &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
+    TDistributedConfigKeeper::GenerateBridgeInitialState(*Cfg, config.get());
     TDistributedConfigKeeper::UpdateFingerprint(config.get());
     StorageConfig = std::move(config);
 
@@ -798,6 +803,8 @@ void TNodeWarden::Handle(TEvRegisterPDiskLoadActor::TPtr ev) {
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev) {
     auto& record = ev->Get()->Record;
 
+    STLOG(PRI_DEBUG, BS_NODE, NW52, "TEvControllerNodeServiceSetUpdate", (Record, record));
+
     if (record.HasAvailDomain() && record.GetAvailDomain() != AvailDomainId) {
         // AvailDomain may arrive unset
         STLOG_DEBUG_FAIL(BS_NODE, NW02, "unexpected AvailDomain from BS_CONTROLLER", (Msg, record), (AvailDomainId, AvailDomainId));
@@ -897,6 +904,10 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
             yaml.HasStorageConfigVersion() ? std::make_optional(yaml.GetStorageConfigVersion()) : std::nullopt);
 
         ExpectedSaveConfigCookie++;
+    }
+
+    if (record.GetUpdateSyncers()) {
+        ApplyWorkingSyncers(record);
     }
 }
 
@@ -1025,9 +1036,30 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvNotifyWardenPDiskRestarted::TPtr ev)
     OnPDiskRestartFinished(ev->Get()->PDiskId, ev->Get()->Status);
 }
 
+void TNodeWarden::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr ev) {
+    const ui64 cookie = NextConfigCookie++;
+    UnfinishedRequests[cookie].CopyFrom(ev->Get()->Record);
+    ConfigInFlight.emplace(cookie, [this, cookie = cookie, origSender = ev->Sender, origCookie = ev->Cookie](
+            TEvBlobStorage::TEvControllerConfigResponse *ev) {
+        if (ev) {
+            Send(origSender, ev, 0, origCookie);
+            UnfinishedRequests.erase(cookie);
+        }
+    });
+    SendToController(std::unique_ptr<IEventBase>(ev->ReleaseBase().Release()), cookie);
+}
+
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
     if (auto nh = ConfigInFlight.extract(ev->Cookie)) {
         nh.mapped()(ev->Get());
+    }
+}
+
+void TNodeWarden::SendUnfinishedRequests() {
+    for (const auto& [cookie, record] : UnfinishedRequests) {
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        ev->Record.CopyFrom(record);
+        SendToController(std::move(ev), cookie);
     }
 }
 
@@ -1523,7 +1555,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 *errorReason = "missing pile name";
                 return false;
             }
-            const auto [it, inserted] = piles.try_emplace(p[i].GetName(), TBridgePileId::FromValue(i));
+            const auto [it, inserted] = piles.try_emplace(p[i].GetName(), TBridgePileId::FromPileIndex(i));
             if (!inserted) {
                 *errorReason = TStringBuilder() << "duplicate pile name " << p[i].GetName();
                 return false;
@@ -1547,18 +1579,13 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         } else if (node.HasWalleLocation()) {
             r->MutableLocation()->CopyFrom(node.GetWalleLocation());
         }
+        const auto& bridgePileName = TNodeLocation(r->GetLocation()).GetBridgePileName();
         if (!piles.empty()) {
-            if (!node.HasBridgePileName()) {
+            if (!bridgePileName) {
                 *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
                 return false;
             }
-            const auto it = piles.find(node.GetBridgePileName());
-            if (it == piles.end()) {
-                *errorReason = TStringBuilder() << "incorrect pile name " << node.GetBridgePileName();
-                return false;
-            }
-            it->second.CopyToProto(r, &NKikimrBlobStorage::TNodeIdentifier::SetBridgePileId);
-        } else if (node.HasBridgePileName()) {
+        } else if (bridgePileName) {
             *errorReason = "pile name can't be specified when Bridge mode is not enabled";
             return false;
         }

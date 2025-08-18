@@ -4,10 +4,10 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 #include <ydb/tests/tools/kqprun/runlib/settings.h>
-
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
 
 
@@ -48,6 +48,8 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     bool TraceOptEnabled = false;
     EVerbose VerboseLevel = EVerbose::Info;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
+
+    NYql::IPqGateway::TPtr PqGateway;
 };
 
 

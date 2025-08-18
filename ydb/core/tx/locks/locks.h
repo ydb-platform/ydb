@@ -503,7 +503,7 @@ public:
         Y_ENSURE(KeyColumnTypes.size() <= keyTypes.size());
         if (KeyColumnTypes.size() < keyTypes.size()) {
             KeyColumnTypes = keyTypes;
-            Ranges.SetKeyTypes(keyTypes);
+            Ranges.MutableComparator().SetKeyTypes(keyTypes);
         }
     }
 
@@ -519,7 +519,7 @@ public:
 
     template<class TCallback>
     void ForEachRangeLock(TCallback&& callback) {
-        Ranges.EachRange([&callback](const TRangeTreeBase::TRange&, TLockInfo* lock) {
+        Ranges.EachRange([&callback](const TRangeTreapTraits::TRange&, TLockInfo* lock) {
             callback(lock);
         });
     }

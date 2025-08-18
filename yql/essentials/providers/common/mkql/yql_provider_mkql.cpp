@@ -168,7 +168,7 @@ TMkqlBuildContext* GetContextForMemoize(const TExprNode& node, TMkqlBuildContext
 }
 
 const TRuntimeNode& CheckTypeAndMemoize(const TExprNode& node, TMkqlBuildContext& ctx, const TRuntimeNode& runtime) {
-    if (node.GetTypeAnn()) {
+    if (node.GetTypeAnn() && node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Unit) {
         TNullOutput null;
         if (const auto type = BuildType(*node.GetTypeAnn(), ctx.ProgramBuilder, *ctx.TypeMemoization, null)) {
             if (!type->IsSameType(*runtime.GetStaticType())) {
@@ -687,7 +687,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
         const auto lambda = [&](TRuntimeNode::TList items) { return MkqlBuildWideLambda(node.Tail(), ctx, items); };
         TRuntimeNode result = ctx.ProgramBuilder.WideMap(arg, lambda);
-        if (IsWideBlockType(*node.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType())) {
+        if (IsWideBlockType(*GetWideFlowOrStreamComponents(*node.GetTypeAnn()))) {
             result = ctx.ProgramBuilder.BlockExpandChunked(result);
         }
         return result;
@@ -2432,7 +2432,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
-    AddCallable({"WithWorld"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({"WithWorld", "WithSideEffectsMode"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
@@ -2999,7 +2999,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.TryWeakMemberFromDict(other, rest, schemeType, member);
     });
 
-    AddCallable("DependsOn", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    // TODO: remove DependsOn from list below after NormalizeDependsOn is enabled by default
+    AddCallable({ "DependsOn", "InnerDependsOn" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
@@ -3016,7 +3017,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 
-    AddCallable({ "AssumeStrict", "AssumeNonStrict", "NoPush", "Likely" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({ "AssumeStrict", "AssumeNonStrict", "NoPush", "Likely", "Unessential" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 

@@ -67,18 +67,17 @@ struct TEvSubscribe : public NActors::TEventLocal<TEvSubscribe, Ev::Subscribe> {
 };
 
 struct TChange {
-    TChange(std::string&& key, i64 revision, TData&& oldData, TData&& newData = {})
-        : Key(std::move(key)), Revision(revision), OldData(std::move(oldData)), NewData(std::move(newData))
+    TChange(std::string&& key, TData&& oldData = {}, TData&& newData = {})
+        : Key(std::move(key)), OldData(std::move(oldData)), NewData(std::move(newData))
     {}
 
     struct TOrder {
         bool operator()(const TChange& lhs, const TChange& rhs) const {
-            return lhs.Revision < rhs.Revision;
+            return lhs.NewData.Modified < rhs.NewData.Modified;
         }
     };
 
     std::string Key;
-    i64 Revision = 0LL;
     TData OldData, NewData;
 };
 

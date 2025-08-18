@@ -119,7 +119,6 @@ struct TNodeRegistrationSettings {
     ui32 InterconnectPort;
     NActors::TNodeLocation Location;
     TString NodeRegistrationToken;
-    std::optional<TString> BridgePileName;
 };
 
 class INodeRegistrationResult {

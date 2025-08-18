@@ -1,7 +1,8 @@
+import datetime
 from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
-from moto.ec2.models.spot_requests import SpotFleetLaunchSpec
-
+from moto.ec2.models.spot_requests import SpotFleetLaunchSpec, SpotInstanceRequest
 from .core import TaggedEC2Resource
 from ..utils import (
     random_fleet_id,
@@ -12,19 +13,19 @@ from ..utils import (
 class Fleet(TaggedEC2Resource):
     def __init__(
         self,
-        ec2_backend,
-        fleet_id,
-        on_demand_options,
-        spot_options,
-        target_capacity_specification,
-        launch_template_configs,
-        excess_capacity_termination_policy,
-        replace_unhealthy_instances,
-        terminate_instances_with_expiration,
-        fleet_type,
-        valid_from,
-        valid_until,
-        tag_specifications,
+        ec2_backend: Any,
+        fleet_id: str,
+        on_demand_options: Dict[str, Any],
+        spot_options: Dict[str, Any],
+        target_capacity_specification: Dict[str, Any],
+        launch_template_configs: List[Dict[str, Any]],
+        excess_capacity_termination_policy: str,
+        replace_unhealthy_instances: bool,
+        terminate_instances_with_expiration: bool,
+        fleet_type: str,
+        valid_from: str,
+        valid_until: str,
+        tag_specifications: List[Dict[str, Any]],
     ):
 
         self.ec2_backend = ec2_backend
@@ -39,7 +40,7 @@ class Fleet(TaggedEC2Resource):
         self.replace_unhealthy_instances = replace_unhealthy_instances
         self.terminate_instances_with_expiration = terminate_instances_with_expiration
         self.fleet_type = fleet_type
-        self.valid_from = valid_from
+        self.valid_from = valid_from or datetime.datetime.now(tz=datetime.timezone.utc)
         self.valid_until = valid_until
         tag_map = convert_tag_spec(tag_specifications).get("fleet", {})
         self.add_tags(tag_map)
@@ -50,18 +51,18 @@ class Fleet(TaggedEC2Resource):
         self.fulfilled_on_demand_capacity = 0.0
         self.fulfilled_spot_capacity = 0.0
 
-        self.launch_specs = []
+        self.launch_specs: List[SpotFleetLaunchSpec] = []
 
-        launch_specs_from_config = []
+        launch_specs_from_config: List[Dict[str, Any]] = []
         for config in launch_template_configs or []:
-            spec = config["LaunchTemplateSpecification"]
-            if "LaunchTemplateId" in spec:
+            launch_spec = config["LaunchTemplateSpecification"]
+            if "LaunchTemplateId" in launch_spec:
                 launch_template = self.ec2_backend.get_launch_template(
-                    template_id=spec["LaunchTemplateId"]
+                    template_id=launch_spec["LaunchTemplateId"]
                 )
-            elif "LaunchTemplateName" in spec:
+            elif "LaunchTemplateName" in launch_spec:
                 launch_template = self.ec2_backend.get_launch_template_by_name(
-                    name=spec["LaunchTemplateName"]
+                    name=launch_spec["LaunchTemplateName"]
                 )
             else:
                 continue
@@ -92,22 +93,24 @@ class Fleet(TaggedEC2Resource):
                 )
             )
 
-        self.spot_requests = []
-        self.on_demand_instances = []
+        self.spot_requests: List[SpotInstanceRequest] = []
+        self.on_demand_instances: List[Dict[str, Any]] = []
         default_capacity = (
             target_capacity_specification.get("DefaultTargetCapacityType")
             or "on-demand"
         )
         self.target_capacity = int(
-            target_capacity_specification.get("TotalTargetCapacity")
+            target_capacity_specification.get("TotalTargetCapacity")  # type: ignore[arg-type]
         )
         self.spot_target_capacity = int(
-            target_capacity_specification.get("SpotTargetCapacity")
+            target_capacity_specification.get("SpotTargetCapacity", 0)
         )
         if self.spot_target_capacity > 0:
             self.create_spot_requests(self.spot_target_capacity)
         self.on_demand_target_capacity = int(
-            target_capacity_specification.get("OnDemandTargetCapacity")
+            target_capacity_specification.get(
+                "OnDemandTargetCapacity", self.target_capacity
+            )
         )
         if self.on_demand_target_capacity > 0:
             self.create_on_demand_requests(self.on_demand_target_capacity)
@@ -120,10 +123,10 @@ class Fleet(TaggedEC2Resource):
                 self.create_spot_requests(remaining_capacity)
 
     @property
-    def physical_resource_id(self):
+    def physical_resource_id(self) -> str:
         return self.id
 
-    def create_spot_requests(self, weight_to_add):
+    def create_spot_requests(self, weight_to_add: float) -> List[SpotInstanceRequest]:
         weight_map, added_weight = self.get_launch_spec_counts(weight_to_add)
         for launch_spec, count in weight_map.items():
             requests = self.ec2_backend.request_spot_instances(
@@ -151,7 +154,7 @@ class Fleet(TaggedEC2Resource):
         self.fulfilled_capacity += added_weight
         return self.spot_requests
 
-    def create_on_demand_requests(self, weight_to_add):
+    def create_on_demand_requests(self, weight_to_add: float) -> None:
         weight_map, added_weight = self.get_launch_spec_counts(weight_to_add)
         for launch_spec, count in weight_map.items():
             reservation = self.ec2_backend.add_instances(
@@ -180,12 +183,13 @@ class Fleet(TaggedEC2Resource):
                 }
             )
         self.fulfilled_capacity += added_weight
-        return self.on_demand_instances
 
-    def get_launch_spec_counts(self, weight_to_add):
-        weight_map = defaultdict(int)
+    def get_launch_spec_counts(
+        self, weight_to_add: float
+    ) -> Tuple[Dict[SpotFleetLaunchSpec, int], float]:
+        weight_map: Dict[SpotFleetLaunchSpec, int] = defaultdict(int)
 
-        weight_so_far = 0
+        weight_so_far = 0.0
         if (
             self.spot_options
             and self.spot_options["AllocationStrategy"] == "diversified"
@@ -215,15 +219,15 @@ class Fleet(TaggedEC2Resource):
 
         return weight_map, weight_so_far
 
-    def terminate_instances(self):
+    def terminate_instances(self) -> None:
         instance_ids = []
         new_fulfilled_capacity = self.fulfilled_capacity
         for req in self.spot_requests + self.on_demand_instances:
             instance = None
             try:
-                instance = req.instance
+                instance = req.instance  # type: ignore
             except AttributeError:
-                instance = req["instance"]
+                instance = req["instance"]  # type: ignore[index]
 
             if instance.state == "terminated":
                 continue
@@ -247,23 +251,23 @@ class Fleet(TaggedEC2Resource):
 
 
 class FleetsBackend:
-    def __init__(self):
-        self.fleets = {}
+    def __init__(self) -> None:
+        self.fleets: Dict[str, Fleet] = {}
 
     def create_fleet(
         self,
-        on_demand_options,
-        spot_options,
-        target_capacity_specification,
-        launch_template_configs,
-        excess_capacity_termination_policy,
-        replace_unhealthy_instances,
-        terminate_instances_with_expiration,
-        fleet_type,
-        valid_from,
-        valid_until,
-        tag_specifications,
-    ):
+        on_demand_options: Dict[str, Any],
+        spot_options: Dict[str, Any],
+        target_capacity_specification: Dict[str, Any],
+        launch_template_configs: List[Dict[str, Any]],
+        excess_capacity_termination_policy: str,
+        replace_unhealthy_instances: bool,
+        terminate_instances_with_expiration: bool,
+        fleet_type: str,
+        valid_from: str,
+        valid_until: str,
+        tag_specifications: List[Dict[str, Any]],
+    ) -> Fleet:
 
         fleet_id = random_fleet_id()
         fleet = Fleet(
@@ -284,30 +288,39 @@ class FleetsBackend:
         self.fleets[fleet_id] = fleet
         return fleet
 
-    def get_fleet(self, fleet_id):
+    def get_fleet(self, fleet_id: str) -> Optional[Fleet]:
         return self.fleets.get(fleet_id)
 
-    def describe_fleet_instances(self, fleet_id):
+    def describe_fleet_instances(self, fleet_id: str) -> List[Any]:
         fleet = self.get_fleet(fleet_id)
         if not fleet:
             return []
         return fleet.spot_requests + fleet.on_demand_instances
 
-    def describe_fleets(self, fleet_ids):
-        fleets = self.fleets.values()
+    def describe_fleets(self, fleet_ids: Optional[List[str]]) -> List[Fleet]:
+        fleets = list(self.fleets.values())
 
         if fleet_ids:
             fleets = [fleet for fleet in fleets if fleet.id in fleet_ids]
 
         return fleets
 
-    def delete_fleets(self, fleet_ids, terminate_instances):
+    def delete_fleets(
+        self, fleet_ids: List[str], terminate_instances: bool
+    ) -> List[Fleet]:
+
         fleets = []
         for fleet_id in fleet_ids:
             fleet = self.fleets[fleet_id]
             if terminate_instances:
+                # State indicates the fleet is in the process of being terminated
+                # AWS will change the state to `deleted` after a few seconds/minutes
+                # Note that it will stay in the `deleted`-state for at least a few hours
+                fleet.state = "deleted_terminating"
                 fleet.target_capacity = 0
                 fleet.terminate_instances()
+            else:
+                # State is different, and indicates that instances are still running
+                fleet.state = "deleted_running"
             fleets.append(fleet)
-            fleet.state = "deleted"
         return fleets

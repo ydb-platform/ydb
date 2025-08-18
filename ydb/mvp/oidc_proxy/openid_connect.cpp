@@ -262,9 +262,51 @@ TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) 
     return cookieValue;
 }
 
+TString GetAddressWithoutPort(const TString& address) {
+    // IPv6 with brackets: [addr]:port -> addr
+    if (address.StartsWith('[')) {
+        auto end = address.find(']');
+        if (end != TString::npos) {
+            return address.substr(1, end - 1);
+        }
+    }
+
+    // IPv6 without brackets - leave unchanged just in case
+    if (std::count(address.begin(), address.end(), ':') > 1) {
+        return address;
+    }
+
+    // IPv4 with port: addr:port → addr
+    auto pos = address.rfind(':');
+    if (pos != TString::npos) {
+        return address.substr(0, pos);
+    }
+
+    return address;
+}
+
+// Append request address to X-Forwarded-For header
+// Useful for logging and audit
+TString MakeXForwardedFor(const TProxiedRequestParams& params) {
+    NHttp::THeaders headers(params.Request->Headers);
+
+    TStringBuilder forwarded;
+    forwarded << headers.Get(X_FORWARDED_FOR_HEADER);
+    if (params.Request->Address) {
+        auto address = GetAddressWithoutPort(params.Request->Address->ToString());
+        if (!address.empty()) {
+            if (!forwarded.empty()) {
+                forwarded << ", ";
+            }
+            forwarded << address;
+        }
+    }
+    return std::move(forwarded);
+}
+
 NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& params) {
     auto outRequest = NHttp::THttpOutgoingRequest::CreateRequest(params.Request->Method, params.ProtectedPage.Url);
-    NHttp::THeadersBuilder headers(params.Request->Headers);
+    NHttp::THeaders headers(params.Request->Headers);
     for (const auto& header : params.Settings.REQUEST_HEADERS_WHITE_LIST) {
         if (headers.Has(header)) {
             outRequest->Set(header, headers.Get(header));
@@ -275,6 +317,9 @@ NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams&
     if (!params.AuthHeader.empty()) {
         outRequest->Set(AUTHORIZATION_HEADER, params.AuthHeader);
     }
+
+    outRequest->Set(X_FORWARDED_FOR_HEADER, MakeXForwardedFor(params));
+
     if (params.Request->HaveBody()) {
         outRequest->SetBody(params.Request->Body);
     }

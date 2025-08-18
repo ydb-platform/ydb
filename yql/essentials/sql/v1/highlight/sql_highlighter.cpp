@@ -19,7 +19,7 @@ namespace NSQLHighlight {
         names[EUnitKind::Keyword] = "K";
         names[EUnitKind::Punctuation] = "P";
         names[EUnitKind::QuotedIdentifier] = "Q";
-        names[EUnitKind::BindParamterIdentifier] = "B";
+        names[EUnitKind::BindParameterIdentifier] = "B";
         names[EUnitKind::TypeIdentifier] = "T";
         names[EUnitKind::FunctionIdentifier] = "F";
         names[EUnitKind::Identifier] = "I";

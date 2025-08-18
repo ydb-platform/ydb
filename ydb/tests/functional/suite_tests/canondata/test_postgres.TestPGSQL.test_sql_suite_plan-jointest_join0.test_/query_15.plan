@@ -94,13 +94,10 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                         "ReadColumns": [
-                                                                            "even",
-                                                                            "ten",
-                                                                            "unique2"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "unique1 (-\u221e, +\u221e)",
-                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                            "unique2 (-\u221e, +\u221e)",
+                                                                            "even",
+                                                                            "ten"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
                                                                         "Scan": "Parallel",

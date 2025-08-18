@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -32,6 +33,10 @@ void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildI
 /// QueryService
 void PrintOperation(const NYdb::NQuery::TScriptExecutionOperation& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NQuery::TScriptExecutionOperation>& operations, EDataFormat format);
+
+// Incremental backup
+void PrintOperation(const NYdb::NBackup::TIncrementalBackupResponse& operation, EDataFormat format);
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NBackup::TIncrementalBackupResponse>& operations, EDataFormat format);
 
 }
 }

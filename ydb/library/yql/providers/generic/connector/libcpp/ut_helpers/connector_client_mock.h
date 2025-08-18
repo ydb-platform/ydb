@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/defaults.h>

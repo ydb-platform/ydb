@@ -22,6 +22,10 @@ Any command can be run from the command line with the `--help` option to get hel
 
 | Command / subcommand | Brief description |
 --- | ---
+| [admin cluster dump](../export-import/tools-dump.md#cluster) | Dumping cluster' metadata to the file system |
+| [admin cluster restore](../export-import/tools-restore.md#cluster) | Restoring cluster' metadata from the file system |
+| [admin database dump](../export-import/tools-dump.md#db) | Dumping database' data and metadata to the file system |
+| [admin database restore](../export-import/tools-restore.md#db) | Restoring database' data and metadata from the file system |
 | [config info](../commands/config-info.md) | Displaying [connection parameters](../connect.md) |
 | [config profile activate](../profile/activate.md) | Activating a [profile](../profile/index.md) |
 | [config profile create](../profile/create.md) | Creating a [profile](../profile/index.md) |
@@ -67,9 +71,10 @@ Any command can be run from the command line with the `--help` option to get hel
 | [table ttl set](../table-ttl-set.md) | Setting TTL parameters |
 | [table ttl reset](../table-ttl-reset.md) | Resetting TTL parameters |
 | [tools copy](../tools-copy.md) | Copying tables |
-| [tools dump](../export-import/tools-dump.md) | Dumping a directory or table to the file system |
+| [tools dump](../export-import/tools-dump.md#schema-objects) | Dumping invidiual schema objects to the file system |
+| [tools infer csv](../tools-infer.md) | Generate a `CREATE TABLE` SQL query from a CSV file |
 | [tools rename](../commands/tools/rename.md) | Renaming tables |
-| [tools restore](../export-import/tools-restore.md) | Restoring data from the file system |
+| [tools restore](../export-import/tools-restore.md#schema-objects) | Restoring invidiual schema objects from the file system |
 | [topic create](../topic-create.md) | Creating a topic |
 | [topic alter](../topic-alter.md) | Updating topic parameters and consumers |
 | [topic drop](../topic-drop.md) | Deleting a topic |

@@ -36,6 +36,10 @@ private:
     TFileTopicClient::TPtr FileTopicClient_;
 };
 
+TDummyPqGateway::TDummyPqGateway(bool skipDatabasePrefix)
+    : SkipDatabasePrefix(skipDatabasePrefix)
+{}
+
 NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId, const TString& username) {
     with_lock (Mutex) {
         Y_ENSURE(sessionId);
@@ -57,11 +61,13 @@ NThreading::TFuture<void> TDummyPqGateway::CloseSession(const TString& sessionId
 }
 
 NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
-    Y_UNUSED(database);
     Y_UNUSED(token);
+
+    const auto& clusterCanonized = CanonizeCluster(cluster, database);
+
     with_lock (Mutex) {
         Y_ENSURE(IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is not opened in pq gateway");
-        const auto key = std::make_pair(cluster, path);
+        const auto key = std::make_pair(clusterCanonized, path);
         if (const auto* topic = Topics.FindPtr(key)) {
             NPq::NConfigurationManager::TTopicDescription desc(path);
             desc.PartitionsCount = topic->PartitionsCount;
@@ -69,16 +75,18 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePa
                 NPq::NConfigurationManager::TDescribePathResult::Make<NPq::NConfigurationManager::TTopicDescription>(desc));
         }
         return NThreading::MakeErrorFuture<NPq::NConfigurationManager::TDescribePathResult>(
-            std::make_exception_ptr(NPq::NConfigurationManager::TException{NPq::NConfigurationManager::EStatus::NOT_FOUND} << "Topic " << path << " is not found on cluster " << cluster));
+            std::make_exception_ptr(NPq::NConfigurationManager::TException{NPq::NConfigurationManager::EStatus::NOT_FOUND} << "Topic " << path << " is not found on cluster " << clusterCanonized << " in database " << database));
     }
 }
 
 IPqGateway::TAsyncDescribeFederatedTopicResult TDummyPqGateway::DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
-    Y_UNUSED(database);
     Y_UNUSED(token);
+
+    const auto& clusterCanonized = CanonizeCluster(cluster, database);
+
     with_lock (Mutex) {
         Y_ENSURE(IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is not opened in pq gateway");
-        const auto key = std::make_pair(cluster, path);
+        const auto key = std::make_pair(clusterCanonized, path);
         if (const auto* topic = Topics.FindPtr(key)) {
             IPqGateway::TDescribeFederatedTopicResult result;
             auto& cluster = result.emplace_back();
@@ -86,7 +94,7 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TDummyPqGateway::DescribeFederate
             return NThreading::MakeFuture<TDescribeFederatedTopicResult>(result);
         }
         return NThreading::MakeErrorFuture<IPqGateway::TDescribeFederatedTopicResult>(
-            std::make_exception_ptr(yexception() << "Topic " << path << " is not found on cluster " << cluster));
+            std::make_exception_ptr(yexception() << "Topic " << path << " is not found on cluster " << clusterCanonized << " in database " << database));
     }
 }
 
@@ -105,8 +113,8 @@ TDummyPqGateway& TDummyPqGateway::AddDummyTopic(const TDummyTopic& topic) {
     }
 }
 
-IPqGateway::TPtr CreatePqFileGateway() {
-    return MakeIntrusive<TDummyPqGateway>();
+IPqGateway::TPtr CreatePqFileGateway(bool skipDatabasePrefix) {
+    return MakeIntrusive<TDummyPqGateway>(skipDatabasePrefix);
 }
 
 ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings&) {
@@ -138,6 +146,17 @@ void TDummyPqGateway::UpdateClusterConfigs(const TPqGatewayConfigPtr& config) {
 
 NYdb::NTopic::TTopicClientSettings TDummyPqGateway::GetTopicClientSettings() const {
     return NYdb::NTopic::TTopicClientSettings();
+}
+
+TString TDummyPqGateway::CanonizeCluster(const TString& cluster, const TString& database) const {
+    TStringBuf clusterCanonized(cluster);
+
+    if (SkipDatabasePrefix) {
+        clusterCanonized.SkipPrefix(database);
+        clusterCanonized.SkipPrefix("/");
+    }
+
+    return TString(clusterCanonized);
 }
 
 class TPqFileGatewayFactory : public IPqGatewayFactory {

@@ -94,10 +94,20 @@ protected:
         const auto& restoreSrc = tx->GetSchemeTx().GetCreateIncrementalRestoreSrc();
 
         const ui64 tableId = restoreSrc.GetSrcPathId().GetLocalId();
-        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
+        
+        if (!DataShard.GetUserTables().contains(tableId)) {
+            Abort(op, ctx, TStringBuilder() << "Source table for incremental restore not found in DataShard, tableId: " << tableId
+                  << ", OwnerId: " << restoreSrc.GetSrcPathId().GetOwnerId() 
+                  << ". This may indicate the source table was not properly created/registered during restore setup.");
+            return false;
+        }
 
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
-        Y_ENSURE(txc.DB.GetScheme().GetTableInfo(localTableId));
+        if (!txc.DB.GetScheme().GetTableInfo(localTableId)) {
+            Abort(op, ctx, TStringBuilder() << "Source table exists in DataShard but not in local DB scheme, localTableId: " << localTableId
+                  << ", tableId: " << tableId << ". Database schema may be inconsistent.");
+            return false;
+        }
 
         Y_ENSURE(restoreSrc.HasDstPathId());
 
@@ -166,9 +176,19 @@ protected:
             return;
         }
 
-        const ui64 tableId = tx->GetSchemeTx().GetBackup().GetTableId();
+        if (!tx->GetSchemeTx().HasCreateIncrementalRestoreSrc()) {
+            return;
+        }
+        
+        const auto& restoreSrc = tx->GetSchemeTx().GetCreateIncrementalRestoreSrc();
+        const ui64 tableId = restoreSrc.GetSrcPathId().GetLocalId();
 
-        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
+        if (!DataShard.GetUserTables().contains(tableId)) {
+            // Table not found, just reset the scan task
+            tx->SetScanTask(0);
+            return;
+        }
+        
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
 
         DataShard.CancelScan(localTableId, tx->GetScanTask());
@@ -252,7 +272,13 @@ protected:
 
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, TOperation::TPtr op, const TActorContext& ctx) {
-        Y_UNUSED(ev, op, ctx);
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, 
+                   "IncrementalRestoreScan finished for txId: " << ev->Get()->TxId 
+                   << " at DataShard: " << DataShard.TabletID());
+        
+        // Additional completion handling can be added here if needed
+        // (e.g., updating operation status, sending additional notifications)
+        
         ResetWaiting(op);
     }
 

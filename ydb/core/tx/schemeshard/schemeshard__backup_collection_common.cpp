@@ -38,6 +38,12 @@ std::optional<NBackup::TBackupCollectionPaths> ResolveBackupCollectionPaths(
 
     const TString& backupCollectionsDir = JoinPath({rootPath.GetDomainPathString(), ".backups/collections"});
 
+    // Validate the collection name
+    if (name.empty()) {
+        result->SetError(NKikimrScheme::EStatus::StatusInvalidParameter, "Backup collection name cannot be empty");
+        return std::nullopt;
+    }
+
     TPathSplitUnix absPathSplit(name);
 
     if (absPathSplit.size() > 1 && !absPathSplit.IsAbsolute) {

@@ -1335,9 +1335,6 @@ void TxUsage::TestWriteToTopic10()
 
 void TxUsage::TestWriteToTopic26()
 {
-    // TODO(brgayazov): fix test
-    GTEST_SKIP() << "Test is flaky";
-
     //
     // the test verifies a transaction in which data is read from a partition of one topic and written to
     // another partition of this topic
@@ -1723,9 +1720,6 @@ TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_17))
 
 void TxUsage::TestWriteToTopic25()
 {
-    // TODO(brgayazov): fix test
-    GTEST_SKIP() << "Test is flaky";
-
     //
     // the test verifies a transaction in which data is read from one topic and written to another
     //

@@ -1,10 +1,12 @@
 #include "kafka_metadata_actor.h"
 
-#include <ydb/core/kafka_proxy/kafka_events.h>
-#include <ydb/services/persqueue_v1/actors/schema_actors.h>
-#include <ydb/core/grpc_services/grpc_endpoint.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/grpc_services/grpc_endpoint.h>
+#include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
+#include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/list_all_topics_actor.h>
+#include <ydb/services/persqueue_v1/actors/schema_actors.h>
 
 namespace NKafka {
 using namespace NKikimr;
@@ -248,15 +250,60 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
 
     for (auto index : actorIter->second) {
         auto& topic = Response->Topics[index];
-        if (locationResponse->Status == Ydb::StatusIds::SUCCESS) {
+        Ydb::StatusIds::StatusCode status = locationResponse->Status;
+        if (status == Ydb::StatusIds::SUCCESS) {
             KAFKA_LOG_D("Describe topic '" << topic.Name << "' location finishied successful");
             PendingTopicResponses.emplace(index, locationResponse);
-        } else {
-            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
+        } else if (!Context->Config.GetAutoCreateTopicsEnable() || TopicСreationAttempts.find(*topic.Name) != TopicСreationAttempts.end()) {
+            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code="
+                << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
             AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
+        } else if (status == Ydb::StatusIds::SCHEME_ERROR && TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()) {
+            TopicСreationAttempts.insert(*topic.Name);
+            SendCreateTopicsRequest(*topic.Name, index, ctx);
         }
     }
-    RespondIfRequired(ctx);
+    if (InflyCreateTopics == 0) {
+        RespondIfRequired(ctx);
+    }
+}
+
+void TKafkaMetadataActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    // can be recieved only from TCreateTopicActor
+    TActorId& creatorActorId = ev->Sender;
+    const TTopicNameToIndex& topicNameToIndex = CreateTopicRequests[creatorActorId];
+    const TString& topicName = topicNameToIndex.TopicName;
+    const ui32& topicIndex = topicNameToIndex.TopicIndex;
+    InflyCreateTopics--;
+    EKafkaErrors errorCode = ev->Get()->ErrorCode;
+    if (errorCode == EKafkaErrors::NONE_ERROR) {
+        TActorId child = SendTopicRequest(topicName);
+        TopicIndexes[child].push_back(topicIndex);
+    } else {
+        Response->Topics[topicIndex].ErrorCode = errorCode;
+        if (InflyCreateTopics == 0) {
+            RespondIfRequired(ctx);
+        }
+    }
+}
+
+void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32 index, const TActorContext& ctx) {
+    InflyCreateTopics++;
+    auto message = std::make_shared<NKafka::TCreateTopicsRequestData>();
+    TCreateTopicsRequestData::TCreatableTopic topicToCreate;
+    topicToCreate.Name = topicName;
+    topicToCreate.NumPartitions = Context->Config.GetTopicCreationDefaultPartitions();
+    message->Topics.push_back(topicToCreate);
+    TContext::TPtr ContextForTopicCreation;
+    ContextForTopicCreation = std::make_shared<TContext>(TContext(Context->Config));
+    ContextForTopicCreation->ConnectionId = ctx.SelfID;
+    ContextForTopicCreation->UserToken = Context->UserToken;
+    ContextForTopicCreation->DatabasePath = Context->DatabasePath;
+    TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
+        1,
+        TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)
+    ));
+    CreateTopicRequests[actorId] = TTopicNameToIndex{topicName, index};
 }
 
 void TKafkaMetadataActor::AddBroker(ui64 nodeId, const TString& host, ui64 port) {

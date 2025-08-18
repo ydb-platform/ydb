@@ -52,5 +52,16 @@ EValidatePolicy ValidatePolicyByStr(const TString& validatePolicyStr) {
     ythrow yexception() << "Unknown udf validate policy: " << validatePolicyStr;
 }
 
+EValidateDatumMode ToDatumValidateMode(EValidateMode validateMode) {
+    switch (validateMode) {
+        case EValidateMode::None:
+            return EValidateDatumMode::None;
+        case EValidateMode::Lazy:
+            return EValidateDatumMode::Cheap;
+        case EValidateMode::Greedy:
+        case EValidateMode::Max:
+            return EValidateDatumMode::Expensive;
+    }
+}
 } // namspace NUdf
 } // namspace NYql

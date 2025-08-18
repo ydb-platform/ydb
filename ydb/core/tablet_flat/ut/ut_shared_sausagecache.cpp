@@ -1,17 +1,18 @@
 #include "flat_executor_ut_common.h"
 
+#include <shared_cache_counters.h>
 #include <util/system/sanitizers.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 namespace NKikimr::NSharedCache {
 
 using namespace NTabletFlatExecutor;
 
-Y_UNIT_TEST_SUITE(TSharedPageCache) {
-
 enum : ui32  {
     TableId = 101,
+    Table2Id = 102,
     KeyColumnId = 1,
     ValueColumnId = 2,
 };
@@ -27,19 +28,30 @@ void Increment(TRetriedCounters& retried, ui32 attempts) {
 }
 
 struct TTxInitSchema : public ITransaction {
+    
+    TTxInitSchema(ui32 tableId = NSharedCache::TableId, bool tryKeepInMemory = false)
+        : TableId(tableId)
+        , TryKeepInMemory(tryKeepInMemory)
+    {}
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (txc.DB.GetScheme().GetTableInfo(TableId))
             return true;
 
-        TCompactionPolicy policy;
-        policy.MinBTreeIndexNodeSize = 128;
+        CompactionPolicy->MinBTreeIndexNodeSize = 128;
 
         txc.DB.Alter()
             .AddTable("test" + ToString(ui32(TableId)), TableId)
             .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false)
             .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false)
             .AddColumnToKey(TableId, KeyColumnId)
-            .SetCompactionPolicy(TableId, policy);
+            .SetCompactionPolicy(TableId, *CompactionPolicy);
+
+        if (TryKeepInMemory) {
+            txc.DB.Alter()
+                .SetFamilyCacheMode(TableId, 0, NTable::NPage::ECacheMode::TryKeepInMemory)
+                .SetFamilyCache(TableId, 0, NTable::NPage::ECache::Once);
+        }
 
         return true;
     }
@@ -47,15 +59,25 @@ struct TTxInitSchema : public ITransaction {
     void Complete(const TActorContext& ctx) override {
         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
     }
+
+    NLocalDb::TCompactionPolicyPtr CompactionPolicy = NLocalDb::CreateDefaultUserTablePolicy();
+    ui32 TableId;
+    bool TryKeepInMemory;
 };
 
 struct TTxWriteRow : public ITransaction {
+    ui32 TableId;
     i64 Key;
     TString Value;
 
-    explicit TTxWriteRow(i64 key, TString value)
-        : Key(key)
+    explicit TTxWriteRow(ui32 tableId, i64 key, TString value)
+        : TableId(tableId)
+        , Key(key)
         , Value(std::move(value))
+    { }
+
+    explicit TTxWriteRow(i64 key, TString value)
+        : TTxWriteRow(NSharedCache::TableId, key, std::move(value))
     { }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -74,37 +96,95 @@ struct TTxWriteRow : public ITransaction {
     }
 };
 
-struct TTxReadRow : public ITransaction {
-    i64 Key;
+struct TTxReadRows : public ITransaction {
+    ui32 TableId;
+    TVector<i64> Keys;
     TRetriedCounters& Retried;
     ui32 Attempts = 0;
+    bool& Completed;
 
-    explicit TTxReadRow(i64 key, TRetriedCounters& retried)
-        : Key(key)
+    TTxReadRows(ui32 tableId, TVector<i64> keys, TRetriedCounters& retried, bool& completed)
+        : TableId(tableId)
+        , Keys(keys)
         , Retried(retried)
+        , Completed(completed)
+    {
+        Completed = false;
+    }
+
+    TTxReadRows(ui32 tableId, i64 key, TRetriedCounters& retried)
+        : TTxReadRows(tableId, TVector<i64>{key}, retried, Completed_)
+    { }
+
+    TTxReadRows(TVector<i64> keys, TRetriedCounters& retried, bool& completed)
+        : TTxReadRows(NSharedCache::TableId, keys, retried, completed)
+    { }
+
+    TTxReadRows(TVector<i64> keys, TRetriedCounters& retried)
+        : TTxReadRows(keys, retried, Completed_)
+    { }
+
+    TTxReadRows(i64 key, TRetriedCounters& retried)
+        : TTxReadRows(TVector<i64>{key}, retried)
     { }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Increment(Retried, Attempts);
         Attempts++;
 
-        TVector<TRawTypeValue> rawKey;
-        rawKey.emplace_back(&Key, sizeof(Key), NScheme::TInt64::TypeId);
+        bool ready = true;
+        for (auto key : Keys) {
+            TVector<TRawTypeValue> rawKey;
+            rawKey.emplace_back(&key, sizeof(key), NScheme::TInt64::TypeId);
 
-        TVector<NTable::TTag> tags;
-        tags.push_back(KeyColumnId);
-        tags.push_back(ValueColumnId);
+            TVector<NTable::TTag> tags;
+            tags.push_back(KeyColumnId);
+            tags.push_back(ValueColumnId);
 
-        NTable::TRowState row;
-        auto ready = txc.DB.Select(TableId, rawKey, tags, row);
-        if (ready == NTable::EReady::Page) {
-            return false;
+            NTable::TRowState row;
+            if (txc.DB.Select(TableId, rawKey, tags, row) == NTable::EReady::Page) {
+                ready = false;
+            }
         }
+
+        return ready;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        Completed = true;
+        ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+    }
+
+private:
+    bool Completed_;
+};
+
+struct TTxTryKeepInMemory : public ITransaction {
+    ui32 TableId;
+    bool TryKeepInMemory;
+
+    TTxTryKeepInMemory(ui32 tableId, bool tryKeepInMemory)
+        : TableId(tableId)
+        , TryKeepInMemory(tryKeepInMemory)
+    { }
+
+    TTxTryKeepInMemory(bool tryKeepInMemory)
+        : TTxTryKeepInMemory(NSharedCache::TableId, tryKeepInMemory)
+    { }
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override
+    {
+        using namespace NTable::NPage;
+
+        txc.DB.Alter()
+            .SetFamilyCacheMode(TableId, 0, TryKeepInMemory ? ECacheMode::TryKeepInMemory : ECacheMode::Regular)
+            .SetFamilyCache(TableId, 0, ECache::Once);
 
         return true;
     }
 
-    void Complete(const TActorContext&ctx) override {
+    void Complete(const TActorContext &ctx) override
+    {
         ctx.Send(ctx.SelfID, new NFake::TEvReturn);
     }
 };
@@ -135,11 +215,10 @@ void RestartAndClearCache(TMyEnvBase& env, ui64 memoryLimit = Max<ui64>()) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 }
 
-void SetupSharedCache(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy policy = NKikimrSharedCache::ThreeLeveledLRU, ui64 limit = 8_MB, bool resetMemoryLimit = false) {
+void SetupSharedCache(TMyEnvBase& env, ui64 limit = 8_MB, bool resetMemoryLimit = false) {
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     auto config = request->Record.MutableConfig()->MutableSharedCacheConfig();
-    config->SetReplacementPolicy(policy);
     config->SetMemoryLimit(limit);
     
     env->Send(MakeSharedPageCacheId(), TActorId{}, request.Release());
@@ -151,12 +230,39 @@ void SetupSharedCache(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy po
     }
 }
 
+auto MakeSharedCacheRequestsDeterministic(TTestActorRuntime& runtime) {
+    // keep page ordered because their order doesn't matter
+    // but may effect cache policies
+    return std::make_tuple(
+        MakeHolder<TBlockEvents<NSharedCache::TEvTouch>>(runtime, [&](const auto& ev) {
+            auto &msg = *ev->Get();
+
+            TVector<std::pair<TLogoBlobID, TVector<TPageId>>> touched;
+            for (const auto& [pageCollectionId, pages] : msg.Touched) {
+                touched.emplace_back(pageCollectionId, TVector<TPageId>(pages.begin(), pages.end()));
+                Sort(touched.back().second);
+            }
+            Sort(touched);
+
+            msg.Touched = {};
+            for (const auto& [pageCollectionId, pages] : touched) {
+                msg.Touched.emplace(pageCollectionId, THashSet<TPageId>(pages.begin(), pages.end()));
+            }
+
+            return false;
+        })
+    );
+}
+
+Y_UNIT_TEST_SUITE(TSharedPageCache) {
+
 Y_UNIT_TEST(Limits) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
     ui32 passiveBytes = bTreeIndex ? 131 : 7772;
@@ -179,7 +285,7 @@ Y_UNIT_TEST(Limits) {
 
     TRetriedCounters retried;
     for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) });
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(counters->LoadInFlyBytes->Val(), 0);
@@ -225,6 +331,7 @@ Y_UNIT_TEST(Limits_Config) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
     ui32 passiveBytes = bTreeIndex ? 131 : 7772;
@@ -232,7 +339,7 @@ Y_UNIT_TEST(Limits_Config) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU);
+    SetupSharedCache(env);
 
     // write 300 rows, each ~100KB (~30MB)
     for (i64 key = 0; key < 300; ++key) {
@@ -247,7 +354,7 @@ Y_UNIT_TEST(Limits_Config) {
 
     TRetriedCounters retried;
     for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) });
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(counters->LoadInFlyBytes->Val(), 0);
@@ -256,14 +363,14 @@ Y_UNIT_TEST(Limits_Config) {
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 8_MB);
 
-    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 100_MB);
+    SetupSharedCache(env, 100_MB);
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 100_MB);
 
-    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 2_MB);
+    SetupSharedCache(env, 2_MB);
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(2_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 2_MB);
@@ -278,117 +385,12 @@ Y_UNIT_TEST(Limits_Config) {
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 1_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 2_MB);
 
-    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 0_MB);
+    SetupSharedCache(env, 0_MB);
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 0_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
     UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 0_MB);
-}
-
-Y_UNIT_TEST(ThreeLeveledLRU) {
-    TMyEnvBase env;
-    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
-    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
-    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
-    auto counters = GetSharedPageCounters(env);
-
-    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
-
-    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 8_MB, true);
-
-    // write 100 rows, each ~100KB (~10MB)
-    for (i64 key = 0; key < 100; ++key) {
-        TString value(size_t(100 * 1024), char('a' + key % 26));
-        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
-    }
-
-    Cerr << "...compacting" << Endl;
-    env.SendSync(new NFake::TEvCompact(TableId));
-    Cerr << "...waiting until compacted" << Endl;
-    env.WaitFor<NFake::TEvCompacted>();
-
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 0);
-
-    TRetriedCounters retried;
-    for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 45, 5}));
-
-    RestartAndClearCache(env);
-
-    retried = {};
-    for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3)); // 2 full layers (fresh & staging)
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
-
-    retried = {};
-    for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 44, 6}));
-
-    retried = {};
-    for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 73, 10, 1}));
-
-    RestartAndClearCache(env);
-
-    // read some key twice
-    retried = {};
-    env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1, 1, 1}));
-    retried = {};
-    env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1}));
-
-    // simulate scan
-    retried = {};
-    for (i64 key = 1; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3)); // 2 full layers (fresh & staging)
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{99, 99, 13, 1}));
-
-    // read the key again
-    retried = {};
-    env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1, 1}));
-
-    RestartAndClearCache(env);
-
-    retried = {};
-    for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3)); // 2 full layers (fresh & staging)
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{200, 100, 14, 2}));
-
-    retried = {};
-    for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3)); // 2 full layers (fresh & staging)
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14}));
 }
 
 Y_UNIT_TEST(S3FIFO) {
@@ -397,11 +399,12 @@ Y_UNIT_TEST(S3FIFO) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 8_MB, true);
+    SetupSharedCache(env, 8_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -420,7 +423,7 @@ Y_UNIT_TEST(S3FIFO) {
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) });
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
@@ -430,7 +433,7 @@ Y_UNIT_TEST(S3FIFO) {
 
     retried = {};
     for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
@@ -438,7 +441,7 @@ Y_UNIT_TEST(S3FIFO) {
 
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
@@ -446,7 +449,7 @@ Y_UNIT_TEST(S3FIFO) {
 
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
@@ -456,16 +459,16 @@ Y_UNIT_TEST(S3FIFO) {
 
     // read some key twice
     retried = {};
-    env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
+    env.SendSync(new NFake::TEvExecute{ new TTxReadRows(0, retried) }, true);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1, 1, 1}));
     retried = {};
-    env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
+    env.SendSync(new NFake::TEvExecute{ new TTxReadRows(0, retried) }, true);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1}));
 
     // simulate scan
     retried = {};
     for (i64 key = 1; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
@@ -473,15 +476,15 @@ Y_UNIT_TEST(S3FIFO) {
 
     // read the key again
     retried = {};
-    env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
+    env.SendSync(new NFake::TEvExecute{ new TTxReadRows(0, retried) }, true);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1}));
 
     RestartAndClearCache(env);
 
     retried = {};
     for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
@@ -489,182 +492,11 @@ Y_UNIT_TEST(S3FIFO) {
 
     retried = {};
     for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 28, 4, 1}));
-}
-
-Y_UNIT_TEST(ClockPro) {
-    TMyEnvBase env;
-    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
-    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
-    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
-    auto counters = GetSharedPageCounters(env);
-
-    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
-
-    SetupSharedCache(env, NKikimrSharedCache::ClockPro, 8_MB, true);
-
-    // write 100 rows, each ~100KB (~10MB)
-    for (i64 key = 0; key < 100; ++key) {
-        TString value(size_t(100 * 1024), char('a' + key % 26));
-        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
-    }
-
-    Cerr << "...compacting" << Endl;
-    env.SendSync(new NFake::TEvCompact(TableId));
-    Cerr << "...waiting until compacted" << Endl;
-    env.WaitFor<NFake::TEvCompacted>();
-
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 0);
-
-    TRetriedCounters retried;
-    for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19, 2}));
-
-    RestartAndClearCache(env);
-
-    retried = {};
-    for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
-
-    retried = {};
-    for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 21, 2}));
-
-    retried = {};
-    for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 20, 2}));
-
-    RestartAndClearCache(env);
-
-    // read some key twice
-    retried = {};
-    env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1, 1, 1}));
-    retried = {};
-    env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1}));
-
-    // simulate scan
-    retried = {};
-    for (i64 key = 1; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{99, 99, 13, 1}));
-
-    // read the key again
-    retried = {};
-    env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1, 1, 1}));
-
-    // simulate scan again
-    retried = {};
-    for (i64 key = 1; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{99, 99, 13}));
-
-    // read the key again again
-    retried = {};
-    env.SendSync(new NFake::TEvExecute{ new TTxReadRow(0, retried) }, true);
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1, 1, 1}));
-
-    RestartAndClearCache(env);
-
-    retried = {};
-    for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{200, 100, 14, 2}));
-
-    retried = {};
-    for (i64 key = 0; key < 100; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 1}));
-}
-
-Y_UNIT_TEST(ReplacementPolicySwitch) {
-    TMyEnvBase env;
-    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
-    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
-    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
-    auto counters = GetSharedPageCounters(env);
-
-    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
-
-    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 8_MB, true);
-
-    // write 100 rows, each ~100KB (~10MB)
-    for (i64 key = 0; key < 100; ++key) {
-        TString value(size_t(100 * 1024), char('a' + key % 26));
-        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
-    }
-
-    Cerr << "...compacting" << Endl;
-    env.SendSync(new NFake::TEvCompact(TableId));
-    Cerr << "...waiting until compacted" << Endl;
-    env.WaitFor<NFake::TEvCompacted>();
-
-    RestartAndClearCache(env);
-
-    TRetriedCounters retried = {};
-    for (i64 key = 0; key < 3; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{3, 3, 1, 1}));
-
-    UNIT_ASSERT_GT(counters->ReplacementPolicySize(NKikimrSharedCache::ThreeLeveledLRU)->Val(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(counters->ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
-
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 8_MB);
-
-    retried = {};
-    for (i64 key = 0; key < 3; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{3}));
-
-    retried = {};
-    for (i64 key = 90; key < 93; ++key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{3, 3, 2, 1}));
-
-    UNIT_ASSERT_GT(counters->ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(counters->ReplacementPolicySize(NKikimrSharedCache::ThreeLeveledLRU)->Val(), 0);
 }
 
 Y_UNIT_TEST(BigCache_BTreeIndex) {
@@ -673,12 +505,13 @@ Y_UNIT_TEST(BigCache_BTreeIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 20_MB, true);
+    SetupSharedCache(env, 20_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -703,7 +536,7 @@ Y_UNIT_TEST(BigCache_BTreeIndex) {
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) });
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
@@ -720,7 +553,7 @@ Y_UNIT_TEST(BigCache_BTreeIndex) {
     LogCounters(counters);
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
@@ -740,12 +573,13 @@ Y_UNIT_TEST(BigCache_FlatIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 20_MB, true);
+    SetupSharedCache(env, 20_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -770,7 +604,7 @@ Y_UNIT_TEST(BigCache_FlatIndex) {
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) });
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
@@ -787,7 +621,7 @@ Y_UNIT_TEST(BigCache_FlatIndex) {
     LogCounters(counters);
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100}));
@@ -807,12 +641,13 @@ Y_UNIT_TEST(MiddleCache_BTreeIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 8_MB, true);
+    SetupSharedCache(env, 8_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -837,7 +672,7 @@ Y_UNIT_TEST(MiddleCache_BTreeIndex) {
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) });
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19, 2}));
@@ -854,7 +689,7 @@ Y_UNIT_TEST(MiddleCache_BTreeIndex) {
     LogCounters(counters);
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
@@ -874,12 +709,13 @@ Y_UNIT_TEST(MiddleCache_FlatIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 8_MB, true);
+    SetupSharedCache(env, 8_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -904,7 +740,7 @@ Y_UNIT_TEST(MiddleCache_FlatIndex) {
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) });
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19}));
@@ -921,7 +757,7 @@ Y_UNIT_TEST(MiddleCache_FlatIndex) {
     LogCounters(counters);
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100}));
@@ -941,12 +777,13 @@ Y_UNIT_TEST(ZeroCache_BTreeIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 0_MB, true);
+    SetupSharedCache(env, 0_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -971,7 +808,7 @@ Y_UNIT_TEST(ZeroCache_BTreeIndex) {
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) });
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 100, 100, 100}));
@@ -988,7 +825,7 @@ Y_UNIT_TEST(ZeroCache_BTreeIndex) {
     LogCounters(counters);
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 100, 100, 100}));
@@ -1008,12 +845,13 @@ Y_UNIT_TEST(ZeroCache_FlatIndex) {
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SetupSharedCache(env, NKikimrSharedCache::S3FIFO, 0_MB, true);
+    SetupSharedCache(env, 0_MB, true);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -1038,7 +876,7 @@ Y_UNIT_TEST(ZeroCache_FlatIndex) {
 
     TRetriedCounters retried;
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) });
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100}));
@@ -1055,7 +893,7 @@ Y_UNIT_TEST(ZeroCache_FlatIndex) {
     LogCounters(counters);
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
-        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(key, retried) }, true);
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100}));
@@ -1067,6 +905,619 @@ Y_UNIT_TEST(ZeroCache_FlatIndex) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(20_MB), static_cast<i64>(1_MB));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 202);
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 10_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    Cerr << "...compacting first table" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until first table compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 119);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    
+    // make second table to try to preempt first table from cache
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(Table2Id, false) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(Table2Id, key, std::move(value)) });
+    }
+    Cerr << "...compacting second table" << Endl;
+    env.SendSync(new NFake::TEvCompact(Table2Id));
+    Cerr << "...waiting until second table compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(Table2Id, key, retried) });
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 98, 13, 1}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(10'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 112);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // read from in-memory table, should be no more cache misses
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(TableId, key, retried) });
+    }
+
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(10'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 112);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    RestartAndClearCache(env, 10_MB);
+
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(Table2Id, key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(20'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // read from in-memory table, should be no more cache misses
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(TableId, key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 116);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(20'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 10_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, false) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    Cerr << "...compacting first table" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until first table compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 118);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+
+    // Enable in-memory for first table
+    env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, true) });
+    
+    // make second table to try to preempt first table from cache
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(Table2Id, false) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(Table2Id, key, std::move(value)) });
+    }
+    Cerr << "...compacting second table" << Endl;
+    env.SendSync(new NFake::TEvCompact(Table2Id));
+    Cerr << "...waiting until second table compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(Table2Id, key, retried) });
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 98, 13, 1}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(10'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 112);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // read from in-memory table, should be no more cache misses
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(TableId, key, retried) });
+    }
+
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(10'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 112);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    RestartAndClearCache(env, 10_MB);
+
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(Table2Id, key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(20'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // read from previously-in-memory table, should not be preloaded
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(TableId, key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 116);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(20'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_Disabling) {
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 10_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    Cerr << "...compacting first table" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until first table compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 119);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // Disable in-memory
+    env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, false) });
+    
+    // make second table to try to preempt first table from cache
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(Table2Id, false) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(Table2Id, key, std::move(value)) });
+    }
+    Cerr << "...compacting second table" << Endl;
+    env.SendSync(new NFake::TEvCompact(Table2Id));
+    Cerr << "...waiting until second table compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(Table2Id, key, retried) });
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 127);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+
+    // read from previously-in-memory table, should be preempted
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(TableId, key, retried) });
+    }
+
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 98, 13, 1}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 124);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 2);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(10'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 112);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+
+    RestartAndClearCache(env, 10_MB);
+
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(Table2Id, key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 120);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(20'000_KB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+
+    // read from previously-in-memory table, should not be preloaded
+    retried = {};
+    for (i64 key = 99; key >= 0; --key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRows(TableId, key, retried) }, true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheHitPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissBytes->Val(), static_cast<i64>(29_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 348);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TryKeepInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+}
+
+}
+
+Y_UNIT_TEST_SUITE(TSharedPageCache_Transactions) {
+
+void BasicSetup(TMyEnvBase& env) {
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SetupSharedCache(env, 0_MB, true);
+
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
+    }
+
+    Cerr << "...compacting" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+}
+
+void ManyPartsSetup(TMyEnvBase& env) {
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    TAutoPtr<TTxInitSchema> initSchema = new TTxInitSchema();
+    initSchema->CompactionPolicy = NLocalDb::CreateDefaultUserTablePolicy();
+    initSchema->CompactionPolicy->InMemForceStepsToSnapshot = 1;
+    for (auto& gen : initSchema->CompactionPolicy->Generations) {
+        gen.ExtraCompactionPercent = 0;
+        gen.ExtraCompactionMinSize = 100;
+        gen.ExtraCompactionExpPercent = 0;
+        gen.ExtraCompactionExpMaxSize = 0;
+        gen.UpliftPartSize = 0;
+    }
+    env.SendSync(new NFake::TEvExecute{ initSchema });
+
+    SetupSharedCache(env, 0_MB, true);
+
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
+    }
+}
+
+Y_UNIT_TEST(One_Transaction_One_Key) {
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
+
+    BasicSetup(env);
+
+    Cerr << "...making read" << Endl;
+    TRetriedCounters retried;
+    env.SendSync(new NFake::TEvExecute{ new TTxReadRows(33, retried) });
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 4);
+}
+
+Y_UNIT_TEST(One_Transaction_Two_Keys) {
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
+
+    BasicSetup(env);
+
+    Cerr << "...making read" << Endl;
+    TRetriedCounters retried;
+    env.SendSync(new NFake::TEvExecute{ new TTxReadRows({33, 66}, retried) });
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 7);
+}
+
+Y_UNIT_TEST(One_Transaction_Two_Keys_Many_Parts) {
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
+
+    ManyPartsSetup(env);
+    
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 96);
+
+    Cerr << "...making read" << Endl;
+    TRetriedCounters retried;
+    env.SendSync(new NFake::TEvExecute{ new TTxReadRows({33, 66}, retried) });
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 98);
+}
+
+Y_UNIT_TEST(Two_Transactions_One_Key) {
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
+
+    BasicSetup(env);
+
+    Cerr << "...making read" << Endl;
+
+    TBlockEvents<NSharedCache::TEvRequest> block(env.Env);
+            
+    TRetriedCounters retried1, retried2;
+    bool completed1, completed2;
+    env.SendAsync(new NFake::TEvExecute{ new TTxReadRows({33}, retried1, completed1) });
+    env.SendAsync(new NFake::TEvExecute{ new TTxReadRows({33}, retried2, completed2) });
+
+    env.Env.WaitFor("blocked TEvRequest 1", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1}));
+    UNIT_ASSERT_VALUES_EQUAL(completed1, false);
+    UNIT_ASSERT_VALUES_EQUAL(completed2, false);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+
+    block.Unblock();
+    env.Env.WaitFor("blocked TEvRequest 2", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(completed1, false);
+    UNIT_ASSERT_VALUES_EQUAL(completed2, false);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 2);
+
+    block.Unblock();
+    env.Env.WaitFor("blocked TEvRequest 3", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(completed1, false);
+    UNIT_ASSERT_VALUES_EQUAL(completed2, false);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 4);
+
+    block.Unblock();
+    env.Env.WaitFor("blocked TEvRequest 3", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(completed1, false);
+    UNIT_ASSERT_VALUES_EQUAL(completed2, false);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 6);
+
+    block.Unblock();
+    env.Env.WaitFor("blocked TEvRequest 4", [&]{ return completed1 && completed2; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT(block.empty());
+    UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 8);
+}
+
+Y_UNIT_TEST(Two_Transactions_Two_Keys) {
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
+
+    BasicSetup(env);
+
+    Cerr << "...making read" << Endl;
+
+    TBlockEvents<NSharedCache::TEvRequest> block(env.Env);
+            
+    TRetriedCounters retried1, retried2;
+    bool completed1, completed2;
+    env.SendAsync(new NFake::TEvExecute{ new TTxReadRows({33}, retried1, completed1) });
+    env.SendAsync(new NFake::TEvExecute{ new TTxReadRows({66}, retried2, completed2) });
+
+    // b-tree index root is common page:
+    env.Env.WaitFor("blocked TEvRequest 1", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1}));
+    UNIT_ASSERT_VALUES_EQUAL(completed1, false);
+    UNIT_ASSERT_VALUES_EQUAL(completed2, false);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+
+    block.Unblock();
+    env.Env.WaitFor("blocked TEvRequest 2", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(completed1, false);
+    UNIT_ASSERT_VALUES_EQUAL(completed2, false);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 2);
+
+    block.Unblock();
+    env.Env.WaitFor("blocked TEvRequest 3", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(completed1, false);
+    UNIT_ASSERT_VALUES_EQUAL(completed2, false);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 4);
+
+    block.Unblock();
+    env.Env.WaitFor("blocked TEvRequest 3", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(completed1, false);
+    UNIT_ASSERT_VALUES_EQUAL(completed2, false);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 6);
+
+    block.Unblock();
+    env.Env.WaitFor("blocked TEvRequest 4", [&]{ return completed1 && completed2; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT(block.empty());
+    UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 8);
+}
+
+Y_UNIT_TEST(Compaction) {
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+    auto deterministicRequests = MakeSharedCacheRequestsDeterministic(env.Env);
+
+    BasicSetup(env);
+
+    Cerr << "...making read" << Endl;
+
+    TBlockEvents<NSharedCache::TEvRequest> block(env.Env);
+            
+    TRetriedCounters retried;
+    bool completed;
+    env.SendAsync(new NFake::TEvExecute{ new TTxReadRows({33}, retried, completed) });
+
+    env.Env.WaitFor("blocked TEvRequest 1", [&]{ return block.size() == 1; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1}));
+    UNIT_ASSERT_VALUES_EQUAL(completed, false);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
+    
+    block.Stop();
+
+    Cerr << "...compacting" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    block.Unblock();
+
+    // page collection invalidation activates waiting transactions:
+    env.Env.WaitFor("blocked TEvRequest 2", [&]{ return completed; }, TDuration::Seconds(10));
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{1, 1, 1, 1, 1, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 122);
+
+    env->SimulateSleep(TDuration::Seconds(3));
+    // nothing should crash    
 }
 
 }

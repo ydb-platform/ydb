@@ -1,5 +1,5 @@
 SELECT value FROM local_solomon.my_project WITH (
   program = @@{}@@,
-  from = "2023-12-08T14:40:39Z",
-  to = "2023-12-08T14:45:39Z"
+  from = "1970-01-01T00:00:01Z",
+  to = "1970-01-02T00:00:01Z"
 );

@@ -11,7 +11,8 @@ public:
     TDqStatisticsTransformerBase(
         TTypeAnnotationContext* typeCtx,
         const IProviderContext& ctx,
-        const TOptimizerHints& hints = {}
+        const TOptimizerHints& hints = {},
+        TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr
     );
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
@@ -28,6 +29,7 @@ protected:
     TTypeAnnotationContext* TypeCtx;
     const IProviderContext& Pctx;
     TOptimizerHints Hints;
+    TShufflingOrderingsByJoinLabels* ShufflingOrderingsByJoinLabels;
 };
 
 } // namespace NYql::NDq

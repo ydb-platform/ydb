@@ -42,7 +42,6 @@ struct TLongOpTestSetup {
                     if (OperationInProgress && ExpectedBackupCollectionPathIds.contains(msg->BackupCollectionPathId)) {
                         CapturedBackupCollectionPathIds.push_back(msg->BackupCollectionPathId);
                     } else if (OperationInProgress) {
-                        // Log unexpected events during testing for debugging
                         Cerr << "Captured TEvRunIncrementalRestore for unexpected BackupCollectionPathId: " 
                              << msg->BackupCollectionPathId << Endl;
                     }
@@ -140,8 +139,8 @@ struct TLongOpTestSetup {
         }
     }
     
-    // Execute restore operation
-    void ExecuteRestore(const TString& collectionName, const TVector<NSchemeShardUT_Private::TExpectedResult>& expectedResults = {}) {
+    // Execute restore operation and return transaction ID
+    ui64 ExecuteRestore(const TString& collectionName, const TVector<NSchemeShardUT_Private::TExpectedResult>& expectedResults = {}) {
         TString restoreSettings = TStringBuilder() << R"(
             Name: ")" << collectionName << R"("
         )";
@@ -160,15 +159,18 @@ struct TLongOpTestSetup {
             OperationInProgress = true;
         }
         
+        ui64 restoreTxId = ++TxId;
         if (expectedResults.empty()) {
-            TestRestoreBackupCollection(Runtime, ++TxId, "/MyRoot/.backups/collections/", restoreSettings);
+            TestRestoreBackupCollection(Runtime, restoreTxId, "/MyRoot/.backups/collections/", restoreSettings);
         } else {
-            TestRestoreBackupCollection(Runtime, ++TxId, "/MyRoot/.backups/collections/", restoreSettings, expectedResults);
+            TestRestoreBackupCollection(Runtime, restoreTxId, "/MyRoot/.backups/collections/", restoreSettings, expectedResults);
         }
-        Env.TestWaitNotification(Runtime, TxId);
+        Env.TestWaitNotification(Runtime, restoreTxId);
         
         // Mark operation as completed
         OperationInProgress = false;
+        
+        return restoreTxId;
     }
     
     // Execute async restore operation (for testing concurrent operations)
@@ -323,7 +325,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         auto& env = setup.Env;
         auto& txId = setup.TxId;
 
-        // Create backup collection for BusyTable (note: don't create the actual table since restore will create it)
+        // Create backup collection for BusyTable
         setup.CreateBackupCollection("BusyCollection", {"/MyRoot/BusyTable"});
 
         // Create backup structure manually to ensure long restore scenario
@@ -375,7 +377,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // This test verifies that the internal ESchemeOpCreateLongIncrementalRestoreOp
         // transaction can be created and processed without errors
 
-        // Create backup collection (note: don't create the actual table since restore will create it)
+        // Create backup collection
         setup.CreateBackupCollection("InternalTestCollection", {"/MyRoot/InternalTestTable"});
 
         // Create backup structure with incremental backups to trigger long restore
@@ -416,7 +418,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Create some directories that don't follow backup naming convention (no actual table backups inside)
         setup.CreateCustomBackupDirectories("MalformedCollection", {"invalid_backup_name", "another_invalid"});
 
-        // Should fail with StatusPathDoesNotExist because the table backups don't exist in the backup directories
+        // Should fail because the table backups don't exist in the backup directories
         setup.ExecuteRestore("MalformedCollection", {NKikimrScheme::StatusPathDoesNotExist});
         
         // Test 3: Try to restore with proper backup structure (should succeed)
@@ -432,7 +434,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         auto& env = setup.Env;
         auto& txId = setup.TxId;
 
-        // Create backup collection (note: we don't create the target table since restore will create it)
+        // Create backup collection
         TString collectionSettings = R"(
             Name: "DatabaseTestCollection"
             ExplicitEntryList {
@@ -731,9 +733,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Create backup collection with ONLY full backup (no incremental)
         setup.CreateBackupCollection("FullOnlyCollection", {"/MyRoot/FullOnlyTable"});
         setup.CreateFullBackup("FullOnlyCollection", {"FullOnlyTable"});
-        // Note: No incremental backups created
 
-        // Clear any previous events
         setup.ClearCapturedEvents();
 
         // Execute restore operation (event validation is handled automatically)
@@ -883,5 +883,360 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         Cerr << "Successfully verified " << setup.CapturedBackupCollectionPathIds.size() 
              << " TEvRunIncrementalRestore events for " << uniquePathIds.size() 
              << " unique collections with " << operationsCount << " operations in database" << Endl;
+    }
+
+
+    // Helper function to wait for incremental restore completion
+    void WaitForIncrementalRestoreCompletion(TTestBasicRuntime& runtime, const TString& collectionName, const TVector<TString>& tableNames, ui32 timeoutSeconds = 30) {
+        Y_UNUSED(collectionName); // Collection name parameter kept for future use
+        TInstant deadline = TInstant::Now() + TDuration::Seconds(timeoutSeconds);
+        
+        while (TInstant::Now() < deadline) {
+            // Check if operations are cleaned up from database
+            TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
+            
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
+                (
+                    (let range '('('Id (Null) (Void))))
+                    (let select '('Id 'Operation))
+                    (let operations (SelectRange 'IncrementalRestoreOperations range select '()))
+                    (let ret (AsList (SetResult 'Operations operations)))
+                    (return ret)
+                )
+            )", result, err);
+            
+            if (status != NKikimrProto::EReplyStatus::OK) {
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                continue;
+            }
+            
+            auto value = NClient::TValue::Create(result);
+            auto operationsResultSet = value["Operations"];
+            ui32 operationsCount = 0;
+            if (operationsResultSet.HaveValue()) {
+                auto operationsList = operationsResultSet["List"];
+                if (operationsList.HaveValue()) {
+                    operationsCount = operationsList.Size();
+                }
+            }
+            
+            // Check if all target tables are in normalized state
+            bool allTablesNormalized = true;
+            for (const auto& tableName : tableNames) {
+                TString targetPath = TStringBuilder() << "/MyRoot/" << tableName;
+                auto targetDesc = DescribePath(runtime, targetPath);
+                auto targetState = targetDesc.GetPathDescription().GetSelf().GetPathState();
+                
+                if (targetState != NKikimrSchemeOp::EPathState::EPathStateNoChanges) {
+                    allTablesNormalized = false;
+                    break;
+                }
+            }
+            
+            // Operations should be cleaned up AND all tables should be normalized
+            if (operationsCount == 0 && allTablesNormalized) {
+                return; // Finalization completed
+            }
+            
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        
+        // If we reach here, timeout occurred
+        UNIT_ASSERT_C(false, "Timeout waiting for incremental restore finalization to complete");
+    }
+
+    // Helper function to verify database cleanup
+    void VerifyDatabaseCleanup(TTestBasicRuntime& runtime) {
+        TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
+        
+        NKikimrMiniKQL::TResult result;
+        TString err;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
+            (
+                (let range '('('Id (Null) (Void))))
+                (let select '('Id 'Operation))
+                (let operations (SelectRange 'IncrementalRestoreOperations range select '()))
+                (let ret (AsList (SetResult 'Operations operations)))
+                (return ret)
+            )
+        )", result, err);
+        
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        
+        auto value = NClient::TValue::Create(result);
+        auto operationsResultSet = value["Operations"];
+        
+        if (operationsResultSet.HaveValue()) {
+            auto operationsList = operationsResultSet["List"];
+            ui32 operationsCount = 0;
+            if (operationsList.HaveValue()) {
+                operationsCount = operationsList.Size();
+            }
+            
+            UNIT_ASSERT_VALUES_EQUAL_C(operationsCount, 0, 
+                TStringBuilder() << "IncrementalRestoreOperations table should be empty after finalization, but found " 
+                               << operationsCount << " operations");
+        }
+    }
+
+    // Helper function to verify path state normalization
+    void VerifyPathStatesNormalized(TTestBasicRuntime& runtime, const TString& collectionName, const TVector<TString>& tableNames) {
+        // Verify target table states
+        for (const auto& tableName : tableNames) {
+            TString targetPath = TStringBuilder() << "/MyRoot/" << tableName;
+            auto targetDesc = DescribePath(runtime, targetPath);
+            auto targetState = targetDesc.GetPathDescription().GetSelf().GetPathState();
+            
+            UNIT_ASSERT_VALUES_EQUAL_C(targetState, NKikimrSchemeOp::EPathState::EPathStateNoChanges,
+                TStringBuilder() << "Target table " << targetPath << " should be in EPathStateNoChanges state after finalization, got: " 
+                               << NKikimrSchemeOp::EPathState_Name(targetState));
+        }
+        
+        // Verify backup collection state
+        TString collectionPath = TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName;
+        auto collectionDesc = DescribePath(runtime, collectionPath);
+        auto collectionState = collectionDesc.GetPathDescription().GetSelf().GetPathState();
+        
+        UNIT_ASSERT_VALUES_EQUAL_C(collectionState, NKikimrSchemeOp::EPathState::EPathStateNoChanges,
+            TStringBuilder() << "Backup collection " << collectionPath << " should be in EPathStateNoChanges state after finalization, got: " 
+                           << NKikimrSchemeOp::EPathState_Name(collectionState));
+        
+        // Verify source table states in backup directories
+        for (const auto& tableName : tableNames) {
+            // Check full backup table
+            TString fullBackupTablePath = TStringBuilder() << collectionPath << "/backup_001_full/" << tableName;
+            auto fullBackupDesc = DescribePath(runtime, fullBackupTablePath);
+            auto fullBackupState = fullBackupDesc.GetPathDescription().GetSelf().GetPathState();
+            
+            UNIT_ASSERT_VALUES_EQUAL_C(fullBackupState, NKikimrSchemeOp::EPathState::EPathStateNoChanges,
+                TStringBuilder() << "Full backup table " << fullBackupTablePath << " should be in EPathStateNoChanges state after finalization, got: " 
+                               << NKikimrSchemeOp::EPathState_Name(fullBackupState));
+            
+            // Check incremental backup tables
+            for (ui32 i = 2; i <= 5; ++i) { // Assuming up to 5 incremental backups
+                TString incrBackupTablePath = TStringBuilder() << collectionPath << "/backup_" << Sprintf("%03d", i) << "_incremental/" << tableName;
+                auto incrBackupDesc = DescribePath(runtime, incrBackupTablePath);
+                if (incrBackupDesc.GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+                    continue; // This incremental backup doesn't exist
+                }
+                
+                auto incrBackupState = incrBackupDesc.GetPathDescription().GetSelf().GetPathState();
+                UNIT_ASSERT_VALUES_EQUAL_C(incrBackupState, NKikimrSchemeOp::EPathState::EPathStateNoChanges,
+                    TStringBuilder() << "Incremental backup table " << incrBackupTablePath << " should be in EPathStateNoChanges state after finalization, got: " 
+                                   << NKikimrSchemeOp::EPathState_Name(incrBackupState));
+            }
+        }
+    }
+
+    // Helper function to verify operation completion
+    void VerifyIncrementalRestoreOperationCompleted(TTestBasicRuntime& runtime, ui64 operationId) {
+        // Check that the operation is no longer in progress
+        TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
+        
+        NKikimrMiniKQL::TResult result;
+        TString err;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), Sprintf(R"(
+            (
+                (let key '('('Id (Uint64 '%lu))))
+                (let select '('Id 'Operation))
+                (let operation (SelectRow 'IncrementalRestoreOperations key select))
+                (let ret (AsList (SetResult 'Operation operation)))
+                (return ret)
+            )
+        )", operationId), result, err);
+        
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        
+        auto value = NClient::TValue::Create(result);
+        auto operationResult = value["Operation"];
+        
+        // Operation should not exist after completion and finalization
+        UNIT_ASSERT_C(!operationResult.HaveValue() || operationResult.IsNull(),
+            TStringBuilder() << "Operation " << operationId << " should be cleaned up after completion");
+    }
+
+    Y_UNIT_TEST(LongIncrementalRestoreOpCleanupAfterSuccess) {
+        TLongOpTestSetup setup;
+        
+        setup.CreateCompleteBackupScenario("CleanupTestCollection", {"CleanupTestTable"}, 3);
+        
+        ui64 restoreTxId = setup.ExecuteRestore("CleanupTestCollection");
+        
+        WaitForIncrementalRestoreCompletion(setup.Runtime, "CleanupTestCollection", {"CleanupTestTable"});
+        
+        VerifyDatabaseCleanup(setup.Runtime);
+        
+        VerifyIncrementalRestoreOperationCompleted(setup.Runtime, restoreTxId);
+    }
+    
+    Y_UNIT_TEST(LongIncrementalRestoreOpCleanupMultipleOperations) {
+        TLongOpTestSetup setup;
+        
+        // Create multiple backup collections
+        setup.CreateCompleteBackupScenario("Collection1", {"Table1"}, 2);
+        setup.CreateCompleteBackupScenario("Collection2", {"Table2"}, 3);
+        setup.CreateCompleteBackupScenario("Collection3", {"Table3"}, 1);
+        
+        // Execute multiple restore operations
+        ui64 restoreTxId1 = setup.ExecuteRestore("Collection1");
+        ui64 restoreTxId2 = setup.ExecuteRestore("Collection2");
+        ui64 restoreTxId3 = setup.ExecuteRestore("Collection3");
+        
+        // Wait for all operations to complete
+        WaitForIncrementalRestoreCompletion(setup.Runtime, "Collection1", {"Table1"});
+        WaitForIncrementalRestoreCompletion(setup.Runtime, "Collection2", {"Table2"});
+        WaitForIncrementalRestoreCompletion(setup.Runtime, "Collection3", {"Table3"});
+        
+        // Verify that all operations are cleaned up independently
+        // No cross-operation interference should occur
+        VerifyDatabaseCleanup(setup.Runtime);
+        
+        VerifyIncrementalRestoreOperationCompleted(setup.Runtime, restoreTxId1);
+        VerifyIncrementalRestoreOperationCompleted(setup.Runtime, restoreTxId2);
+        VerifyIncrementalRestoreOperationCompleted(setup.Runtime, restoreTxId3);
+    }
+    
+    Y_UNIT_TEST(PathStatesNormalizedAfterIncrementalRestore) {
+        TLongOpTestSetup setup;
+        
+        setup.CreateCompleteBackupScenario("StateTestCollection", {"StateTestTable"}, 2);
+        
+        setup.ExecuteRestore("StateTestCollection");
+        
+        WaitForIncrementalRestoreCompletion(setup.Runtime, "StateTestCollection", {"StateTestTable"});
+        
+        VerifyPathStatesNormalized(setup.Runtime, "StateTestCollection", {"StateTestTable"});
+    }
+    
+    Y_UNIT_TEST(BasicFinalizationWorksCorrectly) {
+        TLongOpTestSetup setup;
+        
+        setup.CreateCompleteBackupScenario("BasicFinalizationCollection", {"BasicFinalizationTable"}, 1);
+        
+        setup.ExecuteRestore("BasicFinalizationCollection");
+        
+        WaitForIncrementalRestoreCompletion(setup.Runtime, "BasicFinalizationCollection", {"BasicFinalizationTable"}, 60);
+        
+        VerifyDatabaseCleanup(setup.Runtime);
+        VerifyPathStatesNormalized(setup.Runtime, "BasicFinalizationCollection", {"BasicFinalizationTable"});
+    }
+    
+    Y_UNIT_TEST(PathStatesNormalizedAfterPartialFailure) {
+        TLongOpTestSetup setup;
+        
+        // Create a backup collection with a full backup but create a broken incremental backup
+        setup.CreateBackupCollection("PartialFailureCollection", {"/MyRoot/PartialFailureTable"});
+        setup.CreateFullBackup("PartialFailureCollection", {"PartialFailureTable"});
+        
+        // Create a malformed incremental backup directory but don't put any table backups inside
+        // This will cause the incremental restore to fail when it tries to find table backups
+        setup.CreateCustomBackupDirectories("PartialFailureCollection", {"backup_002_incremental"});
+        
+        // Execute restore operation - it should start but fail during incremental processing
+        try {
+            setup.ExecuteRestore("PartialFailureCollection");
+            
+            // Wait a reasonable time for the operation to attempt processing and fail
+            setup.Runtime.SimulateSleep(TDuration::Seconds(2));
+            
+            // The operation should eventually timeout or fail, and finalization should occur
+            // We'll wait with a longer timeout to account for retry mechanisms
+            WaitForIncrementalRestoreCompletion(setup.Runtime, "PartialFailureCollection", {"PartialFailureTable"}, 60);
+        } catch (...) {
+            // Failure during restore execution is expected in this test case
+            // Even if the restore fails, we should still wait for cleanup
+            setup.Runtime.SimulateSleep(TDuration::Seconds(2));
+        }
+        
+        // Even after failure, the system should eventually clean up paths
+        // The key test is that we don't leave paths in intermediate states forever
+        
+        // Check backup collection state - it should be normalized
+        TString collectionPath = "/MyRoot/.backups/collections/PartialFailureCollection";
+        auto collectionDesc = DescribePath(setup.Runtime, collectionPath);
+        auto collectionState = collectionDesc.GetPathDescription().GetSelf().GetPathState();
+        
+        // Collection should be in a valid final state (not stuck in intermediate state)
+        bool isValidFinalState = (collectionState == NKikimrSchemeOp::EPathState::EPathStateNoChanges);
+        
+        UNIT_ASSERT_C(isValidFinalState,
+            TStringBuilder() << "After failure, backup collection should be in valid final state, got: " 
+                           << NKikimrSchemeOp::EPathState_Name(collectionState));
+        
+        // Target table should also be in a reasonable final state
+        TString targetPath = "/MyRoot/PartialFailureTable";
+        auto targetDesc = DescribePath(setup.Runtime, targetPath);
+        auto targetState = targetDesc.GetPathDescription().GetSelf().GetPathState();
+        
+        // Target should either be normalized or not exist (both are acceptable outcomes after failure)
+        bool isValidTargetState = (targetState == NKikimrSchemeOp::EPathState::EPathStateNoChanges) ||
+                                 (targetDesc.GetStatus() == NKikimrScheme::StatusPathDoesNotExist);
+        
+        UNIT_ASSERT_C(isValidTargetState,
+            TStringBuilder() << "After failure, target table should be in valid final state or not exist, got: " 
+                           << NKikimrSchemeOp::EPathState_Name(targetState));
+    }
+    
+    Y_UNIT_TEST(IncrementalRestoreCompleteLifecycle) {
+        TLongOpTestSetup setup;
+        
+        setup.CreateCompleteBackupScenario("LifecycleCollection", {"LifecycleTable"}, 4);
+        
+        TString targetPath = "/MyRoot/LifecycleTable";
+        TString collectionPath = "/MyRoot/.backups/collections/LifecycleCollection";
+        
+        setup.ExecuteRestore("LifecycleCollection");
+        
+        WaitForIncrementalRestoreCompletion(setup.Runtime, "LifecycleCollection", {"LifecycleTable"});
+        
+        TestDescribeResult(DescribePath(setup.Runtime, targetPath), {NLs::PathExist});
+        
+        VerifyPathStatesNormalized(setup.Runtime, "LifecycleCollection", {"LifecycleTable"});
+        
+        VerifyDatabaseCleanup(setup.Runtime);
+        
+        auto finalTargetDesc = DescribePath(setup.Runtime, targetPath);
+        auto finalState = finalTargetDesc.GetPathDescription().GetSelf().GetPathState();
+        UNIT_ASSERT_VALUES_EQUAL(finalState, NKikimrSchemeOp::EPathState::EPathStateNoChanges);
+    }
+    
+    Y_UNIT_TEST(MultipleTablesIncrementalRestoreFinalization) {
+        TLongOpTestSetup setup;
+        
+        TVector<TString> tableNames = {"MultiTable1", "MultiTable2", "MultiTable3"};
+        setup.CreateCompleteBackupScenario("MultiTableCollection", tableNames, 3);
+        
+        setup.ExecuteRestore("MultiTableCollection");
+        
+        WaitForIncrementalRestoreCompletion(setup.Runtime, "MultiTableCollection", tableNames);
+        
+        VerifyPathStatesNormalized(setup.Runtime, "MultiTableCollection", tableNames);
+        
+        VerifyDatabaseCleanup(setup.Runtime);
+        
+        for (const auto& tableName : tableNames) {
+            TString targetPath = TStringBuilder() << "/MyRoot/" << tableName;
+            TestDescribeResult(DescribePath(setup.Runtime, targetPath), {NLs::PathExist});
+        }
+    }
+    
+    Y_UNIT_TEST(ConcurrentOperationsFinalization) {
+        TLongOpTestSetup setup;
+        
+        setup.CreateCompleteBackupScenario("ConcurrentCollection1", {"ConcurrentTable1"}, 2);
+        setup.CreateCompleteBackupScenario("ConcurrentCollection2", {"ConcurrentTable2"}, 3);
+        
+        setup.ExecuteRestore("ConcurrentCollection1");
+        setup.ExecuteRestore("ConcurrentCollection2");
+        
+        WaitForIncrementalRestoreCompletion(setup.Runtime, "ConcurrentCollection1", {"ConcurrentTable1"});
+        WaitForIncrementalRestoreCompletion(setup.Runtime, "ConcurrentCollection2", {"ConcurrentTable2"});
+        
+        VerifyDatabaseCleanup(setup.Runtime);
+        
+        VerifyPathStatesNormalized(setup.Runtime, "ConcurrentCollection1", {"ConcurrentTable1"});
+        VerifyPathStatesNormalized(setup.Runtime, "ConcurrentCollection2", {"ConcurrentTable2"});
     }
 }

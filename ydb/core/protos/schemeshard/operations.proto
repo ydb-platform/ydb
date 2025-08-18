@@ -94,6 +94,10 @@ enum EOperationType {
     ESchemeOpDropCdcStream = 68;
     ESchemeOpDropCdcStreamImpl = 69;
     ESchemeOpDropCdcStreamAtTable = 70;
+    // Rotate
+    ESchemeOpRotateCdcStream = 120;
+    ESchemeOpRotateCdcStreamImpl = 121;
+    ESchemeOpRotateCdcStreamAtTable = 122;
 
     ESchemeOpMoveTable = 71;
     ESchemeOpMoveTableIndex = 72;
@@ -183,6 +187,12 @@ enum EOperationType {
 
     // Change Path State
     ESchemeOpChangePathState = 119;
+
+    // Incremental Restore Finalization
+    ESchemeOpIncrementalRestoreFinalize = 123;
+
+    // Long Incremental Backup
+    ESchemeOpCreateLongIncrementalBackupOp = 124;
 
     // Some entries are grouped by semantics, so are out of order
 }

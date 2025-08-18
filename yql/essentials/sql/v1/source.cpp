@@ -488,7 +488,7 @@ TNodePtr ISource::BuildFlattenColumns(const TString& label) {
 
 namespace {
 
-TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& exprs, bool override) {
+TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& exprs, bool override, bool persistable) {
     auto structObj = BuildAtom(pos, "row", TNodeFlags::Default);
     for (const auto& exprNode: exprs) {
         const auto name = exprNode->GetLabel();
@@ -503,7 +503,7 @@ TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& e
         if (dynamic_cast<const THoppingWindow*>(exprNode.Get())) {
             continue;
         }
-        structObj = structObj->Y("AddMember", structObj, structObj->Q(name), exprNode);
+        structObj = structObj->Y("AddMember", structObj, structObj->Q(name), persistable ? structObj->Y("PersistableRepr", exprNode) : exprNode);
     }
     return structObj->Y("AsList", structObj);
 }
@@ -518,12 +518,20 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
 
     TNodePtr res;
     if (groupByExprs) {
-        auto body = BuildLambdaBodyForExprAliases(Pos_, groupByExprs, ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride);
+        auto body = BuildLambdaBodyForExprAliases(
+            Pos_,
+            groupByExprs,
+            ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride,
+            ctx.PersistableFlattenAndAggrExprs);
         res = Y("FlatMap", "core", BuildLambda(Pos_, Y("row"), body));
     }
 
     if (distinctAggrExprs) {
-        auto body = BuildLambdaBodyForExprAliases(Pos_, distinctAggrExprs, ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride);
+        auto body = BuildLambdaBodyForExprAliases(
+            Pos_,
+            distinctAggrExprs,
+            ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride,
+            ctx.PersistableFlattenAndAggrExprs);
         auto lambda = BuildLambda(Pos_, Y("row"), body);
         res = res ? Y("FlatMap", res,  lambda) : Y("FlatMap", "core", lambda);
     }
@@ -533,7 +541,7 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
 TNodePtr ISource::BuildPreFlattenMap(TContext& ctx) {
     Y_UNUSED(ctx);
     YQL_ENSURE(IsFlattenByExprs());
-    return BuildLambdaBodyForExprAliases(Pos_, Expressions(EExprSeat::FlattenByExpr), true);
+    return BuildLambdaBodyForExprAliases(Pos_, Expressions(EExprSeat::FlattenByExpr), true, ctx.PersistableFlattenAndAggrExprs);
 }
 
 TNodePtr ISource::BuildPrewindowMap(TContext& ctx) {
@@ -582,14 +590,14 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
 
     std::map<std::pair<bool, TString>, std::vector<IAggregation*>> genericAggrs;
     for (const auto& aggr: Aggregations_) {
-        if (const auto key = aggr->GetGenericKey()) {
+        if (auto key = aggr->GetGenericKey()) {
             genericAggrs[{aggr->IsDistinct(), *key}].emplace_back(aggr.Get());
         }
     }
 
-    for (const auto& aggr : genericAggrs) {
-        for (size_t i = 1U; i < aggr.second.size(); ++i) {
-            aggr.second.front()->Join(aggr.second[i]);
+    for (const auto& [_, aggrs] : genericAggrs) {
+        for (size_t i = 1; i < aggrs.size(); ++i) {
+            aggrs.front()->Join(aggrs[i]);
         }
     }
 

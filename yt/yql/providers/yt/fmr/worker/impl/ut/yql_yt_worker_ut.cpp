@@ -12,7 +12,7 @@
 namespace NYql::NFmr {
 
 TDownloadOperationParams downloadOperationParams{
-    .Input = TYtTableRef{"Path","Cluster", "FilePath"},
+    .Input = TYtTableRef{.RichPath = NYT::TRichYPath().Path("Path").Cluster("Cluster"), .FilePath = "FilePath"},
     .Output = TFmrTableRef{{"Cluster", "Path"}}
 };
 

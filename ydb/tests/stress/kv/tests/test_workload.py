@@ -18,8 +18,8 @@ class TestYdbWorkload(StressFixture):
         init_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
-            "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-            "--database=/Root",
+            "--endpoint", self.endpoint,
+            "--database={}".format(self.database),
             "workload", "kv", "init",
             "--min-partitions", "1",
             "--partition-size", "10",

@@ -75,7 +75,7 @@
                                                         "PlanNodeId": 6,
                                                         "Plans": [
                                                             {
-                                                                "HashFunc": "HashV1",
+                                                                "HashFunc": "HashV2",
                                                                 "KeyColumns": [
                                                                     "unique1"
                                                                 ],
@@ -104,6 +104,8 @@
                                                                                                         "Name": "TableFullScan",
                                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                                         "ReadColumns": [
+                                                                                                            "unique1 (-\u221e, +\u221e)",
+                                                                                                            "unique2 (-\u221e, +\u221e)",
                                                                                                             "even",
                                                                                                             "fivethous",
                                                                                                             "four",
@@ -117,13 +119,7 @@
                                                                                                             "thousand",
                                                                                                             "twenty",
                                                                                                             "two",
-                                                                                                            "twothousand",
-                                                                                                            "unique1",
-                                                                                                            "unique2"
-                                                                                                        ],
-                                                                                                        "ReadRanges": [
-                                                                                                            "unique1 (-\u221e, +\u221e)",
-                                                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                                                            "twothousand"
                                                                                                         ],
                                                                                                         "ReadRangesPointPrefixLen": "0",
                                                                                                         "Scan": "Parallel",

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(25.1.1)
+VERSION(25.2)
 
 LICENSE(MIT)
 
@@ -194,17 +194,9 @@ PY_SRCS(
     pip/_vendor/dependency_groups/_toml_compat.py
     pip/_vendor/distlib/__init__.py
     pip/_vendor/distlib/compat.py
-    pip/_vendor/distlib/database.py
-    pip/_vendor/distlib/index.py
-    pip/_vendor/distlib/locators.py
-    pip/_vendor/distlib/manifest.py
-    pip/_vendor/distlib/markers.py
-    pip/_vendor/distlib/metadata.py
     pip/_vendor/distlib/resources.py
     pip/_vendor/distlib/scripts.py
     pip/_vendor/distlib/util.py
-    pip/_vendor/distlib/version.py
-    pip/_vendor/distlib/wheel.py
     pip/_vendor/distro/__init__.py
     pip/_vendor/distro/__main__.py
     pip/_vendor/distro/distro.py
@@ -388,7 +380,6 @@ PY_SRCS(
     pip/_vendor/truststore/_openssl.py
     pip/_vendor/truststore/_ssl_constants.py
     pip/_vendor/truststore/_windows.py
-    pip/_vendor/typing_extensions.py
     pip/_vendor/urllib3/__init__.py
     pip/_vendor/urllib3/_collections.py
     pip/_vendor/urllib3/_version.py

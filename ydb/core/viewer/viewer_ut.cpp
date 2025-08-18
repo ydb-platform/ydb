@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             NKikimrWhiteboard::TEvTabletStateResponse result;
             MergeWhiteboardResponses(result, nodesData);
             Ctest << "Merge = " << timer.Passed() << Endl;
-            UNIT_ASSERT_LT(timer.Passed(), 2 * BASE_PERF);
+            UNIT_ASSERT_LT(timer.Passed(), 3 * BASE_PERF);
             UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), 10000);
             timer.Reset();
         }

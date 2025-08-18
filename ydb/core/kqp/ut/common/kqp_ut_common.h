@@ -11,6 +11,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -18,40 +19,6 @@
 #include <library/cpp/yson/writer.h>
 #include <library/cpp/threading/future/async.h>
 
-
-#define Y_UNIT_TEST_TWIN(N, OPT)                                                                                   \
-    template <bool OPT>                                                                                            \
-    struct TTestCase##N : public TCurrentTestCase {                                                                \
-        TTestCase##N() : TCurrentTestCase() {                                                                      \
-            if constexpr (OPT) { Name_ = #N "+" #OPT; } else { Name_ = #N "-" #OPT; }                              \
-        }                                                                                                          \
-        static THolder<NUnitTest::TBaseTestCase> CreateOn()  { return ::MakeHolder<TTestCase##N<true>>();  }       \
-        static THolder<NUnitTest::TBaseTestCase> CreateOff() { return ::MakeHolder<TTestCase##N<false>>(); }       \
-        void Execute_(NUnitTest::TTestContext&) override;                                                          \
-    };                                                                                                             \
-    struct TTestRegistration##N {                                                                                  \
-        TTestRegistration##N() {                                                                                   \
-            TCurrentTest::AddTest(TTestCase##N<true>::CreateOn);                                                   \
-            TCurrentTest::AddTest(TTestCase##N<false>::CreateOff);                                                 \
-        }                                                                                                          \
-    };                                                                                                             \
-    static TTestRegistration##N testRegistration##N;                                                               \
-    template <bool OPT>                                                                                            \
-    void TTestCase##N<OPT>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
-
-#define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
-    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
-    struct TTestRegistration##N {                                                                                                    \
-        TTestRegistration##N() {                                                                                                     \
-            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false); \
-            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);  \
-            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);  \
-            TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false);   \
-        }                                                                                                                            \
-    };                                                                                                                               \
-    static TTestRegistration##N testRegistration##N;                                                                                 \
-    template<bool OPT1, bool OPT2>                                                                                                   \
-    void N(NUnitTest::TTestContext&)
 
 template <bool ForceVersionV1>
 TString MakeQuery(const TString& tmpl) {
@@ -74,6 +41,31 @@ extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
 
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
+private:
+    void InitDefaultConfig() {
+        auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
+        auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
+        auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
+        exchangerSettings->SetStartDelayMs(10);
+        exchangerSettings->SetMaxDelayMs(10);
+        FeatureFlags.SetEnableSparsedColumns(true);
+        FeatureFlags.SetEnableWritePortionsOnInsert(true);
+        FeatureFlags.SetEnableParameterizedDecimal(true);
+        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
+        FeatureFlags.SetEnableFollowerStats(true);
+        FeatureFlags.SetEnableColumnStore(true);
+
+        if (!AppConfig.MutableColumnShardConfig()->HasReaderClassName()) {
+            SetColumnShardReaderClassName("SIMPLE");
+        }
+        if (!AppConfig.MutableColumnShardConfig()->HasDisabledOnSchemeShard()) {
+            AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        }
+        if (!AppConfig.MutableColumnShardConfig()->HasMaxInFlightIntervalsOnRequest()) {
+            AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
+        }
+    }
+public:
     NKikimrConfig::TAppConfig AppConfig;
     NKikimrPQ::TPQConfig PQConfig;
     TVector<NKikimrKqp::TKqpSetting> KqpSettings;
@@ -83,6 +75,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     bool WithSampleTables = true;
     bool UseRealThreads = true;
     bool EnableForceFollowers = false;
+    bool EnableScriptExecutionBackgroundChecks = true;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
     TMaybe<NFake::TStorage> Storage = Nothing();
@@ -92,24 +85,16 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     NKikimrConfig::TImmediateControlsConfig Controls;
     TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
 
-    TKikimrSettings()
-    {
-        auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
-        auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
-        auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
-        exchangerSettings->SetStartDelayMs(10);
-        exchangerSettings->SetMaxDelayMs(10);
-        AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
-        AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
-        FeatureFlags.SetEnableSparsedColumns(true);
-        FeatureFlags.SetEnableWritePortionsOnInsert(true);
-        FeatureFlags.SetEnableParameterizedDecimal(true);
-        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
-        FeatureFlags.SetEnableFollowerStats(true);
-        FeatureFlags.SetEnableColumnStore(true);
+    TKikimrSettings() {
+        InitDefaultConfig();
     }
 
-    TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
+    explicit TKikimrSettings(const NKikimrConfig::TAppConfig& value)
+        : AppConfig(value)
+    {
+        InitDefaultConfig();
+    }
+
     TKikimrSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
     TKikimrSettings& SetPQConfig(const NKikimrPQ::TPQConfig& value) { PQConfig = value; return *this; };
     TKikimrSettings& SetKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& value) { KqpSettings = value; return *this; }
@@ -230,8 +215,7 @@ private:
 inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings = {},
     const NKikimrConfig::TAppConfig& appConfig = {})
 {
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig)
+    auto settings = TKikimrSettings(appConfig)
         .SetKqpSettings(kqpSettings)
         .SetEnableScriptExecutionOperations(true);
 

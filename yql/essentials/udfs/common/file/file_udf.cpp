@@ -379,11 +379,11 @@ namespace {
                 TStreamMeta::TPtr metaPtr(new TStreamMeta(filePath));
                 auto pos = Pos_;
                 auto terminateFunc = [pos](const TString& message) {
-                    UdfTerminate((TStringBuilder() << pos << " " << message).data());
+                    UdfTerminate((TStringBuilder() << pos << " " << message).c_str());
                 };
                 return TUnboxedValuePod(new TListByLineBoxedValue<TUserType>(metaPtr, *valueBuilder, terminateFunc));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 
@@ -437,7 +437,7 @@ namespace {
                     items[IndexA_] = ValueBuilder_.NewString(attrs);
                 }
                 catch (const std::exception& e) {
-                    UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                    UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
                 }
                 return true;
             }
@@ -534,7 +534,7 @@ namespace {
                 TString filePath(args[0].AsStringRef());
                 return TUnboxedValuePod(new TList(IndexP_, IndexT_, IndexA_, *valueBuilder, Pos_, filePath));
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 

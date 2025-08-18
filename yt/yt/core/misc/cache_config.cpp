@@ -2,6 +2,8 @@
 
 namespace NYT {
 
+using namespace NYTree;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TSlruCacheConfigPtr TSlruCacheConfig::CreateWithCapacity(i64 capacity)

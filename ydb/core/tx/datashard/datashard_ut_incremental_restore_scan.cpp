@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
             table,
             targetPathId,
             txId,
-            {}).Release();
+            NStreamScan::TLimits()).Release();
 
         TDriverMock driver;
 

@@ -52,6 +52,7 @@ public:
 
 private:
     NChaosClient::TChaosLeaseId ChaosLeaseId;
+    bool PingAncestors;
 
     void DoExecute(ICommandContextPtr context) override;
 };

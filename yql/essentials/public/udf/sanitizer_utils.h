@@ -96,14 +96,14 @@ constexpr size_t GetSizeToAlloc(size_t size) {
 #endif // defined(_asan_enabled_) || defined(_msan_enabled_)
 }
 
-constexpr const void* GetOriginalAllocatedObject(const void* ptr, size_t size) {
+constexpr const void* GetOriginalAllocatedObject(const void* ptr, bool isZeroSize = false) {
 #if defined(_asan_enabled_) || defined(_msan_enabled_)
-    if (size == 0) {
+    if (isZeroSize) {
         return ptr;
     }
     return static_cast<const char*>(ptr) - ALLOCATION_REDZONE_SIZE;
 #else // defined(_asan_enabled_) || defined(_msan_enabled_)
-    Y_UNUSED(size);
+    Y_UNUSED(isZeroSize);
     return ptr;
 #endif // defined(_asan_enabled_) || defined(_msan_enabled_)
 }

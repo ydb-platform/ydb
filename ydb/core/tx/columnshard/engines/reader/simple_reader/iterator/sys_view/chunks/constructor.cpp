@@ -1,39 +1,37 @@
 #include "constructor.h"
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
+
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
-std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(const std::shared_ptr<NReader::NSimple::TSpecialReadContext>& context) {
-    AFL_VERIFY(SourceId);
+std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
     return std::make_shared<TSourceData>(
-        SourceId, SourceIdx, PathId, TabletId, Portion, std::move(Start), std::move(Finish), context, std::move(Schema));
+        GetSourceId(), GetSourceIdx(), PathId, GetTabletId(), std::move(Portion), ExtractStart(), ExtractFinish(), context, std::move(Schema));
 }
 
-std::shared_ptr<NKikimr::NOlap::NReader::NCommon::IDataSource> TConstructor::DoExtractNext(
-    const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
-    AFL_VERIFY(Constructors.size());
-    Constructors.front().SetIndex(CurrentSourceIdx);
+std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(
+    const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) {
+    auto result = Construct(context);
+    result->SetPortionAccessor(std::move(accessor));
+    return result;
+}
+
+std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNextImpl(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
+    auto constructor = PopObjectWithAccessor();
+    constructor.MutableObject().SetIndex(CurrentSourceIdx);
     ++CurrentSourceIdx;
-    if (Sorting == ERequestSorting::NONE) {
-        std::shared_ptr<NReader::NCommon::IDataSource> result =
-            Constructors.front().Construct(std::static_pointer_cast<NReader::NSimple::TSpecialReadContext>(context));
-        Constructors.pop_front();
-        return result;
-    } else {
-        std::pop_heap(Constructors.begin(), Constructors.end(), TPortionDataConstructor::TComparator(Sorting == ERequestSorting::DESC));
-        std::shared_ptr<NReader::NCommon::IDataSource> result =
-            Constructors.back().Construct(std::static_pointer_cast<NReader::NSimple::TSpecialReadContext>(context));
-        Constructors.pop_back();
-        return result;
-    }
+    std::shared_ptr<NReader::NCommon::IDataSource> result = constructor.MutableObject().Construct(context, constructor.DetachAccessor());
+    return result;
 }
 
 TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
     const std::optional<NOlap::TInternalPathId> internalPathId, const TSnapshot reqSnapshot,
     const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting)
-    : Sorting(sorting) {
+    : TBase(sorting) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     const TVersionedIndex& originalSchemaInfo = engineImpl->GetVersionedIndex();
+    std::deque<TPortionDataConstructor> constructors;
     for (auto&& i : engineImpl->GetTables()) {
         if (internalPathId && *internalPathId != i.first) {
             continue;
@@ -45,16 +43,14 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
             if (p->IsRemovedFor(reqSnapshot)) {
                 continue;
             }
-            Constructors.emplace_back(
+            constructors.emplace_back(
                 pathIdTranslator.GetUnifiedByInternalVerified(p->GetPathId()), tabletId, p, p->GetSchema(originalSchemaInfo));
-            if (!pkFilter->IsUsed(Constructors.back().GetStart(), Constructors.back().GetFinish())) {
-                Constructors.pop_back();
+            if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
+                constructors.pop_back();
             }
         }
     }
-    if (Sorting != ERequestSorting::NONE) {
-        std::make_heap(Constructors.begin(), Constructors.end(), TPortionDataConstructor::TComparator(Sorting == ERequestSorting::DESC));
-    }
+    InitializeConstructors(std::move(constructors));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks

@@ -26,6 +26,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  std::shared_ptr<TUploadRows> rows,
                                  EUploadRowsMode mode = EUploadRowsMode::Normal,
                                  bool writeToPrivateTable = false,
-                                 bool writeToIndexImplTable = false);
+                                 bool writeToIndexImplTable = false,
+                                 ui64 cookie = 0);
 } // namespace NTxProxy
 } // namespace NKikimr

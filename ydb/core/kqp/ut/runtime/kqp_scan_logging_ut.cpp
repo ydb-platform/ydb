@@ -12,10 +12,7 @@ using namespace NYdb::NTable;
 namespace {
 
 TKikimrSettings AppSettings(TStringStream& logStream) {
-    NKikimrConfig::TAppConfig appCfg;
-
     TKikimrSettings serverSettings;
-    serverSettings.SetAppConfig(appCfg);
     serverSettings.LogStream = &logStream;
 
     return serverSettings;

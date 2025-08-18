@@ -10,6 +10,7 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/core/kqp/expr_nodes
 )
 
 SRCS(

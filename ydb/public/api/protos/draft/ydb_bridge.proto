@@ -7,22 +7,10 @@ option java_package = "com.yandex.ydb.bridge.proto";
 option java_outer_classname = "BridgeProtos";
 option java_multiple_files = true;
 
-import "ydb/public/api/protos/ydb_operation.proto";
-
-// State of a pile in relation to primary
-enum PileState {
-    DISCONNECTED = 0; // disconnected from the cluster (no connectivity to other piles)
-    NOT_SYNCHRONIZED = 1; // not synchronized with primary, cannot be promoted
-    SYNCHRONIZED = 2; // fully synchronized with primary, may be promoted
-    PROMOTE = 3; // pile is being promoted to primary
-    PRIMARY = 4; // pile is primary
-}
-
-// Pair of pile id and pile state
-message PileStateUpdate {
-    uint32 pile_id = 1;
-    PileState state = 2;
-}
+import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_bridge_common.proto";
+import "ydb/public/api/protos/ydb_operation.proto"; 
+import "google/protobuf/timestamp.proto";
 
 message GetClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
@@ -34,15 +22,17 @@ message GetClusterStateResponse {
 
 message GetClusterStateResult {
     // Current cluster state
-    repeated PileStateUpdate per_pile_state = 1;
+    repeated PileState pile_states = 1;
 }
 
 message UpdateClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // List of desired pile states to update
-    repeated PileStateUpdate updates = 2;
-    // If set, acquire quorum only for specific pile(s)
-    repeated uint32 specific_pile_ids = 3;
+    repeated PileState updates = 2 [(size).ge = 1];
+    // List of piles that are required to form a quorum for this update to succeed.
+    // These piles act as "witnesses" for the operation.
+    // If empty, all piles in the cluster will be used for the quorum check.
+    repeated string quorum_piles = 3;
 }
 
 message UpdateClusterStateResponse {
@@ -50,4 +40,44 @@ message UpdateClusterStateResponse {
 }
 
 message UpdateClusterStateResult {
+}
+
+message BridgeHistoryEvent {
+    // Timestamp of the event
+    google.protobuf.Timestamp timestamp = 1;
+    // UUID of the request that initiated the change
+    string request_id = 2 [(length).le = 64];
+    // UUID of the cluster state generation
+    string generation_uuid = 3 [(length).le = 64];
+    // The primary pile at the time of the event
+    string primary_pile = 4 [(length).le = 128];
+    // Name of the pile that changed state
+    string pile_name = 5 [(length).le = 128];
+    // Event type
+    string event = 6;
+    // State before the change
+    PileState.State from_state = 7;
+    // State after the change
+    PileState.State to_state = 8;
+    // Who initiated the change (e.g., "admin" or "system")
+    string initiator = 9;
+}
+
+message GetClusterHistoryRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Limit the number of history records to show
+    uint64 limit = 2;
+    // Pagination token
+    string page_token = 3 [(length).le = 256];
+}
+
+message GetClusterHistoryResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetClusterHistoryResult {
+    // List of history events
+    repeated BridgeHistoryEvent events = 1;
+    // Pagination token
+    string next_page_token = 2;
 }

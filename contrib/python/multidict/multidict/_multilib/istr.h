@@ -9,7 +9,7 @@ extern "C" {
 
 typedef struct {
     PyUnicodeObject str;
-    PyObject * canonical;
+    PyObject *canonical;
     mod_state *state;
 } istrobject;
 
@@ -23,7 +23,7 @@ static inline void
 istr_dealloc(istrobject *self)
 {
     Py_XDECREF(self->canonical);
-    PyUnicode_Type.tp_dealloc((PyObject*)self);
+    PyUnicode_Type.tp_dealloc((PyObject *)self);
 }
 
 static inline PyObject *
@@ -42,8 +42,8 @@ istr_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     PyObject *canonical = NULL;
     PyObject *ret = NULL;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|OOO:str",
-                                     kwlist, &x, &encoding, &errors)) {
+    if (!PyArg_ParseTupleAndKeywords(
+            args, kwds, "|OOO:str", kwlist, &x, &encoding, &errors)) {
         return NULL;
     }
     if (x != NULL && IStr_Check(state, x)) {
@@ -58,8 +58,8 @@ istr_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (!canonical) {
         goto fail;
     }
-    ((istrobject*)ret)->canonical = canonical;
-    ((istrobject*)ret)->state = state;
+    ((istrobject *)ret)->canonical = canonical;
+    ((istrobject *)ret)->state = state;
     return ret;
 fail:
     Py_XDECREF(ret);
@@ -88,10 +88,9 @@ ret:
     return result;
 }
 
-
 static PyMethodDef istr_methods[] = {
     {"__reduce__", (PyCFunction)istr_reduce, METH_NOARGS, NULL},
-    {NULL, NULL}   /* sentinel */
+    {NULL, NULL} /* sentinel */
 };
 
 static PyType_Slot istr_slots[] = {
@@ -105,15 +104,13 @@ static PyType_Slot istr_slots[] = {
 static PyType_Spec istr_spec = {
     .name = "multidict._multidict.istr",
     .basicsize = sizeof(istrobject),
-    .flags = (Py_TPFLAGS_DEFAULT
-              | Py_TPFLAGS_BASETYPE
+    .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE
 #if PY_VERSION_HEX >= 0x030a00f0
               | Py_TPFLAGS_IMMUTABLETYPE
 #endif
               | Py_TPFLAGS_UNICODE_SUBCLASS),
     .slots = istr_slots,
 };
-
 
 static inline PyObject *
 IStr_New(mod_state *state, PyObject *str, PyObject *canonical)
@@ -129,8 +126,8 @@ IStr_New(mod_state *state, PyObject *str, PyObject *canonical)
         goto ret;
     }
     Py_INCREF(canonical);
-    ((istrobject*)res)->canonical = canonical;
-    ((istrobject*)res)->state = state;
+    ((istrobject *)res)->canonical = canonical;
+    ((istrobject *)res)->state = state;
 ret:
     Py_CLEAR(args);
     return res;

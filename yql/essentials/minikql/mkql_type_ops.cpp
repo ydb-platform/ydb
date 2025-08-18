@@ -631,7 +631,9 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
     }
 
     case NUdf::EDataSlot::DyNumber: {
-        out << NDyNumber::DyNumberToString(value.AsStringRef());
+        const auto& res = NDyNumber::DyNumberToString(value.AsStringRef());
+        MKQL_ENSURE(res, "Invalid DyNumber value : " << EscapeC(TString(value.AsStringRef())));
+        out << *res;
         break;
     }
 

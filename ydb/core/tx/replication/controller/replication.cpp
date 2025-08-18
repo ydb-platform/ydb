@@ -41,7 +41,11 @@ class TReplication::TImpl: public TLagProvider {
             return;
         }
 
-        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName));
+        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie));
+    }
+
+    ui64 GetExpectedSecretResolverCookie() const {
+        return SecretResolverCookie;
     }
 
     template <typename... Args>
@@ -141,6 +145,7 @@ public:
             const auto& endpoint = params.GetEndpoint();
             const auto& database = params.GetDatabase();
             const bool ssl = params.GetEnableSsl();
+            const auto& caCert = params.GetCaCert();
 
             if (endpoint.empty()) {
                 ydbProxy.Reset(CreateLocalYdbProxy(Database));
@@ -150,13 +155,13 @@ public:
                     if (!params.GetStaticCredentials().HasPassword()) {
                         return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
                     }
-                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetStaticCredentials()));
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, caCert, params.GetStaticCredentials()));
                     break;
                 case NKikimrReplication::TConnectionParams::kOAuthToken:
                     if (!params.GetOAuthToken().HasToken()) {
                         return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
                     }
-                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetOAuthToken().GetToken()));
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken()));
                     break;
                 default:
                     ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
@@ -214,6 +219,14 @@ public:
         Config = config;
     }
 
+    void ResetCredentials(const TActorContext& ctx) {
+        for (auto* x : TVector<TActorId*>{&SecretResolver, &TargetDiscoverer, &YdbProxy}) {
+            if (auto actorId = std::exchange(*x, {})) {
+                ctx.Send(actorId, new TEvents::TEvPoison());
+            }
+        }
+    }
+
     void ErrorState(TString issue) {
         SetState(EState::Error, issue);
     }
@@ -242,6 +255,7 @@ private:
     THashSet<ui64> PendingAlterTargets;
     mutable TVector<TString> TargetTablePaths;
     TActorId SecretResolver;
+    ui64 SecretResolverCookie = 0;
     TActorId YdbProxy;
     TActorId TenantResolver;
     TActorId TargetDiscoverer;
@@ -322,6 +336,10 @@ void TReplication::SetConfig(NKikimrReplication::TReplicationConfig&& config) {
     Impl->SetConfig(std::move(config));
 }
 
+void TReplication::ResetCredentials(const TActorContext& ctx) {
+    Impl->ResetCredentials(ctx);
+}
+
 const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {
     return Impl->Config;
 }
@@ -370,6 +388,10 @@ void TReplication::UpdateSecret(const TString& secretValue) {
     default:
         Y_ABORT("unreachable");
     }
+}
+
+ui64 TReplication::GetExpectedSecretResolverCookie() const {
+    return Impl->GetExpectedSecretResolverCookie();
 }
 
 void TReplication::SetTenant(const TString& value) {

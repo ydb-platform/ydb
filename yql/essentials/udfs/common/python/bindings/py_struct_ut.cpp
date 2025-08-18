@@ -60,6 +60,29 @@ Y_UNIT_TEST_SUITE(TPyStructTest) {
                 });
     }
 
+    Y_UNIT_TEST(FromPyObjectBytesAttrWithNullCharacter) {
+        TPythonTestEngine engine;
+
+        ui32 ageIdx = 0;
+        auto personType = engine.GetTypeBuilder().Struct()->
+                AddField<int>("a\0ge", &ageIdx)
+                .Build();
+
+        engine.ToMiniKQL(personType,
+                "class Person:\n"
+                "    def __init__(self, age):\n"
+                "        setattr(self, 'a\\0ge', age)\n"
+                "\n"
+                "def Test():\n"
+                "    return Person(99)\n",
+                [ageIdx](const NUdf::TUnboxedValuePod& value) {
+                    UNIT_ASSERT(value);
+                    UNIT_ASSERT(value.IsBoxed());
+                    auto age = value.GetElement(ageIdx);
+                    UNIT_ASSERT_EQUAL(age.Get<ui32>(), 99);
+                });
+    }
+
     Y_UNIT_TEST(FromPyDict) {
         TPythonTestEngine engine;
 

@@ -283,7 +283,14 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                     .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
                     .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
                     .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
-                    .DisableDeduplication = false,
+
+                    // Disable deduplication, because otherwise we get an error,
+                    // due to the messages written through Kafka protocol with idempotent producer
+                    // have seqnos starting from 0 for new producer epochs (i.e. they have duplicate seqnos).
+                    // Disabling deduplication here is safe because all deduplication checks have been done already,
+                    // when the messages were written to the supportive partition.
+                    .DisableDeduplication = true,
+
                     .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
                     .Data = blob.Data,
                     .UncompressedSize = blob.UncompressedSize,

@@ -67,7 +67,7 @@ namespace NJson2Udf {
                     return valueBuilder->NewString(TStringBuf(binaryJson.Data(), binaryJson.Size()));
                 }
             } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
             }
         }
 

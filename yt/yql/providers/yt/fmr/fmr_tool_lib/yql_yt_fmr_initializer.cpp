@@ -3,8 +3,9 @@
 
 namespace NYql::NFmr {
 
-std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::TPtr slave, bool disableLocalFmrWorker, const TString& coordinatorServerUrl, bool isFileGateway, const TString& fmrOperationSpecFilePath) {
+std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::TPtr slave, const TFmrServices::TPtr fmrServices) {
     TFmrCoordinatorSettings coordinatorSettings{};
+    TString fmrOperationSpecFilePath = fmrServices->FmrOperationSpecFilePath;
     if (!fmrOperationSpecFilePath.empty()) {
         TFileInput input(fmrOperationSpecFilePath);
         auto fmrOperationSpec = NYT::NodeFromYsonStream(&input);
@@ -12,14 +13,18 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
     }
 
     ITableDataService::TPtr tableDataService = nullptr;
+    bool disableLocalFmrWorker = fmrServices->DisableLocalFmrWorker;
+    TString tableDataServiceDiscoveryFilePath = fmrServices->TableDataServiceDiscoveryFilePath;
+    TString coordinatorServerUrl = fmrServices->CoordinatorServerUrl;
     if (!disableLocalFmrWorker) {
-        tableDataService = MakeLocalTableDataService();
+        YQL_ENSURE(!tableDataServiceDiscoveryFilePath.empty());
+        auto tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = tableDataServiceDiscoveryFilePath});
+        tableDataService = MakeTableDataServiceClient(tableDataServiceDiscovery);
     }
+
     IFmrGcService::TPtr gcService = MakeGcService(tableDataService);
 
-    auto coordinator = isFileGateway ?
-        MakeFmrCoordinator(coordinatorSettings, MakeFileYtCoordinatorService(), gcService)
-        : MakeFmrCoordinator(coordinatorSettings, MakeYtCoordinatorService(), gcService);
+    auto coordinator = MakeFmrCoordinator(coordinatorSettings, fmrServices->YtCoordinatorService, gcService);
     if (!coordinatorServerUrl.empty()) {
         TFmrCoordinatorClientSettings coordinatorClientSettings;
         THttpURL parsedUrl;
@@ -33,10 +38,10 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
 
     IFmrWorker::TPtr worker = nullptr;
     if (!disableLocalFmrWorker) {
-        auto fmrYtJobSerivce = isFileGateway ? MakeFileYtJobSerivce() : MakeYtJobSerivce();
-
-        auto func = [tableDataService, fmrYtJobSerivce] (NFmr::TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) mutable {
-            return RunJob(task, tableDataService, fmrYtJobSerivce, cancelFlag);
+        auto fmrYtJobSerivce = fmrServices->YtJobService;
+        auto jobLauncher = fmrServices->JobLauncher;
+        auto func = [tableDataServiceDiscoveryFilePath, fmrYtJobSerivce, jobLauncher] (NFmr::TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) mutable {
+            return RunJob(task, tableDataServiceDiscoveryFilePath, fmrYtJobSerivce, jobLauncher, cancelFlag);
         };
 
         NFmr::TFmrJobFactorySettings settings{.Function=func};
@@ -46,7 +51,7 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         worker = MakeFmrWorker(coordinator, jobFactory, workerSettings);
         worker->Start();
     }
-    return std::pair<IYtGateway::TPtr, IFmrWorker::TPtr>{CreateYtFmrGateway(slave, coordinator), std::move(worker)};
+    return std::pair<IYtGateway::TPtr, IFmrWorker::TPtr>{CreateYtFmrGateway(slave, coordinator, fmrServices), std::move(worker)};
 }
 
 } // namespace NYql::NFmr

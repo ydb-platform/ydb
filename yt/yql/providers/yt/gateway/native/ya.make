@@ -6,7 +6,6 @@ SRCS(
     yql_yt_native.cpp
     yql_yt_native_folders.cpp
     yql_yt_op_tracker.cpp
-    yql_yt_qb2.cpp
     yql_yt_session.cpp
     yql_yt_spec.cpp
     yql_yt_transform.cpp

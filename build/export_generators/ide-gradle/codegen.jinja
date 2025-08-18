@@ -13,6 +13,11 @@ tasks.compileJava.configure {
 tasks.compileTestJava.configure {
     dependsOn({{ taskvar }})
 }
+{%-    if hasResources %}
+tasks.processResources.configure {
+    dependsOn({{ taskvar }})
+}
+{%-    endif -%}
 {%-     if with_lombok_plugin %}
 tasks.getByName("delombok").mustRunAfter({{ taskvar }})
 {%-     endif -%}

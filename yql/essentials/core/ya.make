@@ -32,6 +32,8 @@ SRCS(
     yql_opt_hopping.cpp
     yql_opt_match_recognize.cpp
     yql_opt_match_recognize.h
+    yql_opt_normalize_depends_on.cpp
+    yql_opt_normalize_depends_on.h
     yql_opt_proposed_by_data.cpp
     yql_opt_proposed_by_data.h
     yql_opt_range.cpp

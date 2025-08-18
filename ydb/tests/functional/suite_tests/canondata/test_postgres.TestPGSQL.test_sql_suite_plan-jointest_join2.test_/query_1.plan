@@ -71,7 +71,7 @@
                                         "PlanNodeId": 20,
                                         "Plans": [
                                             {
-                                                "HashFunc": "HashV1",
+                                                "HashFunc": "HashV2",
                                                 "KeyColumns": [
                                                     "name"
                                                 ],
@@ -100,10 +100,6 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join2.test_plan/t3",
                                                                                         "ReadColumns": [
-                                                                                            "n",
-                                                                                            "name"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "name (-\u221e, +\u221e)",
                                                                                             "n (-\u221e, +\u221e)"
                                                                                         ],
@@ -126,7 +122,7 @@
                                                 ]
                                             },
                                             {
-                                                "HashFunc": "HashV1",
+                                                "HashFunc": "HashV2",
                                                 "KeyColumns": [
                                                     "name"
                                                 ],
@@ -161,7 +157,7 @@
                                                                         "PlanNodeId": 11,
                                                                         "Plans": [
                                                                             {
-                                                                                "HashFunc": "HashV1",
+                                                                                "HashFunc": "HashV2",
                                                                                 "KeyColumns": [
                                                                                     "name"
                                                                                 ],
@@ -190,10 +186,6 @@
                                                                                                                         "Name": "TableFullScan",
                                                                                                                         "Path": "/Root/postgres_jointest/join2.test_plan/t1",
                                                                                                                         "ReadColumns": [
-                                                                                                                            "n",
-                                                                                                                            "name"
-                                                                                                                        ],
-                                                                                                                        "ReadRanges": [
                                                                                                                             "name (-\u221e, +\u221e)",
                                                                                                                             "n (-\u221e, +\u221e)"
                                                                                                                         ],
@@ -216,7 +208,7 @@
                                                                                 ]
                                                                             },
                                                                             {
-                                                                                "HashFunc": "HashV1",
+                                                                                "HashFunc": "HashV2",
                                                                                 "KeyColumns": [
                                                                                     "name"
                                                                                 ],
@@ -245,10 +237,6 @@
                                                                                                                         "Name": "TableFullScan",
                                                                                                                         "Path": "/Root/postgres_jointest/join2.test_plan/t2",
                                                                                                                         "ReadColumns": [
-                                                                                                                            "n",
-                                                                                                                            "name"
-                                                                                                                        ],
-                                                                                                                        "ReadRanges": [
                                                                                                                             "name (-\u221e, +\u221e)",
                                                                                                                             "n (-\u221e, +\u221e)"
                                                                                                                         ],

@@ -13,6 +13,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.common.types import Erasure
 
 
 LOGGER = logging.getLogger()
@@ -165,10 +166,14 @@ class BaseTestSet:
     @classmethod
     def _get_cluster_config(cls):
         return KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_column_store": True,
                 "enable_external_data_sources": True,
                 "enable_tiering_in_column_shard": True,
+            },
+            column_shard_config={
+                "generate_internal_path_id": True
             },
             query_service_config=dict(
                 available_external_data_sources=["ObjectStorage"]

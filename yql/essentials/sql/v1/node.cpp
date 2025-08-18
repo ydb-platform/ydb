@@ -1544,9 +1544,11 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
 
         if (GetColumnName()) {
             auto fullName = Source_ ? DotJoin(Source_, *GetColumnName()) : *GetColumnName();
-            auto alias = src->GetGroupByColumnAlias(fullName);
-            if (alias) {
-                ResetColumn(alias, {});
+            if (!ctx.GroupByExprAfterWhere) {
+                auto alias = src->GetGroupByColumnAlias(fullName);
+                if (alias) {
+                    ResetColumn(alias, {});
+                }
             }
             Artificial_ = !Source_ && src->IsExprAlias(*GetColumnName());
         }
@@ -1707,8 +1709,8 @@ void IAggregation::DoUpdateState() const {
     State_.Set(ENodeState::OverWindowDistinct, AggMode_ == EAggregateMode::OverWindowDistinct);
 }
 
-const TString* IAggregation::GetGenericKey() const {
-    return nullptr;
+TMaybe<TString> IAggregation::GetGenericKey() const {
+    return Nothing();
 }
 
 void IAggregation::Join(IAggregation*) {
@@ -3086,6 +3088,13 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
                 Cpu_ = MakeAtomFromExpression(Pos_, ctx, arg);
             } else if (arg->GetLabel() == "ExtraMem") {
                 ExtraMem_ = MakeAtomFromExpression(Pos_, ctx, arg);
+            } else if (arg->GetLabel() == "Depends") {
+                if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
+                    NYql::MakeLangVersion(2025,3), ctx.Settings.BackportMode)) {
+                        ctx.Error() << "Udf: named argument Depends is not available before version 2025.03";
+                        return false;
+                    }
+                Depends_.push_back(arg);
             } else {
                 ctx.Error() << "Udf: unexpected named argument: " << arg->GetLabel();
                 return false;
@@ -3114,6 +3123,10 @@ TNodePtr TUdfNode::GetRunConfig() const {
 
 const TDeferredAtom& TUdfNode::GetTypeConfig() const {
     return TypeConfig_;
+}
+
+const TVector<TNodePtr>& TUdfNode::GetDepends() const {
+    return Depends_;
 }
 
 TNodePtr TUdfNode::BuildOptions() const {

@@ -150,6 +150,13 @@ void TGetJobStderrCommand::Register(TRegistrar registrar)
             return command->Options.Offset;
         })
         .Optional(/*init*/ true);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EJobStderrType>>(
+        "type",
+        [] (TThis* command) -> auto& {
+            return command->Options.Type;
+        })
+        .Optional(/*init*/ true);
 }
 
 bool TGetJobStderrCommand::HasResponseParameters() const

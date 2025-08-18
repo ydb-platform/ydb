@@ -5,23 +5,35 @@ from datetime import datetime, timedelta
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.datashard.lib.create_table import create_table_sql_request
-from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, cleanup_type_name, format_sql_value
+from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, cleanup_type_name, format_sql_value, types_not_supported_yet_in_columnshard
 
 
 class TestDataType(RestartToAnotherVersionFixture):
+
+    @pytest.fixture()
+    def store_type(self, request):
+        return request.param
+
     @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        self.pk_types = []
-        self.pk_types.append({"Int64": lambda i: i})
-        self.count_table = 1
-        for type_name, lamb in pk_types.items():
-            self.pk_types[self.count_table - 1][type_name] = lamb
-            if len(self.pk_types[self.count_table - 1]) >= 20:
-                self.pk_types.append({"Int64": lambda i: i})
-                self.count_table += 1
-        self.table_names = []
+    def setup(self, store_type):
+        # ydb/docs/en/core/concepts/_includes/limits-ydb.md
+        columns_in_pk_limit = 20
         self.count_rows = 30
-        self.all_types = {**pk_types, **non_pk_types}
+        self.store_type = store_type
+        # not all the types are supported for column tables
+        supported_pk_types = pk_types if store_type == "ROW" else {k: v for k, v in pk_types.items() if k not in types_not_supported_yet_in_columnshard}
+        supported_non_pk_types = non_pk_types if store_type == "ROW" else {k: v for k, v in non_pk_types.items() if k not in types_not_supported_yet_in_columnshard}
+        self.all_types = {**supported_pk_types, **supported_non_pk_types}
+
+        self.count_table = 0
+        self.pk_types = []
+        for type_name, lamb in supported_pk_types.items():
+            if len(self.pk_types) == 0 or len(self.pk_types[-1]) >= columns_in_pk_limit:
+                self.count_table += 1
+                self.pk_types.append({"Int64": lambda i: i})
+            self.pk_types[-1][type_name] = lamb
+
+        self.table_names = []
         self.columns = []
         for i in range(self.count_table):
             self.columns.append(
@@ -30,26 +42,34 @@ class TestDataType(RestartToAnotherVersionFixture):
                     "col_": self.all_types.keys(),
                 }
             )
-            self.table_names.append(f"table_{i}")
+            self.table_names.append(f"table_{i}_{self.store_type}")
         yield from self.setup_cluster(
             extra_feature_flags={
                 "enable_parameterized_decimal": True,
                 "enable_table_datetime64": True,
+            },
+            column_shard_config={
+                "disabled_on_scheme_shard": False,
+            },
+            table_service_config={
+                "enable_olap_sink": True,
             }
         )
 
     def write_data(self):
         querys = []
+        unwrap_after_cast = self.store_type == "COLUMN"
         for i in range(self.count_table):
             values = []
             for key in range(1, self.count_rows + 1):
                 values.append(
                     f'''(
-                        {", ".join([format_sql_value(self.pk_types[i][type_name](key), type_name) for type_name in self.pk_types[i].keys()])},
-                        {", ".join([format_sql_value(self.all_types[type_name](key), type_name) for type_name in self.all_types.keys()])}
+                        {", ".join([format_sql_value(self.pk_types[i][type_name](key), type_name, unwrap_after_cast) for type_name in self.pk_types[i].keys()])},
+                        {", ".join([format_sql_value(self.all_types[type_name](key), type_name, unwrap_after_cast) for type_name in self.all_types.keys()])}
                         )
                         '''
                 )
+
             querys.append(
                 f"""
                 UPSERT INTO `{self.table_names[i]}` (
@@ -59,6 +79,7 @@ class TestDataType(RestartToAnotherVersionFixture):
                 VALUES {",".join(values)};
             """
             )
+
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in querys:
                 session_pool.execute_with_retries(query)
@@ -70,24 +91,26 @@ class TestDataType(RestartToAnotherVersionFixture):
                 queries.append(f"SELECT * FROM {self.table_names[numb_table]} WHERE pk_Int64 = {i}")
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            count = 1
-            value = 0
+            query_index = 0
             for query in queries:
-                value += 1 if count != 0 else 0
-                count = (count + 1) % self.count_table
+                table_index = query_index % self.count_table
+                row_num = (query_index // self.count_table) + 1
                 result_sets = session_pool.execute_with_retries(query)
                 assert len(result_sets[0].rows) == 1
                 rows = result_sets[0].rows
                 for row in rows:
-                    for prefix in self.columns[count].keys():
-                        for type_name in self.columns[count][prefix]:
-                            self.assert_type(type_name, value, row[f"{prefix}{cleanup_type_name(type_name)}"])
+                    for prefix in self.columns[table_index].keys():
+                        for type_name in self.columns[table_index][prefix]:
+                            expected_value = row_num
+                            self.assert_type(type_name, expected_value, row[f"{prefix}{cleanup_type_name(type_name)}"])
+
+                query_index += 1
 
     def assert_type(self, data_type: str, values: int, values_from_rows):
         if data_type == "String" or data_type == "Yson":
             assert values_from_rows.decode("utf-8") == self.all_types[data_type](
                 values
-            ), f"{data_type}, expected {self.all_types[data_type](values)}, received {values_from_rows.decode("utf-8")}"
+            ), f"{data_type}, expected {self.all_types[data_type](values)}, received {values_from_rows.decode('utf-8')}"
         elif data_type == "Float" or data_type == "DyNumber":
             assert math.isclose(
                 float(values_from_rows), float(self.all_types[data_type](values)), rel_tol=1e-3
@@ -117,6 +140,7 @@ class TestDataType(RestartToAnotherVersionFixture):
                     "pk_": self.pk_types[i].keys(),
                 }
             )
+
         querys = []
         for i in range(self.count_table):
             querys.append(
@@ -127,13 +151,20 @@ class TestDataType(RestartToAnotherVersionFixture):
                     index_columns={},
                     unique="",
                     sync="",
+                    column_table=self.store_type == "COLUMN",
                 )
             )
+
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in querys:
                 session_pool.execute_with_retries(query)
 
+    @pytest.mark.parametrize("store_type", ["ROW", "COLUMN"], indirect=True)
     def test_data_type(self):
+        if any("Decimal" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
+            if (min(self.versions) < (25, 1)):
+                pytest.skip("Decimal types are not supported in columnshard in this version")
+
         self.create_table()
 
         self.write_data()

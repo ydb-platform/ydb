@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet_1",
-                "PlanNodeId": 12,
+                "PlanNodeId": 10,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 10
+                                        "ExternalPlanNodeId": 8
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 11,
+                        "PlanNodeId": 9,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 10,
+                                "PlanNodeId": 8,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -62,14 +62,14 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 8
+                                                        "ExternalPlanNodeId": 6
                                                     }
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.name)"
                                             }
                                         ],
-                                        "PlanNodeId": 9,
+                                        "PlanNodeId": 7,
                                         "Plans": [
                                             {
                                                 "Columns": [
@@ -84,7 +84,7 @@
                                                 ],
                                                 "Node Type": "TableLookup",
                                                 "Path": "/Root/postgres_jointest/join2.test_plan/t3",
-                                                "PlanNodeId": 8,
+                                                "PlanNodeId": 6,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -106,7 +106,7 @@
                                                                 "Name": "PartitionByKey"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 7
+                                                        "PlanNodeId": 5
                                                     }
                                                 ],
                                                 "Table": "postgres_jointest/join2.test_plan/t3"
@@ -125,49 +125,32 @@
             {
                 "Node Type": "Precompute_0",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 5,
+                "PlanNodeId": 3,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
                         "Node Type": "Collect",
-                        "PlanNodeId": 4,
+                        "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 3,
-                                "PlanNodeType": "Connection",
-                                "Plans": [
+                                "Node Type": "TableFullScan",
+                                "Operators": [
                                     {
-                                        "Node Type": "Collect",
-                                        "PlanNodeId": 2,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "TableFullScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "Path": "/Root/postgres_jointest/join2.test_plan/t2",
-                                                        "ReadColumns": [
-                                                            "n",
-                                                            "name"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "name (-\u221e, +\u221e)",
-                                                            "n (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadRangesPointPrefixLen": "0",
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/join2.test_plan/t2"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Tables": [
-                                                    "postgres_jointest/join2.test_plan/t2"
-                                                ]
-                                            }
-                                        ]
+                                        "Inputs": [],
+                                        "Name": "TableFullScan",
+                                        "Path": "/Root/postgres_jointest/join2.test_plan/t2",
+                                        "ReadColumns": [
+                                            "name (-\u221e, +\u221e)",
+                                            "n (-\u221e, +\u221e)"
+                                        ],
+                                        "ReadRangesPointPrefixLen": "0",
+                                        "Scan": "Parallel",
+                                        "Table": "postgres_jointest/join2.test_plan/t2"
                                     }
+                                ],
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "postgres_jointest/join2.test_plan/t2"
                                 ]
                             }
                         ]

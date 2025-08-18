@@ -42,6 +42,74 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(ImaginarySortReverse, InvertPkOverSort) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto queryTemplate = R"(
+                create table TestTable (
+                    ns Utf8,
+                    key Utf8,
+                    value Int64,
+
+                    PRIMARY KEY(%s)
+                );
+            )";
+
+            auto query = InvertPkOverSort ? Sprintf(queryTemplate, "ns, key") :  Sprintf(queryTemplate, "key, ns");
+
+            auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            TString query = R"(
+                upsert into TestTable  (ns, key, value) VALUES ("a", "2", 1);
+                upsert into TestTable  (ns, key, value) VALUES ("b", "1", 0);
+            )";
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            TString query = R"(
+                SELECT `ns`, `key`, `value` FROM `TestTable` ORDER BY `key` DESC, `ns` DESC LIMIT 10000
+            )";
+
+            auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([
+                [["a"];["2"];[1]];
+                [["b"];["1"];[0]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(explainResult.GetStatus(), EStatus::SUCCESS);
+            if (InvertPkOverSort) {
+                UNIT_ASSERT_C(!explainResult.GetAst().contains("('\"Reverse\")"), explainResult.GetAst());
+            } else {
+                UNIT_ASSERT_C(explainResult.GetAst().contains("('\"Reverse\")"), explainResult.GetAst());
+            }
+        }
+
+        {
+            TString query = R"(
+                SELECT `ns`, `key`, `value` FROM `TestTable` ORDER BY `key` DESC, `ns` DESC LIMIT 10000
+            )";
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([
+                [["a"];["2"];[1]];
+                [["b"];["1"];[0]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(ReverseOptimizedWithPredicate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1128,10 +1196,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
     }
 
     Y_UNIT_TEST(UnionAllSortLimit) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig);
-
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr{serverSettings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

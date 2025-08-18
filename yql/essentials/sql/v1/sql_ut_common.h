@@ -911,7 +911,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(SelectOrderByExpressionAsc) {
         NYql::TAstParseResult res = SqlToYql("select i.key, i.subkey from plato.Input as i order by cast(key as uint32) % cast(i.subkey as uint32) asc");
-        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Sort") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"%MayWarn\""));
@@ -1800,6 +1800,45 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(3, elementStat["Union"]);
     }
 
+    Y_UNIT_TEST(UnionAssumeOrderByWarning) {
+        {
+            NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                SELECT a FROM x
+                ASSUME ORDER BY a;
+            )sql");
+            UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "");
+        }
+        {
+            NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                SELECT a FROM x
+                UNION ALL
+                SELECT a FROM y
+                ORDER BY a;
+            )sql");
+            UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+            UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "");
+        }
+        {
+            NYql::TAstParseResult warn = SqlToYql(R"sql(
+                USE plato;
+                SELECT a FROM x
+                UNION ALL
+                SELECT a FROM y
+                ASSUME ORDER BY a;
+            )sql");
+            UNIT_ASSERT_C(warn.Root, warn.Issues.ToString());
+            UNIT_ASSERT_STRINGS_EQUAL(
+                warn.Issues.ToString(),
+                "<main>:6:33: Warning: ASSUME ORDER BY is used, "
+                "but UNION, INTERSECT and EXCEPT operators "
+                "have no ordering guarantees, "
+                "therefore consider using ORDER BY, code: 3\n");
+        }
+    }
+
     // INTERSECT
 
     Y_UNIT_TEST(IntersectAllTest) {
@@ -1862,16 +1901,26 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         settings.LangVer = 202503;
 
         NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input INTERSECT SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:70: Error: Multiple usage of INTERSECT and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Intersect"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Intersect"]);
 
         res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input INTERSECT ALL SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:80: Error: Multiple usage of INTERSECT and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Intersect"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Intersect"]);
 
         res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT SELECT subkey FROM plato.Input UNION SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:70: Error: Simultaneous usage of UNION, INTERSECT, and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Intersect"), 0}, {TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Intersect"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
     }
 
     // EXCEPT
@@ -1936,16 +1985,26 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         settings.LangVer = 202503;
 
         NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input EXCEPT SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:67: Error: Multiple usage of INTERSECT and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Except"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Except"]);
 
         res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input EXCEPT ALL SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:74: Error: Multiple usage of INTERSECT and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Except"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Except"]);
 
         res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT SELECT subkey FROM plato.Input UNION SELECT subkey FROM plato.Input;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:67: Error: Simultaneous usage of UNION, INTERSECT, and EXCEPT is not implemented yet.\n");
+        UNIT_ASSERT(res.Root);
+
+        elementStat = {{TString("Except"), 0}, {TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Except"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
     }
 
 
@@ -2108,6 +2167,14 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             INSERT OR IGNORE INTO Output SELECT key, value FROM Input;
             INSERT OR REVERT INTO Output SELECT key, value FROM Input;
         )", 10, TString(NYql::KikimrProviderName));
+        UNIT_ASSERT(res.Root);
+    }
+
+    Y_UNIT_TEST(InsertIntoNamedExpr) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            $target = "target";
+            INSERT INTO plato.$target (x) VALUES ((1));
+        )sql");
         UNIT_ASSERT(res.Root);
     }
 
@@ -3337,7 +3404,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterTableAlterColumnDropNotNullAstCorrect) {
-        auto reqSetNull = SqlToYql(R"(
+        auto reqDropNotNull = SqlToYql(R"sql(
             USE plato;
             CREATE TABLE tableName (
                 id Uint32,
@@ -3347,21 +3414,48 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
             COMMIT;
             ALTER TABLE tableName ALTER COLUMN val DROP NOT NULL;
-        )");
+        )sql");
 
-        UNIT_ASSERT(reqSetNull.IsOk());
-        UNIT_ASSERT(reqSetNull.Root);
+        UNIT_ASSERT(reqDropNotNull.IsOk());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             Y_UNUSED(word);
 
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
-                R"(let world (Write! world sink (Key '('tablescheme (String '"tableName"))) (Void) '('('mode 'alter) '('actions '('('alterColumns '('('"val" '('changeColumnConstraints '('('drop_not_null)))))))))))"
+                "'('changeColumnConstraints '('('drop_not_null)))"
             ));
         };
 
         TWordCountHive elementStat({TString("\'mode \'alter")});
-        VerifyProgram(reqSetNull, elementStat, verifyLine);
+        VerifyProgram(reqDropNotNull, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+    }
+
+    Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
+        auto reqSetNotNull = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tableName (
+                id Uint32,
+                val Uint32,
+                PRIMARY KEY (id)
+            );
+
+            COMMIT;
+            ALTER TABLE tableName ALTER COLUMN val SET NOT NULL;
+        )sql");
+
+        UNIT_ASSERT(reqSetNotNull.IsOk());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(
+                "'('changeColumnConstraints '('('set_not_null)))"
+            ));
+        };
+
+        TWordCountHive elementStat({TString("\'mode \'alter")});
+        VerifyProgram(reqSetNotNull, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
     }
 
@@ -3621,7 +3715,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             WITH (
                 CONNECTION_STRING = "grpc://localhost:2135/?database=/MyDatabase",
                 ENDPOINT = "localhost:2135",
-                DATABASE = "/MyDatabase"
+                DATABASE = "/MyDatabase",
+                CA_CERT = "-----BEGIN CERTIFICATE-----"
             );
         )";
         auto res = SqlToYql(req);
@@ -3641,6 +3736,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("database"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ca_cert"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("-----BEGIN CERTIFICATE-----"));
             }
         };
 
@@ -3735,6 +3832,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             {"user", "user"},
             {"password", "bar"},
             {"password_secret_name", "bar_secret_name"},
+            {"ca_cert", "-----BEGIN CERTIFICATE-----"},
         };
 
         for (const auto& [k, v] : settings) {
@@ -4896,6 +4994,14 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropTableNamedNode) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            $x = "y";
+            DROP TABLE plato.$x;
+        )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
     Y_UNIT_TEST(TooManyErrors) {
@@ -8862,5 +8968,231 @@ Y_UNIT_TEST_SUITE(Crashes) {
         )sql");
 
         UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    }
+}
+
+Y_UNIT_TEST_SUITE(Aggregation) {
+
+    Y_UNIT_TEST(DeduplicationDistinctSources) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT Percentile(a.x, 0.50), Percentile(b.x, 0.75)
+            FROM plato.Input1 AS a
+            JOIN plato.Input1 AS b ON a.x == b.x;
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+        TWordCountHive count = {{TString("percentile_traits_factory"), 0}};
+        VerifyProgram(res, count);
+
+        UNIT_ASSERT_VALUES_EQUAL(2, count["percentile_traits_factory"]);
+    }
+
+    Y_UNIT_TEST(DeduplicationSameSource) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT Percentile(a.x, 0.50), Percentile(a.x, 0.75)
+            FROM plato.Input1 AS a
+            JOIN plato.Input1 AS b ON a.x == b.x;
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+
+        TWordCountHive count = {{TString("percentile_traits_factory"), 0}};
+        VerifyProgram(res, count);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, count["percentile_traits_factory"]);
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(Watermarks) {
+    Y_UNIT_TEST(Insert) {
+        const auto stmt = R"sql(
+USE plato;
+
+INSERT INTO Output
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK AS (ts)
+);
+)sql";
+        const auto& res = SqlToYql(stmt);
+        Err2Str(res, EDebugOutput::ToCerr);
+        UNIT_ASSERT(res.IsOk());
+    }
+
+    Y_UNIT_TEST(Select) {
+        const auto stmt = R"sql(
+USE plato;
+
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK AS (ts)
+);
+)sql";
+        const auto& res = SqlToYql(stmt);
+        Err2Str(res, EDebugOutput::ToCerr);
+        UNIT_ASSERT(res.IsOk());
+    }
+}
+
+Y_UNIT_TEST_SUITE(HoppingWindow) {
+    Y_UNIT_TEST(HoppingWindow) {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42);
+        )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
+
+    Y_UNIT_TEST(HoppingWindowWithoutSource) {
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HoppingWindow(key, 39, 42);)sql",
+            "<main>:1:12: Error: HoppingWindow requires data source\n"
+        );
+    }
+
+    Y_UNIT_TEST(HoppingWindowInProjection) {
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HoppingWindow(key, 39, 42) FROM plato.Input;)sql",
+            "<main>:1:12: Error: HoppingWindow can only be used as a top-level GROUP BY expression\n"
+        );
+    }
+
+    Y_UNIT_TEST(HoppingWindowWithNonConstIntervals) {
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    key,
+                    hopping_start
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39 + subkey, 42) AS hopping_start,
+                    key;
+            )sql",
+
+            "<main>:7:21: Error: Source does not allow column references\n"
+            "<main>:7:45: Error: Column reference 'subkey'\n"
+        );
+
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    key,
+                    hopping_start
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39 + subkey, 42) AS hopping_start,
+                    key;
+            )sql",
+
+            "<main>:7:21: Error: Source does not allow column references\n"
+            "<main>:7:45: Error: Column reference 'subkey'\n"
+        );
+    }
+
+    Y_UNIT_TEST(HoppingWindowWithWrongNumberOfArgs) {
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    *
+                FROM plato.Input
+                GROUP BY HoppingWindow(key, 39);
+            )sql",
+
+            "<main>:5:26: Error: HoppingWindow requires three arguments\n"
+        );
+
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    *
+                FROM plato.Input
+                GROUP BY HoppingWindow(key, 39, 42, 63);
+            )sql",
+
+            "<main>:5:26: Error: HoppingWindow requires three arguments\n"
+        );
+    }
+
+    Y_UNIT_TEST(DuplicateHoppingWindow) {
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    *
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39, 42),
+                    subkey,
+                    HoppingWindow(ts, 42, 39);
+            )sql",
+
+            "<main>:8:21: Error: Duplicate hopping window specification:\n"
+            "<main>:6:21: Error: Previous hopping window is declared here\n"
+        );
+    }
+
+    Y_UNIT_TEST(HopStartEndWithoutSource) {
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HopStart();)sql",
+            "<main>:1:12: Error: HopStart requires data source\n"
+        );
+
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HopEnd();)sql",
+            "<main>:1:12: Error: HopEnd requires data source\n"
+        );
+    }
+
+    Y_UNIT_TEST(HopStartEndWithoutGroupByOrWindow) {
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HopStart() FROM plato.Input;)sql",
+            "<main>:1:12: Error: HopStart can not be used without aggregation by HoppingWindow\n"
+        );
+
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HopEnd() FROM plato.Input;)sql",
+            "<main>:1:12: Error: HopEnd can not be used without aggregation by HoppingWindow\n"
+        );
+    }
+
+    Y_UNIT_TEST(HopStartEndWithGroupByWithoutHopping) {
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    1 + HopStart()
+                FROM plato.Input
+                GROUP BY user;
+            )sql",
+
+            "<main>:3:25: Error: HopStart can not be used here: HoppingWindow specification is missing in GROUP BY\n"
+        );
+
+        ExpectFailWithError(
+            R"sql(
+                SELECT
+                    1 + HopEnd()
+                FROM plato.Input
+                GROUP BY user;
+            )sql",
+
+            "<main>:3:25: Error: HopEnd can not be used here: HoppingWindow specification is missing in GROUP BY\n"
+        );
     }
 }

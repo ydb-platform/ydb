@@ -39,6 +39,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     TActorId SuggestedLeader;
     TActorId SuggestedLeaderTablet;
     TActorId Source;
+    ui64 SourceCookie = 0;
 
     ui32 Replicas;
     THolder<TStateStorageInfo::TSelection> ReplicaSelection;
@@ -91,12 +92,12 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             }
         }
         if (NotifyRingGroupProxy)
-            Send(Source, new TEvStateStorage::TEvRingGroupPassAway());
+            Send(Source, new TEvStateStorage::TEvRingGroupPassAway(), 0, SourceCookie);
         TActor::PassAway();
     }
 
     void Reply(NKikimrProto::EReplyStatus status) {
-        Send(Source, new TEvStateStorage::TEvInfo(status, TabletID, Cookie, ReplyLeader, ReplyLeaderTablet, ReplyGeneration, ReplyStep, ReplyLocked, ReplyLockedFor, Signature, Followers));
+        Send(Source, new TEvStateStorage::TEvInfo(status, TabletID, Cookie, ReplyLeader, ReplyLeaderTablet, ReplyGeneration, ReplyStep, ReplyLocked, ReplyLockedFor, Signature, Followers), 0, SourceCookie);
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
@@ -193,7 +194,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
             BLOG_D("StateStorageProxy TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " clusterStateGeneration=" << clusterStateGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " clusterStateGuid=" << clusterStateGuid);
             if (NotifyRingGroupProxy) {
-                Send(Source, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
+                Send(Source, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid), 0, SourceCookie);
             }
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), clusterStateGeneration, clusterStateGuid));
@@ -285,6 +286,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         TEvStateStorage::TEvLookup *msg = ev->Get();
         BLOG_D("ProxyRequest::HandleInit ringGroup:" << RingGroupIndex << " ev: " << msg->ToString());
         Source = ev->Sender;
+        SourceCookie = ev->Cookie;
 
         PrepareInit(msg);
         SendRequest([this](ui64 cookie, TActorId /*replica*/) { return new TEvStateStorage::TEvReplicaLookup(TabletID, cookie, Info->ClusterStateGeneration, Info->ClusterStateGuid); });
@@ -296,6 +298,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         TEvStateStorage::TEvUpdate *msg = ev->Get();
         BLOG_D("ProxyRequest::HandleInit ringGroup:" << RingGroupIndex << " ev: " << msg->ToString());
         Source = ev->Sender;
+        SourceCookie = ev->Cookie;
 
         PrepareInit(msg);
 
@@ -313,6 +316,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         TEvStateStorage::TEvLock *msg = ev->Get();
         BLOG_D("ProxyRequest::HandleInit ringGroup:" << RingGroupIndex << " ev: " << msg->ToString());
         Source = ev->Sender;
+        SourceCookie = ev->Cookie;
 
         PrepareInit(msg);
 
@@ -496,7 +500,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             ++SignaturesMerged;
 
             if (RepliesMerged + RepliesAfterReply == Replicas) {
-                Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature));
+                Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature), 0, SourceCookie);
                 return PassAway();
             }
         }
@@ -514,7 +518,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         MergeSigNodeError(node);
 
         if (RepliesMerged + RepliesAfterReply == Replicas) {
-            Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature));
+            Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature), 0, SourceCookie);
             return PassAway();
         }
     }
@@ -524,7 +528,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
 
-        CheckConfigVersion(ev->Sender, msg);
+        if (!CheckConfigVersion(ev->Sender, msg)) {
+            return;
+        }
 
         const ui64 cookie = msg->Record.GetCookie();
         Y_ABORT_UNLESS(cookie < Replicas);
@@ -541,7 +547,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void HandleUpdateSigTimeout() {
         BLOG_D("ProxyRequest::HandleUpdateSigTimeout ringGroup:" << RingGroupIndex << " RepliesAfterReply# " << (ui32)RepliesAfterReply);
         if (RepliesAfterReply > 0)
-            Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature));
+            Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature), 0, SourceCookie);
         PassAway();
     }
 
@@ -644,6 +650,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     THashMap<ui32, TActorId> RingGroupActorsByIndex;
 
     TActorId Source;
+    ui64 SourceCookie = 0;
     THashSet<TActorId> Replies;
     ui32 RingGroupPassAwayCounter;
     bool WaitAllReplies;
@@ -664,6 +671,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     void HandleInit(TEvStateStorage::TEvLookup::TPtr &ev) {
         TEvStateStorage::TEvLookup *msg = ev->Get();
         Source = ev->Sender;
+        SourceCookie = ev->Cookie;
         WaitAllReplies = msg->ProxyOptions.SigWaitMode != msg->ProxyOptions.SigNone;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
@@ -683,6 +691,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     void HandleInit(T::TPtr &ev) {
         T *msg = ev->Get();
         Source = ev->Sender;
+        SourceCookie = ev->Cookie;
         WaitAllReplies = true;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
@@ -718,7 +727,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     void Reply(NKikimrProto::EReplyStatus status) {
         auto* msg = new TEvStateStorage::TEvInfo(status, TabletID, Cookie, CurrentLeader, CurrentLeaderTablet, CurrentGeneration, CurrentStep, Locked, LockedFor, Signature, Followers);
         BLOG_D("RingGroupProxyRequest::Reply ev: " << msg->ToString());
-        Send(Source, msg);
+        Send(Source, msg, 0, SourceCookie);
     }
 
     bool ShouldReply() {
@@ -748,7 +757,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     void HandleResult(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
         TEvStateStorage::TEvUpdateSignature *msg = ev->Get();
         Signature.Merge(msg->Signature);
-        Send(Source, new TEvStateStorage::TEvUpdateSignature(msg->TabletID, Signature));
+        Send(Source, new TEvStateStorage::TEvUpdateSignature(msg->TabletID, Signature), 0, SourceCookie);
     }
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
@@ -804,6 +813,7 @@ public:
 class TStateStorageDumpRequest : public TActorBootstrapped<TStateStorageDumpRequest> {
 protected:
     const TActorId Sender;
+    const ui64 Cookie;
     TIntrusivePtr<TStateStorageInfo> Info;
     TList<TActorId> AllReplicas;
     TAutoPtr<TEvStateStorage::TEvResponseReplicasDumps> Response;
@@ -814,14 +824,15 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TStateStorageDumpRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info)
+    TStateStorageDumpRequest(const TActorId &sender, ui64 cookie, const TIntrusivePtr<TStateStorageInfo> &info)
         : Sender(sender)
+        , Cookie(cookie)
         , Info(info)
         , UndeliveredCount(0)
     {}
 
     void SendResponse() {
-        Send(Sender, Response.Release());
+        Send(Sender, Response.Release(), 0, Cookie);
         PassAway();
     }
 
@@ -871,6 +882,7 @@ public:
 class TStateStorageDeleteRequest : public TActorBootstrapped<TStateStorageDeleteRequest> {
 protected:
     const TActorId Sender;
+    const ui64 Cookie;
     TIntrusivePtr<TStateStorageInfo> Info;
     TList<TActorId> AllReplicas;
     ui32 Count;
@@ -882,8 +894,9 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TStateStorageDeleteRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info, ui64 tabletId)
+    TStateStorageDeleteRequest(const TActorId &sender, ui64 cookie, const TIntrusivePtr<TStateStorageInfo> &info, ui64 tabletId)
         : Sender(sender)
+        , Cookie(cookie)
         , Info(info)
         , Count(0)
         , UndeliveredCount(0)
@@ -891,7 +904,7 @@ public:
     {}
 
     void SendResponse() {
-        Send(Sender, new TEvStateStorage::TEvDeleteResult(TabletID, Count > AllReplicas.size() / 2 ? NKikimrProto::OK : NKikimrProto::ERROR));
+        Send(Sender, new TEvStateStorage::TEvDeleteResult(TabletID, Count > AllReplicas.size() / 2 ? NKikimrProto::OK : NKikimrProto::ERROR), 0, Cookie);
         PassAway();
     }
 
@@ -955,11 +968,11 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     THashSet<std::tuple<TActorId, ui64>> SchemeBoardSubscriptions;
 
     void Handle(TEvStateStorage::TEvRequestReplicasDumps::TPtr &ev) {
-        TActivationContext::Register(new TStateStorageDumpRequest(ev->Sender, Info));
+        TActivationContext::Register(new TStateStorageDumpRequest(ev->Sender, ev->Cookie, Info));
     }
 
     void Handle(TEvStateStorage::TEvDelete::TPtr &ev) {
-        TActivationContext::Register(new TStateStorageDeleteRequest(ev->Sender, Info, ev->Get()->TabletID));
+        TActivationContext::Register(new TStateStorageDeleteRequest(ev->Sender, ev->Cookie, Info, ev->Get()->TabletID));
     }
 
     void SpreadCleanupRequest(const TStateStorageInfo::TSelection &selection, ui64 tabletId, TActorId proposedLeader) {

@@ -83,7 +83,7 @@ private:
     TStorageAction& GetStorageAction(const TString& storageId) {
         auto it = StorageActions.find(storageId);
         if (it == StorageActions.end()) {
-            it = StorageActions.emplace(storageId, Storages->GetOperator(storageId)).first;
+            it = StorageActions.emplace(storageId, Storages->GetOperatorVerified(storageId)).first;
         }
         return it->second;
     }

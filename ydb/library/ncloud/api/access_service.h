@@ -2,7 +2,7 @@
 #include "events.h"
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
-#include <ydb/public/api/client/nc_private/accessservice/access_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/v1/access_service.grpc.pb.h>
 
 namespace NNebiusCloud {
     using namespace NKikimr;
@@ -22,7 +22,7 @@ namespace NNebiusCloud {
 
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_NEBIUS_ACCESS_SERVICE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_NEBIUS_ACCESS_SERVICE)");
 
-        // https://github.com/ydb-platform/ydb/tree/main/ydb/public/api/client/nc_private/accessservice/access_service.proto
+        // https://github.com/ydb-platform/ydb/tree/main/ydb/public/api/client/nc_private/iam/v1/access_service.proto
 
         struct TEvAuthenticateRequest : TEvGrpcProtoRequest<TEvAuthenticateRequest, EvAuthenticateRequest, nebius::iam::v1::AuthenticateRequest> {};
         struct TEvAuthenticateResponse : TEvGrpcProtoResponse<TEvAuthenticateResponse, EvAuthenticateResponse, nebius::iam::v1::AuthenticateResponse> {};

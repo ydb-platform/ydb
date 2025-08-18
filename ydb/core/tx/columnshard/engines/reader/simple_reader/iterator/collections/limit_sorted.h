@@ -32,11 +32,11 @@ private:
     };
 
     virtual bool DoHasData() const override {
-        return !SourcesConstructor->IsFinished();
+        return !SourcesConstructor->IsFinished() || !!NextSource;
     }
-    std::shared_ptr<IDataSource> NextSource;
+    std::shared_ptr<NCommon::IDataSource> NextSource;
     ui64 Limit = 0;
-    std::unique_ptr<NCommon::ISourcesConstructor> SourcesConstructor;
+
     ui64 InFlightLimit = 1;
     std::set<ui32> FetchingInFlightSources;
     bool Aborted = false;
@@ -44,32 +44,56 @@ private:
 
     void DrainToLimit();
 
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor(
+        const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceId(), readyRecords);
     }
     virtual void DoClear() override {
         Cleared = true;
         SourcesConstructor->Clear();
         FetchingInFlightSources.clear();
+        NextSource.reset();
     }
     virtual void DoAbort() override {
         Aborted = true;
         SourcesConstructor->Abort();
         FetchingInFlightSources.clear();
+        NextSource.reset();
+    }
+    virtual TString DoDebugString() const override {
+        TStringBuilder sb;
+        sb << "{";
+        sb << "N:" << (NextSource ? true : false) << ";";
+        if (Cleared) {
+            sb << "C:" << Cleared << ";";
+        }
+        if (Aborted) {
+            sb << "A:" << Aborted << ";";
+        }
+        sb << "SCF:" << SourcesConstructor->IsFinished() << ";";
+        sb << "FFS:" << FetchingInFlightSources.size() << ";";
+        sb << "IN_FLY:" << GetSourcesInFlightCount() << ";";
+        sb << "HAS_DATA:" << HasData() << ";";
+        sb << "}";
+        return sb;
     }
     virtual bool DoIsFinished() const override {
         return !NextSource && SourcesConstructor->IsFinished() && FetchingInFlightSources.empty();
     }
-    virtual std::shared_ptr<IDataSource> DoExtractNext() override;
+    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override;
     virtual bool DoCheckInFlightLimits() const override {
-        return FetchingInFlightSources.size() < InFlightLimit;
+        return GetSourcesInFlightCount() < InFlightLimit;
     }
 
-    virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) override;
+    virtual void DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) override;
     ui32 GetInFlightIntervalsCount(const TCompareKeyForScanSequence& from, const TCompareKeyForScanSequence& to) const;
 
 public:
-    const std::shared_ptr<IDataSource>& GetNextSource() const {
+    virtual TString GetClassName() const override {
+        return "SORT_LIMIT";
+    }
+
+    const std::shared_ptr<NCommon::IDataSource>& GetNextSource() const {
         return NextSource;
     }
 

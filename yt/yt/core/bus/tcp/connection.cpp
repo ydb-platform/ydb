@@ -1327,7 +1327,7 @@ bool TTcpConnection::OnHandshakePacketReceived()
         } else {
             if (ConnectionType_ == EConnectionType::Client &&
                 handshake.has_verification_mode() &&
-                handshake.verification_mode() != static_cast<int>(EVerificationMode::None) &&
+                FromProto<EVerificationMode>(handshake.verification_mode()) != EVerificationMode::None &&
                 !Config_->CertificateChain)
             {
                 // Fail connection earlier to avoid wasting time on TLS handshake.

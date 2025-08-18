@@ -28,25 +28,19 @@
                                         [
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"test\/ds\/store_sales"
+                                            "table":"store_sales"
                                           },
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"test\/ds\/date_dim"
+                                            "table":"date_dim"
                                           }
                                         ]
                                     }
                                   ]
                               },
                               {
-                                "op_name":"HashShuffle",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"test\/ds\/store_returns"
-                                    }
-                                  ]
+                                "op_name":"TableFullScan",
+                                "table":"store_returns"
                               }
                             ]
                         }
@@ -71,14 +65,8 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"test\/ds\/web_sales"
-                                          }
-                                        ]
+                                      "op_name":"TableFullScan",
+                                      "table":"web_sales"
                                     },
                                     {
                                       "op_name":"HashShuffle",
@@ -86,7 +74,7 @@
                                         [
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"test\/ds\/web_returns"
+                                            "table":"web_returns"
                                           }
                                         ]
                                     }
@@ -94,7 +82,7 @@
                               },
                               {
                                 "op_name":"TableFullScan",
-                                "table":"test\/ds\/date_dim"
+                                "table":"date_dim"
                               }
                             ]
                         }
@@ -121,14 +109,8 @@
                           "args":
                             [
                               {
-                                "op_name":"HashShuffle",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"test\/ds\/catalog_sales"
-                                    }
-                                  ]
+                                "op_name":"TableFullScan",
+                                "table":"catalog_sales"
                               },
                               {
                                 "op_name":"HashShuffle",
@@ -136,7 +118,7 @@
                                   [
                                     {
                                       "op_name":"TableFullScan",
-                                      "table":"test\/ds\/catalog_returns"
+                                      "table":"catalog_returns"
                                     }
                                   ]
                               }
@@ -144,7 +126,7 @@
                         },
                         {
                           "op_name":"TableFullScan",
-                          "table":"test\/ds\/date_dim"
+                          "table":"date_dim"
                         }
                       ]
                   }

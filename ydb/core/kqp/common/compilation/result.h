@@ -1,5 +1,7 @@
 #pragma once
 #include <memory>
+#include <util/datetime/base.h>
+#include <util/digest/multi.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/helpers.h>
@@ -36,6 +38,11 @@ struct TKqpCompileResult {
 
     std::shared_ptr<NYql::TAstParseResult> GetAst() const;
 
+    void IncUsage() const { UsageFrequency++; }
+    ui64 GetAccessCount() const { return UsageFrequency.load(); }
+
+    void SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to) const;
+
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
 
@@ -51,6 +58,8 @@ struct TKqpCompileResult {
     TMaybe<TString> ReplayMessageUserView;
 
     std::shared_ptr<const TPreparedQueryHolder> PreparedQuery;
+    mutable std::atomic<ui64> UsageFrequency;
+    TInstant CompiledAt = TInstant::Now();
 };
 
 struct TKqpStatsCompile {
@@ -59,3 +68,8 @@ struct TKqpStatsCompile {
     ui64 CpuTimeUs = 0;
 };
 } // namespace NKikimr::NKqp
+
+template<>
+struct THash<NKikimr::NKqp::TKqpCompileResult::TConstPtr> {
+    size_t operator ()(const NKikimr::NKqp::TKqpCompileResult::TConstPtr& x) const { return std::hash<NKikimr::NKqp::TKqpCompileResult::TConstPtr>()(x); }
+};

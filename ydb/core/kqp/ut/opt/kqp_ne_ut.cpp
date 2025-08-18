@@ -10,13 +10,28 @@ namespace NKikimr::NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+class TItemsLimitsExtractor : public NJson::IScanCallback {
+public:
+    THashMap<TString, TString> LimitsPerTable;
+
+    bool Do(const TString& path, NJson::TJsonValue* parent, NJson::TJsonValue& value) {
+        Y_UNUSED(path, parent);
+
+        if (value.IsMap() && value.Has("ReadLimit")) {
+            TString path = value["Path"].GetStringSafe();
+            LimitsPerTable[path] = value["ReadLimit"].GetStringSafe();
+        }
+
+        return true;
+    }
+
+};
+
 Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(StreamLookupWithView) {
-        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableViews(true);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false).SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableViews(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
 
         auto kikimr = TKikimrRunner{settings};
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
@@ -132,11 +147,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(ContainerRegistryCombiner) {
-        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false).SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
 
         auto kikimr = TKikimrRunner{settings};
         auto db = kikimr.GetTableClient();
@@ -2022,9 +2034,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST_TWIN(PruneEffectPartitions, UseSink) {
         TKikimrSettings serverSettings;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        serverSettings.SetAppConfig(app);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -3506,9 +3516,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(PagingNoPredicateExtract) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
 
         TKikimrRunner kikimr{serverSettings};
         auto db = kikimr.GetTableClient();
@@ -3595,9 +3603,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(PushFlatmapInnerConnectionsToStageInput) {
-        NKikimrConfig::TAppConfig app;
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app);
+        TKikimrSettings settings;
         TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -3699,9 +3705,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(MultiUsageInnerConnection) {
-        NKikimrConfig::TAppConfig app;
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app);
+        TKikimrSettings settings;
 
         TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
@@ -3722,9 +3726,9 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST_TWIN(StreamLookupForDataQuery, StreamLookupJoin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookupJoin);
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3818,9 +3822,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(FlatmapLambdaMutiusedConnections) {
-        NKikimrConfig::TAppConfig app;
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app);
+        TKikimrSettings settings;
         TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -3865,9 +3867,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST(FlatMapLambdaInnerPrecompute) {
-        NKikimrConfig::TAppConfig app;
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app);
+        TKikimrSettings settings;
         TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -3887,9 +3887,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(DqSourceCount) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -3915,9 +3913,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(DqSource) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -3934,9 +3930,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(DqSourceLiteralRange) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -3964,9 +3958,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(DqSourceLimit) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -3990,9 +3982,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(DqSourceSequentialLimit) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        settings.SetAppConfig(appConfig);
-
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4024,9 +4013,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(DqSourceLocksEffects) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -4065,8 +4052,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(PrimaryView) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -4084,10 +4069,57 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 0);
     }
 
+    Y_UNIT_TEST_TWIN(IndexAutochooserAndLimitPushdown, AutoSelectIndex) {
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        if (AutoSelectIndex) {
+            return;
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/my_table` (
+                    id Uint64,
+                    a Utf8,
+                    b Utf8,
+                    c Utf8,
+                    INDEX idx_my_table_table_a_b GLOBAL ON (a,b),
+                    --INDEX idx_my_table_table_a_c GLOBAL ON (a,c),
+                    PRIMARY KEY (id)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        NYdb::NTable::TExecDataQuerySettings querySettings;
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        TString query = Sprintf(R"(
+            SELECT * FROM `/Root/my_table` %s
+            WHERE a = '123'
+            ORDER BY a, b
+            LIMIT 10;
+        )", AutoSelectIndex ? "" : " VIEW idx_my_table_table_a_b ");
+
+        auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+        Cerr << explainResult.GetPlan() << Endl;
+        Cerr << explainResult.GetAst() << Endl;
+
+        TItemsLimitsExtractor extractor;
+        NJson::TJsonValue plan;
+        UNIT_ASSERT(NJson::ReadJsonTree(explainResult.GetPlan(), &plan));
+        plan.Scan(extractor);
+
+        UNIT_ASSERT_VALUES_EQUAL(extractor.LimitsPerTable["/Root/my_table/idx_my_table_table_a_b/indexImplTable"], "10");
+    }
+
     Y_UNIT_TEST(AutoChooseIndex) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
 
@@ -4108,8 +4140,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(AutoChooseIndexOrderByLimit) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
 
@@ -4167,8 +4197,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(AutoChooseIndexOrderByLambda) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
 
@@ -4229,8 +4257,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(MultipleBroadcastJoin) {
         TKikimrSettings kisettings;
-        NKikimrConfig::TAppConfig appConfig;
-        kisettings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(kisettings);
 
@@ -4278,8 +4304,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(ComplexLookupLimit) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -4349,9 +4373,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(FullScanCount) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetExtractPredicateRangesLimit(4);
-        settings.SetAppConfig(appConfig);
+        settings.AppConfig.MutableTableServiceConfig()->SetExtractPredicateRangesLimit(4);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();

@@ -60,6 +60,6 @@ EXPOSE ${GRPC_PORT:-2136}
 EXPOSE ${MON_PORT:-8765}
 EXPOSE ${YDB_KAFKA_PROXY_PORT:-9092}
 
-HEALTHCHECK --start-period=60s --interval=1s CMD /ydb -e grpcs://localhost:${GRPC_TLS_PORT:-2135} --ca-file /ydb_certs/ca.pem -d /local --no-discovery monitoring healthcheck | grep -q GOOD || exit 1
+HEALTHCHECK --start-period=60s --interval=1s CMD sh /health_check
 
-CMD ["sh", "./initialize_local_ydb"]
+CMD ["sh", "/initialize_local_ydb"]

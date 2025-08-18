@@ -18,7 +18,8 @@ public:
         const TOperationProgress& p,
         TInstant startedAt,
         TInstant finishedAt,
-        const TVector<TOperationProgress::TStage>& stages);
+        const TVector<TOperationProgress::TStage>& stages
+    );
 
     bool MergeWith(const TOperationProgress& p);
     void Abort();
@@ -45,4 +46,4 @@ struct ITaskProgressMerger {
     virtual void AbortAllUnfinishedNodes() = 0;
 };
 
-} // namespace NProgressMerger 
+} // namespace NProgressMerger

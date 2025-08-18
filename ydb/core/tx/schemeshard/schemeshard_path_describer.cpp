@@ -186,15 +186,7 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
         descr->SetChildrenExist(pathEl->GetAliveChildren() > 0);
     }
 
-    if (pathEl->PathType == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-        auto it = Self->Topics.FindPtr(pathEl->PathId);
-        Y_ABORT_UNLESS(it, "PersQueueGroup is not found");
-
-        TTopicInfo::TPtr pqGroupInfo = *it;
-        if (pqGroupInfo->HasBalancer()) {
-            descr->SetBalancerTabletID(ui64(pqGroupInfo->BalancerTabletID));
-        }
-    } else {
+    if (pathEl->PathType != NKikimrSchemeOp::EPathTypePersQueueGroup) {
         descr->SetACL(pathEl->ACL); // YDBOPS-1328
     }
 }

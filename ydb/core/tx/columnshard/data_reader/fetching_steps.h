@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -67,7 +67,7 @@ private:
                 Fetcher->OnError("cannot fetch accessors");
             } else {
                 AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
-                std::vector<TPortionDataAccessor> accessors;
+                std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
                 for (auto&& i : Fetcher->GetInput().GetPortions()) {
                     accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
                 }
@@ -88,8 +88,7 @@ private:
 
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::AskAccessors);
-        std::shared_ptr<TDataAccessorsRequest> request =
-            std::make_shared<TDataAccessorsRequest>(fetchingContext->GetInput().GetConsumer());
+        std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>(fetchingContext->GetInput().GetConsumer());
         request->RegisterSubscriber(std::make_shared<TSubscriber>(fetchingContext));
         for (auto&& i : fetchingContext->GetInput().GetPortions()) {
             request->AddPortion(i->GetPortionInfo());
@@ -129,7 +128,7 @@ private:
 
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::AskDataResources);
-        const std::vector<TPortionDataAccessor>& accessors = fetchingContext->GetCurrentContext().GetPortionAccessors();
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors = fetchingContext->GetCurrentContext().GetPortionAccessors();
         const ui64 memory = GetNecessaryDataMemory(fetchingContext, ColumnIds, accessors);
         if (!memory) {
             return IFetchingStep::EStepResult::Continue;
@@ -140,25 +139,26 @@ private:
 
 protected:
     virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext,
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const = 0;
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const = 0;
 
 public:
     TAskDataResourceStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
-        : ColumnIds(columnIds)
-    {
+        : ColumnIds(columnIds) {
     }
 };
 
 class TAskBlobDataResourceStep: public TAskDataResourceStep {
 private:
     virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& /*fetchingContext*/,
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const override {
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const override {
         ui64 memory = 0;
         for (auto&& a : acc) {
             if (columnIds) {
-                memory += a.GetColumnBlobBytes(columnIds->GetColumnIds());
+                memory += a->GetColumnBlobBytes(columnIds->GetColumnIds());
             } else {
-                memory += a.GetPortionInfo().GetTotalBlobBytes();
+                memory += a->GetPortionInfo().GetTotalBlobBytes();
             }
         }
         return memory;
@@ -171,13 +171,14 @@ public:
 class TAskRawDataResourceStep: public TAskDataResourceStep {
 private:
     virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& /*fetchingContext*/,
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const override {
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const override {
         ui64 memory = 0;
         for (auto&& a : acc) {
             if (columnIds) {
-                memory += a.GetColumnRawBytes(columnIds->GetColumnIds());
+                memory += a->GetColumnRawBytes(columnIds->GetColumnIds());
             } else {
-                memory += a.GetPortionInfo().GetTotalRawBytes();
+                memory += a->GetPortionInfo().GetTotalRawBytes();
             }
         }
         return memory;
@@ -190,7 +191,8 @@ public:
 class TAskUsageResourceStep: public TAskDataResourceStep {
 private:
     virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext,
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const override {
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const override {
         return fetchingContext->GetNecessaryDataMemory(columnIds, acc);
     }
 
@@ -234,8 +236,7 @@ private:
 public:
     TAskGeneralResourceStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const ui64 memoryUsage)
         : ColumnIds(columnIds)
-        , MemoryUsage(memoryUsage)
-    {
+        , MemoryUsage(memoryUsage) {
     }
 };
 
@@ -270,13 +271,13 @@ private:
 
     virtual EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::ReadBlobs);
-        const std::vector<TPortionDataAccessor>& accessors = fetchingContext->GetCurrentContext().GetPortionAccessors();
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors = fetchingContext->GetCurrentContext().GetPortionAccessors();
         THashMap<TString, THashSet<TBlobRange>> ranges;
         for (ui32 idx = 0; idx < accessors.size(); ++idx) {
             if (ColumnIds) {
-                accessors[idx].FillBlobRangesByStorage(ranges, fetchingContext->GetInput().GetPortions()[idx]->GetSchema()->GetIndexInfo());
+                accessors[idx]->FillBlobRangesByStorage(ranges, fetchingContext->GetInput().GetPortions()[idx]->GetSchema()->GetIndexInfo());
             } else {
-                accessors[idx].FillBlobRangesByStorage(
+                accessors[idx]->FillBlobRangesByStorage(
                     ranges, fetchingContext->GetInput().GetPortions()[idx]->GetSchema()->GetIndexInfo(), &ColumnIds->GetColumnIds());
             }
         }
@@ -313,16 +314,16 @@ private:
         for (const auto& portion : fetchingContext->GetInput().GetPortions()) {
             schemas.emplace_back(portion->GetSchema());
         }
-        std::vector<TPortionDataAccessor> accessors = context.ExtractPortionAccessors();
+        std::vector<std::shared_ptr<TPortionDataAccessor>> accessors = context.ExtractPortionAccessors();
         auto blobs = TPortionDataAccessor::DecodeBlobAddresses(accessors, schemas, context.ExtractBlobs());
         for (ui64 i = 0; i < fetchingContext->GetInput().GetPortions().size(); ++i) {
-            AFL_VERIFY(i < context.GetPortionAccessors().size());
+            AFL_VERIFY(i < accessors.size());
             const auto& accessor = accessors[i];
             const auto& portion = fetchingContext->GetInput().GetPortions()[i];
-            AFL_VERIFY(accessor.GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
+            AFL_VERIFY(accessor->GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
 
             std::shared_ptr<NArrow::TGeneralContainer> container =
-                accessor.PrepareForAssemble(*portion->GetSchema(), *portion->GetSchema(), blobs[i])
+                accessor->PrepareForAssemble(*portion->GetSchema(), *portion->GetSchema(), blobs[i])
                     .AssembleToGeneralContainer({})
                     .DetachResult();
             result.emplace_back(std::move(*container));

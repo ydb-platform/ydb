@@ -147,6 +147,10 @@ namespace NActors {
 
         for (const auto& [key, value] : Items) {
             switch (key) {
+                case TKeys::BridgePileName:
+                    // just ignore it
+                    break;
+
                 case TKeys::DataCenter:
                     memcpy(&dataCenterId, value.data(), Min<size_t>(sizeof(dataCenterId), value.length()));
                     break;

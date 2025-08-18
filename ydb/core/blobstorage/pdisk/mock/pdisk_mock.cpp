@@ -36,7 +36,7 @@ struct TPDiskMockState::TImpl {
 
     const ui32 NodeId;
     const ui32 PDiskId;
-    const ui64 PDiskGuid;
+    ui64 PDiskGuid;
     const ui64 Size;
     const ui32 ChunkSize;
     const ui32 TotalChunks;
@@ -491,7 +491,7 @@ public:
             const ui64 bulkWriteBlockSize = 65536;
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::OK, seekTimeUs, readSpeedBps, writeSpeedBps,
                 readBlockSize, writeBlockSize, bulkWriteBlockSize, Impl.ChunkSize, Impl.AppendBlockSize, ownerId,
-                owner->OwnerRound, owner->Weight, 0u, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, TString());
+                owner->OwnerRound, 0u, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, false, TString());
             res->StartingPoints = owner->StartingPoints;
         } else {
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::INVALID_ROUND, "invalid owner round");
@@ -930,6 +930,8 @@ public:
         bool restartAllowed = ev->Get()->RestartAllowed;
 
         if (restartAllowed) {
+            Become(&TThis::StateNormal);
+            Impl.StateErrorReason = "";
             Impl.IsDiskReadOnly = ev->Get()->Config->ReadOnly;
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(Impl.PDiskId));
         }
@@ -1050,17 +1052,30 @@ public:
         Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::ERROR, std::nullopt), 0, ev->Cookie);
     }
 
+    std::optional<ui64> GetPDiskGuid() const {
+        return Impl.PDiskGuid
+            ? std::make_optional(Impl.PDiskGuid)
+            : std::nullopt;
+    }
+
     void Handle(NPDisk::TEvReadMetadata::TPtr& ev) {
         if (Impl.Metadata) {
-            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(*Impl.Metadata), Impl.PDiskGuid), 0, ev->Cookie);
+            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(*Impl.Metadata), GetPDiskGuid()), 0, ev->Cookie);
         } else {
-            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(NPDisk::EPDiskMetadataOutcome::NO_METADATA, Impl.PDiskGuid), 0, ev->Cookie);
+            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(NPDisk::EPDiskMetadataOutcome::NO_METADATA, GetPDiskGuid()), 0, ev->Cookie);
         }
     }
 
     void Handle(NPDisk::TEvWriteMetadata::TPtr& ev) {
         Impl.Metadata.emplace(std::move(ev->Get()->Metadata));
-        Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::OK, Impl.PDiskGuid), 0, ev->Cookie);
+        Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::OK, GetPDiskGuid()), 0, ev->Cookie);
+    }
+
+    void Handle(TEvMoveDrive::TPtr& ev) {
+        State = ev->Get()->State;
+        Impl.Blocks = State->Impl->Blocks;
+        Impl.Owners = State->Impl->Owners;
+        Impl.PDiskGuid = State->Impl->PDiskGuid;
     }
 
     void HandleMoveToErrorState() {
@@ -1095,10 +1110,13 @@ public:
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
         hFunc(NPDisk::TEvReadMetadata, Handle);
         hFunc(NPDisk::TEvWriteMetadata, Handle);
+        hFunc(TEvMoveDrive, Handle);
 
         cFunc(EvBecomeError, HandleMoveToErrorState);
 
         cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
+
+        cFunc(TEvents::TSystem::Poison, PassAway);
     )
 
     STRICT_STFUNC(StateError,
@@ -1117,11 +1135,15 @@ public:
         hFunc(NPDisk::TEvReadMetadata, ErrorHandle);
         hFunc(NPDisk::TEvWriteMetadata, ErrorHandle);
         hFunc(TEvBlobStorage::TEvAskWardenRestartPDiskResult, Handle);
+        hFunc(NPDisk::TEvYardControl, Handle);
+        hFunc(TEvMoveDrive, Handle);
 
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
         cFunc(EvBecomeNormal, HandleMoveToNormalState);
 
         cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
+
+        cFunc(TEvents::TSystem::Poison, PassAway);
     )
 };
 

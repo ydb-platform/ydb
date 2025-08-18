@@ -42,4 +42,4 @@ See the [run_async example](./examples/run_async.py) for more details.
 ### Complete Documentation
 
 The documentation for ClickHouse Connect has moved to
-[ClickHouse Docs](https://clickhouse.com/docs/en/integrations/language-clients/python/intro) 
+[ClickHouse Docs](https://clickhouse.com/docs/integrations/python) 

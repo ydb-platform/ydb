@@ -153,7 +153,7 @@ IGraphTransformer::TStatus BlockCompressWrapper(const TExprNode::TPtr& input, TE
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -186,11 +186,11 @@ IGraphTransformer::TStatus BlockCompressWrapper(const TExprNode::TPtr& input, TE
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
     flowItemTypes.erase(flowItemTypes.begin() + index);
 
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(flowItemTypes);
-    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputItemType));
+    input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(outputItemType));
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -219,6 +219,35 @@ IGraphTransformer::TStatus BlockExistsWrapper(const TExprNode::TPtr& input, TExp
 
     const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool);
     input->SetTypeAnn(MakeBlockOrScalarType(resultType, isScalar, ctx.Expr));
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus BlockValidUnwrapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto& arg = *input->Child(0);
+
+    if (!EnsureComputable(arg, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    // Arg type must be block.
+    if (!EnsureBlockOrScalarType(arg, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    // Arg type must be optional.
+    bool argItemIsScalar;
+    const auto* argItemType = GetBlockItemType(*arg.GetTypeAnn(), argItemIsScalar);
+    if (!EnsureOptionalType(arg.Pos(), *argItemType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(UnpackOptionalBlockItemType(*arg.GetTypeAnn(), ctx.Expr, /*convertToScalar=*/false));
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -974,7 +1003,7 @@ IGraphTransformer::TStatus WideSkipTakeBlocksWrapper(const TExprNode::TPtr& inpu
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -1000,7 +1029,7 @@ IGraphTransformer::TStatus WideTopBlocksWrapper(const TExprNode::TPtr& input, TE
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -1031,7 +1060,7 @@ IGraphTransformer::TStatus WideSortBlocksWrapper(const TExprNode::TPtr& input, T
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 

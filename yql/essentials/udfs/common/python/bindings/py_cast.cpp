@@ -474,7 +474,7 @@ TPyObjectPtr ToPyData(const TPyCastContext::TPtr& ctx,
             if (!pyObj) {
                 UdfTerminate((TStringBuilder() << ctx->PyCtx->Pos <<
                     "Failed to convert to unicode with _yql_bytes_decode_mode='strict':\n" <<
-                    GetLastErrorAsString()).data()
+                    GetLastErrorAsString()).c_str()
                 );
             }
             return pyObj;
@@ -487,7 +487,7 @@ TPyObjectPtr ToPyData(const TPyCastContext::TPtr& ctx,
             PyTuple_SET_ITEM(pyArgs.Get(), 0, pyObj.Release());
             pyObj = PyObject_CallObject(ctx->YsonConverterIn.Get(), pyArgs.Get());
             if (!pyObj) {
-                UdfTerminate((TStringBuilder() << ctx->PyCtx->Pos << "Failed to execute:\n" << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << ctx->PyCtx->Pos << "Failed to execute:\n" << GetLastErrorAsString()).c_str());
             }
         }
 
@@ -554,7 +554,7 @@ NUdf::TUnboxedValue FromPyData(
             PyTuple_SET_ITEM(pyArgs.Get(), 0, input.Release());
             input.ResetSteal(PyObject_CallObject(ctx->YsonConverterOut.Get(), pyArgs.Get()));
             if (!input) {
-                UdfTerminate((TStringBuilder() << ctx->PyCtx->Pos << "Failed to execute:\n" << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << ctx->PyCtx->Pos << "Failed to execute:\n" << GetLastErrorAsString()).c_str());
             }
             return ctx->ValueBuilder->NewString(PyCast<NUdf::TStringRef>(input.Get()));
         }
@@ -916,7 +916,19 @@ TPyObjectPtr ToPyArgs(
     TPyObjectPtr tuple(PyTuple_New(argsCount));
 
     for (ui32 i = 0; i < argsCount; i++) {
-        auto arg = ToPyObject(ctx, inspector.GetArgType(i), args[i]);
+        const auto argType = inspector.GetArgType(i);
+        auto arg = ToPyObject(ctx, argType, args[i]);
+        // PyTuple_SET_ITEM doesn't handle the case if nullptr is
+        // given as a payload to be set (unlike PyList_Append or
+        // PyDict_SetItem do), so we have to explicitly handle
+        // the failed export from UnboxedValue to PyObject here.
+        if (!arg) {
+            ::TStringBuilder sb;
+            sb << "Failed to export ";
+            NUdf::TTypePrinter(*ctx->PyCtx->TypeInfoHelper, argType).Out(sb.Out);
+            sb << " given as args[" << i << "]: ";
+            UdfTerminate((sb << ctx->PyCtx->Pos << GetLastErrorAsString()).c_str());
+        }
         PyTuple_SET_ITEM(tuple.Get(), i, arg.Release());
     }
 

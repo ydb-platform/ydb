@@ -243,7 +243,8 @@ namespace NActors {
                 MonPorts.push_back(port);
             }
 
-            node->ActorSystem->Start();
+            StartActorSystem(nodeIndex, node);
+
             if (nodeAppData->Mon) {
                 nodeAppData->Mon->Start(node->ActorSystem.Get());
             }
@@ -317,14 +318,6 @@ namespace NActors {
         }
 
         return true;
-    }
-
-    void TTestActorRuntime::SimulateSleep(TDuration duration) {
-        if (!SleepEdgeActor) {
-            SleepEdgeActor = AllocateEdgeActor();
-        }
-        Schedule(new IEventHandle(SleepEdgeActor, SleepEdgeActor, new TEvents::TEvWakeup()), duration);
-        GrabEdgeEventRethrow<TEvents::TEvWakeup>(SleepEdgeActor);
     }
 
     void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie, NWilson::TTraceId traceId) {

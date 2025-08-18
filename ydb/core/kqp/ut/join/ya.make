@@ -19,6 +19,7 @@ IF(SANITIZER_TYPE == "memory")
 ENDIF()
 
 SRCS(
+    kqp_block_hash_join_ut.cpp
     kqp_flip_join_ut.cpp
     kqp_index_lookup_join_ut.cpp
     kqp_join_ut.cpp

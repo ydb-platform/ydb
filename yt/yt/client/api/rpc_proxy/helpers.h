@@ -308,6 +308,12 @@ NProto::EQueryState ConvertQueryStateToProto(
 NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
     NProto::EQueryState proto);
 
+NApi::EJobStderrType ConvertJobStderrTypeFromProto(
+    NProto::EJobStderrType proto);
+
+NProto::EJobStderrType ConvertJobStderrTypeToProto(
+    NApi::EJobStderrType jobStderrType);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(

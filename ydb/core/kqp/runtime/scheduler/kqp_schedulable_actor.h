@@ -1,18 +1,60 @@
 #pragma once
 
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_actor.h>
-#include <ydb/core/kqp/runtime/scheduler/old/kqp_compute_scheduler.h>
+#include "fwd.h"
 
-namespace NKikimr::NKqp {
+#include <library/cpp/time_provider/monotonic.h>
 
-#if defined(USE_HDRF_SCHEDULER)
-    template <class T>
-    using TSchedulableComputeActorBase = NScheduler::TSchedulableComputeActorBase<T>;
-    using TSchedulableOptions = NScheduler::TSchedulableActorHelper::TOptions;
-#else
-    template <class T>
-    using TSchedulableComputeActorBase = NSchedulerOld::TSchedulableComputeActorBase<T>;
-    using TSchedulableOptions = NSchedulerOld::TComputeActorSchedulingOptions;
-#endif
+#include <util/system/hp_timer.h>
 
-} // namespace NKikimr::NKqp
+namespace NActors {
+    struct TActorId;
+}
+
+namespace NKikimr::NKqp::NScheduler {
+
+class TSchedulableActorBase {
+public:
+    struct TOptions {
+        NHdrf::NDynamic::TQueryPtr Query;
+        bool IsSchedulable;
+    };
+
+protected:
+    explicit TSchedulableActorBase(const TOptions& options);
+
+    static inline TMonotonic Now() {
+        return TMonotonic::Now();
+    }
+
+    void RegisterForResume(const NActors::TActorId& actorId);
+
+    inline bool IsAccountable() const {
+        return !!SchedulableTask;
+    }
+    inline bool IsThrottled() const {
+        return Throttled;
+    }
+
+    bool StartExecution(TMonotonic now);
+    void StopExecution(bool& forcedResume);
+
+    TDuration CalculateDelay(TMonotonic now) const;
+
+private:
+    void Resume();
+
+    TSchedulableTaskPtr SchedulableTask;
+    const bool IsSchedulable;
+
+    THPTimer Timer;
+    bool Executed = false;
+    bool Throttled = false;
+    TMonotonic StartThrottle;
+
+    TDuration LastExecutionTime;
+    ui64 ExecuteAttempts = 0;
+};
+
+using TSchedulableActorOptions = TSchedulableActorBase::TOptions;
+
+} // namespace NKikimr::NKqp::NScheduler

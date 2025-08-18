@@ -10,6 +10,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/subdomain.h>
@@ -42,7 +43,9 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
 inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev) {
     const bool isBearerToken = ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer");
     const bool useAccessService = AppData()->AuthConfig.GetUseAccessService();
-    const bool needClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
+    const bool needClusterAccessResourceCheck =
+                                AppData()->DomainsConfig.GetSecurityConfig().DatabaseAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
                                 AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0 ||
                                 AppData()->DomainsConfig.GetSecurityConfig().AdministrationAllowedSIDsSize() > 0;
 
@@ -64,7 +67,9 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAnd
 
 inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForClusterAccessCheck(const TVector<std::pair<TString, TString>>& rootAttributes) {
     const bool useAccessService = AppData()->AuthConfig.GetUseAccessService();
-    const bool needClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
+    const bool needClusterAccessResourceCheck =
+                                AppData()->DomainsConfig.GetSecurityConfig().DatabaseAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
                                 AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0 ||
                                 AppData()->DomainsConfig.GetSecurityConfig().AdministrationAllowedSIDsSize() > 0;
 
@@ -459,17 +464,35 @@ private:
 
     bool IsAuditEnabledFor(const TString& userSID) const {
         return DmlAuditEnabled_ && !DmlAuditExpectedSubjects_.contains(userSID);
-    };
+    }
 
-    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID, const TString& sanitizedToken) const {
-        const bool dmlAuditEnabled = requestBaseCtx->IsAuditable() && IsAuditEnabledFor(userSID);
+    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName) const {
+        const TString userSID = TBase::GetUserSID();
+        // DmlAudit, specially enabled through Scheme Shard
+        bool auditEnabledCompleted = requestBaseCtx->IsDmlAuditable() && IsAuditEnabledFor(userSID);
+        bool auditEnabledReceived = false;
 
-        if (dmlAuditEnabled) {
+        TAuditMode auditMode = requestBaseCtx->GetAuditMode();
+        if (auditMode.IsModifying && !requestBaseCtx->IsInternalCall()) {
+            TIntrusiveConstPtr<NACLib::TUserToken> token = TBase::GetParsedToken();
+            const NACLibProto::ESubjectType subjectType = token ? token->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
+            auditEnabledCompleted |= AppData()->AuditConfig.EnableLogging(auditMode.LogClass, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, subjectType);
+            auditEnabledReceived |= AppData()->AuditConfig.EnableLogging(auditMode.LogClass, NKikimrConfig::TAuditConfig::TLogClassConfig::Received, subjectType);
+        }
+
+        const TString sanitizedToken = TBase::GetSanitizedToken();
+        if (auditEnabledReceived || auditEnabledCompleted) {
             AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
-            requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
-                AuditContextEnd(requestBaseCtx);
-                AuditLog(status, parts);
-            });
+            if (auditEnabledReceived) {
+                AuditLog(std::nullopt, requestBaseCtx->GetAuditLogParts());
+            }
+
+            if (auditEnabledCompleted) {
+                requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
+                    AuditContextEnd(requestBaseCtx);
+                    AuditLog(status, parts);
+                });
+            }
         }
     }
 
@@ -519,7 +542,7 @@ private:
     void HandleAndDie(TAutoPtr<TEventHandle<TEvProxyRuntimeEvent>>& event) {
         // Request audit happen after successful authentication
         // and authorization check against the database
-        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
+        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
 
         GrpcRequestBaseCtx_->FinishSpan();
         event->Release().Release()->Pass(*this);
@@ -543,6 +566,10 @@ private:
 
     template <typename T>
     void HandleAndDie(T& event) {
+        // Request audit happen after successful authentication
+        // and authorization check against the database
+        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
+
         GrpcRequestBaseCtx_->FinishSpan();
         TGRpcRequestProxyHandleMethods::Handle(event, TlsActivationContext->AsActorContext());
         PassAway();

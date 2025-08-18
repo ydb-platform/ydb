@@ -32,8 +32,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(AddSerialColumnForbidden) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -66,8 +65,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(AddColumnWithDefaultForbidden) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -100,8 +98,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(SerialTypeNegative1) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -122,8 +119,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(SerialTypeForNonKeyColumn) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -210,8 +206,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
 
     void TestSerialType(TString serialType) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -299,8 +294,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DropCreateSerial) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -407,8 +401,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultsAndDeleteAndUpdate) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -498,9 +491,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultValue) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -533,8 +525,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultValuesForTable) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -598,8 +589,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultValuesForTableNegative2) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -620,8 +610,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultValuesForTableNegative3) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -643,9 +632,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultValuesForTableNegative4) {
-
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -666,9 +653,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(IndexedTableAndNotNullColumn) {
-
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -780,8 +765,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(IndexAutoChooseAndNonReadyIndex) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
         auto querySession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
@@ -891,11 +875,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(AddNonColumnDoesnotReturnInternalError) {
-
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
-
-        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        auto settings = TKikimrSettings().SetUseRealThreads(false).SetPQConfig(DefaultPQConfig());
+        settings.AppConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
         auto querySession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
@@ -1064,12 +1046,11 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(IndexedTableAndNotNullColumnAddNotNullColumn) {
+        auto settings = TKikimrSettings().SetPQConfig(DefaultPQConfig());
+        settings.AppConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableParameterizedDecimal(true);
 
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
-        appConfig.MutableFeatureFlags()->SetEnableParameterizedDecimal(true);
-
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1323,8 +1304,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(DefaultAndIndexesTestDefaultColumnNotIncludedInIndex) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1394,10 +1374,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(Utf8AndDefault) {
 
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
+        auto settings = TKikimrSettings().SetPQConfig(DefaultPQConfig());
+        settings.AppConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1477,10 +1457,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddNotNullWithDefault) {
 
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
+        auto settings = TKikimrSettings().SetPQConfig(DefaultPQConfig());
+        settings.AppConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
 
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

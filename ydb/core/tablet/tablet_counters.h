@@ -505,7 +505,7 @@ public:
     void RememberCurrentStateAsBaseline(/*out*/ TTabletCountersBase& baseLine) const;
 
     //
-    void OutputHtml(IOutputStream &os) const;
+    void OutputHtml(IOutputStream &os, const char* counterClass = "col-md-3") const;
     void OutputProto(NKikimrTabletBase::TTabletCountersBase& op) const;
 
     //

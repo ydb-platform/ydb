@@ -39,6 +39,7 @@ enum ESysViewType {
     EInformationSchemaTables = 32;
     EPgClass = 33;
     EShowCreate = 34;
+    ECompileCacheQueries = 35;
 }
 
 message TSysViewDescription {

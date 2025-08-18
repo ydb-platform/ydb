@@ -3,10 +3,10 @@ use plato;
 pragma Engine = "ytflow";
 
 pragma Ytflow.Cluster = "plato";
-pragma Ytflow.PipelinePath = "pipeline";
+pragma Ytflow.PipelinePath = "pipelines/test";
 
-pragma Ytflow.YtConsumerPath = "consumers/main_consumer";
-pragma Ytflow.YtProducerPath = "consumers/main_producer";
+pragma Ytflow.YtConsumerPath = "yql_ytflow/consumers/main_consumer";
+pragma Ytflow.YtProducerPath = "yql_ytflow/producers/main_producer";
 
 insert into Output
 select 

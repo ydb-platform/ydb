@@ -7,13 +7,16 @@
 #include <util/generic/vector.h>
 #include <util/generic/map.h>
 
+// TODO(vityaman): Migrate YDB to corrected version
+#define BindParamterIdentifier BindParameterIdentifier // NOLINT
+
 namespace NSQLHighlight {
 
     enum class EUnitKind {
         Keyword,
         Punctuation,
         QuotedIdentifier,
-        BindParamterIdentifier,
+        BindParameterIdentifier,
         TypeIdentifier,
         FunctionIdentifier,
         Identifier,
@@ -24,13 +27,23 @@ namespace NSQLHighlight {
         Error,
     };
 
+    struct TRangePattern {
+        TString Begin;
+        TString End;
+    };
+
     struct TUnit {
         EUnitKind Kind;
         TVector<NSQLTranslationV1::TRegexPattern> Patterns;
         TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
+        TMaybe<TRangePattern> RangePattern;
+        bool IsPlain = true;
+        bool IsCodeGenExcluded = false;
     };
 
     struct THighlighting {
+        TString Name = "YQL";
+        TString Extension = "yql";
         TVector<TUnit> Units;
     };
 

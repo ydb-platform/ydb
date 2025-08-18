@@ -315,14 +315,19 @@ void ValidateYTreeKey(IAttributeDictionary::TKeyView key)
 #endif
 }
 
+[[noreturn]] void ThrowYPathResolutionDepthExceeded(TYPathBuf path)
+{
+    THROW_ERROR_EXCEPTION(
+        NYTree::EErrorCode::ResolveError,
+        "Path %v exceeds resolve depth limit",
+        path)
+        << TErrorAttribute("limit", MaxYPathResolveIterations);
+}
+
 void ValidateYPathResolutionDepth(TYPathBuf path, int depth)
 {
     if (depth > MaxYPathResolveIterations) {
-        THROW_ERROR_EXCEPTION(
-            NYTree::EErrorCode::ResolveError,
-            "Path %v exceeds resolve depth limit",
-            path)
-            << TErrorAttribute("limit", MaxYPathResolveIterations);
+        ThrowYPathResolutionDepthExceeded(path);
     }
 }
 

@@ -61,35 +61,36 @@ private:
 
 class TMockYtJobService: public NYql::NFmr::IYtJobService {
 public:
-    TMockYtJobService(const std::unordered_map<TString, TString>& inputTables, std::unordered_map<TYtTableRef, TString>& outputTables)
+    TMockYtJobService(const std::unordered_map<TString, TString>& inputTables, std::unordered_map<TString, TString>& outputTables)
         : InputTables_(inputTables), OutputTables_(outputTables) {}
 
     virtual NYT::TRawTableReaderPtr MakeReader(
-        const std::variant<NYT::TRichYPath, TString>& inputTableRef,
+        const TYtTableRef& ytTablePart,
         const TClusterConnection& /*clusterConnection*/,
         const TYtReaderSettings& /*settings*/
     ) override {
-        auto richPath = std::get<NYT::TRichYPath>(inputTableRef);
+        auto richPath = ytTablePart.RichPath;
         TString richPathStr = NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath));
         YQL_ENSURE(InputTables_.contains(richPathStr));
         return {MakeIntrusive<TMockYtTableReader>(InputTables_[richPathStr])};
     }
 
     NYT::TRawTableWriterPtr MakeWriter(const TYtTableRef& ytTableRef, const TClusterConnection&, const TYtWriterSettings&) override {
-        if (!OutputTables_.contains(ytTableRef)) {
-            OutputTables_.emplace(ytTableRef, TString());
+        TString serializedRichPath = SerializeRichPath(ytTableRef.RichPath);
+        if (!OutputTables_.contains(serializedRichPath)) {
+            OutputTables_.emplace(serializedRichPath, TString());
         }
-        return MakeIntrusive<TMockYtTableWriter>(OutputTables_[ytTableRef]);
+        return MakeIntrusive<TMockYtTableWriter>(OutputTables_[serializedRichPath]);
     }
 
 private:
-    std::unordered_map<TString, TString> InputTables_; // rich yt path in string form -> total textYsonContent of it
-    std::unordered_map<TYtTableRef, TString>& OutputTables_;
+    std::unordered_map<TString, TString> InputTables_; // serialized rich yt path in string form -> total textYsonContent of it
+    std::unordered_map<TString, TString>& OutputTables_;
 };
 
 } // namespace
 
-IYtJobService::TPtr MakeMockYtJobService(const std::unordered_map<TString, TString>& inputTables, std::unordered_map<TYtTableRef, TString>& outputTables) {
+IYtJobService::TPtr MakeMockYtJobService(const std::unordered_map<TString, TString>& inputTables, std::unordered_map<TString, TString>& outputTables) {
     return MakeIntrusive<TMockYtJobService>(inputTables, outputTables);
 }
 

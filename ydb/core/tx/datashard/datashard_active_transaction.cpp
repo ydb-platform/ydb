@@ -440,6 +440,7 @@ bool TActiveTransaction::BuildSchemeTx()
         + (ui32)SchemeTx->HasCreateCdcStreamNotice()
         + (ui32)SchemeTx->HasAlterCdcStreamNotice()
         + (ui32)SchemeTx->HasDropCdcStreamNotice()
+        + (ui32)SchemeTx->HasRotateCdcStreamNotice()
         + (ui32)SchemeTx->HasMoveIndex()
         + (ui32)SchemeTx->HasCreateIncrementalRestoreSrc()
         + (ui32)SchemeTx->HasCreateIncrementalBackupSrc()
@@ -477,6 +478,8 @@ bool TActiveTransaction::BuildSchemeTx()
         SchemeTxType = TSchemaOperation::ETypeAlterCdcStream;
     else if (SchemeTx->HasDropCdcStreamNotice())
         SchemeTxType = TSchemaOperation::ETypeDropCdcStream;
+    else if (SchemeTx->HasRotateCdcStreamNotice())
+        SchemeTxType = TSchemaOperation::ETypeRotateCdcStream;
     else if (SchemeTx->HasMoveIndex())
         SchemeTxType = TSchemaOperation::ETypeMoveIndex;
     else if (SchemeTx->HasCreateIncrementalRestoreSrc())
@@ -865,6 +868,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::CreateCdcStream);
         plan.push_back(EExecutionUnitKind::AlterCdcStream);
         plan.push_back(EExecutionUnitKind::DropCdcStream);
+        plan.push_back(EExecutionUnitKind::RotateCdcStream);
         plan.push_back(EExecutionUnitKind::CreateIncrementalRestoreSrc);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);

@@ -1,5 +1,5 @@
 #include "yql_generic_provider_impl.h"
-#include "yql_generic_describe.h"
+#include "yql_generic_describe_table.h"
 
 #include <library/cpp/json/json_reader.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
@@ -107,7 +107,7 @@ void SetLoggingFolderId(NYql::TLoggingDataSourceOptions& options, const TGeneric
     }
 }
 
-TString GetOptionValue(const ::google::protobuf::Map<TProtoStringType,
+TString GetIcebergOptionValue(const ::google::protobuf::Map<TProtoStringType,
                              TProtoStringType>& options, TString option) {
     auto it = options.find(option);
     if (options.end() == it) {
@@ -125,22 +125,22 @@ TString GetOptionValue(const ::google::protobuf::Map<TProtoStringType,
 void SetIcebergOptions(NYql::TIcebergDataSourceOptions& dataSourceOptions, const TGenericClusterConfig& clusterConfig) {
     using namespace NKikimr::NExternalSource::NIceberg;
     const auto& clusterOptions = clusterConfig.GetDataSourceOptions();
-    auto warehouseType = GetOptionValue(clusterOptions, WAREHOUSE_TYPE);
+    auto warehouseType = GetIcebergOptionValue(clusterOptions, WAREHOUSE_TYPE);
 
     if (VALUE_S3 != warehouseType) {
         throw yexception() << "Unexpected warehouse type: " << warehouseType;
     }
 
-    auto endpoint = GetOptionValue(clusterOptions, WAREHOUSE_S3_ENDPOINT);
-    auto region = GetOptionValue(clusterOptions, WAREHOUSE_S3_REGION);
-    auto uri = GetOptionValue(clusterOptions, WAREHOUSE_S3_URI);
+    auto endpoint = GetIcebergOptionValue(clusterOptions, WAREHOUSE_S3_ENDPOINT);
+    auto region = GetIcebergOptionValue(clusterOptions, WAREHOUSE_S3_REGION);
+    auto uri = GetIcebergOptionValue(clusterOptions, WAREHOUSE_S3_URI);
     auto& s3 = *dataSourceOptions.mutable_warehouse()->mutable_s3();
 
     s3.set_endpoint(endpoint);
     s3.set_region(region);
     s3.set_uri(uri);
 
-    auto catalogType = GetOptionValue(clusterOptions, CATALOG_TYPE);
+    auto catalogType = GetIcebergOptionValue(clusterOptions, CATALOG_TYPE);
     auto& catalog = *dataSourceOptions.mutable_catalog();
 
     // set catalog options
@@ -148,7 +148,7 @@ void SetIcebergOptions(NYql::TIcebergDataSourceOptions& dataSourceOptions, const
         // hadoop nothing yet
         catalog.mutable_hadoop();
     } else if (VALUE_HIVE_METASTORE == catalogType) {
-        auto uri = GetOptionValue(clusterOptions, CATALOG_HIVE_METASTORE_URI);
+        auto uri = GetIcebergOptionValue(clusterOptions, CATALOG_HIVE_METASTORE_URI);
          catalog.mutable_hive_metastore()->set_uri(uri);
     } else {
         throw yexception() << "Unexpected catalog type: " << catalogType;

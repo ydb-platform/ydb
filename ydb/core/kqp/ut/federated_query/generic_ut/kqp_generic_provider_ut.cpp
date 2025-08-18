@@ -163,6 +163,9 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
+                    .What()
+                        .Column("col1", Ydb::Type::UINT16)
+                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -284,6 +287,8 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
+                    .What()
+                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -399,6 +404,8 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
+                    .What()
+                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -496,10 +503,7 @@ namespace NKikimr::NKqp {
             const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             // clang-format off
-            const NApi::TSelect selectInListSplits = TConnectorClientMock::TSelectBuilder<>()
-                .DataSourceInstance(dataSourceInstance).GetResult();
-
-            const NApi::TSelect selectInReadSplits = TConnectorClientMock::TSelectBuilder<>()
+            const NApi::TSelect expectedSelect = TConnectorClientMock::TSelectBuilder<>()
                 .DataSourceInstance(dataSourceInstance)
                 .What()
                     .NullableColumn("data_column", Ydb::Type::STRING)
@@ -529,11 +533,11 @@ namespace NKikimr::NKqp {
             // step 2: ListSplits
             // clang-format off
             clientMock->ExpectListSplits()
-                .Select(selectInListSplits)
+                .Select(expectedSelect)
                 .Result()
                     .AddResponse(NewSuccess())
                         .Description("some binary description")
-                        .Select(selectInReadSplits);
+                        .Select(expectedSelect);
             // clang-format on
 
             // step 3: ReadSplits
@@ -547,7 +551,7 @@ namespace NKikimr::NKqp {
                 .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
-                    .Select(selectInReadSplits)
+                    .Select(expectedSelect)
                     .Done()
                 .Result()
                     .AddResponse(MakeRecordBatch(

@@ -844,6 +844,7 @@ protected:
         std::optional<NDqProto::TCheckpoint> PendingCheckpoint;
         const NDqProto::ECheckpointingMode CheckpointingMode;
         i64 FreeSpace = 0;
+        i64 LastFreeSpace = 0;
 
         explicit TInputChannelInfo(
                 const TString& logPrefix,

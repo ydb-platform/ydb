@@ -269,6 +269,8 @@ private:
             html << "CheckpointingMode: " << NDqProto::ECheckpointingMode_Name(info.CheckpointingMode) << "<br />";
             DUMP(info, FreeSpace);
             html << "IsPaused: " << info.IsPaused() << "<br />";
+            DUMP(info, LastFreeSpace);
+            
 
             if (const auto* channelStats = Channels->GetInputChannelStats(id)) {
                 DUMP_PREFIXED("InputChannelStats.", (*channelStats), PollRequests);
@@ -280,6 +282,9 @@ private:
                     const auto& state = it->second;
                     html << "LastRecvSeqNo: " << state.LastRecvSeqNo << "<br />";
                     html << "InFlight size: " << state.InFlight.size() << "<br />";
+                    if (!state.InFlight.empty()) {
+                        html << "InFlight.FreeSpace: " << state.InFlight.crbegin()->second.FreeSpace << "<br />";
+                    }
                     if (state.PollRequest) {
                         html << "PollRequest.SeqNo: " << state.PollRequest->SeqNo << "<br />";  
                         html << "PollRequest.FreeSpace: " << state.PollRequest->FreeSpace << "<br />";    
@@ -759,6 +764,7 @@ private:
         const TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(inputChannel, "task: " << Task.GetId() << ", unknown input channelId: " << channelId);
 
+        inputChannel->LastFreeSpace = inputChannel->FreeSpace;
         return inputChannel->FreeSpace;
     }
 
@@ -1027,6 +1033,7 @@ private:
 
         if (it->second.Ack) {
             Channels->SendChannelDataAck(it->second.ChannelId, inputChannel->FreeSpace);
+            inputChannel->LastFreeSpace = inputChannel->FreeSpace;
         }
 
         TakeInputChannelDataRequests.erase(it);

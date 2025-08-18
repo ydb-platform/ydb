@@ -379,7 +379,7 @@ SELECT
     DateTime::MakeDatetime($parse1("01:02:03")), -- 1970-01-01T01:02:03Z
     DateTime::MakeTimestamp($parse2("12.3456")), -- 1970-01-01T00:00:12.345600Z
     DateTime::MakeTimestamp($parse3("02/30/2000")), -- NULL (Feb 30)
-    DateTime::MakeTimestamp($parse4("Canada/Central")), -- 1970-01-01T06:00:00Z (конвертация в UTC)
+DateTime::MakeTimestamp($parse4("Canada/Central")), -- 1970-01-01T06:00:00Z (конвертация в UTC)
     DateTime::MakeTimestamp64($parse5("02/10/1931")), -- 1931-02-10T00:00:00Z (конвертация в UTC)
 ```
 

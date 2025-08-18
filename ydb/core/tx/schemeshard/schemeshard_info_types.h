@@ -3055,7 +3055,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     enum class ESubState: ui32 {
         // Common
-        Invalid = 0,
+        None = 0,
 
         // Filling
         UniqIndexValidation = 100,
@@ -3187,7 +3187,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TKMeans KMeans;
 
     EState State = EState::Invalid;
-    ESubState SubState = ESubState::Invalid;
+    ESubState SubState = ESubState::None;
 private:
     TString Issue;
 public:
@@ -3436,7 +3436,7 @@ public:
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());
         indexInfo->SubState = TIndexBuildInfo::ESubState(
-            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::Invalid)));
+            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
         indexInfo->Issue =
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
 

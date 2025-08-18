@@ -666,7 +666,14 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if not test_files:
         return
 
-    tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+    tsconfig_paths = unit.get("_TS_TYPECHECK_TSCONFIG").split(" ")
+    if len(tsconfig_paths) > 1:
+        raise Exception(
+            f"You have set several tsconfig files for TS_TYPECHECK: {tsconfig_paths}. "
+            f"Only one tsconfig is allowed for `TS_TYPECHECK(<config_filename>)` macro."
+        )
+
+    tsconfig_path = tsconfig_paths[0]
     if not tsconfig_path:
         tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
         if len(tsconfig_paths) > 1:

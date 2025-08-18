@@ -375,6 +375,11 @@ private:
             clusterIds.push_back(pp.first);
             clusterRows.push_back(std::move(pp.second));
         }
+        if (!ReadingChildClustersOf && !clusterRows.size()) {
+            // Index is empty
+            RuntimeError("Updating an empty vector index is not supported yet", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+            return;
+        }
         if (!clusters->SetClusters(std::move(clusterRows))) {
             // Clusters are invalid for some reason
             RuntimeError("Child clusters of "+std::to_string(ReadingChildClustersOf)+" are invalid", NYql::NDqProto::StatusIds::INTERNAL_ERROR);

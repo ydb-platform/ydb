@@ -213,8 +213,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             }
 
             for (const auto& column : indexDesc->DataColumns) {
-                if (inputColumnsSet.contains(column)) {
-                    YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+                if (inputColumnsSet.contains(column) && indexTableColumnsSet.emplace(column).second) {
                     indexTableColumns.emplace_back(column);
                 }
             }
@@ -223,7 +222,8 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 insert.Pos(), ctx, true);
 
             if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns, upsertIndexRows, insert.Pos(), ctx);
+                upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns,
+                    upsertIndexRows, true, insert.Pos(), ctx);
                 indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
             }
 

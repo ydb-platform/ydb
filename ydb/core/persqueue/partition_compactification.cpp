@@ -91,7 +91,6 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
         case EStep::READING: {
             Y_ABORT_UNLESS(ReadState);
             processResponseResult = ReadState->ProcessResponse(ev);
-            FirstUncompactedOffset = ReadState->OffsetToRead;
             break;
         }
         case EStep::COMPACTING: {
@@ -248,7 +247,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TReadState::ContinueIfPossible
         return EStep::COMPACTING;
 
     if (OffsetToRead >= LastOffset) {
-        return TopicData.size() ? EStep::COMPACTING : EStep::PENDING;
+        return TopicData.size() ? EStep::COMPACTING : EStep::READING;
     }
     auto evRead = MakeEvRead(nextRequestCookie, OffsetToRead, LastOffset, NextPartNo);
     PartitionActor->Send(PartitionActor->SelfId(), evRead.release());
@@ -680,9 +679,6 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
         if (itDeleted != DeletedKeys.end() && itExisting->Key == *itDeleted) {
             ++zeroedKeys;
             sizeDiff += itExisting->Size;
-            if (*itDeleted == itUpdated->first) {
-                itUpdated++;
-            }
             itDeleted++;
         } else if (itUpdated != UpdatedKeys.end() && itUpdated->first == itExisting->Key) {
             sizeDiff += itExisting->Size - itUpdated->second;

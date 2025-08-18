@@ -497,7 +497,7 @@ A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} 
 
 ### Spilling {#spilling}
 
-**Spilling** is a memory management mechanism in {{ ydb-short-name }} that temporarily offloads intermediate data from computations that exceed the available node RAM capacity to external storage. In {{ ydb-short-name }}, disk storage is currently used for spilling.
+**Spilling** is a memory management mechanism in {{ ydb-short-name }} that temporarily offloads intermediate query data to external storage when such data exceeds the available node RAM capacity. In {{ ydb-short-name }}, disk storage is currently used for spilling.
 
 For more details on spilling, see [{#T}](spilling.md).
 

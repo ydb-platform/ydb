@@ -1,6 +1,6 @@
 # admin cluster bridge switchover
 
-С помощью команды `admin cluster bridge switchover` вы можете выполнить плановую, плавную смену PRIMARY на указанный пайл. См. [описание сценария](../../../../concepts/bridge.md#switchover).
+С помощью команды `admin cluster bridge switchover` можно выполнить плановую, плавную смену роли PRIMARY на указанный пайл. Подробнее см. [описание сценария](../../../../concepts/bridge.md#switchover).
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -10,10 +10,10 @@
 ydb [global options...] admin cluster bridge switchover [options...]
 ```
 
-* `global options` — глобальные параметры.
+* `global options` — [глобальные параметры](../global-options.md) CLI.
 * `options` — [параметры подкоманды](#options).
 
-Посмотрите справку по команде:
+Просмотр справки по команде:
 
 ```bash
 ydb admin cluster bridge switchover --help
@@ -28,11 +28,11 @@ ydb admin cluster bridge switchover --help
 
 ## Требования {#requirements}
 
-- Целевой пайл должен быть в состоянии `SYNCHRONIZED`.
+- Целевой пайл должен находиться в состоянии `SYNCHRONIZED`.
 
 ## Примеры {#examples}
 
-Переключить PRIMARY на SYNCHRONIZED пайл:
+Переключение роли `PRIMARY` на пайл в состоянии `SYNCHRONIZED`:
 
 ```bash
 ydb admin cluster bridge switchover --new-primary pile-b
@@ -40,7 +40,7 @@ ydb admin cluster bridge switchover --new-primary pile-b
 
 ## Проверка результата {#verify}
 
-Проверьте, что роли пайлов спустя некоторое время поменялись корректно:
+Убедитесь, что спустя некоторое время роли пайлов изменились корректно:
 
 ```bash
 ydb admin cluster bridge list

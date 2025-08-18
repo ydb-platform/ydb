@@ -1,6 +1,6 @@
 # admin cluster bridge takedown
 
-С помощью команды `admin cluster bridge takedown` вы можете выполнить [плановое отключение](../../../../concepts/bridge.md#takedown) пайла. Если выводится текущий PRIMARY, можно указать новый PRIMARY.
+С помощью команды `admin cluster bridge takedown` можно выполнить [плановое отключение](../../../../concepts/bridge.md#takedown) пайла. Если отключается текущий `PRIMARY`, можно указать новый `PRIMARY`.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -13,7 +13,7 @@ ydb [global options...] admin cluster bridge takedown [options...]
 * `global options` — глобальные параметры.
 * `options` — [параметры подкоманды](#options).
 
-Посмотрите справку по команде:
+Просмотр справки по команде:
 
 ```bash
 ydb admin cluster bridge takedown --help
@@ -24,22 +24,22 @@ ydb admin cluster bridge takedown --help
 #|
 || Имя | Описание ||
 || `--pile <pile>` | Имя пайла, который нужно аккуратно остановить. ||
-|| `--new-primary <pile>` | Имя пайла, который должен стать новым PRIMARY (если выводимый пайл — текущий PRIMARY). ||
+|| `--new-primary <pile>` | Имя пайла, который должен стать новым `PRIMARY`, если отключается текущий `PRIMARY`. ||
 |#
 
 ## Требования {#requirements}
 
-- Если выводится текущий `PRIMARY`, обязательно укажите `--new-primary` и выберите пайл в состоянии `SYNCHRONIZED`.
+- Если отключается текущий `PRIMARY`, обязательно укажите `--new-primary` и выберите пайл в состоянии `SYNCHRONIZED`.
 
 ## Примеры {#examples}
 
-Вывести SYNCHRONIZED пайл из кластера:
+Вывод `SYNCHRONIZED` пайла из кластера:
 
 ```bash
 ydb admin cluster bridge takedown --pile pile-b
 ```
 
-Вывести PRIMARY пайл из кластера, переключив PRIMARY на SYNCHRONIZED пайл:
+Вывод `PRIMARY` пайла из кластера с переключением `PRIMARY` на `SYNCHRONIZED` пайл:
 
 ```bash
 ydb admin cluster bridge takedown --pile pile-a --new-primary pile-b
@@ -56,7 +56,7 @@ pile-a: PRIMARY
 pile-b: DISCONNECTED
 ```
 
-Если отключали текущий PRIMARY с указанием `--new-primary`, проверьте, что выбранный пайл стал PRIMARY:
+Если отключался текущий `PRIMARY` с указанием `--new-primary`, убедитесь, что выбранный пайл стал `PRIMARY`:
 
 ```bash
 ydb admin cluster bridge list

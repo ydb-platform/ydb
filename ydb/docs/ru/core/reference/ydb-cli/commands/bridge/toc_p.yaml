@@ -1,13 +1,13 @@
 items:
   - name: Обзор
     href: index.md
-  - name: Вывод состояния пайлов
+  - name: ydb admin cluster bridge list
     href: list.md
-  - name: Плановая смена PRIMARY
+  - name: ydb admin cluster bridge switchover
     href: switchover.md
-  - name: Аварийное отключение пайла
+  - name: ydb admin cluster bridge failover
     href: failover.md
-  - name: Вывод пайла из кластера
+  - name: ydb admin cluster bridge takedown
     href: takedown.md
-  - name: Возвращение пайла в кластер
+  - name: ydb admin cluster bridge rejoin
     href: rejoin.md

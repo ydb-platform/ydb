@@ -1,19 +1,19 @@
-# Управление кластером в режиме bridge
+# Команды управления кластером в режиме bridge
 
-Команды управления кластером в режиме [bridge](../../../../concepts/bridge.md) позволяют смотреть состояние [пайлов](../../../../concepts/glossary.md#pile), выполнять плановую и аварийную смену PRIMARY, временно выводить пайл на обслуживание и возвращать его в кластер.
+Команды управления кластером в режиме [bridge](../../../../concepts/bridge.md) позволяют просматривать состояние [пайлов](../../../../concepts/glossary.md#pile), выполнять плановую и аварийную смену PRIMARY, временно выводить пайл на обслуживание и возвращать его в кластер.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
 Общий синтаксис вызова команд управления кластером в режиме bridge:
 
 ```bash
-ydb [global options...] admin cluster bridge [options...] <subcommand>
+{{ ydb-cli }} [global options...] admin cluster bridge [command options...] <subcommand>
 ```
 
 где:
 
-- `ydb` — команда запуска YDB CLI из командной строки операционной системы;
-- `[global options]` — глобальные параметры, одинаковые для всех команд YDB CLI;
+- `{{ ydb-cli }}` — команда запуска {{ ydb-short-name }} CLI из командной строки операционной системы;
+- `[global options]` — глобальные параметры, одинаковые для всех команд {{ ydb-short-name }} CLI;
 - `admin cluster bridge` — команда управления конфигурацией кластера;
 - `[command options]` — параметры команды, специфичные для каждой команды и подкоманды;
 - `<subcommand>` — подкоманда.
@@ -25,7 +25,7 @@ ydb [global options...] admin cluster bridge [options...] <subcommand>
 Команда / подкоманда | Краткое описание
 --- | ---
 [admin cluster bridge list](./list.md) | Вывод состояния пайлов
-[admin cluster bridge switchover](./switchover.md) | Плановая смена PRIMARY
+[admin cluster bridge switchover](./switchover.md) | Плановая смена `PRIMARY`
 [admin cluster bridge failover](./failover.md) | Аварийное переключение
 [admin cluster bridge takedown](./takedown.md) | Вывод пайла из кластера
 [admin cluster bridge rejoin](./rejoin.md) | Возвращение пайла в кластер

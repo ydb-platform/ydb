@@ -1,6 +1,6 @@
 # admin cluster bridge list
 
-С помощью команды `admin cluster bridge list` вы можете вывести состояние каждого пайла в [режиме bridge](../../../../concepts/bridge.md).
+С помощью команды `admin cluster bridge list` можно вывести состояние каждого пайла в [режиме bridge](../../../../concepts/bridge.md).
 
 Общий вид команды:
 
@@ -8,10 +8,10 @@
 ydb [global options...] admin cluster bridge list [options...]
 ```
 
-* `global options` — глобальные параметры.
+* `global options` — [глобальные параметры](../global-options.md) CLI.
 * `options` — [параметры подкоманды](#options).
 
-Посмотрите справку по команде:
+Просмотр справки по команде:
 
 ```bash
 ydb admin cluster bridge list --help
@@ -21,12 +21,12 @@ ydb admin cluster bridge list --help
 
 #|
 || Имя | Описание ||
-|| `--format <pretty, json, csv>` | Формат вывода. Значение по умолчанию: `pretty`. ||
+|| `--format <pretty, json, csv>` | Формат вывода. Допустимые значения: `pretty`, `json`, `csv`. Значение по умолчанию: `pretty`. ||
 |#
 
 ## Примеры {#examples}
 
-Вывести список пайлов в человекочитаемом виде:
+Вывести список пайлов в человекочитаемом формате:
 
 ```bash
 ydb admin cluster bridge list

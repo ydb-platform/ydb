@@ -1,5 +1,6 @@
 #include "offload_actor.h"
 #include "partition.h"
+#include "partition_compactification.h"
 #include "partition_log.h"
 #include "partition_util.h"
 
@@ -327,6 +328,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         Partition()->EndOffset = meta.GetEndOffset();
         if (Partition()->StartOffset == Partition()->EndOffset) {
            Partition()->NewHead.Offset = Partition()->Head.Offset = Partition()->EndOffset;
+
         }
         if (meta.HasStartOffset()) {
             GetContext().StartOffset = meta.GetStartOffset();
@@ -458,7 +460,6 @@ void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
 
     Done(ctx);
 }
-
 
 
 //
@@ -928,7 +929,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     WriteCycleStartTime = ctx.Now();
 
     ReadQuotaTrackerActor = Register(new TReadQuoter(
-        ctx,
+        AppData(ctx)->PQConfig,
         TopicConverter,
         Config,
         Partition,
@@ -1216,6 +1217,25 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 void TPartition::InitSplitMergeSlidingWindow() {
     using Tui64SumSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
     SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
+}
+
+void TPartition::CreateCompacter() {
+    if (!Config.GetEnableCompactification() || !AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() || IsSupportive()) {
+        if (!IsSupportive()) {
+            Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
+        }
+        Compacter.Reset();
+        return;
+    }
+    if (Compacter) {
+        Compacter->TryCompactionIfPossible();
+        return;
+    }
+
+    auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext()); //ToDo: Fix!
+    ui64 compStartOffset = userInfo.Offset;
+    Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
+    Compacter->TryCompactionIfPossible();
 }
 
 //

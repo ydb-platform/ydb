@@ -839,9 +839,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 // page was accessed while being passive, load it back
                 TryLoadEvictedPage(page);
                 Touch(page);
-            } else {
-                TryDrop(page, recheck);
             }
+            // load evicted page may be evicted again
+            TryDrop(page, recheck);
         }
 
         if (recheck) {

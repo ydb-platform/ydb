@@ -220,7 +220,6 @@ void TBatch::Pack() {
         return;
     Packed = true;
     PackedData.Clear();
-
     bool hasUncompressed = false;
     bool hasKinesis = false;
     for (ui32 i = 0; i < Blobs.size(); ++i) {

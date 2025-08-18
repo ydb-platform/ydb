@@ -847,6 +847,7 @@ protected:
         const NDqProto::ECheckpointingMode CheckpointingMode;
         i64 FreeSpace = 0;
         i64 LastFreeSpace = 0;
+        i64 PollChannelFreeSpace = 0;
 
         explicit TInputChannelInfo(
                 const TString& logPrefix,

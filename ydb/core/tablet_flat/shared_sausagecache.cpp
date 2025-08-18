@@ -344,20 +344,29 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         for (const ui32 reqIdx : xrange(msg->Pages.size())) {
             const TPageId pageId = msg->Pages[reqIdx];
             auto* page = EnsurePage(pageCollection, collection, pageId, cacheMode);
-            TryLoadEvictedPage(page);
 
             Counters.RequestedPages->Inc();
             Counters.RequestedBytes->Add(page->Size);
+
+            bool wasEvicted = page->State == PageStateEvicted;
+            if (wasEvicted) {
+                Y_ENSURE(page->Use()); // still in PageMap, guaranteed to be alive
+                page->State = PageStateLoaded;
+                RemovePassivePage(page);
+                AddActivePage(page);
+            }
 
             switch (page->State) {
             case PageStateLoaded:
                 Counters.CacheHitPages->Inc();
                 Counters.CacheHitBytes->Add(page->Size);
-                readyPages.emplace_back(pageId, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
+                if (!wasEvicted) {
+                    page->IncrementFrequency();
+                }
                 if (doTraceLog) {
                     pagesFromCacheTraceLog.push_back(pageId);
                 }
-                Touch(page);
+                readyPages.emplace_back(pageId, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
                 break;
             case PageStateNo:
                 ++pagesToRequestCount;
@@ -372,6 +381,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 break;
             case PageStateEvicted:
                 Y_TABLET_ERROR("must not happens");
+            }
+
+            if (wasEvicted) {
+                // call insert here because reloaded evicted page may be evicted again
+                Evict(Cache.Insert(page));
             }
         }
 
@@ -591,43 +605,26 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // Note: sent request pages will be kept in PendingRequests until their pages are loaded
     }
 
-    void Handle(NSharedCache::TEvTouch::TPtr &ev, const TActorContext& ctx) {
-        NSharedCache::TEvTouch *msg = ev->Get();
+    void Handle(NSharedCache::TEvSync::TPtr &ev, const TActorContext& ctx) {
+        NSharedCache::TEvSync *msg = ev->Get();
         THashMap<TLogoBlobID, THashSet<TPageId>> droppedPages;
 
-        for (auto &[pageCollectionId, touchedPages] : msg->Touched) {
-            LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Touch page collection " << pageCollectionId
+        for (auto &[pageCollectionId, pages] : msg->Pages) {
+            LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Sync page collection " << pageCollectionId
                 << " owner " << ev->Sender
-                << " pages " << touchedPages);
+                << " pages " << pages);
 
             auto collection = Collections.FindPtr(pageCollectionId);
             if (!collection) {
-                droppedPages[pageCollectionId].insert(touchedPages.begin(), touchedPages.end());
+                droppedPages[pageCollectionId].insert(pages.begin(), pages.end());
                 continue;
             }
 
-            for (auto pageId : touchedPages) {
+            for (auto pageId : pages) {
                 Y_ENSURE(pageId < collection->PageMap.size());
                 auto* page = collection->PageMap[pageId].Get();
                 if (!page) {
                     droppedPages[pageCollectionId].insert(pageId);
-                    continue;
-                }
-
-                TryLoadEvictedPage(page);
-
-                switch (page->State) {
-                case PageStateNo:
-                    Y_TABLET_ERROR("unexpected uninitialized page found");
-                case PageStateRequested:
-                case PageStateRequestedAsync:
-                case PageStatePending:
-                    break;
-                case PageStateLoaded:
-                    Touch(page);
-                    break;
-                default:
-                    Y_TABLET_ERROR("unknown page state " << page->State);
                 }
             }
         }
@@ -765,23 +762,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         return page;
     }
 
-    void TryLoadEvictedPage(TPage* page) {
-        if (page->State == PageStateEvicted) {
-            Y_ENSURE(page->Use()); // still in PageMap, guaranteed to be alive
-            page->State = PageStateLoaded;
-            RemovePassivePage(page);
-            AddActivePage(page);
-            // WARN: Touch should be called after this to put a page into cache policy
-        }
-    }
-
-    void Touch(TPage* page) {
-        // TODO: touch and insert separately
-        if (page->Location == ES3FIFOPageLocation::None) {
-            Evict(Cache.Insert(page));
-        } else {
-            page->IncrementFrequency();
-        }
+    void ReloadEvictedPage(TPage* page) {
+        Y_ASSERT(page->State == PageStateEvicted);
+        Y_ENSURE(page->Use()); // still in PageMap, guaranteed to be alive
+        page->State = PageStateLoaded;
+        RemovePassivePage(page);
+        AddActivePage(page);
+        Evict(Cache.Insert(page));
     }
 
     TCollection& EnsureCollection(const TLogoBlobID& pageCollectionId, const NPageCollection::IPageCollection& pageCollection, const TActorId& owner) {
@@ -837,8 +824,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             auto* page = static_cast<TPage*>(rawPage.Get());
             if (page->State == PageStateEvicted && page->GetFrequency() > 0) {
                 // page was accessed while being passive, load it back
-                TryLoadEvictedPage(page);
-                Touch(page);
+                ReloadEvictedPage(page);
             }
             // load evicted page may be evicted again
             TryDrop(page, recheck);
@@ -1096,8 +1082,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             switch (page->State) {
             case PageStateEvicted:
-                TryLoadEvictedPage(page);
-                Touch(page);
+                ReloadEvictedPage(page);
                 break;
             case PageStateNo:
                 page->State = PageStateRequestedAsync;
@@ -1274,7 +1259,7 @@ public:
             HFunc(NSharedCache::TEvAttach, Handle);
             HFunc(NSharedCache::TEvSaveCompactedPages, Handle);
             HFunc(NSharedCache::TEvRequest, Handle);
-            HFunc(NSharedCache::TEvTouch, Handle);
+            HFunc(NSharedCache::TEvSync, Handle);
             HFunc(NSharedCache::TEvUnregister, Handle);
             HFunc(NSharedCache::TEvDetach, Handle);
 

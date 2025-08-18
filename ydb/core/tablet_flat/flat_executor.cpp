@@ -731,9 +731,12 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
 
 void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection)
 {
-    auto sharedCacheTouches = PrivatePageCache->AddPageCollection(pageCollection);
+    auto syncPages = PrivatePageCache->AddPageCollection(pageCollection);
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode()));
-    SendSharedCacheTouches(std::move(sharedCacheTouches));
+   
+    if (syncPages) {
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvSync(std::move(syncPages)));
+    }
 }
 
 void TExecutor::DropPartStorePageCollections(const NTable::TPart &part)
@@ -763,12 +766,6 @@ void TExecutor::DropPageCollection(const TLogoBlobID &pageCollectionId)
     // Note: Shared Cache will send TEvResult with NKikimrProto::RACE status
     // it activates all transactions that are waiting for being dropped page collection
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvDetach(pageCollectionId));
-}
-
-void TExecutor::SendSharedCacheTouches(THashMap<TLogoBlobID, THashSet<TPageId>>&& touches) {
-    if (touches.empty())
-        return;
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvTouch(std::move(touches)));
 }
 
 void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {

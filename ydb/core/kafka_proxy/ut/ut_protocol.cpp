@@ -116,7 +116,6 @@ public:
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(128);
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
         appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(1_KB);
-        appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(50_KB);
 
         appConfig.MutableGRpcConfig()->SetHost("::1");
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
@@ -2165,7 +2164,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TStringBuilder topic1FullPath;
         topic1FullPath << "/Root/" << topic1;
 
-        CreateTopic(pqClient, topic1FullPath, 1, {"consumer1"}, 50_MB);
+        CreateTopic(pqClient, topic1FullPath, 1, {"consumer1"});
         {
             // Creation of two topics
             auto msg = client.CreateTopics({

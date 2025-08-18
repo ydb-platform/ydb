@@ -5,7 +5,6 @@ ADDINCL(
 )
 
 SIZE(medium)
-TIMEOUT(160)
 SRCS(
     kafka_test_client.cpp
     kafka_test_client.h

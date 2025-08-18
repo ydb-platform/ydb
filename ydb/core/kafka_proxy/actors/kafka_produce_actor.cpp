@@ -300,7 +300,6 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
                 res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
             }
         }
-        auto w = partitionRequest->AddCmdWrite();
 
         if (record.Key) {
             auto res = proto.AddMessageMeta();
@@ -315,6 +314,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         bool res = proto.SerializeToString(&str);
         Y_ABORT_UNLESS(res);
 
+        auto w = partitionRequest->AddCmdWrite();
         w->SetSourceId(sourceId);
 
         bool enableKafkaDeduplication = batch->ProducerId >= 0;

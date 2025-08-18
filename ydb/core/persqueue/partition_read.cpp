@@ -784,7 +784,8 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                     " offset " << read->Offset);
         ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
                                       TStringBuilder() << "trying to read from future. ReadOffset " <<
-                                      read->Offset << ", " << read->PartNo << " EndOffset " << EndOffset, ev->Get()->IsInternal);
+                                      read->Offset << ", " << read->PartNo << " EndOffset " << BlobEncoder.EndOffset,
+                                      ev->Get()->IsInternal);
         return;
     }
 

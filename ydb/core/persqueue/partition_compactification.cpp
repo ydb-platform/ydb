@@ -39,7 +39,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
         return;
     }
 
-    FirstUncompactedOffset = Max(PartitionActor->StartOffset, FirstUncompactedOffset);
+    FirstUncompactedOffset = Max(PartitionActor->CompactionBlobEncoder.StartOffset, FirstUncompactedOffset);
     switch (Step) {
     case EStep::PENDING:
         ReadState = TReadState(FirstUncompactedOffset, PartitionActor);
@@ -128,7 +128,7 @@ void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
 }
 TPartitionCompaction::TReadState::TReadState(ui64 firstOffset, TPartition* partitionActor)
     : OffsetToRead(firstOffset)
-    , LastOffset(PartitionActor->BlobEncoder.DataKeysBody.empty()
+    , LastOffset(partitionActor->BlobEncoder.DataKeysBody.empty()
         ?  partitionActor->BlobEncoder.Head.Offset
         : partitionActor->BlobEncoder.DataKeysBody.front().Key.GetOffset())
     , PartitionActor(partitionActor)
@@ -263,7 +263,7 @@ TPartitionCompaction::TCompactState::TCompactState(
     : MaxOffset(maxOffset)
     , TopicData(std::move(data))
     , PartitionActor(partitionActor)
-    , LastProcessedOffset(partitionActor->StartOffset)
+    , LastProcessedOffset(partitionActor->CompactionBlobEncoder.StartOffset)
     , CommittedOffset(firstUncompactedOffset)
     , DataKeysBody(partitionActor->CompactionBlobEncoder.DataKeysBody)
 {
@@ -435,7 +435,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         }
         hasNonZeroParts = hasNonZeroParts || res.GetData().size() > 0;
 
-        if (res.GetOffset() <= PartitionActor->StartOffset
+        if (res.GetOffset() <= PartitionActor->CompactionBlobEncoder.StartOffset
             // These are parts of last message that we don't wan't to process
             || (CurrentMessage.Defined() && res.GetOffset() == CurrentMessage->GetOffset() && res.GetPartNo() <= CurrentMessage->GetPartNo())
              // We reached max offset and don't want to process more messages, but still need to add them to batch
@@ -676,11 +676,12 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
     }
 
     Y_ENSURE(PartitionActor->CompactionBlobEncoder.DataKeysBody.size() == oldDataKeys.size() - zeroedKeys);
-    Y_ENSURE(currCumulSize == PartitionActor->BodySize - sizeDiff);
-    PartitionActor->BodySize = currCumulSize;
-    PartitionActor->StartOffset = Max(
-                    PartitionActor->StartOffset,
-                    PartitionActor->DataKeysBody.front().Key.GetOffset() + (ui32)(PartitionActor->DataKeysBody.front().Key.GetPartNo() > 0));
+    Y_ENSURE(currCumulSize == PartitionActor->CompactionBlobEncoder.BodySize - sizeDiff);
+    PartitionActor->CompactionBlobEncoder.BodySize = currCumulSize;
+    PartitionActor->CompactionBlobEncoder.StartOffset = Max(
+                    PartitionActor->CompactionBlobEncoder.StartOffset,
+                    PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetOffset()
+                        + (ui32)(PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetPartNo() > 0));
 
     UpdatedKeys.clear();
     DeletedKeys.clear();

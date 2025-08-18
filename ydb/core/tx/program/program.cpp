@@ -25,7 +25,8 @@ const THashSet<ui32>& TProgramContainer::GetEarlyFilterColumns() const {
     return Program->GetFilterColumns();
 }
 
-TConclusionStatus TProgramContainer::Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) {
+TConclusionStatus TProgramContainer::Init(
+    const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept {
     ProgramProto = programProto;
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
         TString out;
@@ -34,7 +35,14 @@ TConclusionStatus TProgramContainer::Init(const NArrow::NSSA::IColumnResolver& c
     }
 
     if (programProto.HasKernels()) {
-        KernelsRegistry.Parse(programProto.GetKernels());
+        try {
+            if (!KernelsRegistry.Parse(programProto.GetKernels())) {
+                return TConclusionStatus::Fail("Can't parse kernels");
+            }
+        } catch (...) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed_error")("result", CurrentExceptionMessage());
+            return TConclusionStatus::Fail(TStringBuilder() << "Can't initialize program, exception thrown: " << CurrentExceptionMessage());
+        }
     }
 
     auto parseStatus = ParseProgram(columnResolver, programProto);
@@ -42,12 +50,11 @@ TConclusionStatus TProgramContainer::Init(const NArrow::NSSA::IColumnResolver& c
         return parseStatus;
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed")("result", DebugString());
-
     return TConclusionStatus::Success();
 }
 
 TConclusionStatus TProgramContainer::Init(
-    const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) {
+    const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) noexcept {
     NKikimrSSA::TProgram programProto;
     if (!programProto.ParseFromString(olapProgramProto.GetProgram())) {
         return TConclusionStatus::Fail("Can't parse TProgram protobuf");
@@ -70,7 +77,7 @@ TConclusionStatus TProgramContainer::Init(
 }
 
 TConclusionStatus TProgramContainer::Init(
-    const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram) {
+    const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram) noexcept {
     Y_ABORT_UNLESS(serializedProgram);
     Y_ABORT_UNLESS(!OverrideProcessingColumnsVector);
 
@@ -152,24 +159,24 @@ const THashSet<ui32>& TProgramContainer::GetProcessingColumns() const {
     return Program->GetSourceColumns();
 }
 
-TConclusionStatus TProgramContainer::ApplyProgram(
-    const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& collection, const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const {
+TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> TProgramContainer::ApplyProgram(
+    std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection, const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const {
     if (Program) {
-        return Program->Apply(source, collection);
+        return Program->Apply(source, std::move(collection));
     } else if (OverrideProcessingColumnsVector) {
         collection->RemainOnly(*OverrideProcessingColumnsVector, true);
     }
-    return TConclusionStatus::Success();
+    return std::move(collection);
 }
 
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TProgramContainer::ApplyProgram(
     const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const {
-    auto resources = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(batch, resolver);
-    auto status = ApplyProgram(resources, std::make_shared<NArrow::NSSA::TFakeDataSource>());
+    auto resources = std::make_unique<NArrow::NAccessor::TAccessorsCollection>(batch, resolver);
+    auto status = ApplyProgram(std::move(resources), std::make_shared<NArrow::NSSA::TFakeDataSource>());
     if (status.IsFail()) {
         return status;
     }
-    return resources->ToBatch();
+    return status.GetResult()->ToBatch();
 }
 
 }   // namespace NKikimr::NOlap

@@ -3,9 +3,12 @@
 
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/config.h>
@@ -15,7 +18,6 @@
 
 namespace NKikimr::NOlap::NReader {
 
-class TPartialReadResult;
 class TPartialSourceAddress;
 
 class TComputeShardingPolicy {
@@ -50,6 +52,7 @@ class TReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
+    YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     const NColumnShard::TConcreteScanCounters Counters;
     TReadMetadataBase::TConstPtr ReadMetadata;
     NResourceBroker::NSubscribe::TTaskContext ResourcesTaskContext;
@@ -149,9 +152,10 @@ public:
 
     TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
-        const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
+        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NColumnShard::TConcreteScanCounters& counters,
+        const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
+        const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId,
+        const NConveyorComposite::TCPULimitsConfig& cpuLimits);
 };
 
 class IDataReader {
@@ -162,7 +166,7 @@ protected:
     virtual TString DoDebugString(const bool verbose) const = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
-    virtual std::vector<std::shared_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
+    virtual std::vector<std::unique_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
     virtual TConclusion<bool> DoReadNextInterval() = 0;
 
 public:
@@ -207,7 +211,7 @@ public:
         return *result;
     }
 
-    std::vector<std::shared_ptr<TPartialReadResult>> ExtractReadyResults(const int64_t maxRowsInBatch) {
+    std::vector<std::unique_ptr<TPartialReadResult>> ExtractReadyResults(const int64_t maxRowsInBatch) {
         return DoExtractReadyResults(maxRowsInBatch);
     }
 

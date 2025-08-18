@@ -63,7 +63,7 @@ void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
     AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
 
     DoCompile(context);
-    DoOnAfterCompile();
+    DoOnAfterCompile(context);
 
     SetStage(NChanges::EStage::Compiled);
 }

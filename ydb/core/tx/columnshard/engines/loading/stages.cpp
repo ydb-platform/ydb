@@ -9,7 +9,7 @@ namespace NKikimr::NOlap::NEngineLoading {
 
 bool TEngineShardingInfoReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
-    return Self->VersionedIndex.LoadShardingInfo(db);
+    return Self->MutableVersionedIndex().LoadShardingInfo(db);
 }
 
 bool TEngineShardingInfoReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

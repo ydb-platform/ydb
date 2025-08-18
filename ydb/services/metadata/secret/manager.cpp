@@ -2,6 +2,7 @@
 #include "checker_secret.h"
 #include "manager.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 #include <util/string/vector.h>
@@ -112,7 +113,8 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
     } else {
         result.SetColumn(TSecret::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(context.GetExternalData().GetUserToken()->GetUserSID()));
     }
-    for (auto&& c : settings.GetObjectId()) {
+    const TString secretName{settings.GetObjectId()};
+    for (auto&& c : secretName) {
         if (c >= '0' && c <= '9') {
             continue;
         }
@@ -127,8 +129,15 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
         }
         return TConclusionStatus::Fail("incorrect character for secret id: '" + TString(c) + "'");
     }
+
+    const bool requireDbPrefixInSecretName = HasAppData() ? AppData()->FeatureFlags.GetRequireDbPrefixInSecretName() : false;
+    const TStringBuf databaseName{ExtractBase(context.GetExternalData().GetDatabase())};
+    if (requireDbPrefixInSecretName && !secretName.StartsWith(databaseName)) {
+        return TConclusionStatus::Fail(TStringBuilder{} << "Secret name " << secretName << " must start with database name " << databaseName);
+    }
+
     {
-        result.SetColumn(TSecret::TDecoder::SecretId, NInternal::TYDBValue::Utf8(settings.GetObjectId()));
+        result.SetColumn(TSecret::TDecoder::SecretId, NInternal::TYDBValue::Utf8(secretName));
     }
     {
         auto fValue = settings.GetFeaturesExtractor().Extract(TSecret::TDecoder::Value);

@@ -25,7 +25,7 @@ protected:
     }
 
     virtual void DoCompile(TFinalizationContext& context) override;
-    virtual void DoOnAfterCompile() override;
+    virtual void DoOnAfterCompile(const TFinalizationContext& context) override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoStart(NColumnShard::TColumnShard& self) override;

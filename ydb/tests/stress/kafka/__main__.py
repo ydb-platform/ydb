@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import argparse
-import logging
+# import logging
+import os
 from ydb.tests.stress.kafka.workload import Workload
 
 if __name__ == '__main__':
@@ -19,11 +20,6 @@ if __name__ == '__main__':
 
     os.environ["YDB_ANONYMOUS_CREDENTIALS"] = "1"
 
-    with Workload(args.endpoint,
-                args.database,
-                bootstrap=args.bootstrap,
-                test_topic_path=args.sourcePath,
-                target_topic_path=args.targetPath,
-                workload_consumer_name=args.consumer,
-                num_workers=int(args.numWorkers)) as workload:
+    with Workload(args.endpoint, args.database, bootstrap=args.bootstrap, test_topic_path=args.sourcePath, target_topic_path=args.targetPath,
+                  workload_consumer_name=args.consumer, num_workers=int(args.numWorkers)) as workload:
         workload.loop()

@@ -9,7 +9,7 @@ from ydb.tests.library.stress.fixtures import StressFixture
 class TestYdbTopicWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(kafka_api_port=9092)
 
     def test(self):
         yatest.common.execute([

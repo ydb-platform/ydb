@@ -2,7 +2,7 @@ IF (NOT WITH_VALGRIND)
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/kafka/topic_kafka_streams")
+ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/kafka/kafka_streams_test")
 
 TEST_SRCS(
     test_kafka_streams.py

@@ -37,12 +37,12 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
 
 template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
-    return arrow::fixed_size_binary(16);
+    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
 }
 
 template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>() {
-    return arrow::fixed_size_binary(16);
+    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
 }
 
 template <>
@@ -82,7 +82,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
         case NScheme::NTypeIds::Date32:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
         case NScheme::NTypeIds::Decimal:
-            return std::make_shared<arrow::FixedSizeBinaryType>(16);
+            return std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE);
         default:
             return GetArrowType(typeId);
     }

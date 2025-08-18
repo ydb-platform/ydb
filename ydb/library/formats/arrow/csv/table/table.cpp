@@ -1,5 +1,6 @@
 #include "table.h"
 #include <util/string/join.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 namespace NKikimr::NFormats {
 
@@ -54,7 +55,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetArrowType(con
     auto tp = ExtractType(type);
     switch (tp.GetKind()) {
     case NYdb::TTypeParser::ETypeKind::Decimal:
-        return std::make_shared<arrow::FixedSizeBinaryType>(16);
+        return std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE);
     case NYdb::TTypeParser::ETypeKind::Primitive:
         switch (tp.GetPrimitive()) {
             case NYdb::EPrimitiveType::Bool:

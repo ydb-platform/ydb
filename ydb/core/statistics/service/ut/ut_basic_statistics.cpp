@@ -241,13 +241,13 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         });
         runtime.WaitFor("TEvSchemeShardStats 2", [&]{ return secondStatsToSA; });
 
-        bool propagate = false;
+        size_t propagateCount = 0;
         auto propagateObserver = runtime.AddObserver<TEvStatistics::TEvPropagateStatistics>([&](auto&){
-            propagate = true;
+            ++propagateCount;
         });
-        runtime.WaitFor("TEvPropagateStatistics", [&]{ return propagate; });
+        runtime.WaitFor("TEvPropagateStatistics", [&]{ return propagateCount >= runtime.GetNodeCount(); });
 
-        UNIT_ASSERT(GetRowCount(runtime, 1, pathId) == expectedRowCount);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, 1, pathId), expectedRowCount);
     }
 
     Y_UNIT_TEST(NotFullStatisticsDatashard) {

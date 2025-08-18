@@ -216,7 +216,7 @@ table_service_config:
 **Location:** `table_service_config.enable_query_service_spilling`  
 **Type:** `boolean`  
 **Default:** `true`  
-**Description:** Global option that enables spilling in data transfer channels between tasks.
+**Description:** Global option that enables transport spilling during data transfer between tasks.
 
 ```yaml
 table_service_config:
@@ -225,7 +225,7 @@ table_service_config:
 
 {% note info %}
 
-This setting works in conjunction with the local spilling service configuration. When disabled (`false`), channel spilling does not function even with enabled `spilling_service_config`.
+This setting works in conjunction with the local spilling service configuration. When disabled (`false`), transport spilling does not function even with enabled `spilling_service_config`.
 
 {% endnote %}
 

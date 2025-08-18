@@ -33,12 +33,12 @@ When memory usage approaches the limit, the system:
 
 {{ ydb-short-name }} implements two primary types of spilling that operate at different levels of the computational process:
 
-* [Compute Node Spilling](#compute-node-spilling)
-* [Channel Spilling](#channel-spilling)
+* [Computation Spilling](#computation-spilling)
+* [Transport Spilling](#transport-spilling)
 
 These types work independently and can activate simultaneously within a single query, providing comprehensive memory management.
 
-#### Compute Node Spilling {#compute-node-spilling}
+#### Computation Spilling {#computation-spilling}
 
 {{ ydb-short-name }} compute cores automatically offload intermediate data to disk when executing operations that require significant memory. This type of spilling is implemented at the level of individual computational operations and activates when memory limits are reached.
 
@@ -59,13 +59,13 @@ Compute nodes contain specialized objects for monitoring memory usage. When the 
 6. When necessary, data is loaded back and processed.
 
 
-#### Channel Spilling {#channel-spilling}
+#### Transport Spilling {#transport-spilling}
 
-This type of spilling operates at the level of data transfer between different query execution stages. Data transfer channels automatically buffer and offload data when buffers overflow. This helps avoid blocking the execution of the data-generating node, even when one of the receiving nodes is not ready to accept data.
+This type of spilling operates at the level of data transfer between different query execution stages. The system automatically buffers and offloads data when transfer buffers overflow. This helps avoid blocking the execution of data-generating operations, even when receiving operations are not ready to accept data.
 
 ##### Operation Mechanism
 
-Data transfer channels continuously monitor their state:
+The data transfer system continuously monitors its state:
 
 1. **Buffering**: Incoming data accumulates in the channel’s internal buffers  
 2. **Fill control**: The system tracks buffer fill levels  

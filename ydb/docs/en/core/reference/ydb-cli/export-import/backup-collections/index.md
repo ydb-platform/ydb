@@ -1,6 +1,14 @@
 # Backup collections
 
-This section describes backup collections and incremental backup functionality in YDB.
+## Quick start
+
+To get started with backup collections:
+
+1. [Create a backup collection](create-collection.md) with your tables
+2. [Take incremental backups](incremental-backups.md) regularly  
+3. [Restore from collections](restore-from-collection.md) when needed
+
+For troubleshooting common issues, see the [troubleshooting guide](troubleshooting.md).s section describes backup collections and incremental backup functionality in YDB.
 
 {% note info %}
 

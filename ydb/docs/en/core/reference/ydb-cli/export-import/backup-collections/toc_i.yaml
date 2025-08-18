@@ -17,4 +17,3 @@ items:
   href: compatibility.md
 - name: Troubleshooting
   href: troubleshooting.md
-- include: { mode: link, path: _includes/toc_p.yaml }

@@ -2,7 +2,10 @@
 
 This section explains how to use backup collections for full and incremental backups, and how they interact with export/import tools.
 
-{% include [common-options](_includes/common-options.md) %}
+**Important considerations:**
+- Storage backends: cluster (current); export to FS/S3 via CLI tools
+- Keep backup chains valid; apply retention with care
+- Verify backups periodically and before critical restores
 
 ## What a collection contains
 
@@ -12,13 +15,14 @@ This section explains how to use backup collections for full and incremental bac
 
 ## Supported backends
 
-- **Cluster storage** (SQL: STORAGE='cluster') — Current implementation
-- **Export/import to filesystem or S3** using CLI tools (see [includes](_includes/fs-examples.md))
+- **Cluster storage** (SQL: STORAGE='cluster') — Current implementation  
+- **Export/import to filesystem or S3** using CLI tools (see [Restore operations](restore-from-collection.md))
 
 ## Security and integrity
 
-- See [encryption and integrity docs](_includes/integrity-and-verification.md); verify backups before restore in critical workflows.
+- Verify backups before restore in critical workflows
 - Encryption support via KMS integration (see [Advanced topics](advanced.md))
+- Keep audit logs of backup creation and restore operations
 
 ## Limitations
 

@@ -93,10 +93,10 @@ private:
         if (SourcesToAggregate.empty()) {
             if (AggregationActivity) {
                 ui32 originalCount = source->GetRecordsCount();
-                if (!source->GetStageData().GetTable()->GetFilter().IsTotalAllowFilter()) {
-                    originalCount = source->GetStageData().GetTable()->GetFilter().GetFilteredCountVerified();
+                if (!source->GetStageData().GetTable().GetFilter().IsTotalAllowFilter()) {
+                    originalCount = source->GetStageData().GetTable().GetFilter().GetFilteredCountVerified();
                 }
-                const ui32 aggrKeysCount = source->GetStageData().GetTable()->GetRecordsCountActualVerified();
+                const ui32 aggrKeysCount = source->GetStageData().GetTable().GetRecordsCountActualVerified();
                 localAggregationActivity =
                     aggrKeysCount < GuaranteeNeedAggregationSourceRecordsCount || aggrKeysCount * CriticalBadAggregationKffForSource < originalCount;
             } else {

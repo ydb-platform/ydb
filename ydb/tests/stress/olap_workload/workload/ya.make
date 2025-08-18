@@ -8,6 +8,7 @@ PEERDIR(
     ydb/public/sdk/python
     ydb/public/sdk/python/enable_v3_new_behavior
     ydb/tests/stress/common
+    ydb/tests/datashard/lib
 )
 
 END()

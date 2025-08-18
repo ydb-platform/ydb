@@ -17,14 +17,14 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
 
         TFmrWriterSettings settings{chunkSize};
-        TFmrTableDataServiceWriter outputWriter("tableId", "partId", tableDataServicePtr, settings);
+        TFmrTableDataServiceWriter outputWriter("tableId", "partId", tableDataServicePtr, TString(), settings);
 
         outputWriter.Write(originalTableContent.data(), originalTableContent.size());
         outputWriter.Flush();
 
         TFmrReaderSettings readerSettings{1};
         std::vector<TTableRange> tableRanges = {{"partId", 0, 1}};
-        TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, readerSettings);
+        TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, {}, TString(), readerSettings);
 
         char buffer[10];
         reader.Read(buffer, 10);
@@ -39,14 +39,14 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
 
         TFmrWriterSettings settings{.ChunkSize= chunkSize, .MaxInflightChunks = 2};
-        TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, settings);
+        TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, TString(), settings);
 
         outputStream.Write(originalTableContent.data(), originalTableContent.size());
         outputStream.Flush();
 
         TFmrReaderSettings readerSettings{1};
         std::vector<TTableRange> tableRanges = {{"partId", 0, 1}};
-        TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, readerSettings);
+        TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, {}, TString(), readerSettings);
 
         auto readTableContent = reader.ReadAll();
         UNIT_ASSERT_NO_DIFF(readTableContent, originalTableContent);
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
 
         TFmrWriterSettings settings{.ChunkSize= chunkSize, .MaxInflightChunks = 2};
-        TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, settings);
+        TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, TString(), settings);
 
         for (size_t i = 0; i < 3; ++i) {
             outputStream.Write(originalTableContent.data(), originalTableContent.size());
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
 
         TFmrReaderSettings readerSettings{1};
         std::vector<TTableRange> tableRanges = {{"partId", 0, 3}};
-        TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, readerSettings);
+        TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, {}, TString(), readerSettings);
 
         auto readTableContent = reader.ReadAll();
         UNIT_ASSERT_NO_DIFF(readTableContent, originalTableContent * 3);
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
         ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
 
         TFmrWriterSettings settings{chunkSize};
-        TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, settings);
+        TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, TString(), settings);
 
         for (size_t i = 0; i < 3; ++i) {
             outputStream.Write(originalTableContent.data(), originalTableContent.size());
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
 
         TFmrReaderSettings readerSettings{5};
         std::vector<TTableRange> tableRanges = {{"partId", 0, 3}};
-        TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, readerSettings);
+        TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, {}, TString(), readerSettings);
 
         auto readTableContent = reader.ReadAll();
         UNIT_ASSERT_NO_DIFF(readTableContent, originalTableContent * 3);

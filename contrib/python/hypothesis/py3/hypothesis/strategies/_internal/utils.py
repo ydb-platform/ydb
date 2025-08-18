@@ -10,22 +10,22 @@
 
 import sys
 import threading
+from functools import partial
 from inspect import signature
-from typing import TYPE_CHECKING, Callable, Dict
+from typing import TYPE_CHECKING, Callable
 
 import attr
 
 from hypothesis.internal.cache import LRUReusedCache
 from hypothesis.internal.compat import dataclass_asdict
-from hypothesis.internal.conjecture.junkdrawer import clamp
-from hypothesis.internal.floats import float_to_int
+from hypothesis.internal.floats import clamp, float_to_int
 from hypothesis.internal.reflection import proxies
 from hypothesis.vendor.pretty import pretty
 
 if TYPE_CHECKING:
     from hypothesis.strategies._internal.strategies import SearchStrategy, T
 
-_strategies: Dict[str, Callable[..., "SearchStrategy"]] = {}
+_strategies: dict[str, Callable[..., "SearchStrategy"]] = {}
 
 
 class FloatKey:
@@ -157,7 +157,7 @@ def defines_strategy(
     return decorator
 
 
-def to_jsonable(obj: object) -> object:
+def to_jsonable(obj: object, *, avoid_realization: bool) -> object:
     """Recursively convert an object to json-encodable form.
 
     This is not intended to round-trip, but rather provide an analysis-ready
@@ -165,27 +165,31 @@ def to_jsonable(obj: object) -> object:
     known types.
     """
     if isinstance(obj, (str, int, float, bool, type(None))):
-        if isinstance(obj, int) and abs(obj) >= 2**63:
-            # Silently clamp very large ints to max_float, to avoid
-            # OverflowError when casting to float.
+        if isinstance(obj, int) and not isinstance(obj, bool) and abs(obj) >= 2**63:
+            # Silently clamp very large ints to max_float, to avoid OverflowError when
+            # casting to float.  (but avoid adding more constraints to symbolic values)
+            if avoid_realization:
+                return "<symbolic>"
             obj = clamp(-sys.float_info.max, obj, sys.float_info.max)
             return float(obj)
         return obj
+    if avoid_realization:
+        return "<symbolic>"
+    recur = partial(to_jsonable, avoid_realization=avoid_realization)
     if isinstance(obj, (list, tuple, set, frozenset)):
         if isinstance(obj, tuple) and hasattr(obj, "_asdict"):
-            return to_jsonable(obj._asdict())  # treat namedtuples as dicts
-        return [to_jsonable(x) for x in obj]
+            return recur(obj._asdict())  # treat namedtuples as dicts
+        return [recur(x) for x in obj]
     if isinstance(obj, dict):
         return {
-            k if isinstance(k, str) else pretty(k): to_jsonable(v)
-            for k, v in obj.items()
+            k if isinstance(k, str) else pretty(k): recur(v) for k, v in obj.items()
         }
 
     # Hey, might as well try calling a .to_json() method - it works for Pandas!
     # We try this before the below general-purpose handlers to give folks a
     # chance to control this behavior on their custom classes.
     try:
-        return to_jsonable(obj.to_json())  # type: ignore
+        return recur(obj.to_json())  # type: ignore
     except Exception:
         pass
 
@@ -195,11 +199,11 @@ def to_jsonable(obj: object) -> object:
         and dcs.is_dataclass(obj)
         and not isinstance(obj, type)
     ):
-        return to_jsonable(dataclass_asdict(obj))
+        return recur(dataclass_asdict(obj))
     if attr.has(type(obj)):
-        return to_jsonable(attr.asdict(obj, recurse=False))  # type: ignore
+        return recur(attr.asdict(obj, recurse=False))  # type: ignore
     if (pyd := sys.modules.get("pydantic")) and isinstance(obj, pyd.BaseModel):
-        return to_jsonable(obj.model_dump())
+        return recur(obj.model_dump())
 
     # If all else fails, we'll just pretty-print as a string.
     return pretty(obj)

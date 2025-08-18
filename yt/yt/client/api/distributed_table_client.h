@@ -37,6 +37,7 @@ struct TDistributedWriteSessionWithResults
 
 struct TDistributedWriteSessionStartOptions
     : public TTransactionalOptions
+    , public TTimeoutOptions
 {
     int CookieCount = 0;
      //! Timeout for session. Similar to transaction timeout.
@@ -44,6 +45,7 @@ struct TDistributedWriteSessionStartOptions
 };
 
 struct TDistributedWriteSessionFinishOptions
+    : public TTimeoutOptions
 {
     int MaxChildrenPerAttachRequest = 10'000;
 };

@@ -364,6 +364,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(StopPDisk)
                     HANDLE_COMMAND(GetInterfaceVersion)
                     HANDLE_COMMAND(MovePDisk)
+                    HANDLE_COMMAND(UpdateBridgeGroupInfo)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

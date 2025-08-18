@@ -31,8 +31,8 @@ namespace NKikimr {
         TBridgeInfo(TBridgeInfo&&) = default;
 
         const TPile *GetPile(TBridgePileId bridgePileId) const {
-            Y_ABORT_UNLESS(bridgePileId.GetRawId() < Piles.size());
-            return &Piles[bridgePileId.GetRawId()];
+            Y_ABORT_UNLESS(bridgePileId.GetPileIndex() < Piles.size());
+            return &Piles[bridgePileId.GetPileIndex()];
         }
 
         const TPile *GetPileForNode(ui32 nodeId) const {
@@ -43,7 +43,7 @@ namespace NKikimr {
         template<typename T>
         void ForEachPile(T&& callback) const {
             for (size_t i = 0; i < Piles.size(); ++i) {
-                callback(TBridgePileId::FromValue(i));
+                callback(TBridgePileId::FromPileIndex(i));
             }
         }
     };

@@ -14,7 +14,7 @@ class TEnumIndexedFairShareActionQueue
 {
 public:
     TEnumIndexedFairShareActionQueue(
-        const TString& threadName,
+        std::string threadName,
         const std::vector<TString>& queueNames,
         const THashMap<TString, std::vector<TString>>& bucketToQueues,
         NThreading::TThreadOptions threadOptions,
@@ -45,7 +45,7 @@ private:
 
 template <typename EQueue, typename EBucket>
 IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueue(
-    const TString& threadName,
+    std::string threadName,
     const THashMap<EBucket, std::vector<EQueue>>& bucketToQueues,
     NThreading::TThreadOptions threadOptions,
     NProfiling::IRegistryPtr registry)

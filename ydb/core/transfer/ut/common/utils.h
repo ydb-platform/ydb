@@ -64,6 +64,36 @@ struct DateTimeChecker : public Checker<TInstant> {
     }
 };
 
+struct Timestamp64Checker : public Checker<TInstant> {
+    Timestamp64Checker(TInstant&& expected, TDuration&& precision)
+        : Checker<TInstant>(std::move(expected))
+        , Precision(precision) {
+    }
+
+    TInstant Get(const ::Ydb::Value& value) override {
+        return TInstant::MicroSeconds(value.uint64_value());
+    }
+
+    void Assert(const std::string& msg, const ::Ydb::Value& value) override {
+        auto v = Get(value);
+        if (Expected - Precision > v || Expected + Precision < v) {
+            UNIT_ASSERT_VALUES_EQUAL_C(v, Expected, msg);
+        }
+    }
+
+    TDuration Precision;
+};
+
+struct NullChecker : public IChecker {
+    bool Get(const ::Ydb::Value& value) {
+        return value.has_null_flag_value();
+    }
+
+    void Assert(const std::string& msg, const ::Ydb::Value& value) override {
+        UNIT_ASSERT_VALUES_EQUAL_C(Get(value), true, msg);
+    }
+};
+
 template<>
 inline bool Checker<bool>::Get(const ::Ydb::Value& value) {
     return value.bool_value();
@@ -127,11 +157,11 @@ std::pair<TString, std::shared_ptr<IChecker>> _C(std::string&& name, T&& expecte
     };
 }
 
-template<typename C, typename T>
-std::pair<TString, std::shared_ptr<IChecker>> _T(std::string&& name, T&& expected) {
+template<typename C, typename... T>
+std::pair<TString, std::shared_ptr<IChecker>> _T(std::string&& name, T&&... expected) {
     return {
         std::move(name),
-        std::make_shared<C>(std::move(expected))
+        std::make_shared<C>(std::forward<T>(expected)...)
     };
 }
 
@@ -141,6 +171,8 @@ struct TMessage {
     std::optional<std::string> ProducerId = std::nullopt;
     std::optional<std::string> MessageGroupId = std::nullopt;
     std::optional<ui64> SeqNo = std::nullopt;
+    std::optional<TInstant> CreateTimestamp = std::nullopt;
+    std::map<std::string, std::string> Attributes = {};
 };
 
 inline TMessage _withSeqNo(ui64 seqNo) {
@@ -173,6 +205,29 @@ inline TMessage _withMessageGroupId(const std::string& messageGroupId) {
     };
 }
 
+inline TMessage _withCreateTimestamp(const TInstant& timestamp) {
+    return {
+        .Message = TStringBuilder() << "Message-" << timestamp,
+        .Partition = 0,
+        .ProducerId = std::nullopt,
+        .MessageGroupId = std::nullopt,
+        .SeqNo = std::nullopt,
+        .CreateTimestamp = timestamp
+    };
+}
+
+inline TMessage _withAttributes(std::map<std::string, std::string>&& attributes) {
+    return {
+        .Message = TStringBuilder() << "Message",
+        .Partition = 0,
+        .ProducerId = std::nullopt,
+        .MessageGroupId = std::nullopt,
+        .SeqNo = std::nullopt,
+        .CreateTimestamp = std::nullopt,
+        .Attributes = std::move(attributes)
+    };
+}
+
 using TExpectations = TVector<TVector<std::pair<TString, std::shared_ptr<IChecker>>>>;
 
 struct TConfig {
@@ -194,7 +249,7 @@ struct MainTestCase {
         return config;
     }
 
-    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "COLUMN")
+    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "ROW")
         : TableType(std::move(tableType))
         , Id(RandomNumber<size_t>())
         , ConnectionString(GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE"))
@@ -266,8 +321,16 @@ struct MainTestCase {
     }
 
     void Grant(const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
+        ChangePermissions("GRANT", "TO", object, username, permissions);
+    }
+
+    void Revoke(const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
+        ChangePermissions("REVOKE", "FROM", object, username, permissions);
+    }
+
+    void ChangePermissions(const std::string& statement, const std::string& statementClause, const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
         TStringBuilder sql;
-        sql << "GRANT ";
+        sql << statement << " ";
         for (size_t i = 0; i < permissions.size(); ++i) {
             if (i) {
                 sql << ", ";
@@ -282,7 +345,7 @@ struct MainTestCase {
         if (!object.empty()) {
             sql << "/" << object;
         }
-        sql << "` TO `" << username << "@builtin`";
+        sql << "` " << statementClause << " `" << username << "@builtin`";
 
         ExecuteDDL(sql);
     }
@@ -376,6 +439,7 @@ struct MainTestCase {
         std::optional<ui64> BatchSizeBytes = 8_MB;
         std::optional<std::string> ExpectedError;
         std::optional<std::string> Username;
+        std::optional<std::string> UserSecretName;
         std::optional<std::string> Directory;
 
         CreateTransferSettings() {};
@@ -423,9 +487,19 @@ struct MainTestCase {
             result.Directory = directory;
             return result;
         }
+
+        static CreateTransferSettings WithSecretName(const TString& secret) {
+            CreateTransferSettings result;
+            result.UserSecretName = secret;
+            return result;
+        }
     };
 
     void CreateTransfer(const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
+        CreateTransfer(TransferName, lambda, settings);
+    }
+
+    void CreateTransfer(const std::string& name, const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
         std::vector<std::string> options;
         if (!settings.LocalTopic) {
             options.push_back(TStringBuilder() << "CONNECTION_STRING = 'grpc://" << ConnectionString << "'");
@@ -438,6 +512,9 @@ struct MainTestCase {
         }
         if (settings.BatchSizeBytes) {
             options.push_back(TStringBuilder() <<  "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes);
+        }
+        if (settings.UserSecretName) {
+            options.push_back(TStringBuilder() <<  "TOKEN_SECRET_NAME = '" << *settings.UserSecretName << "'");
         }
         if (settings.Username) {
             options.push_back(TStringBuilder() <<  "TOKEN = '" << *settings.Username << "@builtin'");
@@ -457,7 +534,7 @@ struct MainTestCase {
             WITH (
                 %s
             );
-        )", lambda.data(), TransferName.data(), topicName.data(), TableName.data(), optionsStr.data());
+        )", lambda.data(), name.data(), topicName.data(), TableName.data(), optionsStr.data());
 
         ExecuteDDL(ddl, true, settings.ExpectedError);
     }
@@ -497,6 +574,10 @@ struct MainTestCase {
     }
 
     void AlterTransfer(const AlterTransferSettings& settings, bool success = true) {
+        AlterTransfer(TransferName, settings, success);
+    }
+
+    void AlterTransfer(const std::string& name, const AlterTransferSettings& settings, bool success = true) {
         std::string lambda = settings.TransformLambda ? *settings.TransformLambda : "";
         std::string setLambda = settings.TransformLambda ? "SET USING $l" : "";
 
@@ -523,7 +604,7 @@ struct MainTestCase {
             ALTER TRANSFER `%s`
             %s
             %s;
-        )", lambda.data(), TransferName.data(), setLambda.data(), setOptions.data()), success);
+        )", lambda.data(), name.data(), setLambda.data(), setOptions.data()), success);
     }
 
     void DropTransfer() {
@@ -565,17 +646,28 @@ struct MainTestCase {
     }
 
     auto DescribeConsumer() {
-        auto topic = DescribeTopic();
-        auto consumers = topic.GetTopicDescription().GetConsumers();
+        const auto topic = DescribeTopic();
+        const auto& consumers = topic.GetTopicDescription().GetConsumers();
         UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
         return DescribeConsumer(consumers[0].GetConsumerName());
     }
 
-    void CheckCommittedOffset(size_t partitionId, size_t expectedOffset) {
-        auto d = DescribeConsumer();
-        UNIT_ASSERT(d.IsSuccess());
-        auto s = d.GetConsumerDescription().GetPartitions().at(partitionId).GetPartitionConsumerStats();
-        UNIT_ASSERT_VALUES_EQUAL(expectedOffset, s->GetCommittedOffset());
+    void CheckCommittedOffset(size_t partitionId, size_t expectedOffset, TDuration timeout = TDuration::Seconds(5)) {
+        auto end = TInstant::Now() + timeout;
+
+        while(true) {
+            auto d = DescribeConsumer();
+            UNIT_ASSERT(d.IsSuccess());
+            auto s = d.GetConsumerDescription().GetPartitions().at(partitionId).GetPartitionConsumerStats();
+            if (expectedOffset == s->GetCommittedOffset()) {
+                break;
+            }
+            if (end < TInstant::Now()) {
+                UNIT_ASSERT_VALUES_EQUAL(expectedOffset, s->GetCommittedOffset());
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
     }
 
     void CreateReplication() {
@@ -645,10 +737,16 @@ struct MainTestCase {
         return result;
     }
 
-    void CreateUser(const std::string& username) {
-        ExecuteDDL(Sprintf(R"(
-            CREATE USER %s
-        )", username.data()));
+    void CreateUser(const std::string& username, const std::optional<std::string> password = std::nullopt) {
+        if (password) {
+            ExecuteDDL(Sprintf(R"(
+                CREATE USER %s PASSWORD '%s'
+            )", username.data(), password.value().data()));
+        } else {
+            ExecuteDDL(Sprintf(R"(
+                CREATE USER %s
+            )", username.data()));
+        }
     }
 
     void Write(const TMessage& message) {
@@ -666,7 +764,19 @@ struct MainTestCase {
         }
         auto writeSession = TopicClient.CreateSimpleBlockingWriteSession(writeSettings);
 
-        UNIT_ASSERT(writeSession->Write(message.Message, message.SeqNo));
+        TWriteMessage msg(message.Message);
+        msg.SeqNo(message.SeqNo);
+        msg.CreateTimestamp(message.CreateTimestamp);
+
+        if (!message.Attributes.empty()) {
+            TWriteMessage::TMessageMeta meta;
+            for (auto& [k, v] : message.Attributes) {
+                meta.push_back({k , v});
+            }
+            msg.MessageMeta(meta);
+        }
+
+        UNIT_ASSERT(writeSession->Write(std::move(msg)));
         writeSession->Close(TDuration::Seconds(1));
     }
 

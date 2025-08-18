@@ -18,32 +18,26 @@ import string
 import sys
 import typing
 import warnings
+from collections.abc import Collection, Hashable, Iterable, Sequence
 from contextvars import ContextVar
 from decimal import Context, Decimal, localcontext
 from fractions import Fraction
 from functools import reduce
 from inspect import Parameter, Signature, isabstract, isclass
-from types import FunctionType
+from re import Pattern
+from types import FunctionType, GenericAlias
 from typing import (
+    Annotated,
     Any,
     AnyStr,
     Callable,
-    Collection,
-    Dict,
-    FrozenSet,
-    Hashable,
-    Iterable,
-    List,
     Literal,
+    NoReturn,
     Optional,
-    Pattern,
     Protocol,
-    Sequence,
-    Set,
-    Tuple,
-    Type,
     TypeVar,
     Union,
+    cast,
     get_args,
     get_origin,
     overload,
@@ -71,6 +65,8 @@ from hypothesis.errors import (
 )
 from hypothesis.internal.cathetus import cathetus
 from hypothesis.internal.charmap import (
+    Categories,
+    CategoryName,
     as_general_categories,
     categories as all_categories,
 )
@@ -83,6 +79,7 @@ from hypothesis.internal.compat import (
     get_type_hints,
     is_typed_named_tuple,
 )
+from hypothesis.internal.conjecture.data import ConjectureData
 from hypothesis.internal.conjecture.utils import (
     calc_label_from_cls,
     check_sample,
@@ -90,7 +87,6 @@ from hypothesis.internal.conjecture.utils import (
 )
 from hypothesis.internal.entropy import get_seeder_and_restorer
 from hypothesis.internal.floats import float_of
-from hypothesis.internal.observability import TESTCASE_CALLBACKS
 from hypothesis.internal.reflection import (
     define_function_signature,
     get_pretty_function_description,
@@ -111,8 +107,7 @@ from hypothesis.internal.validation import (
 )
 from hypothesis.strategies._internal import SearchStrategy, check_strategy
 from hypothesis.strategies._internal.collections import (
-    FixedAndOptionalKeysDictStrategy,
-    FixedKeysDictStrategy,
+    FixedDictStrategy,
     ListStrategy,
     TupleStrategy,
     UniqueListStrategy,
@@ -133,7 +128,6 @@ from hypothesis.strategies._internal.recursive import RecursiveStrategy
 from hypothesis.strategies._internal.shared import SharedStrategy
 from hypothesis.strategies._internal.strategies import (
     Ex,
-    Ex_Inv,
     SampledFromStrategy,
     T,
     one_of,
@@ -144,21 +138,15 @@ from hypothesis.strategies._internal.strings import (
     TextStrategy,
     _check_is_single_character,
 )
-from hypothesis.strategies._internal.utils import (
-    cacheable,
-    defines_strategy,
-    to_jsonable,
-)
+from hypothesis.strategies._internal.utils import cacheable, defines_strategy
 from hypothesis.utils.conventions import not_set
 from hypothesis.vendor.pretty import RepresentationPrinter
 
 if sys.version_info >= (3, 10):
     from types import EllipsisType as EllipsisType
-    from typing import TypeAlias as TypeAlias
 elif typing.TYPE_CHECKING:  # pragma: no cover
     from builtins import ellipsis as EllipsisType
 
-    from typing_extensions import TypeAlias
 else:
     EllipsisType = type(Ellipsis)  # pragma: no cover
 
@@ -180,21 +168,21 @@ def sampled_from(elements: Sequence[T]) -> SearchStrategy[T]:  # pragma: no cove
 
 
 @overload
-def sampled_from(elements: Type[enum.Enum]) -> SearchStrategy[Any]:  # pragma: no cover
+def sampled_from(elements: type[enum.Enum]) -> SearchStrategy[Any]:  # pragma: no cover
     # `SearchStrategy[Enum]` is unreliable due to metaclass issues.
     ...
 
 
 @overload
 def sampled_from(
-    elements: Union[Type[enum.Enum], Sequence[Any]]
+    elements: Union[type[enum.Enum], Sequence[Any]],
 ) -> SearchStrategy[Any]:  # pragma: no cover
     ...
 
 
 @defines_strategy(try_non_lazy=True)
 def sampled_from(
-    elements: Union[Type[enum.Enum], Sequence[Any]]
+    elements: Union[type[enum.Enum], Sequence[Any]],
 ) -> SearchStrategy[Any]:
     """Returns a strategy which generates any value present in ``elements``.
 
@@ -285,10 +273,10 @@ def lists(
     unique_by: Union[
         None,
         Callable[[Ex], Hashable],
-        Tuple[Callable[[Ex], Hashable], ...],
+        tuple[Callable[[Ex], Hashable], ...],
     ] = None,
     unique: bool = False,
-) -> SearchStrategy[List[Ex]]:
+) -> SearchStrategy[list[Ex]]:
     """Returns a list containing values drawn from elements with length in the
     interval [min_size, max_size] (no bounds in that direction if these are
     None). If max_size is 0, only the empty list will be drawn.
@@ -344,40 +332,48 @@ def lists(
         # Note that lazy strategies automatically unwrap when passed to a defines_strategy
         # function.
         tuple_suffixes = None
+        # the type: ignores in the TupleStrategy and IntegersStrategy cases are
+        # for a mypy bug, which incorrectly narrows `elements` to Never.
+        # https://github.com/python/mypy/issues/16494
         if (
             # We're generating a list of tuples unique by the first element, perhaps
             # via st.dictionaries(), and this will be more efficient if we rearrange
             # our strategy somewhat to draw the first element then draw add the rest.
             isinstance(elements, TupleStrategy)
-            and len(elements.element_strategies) >= 1
+            and len(elements.element_strategies) >= 1  # type: ignore
             and len(unique_by) == 1
             and (
                 # Introspection for either `itemgetter(0)`, or `lambda x: x[0]`
-                isinstance(unique_by[0], operator.itemgetter)
-                and repr(unique_by[0]) == "operator.itemgetter(0)"
-                or isinstance(unique_by[0], FunctionType)
-                and re.fullmatch(
-                    get_pretty_function_description(unique_by[0]),
-                    r"lambda ([a-z]+): \1\[0\]",
+                (
+                    isinstance(unique_by[0], operator.itemgetter)
+                    and repr(unique_by[0]) == "operator.itemgetter(0)"
+                )
+                or (
+                    isinstance(unique_by[0], FunctionType)
+                    and re.fullmatch(
+                        get_pretty_function_description(unique_by[0]),
+                        r"lambda ([a-z]+): \1\[0\]",
+                    )
                 )
             )
         ):
             unique_by = (identity,)
-            tuple_suffixes = TupleStrategy(elements.element_strategies[1:])
-            elements = elements.element_strategies[0]
+            tuple_suffixes = TupleStrategy(elements.element_strategies[1:])  # type: ignore
+            elements = elements.element_strategies[0]  # type: ignore
 
         # UniqueSampledListStrategy offers a substantial performance improvement for
         # unique arrays with few possible elements, e.g. of eight-bit integer types.
         if (
             isinstance(elements, IntegersStrategy)
-            and None not in (elements.start, elements.end)
-            and (elements.end - elements.start) <= 255
+            and elements.start is not None  # type: ignore
+            and elements.end is not None  # type: ignore
+            and (elements.end - elements.start) <= 255  # type: ignore
         ):
             elements = SampledFromStrategy(
-                sorted(range(elements.start, elements.end + 1), key=abs)
-                if elements.end < 0 or elements.start > 0
-                else list(range(elements.end + 1))
-                + list(range(-1, elements.start - 1, -1))
+                sorted(range(elements.start, elements.end + 1), key=abs)  # type: ignore
+                if elements.end < 0 or elements.start > 0  # type: ignore
+                else list(range(elements.end + 1))  # type: ignore
+                + list(range(-1, elements.start - 1, -1))  # type: ignore
             )
 
         if isinstance(elements, SampledFromStrategy):
@@ -419,7 +415,7 @@ def sets(
     *,
     min_size: int = 0,
     max_size: Optional[int] = None,
-) -> SearchStrategy[Set[Ex]]:
+) -> SearchStrategy[set[Ex]]:
     """This has the same behaviour as lists, but returns sets instead.
 
     Note that Hypothesis cannot tell if values are drawn from elements
@@ -441,7 +437,7 @@ def frozensets(
     *,
     min_size: int = 0,
     max_size: Optional[int] = None,
-) -> SearchStrategy[FrozenSet[Ex]]:
+) -> SearchStrategy[frozenset[Ex]]:
     """This is identical to the sets function but instead returns
     frozensets."""
     return lists(
@@ -460,7 +456,7 @@ class PrettyIter:
     def __next__(self):
         return next(self._iter)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"iter({self._values!r})"
 
 
@@ -473,7 +469,7 @@ def iterables(
     unique_by: Union[
         None,
         Callable[[Ex], Hashable],
-        Tuple[Callable[[Ex], Hashable], ...],
+        tuple[Callable[[Ex], Hashable], ...],
     ] = None,
     unique: bool = False,
 ) -> SearchStrategy[Iterable[Ex]]:
@@ -493,12 +489,43 @@ def iterables(
     ).map(PrettyIter)
 
 
+# this type definition is imprecise, in multiple ways:
+# * mapping and optional can be of different types:
+#      s: dict[str | int, int] = st.fixed_dictionaries(
+#         {"a": st.integers()}, optional={1: st.integers()}
+#     )
+# * the values in either mapping or optional need not all be of the same type:
+#      s: dict[str, int | bool] = st.fixed_dictionaries(
+#         {"a": st.integers(), "b": st.booleans()}
+#     )
+# * the arguments may be of any dict-compatible type, in which case the return
+#  value will be of that type instead of dit
+#
+# Overloads may help here, but I doubt we'll be able to satisfy all these
+# constraints.
+#
+# Here's some platonic ideal test cases for revealed_types.py, with the understanding
+# that some may not be achievable:
+#
+#   ("fixed_dictionaries({'a': booleans()})", "dict[str, bool]"),
+#   ("fixed_dictionaries({'a': booleans(), 'b': integers()})", "dict[str, bool | int]"),
+#   ("fixed_dictionaries({}, optional={'a': booleans()})", "dict[str, bool]"),
+#   (
+#       "fixed_dictionaries({'a': booleans()}, optional={1: booleans()})",
+#       "dict[str | int, bool]",
+#   ),
+#   (
+#       "fixed_dictionaries({'a': booleans()}, optional={1: integers()})",
+#       "dict[str | int, bool | int]",
+#   ),
+
+
 @defines_strategy()
 def fixed_dictionaries(
-    mapping: Dict[T, SearchStrategy[Ex]],
+    mapping: dict[T, SearchStrategy[Ex]],
     *,
-    optional: Optional[Dict[T, SearchStrategy[Ex]]] = None,
-) -> SearchStrategy[Dict[T, Ex]]:
+    optional: Optional[dict[T, SearchStrategy[Ex]]] = None,
+) -> SearchStrategy[dict[T, Ex]]:
     """Generates a dictionary of the same type as mapping with a fixed set of
     keys mapping to strategies. ``mapping`` must be a dict subclass.
 
@@ -515,6 +542,7 @@ def fixed_dictionaries(
     check_type(dict, mapping, "mapping")
     for k, v in mapping.items():
         check_strategy(v, f"mapping[{k!r}]")
+
     if optional is not None:
         check_type(dict, optional, "optional")
         for k, v in optional.items():
@@ -529,8 +557,8 @@ def fixed_dictionaries(
                 "The following keys were in both mapping and optional, "
                 f"which is invalid: {set(mapping) & set(optional)!r}"
             )
-        return FixedAndOptionalKeysDictStrategy(mapping, optional)
-    return FixedKeysDictStrategy(mapping)
+
+    return FixedDictStrategy(mapping, optional=optional)
 
 
 @cacheable
@@ -542,7 +570,7 @@ def dictionaries(
     dict_class: type = dict,
     min_size: int = 0,
     max_size: Optional[int] = None,
-) -> SearchStrategy[Dict[Ex, T]]:
+) -> SearchStrategy[dict[Ex, T]]:
     # Describing the exact dict_class to Mypy drops the key and value types,
     # so we report Dict[K, V] instead of Mapping[Any, Any] for now.  Sorry!
     """Generates dictionaries of type ``dict_class`` with keys drawn from the ``keys``
@@ -566,48 +594,6 @@ def dictionaries(
         max_size=max_size,
         unique_by=operator.itemgetter(0),
     ).map(dict_class)
-
-
-# See https://en.wikipedia.org/wiki/Unicode_character_property#General_Category
-CategoryName: "TypeAlias" = Literal[
-    "L",  #  Letter
-    "Lu",  # Letter, uppercase
-    "Ll",  # Letter, lowercase
-    "Lt",  # Letter, titlecase
-    "Lm",  # Letter, modifier
-    "Lo",  # Letter, other
-    "M",  #  Mark
-    "Mn",  # Mark, nonspacing
-    "Mc",  # Mark, spacing combining
-    "Me",  # Mark, enclosing
-    "N",  #  Number
-    "Nd",  # Number, decimal digit
-    "Nl",  # Number, letter
-    "No",  # Number, other
-    "P",  #  Punctuation
-    "Pc",  # Punctuation, connector
-    "Pd",  # Punctuation, dash
-    "Ps",  # Punctuation, open
-    "Pe",  # Punctuation, close
-    "Pi",  # Punctuation, initial quote
-    "Pf",  # Punctuation, final quote
-    "Po",  # Punctuation, other
-    "S",  #  Symbol
-    "Sm",  # Symbol, math
-    "Sc",  # Symbol, currency
-    "Sk",  # Symbol, modifier
-    "So",  # Symbol, other
-    "Z",  #  Separator
-    "Zs",  # Separator, space
-    "Zl",  # Separator, line
-    "Zp",  # Separator, paragraph
-    "C",  #  Other
-    "Cc",  # Other, control
-    "Cf",  # Other, format
-    "Cs",  # Other, surrogate
-    "Co",  # Other, private use
-    "Cn",  # Other, not assigned
-]
 
 
 @cacheable
@@ -668,7 +654,7 @@ def characters(
     explicitly allowed, the ``codec`` argument will exclude them without
     raising an exception.
 
-    .. _general category: https://wikipedia.org/wiki/Unicode_character_property
+    .. _general category: https://en.wikipedia.org/wiki/Unicode_character_property
     .. _codec encodings: https://docs.python.org/3/library/codecs.html#encodings-and-unicode
     .. _python-specific text encodings: https://docs.python.org/3/library/codecs.html#python-specific-encodings
 
@@ -678,7 +664,7 @@ def characters(
     check_valid_size(min_codepoint, "min_codepoint")
     check_valid_size(max_codepoint, "max_codepoint")
     check_valid_interval(min_codepoint, max_codepoint, "min_codepoint", "max_codepoint")
-
+    categories = cast(Optional[Categories], categories)
     if categories is not None and exclude_categories is not None:
         raise InvalidArgument(
             f"Pass at most one of {categories=} and {exclude_categories=} - "
@@ -725,8 +711,12 @@ def characters(
             f"Characters {sorted(overlap)!r} are present in both "
             f"{include_characters=} and {exclude_characters=}"
         )
-    categories = as_general_categories(categories, "categories")
-    exclude_categories = as_general_categories(exclude_categories, "exclude_categories")
+    if categories is not None:
+        categories = as_general_categories(categories, "categories")
+    if exclude_categories is not None:
+        exclude_categories = as_general_categories(
+            exclude_categories, "exclude_categories"
+        )
     if categories is not None and not categories and not include_characters:
         raise InvalidArgument(
             "When `categories` is an empty collection and there are "
@@ -839,6 +829,19 @@ def text(
                 "The following elements in alphabet are not of length one, "
                 f"which leads to violation of size constraints:  {not_one_char!r}"
             )
+        if alphabet in ["ascii", "utf-8"]:
+            warnings.warn(
+                f"st.text({alphabet!r}): it seems like you are trying to use the "
+                f"codec {alphabet!r}. st.text({alphabet!r}) instead generates "
+                f"strings using the literal characters {list(alphabet)!r}. To specify "
+                f"the {alphabet} codec, use st.text(st.characters(codec={alphabet!r})). "
+                "If you intended to use character literals, you can silence this "
+                "warning by reordering the characters.",
+                HypothesisWarning,
+                # this stacklevel is of course incorrect, but breaking out of the
+                # levels of LazyStrategy and validation isn't worthwhile.
+                stacklevel=1,
+            )
         char_strategy = (
             characters(categories=(), include_characters=alphabet)
             if alphabet
@@ -846,7 +849,10 @@ def text(
         )
     if (max_size == 0 or char_strategy.is_empty) and not min_size:
         return just("")
-    return TextStrategy(char_strategy, min_size=min_size, max_size=max_size)
+    # mypy is unhappy with ListStrategy(SearchStrategy[list[Ex]]) and then TextStrategy
+    # setting Ex = str. Mypy is correct to complain because we have an LSP violation
+    # here in the TextStrategy.do_draw override. Would need refactoring to resolve.
+    return TextStrategy(char_strategy, min_size=min_size, max_size=max_size)  # type: ignore
 
 
 @overload
@@ -1056,7 +1062,7 @@ class BuildsStrategy(SearchStrategy):
         tuples(*self.args).validate()
         fixed_dictionaries(self.kwargs).validate()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         bits = [get_pretty_function_description(self.target)]
         bits.extend(map(repr, self.args))
         bits.extend(f"{k}={v!r}" for k, v in self.kwargs.items())
@@ -1139,7 +1145,7 @@ def builds(
 
 @cacheable
 @defines_strategy(never_lazy=True)
-def from_type(thing: Type[Ex_Inv]) -> SearchStrategy[Ex_Inv]:
+def from_type(thing: type[T]) -> SearchStrategy[T]:
     """Looks up the appropriate search strategy for the given type.
 
     ``from_type`` is used internally to fill in missing arguments to
@@ -1199,7 +1205,7 @@ def from_type(thing: Type[Ex_Inv]) -> SearchStrategy[Ex_Inv]:
         return _from_type_deferred(thing)
 
 
-def _from_type_deferred(thing: Type[Ex]) -> SearchStrategy[Ex]:
+def _from_type_deferred(thing: type[Ex]) -> SearchStrategy[Ex]:
     # This tricky little dance is because we want to show the repr of the actual
     # underlying strategy wherever possible, as a form of user education, but
     # would prefer to fall back to the default "from_type(...)" repr instead of
@@ -1224,7 +1230,7 @@ def _from_type_deferred(thing: Type[Ex]) -> SearchStrategy[Ex]:
 _recurse_guard: ContextVar = ContextVar("recurse_guard")
 
 
-def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
+def _from_type(thing: type[Ex]) -> SearchStrategy[Ex]:
     # TODO: We would like to move this to the top level, but pending some major
     # refactoring it's hard to do without creating circular imports.
     from hypothesis.strategies._internal import types
@@ -1291,6 +1297,14 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
                 if strategy is not NotImplemented:
                     return strategy
             return _from_type(thing.__supertype__)
+        if types.is_a_type_alias_type(
+            thing
+        ):  # pragma: no cover # covered by 3.12+ tests
+            if thing in types._global_type_lookup:
+                strategy = as_strategy(types._global_type_lookup[thing], thing)
+                if strategy is not NotImplemented:
+                    return strategy
+            return _from_type(thing.__value__)
         # Unions are not instances of `type` - but we still want to resolve them!
         if types.is_a_union(thing):
             args = sorted(thing.__args__, key=types.type_sorting_key)
@@ -1335,15 +1349,22 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
             strategy = as_strategy(types._global_type_lookup[thing], thing)
             if strategy is not NotImplemented:
                 return strategy
+        elif (
+            isinstance(thing, GenericAlias)
+            and (to := get_origin(thing)) in types._global_type_lookup
+        ):
+            strategy = as_strategy(types._global_type_lookup[to], thing)
+            if strategy is not NotImplemented:
+                return strategy
     except TypeError:  # pragma: no cover
-        # This is due to a bizarre divergence in behaviour under Python 3.9.0:
+        # This was originally due to a bizarre divergence in behaviour on Python 3.9.0:
         # typing.Callable[[], foo] has __args__ = (foo,) but collections.abc.Callable
         # has __args__ = ([], foo); and as a result is non-hashable.
+        # We've kept it because we turn out to have more type errors from... somewhere.
+        # FIXME: investigate that, maybe it should be fixed more precisely?
         pass
-    if (
-        hasattr(typing, "_TypedDictMeta")
-        and type(thing) is typing._TypedDictMeta
-        or hasattr(types.typing_extensions, "_TypedDictMeta")  # type: ignore
+    if (hasattr(typing, "_TypedDictMeta") and type(thing) is typing._TypedDictMeta) or (
+        hasattr(types.typing_extensions, "_TypedDictMeta")  # type: ignore
         and type(thing) is types.typing_extensions._TypedDictMeta  # type: ignore
     ):  # pragma: no cover
 
@@ -1360,7 +1381,7 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
             qualifiers = []
             while True:
                 annotation_origin = types.extended_get_origin(annotation_type)
-                if annotation_origin in types.AnnotatedTypes:
+                if annotation_origin is Annotated:
                     if annotation_args := get_args(annotation_type):
                         annotation_type = annotation_args[0]
                     else:
@@ -1425,9 +1446,7 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
     # because there are several special cases that don't play well with
     # subclass and instance checks.
     if isinstance(thing, types.typing_root_type) or (
-        sys.version_info[:2] >= (3, 9)
-        and isinstance(get_origin(thing), type)
-        and get_args(thing)
+        isinstance(get_origin(thing), type) and get_args(thing)
     ):
         return types.from_typing_type(thing)
     # If it's not from the typing module, we get all registered types that are
@@ -1475,17 +1494,35 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
             params = get_signature(thing).parameters
         except Exception:
             params = {}  # type: ignore
+
+        posonly_args = []
         kwargs = {}
         for k, p in params.items():
             if (
-                k in hints
+                p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+                and k in hints
                 and k != "return"
-                and p.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
             ):
-                kwargs[k] = from_type_guarded(hints[k])
-                if p.default is not Parameter.empty and kwargs[k] is not ...:
-                    kwargs[k] = just(p.default) | kwargs[k]
-        if params and not kwargs and not issubclass(thing, BaseException):
+                ps = from_type_guarded(hints[k])
+                if p.default is not Parameter.empty and ps is not ...:
+                    ps = just(p.default) | ps
+                if p.kind is Parameter.POSITIONAL_ONLY:
+                    # builds() doesn't infer strategies for positional args, so:
+                    if ps is ...:  # pragma: no cover  # rather fiddly to test
+                        if p.default is Parameter.empty:
+                            raise ResolutionFailed(
+                                f"Could not resolve {thing!r} to a strategy; "
+                                "consider using register_type_strategy"
+                            )
+                        ps = just(p.default)
+                    posonly_args.append(ps)
+                else:
+                    kwargs[k] = ps
+        if (
+            params
+            and not (posonly_args or kwargs)
+            and not issubclass(thing, BaseException)
+        ):
             from_type_repr = repr_call(from_type, (thing,), {})
             builds_repr = repr_call(builds, (thing,), {})
             warnings.warn(
@@ -1496,7 +1533,7 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
                 SmallSearchSpaceWarning,
                 stacklevel=2,
             )
-        return builds(thing, **kwargs)
+        return builds(thing, *posonly_args, **kwargs)
     # And if it's an abstract type, we'll resolve to a union of subclasses instead.
     subclasses = thing.__subclasses__()
     if not subclasses:
@@ -1504,7 +1541,7 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
             f"Could not resolve {thing!r} to a strategy, because it is an abstract "
             "type without any subclasses. Consider using register_type_strategy"
         )
-    subclass_strategies = nothing()
+    subclass_strategies: SearchStrategy = nothing()
     for sc in subclasses:
         try:
             subclass_strategies |= _from_type(sc)
@@ -1703,7 +1740,7 @@ def decimals(
 
         strat = fractions(min_value, max_value).map(fraction_to_decimal)
     # Compose with sampled_from for infinities and NaNs as appropriate
-    special: List[Decimal] = []
+    special: list[Decimal] = []
     if allow_nan or (allow_nan is None and (None in (min_value, max_value))):
         special.extend(map(Decimal, ("NaN", "-NaN", "sNaN", "-sNaN")))
     if allow_infinity or (allow_infinity is None and max_value is None):
@@ -1761,7 +1798,7 @@ class PermutationStrategy(SearchStrategy):
 
 
 @defines_strategy()
-def permutations(values: Sequence[T]) -> SearchStrategy[List[T]]:
+def permutations(values: Sequence[T]) -> SearchStrategy[list[T]]:
     """Return a strategy which returns permutations of the ordered collection
     ``values``.
 
@@ -1784,7 +1821,7 @@ class CompositeStrategy(SearchStrategy):
     def do_draw(self, data):
         return self.definition(data.draw, *self.args, **self.kwargs)
 
-    def calc_label(self):
+    def calc_label(self) -> int:
         return calc_label_from_cls(self.definition)
 
 
@@ -1795,7 +1832,7 @@ class DrawFn(Protocol):
     .. code-block:: python
 
         @composite
-        def list_and_index(draw: DrawFn) -> Tuple[int, str]:
+        def list_and_index(draw: DrawFn) -> tuple[int, str]:
             i = draw(integers())  # type inferred as 'int'
             s = draw(text())  # type inferred as 'str'
             return i, s
@@ -1872,39 +1909,58 @@ def _composite(f):
     return accept
 
 
+composite_doc = """
+Defines a strategy that is built out of potentially arbitrarily many other
+strategies.
+
+@composite provides a callable ``draw`` as the first parameter to the decorated
+function, which can be used to dynamically draw a value from any strategy. For
+example:
+
+.. code-block:: python
+
+    from hypothesis import strategies as st, given
+
+    @st.composite
+    def values(draw):
+        n1 = draw(st.integers())
+        n2 = draw(st.integers(min_value=n1))
+        return (n1, n2)
+
+    @given(values())
+    def f(value):
+        (n1, n2) = value
+        assert n1 <= n2
+
+@composite cannot mix test code and generation code. If you need that, use
+|st.data|.
+
+If :func:`@composite <hypothesis.strategies.composite>` is used to decorate a
+method or classmethod, the ``draw`` argument must come before ``self`` or
+``cls``. While we therefore recommend writing strategies as standalone functions
+and using |st.register_type_strategy| to associate them with a class, methods
+are supported and the ``@composite`` decorator may be applied either before or
+after ``@classmethod`` or ``@staticmethod``. See :issue:`2578` and :pull:`2634`
+for more details.
+
+Examples from this strategy shrink by shrinking the output of each draw call.
+"""
 if typing.TYPE_CHECKING or ParamSpec is not None:
     P = ParamSpec("P")
 
     def composite(
-        f: Callable[Concatenate[DrawFn, P], Ex]
+        f: Callable[Concatenate[DrawFn, P], Ex],
     ) -> Callable[P, SearchStrategy[Ex]]:
-        """Defines a strategy that is built out of potentially arbitrarily many
-        other strategies.
-
-        This is intended to be used as a decorator. See
-        :ref:`the full documentation for more details <composite-strategies>`
-        about how to use this function.
-
-        Examples from this strategy shrink by shrinking the output of each draw
-        call.
-        """
         return _composite(f)
 
 else:  # pragma: no cover
 
     @cacheable
     def composite(f: Callable[..., Ex]) -> Callable[..., SearchStrategy[Ex]]:
-        """Defines a strategy that is built out of potentially arbitrarily many
-        other strategies.
-
-        This is intended to be used as a decorator. See
-        :ref:`the full documentation for more details <composite-strategies>`
-        about how to use this function.
-
-        Examples from this strategy shrink by shrinking the output of each draw
-        call.
-        """
         return _composite(f)
+
+
+composite.__doc__ = composite_doc
 
 
 @defines_strategy(force_reusable_values=True)
@@ -2144,29 +2200,30 @@ class DataObject:
     # Note that "only exists" here really means "is only exported to users",
     # but we want to treat it as "semi-stable", not document it as "public API".
 
-    def __init__(self, data):
+    def __init__(self, data: ConjectureData) -> None:
         self.count = 0
         self.conjecture_data = data
 
     __signature__ = Signature()  # hide internals from Sphinx introspection
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "data(...)"
 
     def draw(self, strategy: SearchStrategy[Ex], label: Any = None) -> Ex:
         check_strategy(strategy, "strategy")
         self.count += 1
-        printer = RepresentationPrinter(context=current_build_context())
-        desc = f"Draw {self.count}{'' if label is None else f' ({label})'}: "
+        desc = f"Draw {self.count}{'' if label is None else f' ({label})'}"
         with deprecate_random_in_strategy("{}from {!r}", desc, strategy):
             result = self.conjecture_data.draw(strategy, observe_as=f"generate:{desc}")
-        if TESTCASE_CALLBACKS:
-            self.conjecture_data._observability_args[desc] = to_jsonable(result)
 
         # optimization to avoid needless printer.pretty
         if should_note():
-            printer.text(desc)
-            printer.pretty(result)
+            printer = RepresentationPrinter(context=current_build_context())
+            printer.text(f"{desc}: ")
+            if self.conjecture_data.provider.avoid_realization:
+                printer.text("<symbolic>")
+            else:
+                printer.pretty(result)
             note(printer.getvalue())
         return result
 
@@ -2179,22 +2236,22 @@ class DataStrategy(SearchStrategy):
             data.hypothesis_shared_data_strategy = DataObject(data)
         return data.hypothesis_shared_data_strategy
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "data()"
 
     def map(self, f):
         self.__not_a_first_class_strategy("map")
 
-    def filter(self, f):
+    def filter(self, condition: Callable[[Ex], Any]) -> NoReturn:
         self.__not_a_first_class_strategy("filter")
 
     def flatmap(self, f):
         self.__not_a_first_class_strategy("flatmap")
 
-    def example(self):
+    def example(self) -> NoReturn:
         self.__not_a_first_class_strategy("example")
 
-    def __not_a_first_class_strategy(self, name):
+    def __not_a_first_class_strategy(self, name: str) -> NoReturn:
         raise InvalidArgument(
             f"Cannot call {name} on a DataStrategy. You should probably "
             "be using @composite for whatever it is you're trying to do."
@@ -2204,21 +2261,63 @@ class DataStrategy(SearchStrategy):
 @cacheable
 @defines_strategy(never_lazy=True)
 def data() -> SearchStrategy[DataObject]:
-    """This isn't really a normal strategy, but instead gives you an object
-    which can be used to draw data interactively from other strategies.
+    """
+    Provides an object ``data`` with a ``data.draw`` function which acts like
+    the ``draw`` callable provided by |st.composite|, in that it can be used
+    to dynamically draw values from strategies. |st.data| is more powerful
+    than |st.composite|, because it allows you to mix generation and test code.
 
-    See :ref:`the rest of the documentation <interactive-draw>` for more
-    complete information.
+    Here's an example of dynamically generating values using |st.data|:
 
-    Examples from this strategy do not shrink (because there is only one),
-    but the result of calls to each ``data.draw()`` call shrink as they normally would.
+    .. code-block:: python
+
+        from hypothesis import strategies as st, given
+
+        @given(st.data())
+        def test_values(data):
+            n1 = data.draw(st.integers())
+            n2 = data.draw(st.integers(min_value=n1))
+            assert n1 + 1 <= n2
+
+    If the test fails, each draw will be printed with the falsifying example.
+    e.g. the above is wrong (it has a boundary condition error), so will print:
+
+    .. code-block:: pycon
+
+        Falsifying example: test_values(data=data(...))
+        Draw 1: 0
+        Draw 2: 0
+
+    Optionally, you can provide a label to identify values generated by each call
+    to ``data.draw()``.  These labels can be used to identify values in the
+    output of a falsifying example.
+
+    For instance:
+
+    .. code-block:: python
+
+        @given(st.data())
+        def test_draw_sequentially(data):
+            x = data.draw(st.integers(), label="First number")
+            y = data.draw(st.integers(min_value=x), label="Second number")
+            assert x < y
+
+    will produce:
+
+    .. code-block:: pycon
+
+        Falsifying example: test_draw_sequentially(data=data(...))
+        Draw 1 (First number): 0
+        Draw 2 (Second number): 0
+
+    Examples from this strategy shrink by shrinking the output of each draw call.
     """
     return DataStrategy()
 
 
 def register_type_strategy(
-    custom_type: Type[Ex],
-    strategy: Union[SearchStrategy[Ex], Callable[[Type[Ex]], SearchStrategy[Ex]]],
+    custom_type: type[Ex],
+    strategy: Union[SearchStrategy[Ex], Callable[[type[Ex]], SearchStrategy[Ex]]],
 ) -> None:
     """Add an entry to the global type-to-strategy lookup.
 
@@ -2332,7 +2431,7 @@ def deferred(definition: Callable[[], SearchStrategy[Ex]]) -> SearchStrategy[Ex]
     return DeferredStrategy(definition)
 
 
-def domains():
+def domains() -> SearchStrategy[str]:
     import hypothesis.provisional
 
     return hypothesis.provisional.domains()

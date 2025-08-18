@@ -96,7 +96,9 @@ public:
         }
 
         if (!TYtTableInfo::HasSubstAnonymousLabel(TExprBase(input))) {
-            auto status = UpdateTableMeta(input, output, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, ctx);
+            const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
+            auto status = UpdateTableMeta(input, output, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx);
             if (status.Level != TStatus::Ok) {
                 return status;
             }
@@ -744,8 +746,10 @@ public:
         auto readInput = input->ChildPtr(TYtReadTable::idx_Input);
         const ERuntimeClusterSelectionMode selectionMode =
             State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        const bool useNativeYtDefaultColumnOrder =
+            State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
         auto newInput = ValidateAndUpdateTablesMeta(readInput, cluster, State_->TablesData,
-            State_->Types->UseTableMetaFromGraph, selectionMode, ctx);
+            State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, selectionMode, ctx);
         if (!newInput) {
             return TStatus::Error;
         }

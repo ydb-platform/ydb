@@ -9,6 +9,7 @@ RECURSE(
     olap
     oss
     postgres_integrations
+    solomon
     sql
     stability
     stress

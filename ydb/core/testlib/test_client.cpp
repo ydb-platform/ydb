@@ -668,15 +668,7 @@ namespace Tests {
         grpcInfo->GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = grpcInfo->GRpcServerRootCounters;
 
-        auto& grpcServer = grpcInfo->GRpcServer;
-        grpcServer.reset(new NYdbGrpc::TGRpcServer(options));
-        auto grpcService = new NGRpcProxy::TGRpcService();
-
         auto system(Runtime->GetActorSystem(grpcServiceNodeId));
-
-        if (Settings->Verbose) {
-            Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
-        }
 
         const size_t proxyCount = Max(ui32{1}, Settings->AppConfig->GetGRpcConfig().GetGRpcProxyCount());
         TVector<TActorId> grpcRequestProxies;
@@ -688,6 +680,14 @@ namespace Tests {
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled, appData.UserPoolId);
             system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
             grpcRequestProxies.push_back(grpcRequestProxyId);
+        }
+
+        auto& grpcServer = grpcInfo->GRpcServer;
+        grpcServer.reset(new NYdbGrpc::TGRpcServer(options));
+        auto grpcService = new NGRpcProxy::TGRpcService(grpcRequestProxies[0]);
+
+        if (Settings->Verbose) {
+            Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
         }
 
         system->Register(
@@ -1199,6 +1199,11 @@ namespace Tests {
             Runtime->RegisterService(NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
+            auto* actor = NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::CreateService(NOlap::NGroupedMemoryManager::TConfig(), appData.Counters);
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
+        {
             auto* actor = NPrioritiesQueue::TCompServiceOperator::CreateService(NPrioritiesQueue::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NPrioritiesQueue::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
@@ -1446,14 +1451,16 @@ namespace Tests {
                     filePathPrefix = Settings->AppConfig->GetMonitoringConfig().GetMemAllocDumpPathPrefix();
                 }
 
-                const TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider(MakeIntrusive<NMemory::TProcessMemoryInfoProvider>());
+                if (!ProcessMemoryInfoProvider) {
+                    ProcessMemoryInfoProvider = MakeIntrusive<NMemory::TProcessMemoryInfoProvider>();
+                }
 
-                IActor* monitorActor = CreateMemProfMonitor(TDuration::Seconds(1), processMemoryInfoProvider,
+                IActor* monitorActor = CreateMemProfMonitor(TDuration::Seconds(1), ProcessMemoryInfoProvider,
                     Runtime->GetAppData(nodeIdx).Counters, filePathPrefix);
                 const TActorId monitorActorId = Runtime->Register(monitorActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
                 Runtime->RegisterService(MakeMemProfMonitorID(Runtime->GetNodeId(nodeIdx)), monitorActorId, nodeIdx);
 
-                IActor* controllerActor = NMemory::CreateMemoryController(TDuration::Seconds(1), processMemoryInfoProvider,
+                IActor* controllerActor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider,
                     Settings->AppConfig->GetMemoryControllerConfig(), NKikimrConfigHelpers::CreateMemoryControllerResourceBrokerConfig(*Settings->AppConfig),
                     Runtime->GetAppData(nodeIdx).Counters);
                 const TActorId controllerActorId = Runtime->Register(controllerActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
@@ -1746,6 +1753,10 @@ namespace Tests {
         return *nodesGRpc.begin()->second.GRpcServer;
     }
 
+    TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> TServer::GetProcessMemoryInfoProvider() const {
+        return ProcessMemoryInfoProvider;
+    }
+
     void TServer::WaitFinalization() {
         for (ui32 nodeIdx = 0; nodeIdx < StaticNodes(); ++nodeIdx) {
             if (!NKqp::WaitHttpGatewayFinalization(Runtime->GetAppData(nodeIdx).Counters)) {
@@ -1933,7 +1944,7 @@ namespace Tests {
 
     NBus::EMessageStatus TClient::WaitCompletion(ui64 txId, ui64 schemeshard, ui64 pathId,
                                         TAutoPtr<NBus::TBusMessage>& reply,
-                                        TDuration timeout)
+                                        TDuration timeout, const TString& securityToken)
     {
         auto deadline = TInstant::Now() + timeout;
 
@@ -1941,6 +1952,9 @@ namespace Tests {
         const NKikimrClient::TResponse* response = nullptr;
         do {
             TAutoPtr<NMsgBusProxy::TBusSchemeOperationStatus> msg = new NMsgBusProxy::TBusSchemeOperationStatus();
+            if (securityToken) {
+                msg->Record.SetSecurityToken(securityToken);
+            }
             msg->Record.MutableFlatTxId()->SetTxId(txId);
             msg->Record.MutableFlatTxId()->SetSchemeShardTabletId(schemeshard);
             msg->Record.MutableFlatTxId()->SetPathId(pathId);
@@ -1967,6 +1981,7 @@ namespace Tests {
                                                         TAutoPtr<NBus::TBusMessage>& reply,
                                                         TDuration timeout) {
         PrepareRequest(request);
+        const TString securityToken = request->Record.GetSecurityToken();
 
         NBus::EMessageStatus status = SendWhenReady(request, reply, timeout.MilliSeconds());
 
@@ -1989,7 +2004,7 @@ namespace Tests {
         }
 
         NKikimrClient::TFlatTxId txId = response->GetFlatTxId();
-        return WaitCompletion(txId.GetTxId(), txId.GetSchemeShardTabletId(), txId.GetPathId(), reply, timeout);
+        return WaitCompletion(txId.GetTxId(), txId.GetSchemeShardTabletId(), txId.GetPathId(), reply, timeout, securityToken);
     }
 
     NMsgBusProxy::EResponseStatus TClient::MkDir(const TString& parent, const TString& name, const TApplyIf& applyIf) {

@@ -94,8 +94,8 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
     std::set<ui32> fieldsUsage;
     for (auto& key : AggregationKeys) {
         AFL_VERIFY(fieldsUsage.emplace(key.GetColumnId()).second);
-        batch.emplace_back(context.GetResources()->GetArrayVerified(key.GetColumnId()));
-        fields.emplace_back(context.GetResources()->GetFieldVerified(key.GetColumnId()));
+        batch.emplace_back(context.GetResources().GetArrayVerified(key.GetColumnId()));
+        fields.emplace_back(context.GetResources().GetFieldVerified(key.GetColumnId()));
         funcOpts.assigns.emplace_back(CH::GroupByOptions::Assign{ .result_column = ::ToString(key.GetColumnId()) });
 
         if (!funcOpts.has_nullable_key) {
@@ -123,8 +123,8 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
         funcOpts.assigns.emplace_back(gbAssign);
         for (auto&& i : aggr.GetInputs()) {
             if (fieldsUsage.emplace(i.GetColumnId()).second) {
-                batch.emplace_back(context.GetResources()->GetArrayVerified(i.GetColumnId()));
-                fields.emplace_back(context.GetResources()->GetFieldVerified(i.GetColumnId()));
+                batch.emplace_back(context.GetResources().GetArrayVerified(i.GetColumnId()));
+                fields.emplace_back(context.GetResources().GetFieldVerified(i.GetColumnId()));
             }
         }
     }
@@ -136,7 +136,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
         return TConclusionStatus::Fail(gbRes.status().ToString());
     }
     auto gbBatch = (*gbRes).record_batch();
-    context.GetResources()->Remove(AggregationKeys);
+    context.MutableResources().Remove(AggregationKeys);
 
     for (auto& assign : funcOpts.assigns) {
         auto column = gbBatch->GetColumnByName(assign.result_column);
@@ -144,7 +144,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
             return TConclusionStatus::Fail("No expected column in GROUP BY result.");
         }
         if (auto columnId = TryFromString<ui32>(assign.result_column)) {
-            context.GetResources()->AddVerified(*columnId, column, false, true);
+            context.MutableResources().AddCalculated(*columnId, column);
         } else {
             return TConclusionStatus::Fail("Incorrect column id from name: " + assign.result_column);
         }
@@ -194,10 +194,9 @@ TConclusionStatus TWithKeysAggregationProcessor::TBuilder::AddGroupBy(
     return TConclusionStatus::Success();
 }
 
-TConclusion<arrow::Datum> TAggregateFunction::Call(
-    const TExecFunctionContext& context, const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusion<arrow::Datum> TAggregateFunction::Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const {
     if (context.GetColumns().size() == 0 && AggregationType == NAggregation::EAggregate::NumRows) {
-        auto rc = resources->GetRecordsCountActualOptional();
+        auto rc = resources.GetRecordsCountActualOptional();
         if (!rc) {
             return TConclusionStatus::Fail("resources hasn't info about records count actual");
         } else {
@@ -213,33 +212,31 @@ class TResultsAggregator: public IResourcesAggregator {
 private:
     const TColumnChainInfo ColumnInfo;
     const EAggregate AggregationType;
-    virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
-        const std::shared_ptr<TAccessorsCollection>& collectionResult) const override {
-        std::vector<const IChunkedArray*> arrays;
+    virtual TConclusionStatus DoExecute(
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const override {
+        std::vector<const arrow::Scalar*> scalars;
         std::optional<arrow::Type::type> type;
         for (auto&& i : sources) {
             AFL_VERIFY(i);
-            const auto& acc = i->GetAccessorVerified(ColumnInfo.GetColumnId());
-            AFL_VERIFY(acc->GetRecordsCount() == 1)("count", acc->GetRecordsCount());
-            arrays.emplace_back(acc.get());
+            const auto& scalar = i->GetConstantScalarVerified(ColumnInfo.GetColumnId());
             if (!type) {
-                type = acc->GetDataType()->id();
+                type = scalar->type->id();
             } else {
-                AFL_VERIFY(*type == acc->GetDataType()->id());
+                AFL_VERIFY(*type == scalar->type->id());
             }
+            scalars.emplace_back(scalar.get());
         }
         TString errorMessage;
         if (!NArrow::SwitchType(*type, [&](const auto& type) {
                 using TWrap = std::decay_t<decltype(type)>;
-                using TArrayType = typename TWrap::TArray;
-                std::optional<ui32> arrResultIndex;
+                using TScalarType = typename TWrap::TScalar;
                 std::optional<typename TWrap::ValueType> result;
-                ui32 idx = 0;
-                for (auto&& i : arrays) {
-                    auto addr = i->GetChunkSlow(0);
-                    const typename TWrap::ValueType value = type.GetValue(*static_cast<const TArrayType*>(addr.GetArray().get()), 0);
+                for (auto&& i : scalars) {
+                    const typename TWrap::ValueType value = type.GetValue(*static_cast<const TScalarType*>(i));
+                    if (!i->is_valid) {
+                        continue;
+                    }
                     if (!result) {
-                        arrResultIndex = idx;
                         result = value;
                     } else {
                         switch (AggregationType) {
@@ -252,7 +249,6 @@ private:
                             case EAggregate::Sum:
                                 if constexpr (TWrap::IsCType) {
                                     *result += value;
-                                    arrResultIndex.reset();
                                 }
                                 if constexpr (TWrap::IsStringView) {
                                     errorMessage = "cannot sum string views";
@@ -261,32 +257,29 @@ private:
                                 break;
                             case EAggregate::Max:
                                 if (*result < value) {
-                                    arrResultIndex = idx;
                                     result = value;
                                 }
                                 break;
                             case EAggregate::Min:
                                 if (value < *result) {
-                                    arrResultIndex = idx;
                                     result = value;
                                 }
                                 break;
                         }
                     }
-                    ++idx;
                 }
-                if (arrResultIndex) {
-                    collectionResult->AddVerified(
-                        ColumnInfo.GetColumnId(), sources[*arrResultIndex]->GetAccessorVerified(ColumnInfo.GetColumnId()), false, true);
+                if (result) {
+                    collectionResult.AddCalculated(ColumnInfo.GetColumnId(),
+                        NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, scalars.front()->type)));
                 } else {
-                    collectionResult->AddVerified(ColumnInfo.GetColumnId(),
-                        NAccessor::TTrivialArray::BuildArrayFromScalar(type.BuildScalar(*result, arrays.front()->GetDataType())), false, true);
+                    collectionResult.AddCalculated(ColumnInfo.GetColumnId(),
+                        NAccessor::TTrivialArray::BuildArrayFromScalar(std::make_shared<TScalarType>(scalars.front()->type)));
                 }
                 return true;
             })) {
             return TConclusionStatus::Fail(errorMessage);
         }
-        collectionResult->TakeSequenceFrom(*sources.front());
+        collectionResult.TakeSequenceFrom(*sources.front());
         return TConclusionStatus::Success();
     }
 
@@ -331,7 +324,7 @@ private:
     const std::vector<TColumnAggregationInfo> Aggregations;
 
     TConclusion<std::shared_ptr<arrow::Array>> BuildColumn(const ui32 keysCount, const TColumnAggregationInfo& aggr,
-        const std::vector<std::shared_ptr<TAccessorsCollection>>& sources, const std::vector<std::vector<ui32>>& decoder) const {
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, const std::vector<std::vector<ui32>>& decoder) const {
         std::vector<const IChunkedArray*> arrays;
         std::optional<arrow::Type::type> type;
         for (ui32 sourceIdx = 0; sourceIdx < sources.size(); ++sourceIdx) {
@@ -411,8 +404,8 @@ private:
         return arrResult;
     }
 
-    virtual TConclusionStatus DoExecute(const std::vector<std::shared_ptr<TAccessorsCollection>>& sources,
-        const std::shared_ptr<TAccessorsCollection>& collectionResult) const override {
+    virtual TConclusionStatus DoExecute(
+        const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const override {
         ui32 reserveCount = 0;
         for (auto&& i : sources) {
             reserveCount += i->GetRecordsCountActualVerified();
@@ -485,18 +478,16 @@ private:
             if (conclusion.IsFail()) {
                 return conclusion;
             }
-            collectionResult->AddVerified(
-                a.GetColumnInfo().GetColumnId(), std::make_shared<NAccessor::TTrivialArray>(conclusion.DetachResult()), false, true);
+            collectionResult.AddCalculated(a.GetColumnInfo().GetColumnId(), conclusion.DetachResult());
         }
         {
             ui32 idx = 0;
             for (auto&& k : KeyColumns) {
-                collectionResult->AddVerified(k.GetColumnId(),
-                    std::make_shared<NAccessor::TTrivialArray>(NArrow::FinishBuilder(std::move(keyBuilders[idx]))), false, true);
+                collectionResult.AddCalculated(k.GetColumnId(), NArrow::FinishBuilder(std::move(keyBuilders[idx])));
                 ++idx;
             }
         }
-        collectionResult->TakeSequenceFrom(*sources.front());
+        collectionResult.TakeSequenceFrom(*sources.front());
         return TConclusionStatus::Success();
     }
 

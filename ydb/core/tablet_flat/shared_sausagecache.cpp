@@ -1,10 +1,9 @@
 #include "flat_bio_actor.h"
 #include "flat_bio_events.h"
-#include "shared_cache_clock_pro.h"
 #include "shared_cache_events.h"
 #include "shared_cache_pages.h"
-#include "shared_cache_s3fifo.h"
 #include "shared_cache_tiered.h"
+#include "shared_cache_counters.h"
 #include "shared_page.h"
 #include "shared_sausagecache.h"
 #include "util_fmt_abort.h"
@@ -14,7 +13,6 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/bootstrap.pb.h>
-#include <ydb/core/util/cache_cache.h>
 #include <ydb/core/util/page_map.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -59,8 +57,56 @@ struct TCollection {
     TMap<TPageId, TPendingRequests> PendingRequests;
     TDeque<TPageId> DroppedPages;
 
-    ECacheTier GetCacheTier() {
-        return InMemoryOwners ? ECacheTier::TryKeepInMemory : ECacheTier::Regular;
+    ECacheMode GetCacheMode() {
+        return InMemoryOwners ? ECacheMode::TryKeepInMemory : ECacheMode::Regular;
+    }
+};
+
+struct TPageTraits {
+    struct TPageKey {
+        TLogoBlobID LogoBlobID;
+        ui32 PageId;
+    };
+    
+    static ui64 GetSize(const TPage* page) {
+        return sizeof(TPage) + page->Size;
+    }
+
+    static TPageKey GetKey(const TPage* page) {
+        return {page->Collection->Id, page->PageId};
+    }
+
+    static size_t GetHash(const TPageKey& key) {
+        return MultiHash(key.LogoBlobID.Hash(), key.PageId);
+    }
+
+    static TString ToString(const TPageKey& key) {
+        return TStringBuilder() << "LogoBlobID: " << key.LogoBlobID.ToString() << " PageId: " << key.PageId;
+    }
+
+    static TString GetKeyToString(const TPage* page) {
+        return ToString(GetKey(page));
+    }
+
+    static ES3FIFOPageLocation GetLocation(const TPage* page) {
+        return page->S3FIFOLocation;
+    }
+
+    static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
+        page->S3FIFOLocation = location;
+    }
+
+    static ui32 GetFrequency(const TPage* page) {
+        return page->S3FIFOFrequency;
+    }
+
+    static void SetFrequency(TPage* page, ui32 frequency) {
+        Y_ENSURE(frequency < (1 << 4));
+        page->S3FIFOFrequency = frequency;
+    }
+
+    static ui32 GetTier(TPage* page) {
+        return static_cast<ui32>(page->CacheMode);
     }
 };
 
@@ -91,140 +137,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     static const ui64 ASYNC_QUEUE_COOKIE = 2;
     static const ui64 SCAN_QUEUE_COOKIE = 3;
 
-    struct TCacheCachePageTraits {
-        static ui64 GetWeight(const TPage* page) {
-            return sizeof(TPage) + page->Size;
-        }
-
-        static ECacheCacheGeneration GetGeneration(const TPage *page) {
-            return static_cast<ECacheCacheGeneration>(page->CacheFlags1);
-        }
-
-        static void SetGeneration(TPage *page, ECacheCacheGeneration generation) {
-            ui32 generation_ = static_cast<ui32>(generation);
-            Y_ENSURE(generation_ < (1 << 4));
-            page->CacheFlags1 = generation_;
-        }
-    };
-
-    struct TS3FIFOPageTraits {
-        struct TPageKey {
-            TLogoBlobID LogoBlobID;
-            ui32 PageId;
-        };
-        
-        static ui64 GetSize(const TPage* page) {
-            return sizeof(TPage) + page->Size;
-        }
-
-        static TPageKey GetKey(const TPage* page) {
-            return {page->Collection->Id, page->PageId};
-        }
-
-        static size_t GetHash(const TPageKey& key) {
-            return MultiHash(key.LogoBlobID.Hash(), key.PageId);
-        }
-
-        static TString ToString(const TPageKey& key) {
-            return TStringBuilder() << "LogoBlobID: " << key.LogoBlobID.ToString() << " PageId: " << key.PageId;
-        }
-
-        static TString GetKeyToString(const TPage* page) {
-            return ToString(GetKey(page));
-        }
-
-        static ES3FIFOPageLocation GetLocation(const TPage* page) {
-            return static_cast<ES3FIFOPageLocation>(page->CacheFlags1);
-        }
-
-        static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
-            ui32 location_ = static_cast<ui32>(location);
-            Y_ENSURE(location_ < (1 << 4));
-            page->CacheFlags1 = location_;
-        }
-
-        static ui32 GetFrequency(const TPage* page) {
-            return page->CacheFlags2;
-        }
-
-        static void SetFrequency(TPage* page, ui32 frequency) {
-            Y_ENSURE(frequency < (1 << 4));
-            page->CacheFlags2 = frequency;
-        }
-    };
-
-    struct TClockProPageTraits {
-        struct TPageKey {
-            TLogoBlobID LogoBlobID;
-            ui32 PageId;
-        };
-        
-        static ui64 GetSize(const TPage* page) {
-            return sizeof(TPage) + page->Size;
-        }
-
-        static TPageKey GetKey(const TPage* page) {
-            return {page->Collection->Id, page->PageId};
-        }
-
-        static size_t GetHash(const TPageKey& key) {
-            return MultiHash(key.LogoBlobID.Hash(), key.PageId);
-        }
-
-        static bool Equals(const TPageKey& left, const TPageKey& right) {
-            return left.PageId == right.PageId && left.LogoBlobID == right.LogoBlobID;
-        }
-
-        static TString ToString(const TPageKey& key) {
-            return TStringBuilder() << "LogoBlobID: " << key.LogoBlobID.ToString() << " PageId: " << key.PageId;
-        }
-
-        static TString GetKeyToString(const TPage* page) {
-            return ToString(GetKey(page));
-        }
-
-        static EClockProPageLocation GetLocation(const TPage* page) {
-            return static_cast<EClockProPageLocation>(page->CacheFlags1);
-        }
-
-        static void SetLocation(TPage* page, EClockProPageLocation location) {
-            ui32 location_ = static_cast<ui32>(location);
-            Y_ENSURE(location_ < (1 << 4));
-            page->CacheFlags1 = location_;
-        }
-
-        static bool GetReferenced(const TPage* page) {
-            return page->CacheFlags2;
-        }
-
-        static void SetReferenced(TPage* page, bool referenced) {
-            page->CacheFlags2 = static_cast<ui32>(referenced);
-        }
-    };
-
-    struct TCompositeCachePageTraits {
-        static ui64 GetSize(const TPage* page) {
-            return sizeof(TPage) + page->Size;
-        }
-
-        static ui32 GetCacheId(const TPage* page) {
-            return page->CacheId;
-        }
-
-        static void SetCacheId(TPage* page, ui32 id) {
-            Y_ENSURE(id < (1 << 4));
-            page->CacheId = id;
-        }
-
-        static ECacheTier GetTier(TPage* page) {
-            return page->CacheTier;
-        }
-
-        static void SetTier(TPage* page, ECacheTier tier) {
-            page->CacheTier = tier;
-        }
-    };
-
     TActorId Owner;
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
     NSharedCache::TSharedCachePages* SharedCachePages;
@@ -236,7 +148,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TRequestQueue AsyncRequests;
     TRequestQueue ScanRequests;
 
-    TTieredCache<TPage, TCompositeCachePageTraits> Cache;
+    TTieredCache<TPage, TPageTraits> Cache;
 
     ui64 StatBioReqs = 0;
     ui64 StatActiveBytes = 0;
@@ -247,23 +159,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     ui64 MemLimitBytes = 0;
     ui64 TryKeepInMemoryBytes = 0;
-
-    THolder<ICacheCache<TPage>> CreateCache() {
-        // TODO: pass actual limit to cache config
-        // now it will be fixed by ActualizeCacheSizeLimit call
-
-        switch (Config.GetReplacementPolicy()) {
-            case NKikimrSharedCache::S3FIFO:
-                return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageTraits>>(1);
-            case NKikimrSharedCache::ClockPro:
-                return MakeHolder<TClockProCache<TPage, TClockProPageTraits>>(1);
-            case NKikimrSharedCache::ThreeLeveledLRU:
-            default: {
-                TCacheCacheConfig cacheCacheConfig(1, Counters.FreshBytes, Counters.StagingBytes, Counters.WarmBytes);
-                return MakeHolder<TCacheCache<TPage, TCacheCachePageTraits>>(std::move(cacheCacheConfig));
-            }
-        }
-    }
 
     void ActualizeCacheSizeLimit() {
         ui64 limitBytes = MemLimitBytes;
@@ -383,10 +278,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TCollection& collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
         switch (msg->CacheMode) {
         case ECacheMode::Regular:
-            TryMoveToRegularCacheTier(collection, ev->Sender);
+            TryMoveToRegularCache(collection, ev->Sender);
             break;
         case ECacheMode::TryKeepInMemory:
-            TryMoveToTryKeepInMemoryCacheTier(collection, std::move(msg->PageCollection), ev->Sender);
+            TryMoveToTryKeepInMemoryCache(collection, std::move(msg->PageCollection), ev->Sender);
             break;
         }
 
@@ -427,7 +322,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const bool doTraceLog = DoTraceLog();
 
         TCollection &collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
-        ECacheTier cacheTier = collection.GetCacheTier();
+        ECacheMode cacheMode = collection.GetCacheMode();
 
         TStackVec<std::pair<TPageId, ui32>> pendingPages; // pageId, reqIdx
         ui32 pagesToRequestCount = 0;
@@ -451,7 +346,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         for (const ui32 reqIdx : xrange(msg->Pages.size())) {
             const TPageId pageId = msg->Pages[reqIdx];
-            auto* page = EnsurePage(pageCollection, collection, pageId, cacheTier);
+            auto* page = EnsurePage(pageCollection, collection, pageId, cacheMode);
             TryLoadEvictedPage(page);
 
             Counters.RequestedPages->Inc();
@@ -769,7 +664,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Y_ENSURE(erased);
             Counters.PageCollectionOwners->Dec();
 
-            TryMoveToRegularCacheTier(*collection, ev->Sender);
+            TryMoveToRegularCache(*collection, ev->Sender);
 
             TryDropExpiredCollection(*collection);
         }
@@ -808,7 +703,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ownerIt->second.erase(collectionIt);
         Counters.PageCollectionOwners->Dec();
 
-        TryMoveToRegularCacheTier(*collection, ev->Sender);
+        TryMoveToRegularCache(*collection, ev->Sender);
 
         TryDropExpiredCollection(*collection);
 
@@ -856,7 +751,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     continue;
                 }
 
-                page->Initialize(std::move(paged.Data));
+                page->ProvideBody(std::move(paged.Data));
                 BodyProvided(*collection, page);
                 Evict(Cache.Touch(page));
             }
@@ -869,7 +764,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         DoGC();
     }
 
-    TPage* EnsurePage(const NPageCollection::IPageCollection& pageCollection, TCollection& collection, const TPageId pageId, ECacheTier initialTier) {
+    TPage* EnsurePage(const NPageCollection::IPageCollection& pageCollection, TCollection& collection, const TPageId pageId, ECacheMode initialMode) {
         Y_ENSURE(pageId < collection.PageMap.size(),
             "Page collection " << pageCollection.Label()
             << " requested page " << pageId
@@ -878,7 +773,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         if (!page) {
             Y_ENSURE(collection.PageMap.emplace(pageId, (page = new TPage(pageId, pageCollection.Page(pageId).Size, &collection))));
-            page->CacheTier = initialTier;
+            page->CacheMode = initialMode;
         }
 
         return page;
@@ -1161,7 +1056,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TryDropExpiredCollection(collection);
     }
 
-    void TryMoveToRegularCacheTier(TCollection& collection, const TActorId& owner) {
+    void TryMoveToRegularCache(TCollection& collection, const TActorId& owner) {
         if (!collection.InMemoryOwners.erase(owner)) {
             return;
         }
@@ -1169,8 +1064,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change tier of page collection " << collection.Id
-            << " to " << ECacheTier::Regular);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change mode of page collection " << collection.Id
+            << " to " << ECacheMode::Regular);
         Y_ENSURE(TryKeepInMemoryBytes >= collection.TotalSize);
         TryKeepInMemoryBytes -= collection.TotalSize;
         Counters.TryKeepInMemoryBytes->Set(TryKeepInMemoryBytes);
@@ -1178,11 +1073,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // TODO: move pages async and batched
         for (const auto& kv : collection.PageMap) {
             auto* page = kv.second.Get();
-            TryMovePageToTier(page, ECacheTier::Regular);
+            TryChangeCacheMode(page, ECacheMode::Regular);
         }
     }
 
-    void TryMoveToTryKeepInMemoryCacheTier(TCollection& collection, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
+    void TryMoveToTryKeepInMemoryCache(TCollection& collection, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
         if (!collection.InMemoryOwners.insert(owner).second) {
             return;
         }
@@ -1190,8 +1085,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change tier of page collection " << collection.Id
-            << " to " << ECacheTier::TryKeepInMemory);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change mode of page collection " << collection.Id
+            << " to " << ECacheMode::TryKeepInMemory);
         TryKeepInMemoryBytes += collection.TotalSize;
         Counters.TryKeepInMemoryBytes->Set(TryKeepInMemoryBytes);
         ActualizeCacheSizeLimit();
@@ -1199,8 +1094,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TVector<TPageId> pagesToRequest(::Reserve(pageCollection->Total()));
         ui64 pagesToRequestBytes = 0;
         for (const auto& pageId : xrange(pageCollection->Total())) {
-            auto* page = EnsurePage(*pageCollection, collection, pageId, ECacheTier::TryKeepInMemory);
-            TryMovePageToTier(page, ECacheTier::TryKeepInMemory);
+            auto* page = EnsurePage(*pageCollection, collection, pageId, ECacheMode::TryKeepInMemory);
+            TryChangeCacheMode(page, ECacheMode::TryKeepInMemory);
 
             switch (page->State) {
             case PageStateEvicted:
@@ -1225,17 +1120,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void TryMovePageToTier(TPage* page, ECacheTier targetTier) {
-        if (page->CacheTier != targetTier) {
+    void TryChangeCacheMode(TPage* page, ECacheMode targetMode) {
+        if (page->CacheMode != targetMode) {
             switch (page->State) {
             case PageStateLoaded:
                 Cache.Erase(page);
                 page->EnsureNoCacheFlags();
-                page->CacheTier = targetTier;
+                page->CacheMode = targetMode;
                 Evict(Cache.Touch(page));
                 break;
             default:
-                page->CacheTier = targetTier;
+                page->CacheMode = targetMode;
                 break;
             }
         }
@@ -1274,8 +1169,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        auto currentReplacementPolicy = Config.GetReplacementPolicy();
-
         {
             auto* appData = AppData(ctx);
             NKikimrSharedCache::TSharedCacheConfig config;
@@ -1299,14 +1192,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
         ScanRequests.Limit = Config.GetScanQueueInFlyLimit();
-
-        if (currentReplacementPolicy != Config.GetReplacementPolicy()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Switch replacement policy "
-                << "from " << currentReplacementPolicy << " to " << Config.GetReplacementPolicy());
-            Evict(Cache.Switch([this]() { return CreateCache(); }, Counters.ReplacementPolicySize(Config.GetReplacementPolicy())));
-            LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Switch replacement policy done "
-                << " from " << currentReplacementPolicy << " to " << Config.GetReplacementPolicy());
-        }
 
         DoGC();
     }
@@ -1358,7 +1243,7 @@ public:
     TSharedPageCache(const TSharedCacheConfig& config, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : Config(config)
         , Counters(counters)
-        , Cache(1, [this]() { return CreateCache(); }, Config.GetReplacementPolicy(), Counters)
+        , Cache(config.GetMemoryLimit())
     {
         AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
         ScanRequests.Limit = Config.GetScanQueueInFlyLimit();

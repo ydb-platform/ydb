@@ -1,7 +1,11 @@
 import pytest
 import ydb
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TestUpgradeToInternalPathId:
@@ -14,8 +18,11 @@ class TestUpgradeToInternalPathId:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.config = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
             use_in_memory_pdisks=False,
-            column_shard_config={"generate_internal_path_id": False}
+            column_shard_config={
+                "generate_internal_path_id": False
+            }
         )
 
         self.cluster = KiKiMR(self.config)
@@ -36,7 +43,7 @@ class TestUpgradeToInternalPathId:
         driver.wait(20)
         self.session = ydb.QuerySessionPool(driver)
 
-    def create_table_with_data(self, table_name):
+    def create_table_with_data(self, table_name, start_value):
         self.session.execute_with_retries(f"""
                 CREATE TABLE `{table_name}` (
                     k Int32 NOT NULL,
@@ -45,60 +52,64 @@ class TestUpgradeToInternalPathId:
                 ) WITH (STORE = COLUMN, PARTITION_COUNT = {self.partition_count}    )
             """)
         self.session.execute_with_retries(f"""
-            $keys = ListFromRange(0, {self.num_rows});
+            $keys = ListFromRange({start_value}, {start_value} + {self.num_rows});
             $rows = ListMap($keys, ($i)->(<|k:$i, v: "value_" || CAST($i as String)|>));
             INSERT INTO `{table_name}`
             SELECT * FROM AS_TABLE($rows);
             """)
 
-    def validate_table(self, table_name):
+    def validate_table(self, table_name, start_value):
         result = self.session.execute_with_retries(f"""
             SELECT sum(k) AS c FROM `{table_name}`
         """)
-        assert result[0].rows[0]["c"] == self.num_rows * (self.num_rows - 1) / 2
+        assert result[0].rows[0]["c"] == (2 * start_value + self.num_rows - 1) * self.num_rows / 2
 
     def get_path_ids(self, table_name):
         result = self.session.execute_with_retries(f"""
             SELECT TabletId, PathId, InternalPathId FROM `{table_name}/.sys/primary_index_granule_stats`
         """)
         rows = [row for result_set in result for row in result_set.rows]
-        result = {}
+        mapping = {}
         for row in rows:
-            internalPathId = row["InternalPathId"]
-            pathId = row["PathId"]
-            if internalPathId not in result:
-                result[internalPathId] = {}
-            if pathId not in result[internalPathId]:
-                result[internalPathId][pathId] = 0
-            result[internalPathId][pathId] += 1
-        return result
+            external_path_id = row["PathId"]
+            internal_path_id = row["InternalPathId"]
+            if external_path_id not in mapping:
+                mapping[external_path_id] = {}
+            if internal_path_id not in mapping[external_path_id]:
+                mapping[external_path_id][internal_path_id] = 0
+            mapping[external_path_id][internal_path_id] += 1
+        assert len(mapping) == 1
+        external_path_id = next(iter(mapping))
+        counted_internal_path_ids = mapping[external_path_id]
+        return (external_path_id, counted_internal_path_ids)
 
     def test(self):
-        self.create_table_with_data("table1")
-        self.validate_table("table1")
-        table1PathMapping = self.get_path_ids("table1")
-        assert len(table1PathMapping) == 1
-        table1InternalPathId = next(iter(table1PathMapping))
-        assert len(table1PathMapping[table1InternalPathId]) == 1
-        table1PathId = next(iter(table1PathMapping[table1InternalPathId]))
-        assert table1InternalPathId == table1PathId
-        assert table1PathMapping[table1InternalPathId][table1PathId] == self.partition_count
+        tables_path_mapping = []
+        for i in range(10):
+            generate_internal_path_id = i % 2 == 1
+            logger.info(f"Iteration {i}, with generate_internal_path_id={generate_internal_path_id}")
+            self.restart_cluster(generate_internal_path_id=generate_internal_path_id)
+            for j in range(0, i):
+                existing_table_name = f"table{j}"
+                self.validate_table(existing_table_name, j)
+                assert j < len(tables_path_mapping)
+                assert self.get_path_ids(existing_table_name) == tables_path_mapping[j]
+            new_table_name = f"table{i}"
+            self.create_table_with_data(new_table_name, i)
+            self.validate_table(new_table_name, i)
+            assert len(tables_path_mapping) == i
+            path_mapping = self.get_path_ids(new_table_name)
+            tables_path_mapping.append(path_mapping)
+            logger.info(f"{i}, path_mapping: {path_mapping}")
 
-        # restart using another configuration
-        self.restart_cluster(generate_internal_path_id=True)
-        self.validate_table("table1")
-        assert table1PathMapping == self.get_path_ids("table1")
+            external_path_id, counted_internal_path_ids = path_mapping
+            assert external_path_id < i + 10  # with a gap for some path ids created before tables creation
 
-        self.create_table_with_data("table2")
-        self.validate_table("table2")
-        table2PathMapping = self.get_path_ids("table2")
-        assert len(table2PathMapping) == self.partition_count
-        table2InternalPathId = next(iter(table2PathMapping))
-        assert table2InternalPathId not in table2PathMapping[table2InternalPathId]
-
-        # restart using the same configuration as before
-        self.restart_cluster(generate_internal_path_id=True)
-        self.validate_table("table1")
-        assert table1PathMapping == self.get_path_ids("table1")
-        self.validate_table("table2")
-        assert table2PathMapping == self.get_path_ids("table2")
+            if generate_internal_path_id:
+                assert len(counted_internal_path_ids) == self.partition_count
+                assert all([internal_path_id >= 1_000_000_000 for internal_path_id in counted_internal_path_ids.keys()])
+                assert all([count == 1 for count in counted_internal_path_ids.values()])
+            else:
+                assert len(counted_internal_path_ids) == 1
+                assert external_path_id in counted_internal_path_ids
+                assert counted_internal_path_ids[external_path_id] == self.partition_count

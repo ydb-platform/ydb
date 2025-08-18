@@ -74,9 +74,6 @@ struct TYtTableRef {
     bool operator == (const TYtTableRef&) const = default;
 };
 
-void SaveRichPath(IOutputStream* buffer, const NYT::TRichYPath& path);
-void LoadRichPath(IInputStream* buffer, NYT::TRichYPath& path);
-
 struct TYtTableTaskRef {
     std::vector<NYT::TRichYPath> RichPaths;
     std::vector<TString> FilePaths;
@@ -86,6 +83,12 @@ struct TYtTableTaskRef {
 
     bool operator == (const TYtTableTaskRef&) const = default;
 }; // corresponds to a partition of several yt input tables.
+
+void SaveRichPath(IOutputStream* buffer, const NYT::TRichYPath& path);
+void LoadRichPath(IInputStream* buffer, NYT::TRichYPath& path);
+
+TString SerializeRichPath(const NYT::TRichYPath& richPath);
+NYT::TRichYPath DeserializeRichPath(const TString& serializedRichPath);
 
 struct TFmrTableId {
     TString Id;
@@ -106,6 +109,8 @@ struct TFmrTableId {
 
 struct TFmrTableRef {
     TFmrTableId FmrTableId;
+    std::vector<TString> Columns = {};
+    TString SerializedColumnGroups = TString();
     bool operator == (const TFmrTableRef&) const = default;
 };
 
@@ -123,6 +128,8 @@ struct TTableRange {
 struct TFmrTableInputRef {
     TString TableId;
     std::vector<TTableRange> TableRanges;
+    std::vector<TString> Columns = {};
+    TString SerializedColumnGroups = TString();
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
@@ -133,6 +140,13 @@ struct TFmrTableInputRef {
 struct TFmrTableOutputRef {
     TString TableId;
     TString PartId;
+    TString SerializedColumnGroups = TString(); // Serialized TNode of columnGroupSpec, empty if column groups is not set
+
+    TFmrTableOutputRef() = default;
+
+    TFmrTableOutputRef(const TString& tableId, const TMaybe<TString>& partId = Nothing());
+
+    TFmrTableOutputRef(const TFmrTableRef& fmrTableRef);
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
@@ -173,7 +187,8 @@ namespace std {
     template<>
     struct hash<NYql::NFmr::TFmrTableOutputRef> {
         size_t operator()(const NYql::NFmr::TFmrTableOutputRef& ref) const {
-            return CombineHashes(hash<TString>()(ref.TableId), hash<TString>()(ref.PartId));
+            return CombineHashes(hash<TString>()(ref.TableId),
+                CombineHashes(hash<TString>()(ref.PartId), hash<TString>()(ref.SerializedColumnGroups)));
         }
     };
 }
@@ -289,9 +304,5 @@ struct TTaskState: public TThrRefBase {
 TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing(), const TStatistics& stats = TStatistics());
-
-TString SerializeRichPath(const NYT::TRichYPath& richPath);
-
-NYT::TRichYPath DeserializeRichPath(const TString& serializedRichPath);
 
 } // namespace NYql::NFmr

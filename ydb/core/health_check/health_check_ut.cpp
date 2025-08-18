@@ -7,6 +7,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include "health_check.cpp"
 
@@ -213,7 +214,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             entry->mutable_info()->set_generation(DEFAULT_GROUP_GENERATION);
             if (proxyGroup) {
                 entry->mutable_info()->set_proxygroupid(*proxyGroup);
-                entry->mutable_info()->set_bridgepileid(pileId);
+                entry->mutable_info()->set_bridgepileid(pileId + 1);
             }
         };
 
@@ -617,8 +618,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TAutoPtr<IEventHandle> handle;
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromValue(0), .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromValue(1), .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -902,32 +903,32 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = RequestHcWithBridgeVdisks({2, TVDisks{2, NKikimrBlobStorage::ERROR}});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test"));
-        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("0"));
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("1"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("2"));
     }
 
     Y_UNIT_TEST(BridgeGroupDegradedInOnePile) {
         auto result = RequestHcWithBridgeVdisks({TVDisks{2, NKikimrBlobStorage::ERROR}, TVDisks{NKikimrBlobStorage::REPLICATING}});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
-        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("0"));
-        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test").Pile("1"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("1"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test").Pile("2"));
     }
 
     Y_UNIT_TEST(BridgeGroupDeadInOnePile) {
         auto result = RequestHcWithBridgeVdisks({TVDisks{3, NKikimrBlobStorage::ERROR}, TVDisks{8, NKikimrBlobStorage::READY}});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
-        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("0"));
-        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("1"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("1"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("2"));
     }
 
     Y_UNIT_TEST(BridgeGroupDeadInBothPiles) {
         auto result = RequestHcWithBridgeVdisks({2, TVDisks{3, NKikimrBlobStorage::ERROR}});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
-        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("0"));
-        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("1"));;
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("1"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("2"));;
     }
 
     /* HC currently infers group status on its own, so it's never unknown
@@ -2722,6 +2723,38 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
     }
 
+    Y_UNIT_TEST(TestNodeDisconnected) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto observer = runtime.AddObserver<TEvWhiteboard::TEvSystemStateResponse>([&](auto&& ev) {
+            auto actor = ev->Recipient;
+            auto nodeId = ev->Sender.NodeId();
+            Cerr << "Observing " << ev->ToString() << Endl;
+            runtime.Send(ev.Release());
+            runtime.Send(new IEventHandle(actor, sender, new TEvInterconnect::TEvNodeDisconnected(nodeId)));
+        });
+
+        TBlockEvents<TEvHive::TEvResponseHiveInfo> block(runtime); // just make it arrive later
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(500));
+        block.Stop().Unblock();
+        auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+    }
+
     Y_UNIT_TEST(CLusterNotBootstrapped) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -2775,8 +2808,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TTestActorRuntime& runtime = *server.GetRuntime();
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromValue(0), .State = NKikimrBridge::TClusterState::SYNCHRONIZED, .IsPrimary = true});
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromValue(1), .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .State = NKikimrBridge::TClusterState::SYNCHRONIZED, .IsPrimary = true});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
         bridgeInfo->PrimaryPile = bridgeInfo->Piles.data();
 

@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 
 #include <util/string/builder.h>
@@ -102,6 +103,8 @@ int TCommandGetOperation::Run(TConfig& config) {
         return GetOperation<NTable::TBuildIndexOperation>(client, OperationId, OutputFormat);
     case TOperationId::SCRIPT_EXECUTION:
         return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
+    case TOperationId::INCREMENTAL_BACKUP:
+        return GetOperation<NBackup::TIncrementalBackupResponse>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }
@@ -137,6 +140,7 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"import/s3", &ListOperations<NImport::TImportFromS3Response>},
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
         {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
+        {"incbackup", &ListOperations<NBackup::TIncrementalBackupResponse>},
     };
     if (config.UseExportToYt) {
         KindToHandler.emplace("export", THandlerWrapper(&ListOperations<NExport::TExportToYtResponse>, true)); // deprecated

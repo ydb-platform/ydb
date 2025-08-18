@@ -1090,7 +1090,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         return node;
     }
 
-    static const TStringBuf canaryBaseName = "_yql_canary_";
+    static const TStringBuf canaryBaseName = YqlCanaryColumnName;
 
     THashMap<TStringBuf, THashSet<TStringBuf>> joinKeysByLabel = CollectEquiJoinKeyColumnsByLabel(*joinTree);
     const auto renames = LoadJoinRenameMap(*settings);
@@ -1109,7 +1109,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         const TTypeAnnotationNode* itemType = input.List().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         auto structType = itemType->Cast<TStructExprType>();
         for (auto& si : structType->GetItems()) {
-            if (si->GetName().find(canaryBaseName, 0) == 0) {
+            if (IsNoPullColumn(si->GetName())) {
                 // EquiJoin already processed
                 return node;
             }

@@ -289,6 +289,42 @@ SELECT
 FROM my_table;
 ```
 
+## Udf {#udf}
+
+Builds a `Callable` given a function name and optional `external user types`, `RunConfig` and `TypeConfig`.
+
+* `Udf(Foo::Bar)` — Function `Foo::Bar` without additional parameters.
+* `Udf(Foo::Bar)(1, 2, 'abc')` — Call udf `Foo::Bar`.
+* `Udf(Foo::Bar, Int32, @@{"device":"AHCI"}@@ as TypeConfig")(1, 2, 'abc')` — Call udf `Foo::Bar` with additional type `Int32` and specified `TypeConfig`.
+* `Udf(Foo::Bar, "1e9+7" as RunConfig")(1, 'extended' As Precision)` — Call udf `Foo::Bar` with specified `RunConfig` and named parameters.
+* `Udf(Foo::Bar, $parent as Depends)` — Call udf `Foo::Bar` with specified computation dependency on specified node - since version [2025.03](../changelog/2025.03.md).
+
+#### Signatures
+
+```yql
+Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig]])->Callable
+```
+
+Where `T1`, `T2`, etc. are additional (`external`) user types.
+
+#### Examples
+
+```yql
+$IsoParser = Udf(DateTime2::ParseIso8601);
+SELECT $IsoParser("2022-01-01");
+```
+
+```yql
+SELECT Udf(Unicode::IsUtf)("2022-01-01")
+```
+
+```yql
+$config = @@{ 
+"name":"MessageFoo", 
+"meta": "..."
+}@@;
+SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
+```
 
 ## CurrentUtc... {#current-utc}
 

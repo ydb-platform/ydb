@@ -462,6 +462,7 @@ ISubOperation::TPtr CreateRotateCdcStreamAtTable(TOperationId id, TTxState::ETxS
 TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 bool CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
+bool CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result, TPathId& outStream);
 TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateBackup(TOperationId id, const TTxTransaction& tx);
@@ -703,8 +704,14 @@ TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxT
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
 
+// Incremental Restore Finalization
+ISubOperation::TPtr CreateIncrementalRestoreFinalize(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateIncrementalRestoreFinalize(TOperationId opId, TTxState::ETxState state);
+
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateLongIncrementalBackupOp(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateLongIncrementalBackupOp(TOperationId opId, TTxState::ETxState state);
 
 // SysView
 // Create

@@ -52,6 +52,8 @@ public:
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
         AddHandler(0, &TDqPhyLength::Match, HNDL(PushOlapLength));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
+        AddHandler(0, &TCoPruneKeys::Match, HNDL(PushPruneKeysToStage<false>));
+        AddHandler(0, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneAdjacentKeysToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildPureFlatmapStage));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
@@ -101,6 +103,8 @@ public:
 
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
+        AddHandler(1, &TCoPruneKeys::Match, HNDL(PushPruneKeysToStage<true>));
+        AddHandler(1, &TCoPruneAdjacentKeys::Match, HNDL(PushPruneAdjacentKeysToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));
         AddHandler(1, &TCoCombineByKey::Match, HNDL(PushCombineToStage<true>));
@@ -287,6 +291,24 @@ protected:
     {
         TExprBase output = DqPushSkipNullMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("PushSkipNullMembersToStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushPruneKeysToStage(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = DqPushPruneKeysToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("PushPruneKeysToStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PushPruneAdjacentKeysToStage(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = DqPushPruneAdjacentKeysToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("PushPruneAdjacentKeysToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

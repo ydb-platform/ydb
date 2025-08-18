@@ -1,18 +1,15 @@
 #pragma once
-#include "json_handlers.h"
-#include "viewer.h"
-#include <library/cpp/json/json_writer.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include "json_pipe_req.h"
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
 
 using namespace NActors;
 
-class TJsonNodeList : public TActorBootstrapped<TJsonNodeList> {
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
-    TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
+class TJsonNodeList : public TViewerPipeClient {
+    TRequestResponse<TEvInterconnect::TEvNodesInfo> NodesInfo;
+    using TBase = TViewerPipeClient;
+    using TThis = TJsonNodeList;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -20,34 +17,43 @@ public:
     }
 
     TJsonNodeList(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TBase(viewer, ev, "/viewer/nodelist")
     {}
 
-    void Bootstrap(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId();
-        ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
-        ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
-        Become(&TThis::StateRequestedBrowse);
+    void Bootstrap() override {
+        if (TBase::NeedToRedirect()) {
+            return;
+        }
+        NodesInfo = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+        Become(&TThis::StateRequestedBrowse, TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
-    STFUNC(StateRequestedBrowse) {
+    STATEFN(StateRequestedBrowse) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            CFunc(TEvents::TSystem::Wakeup, Timeout);
+            hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+            cFunc(TEvents::TSystem::Wakeup, TBase::HandleTimeout);
         }
     }
 
-    void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
-        NodesInfo = ev->Release();
-        ReplyAndDie(ctx);
+    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        if (NodesInfo.Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
-    void ReplyAndDie(const TActorContext &ctx) {
+    void ReplyAndPassAway() override {
         NJson::TJsonValue json;
         json.SetType(NJson::EJsonValueType::JSON_ARRAY);
-        if (NodesInfo != nullptr) {
+        std::optional<std::unordered_set<TNodeId>> databaseNodeIds;
+        if (IsDatabaseRequest()) {
+            auto nodes = GetDatabaseNodes();
+            databaseNodeIds = std::unordered_set<TNodeId>(nodes.begin(), nodes.end());
+        }
+        if (NodesInfo.IsOk()) {
             for (auto it = NodesInfo->Nodes.begin(); it != NodesInfo->Nodes.end(); ++it) {
+                if (databaseNodeIds && databaseNodeIds->count(it->NodeId) == 0) {
+                    continue; // skip nodes that are not in the database
+                }
                 const TEvInterconnect::TNodeInfo& nodeInfo = *it;
                 NJson::TJsonValue& jsonNodeInfo = json.AppendValue(NJson::TJsonValue());
                 jsonNodeInfo["Id"] = nodeInfo.NodeId;
@@ -71,12 +77,7 @@ public:
                 }
             }
         }
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        Die(ctx);
-    }
-
-    void Timeout(const TActorContext &ctx) {
-        ReplyAndDie(ctx);
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 
     static YAML::Node GetSwagger() {

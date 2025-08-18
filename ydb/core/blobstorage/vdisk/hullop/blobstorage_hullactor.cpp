@@ -717,8 +717,8 @@ namespace NKikimr {
             , RTCtx(std::move(rtCtx))
             , SyncLogFirstLsnToKeep(std::move(syncLogFirstLsnToKeep))
             , Boundaries(new NHullComp::TBoundaries(RTCtx->PDiskCtx->Dsk->ChunkSize,
-                                                    Config->HullCompLevel0MaxSstsAtOnce,
-                                                    Config->HullCompSortedPartsNum,
+                                                    HullDs->HullCtx->HullCompLevel0MaxSstsAtOnce,
+                                                    HullDs->HullCtx->HullCompSortedPartsNum,
                                                     Config->Level0UseDreg))
             , HullDbCommitterCtx(new THullDbCommitterCtx(RTCtx->PDiskCtx,
                                                     HullDs->HullCtx,

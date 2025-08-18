@@ -34,11 +34,6 @@ namespace NKikimr::NSharedCache {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
 
-    enum class ECacheMode {
-        Regular,
-        TryKeepInMemory,
-    };
-
     struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {
     };
 
@@ -125,12 +120,12 @@ namespace NKikimr::NSharedCache {
         }
 
         struct TLoaded {
-            TLoaded(ui32 pageId, TSharedPageRef page)
+            TLoaded(TPageId pageId, TSharedPageRef page)
                 : PageId(pageId)
                 , Page(std::move(page))
             { }
 
-            ui32 PageId;
+            TPageId PageId;
             TSharedPageRef Page;
         };
 

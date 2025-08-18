@@ -88,7 +88,7 @@ private:
         StorageId = source->GetColumnStorageId(GetEntityId());
         TBlobsAction blobsAction(source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
-        auto filterPtr = source->GetStageData().GetAppliedFilter();
+        auto filterPtr = context.GetAppliedFilter();
         const NArrow::TColumnFilter& cFilter = filterPtr ? *filterPtr : NArrow::TColumnFilter::BuildAllowFilter();
         auto itFilter = cFilter.GetBegin(false, source->GetRecordsCount());
         bool itFinished = false;

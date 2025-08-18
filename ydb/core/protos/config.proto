@@ -1733,6 +1733,15 @@ message TImmediateControlsConfig {
         map<string, TRequestConfig> RequestConfigs = 1;
     }
 
+    message TKeyValueVolumeControls {
+        optional uint64 ReadRequestsInFlightLimit = 1 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous read requests",
+            MinValue: 1,
+            MaxValue: 4096,
+            DefaultValue: 3
+        }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1747,6 +1756,7 @@ message TImmediateControlsConfig {
     optional TTableServiceControls TableServiceControls = 12;
     optional TTestShardControls TestShardControls = 13;
     optional TGRpcControls GRpcControls = 14;
+    optional TKeyValueVolumeControls KeyValueVolumeControls = 15;
 };
 
 message TMeteringConfig {
@@ -1804,9 +1814,15 @@ message TAuditConfig {
             ServiceImpersonatedFromUser = 4;
         }
 
+        enum ELogPhase {
+            Received = 1;  // A request is received and the initial checks and authentication are made // "status" field of audit log record is equal to "IN-PROCESS"
+            Completed = 2; // A request is completely finished and has final status // "status"/"detailed_status" fields of audit log record are equal to request's final status
+        }
+
         optional ELogClass LogClass = 1; // Log class selector. Default is used for all log classes that were not included in config
         optional bool EnableLogging = 2; // Enables audit logging for specified log class
         repeated EAccountType ExcludeAccountType = 3; // If audit logging for log class is enabled, excludes logging for these account types
+        repeated ELogPhase LogPhase = 4; // The phases of requests execution where audit log records are written
     }
 
     optional TStderrBackend StderrBackend = 1;
@@ -2052,9 +2068,10 @@ message TColumnShardConfig {
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
     optional bool PortionMetaV0Usage = 41 [default = true];
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
-    optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
+    optional bool GenerateInternalPathId = 43 [default = false];
     optional bool ProxyWritingEnabled = 44 [default = true];
     optional bool AllowExtraSymbolsForColumnTableColumns = 45 [default = false];
+    optional bool DeduplicationEnabled = 46 [default = true];
 }
 
 message TSchemeShardConfig {
@@ -2376,6 +2393,9 @@ message TKafkaProxyConfig {
     optional bool MeteringV2Enabled = 10 [default = true];
     optional bool AuthViaApiKey = 11 [default = true];
     optional uint32 TransactionTimeoutMs = 12 [default = 300000]; // 5 minutes (same as in kafka)
+    optional bool AutoCreateTopicsEnable = 13 [default = true];
+    optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
+    optional bool AutoCreateConsumersEnable = 15 [default = true];
 }
 
 message TAwsCompatibilityConfig {
@@ -2512,6 +2532,7 @@ message TAppConfig {
     optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
     optional TGeneralCacheConfig PortionsMetadataCache = 110;
     optional TGeneralCacheConfig ColumnDataCache = 111;
+    optional TGroupedMemoryLimiterConfig DeduplicationGroupedMemoryLimiterConfig = 112;
 }
 
 message TYdbVersion {

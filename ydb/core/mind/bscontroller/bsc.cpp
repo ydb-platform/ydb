@@ -120,10 +120,12 @@ void TBlobStorageController::TGroupInfo::FillInGroupParameters(
     if (GroupMetrics) {
         params->MergeFrom(GroupMetrics->GetGroupParameters());
     } else if (BridgeGroupInfo) {
-        for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
-            if (TGroupInfo *groupInfo = self->FindGroup(TGroupId::FromValue(groupId))) {
-                if (self->BridgeInfo && groupInfo->BridgePileId &&
-                        self->BridgeInfo->GetPile(*groupInfo->BridgePileId)->State == NKikimrBridge::TClusterState::DISCONNECTED) {
+        Y_ABORT_UNLESS(self->BridgeInfo);
+        for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+            const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+            if (TGroupInfo *groupInfo = self->FindGroup(groupId)) {
+                Y_ABORT_UNLESS(groupInfo->BridgePileId);
+                if (!NBridge::PileStateTraits(self->BridgeInfo->GetPile(groupInfo->BridgePileId)->State).AllowsConnection) {
                     continue; // ignore groups from disconnected piles
                 }
                 groupInfo->FillInGroupParameters(params, self);
@@ -150,16 +152,24 @@ void TBlobStorageController::TGroupInfo::FillInResources(
     for (const TVSlotInfo *vslot : VDisksInGroup) {
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
-        const ui32 shareFactor = countMaxSlots ? pdisk->ExpectedSlotCount : pdisk->NumActiveSlots;
+
+        ui32 maxSlots = 0;
+        ui32 slotSizeInUnits = 0;
+        pdisk->ExtractInferredPDiskSettings(maxSlots, slotSizeInUnits);
+
         ui64 vdiskSlotSize = 0;
+        const ui32 weight = TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, slotSizeInUnits);
         if (metrics.HasEnforcedDynamicSlotSize()) {
-            vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize();
+            vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
         } else if (metrics.GetTotalSize()) {
-            vdiskSlotSize = metrics.GetTotalSize() / shareFactor;
+            const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->NumActiveSlots;
+            vdiskSlotSize = metrics.GetTotalSize() / shareFactor * weight;
         }
         if (vdiskSlotSize) {
             size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
         }
+
+        const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->VSlotsOnPDisk.size();
         if (metrics.HasMaxIOPS()) {
             iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * 0.01);
         }
@@ -534,31 +544,7 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
 }
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
-    InvokeOnRootTimer.Reset();
-    InvokeOnRootCmd.reset();
-
-    if (StorageConfig->HasClusterStateDetails()) {
-        for (const auto& unsynced : StorageConfig->GetClusterStateDetails().GetPileSyncState()) {
-            if (unsynced.GetUnsyncedBSC()) {
-                auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-                auto& record = ev->Record;
-                auto *nbsf = record.MutableNotifyBridgeSyncFinished();
-                nbsf->SetGeneration(StorageConfig->GetClusterState().GetGeneration());
-                nbsf->SetBridgePileId(unsynced.GetBridgePileId());
-                using TQuery = NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TNotifyBridgeSyncFinished;
-                nbsf->SetStatus(TQuery::Success);
-                nbsf->SetBSC(true);
-                for (const auto& [groupId, info] : GroupMap) {
-                    if (info->BridgeGroupInfo) {
-                        groupId.CopyToProto(nbsf, &TQuery::AddUnsyncedGroupIdsToAdd);
-                    }
-                }
-                // remember the command in case it fails
-                InvokeOnRootCmd.emplace(record);
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
-            }
-        }
-    }
+    CheckUnsyncedBridgePiles();
 
     if (!StorageConfig->HasBlobStorageConfig()) {
         return;
@@ -574,24 +560,6 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     if (auto ev = BuildConfigRequestFromStorageConfig(*StorageConfig, HostRecords, false)) {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC14, "ApplyStorageConfig", (Request, ev->Record));
         Send(SelfId(), ev.release());
-    }
-}
-
-void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
-    const auto status = ev->Get()->Record.GetStatus();
-    const bool success = status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
-    const bool retriable =
-        status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE ||
-        status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM;
-    STLOG(retriable ? PRI_INFO : success ? PRI_DEBUG : PRI_WARN, BS_CONTROLLER, BSC38, "TEvNodeConfigInvokeOnRootResult",
-        (Response, ev->Get()->Record), (Success, success), (Retriable, retriable));
-    if (success) {
-        InvokeOnRootCmd.reset();
-    } else if (retriable && InvokeOnRootCmd) {
-        auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        ev->Record.CopyFrom(*InvokeOnRootCmd);
-        TActivationContext::Schedule(TDuration::MilliSeconds(InvokeOnRootTimer.NextBackoffMs()), new IEventHandle(
-            MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), ev.release()));
     }
 }
 
@@ -963,6 +931,8 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
         cFunc(TEvPrivate::EvCommitMetrics, CommitMetrics);
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+        cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
+        hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -1119,6 +1089,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kStopPDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateBridgeGroupInfo:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:
@@ -1228,6 +1199,42 @@ bool TBlobStorageController::TStaticGroupInfo::IsLayoutCorrect(const TStaticGrou
         return true;
     } else {
         return LayoutCorrect;
+    }
+}
+
+void TBlobStorageController::InvokeOnRoot(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&& request,
+        std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult&)>&& callback) {
+    const ui64 cookie = NextInvokeOnRootCookie++;
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC42, "InvokeOnRoot", (Request, request), (Cookie, cookie));
+    const auto [it, inserted] = InvokeOnRootCommands.emplace(cookie, TInvokeOnRootCommand{
+        .Request = std::move(request),
+        .Callback = std::move(callback),
+    });
+    auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+    ev->Record.CopyFrom(it->second.Request);
+    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release(), 0, cookie);
+}
+
+void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+    const auto it = InvokeOnRootCommands.find(ev->Cookie);
+    Y_ABORT_UNLESS(it != InvokeOnRootCommands.end());
+    TInvokeOnRootCommand& cmd = it->second;
+    auto& record = ev->Get()->Record;
+    const auto status = record.GetStatus();
+    const bool success = status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
+    const bool retriable =
+        status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE ||
+        status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM;
+    STLOG(retriable ? PRI_INFO : success ? PRI_DEBUG : PRI_WARN, BS_CONTROLLER, BSC41, "TEvNodeConfigInvokeOnRootResult",
+        (Cookie, ev->Cookie), (Response, ev->Get()->Record), (Success, success), (Retriable, retriable));
+    if (retriable) {
+        auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        ev->Record.CopyFrom(cmd.Request);
+        TActivationContext::Schedule(TDuration::MilliSeconds(cmd.Timer.NextBackoffMs()), new IEventHandle(
+            MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), ev.release(), 0, it->first));
+    } else {
+        cmd.Callback(record);
+        InvokeOnRootCommands.erase(it);
     }
 }
 

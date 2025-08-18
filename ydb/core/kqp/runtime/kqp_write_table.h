@@ -10,6 +10,8 @@
 namespace NKikimr {
 namespace NKqp {
 
+using TRowsRef = TConstArrayRef<TConstArrayRef<TCell>>;
+
 class IDataBatch : public TThrRefBase {
 public:
     virtual TString SerializeToString() const = 0;
@@ -26,9 +28,24 @@ public:
 
 using IDataBatchPtr = TIntrusivePtr<IDataBatch>;
 
+class IRowsBatcher : public TThrRefBase {
+public:
+    virtual bool IsEmpty() const = 0;
+    virtual i64 GetMemory() const = 0;
+
+    virtual void AddCell(const TCell& cell) = 0;
+    virtual void AddRow() = 0;
+    virtual IDataBatchPtr Flush() = 0;
+};
+
+using IRowsBatcherPtr = TIntrusivePtr<IRowsBatcher>;
+
+IRowsBatcherPtr CreateRowsBatcher(
+    size_t columnsCount,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
+
 class IDataBatcher : public TThrRefBase {
 public:
-
     virtual void AddData(const NMiniKQL::TUnboxedValueBatch& data) = 0;
     virtual i64 GetMemory() const = 0;
     virtual IDataBatchPtr Build() = 0;
@@ -50,7 +67,9 @@ IDataBatcherPtr CreateColumnDataBatcher(
 
 class IDataBatchProjection : public TThrRefBase {
 public:
-    virtual IDataBatchPtr Project(const IDataBatchPtr& data) const = 0;
+    virtual void Fill(const IDataBatchPtr& data) = 0;
+    virtual void Fill(const TRowsRef& data) = 0;
+    virtual IDataBatchPtr Flush() = 0;
 };
 
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
@@ -58,9 +77,17 @@ using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
 IDataBatchProjectionPtr CreateDataBatchProjection(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     const TConstArrayRef<ui32> inputWriteIndex,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
     const TConstArrayRef<ui32> outputWriteIndex,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
+
+std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
+    const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
+    const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes);
+
+std::vector<TConstArrayRef<TCell>> CutColumns(
+    const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);
 
 class IShardedWriteController : public TThrRefBase {
 public:
@@ -78,16 +105,19 @@ public:
     virtual void Open(
         const TWriteToken token,
         const TTableId TableId,
-        const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndexes,
         const i64 priority) = 0;
-    virtual void Write(TWriteToken token, IDataBatchPtr&& data) = 0;
+    virtual void Write(
+        const TWriteToken token,
+        const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
+        IDataBatchPtr&& data) = 0;
     virtual void Close(TWriteToken token) = 0;
 
     virtual void CleanupClosedTokens() = 0;
 
+    virtual void FlushBuffer(const TWriteToken token) = 0;
     virtual void FlushBuffers() = 0;
 
     virtual void Close() = 0;

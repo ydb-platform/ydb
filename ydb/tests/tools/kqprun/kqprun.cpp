@@ -21,6 +21,8 @@
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <yql/essentials/minikql/mkql_buffer.h>
 #endif
 
 using namespace NKikimrRun;
@@ -417,6 +419,7 @@ class TMain : public TMainBase {
     TDuration PingPeriod;
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
+    std::optional<ui64> UserPoolSize;
 
     std::unordered_map<TString, TString> Templates;
     THashMap<TString, TString> TablesMapping;
@@ -777,6 +780,15 @@ protected:
 
         // Cluster settings
 
+        options.AddLongOption("threads", "User pool size for each node (also scaled system, batch and IC pools in proportion: system / user / batch / IC = 1 / 10 / 1 / 1)")
+            .RequiredArgument("uint")
+            .StoreMappedResultT<ui32>(&UserPoolSize, [](ui32 threadsCount) {
+                if (threadsCount < 1) {
+                    ythrow yexception() << "Number of threads less than one";
+                }
+                return threadsCount;
+            });
+
         options.AddLongOption('N', "node-count", "Number of nodes to create")
             .RequiredArgument("uint")
             .DefaultValue(RunnerOptions.YdbSettings.NodeCount)
@@ -897,6 +909,7 @@ protected:
         }
         queryService.SetProgressStatsPeriodMs(PingPeriod.MilliSeconds());
 
+        SetupActorSystemConfig();
         SetupLogsConfig();
 
         if (EmulateYt) {
@@ -969,6 +982,61 @@ private:
         }
         ModifyLogPriorities(LogPriorities, logConfig);
     }
+
+    void SetupActorSystemConfig() {
+        if (!UserPoolSize) {
+            return;
+        }
+
+        auto& asConfig = *RunnerOptions.YdbSettings.AppConfig.MutableActorSystemConfig();
+
+        if (!asConfig.HasScheduler()) {
+            auto& scheduler = *asConfig.MutableScheduler();
+            scheduler.SetResolution(64);
+            scheduler.SetSpinThreshold(0);
+            scheduler.SetProgressThreshold(10000);
+        }
+
+        asConfig.ClearExecutor();
+
+        const auto addExecutor = [&asConfig](const TString& name, ui64 threads, NKikimrConfig::TActorSystemConfig::TExecutor::EType type, std::optional<ui64> spinThreshold = std::nullopt) {
+            auto& executor = *asConfig.AddExecutor();
+            executor.SetName(name);
+            executor.SetThreads(threads);
+            executor.SetType(type);
+            if (spinThreshold) {
+                executor.SetSpinThreshold(*spinThreshold);
+            }
+            return executor;
+        };
+
+        const auto divideThreads = [](ui64 threads, ui64 divisor) {
+            if (threads < 1) {
+                ythrow yexception() << "Threads must be greater than 0";
+            }
+            return (threads - 1) / divisor + 1;
+        };
+
+        addExecutor("System", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 10);
+        asConfig.SetSysExecutor(0);
+
+        addExecutor("User", *UserPoolSize, NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 1);
+        asConfig.SetUserExecutor(1);
+
+        addExecutor("Batch", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 1);
+        asConfig.SetBatchExecutor(2);
+
+        addExecutor("IO", 1, NKikimrConfig::TActorSystemConfig::TExecutor::IO);
+        asConfig.SetIoExecutor(3);
+
+        addExecutor("IC", divideThreads(*UserPoolSize, 10), NKikimrConfig::TActorSystemConfig::TExecutor::BASIC, 10)
+            .SetTimePerMailboxMicroSecs(100);
+        auto& serviceExecutors = *asConfig.MutableServiceExecutor();
+        serviceExecutors.Clear();
+        auto& serviceExecutor = *serviceExecutors.Add();
+        serviceExecutor.SetServiceName("Interconnect");
+        serviceExecutor.SetExecutorId(4);
+    }
 };
 
 }  // anonymous namespace
@@ -977,6 +1045,11 @@ private:
 
 int main(int argc, const char* argv[]) {
     SetupSignalActions();
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    NMonitoring::TDynamicCounterPtr memoryProfilingCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    NKikimr::NMiniKQL::InitializeGlobalPagedBufferCounters(memoryProfilingCounters);
+#endif
 
     try {
         NKqpRun::TMain().Run(argc, argv);

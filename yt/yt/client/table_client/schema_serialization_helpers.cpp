@@ -84,22 +84,22 @@ void TSerializableColumnSchema::DeserializeFromCursor(TYsonPullParserCursor* cur
             Deserialize(*LogicalTypeV3_, cursor);
         } else if (key == TStringBuf("lock")) {
             cursor->Next();
-            SetLock(ExtractTo<std::optional<TString>>(cursor));
+            SetLock(ExtractTo<std::optional<std::string>>(cursor));
         } else if (key == TStringBuf("expression")) {
             cursor->Next();
-            SetExpression(ExtractTo<std::optional<TString>>(cursor));
+            SetExpression(ExtractTo<std::optional<std::string>>(cursor));
         } else if (key == TStringBuf("materialized")) {
             cursor->Next();
             SetMaterialized(ExtractTo<std::optional<bool>>(cursor));
         } else if (key == TStringBuf("aggregate")) {
             cursor->Next();
-            SetAggregate(ExtractTo<std::optional<TString>>(cursor));
+            SetAggregate(ExtractTo<std::optional<std::string>>(cursor));
         } else if (key == TStringBuf("sort_order")) {
             cursor->Next();
             SetSortOrder(ExtractTo<std::optional<ESortOrder>>(cursor));
         } else if (key == TStringBuf("group")) {
             cursor->Next();
-            SetGroup(ExtractTo<std::optional<TString>>(cursor));
+            SetGroup(ExtractTo<std::optional<std::string>>(cursor));
         } else if (key == TStringBuf("max_inline_hunk_size")) {
             cursor->Next();
             SetMaxInlineHunkSize(ExtractTo<std::optional<i64>>(cursor));

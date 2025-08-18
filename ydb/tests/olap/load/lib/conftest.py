@@ -806,10 +806,12 @@ class LoadSuiteBase:
 class LoadSuiteParallel(LoadSuiteBase):
     threads: int = 0
 
-    def get_query_list() -> list[str]:
+    @classmethod
+    def get_query_list(cls) -> list[str]:
         return []
 
-    def get_path() -> str:
+    @classmethod
+    def get_path(cls) -> str:
         return ''
 
     __results: dict[str, YdbCliHelper.WorkloadRunResult] = {}

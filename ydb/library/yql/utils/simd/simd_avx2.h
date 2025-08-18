@@ -127,7 +127,7 @@ struct TSimd8 {
     }
 
     Y_FORCE_INLINE void StoreMasked(void* dst, const TSimd8<T>& mask) const {
-        _mm_maskmoveu_si128(_mm256_castsi256_si128(this->Value), _mm256_castsi256_si128(mask.Value), dst);
+        _mm_maskmoveu_si128(_mm256_castsi256_si128(this->Value), _mm256_castsi256_si128(mask.Value), (char*) dst);
         _mm_maskmoveu_si128(_mm256_extracti128_si256(this->Value, 1), _mm256_extracti128_si256(mask.Value, 1), (char*) dst);
     }
 

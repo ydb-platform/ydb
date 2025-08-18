@@ -685,9 +685,7 @@ TFuture<TIssues> TCheckpointStorage::Init()
                     issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
                 }
             }
-            NYql::TIssues newIssues;
-            newIssues.AddIssue(std::move(issue));
-            return MakeFuture(std::move(newIssues));
+            return MakeFuture(NYql::TIssues{issue});
         }
     }
 

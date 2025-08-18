@@ -63,11 +63,11 @@ default:
   datalens-name: DataLens
   airflow-name: Apache Airflow™
   ydb-airflow: false
-```yaml
-# Preset variables for dbt integration
-dbt-ydb: dbt-ydb
-dbt: dbt
-```
+  
+  # Preset variables for dbt integration
+  dbt-ydb: dbt-ydb
+  dbt: dbt
+
   ydb-finebi: false
   ydb-superset: false
   ydb-datalens: false

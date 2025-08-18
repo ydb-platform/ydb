@@ -1,8 +1,8 @@
-# {{ dbt-name }} Integration With YDB
+# {{ dbt }} Integration With YDB
 
 ## Introduction
 
-[{{ dbt-name }}](https://www.getdbt.com) is a popular tool for data transformation and management that enables you to:
+[{{ dbt }}](https://www.getdbt.com) is a popular tool for data transformation and management that enables you to:
 
 - Configure reliable and consistent transformation pipelines using `SELECT` statements that reflect business logic
 - Implement version control and CI/CD practices for transformation code
@@ -133,7 +133,7 @@ A ready‑to‑use [example project](https://github.com/ydb-platform/dbt-ydb/tre
    dbt docs serve
    ```
 
-   Project documentation will be available in your browser at http://localhost:8080.
+   Project documentation will be available in your browser at [http://localhost:8080](http://localhost:8080).
 
 ## Next Steps
 

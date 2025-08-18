@@ -12,7 +12,9 @@
 Коннектор [{{ dbt-ydb }}](https://github.com/ydb-platform/dbt-ydb) позволяет подключаться к {{ ydb }} из {{ dbt }} и использовать dbt для управления трансформациями ваших данных внутри {{ ydb }}.
 
 {% note warning %}
+
 Коннектор {{ dbt-ydb}} находится в стадии Preview и, в настоящий момент, не обеспечивает поддержку всех возможностей {{ dbt }}. Ниже приводится список возможностей и ограничений.
+
 {% endnote %}
 
 ## Возможности
@@ -26,7 +28,9 @@
 - [Инкрементальное представление](https://docs.getdbt.com/docs/build/incremental-models-overview) — создаётся как таблица внутри {{ydb}}, но при обновлении не пересоздаётся, а обновляется изменившимися и новыми строками. Коннектор, в данный момент, обеспечивает поддержку [стратегии](https://docs.getdbt.com/docs/build/incremental-strategy#merge) MERGE.
 
 {% note info %}
+
 Еще один тип материализации, [эфемерное представление](https://docs.getdbt.com/docs/build/materializations#ephemeral), в данный момент не поддерживается коннектором.
+
 {% endnote %}
 
 ### Снепшоты
@@ -47,6 +51,8 @@
 
 ## Подготовка к использованию
 
+### Зависимости
+
 Для начала работы с {{dbt}} на {{ydb}} вам понадобятся:
 
 - Python 3.10+;
@@ -59,15 +65,79 @@
 
 {% endnote %}
 
-Для установки {{ dbt-ydb }} выполните:
+### Установка
+
+Для установки {{ dbt-ydb }} выполните
 
 ```bash
 pip install dbt-ydb
 ```
 
+### Подключение {{dbt}} к {{ydb}} кластеру
+
+{{dbt}} подключается к {{ydb}} через {{dbt-ydb}} коннектор [стандартным](https://ydb.tech/docs/ru/concepts/connect) для {{ydb}} образом. Для успешного подключения требуется указать эндпоинт, путь к базе данных, а также параметры аутентификации в файле [профилей](https://docs.getdbt.com/docs/core/connect-data-platform/connection-profiles) dbt.
+
+Пример файла профилей с возможными вариантами аутентификации, а также значениями по умолчанию (в квадртаных скобках)
+
+   ```yml
+   profile_name:
+   target: dev
+   outputs:
+      dev:
+         type: ydb
+         host: [localhost] # YDB host
+         port: [2136] # YDB port
+         database: [/local] # YDB database
+         schema: [<empty string>] # Optional subfolder for DBT models
+         secure: [False] # If enabled, grpcs protocol will be used
+         root_certificates_path: [<empty string>] # Optional path to root certificates file
+
+         # Static Credentials
+         username: [<empty string>]
+         password: [<empty string>]
+
+         # Access Token Credentials
+         token: [<empty string>]
+
+         # Service Account Credentials
+         service_account_credentials_file: [<empty string>]
+   ```
+
+## Создание проекта "c нуля" через команду {{dbt}} init
+
+1. Инициализация проекта
+
+   ```bash
+   dbt init
+   ```
+
+2. Cледуйте интерактивным подсказкам dbt для выбора коннектора {{dbt-ydb}} и настроек аутентификации, подходящих для вашего кластера {{ydb}}
+
+3. В результате директорая с вашим проектом, а также файл [профилей](https://docs.getdbt.com/docs/core/connect-data-platform/connection-profiles) {{dbt}} в домашней директории пользователя будет создан или обновлен новым соединением к {{ydb}}
+
+  ```bash
+  ~/.dbt/profiles.yml
+  ```
+
+4. Запустите команду {{dbt}} debug для проверки соединения
+
+  ```bash
+  dbt debug
+  ```
+
+5. Внутри директории вашего проекта, вы увидите следующую структуру
+
+![{{dbt-ydb}} new project structure](_assets/dbt-ydb-new-project.png)
+
+6. Теперь вы можете запустить ваш проект
+
+  ```bash
+  dbt run
+  ```
+
 ## Запуск тестового примера
 
-Вместе с коннектором {{ dbt-ydb }} поставляется [пример](https://github.com/ydb-platform/dbt-ydb/tree/main/examples/jaffle_shop), который можно использовать для быстрой проверки возможностей {{ dbt }} для {{ ydb }}:
+Вместе с коннектором {{ dbt-ydb }} поставляется [пример](https://github.com/ydb-platform/dbt-ydb/tree/main/examples/jaffle_shop), который можно использовать для быстрой проверки возможностей {{ dbt }} для {{ ydb }}
 
 1. Клонирование репозитория
 
@@ -76,7 +146,7 @@ pip install dbt-ydb
    cd dbt-ydb/examples/jaffle_shop
    ```
 
-2. Настройка профиля подключения к вашей {{ ydb }} в файле `profiles.yml`. Способы подключения и аутентификации представлены [здесь](https://github.com/ydb-platform/dbt-ydb?tab=readme-ov-file#profile-configuration). Для однонодовой инсталляции из [быстрого старта](../../quickstart.md) файл будет выглядеть следующим образом.
+2. Настройка файла профиля подключения к вашей {{ ydb }} в файле `profiles.yml`. Для однонодовой инсталляции из [быстрого старта](../../quickstart.md) файл будет выглядеть следующим образом
 
    ```yaml
    profile_name:
@@ -102,7 +172,7 @@ pip install dbt-ydb
    dbt seed
    ```
 
-   Эта команда загрузит CSV‑файлы из `data/` в таблицы `raw_*` YDB.
+   Эта команда загрузит CSV‑файлы из `data/` в таблицы `raw_*` {{ydb}}.
 
 5. Запуск моделей
 
@@ -127,7 +197,7 @@ pip install dbt-ydb
    dbt docs serve --port 8080
    ```
 
-   Документация по проекту станет доступна в браузере: [http://localhost:8080](http://localhost:8080)
+   Документация по проекту станет доступна в браузере: [http://localhost:8080](http://localhost:8080).
 
 ## Дальнейшие шаги
 

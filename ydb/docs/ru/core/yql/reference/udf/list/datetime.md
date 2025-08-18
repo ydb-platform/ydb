@@ -37,14 +37,13 @@
 ### Список функций
 
 * `DateTime::MakeDate(Resource<TM>{Flags:AutoMap}) -> Date`
-* `DateTime::MakeTzDate(Resource<TM>{Flags:AutoMap}) -> TzDate`
-* `DateTime::MakeDate32(Resource<TM64>{Flags:AutoMap}) -> Date32`
-* `DateTime::MakeTzDate32(Resource<TM64>{Flags:AutoMap}) -> TzDate32`
-* `DateTime::MakeDatetime(Resource<TM>{Flags:AutoMap}) -> Datetime`
-* `DateTime::MakeTzDatetime(Resource<TM>{Flags:AutoMap}) -> TzDatetime`
-* `DateTime::MakeDatetime64(Resource<TM64>{Flags:AutoMap}) -> Datetime64`
-* `DateTime::MakeTzDatetime64(Resource<TM64>{Flags:AutoMap}) -> TzDatetime64`
-* `DateTime::MakeTimestamp(Resource<TM>{Flags:AutoMap}) -> Timestamp`
+* `DateTime::MakeDate32(Resource<TM64>{Flags:AutoMap}) -> Date32`;
+* `DateTime::MakeTzDate32(Resource<TM64>{Flags:AutoMap}) -> TzDate32`;
+* `DateTime::MakeDatetime(Resource<TM>{Flags:AutoMap}) -> Datetime`;
+* `DateTime::MakeTzDatetime(Resource<TM>{Flags:AutoMap}) -> TzDatetime`;
+* `DateTime::MakeDatetime64(Resource<TM64>{Flags:AutoMap}) -> Datetime64`;
+* `DateTime::MakeTzDatetime64(Resource<TM64>{Flags:AutoMap}) -> TzDatetime64`;
+* `DateTime::MakeTimestamp(Resource<TM>{Flags:AutoMap}) -> Timestamp`;
 * `DateTime::MakeTzTimestamp(Resource<TM>{Flags:AutoMap}) -> TzTimestamp`
 * `DateTime::MakeTimestamp64(Resource<TM64>{Flags:AutoMap}) -> Timestamp64`
 * `DateTime::MakeTzTimestamp64(Resource<TM64>{Flags:AutoMap}) -> TzTimestamp64`

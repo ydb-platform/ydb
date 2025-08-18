@@ -553,7 +553,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
     LOG_D("Total tasks: " << nScanTasks + nComputeTasks << ", readonly: true"  // TODO ???
         << ", " << nScanTasks << " scan tasks on " << TasksPerNode.size() << " nodes"
         << ", localComputeTasks: " << TasksGraph.GetMeta().LocalComputeTasks
-        << " MayRunTasksLocally " << TasksGraph.GetMeta().MayRunTasksLocally
+        << ", MayRunTasksLocally " << TasksGraph.GetMeta().MayRunTasksLocally
         << ", snapshot: {" << GetSnapshot().TxId << ", " << GetSnapshot().Step << "}");
 
 

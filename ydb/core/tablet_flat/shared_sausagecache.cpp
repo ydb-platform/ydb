@@ -108,10 +108,6 @@ struct TPageTraits {
         page->SetFrequency(frequency);
     }
 
-    static void IncrementFrequency(TPage* page) {
-        page->IncrementFrequency();
-    }
-
     static ui32 GetTier(TPage* page) {
         return static_cast<ui32>(page->CacheMode);
     }
@@ -192,13 +188,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         while (GetStatAllBytes() > MemLimitBytes
             || GetStatAllBytes() > (Config.HasMemoryLimit() ? Config.GetMemoryLimit() : Max<ui64>()) && StatActiveBytes > configActiveReservedBytes)
         {
-            TIntrusiveList<TPage> pages = Cache.EvictNext();
-            if (pages.Empty()) {
+            if (TPage* evictedPage = Cache.EvictNext()) {
+                EvictNow(evictedPage, recheck);
+            } else {
                 break;
-            }
-            while (!pages.Empty()) {
-                TPage* page = pages.PopFront();
-                EvictNow(page, recheck);
             }
         }
         if (recheck) {
@@ -315,7 +308,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             page->Collection = &collection;
             BodyProvided(collection, page.Get());
-            Evict(Cache.Touch(page.Get()));
+            Evict(Cache.Insert(page.Get()));
         }
     }
 
@@ -351,7 +344,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         for (const ui32 reqIdx : xrange(msg->Pages.size())) {
             const TPageId pageId = msg->Pages[reqIdx];
             auto* page = EnsurePage(pageCollection, collection, pageId, cacheMode);
-            TryLoadEvictedPage(page);
+            if (page->State == PageStateLoaded) {
+                page->IncrementFrequency();
+            } else if (page->State == PageStateEvicted) {
+                LoadEvictedPage(page);
+            }
 
             Counters.RequestedPages->Inc();
             Counters.RequestedBytes->Add(page->Size);
@@ -364,7 +361,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (doTraceLog) {
                     pagesFromCacheTraceLog.push_back(pageId);
                 }
-                Evict(Cache.Touch(page));
                 break;
             case PageStateNo:
                 ++pagesToRequestCount;
@@ -621,7 +617,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     continue;
                 }
 
-                TryLoadEvictedPage(page);
+                if (page->State == PageStateEvicted) {
+                    LoadEvictedPage(page);
+                }
 
                 switch (page->State) {
                 case PageStateNo:
@@ -631,7 +629,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 case PageStatePending:
                     break;
                 case PageStateLoaded:
-                    Evict(Cache.Touch(page));
+                // TODO:
+                    page->IncrementFrequency();
                     break;
                 default:
                     Y_TABLET_ERROR("unknown load state");
@@ -748,7 +747,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 page->ProvideBody(std::move(paged.Data));
                 BodyProvided(*collection, page);
-                Evict(Cache.Touch(page));
+                Evict(Cache.Insert(page));
             }
         }
 
@@ -772,13 +771,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         return page;
     }
 
-    void TryLoadEvictedPage(TPage* page) {
-        if (page->State == PageStateEvicted) {
-            Y_ENSURE(page->Use()); // still in PageMap, guaranteed to be alive
-            page->State = PageStateLoaded;
-            RemovePassivePage(page);
-            AddActivePage(page);
-        }
+    void LoadEvictedPage(TPage* page) {
+        Y_ASSERT(page->State == PageStateEvicted);
+        Y_ENSURE(page->Use()); // still in PageMap, guaranteed to be alive
+
+        page->State = PageStateLoaded;
+        RemovePassivePage(page);
+        AddActivePage(page);
+        Evict(Cache.Insert(page));
     }
 
     TCollection& EnsureCollection(const TLogoBlobID& pageCollectionId, const NPageCollection::IPageCollection& pageCollection, const TActorId& owner) {
@@ -834,11 +834,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             auto* page = static_cast<TPage*>(rawPage.Get());
             if (page->State == PageStateEvicted && page->GetFrequency() > 0) {
                 // page was accessed while being passive, load it back
-                // FIXME: should we limit this loop with some MaxMainQueueReinserts param?
-                TryLoadEvictedPage(page);
-                Evict(Cache.Touch(page));
+                LoadEvictedPage(page);
+            } else {
+                TryDrop(page, recheck);
             }
-            TryDrop(page, recheck);
         }
 
         if (recheck) {
@@ -1093,8 +1092,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             switch (page->State) {
             case PageStateEvicted:
-                TryLoadEvictedPage(page);
-                Evict(Cache.Touch(page));
+                LoadEvictedPage(page);
                 break;
             case PageStateNo:
                 page->State = PageStateRequestedAsync;
@@ -1127,7 +1125,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 Cache.Erase(page);
                 page->EnsureNoCacheFlags();
                 page->CacheMode = targetMode;
-                Evict(Cache.Touch(page));
+                Evict(Cache.Insert(page));
                 break;
             default:
                 page->CacheMode = targetMode;

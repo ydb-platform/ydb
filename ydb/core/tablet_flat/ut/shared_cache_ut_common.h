@@ -2,7 +2,6 @@
 
 #include <shared_cache_s3fifo.h>
 #include <shared_page.h>
-#include <ydb/core/util/cache_cache_iface.h>
 
 namespace NKikimr::NSharedCache::NTest {
 
@@ -79,10 +78,6 @@ namespace NKikimr::NSharedCache::NTest {
     
         static void SetFrequency(TPage* page, ui32 frequency) {
             page->SetFrequency(frequency);
-        }
-
-        static void IncrementFrequency(TPage* page) {
-            page->IncrementFrequency();
         }
 
         static ui32 GetTier(TPage* page) {

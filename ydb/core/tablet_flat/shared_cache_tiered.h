@@ -19,17 +19,17 @@ namespace NKikimr::NSharedCache {
             TryKeepInMemoryTier = &CacheTiers.back();
         }
 
-        TIntrusiveList<TPage> EvictNext() Y_WARN_UNUSED_RESULT {
-            if (auto evicted = RegularTier->EvictNext(); evicted) {
-                return std::move(evicted);
+        TPage* EvictNext() Y_WARN_UNUSED_RESULT {
+            if (TPage* evictedPage = RegularTier->EvictNext(); evictedPage) {
+                return evictedPage;
             } else {
                 return TryKeepInMemoryTier->EvictNext();
             }
         }
 
-        TIntrusiveList<TPage> Touch(TPage *page) Y_WARN_UNUSED_RESULT {
+        TIntrusiveList<TPage> Insert(TPage *page) Y_WARN_UNUSED_RESULT {
             ui32 tier = TPageTraits::GetTier(page);
-            return CacheTiers[tier].Touch(page);
+            return CacheTiers[tier].Insert(page);
         }
 
         void Erase(TPage *page) {
@@ -48,11 +48,7 @@ namespace NKikimr::NSharedCache {
         }
 
         ui64 GetSize() const {
-            ui64 result = 0;
-            for (const auto& cacheTier : CacheTiers) {
-                result += cacheTier.GetSize();
-            }
-            return result;
+            return RegularTier->GetSize() + TryKeepInMemoryTier->GetSize();
         }
 
         TString Dump() const {

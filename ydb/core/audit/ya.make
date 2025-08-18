@@ -11,7 +11,6 @@ PEERDIR(
     ydb/library/actors/core
     library/cpp/json
     library/cpp/logger
-    library/cpp/string_utils/base64
     ydb/core/base
 )
 

@@ -1,10 +1,10 @@
 #include <util/charset/utf8.h>
+#include <util/string/hex.h>
 
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/logger/record.h>
 #include <library/cpp/logger/backend.h>
-#include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/base/events.h>
 #include <ydb/library/actors/core/log.h>
@@ -222,7 +222,7 @@ THolder<NActors::IActor> CreateAuditWriter(TAuditLogBackends&& logBackends)
 
 static void EscapeNonUtf8(TString& s) {
     if (!IsUtf(s)) {
-        s = Base64Encode(s);
+        s = HexEncode(s);
     }
 }
 

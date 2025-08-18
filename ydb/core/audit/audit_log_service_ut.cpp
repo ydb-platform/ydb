@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
             {"fe", "\xfe\xfe"},
         };
 
-        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), "name=value, fe=/v4="); // non utf-8 is in base64
+        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), "name=value, fe=FEFE"); // non utf-8 is in base64
     }
 
     Y_UNIT_TEST(LoggingJson) {
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
             {"fe", "\xfe\xfe"},
         };
 
-        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), R"({"name":"value","fe":"/v4="})");
+        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), R"({"name":"value","fe":"FEFE"})");
     }
 
     Y_UNIT_TEST(LoggingJsonLog) {
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
             {"fe", "\xfe\xfe"},
         };
 
-        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), R"("@log_type":"audit","name":"value","fe":"\/v4="})");
+        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), R"("@log_type":"audit","name":"value","fe":"FEFE"})");
     }
 }
 

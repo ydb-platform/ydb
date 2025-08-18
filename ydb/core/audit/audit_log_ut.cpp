@@ -17,11 +17,12 @@ Y_UNIT_TEST_SUITE(EscapeNonUtf8LogPartsTest) {
 
         EscapeNonUtf8LogParts(parts);
 
+
         TAuditLogParts expectedParts = {
             {"name", "value"},
             {"", ""},
             {"valid-utf-8", "🤺 ברוך הבא"},
-            {"wm5vbv51dGYtOA==", "dmFsaWQgLSD++vXCIC0gdmFsaWQ="},
+            {"C26E6F6EFE7574662D38", "76616C6964202D20FEFAF5C2202D2076616C6964"},
             {"newline", "\n"},
             {"backslash", "\\"},
         };

@@ -3580,6 +3580,9 @@ public:
                     break;
             }
         }
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
+            "Restored index build id# " << indexInfo->Id << ": " << *indexInfo);
     }
 
     template<class TRow>

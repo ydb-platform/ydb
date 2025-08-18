@@ -468,11 +468,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
     propose->Record.SetFailOnExist(true);
 
     auto addUnlock = [&](TPath path) {
-        if (!path.IsResolved() || !path.IsLocked()) {
-            return;
-        }
-        Y_ENSURE(path.LockedBy() == buildInfo.LockTxId);
-
         NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropLock);
         modifyScheme.SetInternal(true);
@@ -488,7 +483,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
 
     if (buildInfo.IsValidatingUniqueIndex()) {
         // Unlock also indexImplTable
-        addUnlock(GetBuildPath(ss, buildInfo, NTableIndex::ImplTable));
+        TPath indexImplTablePath = GetBuildPath(ss, buildInfo, NTableIndex::ImplTable);
+        if (indexImplTablePath.IsResolved() && indexImplTablePath.IsLocked()) {
+            addUnlock(std::move(indexImplTablePath));
+        }
     }
 
     LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,

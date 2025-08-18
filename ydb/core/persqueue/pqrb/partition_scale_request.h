@@ -26,8 +26,9 @@ public:
 
 public:
     TPartitionScaleRequest(const TString& topicName, const TString& topicPath, const TString& databasePath, ui64 pathId, ui64 pathVersion,
-        const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit>& splits,
-        const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge>& merges,
+        std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit> splits,
+        std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge> merges,
+        std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionBoundary> setBoundaries,
         const NActors::TActorId& parentActorId);
 
 public:
@@ -60,6 +61,7 @@ private:
     const ui64 PathVersion;
     const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit> Splits;
     const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge> Merges;
+    const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionBoundary> SetBoundaries;
     NActors::TActorId ParentActorId;
     NActors::TActorId SchemePipeActorId;
 };

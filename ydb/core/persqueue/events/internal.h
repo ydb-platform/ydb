@@ -20,7 +20,9 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 #include <util/generic/maybe.h>
+#include <expected>
 
 namespace NYdb::inline Dev {
     class ICredentialsProviderFactory;
@@ -204,6 +206,7 @@ struct TEvPQ {
         EvExclusiveLockAcquired,
         EvReleaseExclusiveLock,
         EvRunCompaction,
+        EvMirrorTopicDescription,
         EvEnd
     };
 
@@ -770,6 +773,21 @@ struct TEvPQ {
 
         NKikimr::TTabletCountersBase Counters;
     };
+
+    struct TEvMirrorTopicDescription : public TEventLocal<TEvMirrorTopicDescription, EvMirrorTopicDescription> {
+        TEvMirrorTopicDescription(NYdb::NTopic::TDescribeTopicResult description)
+            : Description(std::move(description))
+        {
+        }
+
+        TEvMirrorTopicDescription(TString error)
+            : Description(std::unexpected(std::move(error)))
+        {
+        }
+
+        std::expected<NYdb::NTopic::TDescribeTopicResult, TString> Description;
+    };
+
 
     struct TEvRetryWrite : public TEventLocal<TEvRetryWrite, EvRetryWrite> {
         TEvRetryWrite()

@@ -151,7 +151,7 @@ public:
         TPageTraits::SetFrequency(page, 0);
     }
 
-    // WARN: do not evict items
+    // WARN: does not evict items
     void UpdateLimit(ui64 limit) {
         Limit = limit;
     }

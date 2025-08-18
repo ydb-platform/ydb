@@ -325,7 +325,7 @@ protected:
             .RequiredArgument("file")
             .EmplaceTo(&BindingsRaw);
 
-        options.AddLongOption("templates", TStringBuilder() << "Enable templates for connections, bindings and queries, such as ${" << YQL_TOKEN_VARIABLE << "}, " << TExecutionOptions::QUERY_ID_TEMPLATE << " and " << TExecutionOptions::LOOP_ID_TEMPLATE)
+        options.AddLongOption("templates", TStringBuilder() << "Enable templates for connections, bindings and queries, such as ${" << YQL_TOKEN_VARIABLE << "}; only for queries " << TExecutionOptions::QUERY_ID_TEMPLATE << ", " << TExecutionOptions::LOOP_ID_TEMPLATE)
             .NoArgument()
             .SetFlag(&ExecutionOptions.UseTemplates);
 

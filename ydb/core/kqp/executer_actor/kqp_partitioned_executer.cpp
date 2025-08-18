@@ -496,7 +496,7 @@ private:
         const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig);
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, TResultSetFormatSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
-            FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings), NActors::TActorId());
+            FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings), {}, 0);
         auto exId = RegisterWithSameMailbox(executerActor);
 
         partInfo->ExecuterId = exId;

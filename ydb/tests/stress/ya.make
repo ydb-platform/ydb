@@ -15,5 +15,6 @@ RECURSE(
     simple_queue
     statistics_workload
     topic
+    topic_kafka
     transfer
 )

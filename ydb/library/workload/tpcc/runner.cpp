@@ -36,9 +36,11 @@ namespace {
 //-----------------------------------------------------------------------------
 
 constexpr auto GracefulShutdownTimeout = std::chrono::seconds(10);
-constexpr auto MinWarmupPerTerminal = std::chrono::milliseconds(1);
+constexpr auto MinWarmupPerTerminalMs = std::chrono::milliseconds(1);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
+
+const TDuration SaturatedThreadsWindowDuration = TDuration::Minutes(5);
 
 //-----------------------------------------------------------------------------
 
@@ -112,6 +114,9 @@ private:
     std::shared_ptr<TRunDisplayData> DataToDisplay;
 
     std::unique_ptr<TRunnerTui> Tui;
+
+    Clock::time_point SaturationWindowStartTs{};
+    size_t SaturationWindowMaxSaturatedThreads = 0;
 };
 
 //-----------------------------------------------------------------------------
@@ -291,13 +296,28 @@ void TPCCRunner::RunSync() {
     // We don't want to start all terminals at the same time, because then there will be
     // a huge queue of ready terminals, which we can't handle
     bool forcedWarmup = false;
-    uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
+    uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminalMs.count() / 1000 + 1;
+
     uint32_t warmupSeconds;
-    if (Config.WarmupDuration.Seconds() < minWarmupSeconds) {
-        forcedWarmup = true; // we must print log message later after display update
-        warmupSeconds = minWarmupSeconds;
+    if (Config.WarmupDuration == TDuration()) {
+        // adaptive, a very simple heuristic
+        if (Config.WarehouseCount <= 10) {
+            warmupSeconds = 30;
+        } else if (Config.WarehouseCount <= 100) {
+            warmupSeconds = 5 * 60;
+        } else if (Config.WarehouseCount <= 1000) {
+            warmupSeconds = 10 * 60;
+        } else if (Config.WarehouseCount <= 1000) {
+            warmupSeconds = 30 * 60;
+        }
+        warmupSeconds = std::max(warmupSeconds, minWarmupSeconds);
     } else {
+        // user specified
         warmupSeconds = Config.WarmupDuration.Seconds();
+        if (warmupSeconds < minWarmupSeconds) {
+            forcedWarmup = true; // we must print log message later after display update
+            warmupSeconds = minWarmupSeconds;
+        }
     }
 
     WarmupStartTs = Clock::now();
@@ -325,7 +345,7 @@ void TPCCRunner::RunSync() {
     for (; startedTerminalId < Terminals.size() && !GetGlobalInterruptSource().stop_requested(); ++startedTerminalId) {
         Terminals[startedTerminalId]->Start();
 
-        std::this_thread::sleep_for(MinWarmupPerTerminal);
+        std::this_thread::sleep_for(MinWarmupPerTerminalMs);
         now = Clock::now();
         UpdateDisplayIfNeeded(now);
     }
@@ -396,6 +416,27 @@ void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
 
     CollectDataToDisplay(now);
 
+    // Maintain tumbling window for saturated threads
+    if (SaturationWindowStartTs == Clock::time_point{}) {
+        SaturationWindowStartTs = now;
+        SaturationWindowMaxSaturatedThreads = 0;
+    }
+
+    size_t currentSaturated = DataToDisplay->Statistics.SaturatedThreads;
+    if (currentSaturated > SaturationWindowMaxSaturatedThreads) {
+        SaturationWindowMaxSaturatedThreads = currentSaturated;
+    }
+
+    auto windowElapsedSec = duration_cast<std::chrono::seconds>(now - SaturationWindowStartTs).count();
+    if (windowElapsedSec >= static_cast<long long>(SaturatedThreadsWindowDuration.Seconds())) {
+        if (SaturationWindowMaxSaturatedThreads > 0) {
+            LOG_W("Observed " << SaturationWindowMaxSaturatedThreads << " saturated threads within last "
+                << SaturatedThreadsWindowDuration);
+        }
+        SaturationWindowStartTs = now;
+        SaturationWindowMaxSaturatedThreads = 0;
+    }
+
     switch (Config.DisplayMode) {
     case TRunConfig::EDisplayMode::Text:
         UpdateDisplayTextMode();
@@ -456,7 +497,7 @@ void TPCCRunner::UpdateDisplayTextMode() {
         std::stringstream leftLine;
         if (i < threadCount) {
             const auto& stats = DataToDisplay->Statistics.StatVec[i];
-            double load = stats.ExecutingTime / stats.TotalTime;
+            double load = stats.Load;
             leftLine << std::left
                      << std::setw(5) << (i + 1)
                      << std::setw(5) << std::fixed << std::setprecision(2) << load
@@ -472,7 +513,7 @@ void TPCCRunner::UpdateDisplayTextMode() {
         size_t rightIndex = i + halfCount;
         if (rightIndex < threadCount) {
             const auto& stats = DataToDisplay->Statistics.StatVec[rightIndex];
-            double load = stats.ExecutingTime / stats.TotalTime;
+            double load = stats.Load;
             rightLine << std::left
                       << std::setw(5) << (rightIndex + 1)
                       << std::setw(5) << std::fixed << std::setprecision(2) << load

@@ -5,39 +5,12 @@ import random
 import threading
 from enum import Enum
 
+from ydb.tests.datashard.lib.types_of_variables import non_pk_types, pk_types, types_not_supported_yet_in_columnshard
 from ydb.tests.stress.common.common import WorkloadBase
 
-supported_pk_types = [
-    # Bool https://github.com/ydb-platform/ydb/issues/13037
-    "Int8",
-    "Int16",
-    "Int32",
-    "Int64",
-    "Uint8",
-    "Uint16",
-    "Uint32",
-    "Uint64",
-    "Decimal(22,9)",
-    # "DyNumber", https://github.com/ydb-platform/ydb/issues/13048
+supported_pk_types = list(pk_types.keys() - types_not_supported_yet_in_columnshard)
 
-    "String",
-    "Utf8",
-    # Uuid", https://github.com/ydb-platform/ydb/issues/13047
-
-    "Date",
-    "Datetime",
-    "Datetime64",
-    "Timestamp",
-    # "Interval", https://github.com/ydb-platform/ydb/issues/13050
-]
-
-supported_types = supported_pk_types + [
-    "Float",
-    "Double",
-    "Json",
-    "JsonDocument",
-    "Yson"
-]
+supported_types = list((pk_types.keys() | non_pk_types.keys()) - types_not_supported_yet_in_columnshard)
 
 
 class WorkloadTablesCreateDrop(WorkloadBase):

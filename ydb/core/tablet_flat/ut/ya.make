@@ -24,8 +24,6 @@ SRCS(
     flat_test_db.cpp
     flat_test_db_helpers.h
     shared_cache_s3fifo_ut.cpp
-    shared_cache_clock_pro_ut.cpp
-    shared_cache_switchable_ut.cpp
     shared_cache_tiered_ut.cpp
     shared_handle_ut.cpp
     ut_btree_index_nodes.cpp

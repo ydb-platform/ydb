@@ -1,13 +1,33 @@
 items:
+- name: actor_system_config
+  href: actor_system_config.md
 - name: auth_config
   href: auth_config.md
+- name: blob_storage_config
+  href: blob_storage_config.md
 - name: client_certificate_authorization
   href: client_certificate_authorization.md
-- name: Hive
+- name: domains_config
+  href: domains_config.md
+- name: feature_flags
+  href: feature_flags.md
+- name: healthcheck_config
+  href: healthcheck_config.md
+- name: hive_config
   href: hive.md
+- name: host_configs
+  href: host_configs.md
+- name: hosts
+  href: hosts.md
 - name: log_config
   href: log_config.md
+- name: memory_controller_config
+  href: memory_controller_config.md
+- name: node_broker_config
+  href: node_broker_config.md
+- name: resource_broker_config
+  href: resource_broker_config.md
 - name: security_config
   href: security_config.md
-- name: Настройка TLS
+- name: tls
   href: tls.md

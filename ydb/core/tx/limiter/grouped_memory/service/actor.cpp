@@ -107,8 +107,8 @@ void TMemoryLimiterActor::Handle(NMemory::TEvConsumerRegistered::TPtr& ev) {
 
 void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
     const ui64 countBuckets = Config.GetCountBuckets() ? Config.GetCountBuckets() : 1;
-    const ui64 limitBytes = ev->Get()->LimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient / countBuckets;
-    const ui64 hardLimitBytes = ev->Get()->LimitBytes / countBuckets;
+    const ui64 hardLimitBytes = ev->Get()->LimitBytes * HardLimitMultiplier / countBuckets;
+    const ui64 limitBytes = hardLimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient;
     for (auto& manager: Managers) {
         manager->UpdateMemoryLimits(limitBytes, hardLimitBytes);
     }

@@ -5265,6 +5265,21 @@
                 "ColumnId": 45,
                 "ColumnName": "CpuTimeUsProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 46,
+                "ColumnName": "DropColumnsTxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 47,
+                "ColumnName": "DropColumnsTxStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 48,
+                "ColumnName": "DropColumnsTxDone",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -5315,7 +5330,10 @@
                     42,
                     43,
                     44,
-                    45
+                    45,
+                    46,
+                    47,
+                    48
                 ],
                 "RoomID": 0,
                 "Codec": 0,

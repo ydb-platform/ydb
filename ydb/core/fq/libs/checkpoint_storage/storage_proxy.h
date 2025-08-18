@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
@@ -9,6 +8,10 @@
 #include <ydb/library/actors/core/actor.h>
 
 #include <memory>
+
+namespace NKikimrConfig {
+class TCheckpointsConfig;
+} // namespace NConfig
 
 namespace NFq {
 

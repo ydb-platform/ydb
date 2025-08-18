@@ -6,7 +6,6 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/core/protos/config.pb.h>
 
 #include <memory>
 

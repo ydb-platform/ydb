@@ -21,6 +21,8 @@
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 #include <ydb/library/folder_service/folder_service.h>
 #include <yql/essentials/providers/common/metrics/service_counters.h>
 
@@ -48,7 +50,6 @@
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
-
 
 #include <util/stream/file.h>
 #include <util/system/hostname.h>

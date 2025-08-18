@@ -479,7 +479,7 @@ protected:
             for (auto& [channelId, inputChannel] : InputChannelsMap) {
                 auto freeSpace =  GetInputChannelFreeSpace(channelId);
                 pollSent |= Channels->PollChannel(channelId, freeSpace);
-                inputChannel.PollChannelFreeSpace = freeSpace
+                inputChannel.PollChannelFreeSpace = freeSpace;
             }
             if (!pollSent) {
                 if (ProcessOutputsState.DataWasSent) {

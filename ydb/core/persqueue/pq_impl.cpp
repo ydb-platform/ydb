@@ -223,7 +223,7 @@ private:
                 continue; // This is part of the message which is already being skipped due to empty parts. Skip all other parts as well;
             }
             if (!InitialRequest) {
-                // This is followup request to read missing parts;
+                // This is follow-up request to read missing parts;
                 // There must be some data in response already.
                 if (partResp->ResultSize() == 0) {
                     makeErrorResponse("Internal error - got message part on followup read request with empty current response");

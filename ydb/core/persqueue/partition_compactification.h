@@ -68,8 +68,8 @@ public:
         THashMap<TString, ui64> TopicData;
         TPartition* PartitionActor;
 
-        TMaybe<ui64> LastProcessedOffset;
-        TMaybe<ui64> OffsetToCommit;
+        TMaybe<ui64> LastProcessedOffset; // for ui
+        bool CommitDone = false;
         ui64 CommitCookie = 0;
         TKeysIter KeysIter;
         bool Failure = false;
@@ -82,7 +82,6 @@ public:
         TVector<TClientBlob> CurrMsgPartsFromLastBatch;
         TVector<TKey> CurrMsgMiggleBlobKeys;
         ui64 BlobsToWriteInRequest = 0;
-        ui64 SavedLastProcessedOffset = 0;
 
         ui64 FirstHeadOffset;
         ui64 FirstHeadPartNo;

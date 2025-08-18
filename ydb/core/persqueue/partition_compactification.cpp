@@ -54,6 +54,8 @@ void TPartitionCompaction::TryCompactionIfPossible() {
         } else if (step == EStep::COMPACTING) {
             Step = EStep::COMPACTING;
             CompactState.ConstructInPlace(std::move(ReadState->GetData()), FirstUncompactedOffset, ReadState->GetLastOffset(), PartitionActor);
+            Y_ENSURE(FirstUncompactedOffset < ReadState->GetLastOffset());
+            FirstUncompactedOffset = ReadState->GetLastOffset();
             ReadState.Clear();
         } else {
             break;
@@ -96,9 +98,6 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
         case EStep::COMPACTING: {
             Y_ABORT_UNLESS(CompactState);
             processResponseResult = CompactState->ProcessResponse(ev);
-            if (CompactState->SavedLastProcessedOffset > FirstUncompactedOffset) {
-                FirstUncompactedOffset = CompactState->SavedLastProcessedOffset;
-            }
             break;
         }
         case EStep::PENDING:
@@ -129,21 +128,9 @@ void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
 }
 TPartitionCompaction::TReadState::TReadState(ui64 firstOffset, TPartition* partitionActor)
     : OffsetToRead(firstOffset)
+    , LastOffset(partitionActor->Head.Offset)
     , PartitionActor(partitionActor)
 {
-    ui64 firstHeadOffset = PartitionActor->EndOffset;
-    for (const auto& key : PartitionActor->HeadKeys) {
-        //ToDo: use first key only.
-        if (firstHeadOffset == 0 || key.Key.GetOffset() < firstHeadOffset) {
-            firstHeadOffset = key.Key.GetOffset();
-        }
-    }
-
-    if(partitionActor->DataKeysBody.empty()) {
-        LastOffset = firstOffset;
-    } else if (firstHeadOffset) {
-        LastOffset = firstHeadOffset;
-    }
 }
 
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
@@ -247,7 +234,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TReadState::ContinueIfPossible
         return EStep::COMPACTING;
 
     if (OffsetToRead >= LastOffset) {
-        return TopicData.size() ? EStep::COMPACTING : EStep::READING;
+        return TopicData.size() ? EStep::COMPACTING : EStep::PENDING;
     }
     auto evRead = MakeEvRead(nextRequestCookie, OffsetToRead, LastOffset, NextPartNo);
     PartitionActor->Send(PartitionActor->SelfId(), evRead.release());
@@ -262,7 +249,7 @@ THashMap<TString, ui64>&& TPartitionCompaction::TReadState::GetData() {
 }
 
 ui64 TPartitionCompaction::TReadState::GetLastOffset() {
-    return OffsetToRead - 1;
+    return OffsetToRead;
 }
 
 TPartitionCompaction::TCompactState::TCompactState(
@@ -272,17 +259,12 @@ TPartitionCompaction::TCompactState::TCompactState(
     , TopicData(std::move(data))
     , PartitionActor(partitionActor)
     , LastProcessedOffset(partitionActor->StartOffset)
-    , SavedLastProcessedOffset(partitionActor->StartOffset)
     , CommittedOffset(firstUncompactedOffset)
     , DataKeysBody(partitionActor->DataKeysBody)
 {
-    if (!PartitionActor->HeadKeys.empty()) {
-        FirstHeadOffset = PartitionActor->HeadKeys.front().Key.GetOffset();
-        FirstHeadPartNo = PartitionActor->HeadKeys.front().Key.GetPartNo();
-    } else {
-        FirstHeadOffset = PartitionActor->EndOffset;
-        FirstHeadPartNo = 0;
-    }
+    FirstHeadOffset = PartitionActor->Head.Offset;
+    FirstHeadPartNo = PartitionActor->Head.PartNo;
+
     if (DataKeysBody.empty()) {
         Failure = true; //Probably, also an internal error ?
     }
@@ -334,7 +316,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
         RunKvRequest();
         return EStep::COMPACTING;
     }
-    if (OffsetToCommit) {
+    if (!CommitDone) {
         SendCommit(nextRequestCookie);
         return EStep::COMPACTING;
     }
@@ -384,7 +366,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         // Will retry the request next;
     }
     if (ev->Get()->Cookie == CommitCookie) {
-        OffsetToCommit = Nothing();
+        CommitDone = true;
         CommitCookie = 0;
         return true;
     }
@@ -444,7 +426,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         }
         hasNonZeroParts = hasNonZeroParts || res.GetData().size() > 0;
 
-        if ((SavedLastProcessedOffset && res.GetOffset() <= SavedLastProcessedOffset)
+        if (res.GetOffset() <= PartitionActor->StartOffset
             // These are parts of last message that we don't wan't to process
             || (CurrentMessage.Defined() && res.GetOffset() == CurrentMessage->GetOffset() && res.GetPartNo() <= CurrentMessage->GetPartNo())
              // We reached max offset and don't want to process more messages, but still need to add them to batch
@@ -591,10 +573,8 @@ void TPartitionCompaction::TCompactState::RunKvRequest() {
     Y_ABORT_UNLESS(!PartitionActor->CompacterKvRequestInflight);
     TVector<ui64> deleted;
     for (const auto&[offset, key] : EmptyBlobs) {
-        if (SavedLastProcessedOffset >= offset) {
-            AddDeleteRange(key);
-            deleted.push_back(offset);
-        }
+        AddDeleteRange(key);
+        deleted.push_back(offset);
     }
     for (auto offset : deleted) {
         EmptyBlobs.erase(offset);
@@ -629,27 +609,17 @@ bool TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResp
             }
         }
     }
-    if (LastProcessedOffset) {
-        if (LastProcessedOffset > CommittedOffset) {
-            OffsetToCommit = LastProcessedOffset;
-        }
-        SavedLastProcessedOffset = *LastProcessedOffset;
-    }
 
     UpdateDataKeysBody();
     return true;
 }
 
 void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
-    if (OffsetToCommit.GetOrElse(0) <= CommittedOffset) {
-        OffsetToCommit = Nothing();
-        return;
-    }
     CommitCookie = cookie;
-    auto ev = MakeHolder<TEvPQ::TEvSetClientInfo>(CommitCookie, CLIENTID_COMPACTION_CONSUMER, *OffsetToCommit, TString{}, 0, 0, 0, TActorId{});
+    auto ev = MakeHolder<TEvPQ::TEvSetClientInfo>(CommitCookie, CLIENTID_COMPACTION_CONSUMER, MaxOffset, TString{}, 0, 0, 0, TActorId{});
     ev->IsInternal = true;
     PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
-              << PartitionActor->Partition << " commit offset: " << *OffsetToCommit);
+              << PartitionActor->Partition << " commit offset: " << MaxOffset);
     PartitionActor->CompacterPartitionRequestInflight = true;
     PartitionActor->Send(PartitionActor->SelfId(), ev.Release());
 }

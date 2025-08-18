@@ -1,95 +1,13 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/core/testlib/cs_helper.h>
-#include <ydb/core/testlib/common_helper.h>
-
-#include <library/cpp/threading/local_executor/local_executor.h>
-
-#include <util/generic/serialized_enum.h>
-#include <util/string/printf.h>
 
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpConstraints) {
-    Y_UNIT_TEST(AddSerialColumnForbidden) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                CREATE TABLE `/Root/SerialTableCreateAndAlter` (
-                    Key Int32,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )";
-
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            auto query = R"(
-                ALTER TABLE `/Root/SerialTableCreateAndAlter`
-                ADD COLUMN SeqNo Serial;
-            )";
-
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Column addition with serial data type is unsupported");
-        }
-    }
-
-    Y_UNIT_TEST(AddColumnWithDefaultForbidden) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                CREATE TABLE `/Root/SerialTableCreateAndAlter` (
-                    Key Int32,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )";
-
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            auto query = R"(
-                ALTER TABLE `/Root/SerialTableCreateAndAlter`
-                ADD COLUMN SeqNo Int32 DEFAULT 5;
-            )";
-
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Column addition with default value is not supported now");
-        }
-    }
-
     Y_UNIT_TEST(SerialTypeNegative1) {
         NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings()
@@ -108,7 +26,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown simple type 'SerialUnknown'");
         }
@@ -132,7 +50,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
@@ -141,7 +59,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 UPSERT INTO `/Root/SerialTable` (Key) VALUES (1);
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -150,7 +68,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 SELECT * FROM `/Root/SerialTable`;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,result.GetIssues().ToString());
 
             CompareYson(R"([
@@ -164,7 +82,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 DROP COLUMN Value;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Can't drop serial column: 'Value'");
         }
@@ -175,7 +93,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ALTER COLUMN Value DROP NOT NULL;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot alter serial column 'Value'");
         }
@@ -190,7 +108,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ALTER COLUMN Value SET FAMILY Family2;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot alter serial column 'Value'");
         }
@@ -215,7 +133,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )", serialType.c_str(), serialType.c_str());
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -224,15 +142,16 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 UPSERT INTO `/Root/SerialTable%s` (Value) VALUES ("New");
             )", serialType.c_str());
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
         {
             TString query = Sprintf(R"(
                 SELECT * FROM `/Root/SerialTable%s`;
             )", serialType.c_str());
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             CompareYson(R"([
@@ -246,7 +165,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(SerialTypeSerial2) {
-        TestSerialType("serial2");
+        TestSerialType("Serial2");
     }
 
     Y_UNIT_TEST(SerialTypeSerial) {
@@ -262,7 +181,42 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     }
 
     Y_UNIT_TEST(SerialTypeSerial8) {
-        TestSerialType("serial8");
+        TestSerialType("Serial8");
+    }
+
+    Y_UNIT_TEST(AddSerialColumnForbidden) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/SerialTableCreateAndAlter` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SerialTableCreateAndAlter`
+                ADD COLUMN SeqNo Serial;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Column addition with serial data type is unsupported");
+        }
     }
 
     Y_UNIT_TEST(DropCreateSerial) {
@@ -283,7 +237,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -292,15 +246,16 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 UPSERT INTO `/Root/SerialTable` (Value) VALUES ("New");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
         {
             TString query = R"(
                 SELECT * FROM `/Root/SerialTable`;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -309,7 +264,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 DROP TABLE `/Root/SerialTable`;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -322,7 +277,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -331,15 +286,16 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 UPSERT INTO `/Root/SerialTable` (Value) VALUES ("New");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
         {
             TString query = Sprintf(R"(
                 SELECT * FROM `/Root/SerialTable`;
             )");
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             CompareYson(R"([
@@ -366,7 +322,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -375,7 +331,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 UPSERT INTO `/Root/DefaultsAndDeleteAndUpdate` (Key) VALUES (1), (2), (3), (4);
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -384,7 +340,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 SELECT * FROM `/Root/DefaultsAndDeleteAndUpdate`;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             CompareYson(R"([
@@ -402,8 +358,43 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 SELECT * FROM AS_TABLE(AsList($object_pk));
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AddColumnWithDefaultForbidden) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/SerialTableCreateAndAlter` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SerialTableCreateAndAlter`
+                ADD COLUMN SeqNo Int32 DEFAULT 5;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Column addition with default value is not supported now");
         }
     }
 
@@ -426,7 +417,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -436,7 +427,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 VALUES (1, "One"), (2, "Two"), (3, "Three");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -446,7 +437,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN DefaultValue bool DEFAULT false;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -455,7 +446,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 SELECT Key, Value, DefaultValue FROM `/Root/CreateAndAlterDefault` ORDER BY Key;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             CompareYson(R"([
@@ -477,7 +468,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 VALUES (6, "Six", false);
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -486,7 +477,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 SELECT Key, Value, DefaultValue FROM `/Root/CreateAndAlterDefault` ORDER BY Key;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             CompareYson(R"([
@@ -518,7 +509,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -527,7 +518,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 UPSERT INTO `/Root/TableWithDefaults` (Value) VALUES ("New");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -536,7 +527,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 SELECT * FROM `/Root/TableWithDefaults`;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             CompareYson(R"([
@@ -563,7 +554,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -586,7 +577,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default expr Key is nullable or optional, but column has not null constraint");
         }
@@ -610,7 +601,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default expr Key type mismatch, expected: Uint32, actual: String");
         }
@@ -636,12 +627,12 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         auto fQuery = [&](TString query) -> TString {
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             if (result.GetResultSets().empty()) {
@@ -651,52 +642,59 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             return FormatResultSetYson(result.GetResultSet(0));
         };
 
-        fQuery(R"(
-            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (1, "Old");
-        )");
-
         auto fCompareTable = [&](TString expected) {
             CompareYson(expected, fQuery(R"(
                 SELECT * FROM `/Root/AlterTableAddNotNullColumn` ORDER BY Key;
             )"));
         };
 
-        fCompareTable(R"([
-            [[1u];["Old"];1]
-        ])");
+        {
+            fQuery(R"(
+                UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (1, "Old");
+            )");
 
-        fQuery(R"(
-            INSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "New");
-        )");
+            fCompareTable(R"([
+                [[1u];["Old"];1]
+            ])");
+        }
 
-        fCompareTable(R"([
-            [[1u];["Old"];1];
-            [[2u];["New"];1]
-        ])");
+        {
+            fQuery(R"(
+                INSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "New");
+            )");
 
+            fCompareTable(R"([
+                [[1u];["Old"];1];
+                [[2u];["New"];1]
+            ])");
+        }
 
-        fQuery(R"(
-            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value, Value2) VALUES (2, "New", 2);
-        )");
+        {
+            fQuery(R"(
+                UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value, Value2) VALUES (2, "New", 2);
+            )");
 
-        fCompareTable(R"([
-            [[1u];["Old"];1];
-            [[2u];["New"];2]
-        ])");
+            fCompareTable(R"([
+                [[1u];["Old"];1];
+                [[2u];["New"];2]
+            ])");
+        }
 
-        fQuery(R"(
-            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "OldNew");
-        )");
+        {
+            fQuery(R"(
+                UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "OldNew");
+            )");
 
-        fQuery(R"(
-            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (3, "BrandNew");
-        )");
+            fQuery(R"(
+                UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (3, "BrandNew");
+            )");
 
-        fCompareTable(R"([
-            [[1u];["Old"];1];
-            [[2u];["OldNew"];2];
-            [[3u];["BrandNew"];1]
-        ])");
+            fCompareTable(R"([
+                [[1u];["Old"];1];
+                [[2u];["OldNew"];2];
+                [[3u];["BrandNew"];1]
+            ])");
+        }
 
         CompareYson(fQuery("SELECT Value, Value2 FROM `/Root/AlterTableAddNotNullColumn` VIEW ByValue WHERE Value = \"OldNew\""), R"([
             [["OldNew"];2]
@@ -728,14 +726,14 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = kikimr.RunCall([&]{ return session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync(); });
+            auto result = kikimr.RunCall([&]{ return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
         }
 
         auto fQuery = [&](TString query) -> TString {
             auto result = kikimr.RunCall([&] {
-                return querySession.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                return querySession.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             });
 
             if (result.GetStatus() == EStatus::SUCCESS) {
@@ -749,19 +747,21 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             return TStringBuilder() << result.GetStatus() << ": " << result.GetIssues().ToString();
         };
 
-        fQuery(R"(
-            UPSERT INTO `/Root/IndexChooseAndNonReadyIndex` (Key, Value) VALUES (1, "Old");
-        )");
-
         auto fCompareTable = [&](TString expected) {
             CompareYson(expected, fQuery(R"(
                 SELECT * FROM `/Root/IndexChooseAndNonReadyIndex` WHERE Value = "Old";
             )"));
         };
 
-        fCompareTable(R"([
-            [1u;"Old"]
-        ])");
+        {
+            fQuery(R"(
+                UPSERT INTO `/Root/IndexChooseAndNonReadyIndex` (Key, Value) VALUES (1, "Old");
+            )");
+
+            fCompareTable(R"([
+                [1u;"Old"]
+            ])");
+        }
 
         bool enabledCapture = true;
         TVector<TAutoPtr<IEventHandle>> delayedUpsertRows;
@@ -786,7 +786,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             ADD INDEX Index GLOBAL ON (Value);
         )";
 
-        auto alterFuture = kikimr.RunInThreadPool([&] { return session.ExecuteQuery(alterQuery, NQuery::TTxControl::NoTx()).GetValueSync(); });
+        auto alterFuture = kikimr.RunInThreadPool([&] { return session.ExecuteQuery(alterQuery, TTxControl::NoTx()).GetValueSync(); });
 
         runtime.DispatchEvents(opts);
         Y_VERIFY_S(delayedUpsertRows.size() > 0, "no upload rows requests");
@@ -804,7 +804,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fCompareTable(R"([
             [1u;"Old"]
         ])");
-
     }
 
     Y_UNIT_TEST(AddNonColumnDoesnotReturnInternalError) {
@@ -832,13 +831,13 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = kikimr.RunCall([&]{ return session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync(); });
+            auto result = kikimr.RunCall([&]{ return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         auto fQuery = [&](TString query) -> TString {
             auto result = kikimr.RunCall([&] {
-                return querySession.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+                return querySession.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             });
 
             if (result.GetStatus() == EStatus::SUCCESS) {
@@ -852,28 +851,25 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             return TStringBuilder() << result.GetStatus() << ": " << result.GetIssues().ToString();
         };
 
-        fQuery(R"(
-            UPSERT INTO `/Root/AddNonColumnDoesnotReturnInternalError` (Key, Value) VALUES (1, "Old");
-        )");
-
-        fQuery(R"(
-            UPDATE `/Root/AddNonColumnDoesnotReturnInternalError` SET Value2="Updated" WHERE Key=1;
-        )");
-
         auto fCompareTable = [&](TString expected) {
             CompareYson(expected, fQuery(R"(
                 SELECT * FROM `/Root/AddNonColumnDoesnotReturnInternalError` ORDER BY Key;
             )"));
         };
 
-        fCompareTable(R"([
-            [1u;"Old";"Updated"]
-        ])");
+        {
+            fQuery(R"(
+                UPSERT INTO `/Root/AddNonColumnDoesnotReturnInternalError` (Key, Value) VALUES (1, "Old");
+            )");
 
-        auto alterQuery = R"(
-            ALTER TABLE `/Root/AddNonColumnDoesnotReturnInternalError`
-            ADD COLUMN Value3 Int32 NOT NULL DEFAULT 7;
-        )";
+            fQuery(R"(
+                UPDATE `/Root/AddNonColumnDoesnotReturnInternalError` SET Value2="Updated" WHERE Key=1;
+            )");
+
+            fCompareTable(R"([
+                [1u;"Old";"Updated"]
+            ])");
+        }
 
         bool enabledCapture = true;
         TVector<TAutoPtr<IEventHandle>> delayedUpsertRows;
@@ -893,7 +889,12 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         runtime.SetObserverFunc(grab);
 
-        auto alterFuture = kikimr.RunInThreadPool([&] { return session.ExecuteQuery(alterQuery, NQuery::TTxControl::NoTx()).GetValueSync(); });
+        auto alterQuery = R"(
+            ALTER TABLE `/Root/AddNonColumnDoesnotReturnInternalError`
+            ADD COLUMN Value3 Int32 NOT NULL DEFAULT 7;
+        )";
+
+        auto alterFuture = kikimr.RunInThreadPool([&] { return session.ExecuteQuery(alterQuery, TTxControl::NoTx()).GetValueSync(); });
 
         runtime.DispatchEvents(opts);
         Y_VERIFY_S(delayedUpsertRows.size() > 0, "no upload rows requests");
@@ -982,12 +983,12 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         auto fQuery = [&](TString query) -> TString {
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             if (result.GetResultSets().empty()) {
@@ -997,28 +998,32 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             return FormatResultSetYson(result.GetResultSet(0));
         };
 
-        fQuery(R"(
-            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (1, "Old");
-        )");
-
         auto fCompareTable = [&](TString expected) {
             CompareYson(expected, fQuery(R"(
                 SELECT * FROM `/Root/AlterTableAddNotNullColumn` ORDER BY Key;
             )"));
         };
 
-        fCompareTable(R"([
-            [[1u];["Old"];1]
-        ])");
+        {
+            fQuery(R"(
+                UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (1, "Old");
+            )");
 
-        fQuery(R"(
-            INSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "New");
-        )");
+            fCompareTable(R"([
+                [[1u];["Old"];1]
+            ])");
+        }
 
-        fCompareTable(R"([
-            [[1u];["Old"];1];
-            [[2u];["New"];1]
-        ])");
+        {
+            fQuery(R"(
+                INSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "New");
+            )");
+
+            fCompareTable(R"([
+                [[1u];["Old"];1];
+                [[2u];["New"];1]
+            ])");
+        }
 
         {
             auto query = R"(
@@ -1026,7 +1031,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value3 Int32 NOT NULL DEFAULT 7;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1041,7 +1046,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value4 Int8 NOT NULL DEFAULT Int8("-24");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1056,7 +1061,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value5 Int8 NOT NULL DEFAULT -25;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1071,7 +1076,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value6 Float NOT NULL DEFAULT Float("1.0");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1086,7 +1091,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value7 Double NOT NULL DEFAULT Double("1.0");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1101,7 +1106,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value8 Yson NOT NULL DEFAULT Yson("[123]");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1116,7 +1121,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value9 Json NOT NULL DEFAULT Json("{\"age\" : 22}");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1131,7 +1136,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Valuf1 Decimal(22,9) NOT NULL DEFAULT Decimal("1.11", 22, 9);
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1146,7 +1151,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Valuf35 Decimal(35,10) NOT NULL DEFAULT Decimal("155555555555555.11", 35, 10);
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1161,7 +1166,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value10 Int16 NOT NULL DEFAULT Int16("-213");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1176,7 +1181,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value11 Uint16 NOT NULL DEFAULT 213;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             fCompareTable(R"([
@@ -1207,12 +1212,12 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 )
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         auto fQuery = [&](TString query) -> TString {
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             if (result.GetResultSets().empty()) {
@@ -1264,12 +1269,12 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         auto fQuery = [&](TString query) -> TString {
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,result.GetIssues().ToString());
 
             if (result.GetResultSets().empty()) {
@@ -1277,6 +1282,12 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             }
 
             return FormatResultSetYson(result.GetResultSet(0));
+        };
+
+        auto fCompareTable = [&](TString expected) {
+            CompareYson(expected, fQuery(R"(
+                SELECT * FROM `/Root/Utf8AndDefault` ORDER BY Key;
+            )"));
         };
 
         fQuery(R"(
@@ -1289,7 +1300,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value2 Utf8 NOT NULL DEFAULT Utf8("Hard");
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -1299,28 +1310,24 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value4 Utf8 NOT NULL DEFAULT CAST("Value4" as Utf8);
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-
-        auto fCompareTable = [&](TString expected) {
-            CompareYson(expected, fQuery(R"(
-                SELECT * FROM `/Root/Utf8AndDefault` ORDER BY Key;
-            )"));
-        };
 
         fCompareTable(R"([
             [[1u];"Simple";"Hard";"Impossibru";"Value4"]
         ])");
 
-        fQuery(R"(
-            UPSERT INTO `/Root/Utf8AndDefault` (Key) VALUES (2);
-        )");
+        {
+            fQuery(R"(
+                UPSERT INTO `/Root/Utf8AndDefault` (Key) VALUES (2);
+            )");
 
-        fCompareTable(R"([
-            [[1u];"Simple";"Hard";"Impossibru";"Value4"];
-            [[2u];"Simple";"Hard";"Impossibru";"Value4"]
-        ])");
+            fCompareTable(R"([
+                [[1u];"Simple";"Hard";"Impossibru";"Value4"];
+                [[2u];"Simple";"Hard";"Impossibru";"Value4"]
+            ])");
+        }
     }
 
     Y_UNIT_TEST(AlterTableAddNotNullWithDefault) {
@@ -1343,12 +1350,12 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 );
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         auto fQuery = [&](TString query) -> TString {
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             if (result.GetResultSets().empty()) {
@@ -1358,19 +1365,21 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             return FormatResultSetYson(result.GetResultSet(0));
         };
 
-        fQuery(R"(
-            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (1, "Old");
-        )");
-
         auto fCompareTable = [&](TString expected) {
             CompareYson(expected, fQuery(R"(
                 SELECT * FROM `/Root/AlterTableAddNotNullColumn` ORDER BY Key;
             )"));
         };
 
-        fCompareTable(R"([
-            [[1u];["Old"]]
-        ])");
+        {
+            fQuery(R"(
+                UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (1, "Old");
+            )");
+
+            fCompareTable(R"([
+                [[1u];["Old"]]
+            ])");
+        }
 
         {
             auto query = R"(
@@ -1378,46 +1387,50 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 ADD COLUMN Value2 Int32 NOT NULL DEFAULT 1;
             )";
 
-            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         Sleep(TDuration::Seconds(3));
 
-        fQuery(R"(
-            INSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "New");
-        )");
+        {
+            fQuery(R"(
+                INSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "New");
+            )");
 
-        fCompareTable(R"([
-            [[1u];["Old"];1];
-            [[2u];["New"];1]
-        ])");
+                fCompareTable(R"([
+                [[1u];["Old"];1];
+                [[2u];["New"];1]
+            ])");
+        }
 
+        {
+            fQuery(R"(
+                UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value, Value2) VALUES (2, "New", 2);
+            )");
 
-        fQuery(R"(
-            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value, Value2) VALUES (2, "New", 2);
-        )");
+                fCompareTable(R"([
+                [[1u];["Old"];1];
+                [[2u];["New"];2]
+            ])");
+        }
 
-        fCompareTable(R"([
-            [[1u];["Old"];1];
-            [[2u];["New"];2]
-        ])");
+        {
+            fQuery(R"(
+                UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "OldNew");
+            )");
 
-        fQuery(R"(
-            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "OldNew");
-        )");
+            fQuery(R"(
+                UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (3, "BrandNew");
+            )");
 
-        fQuery(R"(
-            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (3, "BrandNew");
-        )");
-
-        fCompareTable(R"([
-            [[1u];["Old"];1];
-            [[2u];["OldNew"];2];
-            [[3u];["BrandNew"];1]
-        ])");
-
+            fCompareTable(R"([
+                [[1u];["Old"];1];
+                [[2u];["OldNew"];2];
+                [[3u];["BrandNew"];1]
+            ])");
+        }
     }
-
 }
+
 } // namespace NKikimr::NKqp

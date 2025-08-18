@@ -563,13 +563,14 @@ protected:
             default:
                 ; // ignore all other states.
         }
-        if (CheckpointCoordinatorId) {
-            TlsActivationContext->Send(ev->Forward(CheckpointCoordinatorId));
-        }
 
         if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE) {
             ReplyErrorAndDie(NYql::NDq::DqStatusToYdbStatus(state.GetStatusCode()), state.MutableIssues());
             return;
+        }
+
+        if (CheckpointCoordinatorId) {
+            TlsActivationContext->Send(ev->Forward(CheckpointCoordinatorId));
         }
 
         static_cast<TDerived*>(this)->CheckExecutionComplete();

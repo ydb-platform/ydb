@@ -1,41 +1,47 @@
-# {{ dbt-name }} Integration with YDB
+# {{ dbt-name }} Integration With YDB
 
 ## Introduction
 
 [{{ dbt-name }}](https://www.getdbt.com) is a popular tool for data transformation and management that enables you to:
 
-- Configure reliable and consistent transformation pipelines using SELECT statements that reflect business logic.
-- Implement version control and CI/CD practices for transformation code.
-- Test data and detect anomalies to ensure data quality.
-- Generate documentation and visualize dependencies between data.
+- Configure reliable and consistent transformation pipelines using `SELECT` statements that reflect business logic
+- Implement version control and CI/CD practices for transformation code
+- Test data and detect anomalies to ensure data quality
+- Generate documentation and visualize dependencies between data
 
-[dbt-ydb](https://github.com/ydb-platform/dbt-ydb) connector provides seamless integration between dbt and YDB, enabling data transformation, modeling, and pipeline management directly within YDB. Currently, the dbt-ydb connector is in development stage and has some significant limitations. These limitations will be removed in future versions.
+The [{{ dbt-ydb }}](https://github.com/ydb-platform/dbt-ydb) connector provides seamless integration between {{ dbt }} and [{{ ydb-short-name }}](../../concepts/glossary.md), enabling data transformation, modeling, and pipeline management directly within {{ ydb-short-name }}.
+
+{% note info %}
+
+The {{ dbt-ydb }} connector is currently in development and has several significant limitations. These limitations will be removed in future versions.
+
+{% endnote %}
 
 ## Features
 
-### Models and their Materialization
+### Models And Their Materialization
 
-Core concept in dbt is a [data model](https://docs.getdbt.com/docs/build/sql-models). By its nature, it is a SQL expression that can use any data sources inside your data warehouse, including other models. There are different approaches to physically creating a model (its materialization). Each approach defines how exactly the query will be executed - by creating a new table, updating an existing one, or simply forming a view.
+A core concept in {{ dbt }} is a [data model](https://docs.getdbt.com/docs/build/sql-models). By its nature, it is a SQL expression that can use any data sources inside your data warehouse, including other models. There are different approaches to physically creating a model (its materialization). Each approach defines how exactly the query will be executed: by creating a new table, updating an existing one, or simply forming a view.
 
-dbt-ydb connector supports the following materialization strategies:
+The {{ dbt-ydb }} connector supports the following materialization strategies:
 
-- View — materialized as a database view in YDB.
-- Table - presisted as a table in YDB and recreated by dbt on every run.
-- [Incremental model](https://docs.getdbt.com/docs/build/incremental-models-overview) - created as a table in YDB, but during updates it is not recreated but updated with changed and new rows. The connector currently supports the [MERGE strategy](https://docs.getdbt.com/docs/build/incremental-strategy#merge).
+- View — materialized as a database view in YDB
+- Table — persisted as a table in YDB and recreated by {{ dbt }} on every run
+- [Incremental model](https://docs.getdbt.com/docs/build/incremental-models-overview) — created as a table in {{ ydb-short-name }}, but during updates, it is not recreated; instead, it is updated with changed and new rows. The connector currently supports the [`MERGE` strategy](https://docs.getdbt.com/docs/build/incremental-strategy#merge).
 
 Another materialization type, [ephemeral model](https://docs.getdbt.com/docs/build/materializations#ephemeral), is currently not supported by the connector.
 
 ### Snapshots
 
-The [snapshot mechanism](https://docs.getdbt.com/docs/build/snapshots) is currently not supported by dbt-ydb.
+The [snapshot mechanism](https://docs.getdbt.com/docs/build/snapshots) is currently not supported by {{ dbt‑ydb }}.
 
 ### Seeds
 
-dbt-ydb connector supports dbt’s ability to define [seeds](https://docs.getdbt.com/docs/build/seeds) for loading reference and test data from CSV files into your project and using them in other models.
+The {{ dbt‑ydb }} connector supports {{ dbt }}’s ability to define [seeds](https://docs.getdbt.com/docs/build/seeds) for loading reference and test data from CSV files into your project and using them in other models.
 
 ### Data Testing
 
-dbt-ydb connector supports standard [dbt data tests](https://docs.getdbt.com/docs/build/data-tests#generic-data-tests), as well as [specific tests](https://docs.getdbt.com/docs/build/data-tests#singular-data-tests) within the capabilities of [YDB YQL](https://ydb.tech/docs/en/yql/reference/).
+The {{ dbt‑ydb }} connector supports standard [{{ dbt }} data tests](https://docs.getdbt.com/docs/build/data-tests#generic-data-tests), as well as [specific tests](https://docs.getdbt.com/docs/build/data-tests#singular-data-tests) within the capabilities of [YQL](../../yql/reference/index.md).
 
 ### Documentation Generation
 

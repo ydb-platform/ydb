@@ -21,7 +21,6 @@ TEST_SRCS(
     test_vector_index.py
     test_batch_operations.py
     test_topic.py
-    test_kafka_topic.py
     test_transfer.py
     test_node_broker_delta_protocol.py
     udf/test_datetime2.py

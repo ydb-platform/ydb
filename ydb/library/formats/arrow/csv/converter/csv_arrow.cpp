@@ -2,13 +2,9 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <util/string/join.h>
-
 
 namespace NKikimr::NFormats {
 
@@ -60,21 +56,13 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
     ReadOptions.block_size = DEFAULT_BLOCK_SIZE;
     ReadOptions.use_threads = false;
     ReadOptions.autogenerate_column_names = false;
-    auto SetOptionsForColumns = [&](const auto& col) {
-        if (col.Precision > 0) {
-            ConvertOptions.column_types[col.Name] = arrow::decimal128(static_cast<int32_t>(col.Precision), static_cast<int32_t>(col.Scale));
-        } else {
-            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
-        }
-    };
-    
     if (header) {
         // !autogenerate + column_names.empty() => read from CSV
         ResultColumns.reserve(columns.size());
 
         for (const auto& col: columns) {
             ResultColumns.push_back(col.Name);
-            SetOptionsForColumns(col);
+            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
             OriginalColumnTypes[col.Name] = col.ArrowType;
         }
     } else if (!columns.empty()) {
@@ -83,7 +71,7 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
 
         for (const auto& col: columns) {
             ReadOptions.column_names.push_back(col.Name);
-            SetOptionsForColumns(col);
+            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
             OriginalColumnTypes[col.Name] = col.ArrowType;
         }
 #if 0
@@ -140,7 +128,6 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
         } else {
             continue;
         }
-
         if (fArr->type()->Equals(originalType)) {
             resultColumns.emplace_back(fArr);
         } else if (fArr->type()->id() == arrow::TimestampType::type_id) {
@@ -158,17 +145,6 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                     Y_ABORT_UNLESS(false);
                 }
             }());
-        } else if (fArr->type()->id() == arrow::Decimal128Type::type_id && originalType->id() == arrow::FixedSizeBinaryType::type_id) {
-            auto fixedSizeBinaryType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(originalType);
-            const auto& decData = fArr->data();
-            auto viewData = arrow::ArrayData::Make(
-                fixedSizeBinaryType,
-                decData->length,
-                decData->buffers,
-                decData->null_count,
-                decData->offset
-            );
-            resultColumns.emplace_back(arrow::MakeArray(viewData));
         } else {
             Y_ABORT_UNLESS(false);
         }

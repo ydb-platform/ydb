@@ -31,27 +31,25 @@
 namespace NKikimr::NArrow {
 
 template <typename TType>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(const NScheme::TTypeInfo& typeInfo) {
+    Y_UNUSED(typeInfo);
     return std::make_shared<TType>();
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
-    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>(const NScheme::TTypeInfo& typeInfo) {
+    return arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>() {
-    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
-}
-
-template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>() {
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>(const NScheme::TTypeInfo& typeInfo) {
+    Y_UNUSED(typeInfo);
     return arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>() {
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>(const NScheme::TTypeInfo& typeInfo) {
+    Y_UNUSED(typeInfo);
     return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
@@ -59,7 +57,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo 
     std::shared_ptr<arrow::DataType> result;
     bool success = SwitchYqlTypeToArrowType(typeInfo, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);
-        result = CreateEmptyArrowImpl<TType>();
+        result = CreateEmptyArrowImpl<TType>(typeInfo);
         return true;
     });
     if (success) {
@@ -81,8 +79,6 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
         case NScheme::NTypeIds::Date:
         case NScheme::NTypeIds::Date32:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
-        case NScheme::NTypeIds::Decimal:
-            return std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE);
         default:
             return GetArrowType(typeId);
     }

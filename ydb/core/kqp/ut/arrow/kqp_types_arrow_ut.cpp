@@ -102,7 +102,8 @@ Y_UNIT_TEST_SUITE(KqpScanArrowFormat) {
     }
 
     Y_UNIT_TEST(AllTypesColumns) {
-        TKikimrRunner kikimr;
+        auto kikimr = RunnerWithArrowFormatEnabled(true);
+
         InsertAllColumnsAndCheckSelectAll(&kikimr);
     }
 

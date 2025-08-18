@@ -462,7 +462,6 @@ protected:
             const size_t oldCapacity = Map->GetCapacity();
             size_t newCapacity = GetMapCapacity(rowCount);
             if (newCapacity <= oldCapacity) {
-                Map->Clear();
                 return rowCount;
             }
             Map.Reset(nullptr);

@@ -145,7 +145,7 @@ namespace NKikimr::NPQ {
         }
 
         void Verify(const TRequestedBlob& blob) const {
-            Y_ABORT_UNLESS(blob.Value.size() <= blob.Size,
+            Y_ABORT_UNLESS(blob.Value.size() == blob.Size,
                            "\nblob.Value.size=%" PRISZT ", blob.Size=%" PRIu64 "\nblob.Key=%s",
                            blob.Value.size(), blob.Size, blob.Key.ToString().data());
             TClientBlob::CheckBlob(blob.Key, blob.Value);
@@ -424,11 +424,10 @@ namespace NKikimr::NPQ {
             }
 
             auto sp = it->second.GetBlob();
-            if (sp.get() != value.get()) {
-                LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE, "Evicting strange blob. Partition " << blob.Partition.InternalPartitionId
-                           << "offset " << blob.Offset << " partNo " << blob.PartNo << " size " << value->DataSize()
-                           << " L1 ptr " << ((void*)sp.get()) << " vs L2 ptr " << ((void*)value.get()));
-            }
+            Y_ABORT_UNLESS(sp.get() == value.get(),
+                "Evicting strange blob. Partition %d offset %ld partNo %d size %ld. L1 ptr %p vs L2 ptr %p",
+                blob.Partition.InternalPartitionId, blob.Offset, blob.PartNo, value->DataSize(), sp.get(), value.get());
+
             RemoveBlob(it);
 
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Erasing blob in L1. Partition "

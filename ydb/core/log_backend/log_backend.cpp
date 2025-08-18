@@ -15,25 +15,11 @@ public:
     {}
 
     void WriteData(const TLogRecord& rec) override {
-        try {
-            TLogRecord record = rec;
-            TString data = JsonEnvelope.ApplyJsonEnvelope(TStringBuf(record.Data, record.Len));
-            record.Data = data.data();
-            record.Len = data.size();
-            LogBackend->WriteData(record);
-        } catch (const std::exception& ex) {
-            try {
-                TStringBuilder error;
-                error << "Exception on writing audit log line with json envelope: " << ex.what();
-                TString data = JsonEnvelope.ApplyJsonEnvelope(error);
-                TLogRecord record = rec;
-                record.Data = data.data();
-                record.Len = data.size();
-                LogBackend->WriteData(record);
-            } catch (...) {
-            }
-            throw;
-        }
+        TLogRecord record = rec;
+        TString data = JsonEnvelope.ApplyJsonEnvelope(TStringBuf(record.Data, record.Len));
+        record.Data = data.data();
+        record.Len = data.size();
+        LogBackend->WriteData(record);
     }
 
     void ReopenLog() override {

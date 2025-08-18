@@ -24,7 +24,7 @@ public:
         } catch (const std::exception& ex) {
             try {
                 TStringBuilder error;
-                error << "Exception on writing audit log line: " << ex.what();
+                error << "Exception on writing audit log line with json envelope: " << ex.what();
                 TString data = JsonEnvelope.ApplyJsonEnvelope(error);
                 TLogRecord record = rec;
                 record.Data = data.data();
@@ -32,6 +32,7 @@ public:
                 LogBackend->WriteData(record);
             } catch (...) {
             }
+            throw;
         }
     }
 

@@ -6,8 +6,8 @@ SRCS(
     keys.h
     path.h
     scan_actor_base_impl.h
-    schema.h
-    schema.cpp
+    registry.cpp
+    resolver.cpp
     utils.h
     processor_scan.h
 )

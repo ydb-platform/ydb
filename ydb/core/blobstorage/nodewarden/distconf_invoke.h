@@ -12,8 +12,6 @@ namespace NKikimr::NStorage {
         const ui64 InvokePipelineGeneration;
         TInvokeQuery Query;
 
-        bool CheckSyncersAfterCommit = false;
-
         ui32 WaitingReplyFromNode = 0;
 
         using TQuery = NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot;
@@ -91,6 +89,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenBaseConfig::TPtr ev);
         void CheckReassignGroupDisk();
         void ReassignGroupDiskExecute();
+        void UpdateBridgeGroupInfo(const TQuery::TUpdateBridgeGroupInfo& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // VDiskSlain/DropDonor logic
@@ -105,12 +104,12 @@ namespace NKikimr::NStorage {
         void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd);
         void ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd);
         void SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd);
-        void SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal);
+        void SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal, bool pileupReplicas);
         void SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd);
         void GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd);
 
         void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
-        bool GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+        bool GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool pileupReplicas);
         void AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation

@@ -7,49 +7,6 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-template <typename RequestType>
-void SetToken(TClientCommand::TConfig& config, TAutoPtr<RequestType>& request) {
-    if (!config.SecurityToken.empty()) {
-        request->Record.SetSecurityToken(config.SecurityToken);
-    }
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusRequest>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeInitRoot>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeOperation>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeDescribe>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusCmsRequest>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusConsoleRequest>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusFillNode>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusDrainNode>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest>& request) {
-    SetToken(config, request);
-}
-
 template <>
 int OnMessageBus(const TClientCommand::TConfig& config, const NMsgBusProxy::TBusResponse& response) {
     const NKikimrClient::TResponse& resp(response.Record);

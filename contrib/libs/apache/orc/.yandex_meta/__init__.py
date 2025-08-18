@@ -15,7 +15,7 @@ def apache_orc_post_install(self):
 
 
 apache_orc = CMakeNinjaNixProject(
-    owners=["iaz1607", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/apache/orc",
     nixattr="apache-orc",
     ignore_commands=["cmake"],

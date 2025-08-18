@@ -24,6 +24,7 @@
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
+#include "overload/overload_subscribers.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
@@ -299,6 +300,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
+
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 
     ITransaction* CreateTxInitSchema();
@@ -316,6 +319,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     const NTiers::TManager* GetTierManagerPointer(const TString& tierId) const;
 
     void Die(const TActorContext& ctx) override;
+
+    void OnYellowChannelsChanged() override;
 
     void CleanupActors(const TActorContext& ctx);
     void BecomeBroken(const TActorContext& ctx);
@@ -379,6 +384,9 @@ private:
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
     EOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
     EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
+    void UpdateOverloadsStatus();
+    ui64 GetShardWritesInFlyLimit() const;
+    ui64 GetShardWritesSizeInFlyLimit() const;
 
 protected:
     STFUNC(StateInit) {
@@ -457,6 +465,7 @@ protected:
             HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
             HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+            HFunc(TEvColumnShard::TEvOverloadUnsubscribe, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -533,6 +542,7 @@ private:
     NDataShard::TSysLocks SysLocks;
     TSpaceWatcher* SpaceWatcher;
     TActorId SpaceWatcherId;
+    NOverload::TOverloadSubscribers OverloadSubscribers;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

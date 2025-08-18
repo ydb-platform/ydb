@@ -20,6 +20,13 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(StateStorageReconfigurationStep > NONE && StateStorageReconfigurationStep < INVALID_RECONFIGURATION_STEP);
         auto request = std::make_unique<TEvNodeConfigInvokeOnRoot>();
         NKikimrBlobStorage::TStateStorageConfig *config = request->Record.MutableReconfigStateStorage();
+        auto setWriteOnly = [](auto* ringGroup, bool writeOnly) {
+            if (writeOnly) {
+                ringGroup->SetWriteOnly(true);
+            } else {
+                ringGroup->ClearWriteOnly();
+            }
+        };
         auto fillRingGroupsForCurrentCfg = [&](auto *cfg, auto *currentCfg) {
             if (currentCfg->RingGroupsSize()) {
                 for (ui32 i : xrange(currentCfg->RingGroupsSize())) {
@@ -29,12 +36,12 @@ namespace NKikimr::NStorage {
                     }
                     auto *ringGroup = cfg->AddRingGroups();
                     ringGroup->CopyFrom(rg);
-                    ringGroup->SetWriteOnly(StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY || i > PilesCount);
+                    setWriteOnly(ringGroup, StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY || i > PilesCount);
                 }
             } else {
                 auto *ringGroup = cfg->AddRingGroups();
                 ringGroup->CopyFrom(currentCfg->GetRing());
-                ringGroup->SetWriteOnly(StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY);
+                setWriteOnly(ringGroup, StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY);
             }
         };
         auto fillRingGroups = [&](auto mutableFunc) {
@@ -51,7 +58,7 @@ namespace NKikimr::NStorage {
             for (ui32 i : xrange(targetCfg->RingGroupsSize())) {
                 auto *ringGroup = cfg->AddRingGroups();
                 ringGroup->CopyFrom(targetCfg->GetRingGroups(i));
-                ringGroup->SetWriteOnly(StateStorageReconfigurationStep == INTRODUCE_NEW_GROUP);
+                setWriteOnly(ringGroup, StateStorageReconfigurationStep == INTRODUCE_NEW_GROUP);
             }
             if (StateStorageReconfigurationStep == MAKE_PREVIOUS_GROUP_WRITEONLY) {
                 fillRingGroupsForCurrentCfg(cfg, currentCfg);

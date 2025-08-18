@@ -80,7 +80,20 @@ void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
 }
 
 void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf header, const TString& query) const {
-    const TString scaleFactor = "$scale_factor = " + ToString(Params.GetScale()) + ";";
+    TStringBuilder scaleFactor;
+    scaleFactor << "$scale_factor = ";
+    switch(Params.GetFloatMode()) {
+    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
+        scaleFactor << Params.GetScale();
+	break;
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
+        scaleFactor << "cast('" << Params.GetScale() << "' as decimal(35,2))";
+	break;
+    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
+        scaleFactor << "cast('" << Params.GetScale() << "' as decimal(35,9))";
+        break;
+    }
+    scaleFactor << ";";
     for(TStringBuf line; header.ReadLine(line);) {
         const auto pos = line.find('=');
         if (pos == line.npos) {

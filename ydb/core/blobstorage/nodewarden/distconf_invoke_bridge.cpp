@@ -85,16 +85,10 @@ namespace NKikimr::NStorage {
             }
         }
         clusterState->CopyFrom(newClusterState);
-        UpdateClusterStateGuid(clusterState);
-
-        auto *details = config.MutableClusterStateDetails();
-        auto *entry = details->AddUnsyncedHistory();
-        entry->MutableClusterState()->CopyFrom(newClusterState);
-        for (ui32 i = 0; i < Self->Cfg->BridgeConfig->PilesSize(); ++i) {
-            TBridgePileId::FromPileIndex(i).CopyToProto(entry, &std::decay_t<decltype(*entry)>::AddUnsyncedPiles);
-        }
 
         if (changedPileIndex != Max<size_t>()) {
+            auto *details = config.MutableClusterStateDetails();
+
             for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
                 const auto& state = details->GetPileSyncState(i);
                 const auto bridgePileId = TBridgePileId::FromProto(&state, &std::decay_t<decltype(state)>::GetBridgePileId);
@@ -149,88 +143,87 @@ namespace NKikimr::NStorage {
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
-        auto *clusterState = config.MutableClusterState();
         auto *details = config.MutableClusterStateDetails();
 
-        size_t stateIndex;
-        NKikimrBridge::TClusterStateDetails::TPileSyncState *state = nullptr;
-        for (stateIndex = 0; stateIndex < details->PileSyncStateSize(); ++stateIndex) {
-            state = details->MutablePileSyncState(stateIndex);
-            if (TBridgePileId::FromProto(state, &std::decay_t<decltype(*state)>::GetBridgePileId) == bridgePileId) {
-                break;
-            } else {
-                state = nullptr;
-            }
-        }
-        if (!state) {
-            throw TExError() << "Unsynced pile not found";
-        }
-
-        switch (cmd.GetStatus()) {
-            case TQuery::TNotifyBridgeSyncFinished::Success:
+        for (auto& state : *details->MutablePileSyncState()) {
+            if (TBridgePileId::FromProto(&state, &std::decay_t<decltype(state)>::GetBridgePileId) == bridgePileId) {
                 if (cmd.HasBSC()) {
                     if (!cmd.GetBSC()) {
                         throw TExError() << "Incorrect request";
                     }
-                    state->SetUnsyncedBSC(false);
+                    state.SetUnsyncedBSC(false);
                 }
-                if (cmd.HasGroupId()) {
-                    auto *groups = state->MutableUnsyncedGroupIds();
-                    for (int i = 0; i < groups->size(); ++i) {
-                        if (groups->at(i) == cmd.GetGroupId()) {
-                            if (i != groups->size() - 1) {
-                                groups->SwapElements(i, groups->size() - 1);
-                            }
-                            groups->RemoveLast();
-                            break;
-                        }
-                    }
-                }
-                if (cmd.UnsyncedGroupIdsToAddSize()) {
-                    const auto& v = cmd.GetUnsyncedGroupIdsToAdd();
-                    state->MutableUnsyncedGroupIds()->Add(v.begin(), v.end());
-                    CheckSyncersAfterCommit = true;
-                }
-                if (state->UnsyncedGroupIdsSize()) {
-                    auto *groups = state->MutableUnsyncedGroupIds();
-                    std::ranges::sort(*groups);
-                    const auto [first, last] = std::ranges::unique(*groups);
-                    groups->erase(first, last);
-                }
-                if (!state->GetUnsyncedBSC() && !state->UnsyncedGroupIdsSize()) {
-                    // fully synced, can switch to SYNCHRONIZED
-                    details->MutablePileSyncState()->DeleteSubrange(stateIndex, 1);
-                    clusterState->SetPerPileState(bridgePileId.GetPileIndex(), NKikimrBridge::TClusterState::SYNCHRONIZED);
-                    clusterState->SetGeneration(clusterState->GetGeneration() + 1);
-                    UpdateClusterStateGuid(clusterState);
-                    auto *entry = details->AddUnsyncedHistory();
-                    entry->MutableClusterState()->CopyFrom(*clusterState);
-                    for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
-                        TBridgePileId::FromPileIndex(i).CopyToProto(entry, &std::decay_t<decltype(*entry)>::AddUnsyncedPiles);
-                    }
-                }
-                break;
-
-            case TQuery::TNotifyBridgeSyncFinished::TransientError:
-                break;
-
-            case TQuery::TNotifyBridgeSyncFinished::PermanentError: {
-                bool found = false;
-                for (const auto& err : state->GetPermanentErrorReasons()) {
-                    if (err == cmd.GetErrorReason()) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    state->AddPermanentErrorReasons(cmd.GetErrorReason());
-                }
-                break;
+                return StartProposition(&config);
             }
+        }
 
-            case NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot_TNotifyBridgeSyncFinished_EStatus_TEvNodeConfigInvokeOnRoot_TNotifyBridgeSyncFinished_EStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
-            case NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot_TNotifyBridgeSyncFinished_EStatus_TEvNodeConfigInvokeOnRoot_TNotifyBridgeSyncFinished_EStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
-                Y_ABORT();
+        throw TExError() << "Unsynced pile not found";
+    }
+
+    void TInvokeRequestHandlerActor::UpdateBridgeGroupInfo(const TQuery::TUpdateBridgeGroupInfo& cmd) {
+        RunCommonChecks();
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+
+        // find group we are going to update
+        auto *bsConfig = config.MutableBlobStorageConfig();
+        auto *ss = bsConfig->MutableServiceSet();
+        auto *groups = ss->MutableGroups();
+        NKikimrBlobStorage::TGroupInfo *bridgeProxyGroup = nullptr;
+        THashMap<TGroupId, NKikimrBlobStorage::TGroupInfo*> groupMap;
+        for (auto& group : *groups) {
+            if (group.GetGroupID() == cmd.GetGroupId()) {
+                if (group.GetGroupGeneration() != cmd.GetGroupGeneration()) {
+                    throw TExError() << "bridge proxy group generation mismatch";
+                } else if (!group.HasBridgeGroupState()) {
+                    throw TExError() << "group is not bridge proxy group";
+                }
+                bridgeProxyGroup = &group;
+            }
+            groupMap.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), &group);
+        }
+        if (!bridgeProxyGroup) {
+            throw TExError() << "bridge proxy group not found";
+        }
+
+        // validate state update
+        auto *state = bridgeProxyGroup->MutableBridgeGroupState();
+        const auto& newState = cmd.GetBridgeGroupInfo().GetBridgeGroupState();
+        if (state->PileSize() != newState.PileSize()) {
+            throw TExError() << "can't change number of piles in TGroupInfo.BridgeGroupState";
+        }
+        THashMap<TGroupId, ui32> referencedGroups;
+        for (size_t i = 0; i < newState.PileSize(); ++i) {
+            const auto& pile = newState.GetPile(i);
+            const auto it = groupMap.find(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+            if (it == groupMap.end()) {
+                throw TExError() << "can't find referenced group";
+            } else if (state->GetPile(i).GetGroupId() != pile.GetGroupId()) {
+                throw TExError() << "can't change group id";
+            } else if (it->second->GetGroupGeneration() != pile.GetGroupGeneration()) {
+                throw TExError() << "referenced group generation mismatch";
+            }
+            it->second->SetGroupGeneration(it->second->GetGroupGeneration() + 1);
+            referencedGroups.emplace(it->first, it->second->GetGroupGeneration());
+        }
+
+        // update state
+        state->CopyFrom(newState);
+
+        // update referenced group generations
+        bridgeProxyGroup->SetGroupGeneration(bridgeProxyGroup->GetGroupGeneration() + 1);
+        for (auto& pile : *state->MutablePile()) {
+            const auto it = groupMap.find(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+            Y_ABORT_UNLESS(it != groupMap.end());
+            pile.SetGroupGeneration(it->second->GetGroupGeneration());
+        }
+
+        // update vdisk generations
+        for (auto& vdisk : *ss->MutableVDisks()) {
+            auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+            if (const auto it = referencedGroups.find(vdiskId.GroupID); it != referencedGroups.end()) {
+                vdiskId.GroupGeneration = it->second;
+                VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
+            }
         }
 
         StartProposition(&config);

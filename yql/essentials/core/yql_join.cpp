@@ -2280,4 +2280,13 @@ TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabel
     return joinTree;
 }
 
+bool IsNoPullColumn(TStringBuf columnName) {
+    if (columnName.Contains('.')) {
+        TStringBuf table, column;
+        SplitTableName(columnName, table, column);
+        columnName = column;
+    }
+    return columnName.StartsWith(YqlCanaryColumnName) || columnName.StartsWith(YqlJoinKeyColumnName);
+}
+
 } // namespace NYql

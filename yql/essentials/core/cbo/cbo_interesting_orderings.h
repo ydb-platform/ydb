@@ -316,13 +316,24 @@ private:
 };
 
 /*
- * This class represents Finite-State Machine (FSM). The state in this machine is all available logical orderings.
- * The steps of building the FSM:
- *      1) Construct nodes of the NFSM (Non-Determenistic FSM)
- *      2) Prune functional dependencies which won't lead us to the interestng orderings
- *      3) Construct edges of the NFSM
- *      4) It is inconvenient to work with NFSM, because it contains many states at the moment, so
- *         we will convert NFSM to DFSM (Determenistic FSM) and precompute values for it for O(1) switch state operations.
+ * This class represents Finite-State Machine (FSM) for tracking ordering transformations.
+ * Each state represents a set of available logical orderings that can be derived from functional dependencies.
+ *
+ * The FSM construction follows these steps:
+ *      1) Build NFSM (Non-Deterministic FSM): Create nodes for each interesting ordering and apply
+ *         functional dependencies to generate all possible ordering transformations. This creates
+ *         a graph where nodes are orderings and edges represent FD applications.
+ *
+ *      2) Prune FDs: Remove functional dependencies that cannot lead to any interesting orderings
+ *         to reduce the state space and improve performance.
+ *
+ *      3) Add NFSM edges: Connect orderings through epsilon transitions (prefix relationships)
+ *         and FD transitions (functional dependency applications).
+ *
+ *      4) Convert to DFSM (Deterministic FSM): Since NFSM can have exponential states and is
+ *         hard to work with, we convert it to DFSM using subset construction. Each DFSM state
+ *         represents a set of NFSM states reachable through epsilon transitions and always-active FDs.
+ *         This allows O(1) state transitions and efficient ordering containment checks.
  */
 class TOrderingsStateMachine {
 private:
@@ -426,6 +437,13 @@ private:
     );
 
 private:
+    /*
+     * Non-Deterministic Finite State Machine (NFSM) for ordering transformations.
+     *
+     * The NFSM represents all possible ordering transformations that can be achieved
+     * through functional dependencies. Each node represents a specific ordering (either
+     * interesting or artificially generated), and edges represent transformations via FDs.
+     */
     class TNFSM {
     public:
         friend class TDFSM;
@@ -488,6 +506,22 @@ private:
         std::vector<TEdge> Edges_;
     };
 
+    /*
+     * Deterministic Finite State Machine (DFSM) for efficient ordering operations.
+     *
+     * The DFSM is constructed from NFSM using subset construction algorithm. Each DFSM state
+     * represents a set of NFSM states that are reachable through epsilon transitions and
+     * always-active functional dependencies.
+     *
+     * Key benefits over NFSM:
+     * - Deterministic: Exactly one transition per FD from each state
+     * - Efficient: O(1) state transitions using precomputed transition matrix
+     * - Compact: Significantly fewer states than NFSM through state merging
+     * - Fast containment checks: Bitset operations for ordering membership tests
+     *
+     * The DFSM enables efficient runtime queries like "does current state contain ordering X?"
+     * and "what orderings become available after applying FD set Y?".
+     */
     class TDFSM {
     public:
         friend class TLogicalOrderings;

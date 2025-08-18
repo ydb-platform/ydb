@@ -4,7 +4,6 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NKqp {
@@ -32,8 +31,7 @@ public:
         : Owner(owner)
         , TxId(txId)
         , UserToken(userToken)
-        , TasksGraph(tasksGraph)
-        , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver()) {}
+        , TasksGraph(tasksGraph) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -360,7 +358,7 @@ private:
 
                             stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo->KeyColumnTypes, operation);
 
-                            if (SystemViewRewrittenResolver->IsSystemView(stageInfo.Meta.TableId.SysViewInfo)) {
+                            if (stageInfo.Meta.TableConstInfo->SysViewInfo && !stageInfo.Meta.TableConstInfo->SysViewInfo->HasSourceObject()) {
                                 continue;
                             }
 
@@ -407,7 +405,7 @@ private:
                             }
                         }
                     } else if (!ResolvingNamesFinished) {
-                        // CTAS 
+                        // CTAS
                         AFL_ENSURE(!stageInfo.Meta.TableId);
                         AFL_ENSURE(stageInfo.Meta.TablePath);
                         const auto splittedPath = SplitPath(stageInfo.Meta.TablePath);
@@ -519,8 +517,6 @@ private:
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;
     TDuration CpuTime;
-
-    THolder<NSysView::ISystemViewResolver> SystemViewRewrittenResolver;
 };
 
 } // anonymous namespace

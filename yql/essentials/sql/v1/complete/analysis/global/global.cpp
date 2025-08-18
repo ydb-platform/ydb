@@ -171,7 +171,7 @@ namespace NSQLComplete {
 
             ctx.Use = FindUseStatement(parsed, nodes);
             ctx.Names = Keys(nodes);
-            ctx.EnclosingFunction = EnclosingFunction(parsed);
+            ctx.EnclosingFunction = EnclosingFunction(parsed, nodes);
             ctx.Column = InferColumnContext(parsed, nodes);
 
             if (ctx.Use && ctx.Column) {
@@ -186,8 +186,7 @@ namespace NSQLComplete {
             TStringBuf s = input.Text;
             size_t i = input.CursorPosition;
 
-            return (i < s.size() && IsWordBoundary(s[i]) || i == s.size()) &&
-                   (i > 0 /*  */ && IsWordBoundary(s[i - 1]));
+            return (i < s.size() && IsWordBoundary(s[i]) || i == s.size());
         }
 
         SQLv1::Sql_queryContext* Parse(TStringBuf input) {
@@ -207,10 +206,10 @@ namespace NSQLComplete {
             return keys;
         }
 
-        void EnrichTableClusters(TColumnContext& column, const TUseContext& use) {
+        void EnrichTableClusters(TColumnContext& column, const TClusterContext& use) {
             for (auto& table : column.Tables) {
                 if (table.Cluster.empty()) {
-                    table.Cluster = use.Cluster;
+                    table.Cluster = use.Name;
                 }
             }
         }
@@ -253,10 +252,20 @@ namespace NSQLComplete {
 } // namespace NSQLComplete
 
 template <>
+void Out<NSQLComplete::TClusterContext>(IOutputStream& out, const NSQLComplete::TClusterContext& value) {
+    if (!value.Provider.empty()) {
+        out << value.Provider << ":";
+    }
+    out << value.Name;
+}
+
+template <>
 void Out<NSQLComplete::TFunctionContext>(IOutputStream& out, const NSQLComplete::TFunctionContext& value) {
     out << "TFunctionContext { ";
     out << "Name: " << value.Name;
-    out << ", Args: " << value.ArgumentNumber;
+    out << ", ArgN: " << value.ArgumentNumber;
+    out << ", Arg0: " << value.Arg0.GetOrElse("None");
+    out << ", Cluster: " << value.Cluster;
     out << " }";
 }
 

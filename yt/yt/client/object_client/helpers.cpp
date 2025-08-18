@@ -53,7 +53,9 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::OverreplicatedChunkMap ||
         type == EObjectType::UnderreplicatedChunkMap ||
         type == EObjectType::DataMissingChunkMap ||
+        type == EObjectType::DataMissingChunksSampleMap ||
         type == EObjectType::ParityMissingChunkMap ||
+        type == EObjectType::ParityMissingChunksSampleMap ||
         type == EObjectType::OldestPartMissingChunkMap ||
         type == EObjectType::QuorumMissingChunkMap ||
         type == EObjectType::UnsafelyPlacedChunkMap ||
@@ -363,4 +365,3 @@ bool IsGlobalCellId(TCellId cellId)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NObjectClient
-

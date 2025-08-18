@@ -20,9 +20,9 @@ select * from $bar order by subkey;
 
 select 1 as key
 union all
-select 2 as key assume order by key into result aaa;
+select 2 as key order by key into result aaa;
 
 discard
 select 1 as key
 union all
-select 2 as key assume order by key;
+select 2 as key order by key;

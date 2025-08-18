@@ -12,6 +12,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/cgiparam
+    library/cpp/json
+    library/cpp/protobuf/json
     ydb/library/actors/http
     ydb/core/audit
 )

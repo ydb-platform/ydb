@@ -38,6 +38,9 @@ class TestCompatibility(RestartToAnotherVersionFixture):
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_simple(self, store_type):
+        if store_type == "column" and min(self.versions) < (25, 1, 3):
+            pytest.skip("compatibility for column tables is not supported in < 25.1.3")
+
         def upsert_and_check_sum(self, iteration_count=1, start_index=0):
             id_ = start_index
 
@@ -96,6 +99,9 @@ class TestCompatibility(RestartToAnotherVersionFixture):
     def test_tpch1(self, store_type, date64):
         if date64 and min(self.versions) < (25, 1):
             pytest.skip("date64 is not supported in 24-4")
+
+        if store_type == "column" and min(self.versions) < (25, 1) and max(self.versions) >= (25, 1):
+            pytest.skip("no compatibility with 24-4")
 
         if date64:
             date_args = ["--datetime-types=dt64"]

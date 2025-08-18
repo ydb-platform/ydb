@@ -198,6 +198,7 @@ private:
             node.Maybe<TCoUint8>() ||
             node.Maybe<TCoUint16>() ||
             node.Maybe<TCoUint32>() ||
+            node.Maybe<TCoDate>() ||
             node.Maybe<TCoUint64>()) {
             return true;
         }

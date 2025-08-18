@@ -40,7 +40,8 @@ namespace NYql {
                     EFlag::JustPassthroughOperators | // To pushdown REGEXP over String column
                     EFlag::FlatMapOverOptionals | // To pushdown REGEXP over Utf8 column
                     EFlag::ToStringFromStringExpressions | // To pushdown REGEXP over Utf8 column
-                    EFlag::DecimalType | EFlag::DecimalCtor
+                    EFlag::DecimalType | EFlag::DecimalCtor |
+                    EFlag::IntervalCtor
                 );
                 EnableFunction("Re2.Grep");  // For REGEXP pushdown
             }

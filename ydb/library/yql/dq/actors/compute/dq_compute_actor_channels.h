@@ -148,6 +148,15 @@ private:
             }
             return Nothing();
         }
+        friend IOutputStream& operator << (IOutputStream& out, const TChannelRetryState& x) {
+            out << " RetryState {"
+                << " Deadline: " << x.Deadline
+                << " RetryAt: " << x.RetryAt
+                << " AttemptNo: " << x.AttemptNo
+                << " RetryScheduled: " << x.RetryScheduled
+                << " }";
+            return out;
+        }
     };
 
     struct TInputChannelState {
@@ -163,6 +172,14 @@ private:
 
             const ui64 SeqNo;
             const i64 FreeSpace;
+
+            friend IOutputStream& operator << (IOutputStream& out, const TInFlightMessage& x) {
+                out << " InFlightMessage {"
+                    << " SeqNo: " << x.SeqNo
+                    << " FreeSpace: " << x.FreeSpace
+                    << " }";
+                return out;
+            }
         };
         TMap<ui64, TInFlightMessage> InFlight;
 
@@ -175,9 +192,44 @@ private:
 
             const ui64 SeqNo;
             const i64 FreeSpace;
+
+            friend IOutputStream& operator << (IOutputStream& out, const TPollRequest& x) {
+                out << " PollRequest {"
+                    << " SeqNo: " << x.SeqNo
+                    << " FreeSpace: " << x.FreeSpace
+                    << " }";
+                return out;
+            }
         };
         std::optional<TPollRequest> PollRequest;
         std::optional<TInstant> StartPollTime; // used only if Stats defined
+
+        struct TPollDebugInfo {
+            TInstant Time;
+            ui64 SeqNo;
+            i64 FreeSpace;
+            bool HasPeer;
+            ui64 LastRecvSeqNo;
+            TMaybe<TChannelRetryState> RetryState;
+            TMaybe<TInFlightMessage> Rbegin;
+            TMaybe<TPollRequest> PollRequest;
+
+            friend IOutputStream& operator << (IOutputStream& out, const TPollDebugInfo& x) {
+                out <<"PollDebugInfo {"
+                   << "  Time: " << x.Time
+                   << "  SeqNo: " << x.SeqNo
+                    << " FreeSpace: " << x.FreeSpace
+                    << " HasPeer: " << x.HasPeer
+                    << " LastRecvSeqNo: " << x.LastRecvSeqNo
+                    << " RetryState: " << x.RetryState
+                    << " Rbegin: " << x.Rbegin
+                    << " PollRequest: " << x.PollRequest
+                    << " }";
+                return out;
+            }
+        };
+        TMaybe<TPollDebugInfo> PollDebugInfo;
+        i64 LastFreeSpace = std::numeric_limits<i64>::max();
 
         bool IsFromNode(ui32 nodeId) const {
             return Peer && Peer->NodeId() == nodeId;

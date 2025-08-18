@@ -280,10 +280,15 @@ private:
                     const auto& state = it->second;
                     html << "LastRecvSeqNo: " << state.LastRecvSeqNo << "<br />";
                     html << "InFlight size: " << state.InFlight.size() << "<br />";
+                    for (const auto& [seqNo, inFlight]: state.InFlight) {
+                        html << "InFlight.SeqNo." << seqNo << ": " << inFlight << "<br />";
+                    }
                     if (state.PollRequest) {
                         html << "PollRequest.SeqNo: " << state.PollRequest->SeqNo << "<br />";  
                         html << "PollRequest.FreeSpace: " << state.PollRequest->FreeSpace << "<br />";    
                     }
+                    DUMP(state, PollDebugInfo);
+                    DUMP(state, LastFreeSpace);
                 }
             }
 

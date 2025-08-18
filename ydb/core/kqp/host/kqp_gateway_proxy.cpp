@@ -643,6 +643,27 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
+    TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
+        try {
+            NKikimrSchemeOp::TSetColumnConstraintsRequest setConstraintRequestSettings;
+            for (auto& setting : settings) {
+                auto* add = setConstraintRequestSettings.AddConstraintSettings();
+                add->Swap(&setting);
+            }
+
+            setConstraintRequestSettings.SetTablePath(tablePath);
+
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            *modifyScheme.MutableSetConstraintRequest() = std::move(setConstraintRequestSettings);
+            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
+
+            return Gateway->ModifyScheme(std::move(modifyScheme));
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
         if (TIssue error; !NSchemeHelpers::Validate(settings, error)) {
             TGenericResult result;

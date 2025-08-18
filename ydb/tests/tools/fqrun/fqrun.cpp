@@ -291,8 +291,6 @@ class TMain : public TMainBase {
     using TBase = TMainBase;
     using EVerbose = TFqSetupSettings::EVerbose;
 
-    inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
-
 protected:
     void RegisterLogOptions(NLastGetopt::TOpts& options) override {
         TBase::RegisterLogOptions(options);
@@ -650,12 +648,7 @@ private:
 
     void ReplaceTemplates(TString& text) const {
         if (ExecutionOptions.UseTemplates) {
-            const TString tokenVariableName = TStringBuilder() << "${" << YQL_TOKEN_VARIABLE << "}";
-            if (YqlToken) {
-                SubstGlobal(text, tokenVariableName, YqlToken);
-            } else if (text.Contains(tokenVariableName)) {
-                ythrow yexception() << "Failed to replace ${" << YQL_TOKEN_VARIABLE << "} template, please specify " << YQL_TOKEN_VARIABLE << " environment variable";
-            }
+            ReplaceYqlTokenTemplate(text);
         }
     }
 

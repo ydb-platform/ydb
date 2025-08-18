@@ -417,8 +417,6 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
 class TMain : public TMainBase {
     using EVerbose = TYdbSetupSettings::EVerbose;
 
-    inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
-
     TDuration PingPeriod;
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
@@ -969,12 +967,7 @@ private:
             SubstGlobal(sql, TStringBuilder() << "${" << variable <<"}", value);
         }
         if (ExecutionOptions.UseTemplates) {
-            const TString tokenVariableName = TStringBuilder() << "${" << YQL_TOKEN_VARIABLE << "}";
-            if (YqlToken) {
-                SubstGlobal(sql, tokenVariableName, YqlToken);
-            } else if (sql.Contains(tokenVariableName)) {
-                ythrow yexception() << "Failed to replace ${" << YQL_TOKEN_VARIABLE << "} template, please specify " << YQL_TOKEN_VARIABLE << " environment variable";
-            }
+            ReplaceYqlTokenTemplate(sql);
         }
     }
 

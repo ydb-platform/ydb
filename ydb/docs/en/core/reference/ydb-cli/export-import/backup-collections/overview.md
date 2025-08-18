@@ -22,7 +22,7 @@ This section explains how to use backup collections for full and incremental bac
 ## Security and integrity
 
 - Verify backups before restore in critical workflows
-- Encryption support via KMS integration (see [Advanced topics](advanced.md))
+- Encryption support via KMS integration
 - Keep audit logs of backup creation and restore operations
 
 ## Limitations

@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
             {"fe", "\xfe\xfe"},
         };
 
-        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), "name=value, fe=FEFE"); // non utf-8 is in base64
+        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), "name=value, fe=FEFE"); // non utf-8 is in hex
     }
 
     Y_UNIT_TEST(LoggingJson) {

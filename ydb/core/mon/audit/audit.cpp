@@ -129,9 +129,9 @@ void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& u
 }
 
 void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase) {
-    auto AuditEnabled = NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, logPhase, SubjectType);
+    auto auditEnabled = NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, logPhase, SubjectType);
 
-    if (!Auditable || !AuditEnabled) {
+    if (!Auditable || !auditEnabled) {
         return;
     }
 

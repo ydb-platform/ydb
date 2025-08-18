@@ -1046,14 +1046,18 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner([[maybe_unused]] const NNodes::T
         return node;
     }
 
+    auto copyLambda = [&](const auto& prev) {
+        return ctx.DeepCopyLambda(prev.Ref());
+    };
+
     auto inputFromFlow = NNodes::TExprBase(ctx.Builder(node.Pos()).Callable("FromFlow").Add(0, wideCombiner.Input().Ptr()).Seal().Build());
     auto dqPhyCombine = Build<TDqPhyHashCombine>(ctx, node.Pos())
         .Input(inputFromFlow)
         .MemLimit(wideCombiner.MemLimit())
-        .KeyExtractor(wideCombiner.KeyExtractor().Ptr())
-        .InitHandler(wideCombiner.InitHandler().Ptr())
-        .UpdateHandler(wideCombiner.UpdateHandler().Ptr())
-        .FinishHandler(wideCombiner.FinishHandler().Ptr())
+        .KeyExtractor(copyLambda(wideCombiner.KeyExtractor()))
+        .InitHandler(copyLambda(wideCombiner.InitHandler()))
+        .UpdateHandler(copyLambda(wideCombiner.UpdateHandler()))
+        .FinishHandler(copyLambda(wideCombiner.FinishHandler()))
     .Done();
 
     return NNodes::TExprBase(

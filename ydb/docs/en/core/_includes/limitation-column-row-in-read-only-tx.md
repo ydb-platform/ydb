@@ -1,0 +1,3 @@
+The simultaneous use of [column-oriented tables](../concepts/glossary.md#column-oriented-table) and [row-oriented tables](../concepts/glossary.md#row-oriented-table) is possible only in read-only transactions. Support for write transactions involving both types of tables simultaneously is under development.
+
+If a write transaction includes both types of tables, it fails with the following error: `Write transactions between column and row tables are disabled at current time`.

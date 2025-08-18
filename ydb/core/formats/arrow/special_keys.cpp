@@ -1,6 +1,7 @@
 #include "permutations.h"
 #include "size_calcer.h"
 #include "special_keys.h"
+#include "process_columns.h"
 
 #include "reader/position.h"
 
@@ -59,7 +60,7 @@ TFirstLastSpecialKeys::TFirstLastSpecialKeys(
     Y_ABORT_UNLESS(batch->num_rows());
     std::shared_ptr<arrow::RecordBatch> keyBatch = batch;
     if (columnNames.size()) {
-        keyBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(batch, columnNames);
+        keyBatch = TColumnOperator().VerifyIfAbsent().Extract(batch, columnNames);
     }
     if (keyBatch->num_rows() <= 2) {
         Initialize(keyBatch);
@@ -104,7 +105,7 @@ TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch
         columnNamesString.emplace_back(i);
     }
 
-    auto dataBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(batch, columnNamesString);
+    auto dataBatch = TColumnOperator().VerifyIfAbsent().Extract(batch, columnNamesString);
     Initialize(NArrow::CopyRecords(dataBatch, indexes));
 }
 

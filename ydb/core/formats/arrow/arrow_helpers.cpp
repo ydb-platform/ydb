@@ -1,8 +1,7 @@
 #include "arrow_helpers.h"
 #include "permutations.h"
+#include "process_columns.h"
 
-#include "common/adapter.h"
-#include "serializer/abstract.h"
 #include "serializer/native.h"
 #include "serializer/stream.h"
 #include "switch/switch_type.h"
@@ -38,7 +37,14 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(const NScheme::TTypeInfo& 
 
 template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>(const NScheme::TTypeInfo& typeInfo) {
-    return arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
+    Y_UNUSED(typeInfo);
+    return std::make_shared<arrow::FixedSizeBinaryType>(16);
+}
+
+template <>
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>(const NScheme::TTypeInfo& typeInfo) {
+    Y_UNUSED(typeInfo);
+    return std::make_shared<arrow::FixedSizeBinaryType>(16);
 }
 
 template <>
@@ -79,6 +85,8 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
         case NScheme::NTypeIds::Date:
         case NScheme::NTypeIds::Date32:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+        case NScheme::NTypeIds::Decimal:
+            return std::make_shared<arrow::FixedSizeBinaryType>(16);
         default:
             return GetArrowType(typeId);
     }

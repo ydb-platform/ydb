@@ -37,6 +37,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads)
     Settings->AddStoragePoolType("hdd1");
     Settings->AddStoragePoolType("hdd2");
     Settings->SetColumnShardAlterObjectEnabled(true);
+    Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsSendIntervalSecondsServerless(6);
+    Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsPropagateIntervalSecondsServerless(6);
 
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);

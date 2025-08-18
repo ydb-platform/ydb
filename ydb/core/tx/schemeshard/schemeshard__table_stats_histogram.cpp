@@ -371,13 +371,13 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     // Don't split/merge backup tables
     if (table->IsBackup) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxPartitionHistogram Skip backup table tablet " << datashardId);
         return true;
     }
 
     if (path.IsLocked()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxPartitionHistogram Skip locked table tablet " << datashardId << " by " << path.LockedBy());
         return true;
     }
@@ -410,7 +410,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         return true;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "TTxPartitionHistogram Want to"
         << " " << ToString(splitReason) << " " << splitReasonMsg
         << " tablet " << datashardId);
@@ -475,7 +475,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     auto request = SplitRequest(Self, txId, tableId, datashardId, splitKey.GetBuffer());
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "TTxPartitionHistogram Propose"
         << " " << ToString(splitReason) << " " << splitReasonMsg
         << " tablet " << datashardId

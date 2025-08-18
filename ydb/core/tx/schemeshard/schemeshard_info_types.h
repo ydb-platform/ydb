@@ -825,6 +825,11 @@ public:
     }
 
     bool ShouldSplitBySize(ui64 dataSize, const TForceShardSplitSettings& params, TString& reason) const {
+        // Don't split/merge backup tables
+        if (IsBackup) {
+            return false;
+        }
+
         if (!IsSplitBySizeEnabled(params)) {
             return false;
         }

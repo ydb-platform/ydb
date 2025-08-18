@@ -1278,7 +1278,7 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
         return TStatus::Error;
     }
 
-    auto& inputStream = input->ChildRef(0);
+    auto& inputStream = input->ChildRef(TDqPhyHashCombine::idx_Input);
     if (!EnsureStreamType(*inputStream, ctx)) {
         return TStatus::Error;
     }
@@ -1290,7 +1290,7 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto itemTypes = multiType->Cast<TMultiExprType>()->GetItems();
 
     // key extractor lambda
-    auto& keyExtractor = input->ChildRef(2);
+    auto& keyExtractor = input->ChildRef(TDqPhyHashCombine::idx_KeyExtractor);
     auto status = ConvertToLambda(keyExtractor, ctx, itemTypes.size());
     if (status.Level != TStatus::Ok) {
         return status;
@@ -1315,7 +1315,7 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     // state init lambda
-    auto& initHandler = input->ChildRef(3);
+    auto& initHandler = input->ChildRef(TDqPhyHashCombine::idx_InitHandler);
     TTypeAnnotationNode::TListType initArgTypes = keyTypes;
     initArgTypes.insert(initArgTypes.end(), itemTypes.begin(), itemTypes.end());
     status = ConvertToLambda(initHandler, ctx, initArgTypes.size());
@@ -1338,7 +1338,7 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     // state update lambda
-    auto& updateHandler = input->ChildRef(4);
+    auto& updateHandler = input->ChildRef(TDqPhyHashCombine::idx_UpdateHandler);
     TTypeAnnotationNode::TListType updateArgTypes = keyTypes;
     updateArgTypes.insert(updateArgTypes.end(), itemTypes.begin(), itemTypes.end());
     updateArgTypes.insert(updateArgTypes.end(), stateTypes.begin(), stateTypes.end());
@@ -1354,7 +1354,7 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     // finalize output lambda
-    auto& finishHandler = input->ChildRef(5);
+    auto& finishHandler = input->ChildRef(TDqPhyHashCombine::idx_FinishHandler);
     TTypeAnnotationNode::TListType finishArgTypes = keyTypes;
     finishArgTypes.insert(finishArgTypes.end(), stateTypes.begin(), stateTypes.end());
     status = ConvertToLambda(finishHandler, ctx, finishArgTypes.size());

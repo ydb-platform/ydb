@@ -1501,7 +1501,7 @@ public:
             }
             break;
         case TIndexBuildInfo::EState::LockBuild:
-            Y_ENSURE(buildInfo.IsBuildVectorIndex() || buildInfo.IsBuildSecondaryIndex() && buildInfo.IsValidatingUniqueIndex());
+            Y_ENSURE(buildInfo.IsBuildVectorIndex() || buildInfo.IsValidatingUniqueIndex());
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
@@ -2294,7 +2294,7 @@ public:
         } else {
             OnShardError(db, buildInfo, shardStatus, shardId, shardIdx);
         }
-        Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
+        Self->PersistBuildIndexShardRange(db, BuildId, shardIdx, shardStatus);
         Progress(BuildId);
 
         return true;

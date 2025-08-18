@@ -5,6 +5,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <util/string/join.h>
 
 
@@ -64,13 +65,7 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
 
         for (const auto& col: columns) {
             ResultColumns.push_back(col.Name);
-            if (col.Precision > 0) {
-                ConvertOptions.column_types[col.Name] = std::make_shared<arrow::StringType>();
-                DecimalParams[col.Name] = std::make_pair(col.Precision, col.Scale);
-            } else {
-                ConvertOptions.column_types[col.Name] = col.CsvArrowType;
-            }
-
+            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
             OriginalColumnTypes[col.Name] = col.ArrowType;
         }
     } else if (!columns.empty()) {
@@ -79,13 +74,7 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
 
         for (const auto& col: columns) {
             ReadOptions.column_names.push_back(col.Name);
-            if (col.Precision > 0) {
-                ConvertOptions.column_types[col.Name] = std::make_shared<arrow::StringType>();
-                DecimalParams[col.Name] = std::make_pair(col.Precision, col.Scale);
-            } else {
-                ConvertOptions.column_types[col.Name] = col.CsvArrowType;
-            }
-
+            ConvertOptions.column_types[col.Name] = col.CsvArrowType;
             OriginalColumnTypes[col.Name] = col.ArrowType;
         }
 #if 0
@@ -160,78 +149,17 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                     Y_ABORT_UNLESS(false);
                 }
             }());
-        } else if (fArr->type()->id() == arrow::StringType::type_id && originalType->id() == arrow::FixedSizeBinaryType::type_id) {
+        } else if (fArr->type()->id() == arrow::Decimal128Type::type_id && originalType->id() == arrow::FixedSizeBinaryType::type_id) {
             auto fixedSizeBinaryType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(originalType);
-            auto stringArray = std::static_pointer_cast<arrow::StringArray>(fArr);
-            arrow::FixedSizeBinaryBuilder builder(fixedSizeBinaryType);
-            Y_ABORT_UNLESS(builder.Reserve(stringArray->length()).ok());
-            for (i32 i = 0; i < stringArray->length(); ++i) {
-                if (stringArray->IsNull(i)) {
-                    Y_ABORT_UNLESS(builder.AppendNull().ok());
-                } else {
-                    auto value = stringArray->GetString(i);
-                    auto decimalIt = DecimalParams.find(f->name());
-                    if (decimalIt == DecimalParams.end()) {
-                        Y_ABORT_UNLESS(false);
-                    }
-
-                    ui32 scale = decimalIt->second.second;
-                    char bytes[16] = {0};
-                    if (!value.empty()) {
-                        bool negative = false;
-                        size_t pos = 0;
-                        if (value[pos] == '-') {
-                            negative = true;
-                            pos++;
-                        } else if (value[pos] == '+') {
-                            pos++;
-                        }
-
-                        size_t dotPos = value.find('.', pos);
-                        if (dotPos == std::string_view::npos) {
-                            dotPos = value.length();
-                        }
-
-                        std::string intPartStr(value.substr(pos, dotPos - pos));
-                        if (intPartStr.empty()) {
-                            intPartStr = "0";
-                        }
-
-                        std::string fracPartStr;
-                        if (dotPos < value.length()) {
-                            fracPartStr = std::string(value.substr(dotPos + 1));
-                        }
-                        
-                        if (fracPartStr.length() > scale) {
-                            fracPartStr = fracPartStr.substr(0, scale);
-                        } else {
-                            while (fracPartStr.length() < scale) {
-                                fracPartStr += "0";
-                            }
-                        }
-
-                        std::string fullNumber = intPartStr + fracPartStr;
-                        __int128_t num = 0;
-                        for (auto&& ch : fullNumber) {
-                            if (ch >= '0' && ch <= '9') {
-                                num = num * 10 + (ch - '0');
-                            }
-                        }
-
-                        if (negative) {
-                            num = -num;
-                        }
-
-                        std::memcpy(bytes, &num, sizeof(num));
-                    }
-                    
-                    Y_ABORT_UNLESS(builder.Append(bytes).ok());
-                }
-            }
-
-            auto res = builder.Finish();
-            Y_ABORT_UNLESS(res.ok());
-            resultColumns.emplace_back(*res);
+            const auto& decData = fArr->data();
+            auto viewData = arrow::ArrayData::Make(
+                fixedSizeBinaryType,
+                decData->length,
+                decData->buffers,
+                decData->null_count,
+                decData->offset
+            );
+            resultColumns.emplace_back(arrow::MakeArray(viewData));
         } else {
             Y_ABORT_UNLESS(false);
         }

@@ -1775,6 +1775,7 @@ private:
             vectorResolveProto.SetVectorColumnIndex(columnIndexes.at(vectorColumn));
 
             TSet<TString> copyColumns;
+            copyColumns.insert(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
             for (const auto& keyColumn : tableMeta->KeyColumnNames) {
                 copyColumns.insert(keyColumn);
             }
@@ -1786,9 +1787,15 @@ private:
 
             // Maintain alphabetical output column order
 
+            ui32 pos = 0;
             for (const auto& copyCol : copyColumns) {
-                YQL_ENSURE(columnIndexes.contains(copyCol));
-                vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(copyCol));
+                if (copyCol == NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn) {
+                    vectorResolveProto.SetClusterColumnOutPos(pos);
+                } else {
+                    YQL_ENSURE(columnIndexes.contains(copyCol));
+                    vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(copyCol));
+                    pos++;
+                }
             }
 
             return;

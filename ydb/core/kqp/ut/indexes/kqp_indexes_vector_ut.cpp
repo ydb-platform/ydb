@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineSimilarity", "DESC", covered);
     }
 
-    TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable) {
+    TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable, const TString& dataCol = "data") {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
@@ -184,12 +184,12 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 tableBuilder
                     .AddNullableColumn("pk", EPrimitiveType::Int64)
                     .AddNullableColumn("emb", EPrimitiveType::String)
-                    .AddNullableColumn("data", EPrimitiveType::String);
+                    .AddNullableColumn(dataCol, EPrimitiveType::String);
             } else {
                 tableBuilder
                     .AddNonNullableColumn("pk", EPrimitiveType::Int64)
                     .AddNonNullableColumn("emb", EPrimitiveType::String)
-                    .AddNonNullableColumn("data", EPrimitiveType::String);
+                    .AddNonNullableColumn(dataCol, EPrimitiveType::String);
             }
             tableBuilder.SetPrimaryKeyColumns({"pk"});
             tableBuilder.BeginPartitioningSettings()
@@ -205,31 +205,28 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
 
         {
-            const TString query1(Q_(R"(
-                UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES)"
-                "(0, \"\x03\x30\x03\", \"0\"),"
-                "(1, \"\x13\x31\x03\", \"1\"),"
-                "(2, \"\x23\x32\x03\", \"2\"),"
-                "(3, \"\x53\x33\x03\", \"3\"),"
-                "(4, \"\x43\x34\x03\", \"4\"),"
-                "(5, \"\x50\x60\x03\", \"5\"),"
-                "(6, \"\x61\x11\x03\", \"6\"),"
-                "(7, \"\x12\x62\x03\", \"7\"),"
-                "(8, \"\x75\x76\x03\", \"8\"),"
-                "(9, \"\x76\x76\x03\", \"9\");"
-            ));
+            const TString query1 = TStringBuilder()
+                << "UPSERT INTO `/Root/TestTable` (pk, emb, " << dataCol << ") VALUES "
+                << "(0, \"\x03\x30\x03\", \"0\"),"
+                    "(1, \"\x13\x31\x03\", \"1\"),"
+                    "(2, \"\x23\x32\x03\", \"2\"),"
+                    "(3, \"\x53\x33\x03\", \"3\"),"
+                    "(4, \"\x43\x34\x03\", \"4\"),"
+                    "(5, \"\x50\x60\x03\", \"5\"),"
+                    "(6, \"\x61\x11\x03\", \"6\"),"
+                    "(7, \"\x12\x62\x03\", \"7\"),"
+                    "(8, \"\x75\x76\x03\", \"8\"),"
+                    "(9, \"\x76\x76\x03\", \"9\");";
 
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                          .ExtractValueSync();
+            auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
         return session;
     }
 
-    TSession DoCreateTableAndVectorIndex(TTableClient& db, bool nullable, bool covered = true) {
-        auto session = DoCreateTableForVectorIndex(db, nullable);
+    TSession DoCreateTableAndVectorIndex(TTableClient& db, bool nullable, bool covered = true, bool ___data = false) {
+        auto session = DoCreateTableForVectorIndex(db, nullable, ___data ? "___data" : "data");
 
         // Add an index
         {
@@ -239,7 +236,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     GLOBAL USING vector_kmeans_tree
                     ON (emb)%s
                     WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )", covered ? " COVER (data, emb)" : "")));
+            )", covered ? (___data ? " COVER (___data, emb)" : " COVER (data, emb)") : "")));
 
             auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -594,7 +591,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestVectorIndexInsert(Returning, Covered);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateNoChange, Covered) {
+    void DoTestVectorIndexUpdateNoChange(bool covered, bool ___data) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -606,15 +603,16 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableAndVectorIndex(db, true, Covered);
+        auto session = DoCreateTableAndVectorIndex(db, true, covered, ___data);
 
         TString orig = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
 
         // Update to the table with index should succeed (but embedding does not change)
         {
-            const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` SET `data`="20" WHERE `pk`=9;
-            )"));
+            const TString query1(Q_(___data
+                ? "UPDATE `/Root/TestTable` SET `___data`=\"20\" WHERE `pk`=9;"
+                : "UPDATE `/Root/TestTable` SET `data`=\"20\" WHERE `pk`=9;"
+            ));
 
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
@@ -622,10 +620,23 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
 
         const TString updated = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
-        if (Covered) {
+        if (covered) {
             SubstGlobal(orig, "\"9\"", "\"20\"");
         }
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpdateNoChange) {
+        DoTestVectorIndexUpdateNoChange(false, false);
+    }
+
+    Y_UNIT_TEST(VectorIndexUpdateNoChangeCovered) {
+        DoTestVectorIndexUpdateNoChange(true, false);
+    }
+
+    // Similar to VectorIndexUpdateNoChange, but data column is named ___data to make it appear before __ydb_parent in struct types
+    Y_UNIT_TEST(VectorIndexUpdateColumnOrder) {
+        DoTestVectorIndexUpdateNoChange(true, true);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdateNoClusterChange, Covered) {

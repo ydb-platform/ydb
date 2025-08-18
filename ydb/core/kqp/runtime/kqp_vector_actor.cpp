@@ -411,13 +411,20 @@ private:
             // Output columns: Cluster ID + Source table PK [ + Data Columns ]
             auto newValue = HolderFactory.CreateDirectArrayHolder(1 + Settings.CopyColumnIndexesSize(), rowItems);
 
-            *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
-            rowSize += sizeof(NUdf::TUnboxedValuePod);
-
+            if (Settings.GetClusterColumnOutPos() == 0) {
+                // We support inserting cluster ID column into any position to maintain alphabetical order of columns
+                *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
+                rowSize += sizeof(NUdf::TUnboxedValuePod);
+            }
             for (size_t i = 0; i < Settings.CopyColumnIndexesSize(); i++) {
                 auto colIdx = Settings.GetCopyColumnIndexes(i);
                 *rowItems++ = currentValue.GetElement(colIdx);
                 rowSize += NMiniKQL::GetUnboxedValueSize(currentValue.GetElement(colIdx), ColumnTypeInfos[colIdx]).AllocatedBytes;
+                if (Settings.GetClusterColumnOutPos() == i+1) {
+                    // We support inserting cluster ID column into any position to maintain alphabetical order of columns
+                    *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
+                    rowSize += sizeof(NUdf::TUnboxedValuePod);
+                }
             }
 
             totalSize += rowSize;

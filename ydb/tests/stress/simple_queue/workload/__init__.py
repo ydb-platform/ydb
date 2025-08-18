@@ -491,7 +491,7 @@ class Workload:
                 schedule.extend([(point, op) for point in self.random_points()])
 
             for op in EventKind.basic_schema_row() if self.mode == 'row' else EventKind.basic_schema_column():
-                schedule.extend([(point, op) for point in self.random_points(size=20)])
+                schedule.extend([(point, op) for point in self.random_points(size=10)])
 
             for op in EventKind.periodic_tasks_row() if self.mode == 'row' else EventKind.periodic_tasks_column():
                 schedule.extend([(point, op) for point in self.random_points(size=50)])

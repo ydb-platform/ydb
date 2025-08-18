@@ -96,8 +96,9 @@ void TTreeElement::UpdateTopDown() {
             query->FairShare += Min(leftFairShare, demand);
             leftFairShare = leftFairShare <= demand ? 0 : leftFairShare - demand;
 
-            Y_ASSERT(query->Origin);
-            query->Origin->SetSnapshot(query->shared_from_this());
+            if (auto originalQuery = query->Origin.lock()) {
+                originalQuery->SetSnapshot(query->shared_from_this());
+            }
         });
     }
 }
@@ -106,7 +107,7 @@ void TTreeElement::UpdateTopDown() {
 // TQuery
 ///////////////////////////////////////////////////////////////////////////////
 
-TQuery::TQuery(const TQueryId& id, NDynamic::TQuery* query)
+TQuery::TQuery(const TQueryId& id, NDynamic::TQueryPtr query)
     : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id, *query)
     , TTreeElement(id, *query)
     , NHdrf::TQuery<ETreeType::SNAPSHOT>(id, *query)

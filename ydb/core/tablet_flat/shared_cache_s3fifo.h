@@ -10,7 +10,7 @@ namespace NKikimr::NSharedCache {
 
 // TODO: remove template args and make some page base class
 
-enum class ES3FIFOPageLocation {
+enum class ES3FIFOPageLocation : ui32 {
     None,
     SmallQueue,
     MainQueue
@@ -157,6 +157,10 @@ public:
         Limit = limit;
     }
 
+    ui64 GetLimit() const {
+        return Limit.TotalLimit;
+    }
+
     ui64 GetSize() const override {
         return SmallQueue.Size + MainQueue.Size;
     }
@@ -180,9 +184,9 @@ public:
 
         result << "SmallQueue: ";
         dump(SmallQueue);
-        result << Endl << "MainQueue: ";
+        result << " MainQueue: ";
         dump(MainQueue);
-        result << Endl << "GhostQueue: ";
+        result << " GhostQueue: ";
         result << GhostQueue.Dump();
 
         return result;

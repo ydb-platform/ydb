@@ -11,7 +11,7 @@ retry_delay = 2
 
 
 def get_api_url():
-    return "http://localhost:{}".format(os.environ['SOLOMON_PORT'])
+    return "http://localhost:{}".format(os.environ['SOLOMON_HTTP_PORT'])
 
 
 def _do_request_inner(method, url, json):

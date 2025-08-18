@@ -318,11 +318,11 @@ enum EFlag {
 
 message TBridgePileInfo {
     optional uint32 PileId = 1;
-    string Name = 2;
-    NKikimrBridge.TClusterState.EPileState State = 3;
-    bool IsPrimary = 4;
-    bool IsBeingPromoted = 5;
-    uint32 Nodes = 6;
+    optional string Name = 2;
+    optional NKikimrBridge.TClusterState.EPileState State = 3;
+    optional bool IsPrimary = 4;
+    optional bool IsBeingPromoted = 5;
+    optional uint32 Nodes = 6;
 }
 
 message TBridgeInfo {

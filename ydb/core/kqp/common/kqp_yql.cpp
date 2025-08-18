@@ -623,4 +623,33 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TKqpCnStr
     return TKqpStreamLookupSettings::Parse(node.Settings());
 }
 
+NNodes::TCoNameValueTupleList TKqpDeleteRowsIndexSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+
+    if (SkipLookup) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(SkipLookupSettingName)
+            .Done()
+        );
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
+TKqpDeleteRowsIndexSettings TKqpDeleteRowsIndexSettings::Parse(const NNodes::TKqlDeleteRowsIndex& del) {
+    TKqpDeleteRowsIndexSettings settings;
+    if (del.Settings()) {
+        for (const auto& tuple: del.Settings().Cast()) {
+            auto name = tuple.Name().Value();
+            if (name == SkipLookupSettingName) {
+                settings.SkipLookup = true;
+            }
+        }
+    }
+    return settings;
+}
+
 } // namespace NYql

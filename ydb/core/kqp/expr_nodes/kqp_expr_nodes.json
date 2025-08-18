@@ -456,6 +456,16 @@
             ]
         },
         {
+            "Name": "TKqpCnVectorResolve",
+            "Base": "TKqpConnection",
+            "Match": {"Type": "Callable", "Name": "KqpCnVectorResolve"},
+            "Children": [
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "InputType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Index", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqlIndexLookupJoinBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},

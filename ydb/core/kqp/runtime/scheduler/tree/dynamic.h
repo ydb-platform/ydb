@@ -42,15 +42,15 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         TPool* GetParent() const;
 
-        virtual NSnapshot::TTreeElement* TakeSnapshot() const = 0;
+        virtual NSnapshot::TTreeElement* TakeSnapshot() = 0;
     };
 
-    class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::DYNAMIC>, public TSnapshotSwitch<NSnapshot::TQueryPtr> {
+    class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::DYNAMIC>, public TSnapshotSwitch<NSnapshot::TQueryPtr>, public std::enable_shared_from_this<TQuery> {
     public:
         // TODO: pass delay params directly to actors from table_service_config
         TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStaticAttributes& attrs = {});
 
-        NSnapshot::TQuery* TakeSnapshot() const override;
+        NSnapshot::TQuery* TakeSnapshot() override;
 
         TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);
         void RemoveTask(const TSchedulableTaskList::iterator& it);
@@ -72,7 +72,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
     public:
         TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs = {});
 
-        NSnapshot::TPool* TakeSnapshot() const override;
+        NSnapshot::TPool* TakeSnapshot() override;
 
         // TODO: override AddQuery() to initialize query->Delay = Counters.Delay
     };
@@ -81,7 +81,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
     public:
         explicit TDatabase(const TDatabaseId& id, const TStaticAttributes& attrs = {});
 
-        NSnapshot::TDatabase* TakeSnapshot() const override;
+        NSnapshot::TDatabase* TakeSnapshot() override;
     };
 
     class TRoot : public TPool, public TSnapshotSwitch<NSnapshot::TRootPtr> {
@@ -92,7 +92,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         void RemoveDatabase(const TDatabaseId& databaseId);
         TDatabasePtr GetDatabase(const TDatabaseId& databaseId) const;
 
-        NSnapshot::TRoot* TakeSnapshot() const override;
+        NSnapshot::TRoot* TakeSnapshot() override;
 
     public:
         ui64 TotalLimit = Infinity();

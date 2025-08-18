@@ -55,6 +55,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     using ECandidateKind::PragmaName;
     using ECandidateKind::TableName;
     using ECandidateKind::TypeName;
+    using ECandidateKind::UnknownName;
 
     TLexerSupplier MakePureLexerSupplier() {
         NSQLTranslationV1::TLexers lexers;
@@ -118,7 +119,9 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                        "room": {},
                        "time": {}
                     }}
-                }}
+                }},
+                "link": { "type": "LINK" },
+                "topic": { "type": "Topic" }
             }},
             "saurus": { "type": "Folder", "entries": {
                 "maxim": { "type": "Table", "columns": {
@@ -840,6 +843,21 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "UPSERT INTO `test/#`"), expected);
         }
+    }
+
+    Y_UNIT_TEST(AlterObject) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = R"sql(
+            ALTER OBJECT example.`#`
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {FolderName, "yql/"},
+            {UnknownName, "link"},
+            {UnknownName, "topic"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query), expected);
     }
 
     Y_UNIT_TEST(TypeName) {

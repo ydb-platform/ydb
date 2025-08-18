@@ -85,6 +85,7 @@ public:
     bool UseCpuTimestamp = false;
     TMaybe<TString> KeyPrefix;
     ui32 KeyCount = 0;
+    bool CleanupPolicyCompact = false;
 
 protected:
     void CreateTopic(const TString& database,
@@ -95,7 +96,8 @@ protected:
                      ui32 maxPartitionCount = 100,
                      ui32 stabilizationWindowSeconds = 15,
                      ui32 upUtilizationPercent = 90,
-                     ui32 downUtilizationPercent = 30);
+                     ui32 downUtilizationPercent = 30,
+                     bool cleanupPolicyCompact = false);
     void DropTopic(const TString& database,
                    const TString& topic);
 
@@ -133,7 +135,8 @@ private:
                      ui32 maxPartitionCount,
                      ui32 stabilizationWindowSeconds,
                      ui32 upUtilizationPercent,
-                     ui32 downUtilizationPercent);
+                     ui32 downUtilizationPercent,
+                     bool cleanupPolicyCompact);
 
     static NTable::TSession GetSession(NTable::TTableClient& client);
 

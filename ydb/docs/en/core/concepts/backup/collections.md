@@ -3,11 +3,13 @@
 Availability: YDB vX.Y+ (TBD)
 
 Summary
+
 - Organize full and incremental backups into collections for efficient DR and PITR.
 - Works with cluster-managed storage today; export/import to FS or S3 via CLI tools.
 - Background operations with status monitoring through long operations API.
 
 Glossary
+
 - Backup collection: Named set of backups for selected tables.
 - Full backup: Baseline snapshot for a collection.
 - Incremental backup: Changes since the previous backup in the chain.
@@ -17,11 +19,13 @@ Glossary
 - Retention policy: Rules to remove old backups without breaking chains.
 
 Architecture overview
+
 - Flow: create collection → full → incrementals → optional synthetic full → retention cleanup.
 - Storage layout: cluster (current), export/import to FS or S3. Metadata files include metadata.json and mapping.json.
 - Compatibility: See reference/compatibility for format versions and cross-version notes.
 
 When to use
+
 - Disaster Recovery and Point-in-Time Recovery.
 - Large datasets where incremental changes are much smaller than full snapshots.
 
@@ -133,17 +137,20 @@ Operation IDs are returned when starting corresponding backup or restore command
 ## Limitations and recommendations
 
 ### Current limitations
+
 - Maximum incremental backup chain length: 100
 - Maximum single operation size: 1 TB
 - Parallel operations: no more than 3 per collection
 - PITR granularity: 1 second
 
 ### Performance recommendations
+
 - Schedule full backups during low-load periods
 - Use separate collections for different table sets
 - Monitor chain sizes and restore times
 
 ### Version compatibility
+
 - Format v1: YDB 24.3+
 - Format v2: YDB 25.1+ (with compression support)
 - Backward compatibility: can restore v1 in v2, but not vice versa

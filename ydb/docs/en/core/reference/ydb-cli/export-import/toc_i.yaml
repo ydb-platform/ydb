@@ -3,25 +3,9 @@ items:
   href: file-structure.md
 - name: Backup collections
   href: backup-collections/index.md
-  items:
-  - name: Overview
-    href: backup-collections/overview.md
-  - name: SQL API
-    href: backup-collections/sql-api.md
-  - name: Creating collections
-    href: backup-collections/create-collection.md
-  - name: Incremental backups
-    href: backup-collections/incremental-backups.md
-  - name: Restore operations
-    href: backup-collections/restore-from-collection.md
-  - name: Managing collections
-    href: backup-collections/manage-collections.md
-  - name: Advanced topics
-    href: backup-collections/advanced.md
-  - name: Compatibility
-    href: backup-collections/compatibility.md
-  - name: Troubleshooting
-    href: backup-collections/troubleshooting.md
+  include:
+    path: backup-collections/toc_p.yaml
+    mode: link
 - name: Exporting data to the file system
   href: tools-dump.md
 - name: Importing data from the file system

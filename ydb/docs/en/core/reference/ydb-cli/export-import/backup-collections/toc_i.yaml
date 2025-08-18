@@ -1,0 +1,20 @@
+items:
+- name: Overview
+  href: overview.md
+- name: SQL API
+  href: sql-api.md
+- name: Creating collections
+  href: create-collection.md
+- name: Incremental backups
+  href: incremental-backups.md
+- name: Restore operations
+  href: restore-from-collection.md
+- name: Managing collections
+  href: manage-collections.md
+- name: Advanced topics
+  href: advanced.md
+- name: Compatibility
+  href: compatibility.md
+- name: Troubleshooting
+  href: troubleshooting.md
+- include: { mode: link, path: _includes/toc_p.yaml }

@@ -269,7 +269,7 @@ CREATE BACKUP COLLECTION `migration_test_backup`;
 
 ### Ошибка: коллекция уже существует
 
-```
+```text
 Error: Backup collection 'my_backup' already exists
 ```
 
@@ -277,7 +277,7 @@ Error: Backup collection 'my_backup' already exists
 
 ### Ошибка: таблица не найдена
 
-```
+```text
 Error: Table '/Root/database/nonexistent' not found
 ```
 
@@ -285,7 +285,7 @@ Error: Table '/Root/database/nonexistent' not found
 
 ### Ошибка: недостаточно прав
 
-```
+```text
 Error: Access denied for backup operation
 ```
 

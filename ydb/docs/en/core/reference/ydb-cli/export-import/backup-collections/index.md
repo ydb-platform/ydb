@@ -8,7 +8,9 @@ To get started with backup collections:
 2. [Take incremental backups](incremental-backups.md) regularly  
 3. [Restore from collections](restore-from-collection.md) when needed
 
-For troubleshooting common issues, see the [troubleshooting guide](troubleshooting.md).s section describes backup collections and incremental backup functionality in YDB.
+For troubleshooting common issues, see the [troubleshooting guide](troubleshooting.md).
+
+This section describes backup collections and incremental backup functionality in YDB.
 
 {% note info %}
 
@@ -28,9 +30,9 @@ Backup collections are available starting from YDB vX.Y+ (version TBD).
 - [Compatibility](compatibility.md) — Format versions and migration
 - [Troubleshooting](troubleshooting.md) — Common issues and solutions
 
-## Quick start
+## Getting started
 
-For a hands-on introduction, see the [demo cookbook](_includes/demo-cookbook.md) that walks through creating a collection, taking backups, and restoring to different points in time.
+This section describes backup collections and incremental backup functionality in YDB. See the [overview](overview.md) for detailed concepts and usage examples.
 
 ## Key concepts
 

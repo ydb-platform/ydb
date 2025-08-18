@@ -3,6 +3,7 @@
 This section explains how to use backup collections for full and incremental backups, and how they interact with export/import tools.
 
 **Important considerations:**
+
 - Storage backends: cluster (current); export to FS/S3 via CLI tools
 - Keep backup chains valid; apply retention with care
 - Verify backups periodically and before critical restores

@@ -87,6 +87,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TClientServiceTypes& supportedReadRuleServiceTypes,
         const NKikimrPQ::TPQConfig& pqConfig
     );
+
     TString RemoveReadRuleFromConfig(
         NKikimrPQ::TPQTabletConfig *config,
         const NKikimrPQ::TPQTabletConfig& originalConfig,

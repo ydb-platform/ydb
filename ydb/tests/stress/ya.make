@@ -2,6 +2,7 @@ RECURSE(
     cdc
     common
     ctas
+    kafka
     kv
     log
     mixedpy

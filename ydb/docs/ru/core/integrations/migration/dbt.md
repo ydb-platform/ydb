@@ -43,18 +43,23 @@
 
 ### Генерация документации
 
-{{dbt-ydb}} поддерживает создание [документации](https://docs.getdbt.com/docs/build/documentation) из проектов {{dbt}} для {{ydb}}.
+{{ dbt-ydb }} поддерживает создание [документации](https://docs.getdbt.com/docs/build/documentation) из проектов {{dbt}} для {{ydb}}.
 
 ## Подготовка к использованию
 
 Для начала работы с {{dbt}} на {{ydb}} вам понадобятся:
 
-- Python 3.10+.
-- dbt Core (1.8+).
-  Внимание! dbt Fusion (2.0) в данный момент не поддерживается.
+- Python 3.10+;
+- dbt Core (1.8+);
 - Существующий кластер {{ ydb-short-name }}, однонодовая инсталляция из [быстрого старта](../../quickstart.md) будет достаточной.
 
-Для установки {{dbt-ydb}} выполните:
+{% note info %}
+
+Внимание! dbt Fusion (2.0) в данный момент не поддерживается.
+
+{% endnote %}
+
+Для установки {{ dbt-ydb }} выполните:
 
 ```bash
 pip install dbt-ydb
@@ -62,69 +67,69 @@ pip install dbt-ydb
 
 ## Запуск тестового примера
 
-Вместе с коннектором {{dbt-ydb}} поставляется [пример](https://github.com/ydb-platform/dbt-ydb/tree/main/examples/jaffle_shop), который можно использовать для быстрой проверки возможностей {{dbt}} для {{ydb}}:
+Вместе с коннектором {{ dbt-ydb }} поставляется [пример](https://github.com/ydb-platform/dbt-ydb/tree/main/examples/jaffle_shop), который можно использовать для быстрой проверки возможностей {{ dbt }} для {{ ydb }}:
 
 1. Клонирование репозитория
 
-```bash
-git clone https://github.com/ydb-platform/dbt-ydb.git
-cd dbt-ydb/examples/jaffle_shop
-```
+   ```bash
+   git clone https://github.com/ydb-platform/dbt-ydb.git
+   cd dbt-ydb/examples/jaffle_shop
+   ```
 
-2. Настройка профиля подключения к вашей {{ydb}} в файле profiles.yml. Способы подключения и аутентификации представлены [здесь](https://github.com/ydb-platform/dbt-ydb?tab=readme-ov-file#profile-configuration). Для однонодовой инсталляции из [быстрого старта](../../quickstart.md) файл будет выглядеть следующим образом.
+2. Настройка профиля подключения к вашей {{ ydb }} в файле `profiles.yml`. Способы подключения и аутентификации представлены [здесь](https://github.com/ydb-platform/dbt-ydb?tab=readme-ov-file#profile-configuration). Для однонодовой инсталляции из [быстрого старта](../../quickstart.md) файл будет выглядеть следующим образом.
 
-```text
-profile_name:
-  target: dev
-  outputs:
-    dev:
-      type: ydb
-      host: localhost # YDB host
-      port: 2136 # YDB port
-      database: /local # YDB database
-      schema: jaffle_shop
-```
+   ```yaml
+   profile_name:
+     target: dev
+     outputs:
+       dev:
+         type: ydb
+         host: localhost # YDB host
+         port: 2136 # YDB port
+         database: /local # YDB database
+         schema: jaffle_shop
+   ```
 
 3. Проверка подключения
 
-```bash
-dbt debug
-```
+   ```bash
+   dbt debug
+   ```
 
 4. Подготовка тестовых данных (через seeds)
 
-```bash
-dbt seed
-```
+   ```bash
+   dbt seed
+   ```
 
-Эта команда загрузит CSV-файлы из data/ в raw_* таблицы YDB.
+   Эта команда загрузит CSV‑файлы из `data/` в таблицы `raw_*` YDB.
 
 5. Запуск моделей
 
-```bash
-dbt run
-```
+   ```bash
+   dbt run
+   ```
 
-Будут созданы таблицы и представления на основе примеров моделей проекта.
+   Будут созданы таблицы и представления на основе примеров моделей проекта.
 
 6. Тестирование данных в моделях
 
-```bash
-dbt test
-```
+   ```bash
+   dbt test
+   ```
 
-Выполнит стандартные тесты данных описанные в тестовом примере - проверки на null, на допустимые значения списка и другие.
+   Выполнит стандартные тесты данных, описанные в тестовом примере — проверки на `null`, на допустимые значения списка и другие.
 
-7. Генерация документации и старт локального веб-сервера для ее просмотра
+7. Генерация документации и старт локального веб‑сервера для её просмотра
 
-```bash
-dbt docs generate
-dbt docs serve --port 8080
-```
+   ```bash
+   dbt docs generate
+   dbt docs serve --port 8080
+   ```
 
-Документация по проекту доступна в браузере: [http://localhost:8080](http://localhost:8080)
+   Документация по проекту станет доступна в браузере: [http://localhost:8080](http://localhost:8080)
 
 ## Дальнейшие шаги
 
-Официальную документацию {{dbt}} можно найти по [ссылке](https://docs.getdbt.com/docs).
-Дополнительно вы можете изучить исходные коды коннектора, а также поучаствовать в его развитии через публичный репозиторий [{{dbt-ydb}}](https://github.com/ydb-platform/dbt-ydb).
+Официальную документацию {{ dbt }} можно найти по [ссылке](https://docs.getdbt.com/docs).
+Дополнительно вы можете изучить исходные коды коннектора, а также поучаствовать в его развитии через публичный репозиторий {{ dbt-ydb }}.

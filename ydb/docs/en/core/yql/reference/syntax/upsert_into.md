@@ -31,3 +31,39 @@ VALUES ( 1, 10, 'Some text', Date('2021-10-07')),
        ( 2, 10, 'Some text', Date('2021-10-08'))
 ```
 
+## RETURNING
+
+`RETURNING` returns values:
+* For new rows – all inserted values
+* For updated rows – new values after the update  
+This allows you to get the results of the operation immediately without a separate `SELECT` query.
+
+## Examples
+
+Returning all columns of the modified row
+
+```
+UPSERT INTO orders (order_id, status, amount)
+VALUES (1001, 'shipped', 500)
+RETURNING *;
+```
+
+Result
+
+|order_id|status|amount|
+|-|-|-|
+|1001|shipped|500|
+
+Returning specific columns
+
+```
+UPSERT INTO users (user_id, name, email)
+VALUES (42, 'John Doe', 'john@example.com')
+RETURNING user_id, email;
+```
+
+Result
+
+|user_id|email|
+|-|-|
+|42|john@example.com|

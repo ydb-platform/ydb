@@ -67,4 +67,39 @@ SELECT key FROM my_table_source;
 
 {% endif %}
 
+## RETURNING
 
+`RETURNING` returns the values of the inserted rows. This allows you to get the results of the operation immediately without a separate `SELECT` query.
+
+## Example
+
+Returning specific columns
+
+```
+INSERT INTO some_table (id, color, price)
+VALUES
+(1101, 'red', 200),
+(1102, 'green', 300)
+RETURNING id, price;
+```
+
+Result
+
+|id|price|
+|-|-|
+|1101|200|
+|1102|300|
+
+Returning all columns
+
+```
+INSERT INTO some_table (id, year, color, price)
+VALUES (1103, 2023, 'blue', 400)
+RETURNING *;
+```
+
+Result
+
+|id|year|color|price|
+|-|-|-|-|
+|1103|2023|blue|400|

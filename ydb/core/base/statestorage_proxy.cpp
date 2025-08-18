@@ -653,7 +653,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     ui64 SourceCookie = 0;
     THashSet<TActorId> Replies;
     ui32 RingGroupPassAwayCounter;
-    bool WaitAllReplies;
 
     ui64 TabletID;
     ui64 Cookie;
@@ -672,12 +671,10 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         TEvStateStorage::TEvLookup *msg = ev->Get();
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
-        WaitAllReplies = msg->ProxyOptions.SigWaitMode != msg->ProxyOptions.SigNone;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             const auto &ringGroup = Info->RingGroups[ringGroupIndex];
-            if ((!WaitAllReplies && ringGroup.WriteOnly) || ringGroup.State == ERingGroupState::DISCONNECTED
-                || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
+            if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
                 continue;
             }
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
@@ -692,7 +689,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         T *msg = ev->Get();
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
-        WaitAllReplies = true;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             const auto &ringGroup = Info->RingGroups[ringGroupIndex];
@@ -731,17 +727,13 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     }
 
     bool ShouldReply() {
-        bool reply = !WaitAllReplies;
-        if(!reply) {
-            for(ui32 i : xrange(Info->RingGroups.size())) {
-                auto& rg = Info->RingGroups[i];
-                if(!rg.WriteOnly && RingGroupActorsByIndex.contains(i) && !Replies.contains(RingGroupActorsByIndex[i])) {
-                    return reply;
-                }
+        for(ui32 i : xrange(Info->RingGroups.size())) {
+            auto& rg = Info->RingGroups[i];
+            if (!rg.WriteOnly && RingGroupActorsByIndex.contains(i) && !Replies.contains(RingGroupActorsByIndex[i])) {
+                return false;
             }
-            return true;
         }
-        return reply;
+        return true;
     }
 
     void HandleResult(TEvStateStorage::TEvInfo::TPtr &ev) {

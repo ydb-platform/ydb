@@ -213,9 +213,9 @@ private:
             } else {
                 TPage* page = Pop(MainQueue);
                 if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0 && mainQueueReinserts < MaxMainQueueReinserts) {
-                    mainQueueReinserts++;
                     TPageTraits::SetFrequency(page, frequency - 1);
                     Push(MainQueue, page);
+                    mainQueueReinserts++;
                 } else {
                     if (frequency) { // reinserts limit exceeded
                         TPageTraits::SetFrequency(page, 0);

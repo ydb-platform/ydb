@@ -220,7 +220,7 @@ public:
         SendRequest();
     }
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
-        AuditCtx.FinishAudit(response);
+        AuditCtx.LogOnCompleted(response);
         TString url(Event->Get()->Request->URL.Before('?'));
         TString status(response->Status);
         NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters,
@@ -351,6 +351,7 @@ public:
             AuditCtx.AddAuditLogParts(result->UserToken);
             serializedToken = result->UserToken->GetSerializedToken();
         }
+        AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
     }
@@ -426,9 +427,10 @@ public:
     }
 
     void ProcessRequest() {
+        AuditCtx.LogOnReceived();
         Container.Page->Output(Container);
         NHttp::THttpOutgoingResponsePtr response = Event->Get()->Request->CreateResponseString(Container.Str());
-        AuditCtx.FinishAudit(response);
+        AuditCtx.LogOnCompleted(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
         PassAway();
     }

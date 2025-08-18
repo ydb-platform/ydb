@@ -32,6 +32,9 @@ namespace NKqpRun {
 namespace {
 
 struct TExecutionOptions {
+    inline static constexpr char LOOP_ID_TEMPLATE[] = "${LOOP_ID}";
+    inline static constexpr char QUERY_ID_TEMPLATE[] = "${QUERY_ID}";
+
     enum class EExecutionCase {
         GenericScript,
         GenericQuery,
@@ -108,8 +111,8 @@ struct TExecutionOptions {
 
         TString sql = ScriptQueries[index];
         if (UseTemplates) {
-            SubstGlobal(sql, "${LOOP_ID}", ToString(loopId));
-            SubstGlobal(sql, "${QUERY_ID}", ToString(queryId));
+            SubstGlobal(sql, LOOP_ID_TEMPLATE, ToString(loopId));
+            SubstGlobal(sql, QUERY_ID_TEMPLATE, ToString(queryId));
         }
 
         return {
@@ -455,7 +458,7 @@ protected:
             .RequiredArgument("str")
             .AppendTo(&ExecutionOptions.ScriptQueries);
 
-        options.AddLongOption("templates", "Enable templates for -s and -p queries, such as ${YQL_TOKEN} and ${QUERY_ID}")
+        options.AddLongOption("templates", TStringBuilder() << "Enable templates for -s and -p queries, such as ${" << YQL_TOKEN_VARIABLE << "}, " << TExecutionOptions::QUERY_ID_TEMPLATE << " and " << TExecutionOptions::LOOP_ID_TEMPLATE)
             .NoArgument()
             .SetFlag(&ExecutionOptions.UseTemplates);
 
@@ -970,7 +973,7 @@ private:
             if (YqlToken) {
                 SubstGlobal(sql, tokenVariableName, YqlToken);
             } else if (sql.Contains(tokenVariableName)) {
-                ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable";
+                ythrow yexception() << "Failed to replace ${" << YQL_TOKEN_VARIABLE << "} template, please specify " << YQL_TOKEN_VARIABLE << " environment variable";
             }
         }
     }

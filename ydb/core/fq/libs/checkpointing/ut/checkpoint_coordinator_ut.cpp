@@ -105,7 +105,7 @@ struct TTestBootstrap : public TTestActorRuntime {
         ActorToTask[MapActor]     = GraphState.GetTask()[1].GetId();
         ActorToTask[EgressActor]  = GraphState.GetTask()[2].GetId();
 
-        Settings = NKikimrConfig::TCheckpointsConfig ();
+        Settings = NKikimrConfig::TCheckpointsConfig();
         Settings.SetEnabled(true);
         Settings.SetCheckpointingPeriodMillis(TDuration::Hours(1).MilliSeconds());
         Settings.SetCheckpointingSnapshotRotationPeriod(snaphotRotationPeriod);

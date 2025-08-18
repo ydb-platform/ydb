@@ -308,7 +308,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             page->Collection = &collection;
             BodyProvided(collection, page.Get());
-            Evict(Cache.Insert(page.Get()));
         }
     }
 
@@ -738,7 +737,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 page->ProvideBody(std::move(paged.Data));
                 BodyProvided(*collection, page);
-                Evict(Cache.Insert(page));
             }
         }
 
@@ -895,6 +893,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         AddActivePage(page);
         auto pendingRequestsIt = collection.PendingRequests.find(page->PageId);
         if (pendingRequestsIt == collection.PendingRequests.end()) {
+            Evict(Cache.Insert(page));
             return;
         }
         for (auto &[request, index] : pendingRequestsIt->second) {
@@ -911,6 +910,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
         }
         collection.PendingRequests.erase(pendingRequestsIt);
+        Evict(Cache.Insert(page));
     }
 
     void SendResult(TRequest &request) {

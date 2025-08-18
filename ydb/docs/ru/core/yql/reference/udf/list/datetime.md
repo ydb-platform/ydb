@@ -133,12 +133,11 @@ SELECT
 ### Список функций
 
 * `DateTime::FromSeconds(Uint32{Flags:AutoMap}) -> Timestamp`
-* `DateTime::FromSeconds64(Int64{Flags:AutoMap}) -> Timestamp64`
-* `DateTime::FromMilliseconds(Uint64{Flags:AutoMap}) -> Timestamp`
-* `DateTime::FromMilliseconds64(Int64{Flags:AutoMap}) -> Timestamp64`
-* `DateTime::FromMicroseconds(Uint64{Flags:AutoMap}) -> Timestamp`
-* `DateTime::FromMicroseconds64(Int64{Flags:AutoMap}) -> Timestamp64`
-
+* `DateTime::FromSeconds64(Int64{Flags:AutoMap}) -> Timestamp64`;
+* `DateTime::FromMilliseconds(Uint64{Flags:AutoMap}) -> Timestamp`;
+* `DateTime::FromMilliseconds64(Int64{Flags:AutoMap}) -> Timestamp64`;
+* `DateTime::FromMicroseconds(Uint64{Flags:AutoMap}) -> Timestamp`;
+* `DateTime::FromMicroseconds64(Int64{Flags:AutoMap}) -> Timestamp64`.
 ## To... {#to}
 
 Получение количества секунд/миллисекунд/микросекунд от начала эпохи в UTC из простого типа.

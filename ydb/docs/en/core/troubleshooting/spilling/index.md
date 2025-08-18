@@ -1,6 +1,6 @@
 # Spilling Troubleshooting
 
-This section provides troubleshooting information for common spilling issues in {{ ydb-short-name }}. Spilling is a memory management mechanism that temporarily saves data to disk when the system runs out of RAM.
+This section provides troubleshooting information for common spilling issues in {{ ydb-short-name }}. Spilling is a memory management mechanism that temporarily saves intermediate computation data to disk when the system runs out of RAM. These errors can occur during query execution when the system attempts to use spilling functionality and can be observed in logs and query responses.
 
 ## Common Issues
 

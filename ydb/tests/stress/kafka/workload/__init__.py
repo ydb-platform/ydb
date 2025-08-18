@@ -80,7 +80,6 @@ class Workload(unittest.TestCase):
         return
 
     def read_messages(self, topic: str, consumer: str):
-        print("Driver read_messages: ", self.driver)
         with self.driver.topic_client.reader(topic, consumer) as reader:
             messages_info = defaultdict(list)
             while True:
@@ -101,7 +100,6 @@ class Workload(unittest.TestCase):
         self.driver.topic_client.create_topic(topic, consumers=consumers, min_active_partitions=10)
 
     def drop_topic(self, topic: str):
-        print("Driver drop_topic: ", self.driver)
         try:
             self.driver.topic_client.drop_topic(topic)
         except ydb.SchemeError:

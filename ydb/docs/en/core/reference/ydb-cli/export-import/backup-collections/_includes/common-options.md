@@ -3,7 +3,6 @@ Common options and links
 - Storage backends: cluster (current); export to FS/S3 via CLI tools.
 - Parallelism and compression: tune based on environment (document exact flags where applicable).
 - S3 authentication: see export/import S3 docs.
-- Encryption: see Advanced topics and Encryption RFC notes.
 
 Notes
 - Keep backup chains valid; apply retention with care.

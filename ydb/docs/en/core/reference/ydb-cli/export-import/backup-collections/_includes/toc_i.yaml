@@ -1,0 +1,13 @@
+items:
+- name: Common options
+  href: common-options.md
+- name: Demo cookbook
+  href: demo-cookbook.md
+- name: Filesystem examples
+  href: fs-examples.md
+- name: Integrity and verification
+  href: integrity-and-verification.md
+- name: S3 examples
+  href: s3-examples.md
+- name: SQL examples
+  href: sql-examples.md

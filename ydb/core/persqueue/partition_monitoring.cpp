@@ -93,7 +93,6 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 PROPERTY("MaxOffset", Compacter->CompactState->MaxOffset);
                                 PROPERTY("TopicData (size)", Compacter->CompactState->TopicData.size());
                                 PROPERTY("LastProcessedOffset", Compacter->CompactState->LastProcessedOffset);
-                                PROPERTY("OffsetToCommit", Compacter->CompactState->OffsetToCommit);
                                 PROPERTY("CommitCookie", Compacter->CompactState->CommitCookie);
                                 PROPERTY("FirstHeadOffset", Compacter->CompactState->FirstHeadOffset);
                                 PROPERTY("FirstHeadPartNo", Compacter->CompactState->FirstHeadPartNo);

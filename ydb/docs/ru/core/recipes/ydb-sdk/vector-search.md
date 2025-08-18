@@ -132,7 +132,11 @@
     ```
 
 - C++
+{% note info %}
 
+В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
+
+{% endnote %}
     ```cpp
     std::string ConvertVectorToBytes(const std::vector<float>& vector)
     {

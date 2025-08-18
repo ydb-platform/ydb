@@ -6,7 +6,7 @@ import pytest
 import uuid
 import yatest
 
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RollingUpgradeAndDowngradeFixture, RestartToAnotherVersionFixture
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RollingUpgradeAndDowngradeFixture, RestartToAnotherVersionFixture, string_version_to_tuple
 
 
 class Workload:
@@ -105,9 +105,12 @@ class Workload:
                 runner.result()
 
 
+MIN_SUPPORTED_VERSION = "stable-25-1-4"
+
+
 def skip_if_unsupported(versions):
-    if min(versions) < (25, 1, 4):
-        pytest.skip("Only available since 25-1-4")
+    if min(versions) < string_version_to_tuple(MIN_SUPPORTED_VERSION):
+        pytest.skip(f"Only available since {MIN_SUPPORTED_VERSION}")
 
 
 class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
@@ -148,9 +151,9 @@ class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         # create topic with a version that supports cleanup-policy=compact
-        start_version_indices = [i for i, v in enumerate(self.versions) if not (v < (25, 1, 4))]
+        start_version_indices = [i for i, v in enumerate(self.versions) if not (v < string_version_to_tuple(MIN_SUPPORTED_VERSION))]
         if not start_version_indices:
-            pytest.skip("Topic may be created only since 25-1-4")
+            pytest.skip(f"Topic may be created only since {MIN_SUPPORTED_VERSION}")
         assert self.current_binary_paths_index is not None
         self.current_binary_paths_index = start_version_indices[0]
 

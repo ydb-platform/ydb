@@ -1,15 +1,18 @@
 from collections import defaultdict
 import subprocess
 import signal
+import stat
 import os
 import time
 import urllib.request
 import unittest
+import tempfile
+from library.python import resource
 import ydb
 
 
 class Workload(unittest.TestCase):
-    def __init__(self, endpoint, database, bootstrap, test_topic_path, target_topic_path, workload_consumer_name, num_workers):
+    def __init__(self, endpoint, database, bootstrap, test_topic_path, target_topic_path, workload_consumer_name, num_workers, duration):
         self.endpoint = endpoint
         self.database = database
         self.bootstrap = bootstrap
@@ -18,18 +21,27 @@ class Workload(unittest.TestCase):
         self.workload_consumer_name = workload_consumer_name
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.num_workers = num_workers
+        self.duration = duration
+        self._unpack_resource('ydb_cli')
+        self._unpack_resource("e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar")
+
+    def _unpack_resource(self, name):
+        self.working_dir = os.path.join(tempfile.gettempdir(), name)
+        os.makedirs(self.working_dir, exist_ok=True)
+        res = resource.find(name)
+        path_to_unpack = os.path.join(self.working_dir, name)
+        with open(path_to_unpack, "wb") as f:
+            f.write(res)
+
+        st = os.stat(path_to_unpack)
+        os.chmod(path_to_unpack, st.st_mode | stat.S_IEXEC)
+        if name == "ydb_cli":
+            self.cli_path = path_to_unpack
+        elif name == "e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar":
+            self.jar_path = path_to_unpack
+
 
     def loop(self):
-        JAR_FILE_LINK = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"
-        JAR_FILE_NAME = "e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"
-        TEST_FILES_DIRECTORY = "./test-files/"
-
-        print(f"Downloading file: {JAR_FILE_LINK}")
-
-        if not os.path.exists(TEST_FILES_DIRECTORY):
-            os.makedirs(TEST_FILES_DIRECTORY)
-        urllib.request.urlretrieve(JAR_FILE_LINK, TEST_FILES_DIRECTORY + JAR_FILE_NAME)
-
         workloadConsumerName = self.workload_consumer_name
         checkerConsumer = "targetCheckerConsumer"
 
@@ -43,16 +55,16 @@ class Workload(unittest.TestCase):
 
         print("Running workload topic run")
         processes = [
-            subprocess.Popen(["ydb", "-e", self.endpoint, "-d", self.database, "workload", "topic", "run", "write", "--topic", self.test_topic_path, "-s", "10", "--message-rate", "100"])
+            subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "workload", "topic", "run", "write", "--topic", self.test_topic_path, "-s", "10", "--message-rate", "100"])
         ]
         print("NumWorkers: ", self.num_workers)
         for i in range(self.num_workers):
-            processes.append(subprocess.Popen(["ya", "tool", "java", "-jar", "./test-files/e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar", self.bootstrap, f"streams-store-{i}"]),)
+            processes.append(subprocess.Popen(["ya", "tool", "java", "-jar", self.jar_path, self.bootstrap, f"streams-store-{i}"]),)
         processes[0].wait()
 
         print("-----------------")
-        print("Waiting for 120 sec")
-        time.sleep(120)
+        print(f"Waiting for {self.duration} sec")
+        time.sleep(self.duration)
 
         print("Killing processes")
         for i in range(1, self.num_workers + 1):

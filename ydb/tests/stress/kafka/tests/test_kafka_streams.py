@@ -9,8 +9,10 @@ from ydb.tests.library.stress.fixtures import StressFixture
 class TestYdbTopicWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
+        port_manager = yatest.common.network.PortManager()
+        self.kafka_api_port = port_manager.get_port()
         yield from self.setup_cluster(
-            kafka_api_port=9092,
+            kafka_api_port=self.kafka_api_port ,
             extra_feature_flags={
                 "enable_kafka_native_balancing": True,
                 "enable_kafka_transactions": True
@@ -22,9 +24,10 @@ class TestYdbTopicWorkload(StressFixture):
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
             "--database", self.database,
-            "--bootstrap", "http://localhost:9092",
-            "--sourcePath", "test-topic",
-            "--targetPath", "target-topic",
+            "--bootstrap", f"http://localhost:{self.kafka_api_port}",
+            "--source-path", "test-topic",
+            "--target-path", "target-topic",
             "--consumer", "workload-consumer-0",
-            "--numWorkers", "2"
+            "--num-workers", "2",
+            "--duration", "120"
         ])

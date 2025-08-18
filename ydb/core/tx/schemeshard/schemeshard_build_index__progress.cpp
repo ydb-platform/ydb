@@ -2189,119 +2189,26 @@ public:
     }
 };
 
-struct TSchemeShard::TIndexBuilder::TTxReplyValidateUniqueIndex: public TSchemeShard::TIndexBuilder::TTxReply {
-private:
-    TEvDataShard::TEvValidateUniqueIndexResponse::TPtr Response;
-
-public:
-    explicit TTxReplyValidateUniqueIndex(TSelf* self, TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response)
-        : TTxReply(self, TIndexBuildId(response->Get()->Record.GetId()))
-        , Response(response)
+struct TSchemeShard::TIndexBuilder::TTxReplyValidateUniqueIndex: public TTxShardReply<TEvDataShard::TEvValidateUniqueIndexResponse> {
+    TTxReplyValidateUniqueIndex(TSelf* self, TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response)
+        : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
     }
 
-    void OnShardSuccess(NIceDb::TNiceDb&, TIndexBuildInfo&, TIndexBuildInfo::TShardStatus& shardStatus) {
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
         const auto& record = Response->Get()->Record;
+        TTabletId shardId = TTabletId(record.GetTabletId());
+        TShardIdx shardIdx = Self->GetShardIdx(shardId);
+        TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+
         if (const TString& key = record.GetFirstIndexKey()) {
             shardStatus.Range.From = TSerializedCellVec(key);
         }
         if (const TString& key = record.GetLastIndexKey()) {
             shardStatus.Range.To = TSerializedCellVec(key);
         }
-    }
 
-    void OnShardError(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo, TIndexBuildInfo::TShardStatus& shardStatus, TTabletId shardId, TShardIdx shardIdx) {
-        Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
-            << "One of the index shards report " << shardStatus.Status << " " << shardStatus.DebugMessage
-            << " at validation stage, process has to be canceled"
-            << ", shardId: " << shardId
-            << ", shardIdx: " << shardIdx);
-        ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
-    }
-
-    bool DoExecute([[maybe_unused]] TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
-        const auto& record = Response->Get()->Record;
-        TTabletId shardId = TTabletId(record.GetTabletId());
-        TShardIdx shardIdx = Self->GetShardIdx(shardId);
-
-        LOG_N("TTxReply : TEvValidateUniqueIndexResponse, id# " << BuildId
-            << ", shardId# " << shardId
-            << ", shardIdx# " << shardIdx);
-
-        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
-        if (!buildInfoPtr) {
-            return true;
-        }
-
-        auto& buildInfo = *buildInfoPtr->Get();
-        LOG_D("TTxReply : TEvValidateUniqueIndexResponse"
-            << ", TIndexBuildInfo: " << buildInfo
-            << ", record: " << record.ShortDebugString()
-            << ", shardId# " << shardId
-            << ", shardIdx# " << shardIdx);
-
-        if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
-            LOG_I("TTxReply : TEvValidateUniqueIndexResponse superfluous event, id# " << BuildId);
-            return true;
-        }
-
-        if (!buildInfo.InProgressShards.contains(shardIdx)) {
-            LOG_N("TTxReply : TEvValidateUniqueIndexResponse superfluous shard event, id# " << BuildId
-                << ", TIndexBuildInfo: " << buildInfo);
-            return true;
-        }
-
-        TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
-        auto actualSeqNo = std::pair<ui64, ui64>(Self->Generation(), shardStatus.SeqNoRound);
-        auto recordSeqNo = std::pair<ui64, ui64>(record.GetRequestSeqNoGeneration(), record.GetRequestSeqNoRound());
-
-        if (actualSeqNo != recordSeqNo) {
-            LOG_D("TTxReply : TEvValidateUniqueIndexResponse ignore response message by seqNo"
-                << ", TIndexBuildInfo: " << buildInfo
-                << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
-                << ", record: " << record.ShortDebugString());
-            Y_ENSURE(actualSeqNo > recordSeqNo);
-            return true;
-        }
-
-        NIceDb::TNiceDb db(txc.DB);
-
-        auto stats = GetMeteringStats();
-        shardStatus.Processed += stats;
-        buildInfo.Processed += stats;
-
-        Self->PersistBuildIndexProcessed(db, buildInfo);
-
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(record.GetIssues(), issues);
-        if (issues) {
-            shardStatus.DebugMessage = issues.ToString();
-        }
-        shardStatus.Status = record.GetStatus();
-
-        Self->IndexBuildPipes.Close(BuildId, shardId, ctx);
-
-        bool erased = buildInfo.InProgressShards.erase(shardIdx);
-        Y_ENSURE(erased);
-
-        if (shardStatus.Status == NKikimrIndexBuilder::EBuildStatus::DONE) {
-            buildInfo.DoneShards.emplace_back(shardIdx);
-            OnShardSuccess(db, buildInfo, shardStatus);
-
-        } else if (shardStatus.Status == NKikimrIndexBuilder::EBuildStatus::ABORTED) {
-            // datashard gracefully rebooted, reschedule shard
-            buildInfo.ToUploadShards.emplace_front(shardIdx);
-        } else {
-            OnShardError(db, buildInfo, shardStatus, shardId, shardIdx);
-        }
         Self->PersistBuildIndexShardRange(db, BuildId, shardIdx, shardStatus);
-        Progress(BuildId);
-
-        return true;
-    }
-
-    TMeteringStats GetMeteringStats() const {
-        return Response->Get()->Record.GetMeteringStats();
     }
 };
 

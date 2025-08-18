@@ -19,7 +19,7 @@ class TGenericDescribeTransformer : public TGraphTransformerBase {
         std::unordered_map<TGenericState::TTableAddress, TTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
 
 public:
-    TGenericDescribeTransformer(TGenericState::TPtr state);
+    explicit TGenericDescribeTransformer(TGenericState::TPtr state);
 
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;

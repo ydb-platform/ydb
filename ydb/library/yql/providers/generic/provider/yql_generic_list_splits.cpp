@@ -1,5 +1,5 @@
 #include "yql_generic_provider_impl.h"
-#include "yql_generic_list.h"
+#include "yql_generic_list_splits.h"
 
 #include <library/cpp/json/json_reader.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
@@ -50,7 +50,7 @@ void FillColumns(NConnector::NApi::TSelect& select, const TGenReadTable& reader,
 
         const auto& exp = rowType->Cast<TStructExprType>()->GetItems();
 
-        for(auto item : exp) {
+        for (auto item : exp) {
             auto column = items->Add()->mutable_column();
             column->mutable_name()->assign(item->GetName());
             auto type = NConnector::GetColumnTypeByName(schema, TString(item->GetName()));
@@ -84,8 +84,10 @@ IGraphTransformer::TStatus TGenericListTransformer::DoTransform(TExprNode::TPtr 
 
     const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
         if (const auto maybeRead = TMaybeNode<TGenReadTable>(node)) {
-            return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
+            Y_ENSURE(maybeRead.Cast().DataSource().Category().Value() == GenericProviderName);
+            return true;
         }
+        
         return false;
     });
 
@@ -99,7 +101,7 @@ IGraphTransformer::TStatus TGenericListTransformer::DoTransform(TExprNode::TPtr 
 
             if (!table.first) {
                 ctx.AddError(TIssue(table.second.ToString()));
-                return TStatus::Error;;
+                return TStatus::Error;
             }
 
             NConnector::NApi::TSelect select;
@@ -127,7 +129,7 @@ IGraphTransformer::TStatus TGenericListTransformer::DoTransform(TExprNode::TPtr 
     handles.reserve(pendingTables.size());
     ListResponses_.reserve(pendingTables.size());
 
-    for (const auto& k : pendingTables) {
+    for (auto& k : pendingTables) {
         auto tIssues = ListTableFromConnector(k.first, std::move(k.second), handles);
         if (!tIssues.Empty()) {
             ctx.AddError(TIssue(tIssues.ToString()));
@@ -197,7 +199,7 @@ TIssues TGenericListTransformer::ListTableFromConnector(const TGenericState::TTa
 
                 for (const auto& srcIssue : drainerResult.Issues) {
                     dstIssue.AddSubIssue(MakeIntrusive<TIssue>(srcIssue));
-                };
+                }
 
                 desc->Issues.AddIssue(std::move(dstIssue));
                 promise.SetValue();
@@ -225,8 +227,10 @@ IGraphTransformer::TStatus TGenericListTransformer::DoApplyAsyncChanges(TExprNod
 
     const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
         if (const auto maybeRead = TMaybeNode<TGenReadTable>(node)) {
-            return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
+            Y_ENSURE(maybeRead.Cast().DataSource().Category().Value() == GenericProviderName);
+            return true;
         }
+
         return false;
     });
 

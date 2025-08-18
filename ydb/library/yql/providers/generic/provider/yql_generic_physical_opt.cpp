@@ -1,6 +1,6 @@
 #include "yql_generic_provider_impl.h"
 #include "yql_generic_predicate_pushdown.h"
-#include "yql_generic_list.h"
+#include "yql_generic_list_splits.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -212,12 +212,12 @@ namespace NYql {
     } // namespace
 
     THolder<IGraphTransformer> CreateGenericPhysicalOptProposalTransformer(TGenericState::TPtr state) {
-        auto a = TAutoPtr<IGraphTransformer>(new TGenericPhysicalOptProposalTransformer(state));
-        auto b = TAutoPtr<IGraphTransformer>(new TGenericListTransformer(state));
+        auto physicalOptProposal = TAutoPtr<IGraphTransformer>(new TGenericPhysicalOptProposalTransformer(state));
+        auto listSplits = TAutoPtr<IGraphTransformer>(new TGenericListTransformer(state));
 
         return TTransformationPipeline(state->Types)
-           .Add(a, "PushFilters")
-           .Add(b, "ListSplits")
+           .Add(physicalOptProposal, "PushFilters")
+           .Add(listSplits, "ListSplits")
            .Build();
 
     }

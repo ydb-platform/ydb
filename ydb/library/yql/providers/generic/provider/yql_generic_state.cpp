@@ -17,7 +17,7 @@ namespace NYql {
         return std::make_pair<TTableMeta*, TIssues>(nullptr, std::move(issues));
     }
 
-    bool TGenericState::AttachSplitsToTable(const TTableAddress& tableAddress, const std::vector<NYql::NConnector::NApi::TSplit>& splits) {
+    bool TGenericState::AttachSplitsToTable(const TTableAddress& tableAddress, std::vector<NYql::NConnector::NApi::TSplit>& splits) {
         auto result = Tables_.FindPtr(tableAddress);
 
         if (!result) {

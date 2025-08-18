@@ -34,6 +34,7 @@ struct TExecutionOptions {
     std::vector<FederatedQuery::ConnectionContent> Connections;
     std::vector<FederatedQuery::BindingContent> Bindings;
     bool UseTemplates = false;
+    bool RunAsDeamon = false;
 
     ui32 LoopCount = 1;
     TDuration QueryDelay;
@@ -101,7 +102,7 @@ struct TExecutionOptions {
     }
 
     void Validate(const TRunnerOptions& runnerOptions) const {
-        if (Queries.empty() && Connections.empty() && Bindings.empty() && !runnerOptions.FqSettings.MonitoringEnabled && !runnerOptions.FqSettings.GrpcEnabled) {
+        if (Queries.empty() && Connections.empty() && Bindings.empty() && !runnerOptions.FqSettings.MonitoringEnabled && !runnerOptions.FqSettings.GrpcEnabled && !RunAsDeamon) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
         ValidateOptionsSizes(runnerOptions);
@@ -280,7 +281,8 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
         }
     }
 
-    if (runnerOptions.FqSettings.MonitoringEnabled || runnerOptions.FqSettings.GrpcEnabled) {
+    if (executionOptions.RunAsDeamon ||
+        ((runnerOptions.FqSettings.MonitoringEnabled || runnerOptions.FqSettings.GrpcEnabled) && executionOptions.Queries.empty())) {
         RunAsDaemon();
     }
 
@@ -550,6 +552,10 @@ protected:
                 RunnerOptions.FqSettings.SharedComputeDatabases.emplace_back(TExternalDatabase::Parse(option->CurVal(), "YDB_COMPUTE_TOKEN"));
             });
         options.MutuallyExclusive("single-compute-db", "shared-compute-db");
+
+        options.AddLongOption("hold", "Hold fqrun process after finishing all queries")
+            .NoArgument()
+            .SetFlag(&ExecutionOptions.RunAsDeamon);
 
         RegisterKikimrOptions(options, RunnerOptions.FqSettings);
     }

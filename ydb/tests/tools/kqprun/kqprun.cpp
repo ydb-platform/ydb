@@ -46,6 +46,7 @@ struct TExecutionOptions {
     TString SchemeQuery;
     std::unordered_map<TString, Ydb::TypedValue> Params;
     bool UseTemplates = false;
+    bool RunAsDeamon = false;
 
     ui32 LoopCount = 1;
     TDuration QueryDelay;
@@ -130,7 +131,7 @@ struct TExecutionOptions {
     }
 
     void Validate(const TRunnerOptions& runnerOptions) const {
-        if (!SchemeQuery && ScriptQueries.empty() && !runnerOptions.YdbSettings.MonitoringEnabled && !runnerOptions.YdbSettings.GrpcEnabled) {
+        if (!SchemeQuery && ScriptQueries.empty() && !runnerOptions.YdbSettings.MonitoringEnabled && !runnerOptions.YdbSettings.GrpcEnabled && !RunAsDeamon) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
 
@@ -406,7 +407,8 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
         }
     }
 
-    if (runnerOptions.YdbSettings.MonitoringEnabled || runnerOptions.YdbSettings.GrpcEnabled) {
+    if (executionOptions.RunAsDeamon ||
+        ((runnerOptions.YdbSettings.MonitoringEnabled || runnerOptions.YdbSettings.GrpcEnabled) && executionOptions.ScriptQueries.empty() && !executionOptions.SchemeQuery)) {
         RunAsDaemon();
     }
 
@@ -888,6 +890,10 @@ protected:
         options.AddLongOption("disable-disk-mock", "Disable disk mock on single node cluster")
             .NoArgument()
             .SetFlag(&RunnerOptions.YdbSettings.DisableDiskMock);
+
+        options.AddLongOption("hold", "Hold kqprun process after finishing all -s and -p queries")
+            .NoArgument()
+            .SetFlag(&ExecutionOptions.RunAsDeamon);
 
         RegisterKikimrOptions(options, RunnerOptions.YdbSettings);
     }

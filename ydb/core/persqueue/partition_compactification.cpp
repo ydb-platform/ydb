@@ -653,40 +653,48 @@ void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
 
 void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
     Y_ABORT_UNLESS(UpdatedKeys || DeletedKeys);
-    auto iterChng = UpdatedKeys.begin();
-    auto iterDel = DeletedKeys.begin();
+
+    auto itUpdated = UpdatedKeys.begin();
+    auto itDeleted = DeletedKeys.begin();
 
     std::deque<TDataKey> oldDataKeys = std::move(PartitionActor->DataKeysBody);
-    auto iterExst = oldDataKeys.begin();
+    auto itExisting = oldDataKeys.begin();
+
     PartitionActor->DataKeysBody.clear();
+
     ui64 currCumulSize = 0;
     ui64 zeroedKeys = 0;
     ui64 sizeDiff = 0;
 
     auto addCurrentKey = [&]() {
-        iterExst->CumulativeSize = currCumulSize;
-        currCumulSize += iterExst->Size;
-        PartitionActor->DataKeysBody.emplace_back(std::move(*iterExst));
+        itExisting->CumulativeSize = currCumulSize;
+        currCumulSize += itExisting->Size;
+        PartitionActor->DataKeysBody.emplace_back(std::move(*itExisting));
     };
 
-    while (iterExst != oldDataKeys.end()) {
-        if (iterChng != UpdatedKeys.end() && iterChng->first == iterExst->Key) {
-            sizeDiff += iterExst->Size - iterChng->second;
-            iterExst->Size = iterChng->second;
-            addCurrentKey();
-            iterChng++;
-        } else if (iterDel != DeletedKeys.end() && iterExst->Key == *iterDel) {
+    while (itExisting != oldDataKeys.end()) {
+        if (itDeleted != DeletedKeys.end() && itExisting->Key == *itDeleted) {
             ++zeroedKeys;
-            sizeDiff += iterExst->Size;
-            iterDel++;
+            sizeDiff += itExisting->Size;
+            if (*itDeleted == itUpdated->first) {
+                itUpdated++;
+            }
+            itDeleted++;
+        } else if (itUpdated != UpdatedKeys.end() && itUpdated->first == itExisting->Key) {
+            sizeDiff += itExisting->Size - itUpdated->second;
+            itExisting->Size = itUpdated->second;
+            addCurrentKey();
+            itUpdated++;
         } else {
-            Y_ABORT_UNLESS(iterChng == UpdatedKeys.end() || iterChng->first.GetOffset() > iterExst->Key.GetOffset()
-                || iterChng->first.GetOffset() == iterExst->Key.GetOffset() && iterChng->first.GetPartNo() > iterExst->Key.GetPartNo());
-            Y_ABORT_UNLESS(iterDel == DeletedKeys.end() || iterDel->GetOffset() > iterExst->Key.GetOffset()
-                || iterDel->GetOffset() == iterExst->Key.GetOffset() && iterDel->GetPartNo() > iterExst->Key.GetPartNo());
+            Y_ABORT_UNLESS(itUpdated == UpdatedKeys.end() || itUpdated->first.GetOffset() > itExisting->Key.GetOffset()
+                || itUpdated->first.GetOffset() == itExisting->Key.GetOffset() && itUpdated->first.GetPartNo() > itExisting->Key.GetPartNo(),
+                "offset: %" PRIu64 " VS %" PRIu64 " && partNo: %" PRIu64 " VS %" PRIu64, itUpdated->first.GetOffset(), itExisting->Key.GetOffset(), itUpdated->first.GetPartNo(), itExisting->Key.GetPartNo());
+            Y_ABORT_UNLESS(itDeleted == DeletedKeys.end() || itDeleted->GetOffset() > itExisting->Key.GetOffset()
+                || itDeleted->GetOffset() == itExisting->Key.GetOffset() && itDeleted->GetPartNo() > itExisting->Key.GetPartNo(),
+                "offset: %" PRIu64 " VS %" PRIu64 " && partNo: %" PRIu64 " VS %" PRIu64, itDeleted->GetOffset(), itExisting->Key.GetOffset(), itDeleted->GetPartNo(), itExisting->Key.GetPartNo());
             addCurrentKey();
         }
-        iterExst++;
+        itExisting++;
     }
 
     Y_ENSURE(PartitionActor->DataKeysBody.size() == oldDataKeys.size() - zeroedKeys);
@@ -695,6 +703,7 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
     PartitionActor->StartOffset = Max(
                     PartitionActor->StartOffset,
                     PartitionActor->DataKeysBody.front().Key.GetOffset() + (ui32)(PartitionActor->DataKeysBody.front().Key.GetPartNo() > 0));
+
     UpdatedKeys.clear();
     DeletedKeys.clear();
 }

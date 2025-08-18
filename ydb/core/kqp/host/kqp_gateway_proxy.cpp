@@ -641,12 +641,7 @@ public:
 
     TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
         try {
-            auto dirname = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath).first;
-            if (!dirname.empty() && !IsStartWithSlash(dirname)) {
-                dirname = JoinPath({GetDatabase(), dirname});
-            }
-
-            NKikimrSchemeOpConstraint::TSetColumnConstraintsRequest setConstraintRequestSettings;
+            NKikimrSchemeOp::TSetColumnConstraintsRequest setConstraintRequestSettings;
             for (auto& setting : settings) {
                 auto* add = setConstraintRequestSettings.AddConstraintSettings();
                 add->Swap(&setting);
@@ -656,7 +651,6 @@ public:
 
             NKikimrSchemeOp::TModifyScheme modifyScheme;
             *modifyScheme.MutableSetConstraintRequest() = std::move(setConstraintRequestSettings);
-            modifyScheme.SetWorkingDir(std::move(dirname));
             modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
 
             return Gateway->ModifyScheme(std::move(modifyScheme));

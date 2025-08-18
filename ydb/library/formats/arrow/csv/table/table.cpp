@@ -21,7 +21,14 @@ arrow::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::
             continue;
         }
 
-        convertedColumns.emplace_back(TColumnInfo{TString{column.Name}, *arrowType, *csvArrowType});
+        auto tp = ExtractType(column.Type);
+        TColumnInfo columnInfo{TString{column.Name}, *arrowType, *csvArrowType};
+        if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Decimal) {
+            columnInfo.Precision = tp.GetDecimal().Precision;
+            columnInfo.Scale = tp.GetDecimal().Scale;
+        }
+
+        convertedColumns.emplace_back(columnInfo);
         if (NYdb::TTypeParser(column.Type).GetKind() != NYdb::TTypeParser::ETypeKind::Optional || column.NotNull.value_or(false)) {
             notNullColumns.emplace(column.Name);
         }

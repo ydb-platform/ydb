@@ -35,8 +35,10 @@ TPartitionCompaction::TPartitionCompaction(ui64 firstUncompactedOffset, ui64 par
 
 void TPartitionCompaction::TryCompactionIfPossible() {
     Y_ENSURE(PartitionActor->Config.GetEnableCompactification());
-    if (PartitionActor->CompacterPartitionRequestInflight || PartitionActor->CompacterKvRequestInflight)
+    if (PartitionActor->CompacterPartitionRequestInflight || PartitionActor->CompacterKvRequestInflight) {
         return;
+    }
+
     FirstUncompactedOffset = Max(PartitionActor->StartOffset, FirstUncompactedOffset);
     switch (Step) {
     case EStep::PENDING:
@@ -80,7 +82,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvError::TPtr& ev) {
 
 void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
     PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
-              << PartitionActor->Partition << " proxy response cookie: " << ev->Get()->Cookie);
+            << PartitionActor->Partition << " proxy response cookie: " << ev->Get()->Cookie);
     if (ev->Get()->Cookie != PartRequestCookie) {
         return;
     }
@@ -89,6 +91,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
         case EStep::READING: {
             Y_ABORT_UNLESS(ReadState);
             processResponseResult = ReadState->ProcessResponse(ev);
+            FirstUncompactedOffset = ReadState->OffsetToRead;
             break;
         }
         case EStep::COMPACTING: {
@@ -106,6 +109,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
     }
     if (!processResponseResult) {
         PartitionActor->Send(PartitionActor->Tablet, new TEvents::TEvPoisonPill());
+        return;
     }
     TryCompactionIfPossible();
 }
@@ -142,30 +146,28 @@ TPartitionCompaction::TReadState::TReadState(ui64 firstOffset, TPartition* parti
         LastOffset = firstHeadOffset;
     }
 }
-ui64 CheckResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
-    ui64 ret = 0;
-    if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
-        ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK) {
-            ++ret; // Status is OK
-    }
-    else {
-        return ret;
-    }
-    if (ev->Get()->Response->GetPartitionResponse().HasCmdReadResult() &&
-        ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().ResultSize() > 0)
-    {
-        ++ret; // Has partition response;
-    }
-    return ret;
+
+bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
+    return ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
+        ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK;
 }
+
+bool IsReadResponse(const TEvPQ::TEvProxyResponse::TPtr& ev) {
+    return ev->Get()->Response->GetPartitionResponse().HasCmdReadResult();
+}
+
+bool IsEmptyReadResponse(const TEvPQ::TEvProxyResponse::TPtr& ev) {
+    return !ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().ResultSize();
+}
+
 bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
-    if (CheckResponse(ev) >= 2) // Expect to have OK status and partition response;
-    {
-        // empty?
-    } else {
+    if (!IsSucess(ev) || !IsReadResponse(ev)) {
         return false;
-        // Will retry the request next;
     }
+    if (IsEmptyReadResponse(ev)) {
+        return true;
+    }
+
     const auto& readResult = ev->Get()->Response->GetPartitionResponse().GetCmdReadResult();
     for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
         auto& res = readResult.GetResult(i);
@@ -237,6 +239,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
             NextPartNo = LastMessage->GetPartNo() + 1;
         }
     }
+
     return true;
 }
 
@@ -377,8 +380,7 @@ void TPartitionCompaction::TCompactState::SaveLastBatch() {
 
 
 bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
-    auto status = CheckResponse(ev);
-    if (!status) {
+    if (!IsSucess(ev)) {
         return false;
         // Will retry the request next;
     }
@@ -387,9 +389,11 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         CommitCookie = 0;
         return true;
     }
-    if (status < 2) {
-        return false; //Expect to have partiton response unless this was a commit-ack;
+
+    if (!IsReadResponse(ev) || IsEmptyReadResponse(ev)) {
+        return true;
     }
+
     const auto& readResult = ev->Get()->Response->MutablePartitionResponse()->GetCmdReadResult();
 
     ui64 lastExpectedOffset = (KeysIter + 1 == DataKeysBody.end())

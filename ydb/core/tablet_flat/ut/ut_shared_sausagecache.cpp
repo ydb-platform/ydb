@@ -230,15 +230,15 @@ void SetupSharedCache(TMyEnvBase& env, ui64 limit = 8_MB, bool resetMemoryLimit 
     }
 }
 
+// simulates other tablet shared cache usage
 void WakeupSharedCache(TMyEnvBase& env) {
     env->Send(MakeSharedPageCacheId(), TActorId{}, new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCManual)));
-    WaitEvent(env, TKikimrEvents::TSystem::Wakeup);
+    env.WaitForWakeUp();
 }
 
 void DoReadRows(TMyEnvBase& env, TTxReadRows* read, bool retry = false) {
     env.SendSync(new NFake::TEvExecute{ read }, retry);
 
-    // simulate other tablet shared cache usage
     WakeupSharedCache(env);
 }
 

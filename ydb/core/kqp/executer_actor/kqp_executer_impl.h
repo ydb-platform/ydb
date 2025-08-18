@@ -144,8 +144,7 @@ public:
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
-        TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing(),
-        const TActorId checkpointCoordinatorId = {})
+        TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing())
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -169,7 +168,6 @@ public:
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , CheckpointCoordinatorId(checkpointCoordinatorId)
     {
         if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
             ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();

@@ -130,28 +130,6 @@ public:
         }
 
         ReadOnlyTx = IsReadOnlyTx();
-
-        bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig()
-            && QueryServiceConfig.GetCheckpointsConfig().GetEnabled()
-            && Request.SaveQueryPhysicalGraph;
-        if (enableCheckpointCoordinator) {
-            const NKikimrConfig::TCheckpointsConfig& checkpointsConfig = QueryServiceConfig.GetCheckpointsConfig();
-
-            auto stateLoadMode = FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT;
-            FederatedQuery::StreamingDisposition streamingDisposition;
-
-            TString executionId = userRequestContext->CurrentExecutionId;
-            CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
-                ::NFq::TCoordinatorId(userRequestContext->CurrentExecutionId, Generation),
-                NYql::NDq::MakeCheckpointStorageID(),
-                SelfId(),
-                checkpointsConfig,
-                counters->Counters->GetKqpCounters(),
-                NFq::NProto::TGraphParams(),
-                stateLoadMode,
-                streamingDisposition).Release());
-            LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId << ", generation " << generation);
-        }
     }
 
     bool CheckExecutionComplete() {
@@ -448,10 +426,6 @@ public:
         ExecuterSpan.EndOk();
 
         AlreadyReplied = true;
-        if (CheckpointCoordinatorId) {
-            Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
-            CheckpointCoordinatorId = TActorId{};
-        }
         PassAway();
     }
 
@@ -2036,6 +2010,7 @@ private:
         if (graphRestored) {
             RestoreTasksGraphInfo(TasksGraph, *Request.QueryPhysicalGraph);
         }
+        StartCheckpointCoordinator();
 
         size_t sourceScanPartitionsCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
@@ -2980,6 +2955,10 @@ private:
             Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
         }
 
+        if (CheckpointCoordinatorId) {
+            Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
+            CheckpointCoordinatorId = TActorId{};
+        }
         TBase::PassAway();
     }
 
@@ -3051,6 +3030,29 @@ private:
 
     void Handle(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues::TPtr&) {
         LOG_D("TEvRaiseTransientIssues");
+    }
+
+    void StartCheckpointCoordinator() {
+        bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig()
+            && QueryServiceConfig.GetCheckpointsConfig().GetEnabled()
+            && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr);
+        if (!enableCheckpointCoordinator) {
+            return;
+        }
+        const NKikimrConfig::TCheckpointsConfig& checkpointsConfig = QueryServiceConfig.GetCheckpointsConfig();
+
+        FederatedQuery::StreamingDisposition streamingDisposition;
+        TString executionId = TasksGraph.GetMeta().UserRequestContext->CurrentExecutionId;
+        CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
+            ::NFq::TCoordinatorId(executionId, Generation),
+            NYql::NDq::MakeCheckpointStorageID(),
+            SelfId(),
+            checkpointsConfig,
+            Counters->Counters->GetKqpCounters(),
+            NFq::NProto::TGraphParams(),
+            FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
+            streamingDisposition).Release());
+        LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId << ", generation " << Generation);
     }
 
 private:
@@ -3139,7 +3141,6 @@ private:
     const TDuration WaitCAStatsTimeout;
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
-    TActorId CheckpointCoordinatorId;
     ui64 Generation = 0;
 };
 

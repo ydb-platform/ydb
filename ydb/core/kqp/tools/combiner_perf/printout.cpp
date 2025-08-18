@@ -65,11 +65,24 @@ TDuration GetThreadCPUTimeDelta(const TDuration startTime)
     return current - startTime;
 }
 
+TDuration MergeMinTime(TDuration src, TDuration dst)
+{
+    if (!src) {
+        return dst;
+    }
+    else if (!dst) {
+        return src;
+    }
+    else {
+        return Min(src, dst);
+    }
+}
+
 void MergeRunResults(const TRunResult& src, TRunResult& dst)
 {
-    dst.ResultTime = Min(src.ResultTime, dst.ResultTime);
-    dst.GeneratorTime = Min(src.GeneratorTime, dst.GeneratorTime);
-    dst.ReferenceTime = Min(src.ReferenceTime, dst.ReferenceTime);
+    dst.ResultTime = MergeMinTime(src.ResultTime, dst.ResultTime);
+    dst.GeneratorTime = MergeMinTime(src.GeneratorTime, dst.GeneratorTime);
+    dst.ReferenceTime = MergeMinTime(src.ReferenceTime, dst.ReferenceTime);
 
     dst.MaxRSSDelta = Max(src.MaxRSSDelta, dst.MaxRSSDelta);
     dst.ReferenceMaxRSSDelta = Max(src.ReferenceMaxRSSDelta, dst.ReferenceMaxRSSDelta);

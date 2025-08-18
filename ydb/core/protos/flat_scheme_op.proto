@@ -27,7 +27,6 @@ import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_value.proto";
-import "ydb/core/protos/set_constraint.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
@@ -1741,6 +1740,45 @@ message TDropColumnBuild {
     optional uint64 BuildIndexId = 3;
 }
 
+// Begin Set Column Constraints
+
+message TSetColumnConstraintSettings {
+    enum EConstraint {
+        NOT_NULL = 1;
+    }
+
+    optional string ColumnName = 1;
+    optional EConstraint Constraint = 2;
+}
+
+message TSetColumnConstraintsRequest {
+    optional string TablePath = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+}
+
+message TSetColumnConstraintsLock {
+    optional string TablePath = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+}
+
+message TSetColumnConstraintsCheck {
+    optional string TablePath = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+}
+
+message TSetColumnConstraintsFinalize {
+    enum EStatus {
+        SUCCESS = 0;
+        COLUMN_CONSTRAINT_VIOLATION = 1;
+    }
+
+    optional string TablePath = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+    optional EStatus Status = 3;
+}
+
+// End Set Column Constraints
+
 // Request for scheme modification
 // Has only one of the operations
 message TModifyScheme {
@@ -1856,7 +1894,7 @@ message TModifyScheme {
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
-    optional NKikimrSchemeOpConstraint.TSetColumnConstraintsRequest SetConstraintRequest = 86;
+    optional TSetColumnConstraintsRequest SetConstraintRequest = 86;
 
     // Some entries are grouped by semantics, so are out of order
 }

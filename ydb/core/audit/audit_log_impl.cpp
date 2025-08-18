@@ -1,3 +1,6 @@
+#include <util/charset/utf8.h>
+#include <util/string/hex.h>
+
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/logger/record.h>
@@ -11,6 +14,7 @@
 
 #include <ydb/core/base/events.h>
 
+#include "audit_log_impl.h"
 #include "audit_log_service.h"
 #include "audit_log.h"
 
@@ -72,7 +76,7 @@ void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBacken
                 log.data(),
                 log.length()
             ));
-        } catch (const yexception& e) {
+        } catch (const std::exception& e) {
             LOG_E("WriteLog: unable to write audit log (error: " << e.what() << ")");
         }
     }
@@ -143,7 +147,7 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
-            HFunc(TEvAuditLog::TEvWriteAuditLog, HandleWriteAuditLog);
+            hFunc(TEvAuditLog::TEvWriteAuditLog, HandleWriteAuditLog);
         default:
             HandleUnexpectedEvent(ev);
             break;
@@ -156,9 +160,12 @@ private:
         Die(ctx);
     }
 
-    void HandleWriteAuditLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ctx);
+    void EscapeNonUtf8LogParts(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
+        NKikimr::NAudit::EscapeNonUtf8LogParts(ev->Get()->Parts);
+    }
 
+    void HandleWriteAuditLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
+        EscapeNonUtf8LogParts(ev);
         for (auto& logBackends : LogBackends) {
             switch (logBackends.first) {
                 case NKikimrConfig::TAuditConfig::JSON:
@@ -203,6 +210,19 @@ THolder<NActors::IActor> CreateAuditWriter(TAuditLogBackends&& logBackends)
 {
     AUDIT_LOG_ENABLED.store(true);
     return MakeHolder<TAuditLogActor>(std::move(logBackends));
+}
+
+static void EscapeNonUtf8(TString& s) {
+    if (!IsUtf(s)) {
+        s = HexEncode(s);
+    }
+}
+
+void EscapeNonUtf8LogParts(TAuditLogParts& parts) {
+    for (auto& [k, v] : parts) {
+        EscapeNonUtf8(k);
+        EscapeNonUtf8(v);
+    }
 }
 
 }    // namespace NKikimr::NAudit

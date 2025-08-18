@@ -19,3 +19,7 @@ END()
 RECURSE(
     audit_config
 )
+
+RECURSE_FOR_TESTS(
+    ut
+)

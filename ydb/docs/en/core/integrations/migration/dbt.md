@@ -45,87 +45,96 @@ The {{ dbt‑ydb }} connector supports standard [{{ dbt }} data tests](https://d
 
 ### Documentation Generation
 
-dbt-ydb supports generating [documentation](https://docs.getdbt.com/docs/build/documentation) from dbt projects for YDB.
+{{ dbt‑ydb }} supports generating [documentation](https://docs.getdbt.com/docs/build/documentation) from {{ dbt }} projects for {{ ydb-short-name }}.
 
 ## Getting Started
 
-To get started with dbt on YDB, you will need:
+### Prerequisites
 
-- Python 3.10 or later.
-- dbt Core (1.8 or later).
-    Note: dbt Fusion (2.0) is currently not supported.
-- An existing {{ ydb-short-name }} cluster; single-node installation from [Quick Start guide](../../quickstart.md) will be sufficient.
+To get started with {{ dbt }} on  {{ ydb-short-name }}, you will need:
 
-To install dbt-ydb, you can run the following command:
+- Python 3.10 or later.
+- dbt Core (1.8 or later).
+- An existing {{ ydb-short-name }} cluster; a single‑node installation from the [Quick Start guide](../../quickstart.md) will be sufficient.
 
-``` text
+{% note info %}
+
+dbt Fusion (2.0) is currently not supported.
+
+{% endnote %}
+
+### Installation
+
+To install {{ dbt‑ydb }}, run the following command:
+
+```bash
 pip install dbt-ydb
 ```
 
-## Running the Example Project
+### Running the Example Project
 
-A ready-to-use [example project](https://github.com/ydb-platform/dbt-ydb/tree/main/examples/jaffle_shop) is included with the dbt-ydb connector to help you quickly test or explore dbt’s capabilities with YDB:
+A ready‑to‑use [example project](https://github.com/ydb-platform/dbt-ydb/tree/main/examples/jaffle_shop) is included with the {{ dbt‑ydb }} connector to help you quickly test or explore {{ dbt }}’s capabilities with {{ ydb-short-name }}:
 
 1. Clone the repository
 
-``` text
-git clone https://github.com/ydb-platform/dbt-ydb.git
-cd dbt-ydb/examples/jaffle_shop
-```
+   ```bash
+   git clone https://github.com/ydb-platform/dbt-ydb.git
+   cd dbt-ydb/examples/jaffle_shop
+   ```
 
-2. Configure the connection profile to your YDB in the `profiles.yml` file. Connection and authentication methods are described [here](https://github.com/ydb-platform/dbt-ydb?tab=readme-ov-file#profile-configuration). For a single-node installation from [Quick Start guide](../../quickstart.md), the file should look like this:
+2. Configure the connection profile to your {{ ydb-short-name }} in the `profiles.yml` file. Connection and authentication methods are described [here](https://github.com/ydb-platform/dbt-ydb?tab=readme-ov-file#profile-configuration). For a single‑node installation from [{#T}](../../quickstart.md), the file should look like this:
 
-``` text
-profile_name:
-  target: dev
-  outputs:
-    dev:
-      type: ydb
-      host: localhost # YDB host
-      port: 2136 # YDB port
-      database: /local # YDB database
-      schema: jaffle_shop
-```
+   ```yaml
+   profile_name:
+     target: dev
+     outputs:
+       dev:
+         type: ydb
+         host: localhost # YDB host
+         port: 2136 # YDB port
+         database: /local # YDB database
+         schema: jaffle_shop
+   ```
 
 3. Test the connection
 
-``` bash
-dbt debug
-```
+   ```bash
+   dbt debug
+   ```
 
 4. Load test data (seeds)
 
-``` bash
-dbt seed
-```
+   ```bash
+   dbt seed
+   ```
 
-This command will load CSV files from the `data/` directory into `raw_*` tables in YDB.
+   This command loads CSV files from the `data/` directory into `raw_*` tables in {{ ydb-short-name }}.
 
 5. Run models
 
-``` bash
-dbt run
-```
+   ```bash
+   dbt run
+   ```
 
-This will create tables and views based on SQL models from the `models/` directory.
+   This creates tables and views based on SQL models from the `models/` directory.
 
 6. Test data in models
 
-``` bash
-dbt test
-```
+   ```bash
+   dbt test
+   ```
 
-This will verify data quality according to defined rules.
+   This verifies data quality according to defined rules.
 
 7. Generate documentation
 
-``` bash
-dbt docs generate
-dbt docs serve
-```
+   ```bash
+   dbt docs generate
+   dbt docs serve
+   ```
 
-Project documentation will be available in your browser at: [http://localhost:8080](http://localhost:8080)
+   Project documentation will be available in your browser at http://localhost:8080.
 
 ## Next Steps
 
-Refer to the official [dbt documentation](https://docs.getdbt.com/docs/introduction) and public [dbt-ydb](https://github.com/ydb-platform/dbt-ydb) repository for additional information.
+Refer to the official [dbt documentation](https://docs.getdbt.com/docs/introduction) and the public [{{ dbt‑ydb }}](https://github.com/ydb-platform/dbt-ydb) repository for additional information.

@@ -85,10 +85,11 @@ class Workload(unittest.TestCase):
             messages_info = defaultdict(list)
             while True:
                 try:
-                    mess = reader.receive_message()
+                    mess = reader.receive_message(timeout=1)
                     messages_info[mess.partition_id].append([mess.partition_id, mess.seqno, mess.created_at])
                     reader.commit(mess)
-                except:
+                except TimeoutError:
+                    print("Have no new messages in a second")
                     return messages_info
 
     def create_topic(self, topic: str, consumers: list[str]):

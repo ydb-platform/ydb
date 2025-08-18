@@ -160,8 +160,9 @@ class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
         utils = Workload(self.driver, self.endpoint)
 
         utils.create_topic()
-        self.current_binary_paths_index = -1
-        self.change_cluster_version()  # current_binary_paths_index -> 0
+        if self.current_binary_paths_index != 0:
+            self.current_binary_paths_index = -1
+            self.change_cluster_version()  # current_binary_paths_index -> 0
 
         utils.run_stress_test(duration=20)
         self.change_cluster_version()

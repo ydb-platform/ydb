@@ -43,6 +43,9 @@ void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer*
 void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node);
 void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCursor* cursor);
 
+template <class TAce>
+[[nodiscard]] TError CheckAceCorrect(const TAce& ace);
+
 struct TSerializableAccessControlList
 {
     std::vector<TSerializableAccessControlEntry> Entries;
@@ -59,3 +62,7 @@ void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCurs
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NSecurityClient
+
+#define ACL_H
+#include "acl-inl.h"
+#undef ACL_H

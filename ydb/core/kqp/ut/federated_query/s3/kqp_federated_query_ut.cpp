@@ -2740,6 +2740,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
     Y_UNIT_TEST(TestBlockInsertNullColumn) {
         NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         config.MutableTableServiceConfig()->SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_FORCE);
         auto kikimr = NTestUtils::MakeKikimrRunner(config);
 

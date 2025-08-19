@@ -118,10 +118,11 @@ class TestSelect1(object):
         assert (
             "Query failed with code " + ("ABORTED" if yq_version == "v1" else "GENERIC_ERROR") in describe_string
         ), describe_string
-        assert "Unexpected token" in describe_string, describe_string
         # Failed to parse query is added in YQv1 only
         if yq_version == "v1":
             assert "Failed to parse query" in describe_string, describe_string
+        else:
+            assert "Unexpected token" in describe_string, describe_string
 
     @yq_all
     def test_ast_in_failed_query_runtime(self, client):

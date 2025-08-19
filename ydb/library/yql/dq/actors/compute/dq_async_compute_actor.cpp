@@ -776,6 +776,8 @@ private:
                 MetricsReporter.ReportInjectedToOutputsWatermark(*watermark);
                 WatermarksTracker.PopPendingWatermark();
             }
+            // sources or input channels was unpaused, trigger new poll
+            ResumeExecution(EResumeSource::CAWatermarkInject);
         }
 
         for (auto inputChannelId : ev->Get()->FinishedInputsWithWatermarks) {

@@ -1174,11 +1174,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
                 break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
                 TxProxyMon->ResolveKeySetFail->Inc();
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, ctx);
                 break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
                 TxProxyMon->ResolveKeySetFail->Inc();
@@ -1707,6 +1707,23 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
 
     const auto& resultSet = ev->Get()->Request->ResultSet;
 
+    auto parts = GetFullPath(GetModifyScheme());
+
+    if (AllOf(resultSet, [](const auto& result) {
+        return result.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
+    })) {
+        const TString errText = TStringBuilder()
+            << "Cannot resolve working dir, lookup error"
+            << " path# " << JoinPath(parts);
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << ", " << errText
+        );
+        TxProxyMon->ResolveKeySetFail->Inc();
+        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, errText);
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, nullptr, &issue, ctx);
+        return Die(ctx);
+    }
+
     const TVector<TString>* workingDir = nullptr;
     for (auto it = resultSet.rbegin(); it != resultSet.rend(); ++it) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
@@ -1721,8 +1738,6 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
             break;
         }
     }
-
-    auto parts = GetFullPath(GetModifyScheme());
 
     if (!workingDir || workingDir->size() >= parts.size()) {
         const TString errText = TStringBuilder()

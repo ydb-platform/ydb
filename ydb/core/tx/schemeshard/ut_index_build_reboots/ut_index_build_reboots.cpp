@@ -292,13 +292,14 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         BaseCaseWithDataColumns(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    Y_UNIT_TEST(DropIndex) {
+    void DropIndex(NKikimrSchemeOp::EIndexType indexType) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
                     TableDescription {
                       Name: "Table"
                       Columns { Name: "key"   Type: "Uint64" }
@@ -309,8 +310,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                     IndexDescription {
                       Name: "UserDefinedIndexByValue0"
                       KeyColumnNames: ["value0"]
+                      Type: %s
                     }
-                )");
+                )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
+
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -319,7 +322,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                                     NLs::IndexesCount(1)});
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
                                    {NLs::Finished,
-                                    NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                                    NLs::IndexType(indexType),
                                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                                     NLs::IndexKeys({"value0"})});
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
@@ -344,57 +347,12 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropUniqIndex) {
-        TTestWithReboots t(false);
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            {
-                TInactiveZone inactive(activeZone);
+    Y_UNIT_TEST(DropIndex) {
+        DropIndex(NKikimrSchemeOp::EIndexTypeGlobal);
+    }
 
-                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
-                    TableDescription {
-                      Name: "Table"
-                      Columns { Name: "key"   Type: "Uint64" }
-                      Columns { Name: "value0" Type: "Utf8" }
-                      Columns { Name: "value1" Type: "Utf8" }
-                      KeyColumnNames: ["key"]
-                    }
-                    IndexDescription {
-                      Name: "UserDefinedIndexByValue0"
-                      KeyColumnNames: ["value0"]
-                      Type: EIndexTypeGlobalUnique
-                    }
-                )");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
-                                   {NLs::Finished,
-                                    NLs::PathVersionEqual(3),
-                                    NLs::IndexesCount(1)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
-                                   {NLs::Finished,
-                                    NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
-                                    NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                                    NLs::IndexKeys({"value0"})});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
-                                   {NLs::Finished,
-                                    NLs::PathVersionEqual(3)});
-            }
-
-        TestDropTableIndex(runtime, ++t.TxId, "/MyRoot", R"(
-            TableName: "Table"
-            IndexName: "UserDefinedIndexByValue0"
-        )");
-        t.TestEnv->TestWaitNotification(runtime, t.TxId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
-                           {NLs::Finished,
-                            NLs::PathVersionEqual(5),
-                            NLs::IndexesCount(0)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
-                           {NLs::PathNotExist});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
-                           {NLs::PathNotExist});
-        });
+    Y_UNIT_TEST(DropIndexUniq) {
+        DropIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
     Y_UNIT_TEST(DropIndexWithDataColumns) {

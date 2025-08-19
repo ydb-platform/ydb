@@ -133,6 +133,27 @@ void TClientBlob::CheckBlob(const TKey& key, const TString& blob)
     for (TBlobIterator it(key, blob); it.IsValid(); it.Next());
 }
 
+TString TClientBlob::DebugString() const {
+    auto sb = TStringBuilder() << "{"
+        << " SourceId='" << SourceId << "'"
+        << ", SeqNo=" << SeqNo
+        << ", WriteTimestamp=" << WriteTimestamp
+        << ", CreateTimestamp=" << CreateTimestamp
+        << ", UncompressedSize=" << UncompressedSize
+        << ", PartitionKey='" << PartitionKey << "'"
+        << ", ExplicitHashKey='" << ExplicitHashKey << "'";
+
+    if (PartData) {
+        sb << ", PartNo=" << PartData->PartNo
+           << ", TotalParts=" << PartData->TotalParts
+           << ", TotalSize=" << PartData->TotalSize;
+    }
+
+    sb << " }";
+
+    return sb;
+}
+
 void TClientBlob::SerializeTo(TBuffer& res) const
 {
     const ui32 totalSize = GetBlobSize();
@@ -160,15 +181,18 @@ void TClientBlob::SerializeTo(TBuffer& res) const
         ui8 partitionKeySize = PartitionKey.size();
         res.Append((const char*)&(partitionKeySize), sizeof(ui8));
         res.Append(PartitionKey.data(), PartitionKey.size());
+
         ui8 hashKeySize = ExplicitHashKey.size();
         res.Append((const char*)&(hashKeySize), sizeof(ui8));
         res.Append(ExplicitHashKey.data(), ExplicitHashKey.size());
     }
 
     ui64 writeTimestampMs = WriteTimestamp.MilliSeconds();
-    ui64 createTimestampMs = CreateTimestamp.MilliSeconds();
     res.Append((const char*)&writeTimestampMs, sizeof(ui64));
+
+    ui64 createTimestampMs = CreateTimestamp.MilliSeconds();
     res.Append((const char*)&createTimestampMs, sizeof(ui64));
+
     if (flags.HasUncompressedSize()) {
         res.Append((const char*)&(UncompressedSize), sizeof(ui32));
     }
@@ -246,7 +270,7 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
 
     TString dt(data, end - data);
 
-    return TClientBlob(sourceId, seqNo, std::move(dt), std::move(partData), writeTimestamp, createTimestamp, uncompressedSize, partitionKey, explicitHashKey);
+    return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData, writeTimestamp, createTimestamp, uncompressedSize, std::move(partitionKey), std::move(explicitHashKey));
 }
 
 void TBatch::SerializeTo(TString& res) const{
@@ -676,13 +700,31 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) const {
     ui32 currentSID = 0;
     for (ui32 i = 0; i < totalBlobs; ++i) {
         TMaybe<TPartData> pd;
-        auto it = partData.find(pos[i]);
-        if (it != partData.end())
+        if (auto it = partData.find(pos[i]); it != partData.end()) {
             pd = it->second;
-        (*blobs)[pos[i]] = TClientBlob(sourceIds[currentSID], seqNo[i], std::move(dt[i]), std::move(pd), wtime[pos[i]], ctime[pos[i]], uncompressedSize[pos[i]],
-                                       partitionKey[i], explicitHash[i]);
-        if (i + 1 == end[currentSID])
+        }
+
+        bool lastPart = i + 1 == end[currentSID];
+
+        auto& processedBlob = (*blobs)[pos[i]];
+         // One SourceId stored for all parts of the message (many client blobs)
+        if (lastPart) {
+            processedBlob.SourceId = std::move(sourceIds[currentSID]);
+        } else {
+            processedBlob.SourceId = sourceIds[currentSID];
+        }
+        processedBlob.SeqNo = seqNo[i];
+        processedBlob.Data = std::move(dt[i]);
+        processedBlob.PartData = pd;
+        processedBlob.WriteTimestamp = wtime[pos[i]];
+        processedBlob.CreateTimestamp = ctime[pos[i]];
+        processedBlob.UncompressedSize = uncompressedSize[pos[i]];
+        processedBlob.PartitionKey = std::move(partitionKey[i]);
+        processedBlob.ExplicitHashKey = std::move(explicitHash[i]);
+
+        if (lastPart) {
             ++currentSID;
+        }
     }
 }
 

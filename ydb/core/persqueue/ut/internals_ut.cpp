@@ -151,16 +151,15 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     UNIT_ASSERT(s + GetMaxHeaderSize() <= maxBlobSize);
     UNIT_ASSERT(real.size() == all.size());
     for (ui32 i = 0; i < all.size(); ++i) {
-        UNIT_ASSERT(all[i].SourceId == real[i].SourceId);
-        UNIT_ASSERT(all[i].SeqNo == real[i].SeqNo);
-        UNIT_ASSERT(all[i].Data == real[i].Data);
-        UNIT_ASSERT(all[i].PartData.Defined() == real[i].PartData.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(all[i].SourceId, real[i].SourceId);
+        UNIT_ASSERT_VALUES_EQUAL(all[i].SeqNo, real[i].SeqNo);
+        UNIT_ASSERT_VALUES_EQUAL(all[i].Data, real[i].Data);
+        UNIT_ASSERT_VALUES_EQUAL(all[i].PartData.Defined(), real[i].PartData.Defined());
         if (all[i].PartData.Defined()) {
-            UNIT_ASSERT(all[i].PartData->PartNo == real[i].PartData->PartNo);
-            UNIT_ASSERT(all[i].PartData->TotalParts == real[i].PartData->TotalParts);
-            UNIT_ASSERT(all[i].PartData->TotalSize == real[i].PartData->TotalSize);
+            UNIT_ASSERT_VALUES_EQUAL(all[i].PartData->PartNo, real[i].PartData->PartNo);
+            UNIT_ASSERT_VALUES_EQUAL(all[i].PartData->TotalParts, real[i].PartData->TotalParts);
+            UNIT_ASSERT_VALUES_EQUAL(all[i].PartData->TotalSize, real[i].PartData->TotalSize);
         }
-
     }
 }
 

@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <util/generic/hash_set.h>
+#include <util/string/vector.h>
 
 namespace NYdb::NTPCC {
 
@@ -35,6 +36,43 @@ void CheckTablesExist(TDriver& driver, const TString& path, const char* what) {
     for (const char* table: TPCC_TABLES) {
         if (!entries.contains(table)) {
             Cerr << "TPC-C table '" << table << "' is missing in " << path << ". " << what << Endl;
+            std::exit(1);
+        }
+    }
+
+
+}
+
+void CheckPathExistOrCreate(TDriver& driver, const TString& database, const TString& path) {
+    if (path.empty() || path == database) {
+        return;
+    }
+
+    NScheme::TSchemeClient schemeClient(driver);
+    auto listResult = schemeClient.ListDirectory(path, {}).GetValueSync();
+    if (listResult.IsSuccess()) {
+        return;
+    }
+
+    // path is full path, we must ignore database part
+    TString relativePath = path.substr(database.size() + 1); // skip /DB/
+    if (relativePath.empty()) {
+        return;
+    }
+
+    TVector<TString> pathComponents = SplitString(relativePath, "/");
+    TString subPath = database;
+    for (const auto& component: pathComponents) {
+        subPath = subPath + "/" + component;
+
+        listResult = schemeClient.ListDirectory(subPath, {}).GetValueSync();
+        if (listResult.IsSuccess()) {
+            continue;
+        }
+
+        auto createResult = schemeClient.MakeDirectory(subPath).GetValueSync();
+        if (!createResult.IsSuccess()) {
+            Cerr << "Failed to create '" << subPath << "', please, check the path and permissions" << Endl;
             std::exit(1);
         }
     }
@@ -149,6 +187,7 @@ void CheckPathForInit(
     auto connectionConfigCopy = connectionConfig;
     TDriver driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
 
+    CheckPathExistOrCreate(driver, connectionConfig.Database, path);
     CheckNoTablesExist(driver, path, "Already inited or forgot to clean?");
 }
 

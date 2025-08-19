@@ -71,7 +71,7 @@ def test(suite, case, cfg, solomon):
     log('===' + case + '-' + cfg)
 
     xfail = is_xfail(config)
-    program_sql = get_case_file(DATA_PATH, suite, case, {'.sql', '.yql'})
+    program_sql = get_case_file(DATA_PATH, suite, case)
     sql_query = codecs.open(program_sql, encoding='utf-8').read()
 
     files = get_files(suite, config, DATA_PATH)

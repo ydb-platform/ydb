@@ -34,7 +34,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
     cfg_postprocess = add_table_clusters(suite, config)
 
-    program_sql = get_case_file(DATA_PATH, suite, case, {'.sql', '.yql'})
+    program_sql = get_case_file(DATA_PATH, suite, case)
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
 

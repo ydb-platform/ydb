@@ -1,53 +1,43 @@
-# SQL API для коллекций резервных копий
+# SQL API: Коллекции резервных копий
 
-Данная страница содержит полный справочник SQL команд для работы с коллекциями резервных копий.
+Этот раздел предоставляет полный справочник SQL команд, используемых с коллекциями резервных копий.
 
 ## CREATE BACKUP COLLECTION
 
-Создает новую коллекцию резервных копий для указанного набора таблиц.
+Создает новую коллекцию резервных копий с указанными таблицами и конфигурацией.
 
 ### Синтаксис
 
 ```sql
-CREATE BACKUP COLLECTION collection_name
-    ( TABLE table_path [, TABLE table_path ...]
-    )
-WITH
-    ( STORAGE = 'cluster'
-    [, option_name = 'option_value' ...]
-    );
+CREATE BACKUP COLLECTION <collection_name>
+    ( TABLE <table_path> [, TABLE <table_path>]... )
+WITH ( STORAGE = '<storage_backend>'
+     [, INCREMENTAL_BACKUP_ENABLED = '<true|false>']
+     [, <additional_options>] );
 ```
 
 ### Параметры
 
-- `collection_name` - Имя коллекции резервных копий (строка в обратных кавычках)
-- `table_path` - Полный путь к таблице в формате `/Root/database/table_name`
-- `STORAGE` - Тип хранилища. В настоящее время поддерживается только `'cluster'`
+- **collection_name**: Уникальный идентификатор коллекции (должен быть заключен в обратные кавычки)
+- **table_path**: Абсолютный путь к таблице для включения в коллекцию
+- **STORAGE**: Тип варианта хранения (в настоящее время поддерживает 'cluster')
+- **INCREMENTAL_BACKUP_ENABLED**: Включить или отключить поддержку инкрементальных резервных копий
 
 ### Примеры
 
-#### Создание коллекции для одной таблицы
-
+**Создание базовой коллекции:**
 ```sql
-CREATE BACKUP COLLECTION `orders_backup`
-    ( TABLE `/Root/shop/orders`
-    )
-WITH
-    ( STORAGE = 'cluster'
-    );
+CREATE BACKUP COLLECTION `my_backups`
+    ( TABLE `/Root/database/users` )
+WITH ( STORAGE = 'cluster' );
 ```
 
-#### Создание коллекции для нескольких таблиц
-
+**Коллекция с инкрементальными резервными копиями (рекомендуется):**
 ```sql
-CREATE BACKUP COLLECTION `shop_backup`
-    ( TABLE `/Root/shop/orders`
-    , TABLE `/Root/shop/products`
-    , TABLE `/Root/shop/customers`
-    )
-WITH
-    ( STORAGE = 'cluster'
-    );
+CREATE BACKUP COLLECTION `shop_backups`
+    ( TABLE `/Root/shop/orders`, TABLE `/Root/shop/products` )
+WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
+```
 ```
 
 #### Создание коллекции с использованием переменных
@@ -58,106 +48,85 @@ $orders_table = "/Root/database/orders";
 
 CREATE BACKUP COLLECTION $collection_name
     ( TABLE $orders_table
-    )
-WITH
-    ( STORAGE = 'cluster'
-    );
-```
-
-### Особенности
-
-- Имена коллекций должны быть уникальными в рамках базы данных
-- Таблицы должны существовать на момент создания коллекции
-- Один раз созданную коллекцию нельзя изменить (добавить/удалить таблицы)
-- Путь к таблице должен быть абсолютным
-
 ## BACKUP
 
-Создает резервную копию коллекции - полную или инкрементальную.
+Создает резервную копию в существующей коллекции. Первая резервная копия всегда является полной; последующие резервные копии могут быть инкрементальными.
 
 ### Синтаксис
 
 ```sql
--- Полная резервная копия
-BACKUP collection_name;
-
--- Инкрементальная резервная копия
-BACKUP collection_name INCREMENTAL;
+BACKUP <collection_name> [INCREMENTAL];
 ```
 
 ### Параметры
 
-- `collection_name` - Имя существующей коллекции резервных копий
-- `INCREMENTAL` - Ключевое слово для создания инкрементального бэкапа
+- **collection_name**: Имя существующей коллекции резервных копий
+- **INCREMENTAL**: Необязательное ключевое слово для создания инкрементальной резервной копии
 
-### Примеры
+### Типы резервных копий
 
-#### Создание полного бэкапа
-
+**Полная резервная копия (по умолчанию для первой резервной копии):**
 ```sql
--- Создать полную резервную копию коллекции
-BACKUP `shop_backup`;
+BACKUP `shop_backups`;
 ```
 
-#### Создание инкрементального бэкапа
-
+**Инкрементальная резервная копия:**
 ```sql
--- Создать инкрементальную резервную копию
-BACKUP `shop_backup` INCREMENTAL;
+BACKUP `shop_backups` INCREMENTAL;
 ```
 
-#### Создание бэкапов в цикле
+### Пример полного рабочего процесса
 
 ```sql
--- Пример создания серии инкрементальных бэкапов
-BACKUP `daily_backup` INCREMENTAL; -- День 1
--- ... изменения данных ...
-BACKUP `daily_backup` INCREMENTAL; -- День 2
--- ... изменения данных ...
-BACKUP `daily_backup` INCREMENTAL; -- День 3
+-- 1. Создать коллекцию
+CREATE BACKUP COLLECTION `sales_data`
+    ( TABLE `/Root/sales/transactions`, TABLE `/Root/sales/customers` )
+WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
+
+-- 2. Создать начальную полную резервную копию
+BACKUP `sales_data`;
+
+-- 3. Создать инкрементальные резервные копии
+BACKUP `sales_data` INCREMENTAL;
 ```
 
-### Особенности
+## DROP BACKUP COLLECTION
 
-- Первый бэкап коллекции всегда должен быть полным
-- Инкрементальный бэкап можно создать только если уже существует базовый полный бэкап
-- Операции выполняются асинхронно в фоновом режиме
-- Можно отслеживать прогресс через `operation list incbackup`
+Удаляет коллекцию резервных копий и все связанные с ней резервные копии.
 
-## Управление операциями
+### Синтаксис
 
-### Отслеживание операций
+```sql
+DROP BACKUP COLLECTION <collection_name>;
+```
+
+{% note warning %}
+
+Эта операция необратима и удалит все резервные копии в коллекции. Убедитесь, что у вас есть альтернативные резервные копии перед удалением коллекции.
+
+{% endnote %}
+
+## Запрос информации о резервных копиях
+
+Просмотр коллекций через схему базы данных:
 
 ```bash
-# Список всех активных операций резервного копирования
-{{ ydb-cli }} operation list incbackup
+# Список всех коллекций
+ydb scheme ls .backups/collections/
 
-# Статус конкретной операции
-{{ ydb-cli }} operation get "ydb://incbackup/N?id=<operation-id>"
-
-# Удаление завершенной операции
-{{ ydb-cli }} operation forget "ydb://incbackup/N?id=<operation-id>"
+# Просмотр структуры конкретной коллекции
+ydb scheme ls .backups/collections/shop_backups/
 ```
 
-### Форматы вывода
+## Ограничения и соображения
 
-```bash
-# Красивый формат для чтения
-{{ ydb-cli }} operation list incbackup --format pretty
+### Текущие ограничения
 
-# JSON для автоматизации
-{{ ydb-cli }} operation list incbackup --format proto-json-base64
-```
+- **Вариант хранения**: В настоящее время через SQL поддерживается только хранение 'cluster'
+- **Изменение коллекции**: Нельзя добавлять или удалять таблицы из существующих коллекций
+- **Параллельные резервные копии**: Множественные операции резервного копирования одной коллекции могут конфликтовать
 
-## Практические примеры
-
-### Сценарий 1: Еженедельный цикл бэкапов
-
-```sql
--- Понедельник: создание коллекции и полного бэкапа
-CREATE BACKUP COLLECTION `weekly_backup`
-    ( TABLE `/Root/app/transactions`
-    , TABLE `/Root/app/user_data`
+Подробные соображения производительности и рекомендации по управлению цепочками см. в [Концепциях](concepts.md).
     )
 WITH ( STORAGE = 'cluster' );
 
@@ -178,54 +147,7 @@ CREATE BACKUP COLLECTION `pre_migration_backup`
     )
 WITH ( STORAGE = 'cluster' );
 
-BACKUP `pre_migration_backup`;
+## Следующие шаги
 
--- Выполнение миграции...
--- При необходимости можно создать инкрементальный бэкап после
-BACKUP `pre_migration_backup` INCREMENTAL;
-```
-
-### Сценарий 3: Автоматизация через скрипты
-
-```bash
-#!/bin/bash
-# Скрипт для ежедневного инкрементального бэкапа
-
-COLLECTION_NAME="daily_prod_backup"
-
-# Создание инкрементального бэкапа
-{{ ydb-cli }} yql -s "BACKUP \`${COLLECTION_NAME}\` INCREMENTAL;"
-
-# Отслеживание операции
-sleep 5
-OPERATION_ID=$({{ ydb-cli }} operation list incbackup --format proto-json-base64 | jq -r '.operations[0].id')
-
-if [ ! -z "$OPERATION_ID" ]; then
-    echo "Отслеживаем операцию: $OPERATION_ID"
-    {{ ydb-cli }} operation get "$OPERATION_ID"
-fi
-```
-
-## Ограничения и рекомендации
-
-### Ограничения
-
-- Нельзя создать инкрементальный бэкап без базового полного
-- Максимальная длина цепочки: 100 инкрементальных бэкапов
-- Нельзя изменить состав таблиц в существующей коллекции
-- Операции не могут выполняться параллельно для одной коллекции
-
-### Рекомендации
-
-- Создавайте полные бэкапы еженедельно или ежемесячно
-- Используйте осмысленные имена коллекций с указанием даты или назначения
-- Мониторьте длину цепочки инкрементальных бэкапов
-- Очищайте завершенные операции для поддержания порядка
-- Тестируйте процедуры восстановления регулярно
-
-## См. также
-
-- [Создание коллекций](create-collection.md) - Пошаговое руководство
-- [Инкрементальные бэкапы](incremental-backups.md) - Детали работы с инкрементальными копиями
-- [Управление операциями](manage-collections.md) - Мониторинг и управление операциями
-- [Восстановление](restore-from-collection.md) - Процедуры восстановления данных
+- [Изучите концепции коллекций резервных копий](concepts.md)
+- [Исследуйте все операции и задачи управления](operations.md)

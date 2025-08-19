@@ -1,15 +1,7 @@
 items:
-- name: Обзор
-  href: overview.md
+- name: Концепции
+  href: concepts.md
+- name: Операции
+  href: operations.md
 - name: SQL API
   href: sql-api.md
-- name: Создание коллекций
-  href: create-collection.md
-- name: Инкрементальные бэкапы
-  href: incremental-backups.md
-- name: Операции восстановления
-  href: restore-from-collection.md
-- name: Управление коллекциями
-  href: manage-collections.md
-- name: Совместимость
-  href: compatibility.md

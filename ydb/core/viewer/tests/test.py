@@ -987,29 +987,28 @@ def test_topic_data():
     }
     return result
 
+
 def test_topic_data_cdc():
-    endpoint = "localhost:{}".format(cluster.nodes[1].grpc_port)
-
     call_viewer("/viewer/query", {
-                'database': dedicated_db,
-                'query': "alter table table1 add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"
+        'database': dedicated_db,
+        'query': "alter table table1 add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"
     })
 
     call_viewer("/viewer/query", {
-                'database': dedicated_db,
-                'query': "alter topic table1/updates_feed add consumer consumer1"
+        'database': dedicated_db,
+        'query': "alter topic table1/updates_feed add consumer consumer1"
     })
 
     call_viewer("/viewer/query", {
-                'database': dedicated_db,
-                'query': 'insert into table1(id, name) values(1, "one")',
-                'schema': 'multi'
+        'database': dedicated_db,
+        'query': 'insert into table1(id, name) values(1, "one")',
+        'schema': 'multi'
     })
 
     call_viewer("/viewer/query", {
-                'database': dedicated_db,
-                'query': "update table1 set name = 'ONE' where id = 1)",
-                'schema': 'multi'
+        'database': dedicated_db,
+        'query': "update table1 set name = 'ONE' where id = 1)",
+        'schema': 'multi'
     })
 
     topic_path = '{}/table1/updates_feed'.format(dedicated_db)
@@ -1028,7 +1027,6 @@ def test_topic_data_cdc():
     )
     data_response = replace_types_by_key(data_response, ['TimestampDiff'])
     return {"result": data_response}
-
 
 
 def test_transfer_describe():

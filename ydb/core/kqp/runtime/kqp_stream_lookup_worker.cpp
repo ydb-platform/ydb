@@ -128,7 +128,8 @@ class TKqpLookupRows : public TKqpStreamLookupWorker {
 public:
     TKqpLookupRows(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
         const NMiniKQL::THolderFactory& holderFactory)
-        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory) {
+        : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory)
+    {
     }
 
     virtual ~TKqpLookupRows() {}
@@ -763,11 +764,6 @@ public:
             auto leftRowIt = PendingLeftRowsByKey.find(joinKeyCells);
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
 
-            if (Settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::SEMI_JOIN && leftRowIt->second.RightRowExist) {
-                // semi join should return one result row per key
-                continue;
-            }
-
             TReadResultStats rowStats;
             auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, result.ShardId);
             YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
@@ -919,7 +915,10 @@ public:
     }
 private:
     struct TLeftRowInfo {
-        TLeftRowInfo(NUdf::TUnboxedValue row, ui64 seqNo) : Row(std::move(row)), SeqNo(seqNo) {
+        TLeftRowInfo(NUdf::TUnboxedValue row, ui64 seqNo)
+        : Row(std::move(row))
+        , SeqNo(seqNo)
+        {
         }
 
         NUdf::TUnboxedValue Row;
@@ -927,6 +926,10 @@ private:
         bool RightRowExist = false;
         const ui64 SeqNo;
         ui64 MatchedRows = 0;
+
+        bool Completed() {
+            return PendingReads.empty() && RightRowExist;
+        }
     };
 
     struct TResultBatch {
@@ -1063,7 +1066,7 @@ private:
             resultRowItems[1] = NUdf::TUnboxedValuePod();
         }
 
-        resultRowItems[2] = NUdf::TUnboxedValuePod(++leftRowInfo.MatchedRows);
+        resultRowItems[2] = NUdf::TUnboxedValuePod((leftRowInfo.SeqNo << 2) + 3);
 
         rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
         // TODO: use datashard statistics KIKIMR-16924

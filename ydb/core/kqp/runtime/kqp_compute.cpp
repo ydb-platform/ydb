@@ -88,10 +88,10 @@ class TKqpIndexLookupJoinWrapper : public TMutableComputationNode<TKqpIndexLooku
 public:
     struct TState : public TComputationValue<TState> {
         using TComputationValue::TComputationValue;
-
-        std::optional<NUdf::TUnboxedValue> PrevEmptyLeftRow;
-        std::optional<NUdf::TUnboxedValue> UnprocessedRow;
-        bool Finish = false;
+        // i guess it can be changed to some sort
+        // of bitmaps or vectors
+        std::unordered_map<ui64, bool> AllRowsAreNull;
+        std::unordered_map<ui64, bool> RightRowExists;
     };
 
     class TStreamValue : public TComputationValue<TStreamValue> {
@@ -146,7 +146,77 @@ public:
             return resultRow;
         }
 
-        bool TryBuildResultRow(TState& state, NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result, ui64 rowNumber) {
+        bool OmitRow(TState& state, ui64 header, bool isNull) {
+
+            bool lastRowInSequence = header & 1;
+            bool firstRowInSequence = header & 2;
+            ui32 rowId = header >> 2;
+
+            if (lastRowInSequence) {
+                // if row is the first and last row in the sequence at the same time
+                // we can return it as a result row
+                if (firstRowInSequence)
+                    return false;
+
+                auto it = state.AllRowsAreNull.find(rowId);
+                Y_ENSURE(it != state.AllRowsAreNull.end());
+                bool allRowsAreNull = it->second;
+                state.AllRowsAreNull.erase(it);
+
+                if (isNull) {
+                    //
+                    // [left_row_1, null] -- omitted
+                    // [left_row_1, null] -- omitted
+                    // [left_row_1, null] -- omitted
+                    // [left_row_1, null] - not omitted, because it's a last row in the sequence for the specified left key.
+
+                    // [left_row_2, null] -- omitted
+                    // [left_row_2, right_row] -- not omitted, not null
+                    // [left_key_2, null] -- omitted, because we had at least one not omitted row in the returned sequence.
+                    if (allRowsAreNull) {
+                        return false;
+                    }
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (firstRowInSequence) {
+                state.AllRowsAreNull[rowId] = isNull;
+            } else {
+                state.AllRowsAreNull[rowId] &= isNull;
+            }
+
+            return isNull;
+        }
+
+        bool OmitRowSemiJoin(TState& state, ui64 header, bool isNull) {
+            if (isNull)
+                return true;
+
+            bool firstRowInSequence = header & 2;
+            bool lastRowInSequence = header & 1;
+            ui64 rowId = header >> 2;
+
+            if (firstRowInSequence && lastRowInSequence) {
+                return false;
+            }
+
+            bool prevExists = state.RightRowExists[rowId];
+
+            if (!prevExists) {
+                state.RightRowExists[rowId] = true;
+            }
+
+            if (lastRowInSequence) {
+                state.RightRowExists.erase(rowId);
+            }
+
+            return prevExists;
+        }
+
+        bool TryBuildResultRow(TState& state, NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result, ui64 header) {
             auto leftRow = inputRow.GetElement(0);
             auto rightRow = inputRow.GetElement(1);
 
@@ -162,17 +232,9 @@ public:
                     break;
                 }
                 case EJoinKind::Left: {
-                    if (!rightRow.HasValue()) {
-                        if (rowNumber == 1) {
-                            state.PrevEmptyLeftRow = std::move(leftRow);
-                        }
-
+                    if (OmitRow(state, header, !rightRow.HasValue())) {
                         ok = false;
                         break;
-                    }
-
-                    if (rowNumber >= 2 && rightRow.HasValue()) {
-                        state.PrevEmptyLeftRow.reset();
                     }
 
                     result = FillResultItems(std::move(leftRow), std::move(rightRow), EOutputMode::Both);
@@ -188,7 +250,7 @@ public:
                     break;
                 }
                 case EJoinKind::LeftSemi: {
-                    if (!rightRow.HasValue()) {
+                    if (OmitRowSemiJoin(state, header, !rightRow.HasValue())) {
                         ok = false;
                         break;
                     }
@@ -203,48 +265,23 @@ public:
             return ok;
         }
 
-        void BuildFromPrevEmptyLeftRow(TState& state, NUdf::TUnboxedValue& result) {
-            result = FillResultItems(std::move(*state.PrevEmptyLeftRow), NUdf::TUnboxedValuePod(), EOutputMode::Both);
-            state.PrevEmptyLeftRow.reset();
-        }
-
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
             auto& state = GetState();
             for(;;) {
-                if (state.Finish) {
-                    if (state.PrevEmptyLeftRow.has_value()) {
-                        BuildFromPrevEmptyLeftRow(state, result);
-                        return NUdf::EFetchStatus::Ok;
-                    }
-
-                    return NUdf::EFetchStatus::Finish;
-                }
 
                 NUdf::TUnboxedValue item;
-                if (state.UnprocessedRow) {
-                    item = std::move(*state.UnprocessedRow);
-                    state.UnprocessedRow.reset();
-                } else {
-                    auto status = Stream.Fetch(item);
+                auto status = Stream.Fetch(item);
 
-                    if (status == NUdf::EFetchStatus::Yield) {
-                        return status;
-                    }
-
-                    if (status == NUdf::EFetchStatus::Finish) {
-                        state.Finish = true;
-                        continue;
-                    }
+                if (status == NUdf::EFetchStatus::Yield) {
+                    return status;
                 }
 
-                ui64 rowNumber = item.GetElement(2).Get<ui64>();
-                if (rowNumber == 1 && state.PrevEmptyLeftRow.has_value()) {
-                    BuildFromPrevEmptyLeftRow(state, result);
-                    state.UnprocessedRow = std::move(item);
-                    return NUdf::EFetchStatus::Ok;
+                if (status == NUdf::EFetchStatus::Finish) {
+                    return status;
                 }
 
-                bool buildRow = TryBuildResultRow(state, item, result, rowNumber);
+                ui64 header = item.GetElement(2).Get<ui64>();
+                bool buildRow = TryBuildResultRow(state, item, result, header);
                 if (buildRow) {
                     return NUdf::EFetchStatus::Ok;
                 }

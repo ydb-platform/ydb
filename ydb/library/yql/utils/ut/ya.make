@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/utils)
 
+TAG(ya:manual)
+
 SRCS(
     fp_bits_ut.cpp
     md5_stream_ut.cpp

@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/common/codec)
 
+TAG(ya:manual)
+
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)

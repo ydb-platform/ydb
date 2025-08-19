@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/generic/actors)
 
+TAG(ya:manual)
+
 PEERDIR(
     ydb/library/yql/sql/pg_dummy
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers

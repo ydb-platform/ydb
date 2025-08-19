@@ -1,5 +1,7 @@
 UNITTEST()
 
+TAG(ya:manual)
+
 PEERDIR(
     contrib/libs/llvm14/lib/IR
     contrib/libs/llvm14/lib/ExecutionEngine/MCJIT

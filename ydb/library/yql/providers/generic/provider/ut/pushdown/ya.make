@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/generic/provider)
 
+TAG(ya:manual)
+
 SRCS(
     pushdown_ut.cpp
 )

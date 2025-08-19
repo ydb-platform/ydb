@@ -1,5 +1,7 @@
 UNITTEST()
 
+TAG(ya:manual)
+
 SRCS(
     empty_stream.h
     fake_spec.cpp

@@ -419,7 +419,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             currentBatch.ConstructInPlace(res.GetOffset(), res.GetPartNo());
         }
 
-        TClientBlob blob(*res.MutableSourceId(), res.GetSeqNo(), std::move(*res.MutableData()),
+        TClientBlob blob(std::move(*res.MutableSourceId()), res.GetSeqNo(), std::move(*res.MutableData()),
                          Nothing(),
                          TInstant::MilliSeconds(res.GetWriteTimestampMS()), TInstant::MilliSeconds(res.GetCreateTimestampMS()),
                          res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()));

@@ -182,15 +182,18 @@ void TClientBlob::SerializeTo(TBuffer& res) const
         ui8 partitionKeySize = PartitionKey.size();
         res.Append((const char*)&(partitionKeySize), sizeof(ui8));
         res.Append(PartitionKey.data(), PartitionKey.size());
+
         ui8 hashKeySize = ExplicitHashKey.size();
         res.Append((const char*)&(hashKeySize), sizeof(ui8));
         res.Append(ExplicitHashKey.data(), ExplicitHashKey.size());
     }
 
     ui64 writeTimestampMs = WriteTimestamp.MilliSeconds();
-    ui64 createTimestampMs = CreateTimestamp.MilliSeconds();
     res.Append((const char*)&writeTimestampMs, sizeof(ui64));
+
+    ui64 createTimestampMs = CreateTimestamp.MilliSeconds();
     res.Append((const char*)&createTimestampMs, sizeof(ui64));
+
     if (flags.HasUncompressedSize()) {
         res.Append((const char*)&(UncompressedSize), sizeof(ui32));
     }
@@ -268,7 +271,7 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
 
     TString dt(data, end - data);
 
-    return TClientBlob(sourceId, seqNo, std::move(dt), partData, writeTimestamp, createTimestamp, uncompressedSize, std::move(partitionKey), std::move(explicitHashKey));
+    return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData, writeTimestamp, createTimestamp, uncompressedSize, std::move(partitionKey), std::move(explicitHashKey));
 }
 
 void TBatch::SerializeTo(TString& res) const{
@@ -703,8 +706,15 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) const {
             pd = it->second;
         }
 
+        bool lastPart = i + 1 == end[currentSID];
+
         auto& processedBlob = (*blobs)[pos[i]];
-        processedBlob.SourceId = sourceIds[currentSID]; // One SourceId used for all parts of the message (many client blobs)
+         // One SourceId stored for all parts of the message (many client blobs)
+        if (lastPart) {
+            processedBlob.SourceId = std::move(sourceIds[currentSID]);
+        } else {
+            processedBlob.SourceId = sourceIds[currentSID];
+        }
         processedBlob.SeqNo = seqNo[i];
         processedBlob.Data = std::move(dt[i]);
         processedBlob.PartData = pd;
@@ -714,7 +724,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) const {
         processedBlob.PartitionKey = std::move(partitionKey[i]);
         processedBlob.ExplicitHashKey = std::move(explicitHash[i]);
 
-        if (i + 1 == end[currentSID]) {
+        if (lastPart) {
             ++currentSID;
         }
     }

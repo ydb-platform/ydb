@@ -44,7 +44,7 @@
 
 | Параметр                            | Обязательность | Значение по умолчанию     | Описание                                                            |
 |-------------------------------------|----------------|---------------------------|---------------------------------------------------------------------|
-| incremental_strategy                | Нет            | MERGE                     | [Стратегия инкрементальной материлазации](https://docs.getdbt.com/docs/build/incremental-strategy). Поддерживается стратегия MERGE, использующая {{ydb}} операцию [UPSERT](https://ydb.tech/docs/ru/yql/reference/syntax/upsert_into). Стратегия APPEND находится в разработке  |
+| incremental_strategy                | Нет            | MERGE                     | [Стратегия инкрементальной материлазации](https://docs.getdbt.com/docs/build/incremental-strategy). Поддерживается стратегия MERGE, использующая {{ydb}} операцию [UPSERT](https://ydb.tech/docs/ru/yql/reference/syntax/upsert_into). Поддержка стратегии APPEND находится в разработке  |
 
 
 {% note info %}
@@ -99,29 +99,29 @@ pip install dbt-ydb
 
 Пример файла профилей с возможными вариантами аутентификации, а также значениями по умолчанию (в квадратных скобках)
 
-   ```yml
-   profile_name:
-   target: dev
-   outputs:
-      dev:
-         type: ydb
-         host: [localhost] # YDB host
-         port: [2136] # YDB port
-         database: [/local] # YDB database
-         schema: [<empty string>] # Optional subfolder for DBT models
-         secure: [False] # If enabled, grpcs protocol will be used
-         root_certificates_path: [<empty string>] # Optional path to root certificates file
+```yml
+profile_name:
+target: dev
+outputs:
+   dev:
+      type: ydb
+      host: [localhost] # YDB host
+      port: [2136] # YDB port
+      database: [/local] # YDB database
+      schema: [<empty string>] # Optional subfolder for DBT models
+      secure: [False] # If enabled, grpcs protocol will be used
+      root_certificates_path: [<empty string>] # Optional path to root certificates file
 
-         # Static Credentials
-         username: [<empty string>]
-         password: [<empty string>]
+      # Static Credentials
+      username: [<empty string>]
+      password: [<empty string>]
 
-         # Access Token Credentials
-         token: [<empty string>]
+      # Access Token Credentials
+      token: [<empty string>]
 
-         # Service Account Credentials
-         service_account_credentials_file: [<empty string>]
-   ```
+      # Service Account Credentials
+      service_account_credentials_file: [<empty string>]
+```
 
 ## Создание проекта "c нуля" через команду {{dbt}} init
 
@@ -135,23 +135,23 @@ pip install dbt-ydb
 
 3. В результате директория с вашим проектом, а также файл [профилей](https://docs.getdbt.com/docs/core/connect-data-platform/connection-profiles) {{dbt}} в домашней директории пользователя будет создан или обновлен новым соединением к {{ydb}}
 
-  ```bash
-  ~/.dbt/profiles.yml
-  ```
+   ```bash
+   ~/.dbt/profiles.yml
+   ```
 
 4. Запустите команду {{dbt}} debug для проверки соединения
 
-  ```bash
-  dbt debug
-  ```
+   ```bash
+   dbt debug
+   ```
 
 5. Внутри директории вашего проекта, вы увидите следующую структуру
 
-![{{dbt-ydb}} new project structure](_assets/dbt-ydb-new-project.png)
+   ![{{dbt-ydb}} new project structure](_assets/dbt-ydb-new-project.png)
 
 6. Адаптация модели my_first_dbt_model
 
-В данный момент {{dbt}} не поддерживает возможности модификации автоматически генерируемого примера индивидуально под коннектор, поэтому, для запуска данной модели через {{dbt-ydb}} требуется ее обновить следующим образом:
+   В данный момент {{dbt}} не поддерживает возможности модификации автоматически генерируемого примера индивидуально под коннектор, поэтому, для запуска данной модели через {{dbt-ydb}} требуется ее обновить следующим образом:
 
    ```text
    /*
@@ -174,9 +174,9 @@ pip install dbt-ydb
 
 7. Теперь вы можете запустить ваш проект
 
-  ```bash
-  dbt run
-  ```
+   ```bash
+   dbt run
+   ```
 
 ## Запуск тестового примера
 
@@ -193,9 +193,9 @@ pip install dbt-ydb
 
    ```text
    profile_name:
-     target: dev
-     outputs:
-       dev:
+      target: dev
+      outputs:
+         dev:
          type: ydb
          host: localhost # YDB host
          port: 2136 # YDB port
@@ -211,38 +211,38 @@ pip install dbt-ydb
 
 4. Подготовка тестовых данных (через seeds)
 
+   Эта команда загрузит CSV‑файлы из `data/` в таблицы `raw_*` {{ydb}}.
+
    ```bash
    dbt seed
    ```
 
-   Эта команда загрузит CSV‑файлы из `data/` в таблицы `raw_*` {{ydb}}.
-
 5. Запуск моделей
+
+   Будут созданы таблицы и представления на основе примеров моделей проекта.
 
    ```bash
    dbt run
    ```
 
-   Будут созданы таблицы и представления на основе примеров моделей проекта.
-
 6. Тестирование данных в моделях
+
+   Выполнит стандартные тесты данных, описанные в тестовом примере — проверки на `null`, на допустимые значения списка и другие.
 
    ```bash
    dbt test
    ```
 
-   Выполнит стандартные тесты данных, описанные в тестовом примере — проверки на `null`, на допустимые значения списка и другие.
-
 7. Генерация документации и старт локального веб‑сервера для её просмотра
+
+   Документация по проекту будет доступна в браузере: [http://localhost:8080](http://localhost:8080).
 
    ```bash
    dbt docs generate
    dbt docs serve --port 8080
    ```
 
-   Документация по проекту станет доступна в браузере: [http://localhost:8080](http://localhost:8080).
-
 ## Дальнейшие шаги
 
 Официальную документацию {{ dbt }} можно найти по [ссылке](https://docs.getdbt.com/docs).
-Дополнительно вы можете изучить исходные коды коннектора, а также поучаствовать в его развитии через публичный репозиторий {{ dbt-ydb }}.
+Дополнительно, вы можете изучить исходные коды коннектора, а также поучаствовать в его развитии через публичный репозиторий {{ dbt-ydb }}.

@@ -5128,15 +5128,17 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, con
         // the actor's ID could have changed from the moment he sent the TEvProposeTransaction. you need to
         // update the actor ID in the transaction
         //
-        // if the transaction has progressed beyond WAIT_RS, then a response has been sent to the sender
+        // if the transaction has progressed beyond EXECUTED, then a response has been sent to the sender
         //
+        status = NKikimrProto::OK;
+
         tx->SourceActor = ev->Sender;
-        if (tx->State <= NKikimrPQ::TTransaction::WAIT_RS) {
-            status = NKikimrProto::OK;
+        if (tx->State >= NKikimrPQ::TTransaction::EXECUTED) {
+            SendEvProposeTransactionResult(ctx, *tx);
         }
     }
 
-    ctx.Send(ev->Sender, new TEvDataShard::TEvProposeTransactionAttachResult(TabletID(), txId, status), 0, ev->Cookie);
+    ctx.Send(ev->Sender, new TEvPersQueue::TEvProposeTransactionAttachResult(TabletID(), txId, status), 0, ev->Cookie);
 }
 
 void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext&)

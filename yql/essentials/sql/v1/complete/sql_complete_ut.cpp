@@ -840,6 +840,17 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM a WHERE "), expected);
     }
 
+    Y_UNIT_TEST(SelectSubquery) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TVector<TCandidate> expected = {
+            {Keyword, "SELECT"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "$x = sel#"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "$x = (sel#)"), expected);
+    }
+
     Y_UNIT_TEST(Upsert) {
         TVector<TCandidate> expected = {
             {Keyword, "INTO"},
@@ -969,7 +980,6 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {BindingName, "$udf"},
                 {HintName, "XLOCK"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "PROCESS my_table USING $udf(TableRows()) WITH "), expected);
@@ -1533,6 +1543,36 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(4, engine, query), expected);
     }
 
+    Y_UNIT_TEST(QualifiedColumnAtWhere) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString prefix = R"sql(SELECT * FROM example.`/people` AS x )sql";
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "Age"},
+            {ColumnName, "Name"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "WHERE x.#"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "GROUP BY x.#"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "HAVING x.#"), expected);
+    }
+
+    Y_UNIT_TEST(ColumnFromQualifiedAtWhere) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString prefix = R"sql(SELECT * FROM example.`/people` AS x )sql";
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "x.Age"},
+            {ColumnName, "x.Name"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "WHERE #"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "GROUP BY #"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, prefix + "HAVING #"), expected);
+    }
+
     Y_UNIT_TEST(ColumnFromQuotedAlias) {
         auto engine = MakeSqlCompletionEngineUT();
         {
@@ -1574,7 +1614,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
         {
-            TString query = "SELECT Age as a, b FROM example.`/people` WHERE #";
+            TString query = "SELECT Age as a, b FROM example.`/people` ORDER BY #";
 
             TVector<TCandidate> expected = {
                 {ColumnName, "a"},
@@ -1583,6 +1623,33 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
         }
+    }
+
+    Y_UNIT_TEST(ColumnFromNamedNode) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString prefix = R"sql(
+            USE example;
+            $source = '/peo' || 'ple';
+        )sql";
+
+        TVector<TString> input = {
+            prefix + R"sql(SELECT # FROM $source)sql",
+            prefix + R"sql(SELECT * FROM $source WHERE #)sql",
+            prefix + R"sql(SELECT * FROM $source GROUP BY #)sql",
+            prefix + R"sql(SELECT * FROM $source AS x FROM x.#)sql",
+        };
+
+        // FIXME: change ranking.
+        TVector<TCandidate> expected = {
+            {BindingName, "$source"},
+            {ColumnName, "Age"},
+            {ColumnName, "Name"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, input[0]), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, input[1]), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, input[2]), expected);
     }
 
     Y_UNIT_TEST(ColumnQuoted) {

@@ -126,7 +126,7 @@ namespace NSQLComplete {
                         alias = Nothing();
                     }
 
-                    auto aliased = source.ExtractAliased(alias);
+                    TColumnContext aliased = source.ExtractAliased(alias);
                     imported = std::move(imported) | std::move(aliased);
                 }
 
@@ -276,10 +276,7 @@ namespace NSQLComplete {
 
             std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
                 antlr4::ParserRuleContext* source = nullptr;
-                if (IsEnclosingStrict(ctx->expr(0)) ||
-                    IsEnclosingStrict(ctx->group_by_clause()) ||
-                    IsEnclosingStrict(ctx->expr(1)) ||
-                    IsEnclosingStrict(ctx->window_clause()) ||
+                if (IsEnclosingStrict(ctx->window_clause()) ||
                     IsEnclosingStrict(ctx->ext_order_by_clause())) {
                     source = ctx;
                 } else {

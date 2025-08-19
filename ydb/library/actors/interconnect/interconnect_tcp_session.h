@@ -163,7 +163,7 @@ namespace NActors {
             using ScheduleRdmaReadRequestsResult = std::variant<TRdmaReadReqOk, NInterconnect::NRdma::ICq::TBusy, NInterconnect::NRdma::ICq::TErr>;
             ScheduleRdmaReadRequestsResult ScheduleRdmaReadRequests(
                 const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::TQueuePair& qp,
-                NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel);
+                NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel, std::atomic<int>& rdmaReadInflight);
         };
 
         std::array<TPerChannelContext, 16> ChannelArray;
@@ -282,12 +282,14 @@ namespace NActors {
         };
         EState State = EState::HEADER;
         ui64 CurrentSerial = 0;
+        std::atomic<int> RdmaReadInflight = 0;
 
         std::vector<char> XdcCommands;
 
         struct TInboundPacket {
             ui64 Serial;
             size_t XdcUnreadBytes; // number of unread bytes from XDC stream for this exact unprocessed packet
+            size_t RdmaUnreadBytes = 0;
         };
         std::deque<TInboundPacket> InboundPacketQ;
         std::deque<std::tuple<ui16, TMutableContiguousSpan>> XdcInputQ; // target buffers for the XDC stream with channel reference

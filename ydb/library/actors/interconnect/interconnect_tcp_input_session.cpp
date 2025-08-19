@@ -106,7 +106,7 @@ namespace NActors {
     static TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult SendRdmaReadRequest(
         NInterconnect::NRdma::TQueuePair& qp, NInterconnect::NRdma::ICq::TPtr cq,
         const NActorsInterconnect::TRdmaCred& cred, const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
-        std::shared_ptr<std::atomic<size_t>> rdmaSizeLeft, TActorId notify, ui16 channel
+        std::shared_ptr<std::atomic<size_t>> rdmaSizeLeft, TActorId notify, ui16 channel, std::atomic<int>& rdmaReadInflight
     ) {
         using namespace NInterconnect::NRdma;
 
@@ -119,7 +119,8 @@ namespace NActors {
                 as->Send(new IEventHandle(notify, TActorId(), rdmaReadDone));
         };
 
-        auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
+        auto cb = [left=rdmaSizeLeft, size=cred.GetSize(), reply, &rdmaReadInflight](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
+            rdmaReadInflight.fetch_sub(1);
             if (!ioDone->IsSuccess()) {
                 reply(as, ioDone);
                 return;
@@ -154,12 +155,14 @@ namespace NActors {
             //Y_ABORT("Unable to post rdma READ work request, error %d\n", err);
         }
 
+        rdmaReadInflight.fetch_add(1);
+
         return TReceiveContext::TPerChannelContext::TRdmaReadReqOk{};
     }
 
     TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequests(
         const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::TQueuePair& qp,
-        NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel
+        NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel, std::atomic<int>& rdmaReadInflight
     ) {
         auto& pendingEvent = PendingEvents.back();
 
@@ -175,7 +178,7 @@ namespace NActors {
 
                 credCopy.SetAddress(cred.GetAddress() + credOffset);
                 credCopy.SetSize(std::min(cred.GetSize() - credOffset, (ui64)curMemReg.GetSize() - mrOffset));
-                auto err = SendRdmaReadRequest(qp, cq, credCopy, curMemReg, mrOffset, pendingEvent.RdmaSizeLeft, notify, channel);
+                auto err = SendRdmaReadRequest(qp, cq, credCopy, curMemReg, mrOffset, pendingEvent.RdmaSizeLeft, notify, channel, rdmaReadInflight);
                 if (!std::holds_alternative<TRdmaReadReqOk>(err)) {
                     return err;
                 }
@@ -310,9 +313,11 @@ namespace NActors {
 
         if (termEv) {
             if (RdmaQp) {
-                Cerr << "input session move to reset state" << Endl;
+                Cerr << "input session move to reset state: " << RdmaReadInflight.load() << Endl;
                 RdmaQp->ToResetState();
-                Sleep(TDuration::MilliSeconds(1000));
+                while (RdmaReadInflight.load() != 0) {
+                    Sleep(TDuration::MilliSeconds(1));
+                }
             }
             --Context->NumInputSessions;
             Send(SessionId, termEv.release());

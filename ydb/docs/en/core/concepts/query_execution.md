@@ -10,27 +10,27 @@ This article provides an overview of query execution in {{ ydb-short-name }}. It
 
 This section provides a step-by-step overview of how SQL queries are handled in {{ ydb-short-name }}. Understanding this process will help you familiarize yourself with {{ ydb-short-name }} components and have some insight on what’s happening under the hood.
 
-![query workflow](./_assets/query_workflow.png)
+![Query Execution Workflow](./_assets/query_workflow.png "Query Execution Workflow")
 
-1. Connecting to the Database
+1. **Connecting to the Database**
 Your application uses one of the official YDB SDKs to connect to the database. The SDK automatically manages a pool of sessions, logical connections required to execute queries. Behind the scenes, each session is physically connected to one of the nodes in the YDB  cluster. When you need to run a query, the SDK provides a session from this pool so you don’t need to manage connections manually.
 
-2. Starting a Transaction and Sending a Query:
+2. **Starting a Transaction and Sending a Query**
 With your session in hand, your application can begin a new transaction. You then generate your query in YQL query language based on your application logic, and send this query to the YDB server using the session.
 
-3. Parsing and Plan Cache Lookup:
+3. **Parsing and Plan Cache Lookup**
 On the server side, the YDB node that receives your query first parses and analyzes it for correctness. Before planning execution, YDB checks if it has already saved a physical execution plan for this query in its query cache. If it finds a cached plan, that plan can be reused to save time and resources.
 
-4. Query Optimization and Plan Preparation:
+4. **Query Optimization and Plan Preparation**
 If there isn’t an existing plan in the cache, YDB’s query optimizer creates a new physical query plan. This plan determines the most efficient way to execute your query across the distributed cluster. For more detailed information about query optimization and query plans, see [Query Optimizer](optimizer.md) article.
 
-5. Distributed Query Execution:
+5. **Distributed Query Execution**
 Using the prepared physical plan, YDB starts distributed execution of the query. Work is distributed across multiple nodes in the database, each node undertakes a part of the computation or data access based on the plan. This parallel processing enables fast and scalable query execution, even on large datasets.
 
-6. Streaming Results Back to the Client:
+6. **Streaming Results Back to the Client**
 Query results are returned to your application as one or more result sets, which look like strongly typed tables. Instead of sending all results at once, YDB streams the data back in portions (parts). This allows your application to start processing results immediately and handle large result sets efficiently without needing to load everything into memory at once.
 
-7. Continuing or Completing the Transaction:
+7. **Continuing or Completing the Transaction**
 After receiving and processing the results, your application can choose to continue the transaction by sending more queries to the transaction, or finish the transaction by committing (to save changes).
 
 Further details and explanations of the concepts introduced in this section are provided in the following sections.

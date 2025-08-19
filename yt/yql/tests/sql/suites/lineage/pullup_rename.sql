@@ -1,8 +1,3 @@
-pragma config.flags('OptimizerFlags',
-                    'MemberNthOverFlatMap',
-                    'ExtractMembersSplitOnOptional',
-                    'FilterNullMembersOverJust');
-
 use plato;
 
 $t1 = select k1, a1 from Input1;

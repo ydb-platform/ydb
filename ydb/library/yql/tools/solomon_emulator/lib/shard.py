@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 
 # Variant 1
@@ -45,7 +46,7 @@ class Shard(object):
     DEPRECATED_TESTS_PROJECTS = ["my_project", "hist", "invalid"]
 
     class Metric(object):
-        def __init__(self, labels, kind = "DGAUGE", timestamps = [], values = []):
+        def __init__(self, labels, kind="DGAUGE", timestamps=[], values=[]):
             self.labels = labels
             self.kind = kind
             self.data = []
@@ -60,6 +61,8 @@ class Shard(object):
                 if value == "-":
                     if key in self.labels:
                         return False
+                elif value == "*":
+                    return key in self.labels
                 else:
                     if key not in self.labels or self.labels[key] != value:
                         return False
@@ -67,7 +70,7 @@ class Shard(object):
             return True
 
         def add_point(self, ts, value):
-            self.data.append((int(ts * 1000), value))
+            self.data.append((ts, value))
 
     def __init__(self, project, cluster, service):
         self._project = project
@@ -143,7 +146,7 @@ class Shard(object):
             labels["service"] = self._service
             result.append({"labels": labels, "type": metric.kind})
 
-        return sorted(result)
+        return sorted(result, key=lambda x: str(x))
 
     def get_data(self, selectors, time_from, time_to, downsampling):
         result = dict()
@@ -161,7 +164,7 @@ class Shard(object):
         matching_metrics = self.get_matching_metrics(selectors)
         if len(matching_metrics) != 1:
             return (result, "Invalid amount of metrics matching selectors, should be 1, have: {}".format(len(matching_metrics)))
-        
+
         metric = matching_metrics[0]
 
         labels = metric.labels
@@ -173,7 +176,7 @@ class Shard(object):
         values = []
 
         for ts, value in metric.data:
-            if ts >= nanoseconds_from and ts <= nanoseconds_to:
+            if isinstance(ts, str) or (ts >= nanoseconds_from and ts <= nanoseconds_to):
                 if downsampling_disabled or ts % downsampling_grid_interval == 0:
                     timestamps.append(ts)
                     values.append(value)

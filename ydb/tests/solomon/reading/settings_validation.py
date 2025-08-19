@@ -17,8 +17,8 @@ class TestSettingsValidation(SolomonReadingTestBase):
     def check_query_error(self, query, error_msg):
         result, error = self.execute_query(query)
 
-        assert error is not None
-        assert error_msg in extract_issue_messages(error)
+        assert error is not None, "query executed without errors, expecting to have at least one"
+        assert error_msg in extract_issue_messages(error), "expetced to find specific error: {}, have errors: {}".format(error_msg, error)
 
     @link_test_case("#16385")
     def test_settings_validation(self):

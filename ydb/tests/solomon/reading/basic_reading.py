@@ -9,19 +9,26 @@ logger = logging.getLogger(__name__)
 class TestBasicReading(SolomonReadingTestBase):
     def check_query_result(self, result, error, downsampling_disabled):
         if error is not None:
-            return False
+            return False, error
 
         timestamps = [int(row["ts"].timestamp()) for row in result[0].rows]
         values = [int(row["value"]) for row in result[0].rows]
 
-        if not downsampling_disabled:
-            return \
-                timestamps == [ts for ts in self.basic_reading_timestamps if ts % 15 == 0] and \
-                values == [value for value in self.basic_reading_values if value % 3 == 0]
+        downsampled_canon_timestamps = [ts for ts in self.basic_reading_timestamps if ts % 15 == 0]
+        downsampled_canon_values = [value for value in self.basic_reading_values if value % 3 == 0]
+
+        if downsampling_disabled:
+            if timestamps != self.basic_reading_timestamps:
+                return False, "timstamps differ from canonical, have {}, should be {}".format(timestamps, self.basic_reading_timestamps)
+            elif values != self.basic_reading_values:
+                return False, "values differ from canonical, have {}, should be {}".format(values, self.basic_reading_values)
+            return True, None
         else:
-            return \
-                timestamps == self.basic_reading_timestamps and \
-                values == self.basic_reading_values
+            if timestamps != downsampled_canon_timestamps:
+                return False, "timstamps differ from canonical, have {}, should be {}".format(timestamps, downsampled_canon_timestamps)
+            elif values != downsampled_canon_values:
+                return False, "values differ from canonical, have {}, should be {}".format(values, downsampled_canon_values)
+            return True, None
 
     @link_test_case("#16398")
     def test_basic_reading(self):
@@ -39,13 +46,14 @@ class TestBasicReading(SolomonReadingTestBase):
         # simplest query with default downsampling settings
         query = """
             SELECT * FROM local_solomon.basic_reading WITH (
-                program=@@{cluster="my_cluster", service="my_service", test_type="basic_reading_test"}@@,
+                program = @@{cluster="my_cluster", service="my_service", test_type="basic_reading_test"}@@,
 
                 from = "1970-01-01T00:00:00Z",
                 to = "1970-01-01T00:01:00Z"
             )
         """
-        assert self.check_query_result(*self.execute_query(query), False)
+        succes, error = self.check_query_result(*self.execute_query(query), False)
+        assert succes, error
 
         # query using `program` param with enabled downsampling
         query = """
@@ -61,7 +69,8 @@ class TestBasicReading(SolomonReadingTestBase):
                 to = "1970-01-01T00:01:00Z"
             )
         """
-        assert self.check_query_result(*self.execute_query(query), False)
+        succes, error = self.check_query_result(*self.execute_query(query), False)
+        assert succes, error
 
         # query using `program` param with disabled downsampling
         query = """
@@ -74,7 +83,8 @@ class TestBasicReading(SolomonReadingTestBase):
                 to = "1970-01-01T00:01:00Z"
             )
         """
-        assert self.check_query_result(*self.execute_query(query), True)
+        succes, error = self.check_query_result(*self.execute_query(query), True)
+        assert succes, error
 
         # query using `selectors` param with enabled downsampling
         query = """
@@ -90,7 +100,8 @@ class TestBasicReading(SolomonReadingTestBase):
                 to = "1970-01-01T00:01:00Z"
             )
         """
-        assert self.check_query_result(*self.execute_query(query), False)
+        succes, error = self.check_query_result(*self.execute_query(query), False)
+        assert succes, error
 
         # query using `selectors` param with disabled downsampling
         query = """
@@ -103,4 +114,5 @@ class TestBasicReading(SolomonReadingTestBase):
                 to = "1970-01-01T00:01:00Z"
             )
         """
-        assert self.check_query_result(*self.execute_query(query), True)
+        succes, error = self.check_query_result(*self.execute_query(query), True)
+        assert succes, error

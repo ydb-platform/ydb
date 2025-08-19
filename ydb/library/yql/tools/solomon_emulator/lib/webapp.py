@@ -100,13 +100,11 @@ class SolomonEmulator(object):
         folder_id = request.rel_url.query['folderId']
         service = request.rel_url.query['service']
 
-
         shard = self._get_shard(folder_id, folder_id, service)
         content_type = request.headers['content-type']
 
         if content_type != CONTENT_TYPE_JSON:
             return web.HTTPBadRequest(text=f"Unknown content type {content_type}")
-
 
         metrics_json = await request.json()
 
@@ -128,7 +126,6 @@ class SolomonEmulator(object):
         shard = self._get_shard(project, cluster, service)
         result = shard.get_label_names(selectors)
 
-        logger.debug("sending sensor names response: {}".format(result))
         return web.json_response({"names": result})
 
     async def sensors(self, request):
@@ -152,9 +149,6 @@ class SolomonEmulator(object):
         from_ind = page_size * page
         to_ind = min(len(metrics), page_size * (page + 1))
 
-        logger.debug("result metrics: {}".format(metrics[from_ind:to_ind]))
-
-        logger.debug("sending sensors response: metrics = {}, pagesCount = {}, totalCount = {}, from_ind = {}, to_ind = {}".format(metrics, ceil(len(metrics) / page_size), len(metrics), from_ind, to_ind))
         return web.json_response({"result": metrics[from_ind:to_ind], "page": {"pagesCount": ceil(len(metrics) / page_size), "totalCount": len(metrics)}})
 
     async def metrics_get(self, request):
@@ -183,7 +177,7 @@ class SolomonEmulator(object):
     async def cleanup(self, request):
         cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query.get('folderId', None)
         project = request.rel_url.query.get('project', cluster)
-        service = request.rel_url.query.get('service')
+        service = request.rel_url.query.get('service', None)
         request.app["features"] = {"response_code": 200}
 
         if project is None and cluster is None and service is None:
@@ -232,7 +226,7 @@ class DataService(DataServiceServicer):
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details(error)
             return ReadResponse()
-        
+
         return self._build_read_response(result["labels"], result["type"], result["timestamps"], result["values"])
 
     def DeprecatedTestsLogic(self, request: ReadRequest, context):
@@ -307,7 +301,7 @@ def create_web_app(emulator):
         web.post("/cleanup", emulator.cleanup),
         web.post("/config", emulator.config)
     ])
-    
+
     return webapp
 
 

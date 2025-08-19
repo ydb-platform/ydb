@@ -2,7 +2,10 @@
 
 #include "base_visitor.h"
 #include "evaluate.h"
+#include "function.h"
 #include "narrowing_visitor.h"
+
+#include <yql/essentials/sql/v1/complete/core/name.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
@@ -49,6 +52,27 @@ namespace NSQLComplete {
                     return TColumnContext{
                         .Tables = {
                             TTableId{std::move(cluster), std::move(*path)},
+                        },
+                    };
+                }
+
+                if (TMaybe<TFunctionContext> function = GetFunction(ctx, *Nodes_)) {
+                    TString cluster = function->Cluster.GetOrElse({}).Name;
+
+                    TString path;
+                    function->Name = NormalizeName(function->Name);
+                    if (function->Name == "concat" && function->Arg0) {
+                        path = std::move(*function->Arg0);
+                    } else if (function->Name == "range" && function->Arg0 && function->Arg1) {
+                        path = std::move(*function->Arg0);
+                        path.append('/').append(*function->Arg1);
+                    } else {
+                        return {};
+                    }
+
+                    return TColumnContext{
+                        .Tables = {
+                            TTableId{std::move(cluster), std::move(path)},
                         },
                     };
                 }

@@ -9,6 +9,7 @@ import unittest
 import tempfile
 from library.python import resource
 import ydb
+import yatest.common
 
 
 class Workload(unittest.TestCase):
@@ -56,7 +57,15 @@ class Workload(unittest.TestCase):
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
         for i in range(self.num_workers):
-            processes.append(subprocess.Popen(["ya", "tool", "java", "-jar", self.jar_path, self.bootstrap, f"streams-store-{i}"]),)
+            # processes.append(subprocess.Popen(["ya", "tool", "java", "-jar", self.jar_path, self.bootstrap, f"streams-store-{i}"]),)
+            diff_tool = [
+                yatest.common.java_bin(),
+                "-jar",
+                yatest.common.build_path("e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"),
+                self.bootstrap,
+                f"streams-store-{i}"
+            ]
+            yatest.common.execute(diff_tool)
         processes[0].wait()
 
         print("-----------------")

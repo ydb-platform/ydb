@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 namespace NKikimr::NKqp {
 
@@ -1386,6 +1387,87 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 [[2u];["OldNew"];2];
                 [[3u];["BrandNew"];1]
             ])");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableAddColumnWithDefaultRejection) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetEnableAddColumsWithDefaults(true)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key),
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/TestTable`
+                ADD COLUMN DefaultValue Json NOT NULL DEFAULT Json("not [json]");
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid value \"not [json]\" for type Json");
+        }
+
+        {
+            auto query = R"(
+                SELECT DefaultValue FROM `/Root/TestTable`;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Member not found: DefaultValue");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableAddColumnWithDefaultCancellation) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetEnableAddColumsWithDefaults(true)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 100000, 4, 4, 1000, 1);
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/LargeTable`
+                ADD COLUMN DefaultValue Utf8 NOT NULL DEFAULT Utf8("Default Value");
+            )";
+
+            auto script = db.ExecuteScript(query).ExtractValueSync();
+            UNIT_ASSERT_C(script.Status().IsSuccess(), script.Status().GetIssues().ToString());
+
+            auto opClient = NOperation::TOperationClient(kikimr.GetDriver());
+            auto status = opClient.Cancel(script.Id()).ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto op = opClient.Get<TScriptExecutionOperation>(script.Id()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::CANCELLED, op.Status().GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToOneLineString(), "Request was canceled by user");
+        }
+
+        {
+            auto query = R"(
+                SELECT DefaultValue FROM `/Root/LargeTable`;
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Member not found: DefaultValue");
         }
     }
 }

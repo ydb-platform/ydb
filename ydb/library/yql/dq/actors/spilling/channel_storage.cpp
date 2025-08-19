@@ -27,101 +27,6 @@ constexpr ui64 MAX_INFLIGHT_BLOBS_SIZE = 50_MB;
 class TDqChannelStorage : public IDqChannelStorage {
     struct TWritingBlobInfo {
         ui64 BlobSize_;
-        NThreading::TFuture<void> IsBlobWrittenFuture_;
-    };
-public:
-    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback, 
-        TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TActorSystem* actorSystem)
-    : ActorSystem_(actorSystem)
-    {
-        ChannelStorageActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), spillingTaskCounters, actorSystem);
-        ChannelStorageActorId_ = ActorSystem_->Register(ChannelStorageActor_->GetActor());
-    }
-
-    ~TDqChannelStorage() {
-        ActorSystem_->Send(ChannelStorageActorId_, new TEvents::TEvPoison);
-    }
-
-    bool IsEmpty() override {
-        UpdateWriteStatus();
-
-        return WritingBlobs_.empty() && StoredBlobsCount_ == 0 && LoadingBlobs_.empty();
-    }
-
-    bool IsFull() override {
-        UpdateWriteStatus();
-
-        return WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
-    }
-
-    void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 cookie = 0) override {
-        UpdateWriteStatus();
-
-        auto promise = NThreading::NewPromise<void>();
-        auto future = promise.GetFuture();
-
-        ui64 blobSize = blob.Size();
-
-        ActorSystem_->Send(ChannelStorageActorId_, new TEvDqChannelSpilling::TEvPut(blobId, std::move(blob), std::move(promise)), /*flags*/0, cookie);
-
-        WritingBlobs_.emplace(blobId, TWritingBlobInfo{blobSize, std::move(future)});
-        WritingBlobsTotalSize_ += blobSize;
-    }
-
-    bool Get(ui64 blobId, TBuffer& blob, ui64 cookie = 0) override {
-        UpdateWriteStatus();
-
-        const auto it = LoadingBlobs_.find(blobId);
-        // If we didn't request loading blob from spilling -> request it
-        if (it == LoadingBlobs_.end()) {
-            auto promise = NThreading::NewPromise<TBuffer>();
-            auto future = promise.GetFuture();
-            ActorSystem_->Send(ChannelStorageActorId_, new TEvDqChannelSpilling::TEvGet(blobId, std::move(promise)), /*flags*/0, cookie);
-
-            LoadingBlobs_.emplace(blobId, std::move(future));
-            return false;
-        }
-        // If we requested loading blob, but it's not loaded -> wait
-        if (!it->second.HasValue()) return false;
-
-        blob = std::move(it->second.ExtractValue());
-        LoadingBlobs_.erase(it);
-        --StoredBlobsCount_;
-
-        return true;
-    }
-
-private:
-    void UpdateWriteStatus() {
-        for (auto it = WritingBlobs_.begin(); it != WritingBlobs_.end();) {
-            if (it->second.IsBlobWrittenFuture_.HasValue()) {
-                WritingBlobsTotalSize_ -= it->second.BlobSize_;
-                ++StoredBlobsCount_;
-                it = WritingBlobs_.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
-
-private:
-    IDqChannelStorageActor* ChannelStorageActor_;
-    TActorId ChannelStorageActorId_;
-    TActorSystem *ActorSystem_;
-
-    // BlobId -> future with requested blob
-    std::unordered_map<ui64, NThreading::TFuture<TBuffer>> LoadingBlobs_;
-    // BlobId -> future with some additional info
-    std::unordered_map<ui64, TWritingBlobInfo> WritingBlobs_;
-    ui64 WritingBlobsTotalSize_ = 0;
-
-    ui64 StoredBlobsCount_ = 0;
-};
-
-// Channel storage that uses shared spiller instead of creating its own
-class TDqChannelStorageWithSharedSpiller : public IDqChannelStorage {
-    struct TWritingBlobInfo {
-        ui64 BlobSize_;
         NThreading::TFuture<NKikimr::NMiniKQL::ISpiller::TKey> WriteFuture_;
         NKikimr::NMiniKQL::ISpiller::TKey SpillerKey_;
         bool KeyReady_ = false;
@@ -132,14 +37,17 @@ class TDqChannelStorageWithSharedSpiller : public IDqChannelStorage {
     };
     
 public:
-    TDqChannelStorageWithSharedSpiller(ui64 channelId, NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller,
+    // Only constructor - takes spiller from outside
+    TDqChannelStorage(ui64 channelId, NKikimr::NMiniKQL::ISpiller::TPtr spiller,
         TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters)
         : ChannelId_(channelId)
-        , SharedSpiller_(sharedSpiller)
+        , Spiller_(spiller)
         , SpillingTaskCounters_(spillingTaskCounters)
         , StoredBlobsCount_(0)
         , WritingBlobsTotalSize_(0)
     {}
+
+    ~TDqChannelStorage() = default;
 
     bool IsEmpty() override {
         UpdateWriteStatus();
@@ -158,7 +66,7 @@ public:
         }
 
         ui64 blobSize = blob.Size();
-        auto future = SharedSpiller_->Put(std::move(blob));
+        auto future = Spiller_->Put(std::move(blob));
         
         WritingBlobs_[blobId] = TWritingBlobInfo{blobSize, future, 0, false};
         WritingBlobsTotalSize_ += blobSize;
@@ -168,8 +76,9 @@ public:
         }
     }
 
-    bool Get(ui64 blobId, TBuffer& data, ui64 cookie = 0) override {
+    bool Get(ui64 blobId, TBuffer& blob, ui64 cookie = 0) override {
         Y_UNUSED(cookie);
+        UpdateWriteStatus();
         
         // Check if blob is still being written
         if (auto it = WritingBlobs_.find(blobId); it != WritingBlobs_.end()) {
@@ -197,10 +106,10 @@ public:
             LoadingBlobs_.erase(it);
             if (result) {
                 // Convert TChunkedBuffer to TBuffer
-                data.Clear();
-                data.Reserve(result->Size());
+                blob.Clear();
+                blob.Reserve(result->Size());
                 for (const auto& chunk : result->Chunks()) {
-                    data.Append(chunk.data(), chunk.size());
+                    blob.Append(chunk.data(), chunk.size());
                 }
                 // Remove from stored blobs
                 BlobKeys_.erase(blobId);
@@ -218,7 +127,7 @@ public:
         }
 
         // Start loading the blob
-        auto future = SharedSpiller_->Get(keyIt->second);
+        auto future = Spiller_->Get(keyIt->second);
         LoadingBlobs_[blobId] = TLoadingBlobInfo{future};
         
         if (future.HasValue()) {
@@ -226,10 +135,10 @@ public:
             LoadingBlobs_.erase(blobId);
             if (result) {
                 // Convert TChunkedBuffer to TBuffer
-                data.Clear();
-                data.Reserve(result->Size());
+                blob.Clear();
+                blob.Reserve(result->Size());
                 for (const auto& chunk : result->Chunks()) {
-                    data.Append(chunk.data(), chunk.size());
+                    blob.Append(chunk.data(), chunk.size());
                 }
                 BlobKeys_.erase(blobId);
                 StoredBlobsCount_--;
@@ -262,19 +171,21 @@ private:
 
 private:
     const ui64 ChannelId_;
-    NKikimr::NMiniKQL::ISpiller::TPtr SharedSpiller_;
+    NKikimr::NMiniKQL::ISpiller::TPtr Spiller_;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
-
+    
     // BlobId -> SpillerKey mapping for stored blobs
     std::unordered_map<ui64, NKikimr::NMiniKQL::ISpiller::TKey> BlobKeys_;
     // BlobId -> loading info
     std::unordered_map<ui64, TLoadingBlobInfo> LoadingBlobs_;
     // BlobId -> writing info
     std::unordered_map<ui64, TWritingBlobInfo> WritingBlobs_;
-    ui64 WritingBlobsTotalSize_;
-
-    ui64 StoredBlobsCount_;
+    
+    ui64 WritingBlobsTotalSize_ = 0;
+    ui64 StoredBlobsCount_ = 0;
 };
+
+
 
 } // anonymous namespace
 
@@ -285,14 +196,20 @@ IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
     TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters,
     TActorSystem* actorSystem)
 {
-    return new TDqChannelStorage(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), spillingTaskCounters, actorSystem);
+    // Legacy function - creates own spilling actor. This should be deprecated.
+    // For now, we need to create a spiller here, but this breaks the new architecture
+    Y_UNUSED(txId);
+    Y_UNUSED(wakeUpCallback);
+    Y_UNUSED(errorCallback);
+    Y_UNUSED(actorSystem);
+    Y_ABORT("CreateDqChannelStorage with actor creation is deprecated. Use CreateDqChannelStorageWithSharedSpiller instead.");
 }
 
 IDqChannelStorage::TPtr CreateDqChannelStorageWithSharedSpiller(ui64 channelId,
     NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller,
     TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters)
 {
-    return new TDqChannelStorageWithSharedSpiller(channelId, sharedSpiller, spillingTaskCounters);
+    return new TDqChannelStorage(channelId, sharedSpiller, spillingTaskCounters);
 }
 
 } // namespace NYql::NDq

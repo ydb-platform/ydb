@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 SRCS(
+    shared_spiller_ut.cpp
     spilling_file_ut.cpp
 )
 

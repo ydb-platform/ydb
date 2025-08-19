@@ -553,8 +553,8 @@ public:
             SpillerFactory->SetTaskCounters(SpillingTaskCounters);
             // Create shared spiller for all channels in this task
             SharedSpiller = SpillerFactory->CreateSpiller();
+            AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
         }
-        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);

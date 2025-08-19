@@ -43,14 +43,12 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
 }
 
 IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling, NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller, NActors::TActorSystem* actorSystem) const {
+    Y_UNUSED(actorSystem);
     if (withSpilling) {
-        if (sharedSpiller) {
-            // Use new shared spiller approach
-            return CreateDqChannelStorageWithSharedSpiller(channelId, sharedSpiller, SpillingTaskCounters_);
-        } else {
-            // Fallback to old approach when no shared spiller provided
-            return CreateDqChannelStorage(TxId_, channelId, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, actorSystem);
+        if (!sharedSpiller) {
+            Y_ABORT("SharedSpiller is required for channel storage with spilling enabled");
         }
+        return CreateDqChannelStorageWithSharedSpiller(channelId, sharedSpiller, SpillingTaskCounters_);
     } else {
         return nullptr;
     }

@@ -58,7 +58,6 @@ class Workload(unittest.TestCase):
             subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "workload", "topic", "run", "write", "--topic", self.test_topic_path, "-s", "10", "--message-rate", "100"])
         ]
         print("NumWorkers: ", self.num_workers)
-        print("JAR PATH: ", self.jar_path)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
         for i in range(self.num_workers):
             processes.append(subprocess.Popen(["ya", "tool", "java", "-jar", self.jar_path, self.bootstrap, f"streams-store-{i}"]),)

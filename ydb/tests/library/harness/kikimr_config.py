@@ -557,7 +557,6 @@ class KikimrConfigGenerator(object):
             security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
             security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
         self.__enable_static_auth = enable_static_auth
-        print("TRANSACTION FLAG:", self.yaml_config['feature_flags']['enable_kafka_transactions'])
 
     @property
     def enable_static_auth(self):

@@ -883,7 +883,6 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter& wri
         partsSize += partSize;
     }
 
-
     for (; partIdx < count; ++partIdx) {
         ui32 remainingPartSize = (*evChunkWrite->PartsPtr)[partIdx].second - piece->PartOffset;
         auto traceId = evChunkWrite->Span.GetTraceId();
@@ -902,9 +901,10 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter& wri
                 }
                 evChunkWrite->RemainingSize -= sizeToWrite;
                 evChunkWrite->BytesWritten += sizeToWrite;
+                piece->PartOffset = 0;
             }
-            // Cerr << "Releasecount " << releasecount.fetch_add(1) << Endl;
             writer.Flush(evChunkWrite->ReqId, &traceId, piece->Completion.Release());
+            piece->MarkReady(PCtx->PDiskLogPrefix);
             return false;
         } else {
             Y_VERIFY_S(remainingPartSize, PCtx->PDiskLogPrefix);
@@ -921,10 +921,10 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter& wri
             }
             evChunkWrite->RemainingSize -= sizeToWrite;
             evChunkWrite->BytesWritten += sizeToWrite;
+            piece->PartOffset = 0;
         }
     }
-    Y_VERIFY_S(evChunkWrite->RemainingSize == 0, PCtx->PDiskLogPrefix);
-
+    
     ui32 chunkIdx = evChunkWrite->ChunkIdx;
     P_LOG(PRI_DEBUG, BPD79, "ChunkWrite",
             (ChunkIdx, chunkIdx),
@@ -940,10 +940,9 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter& wri
 
     auto traceId = evChunkWrite->Span.GetTraceId();
     evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
-    // Cerr << "Releasecount " << releasecount.fetch_add(1) << Endl;
     writer.Flush(evChunkWrite->ReqId, &traceId, piece->Completion.Release());
+    piece->MarkReady(PCtx->PDiskLogPrefix);
 
-    evChunkWrite->IsReplied = true;
     return true;
 }
 
@@ -974,8 +973,8 @@ TChunkWriteResult TPDisk::ChunkWritePiece(TChunkWritePiece *piece) {
     ui64 desiredSectorIdx = 0;
     ui64 sectorOffset = 0;
     ui64 lastSectorIdx;
-    if (!ParseSectorOffset(Format, PCtx->ActorSystem, PCtx->PDiskId, evChunkWrite->Offset + evChunkWrite->BytesWritten,
-            evChunkWrite->TotalSize - evChunkWrite->BytesWritten, desiredSectorIdx, lastSectorIdx, sectorOffset,
+    if (!ParseSectorOffset(Format, PCtx->ActorSystem, PCtx->PDiskId, evChunkWrite->Offset + piece->PieceShift,
+            evChunkWrite->TotalSize - piece->PieceShift, desiredSectorIdx, lastSectorIdx, sectorOffset,
             PCtx->PDiskLogPrefix)) {
         ui32 chunkIdx = evChunkWrite->ChunkIdx;
         Y_VERIFY_S(chunkIdx != 0, PCtx->PDiskLogPrefix);
@@ -1025,6 +1024,9 @@ void TPDisk::SendChunkWriteError(TChunkWrite &chunkWrite, const TString &errorRe
     PCtx->ActorSystem->Send(chunkWrite.Sender, ev.release());
     Mon.GetWriteCounter(chunkWrite.PriorityClass)->CountResponse();
     chunkWrite.IsReplied = true;
+    if (chunkWrite.Completion) {
+        chunkWrite.Completion->IsReplied = true;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

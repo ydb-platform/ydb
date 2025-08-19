@@ -1,4 +1,79 @@
 {
+    "test.test_async_replication_describe": {
+        "connection_params": {
+            "connection_string": "text",
+            "database": "/Root/dedicated_db",
+            "endpoint": "text",
+            "oauth": {}
+        },
+        "error": {
+            "issues": [
+                {
+                    "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
+                    "severity": 1
+                }
+            ]
+        },
+        "row_consistency": {},
+        "self": {
+            "created_at": {
+                "plan_step": "not-zero-number-text",
+                "tx_id": "not-zero-number-text"
+            },
+            "effective_permissions": [
+                {
+                    "permission_names": [
+                        "ydb.database.connect"
+                    ],
+                    "subject": "USERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.generic.list"
+                    ],
+                    "subject": "METADATA-READERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.granular.select_row"
+                    ],
+                    "subject": "DATA-READERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.tables.modify"
+                    ],
+                    "subject": "DATA-WRITERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.granular.create_directory",
+                        "ydb.granular.write_attributes",
+                        "ydb.granular.create_table",
+                        "ydb.granular.remove_schema",
+                        "ydb.granular.create_queue",
+                        "ydb.granular.alter_schema"
+                    ],
+                    "subject": "DDL-ADMINS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.access.grant"
+                    ],
+                    "subject": "ACCESS-ADMINS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.generic.manage"
+                    ],
+                    "subject": "DATABASE-ADMINS"
+                }
+            ],
+            "name": "TestAsyncReplication",
+            "owner": "root@builtin",
+            "type": "REPLICATION"
+        }
+    },
     "test.test_counter": {
         "status_code": 200,
         "text": "1\n"
@@ -1205,78 +1280,88 @@
         }
     },
     "test.test_transfer_describe": {
-        "connection_params": {
-            "connection_string": "text",
-            "database": "/Root/dedicated_db",
-            "endpoint": "text",
-            "oauth": {}
-        },
-        "error": {
-            "issues": [
-                {
-                    "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
-                    "severity": 1
+        "describe_result": {
+            "batch_settings": {
+                "flush_interval": {
+                    "seconds": "60"
                 }
-            ]
-        },
-        "row_consistency": {},
-        "self": {
-            "created_at": {
-                "plan_step": "not-zero-number-text",
-                "tx_id": "not-zero-number-text"
             },
-            "effective_permissions": [
-                {
-                    "permission_names": [
-                        "ydb.database.connect"
-                    ],
-                    "subject": "USERS"
+            "connection_params": {
+                "connection_string": "text",
+                "oauth": {}
+            },
+            "consumer_name": "OurConsumer",
+            "destination_path": "/Root/dedicated_db/TestTransferDestinationTable",
+            "running": {},
+            "self": {
+                "created_at": {
+                    "plan_step": "not-zero-number-text",
+                    "tx_id": "not-zero-number-text"
                 },
-                {
-                    "permission_names": [
-                        "ydb.generic.list"
-                    ],
-                    "subject": "METADATA-READERS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.granular.select_row"
-                    ],
-                    "subject": "DATA-READERS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.tables.modify"
-                    ],
-                    "subject": "DATA-WRITERS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.granular.create_directory",
-                        "ydb.granular.write_attributes",
-                        "ydb.granular.create_table",
-                        "ydb.granular.remove_schema",
-                        "ydb.granular.create_queue",
-                        "ydb.granular.alter_schema"
-                    ],
-                    "subject": "DDL-ADMINS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.access.grant"
-                    ],
-                    "subject": "ACCESS-ADMINS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.generic.manage"
-                    ],
-                    "subject": "DATABASE-ADMINS"
-                }
-            ],
-            "name": "TestAsyncReplication",
-            "owner": "root@builtin",
-            "type": "REPLICATION"
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "TestTransfer",
+                "owner": "root@builtin",
+                "type": "TRANSFER"
+            },
+            "source_path": "/TestTransferSourceTopic",
+            "transformation_lambda": "$__ydb_transfer_lambda = ($x) -> { return [<| id: $x._offset, message: $x._data |>]; };\n"
+        },
+        "table_result": {
+            "version": 9
+        },
+        "topic_result": {
+            "version": 9
+        },
+        "transfer_result": {
+            "version": 9
         }
     },
     "test.test_viewer_acl": {

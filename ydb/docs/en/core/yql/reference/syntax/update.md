@@ -1,5 +1,7 @@
 # UPDATE
 
+{% include [column-and-row-tables-in-read-only-tx](../../../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+
 Updates the data in the table.{% if feature_mapreduce %}  The table is searched by name in the database specified by the [USE](use.md) operator.{% endif %} After the `SET` keyword, enter the columns where you want to update values and the new values themselves. The list of rows is defined by the `WHERE` clause. If `WHERE` is omitted, the updates are applied to all the rows of the table.
 
 `UPDATE` can't change the value of the primary key columns.

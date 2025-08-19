@@ -975,6 +975,10 @@ private:
                     << "UnlockTxStatus: " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus) << Endl
                     << "UnlockTxDone: " << (info.UnlockTxDone ? "DONE" : "not done") << Endl
 
+                    << "DropColumnsTxId: " << info.DropColumnsTxId << Endl
+                    << "DropColumnsTxStatus: " << NKikimrScheme::EStatus_Name(info.DropColumnsTxStatus) << Endl
+                    << "DropColumnsTxDone: " << (info.DropColumnsTxDone ? "DONE" : "not done") << Endl
+
                     << "SnapshotStep: " << info.SnapshotStep << Endl
                     << "SnapshotTxId: " << info.SnapshotTxId << Endl;
 

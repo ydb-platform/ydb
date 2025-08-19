@@ -39,13 +39,22 @@ CFLAGS(
     -DPy_BUILD_CORE
     -DPy_BUILD_CORE_BUILTIN
     -DUSE_ZLIB_CRC32
-    -DABIFLAGS=\"\"
     -DPREFIX=\"/var/empty\"
     -DEXEC_PREFIX=\"/var/empty\"
     -DVERSION=\"3.12\"
     -DVPATH=\"\"
     -DPLATLIBDIR=\"lib\"
 )
+
+IF (BUILD_TYPE == "RELEASE")
+    CFLAGS(
+        -DABIFLAGS=\"\"
+    )
+ELSE()
+    CFLAGS(
+        -DABIFLAGS=\"d\"
+    )
+ENDIF()
 
 IF (CLANG_CL)
     CFLAGS(

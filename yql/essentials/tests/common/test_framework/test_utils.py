@@ -70,8 +70,6 @@ def collect_argvalues_by_template(template, data_path):
 
 
 def pytest_generate_tests_by_template(template, metafunc, data_path):
-    assert isinstance(template, (str, set))
-
     if isinstance(template, str):
         template = [template]
 
@@ -80,6 +78,10 @@ def pytest_generate_tests_by_template(template, metafunc, data_path):
         argvalues += collect_argvalues_by_template(t, data_path)
 
     metafunc.parametrize(['suite', 'case'], argvalues)
+
+
+def pytest_generate_sql_tests(metafunc, data_path):
+    pytest_generate_tests_by_template(['.sql', '.yql'], metafunc, data_path)
 
 
 def collect_argvalues_for_run(template, suites, currentPart, partsCount, data_path, mode_expander):
@@ -120,7 +122,7 @@ def collect_argvalues_for_run(template, suites, currentPart, partsCount, data_pa
     return argvalues
 
 
-def pytest_generate_tests_for_run(metafunc, template={'.sql', '.yql'}, suites=None, currentPart=0, partsCount=1, data_path=None, mode_expander=None):
+def pytest_generate_tests_for_run(metafunc, template=['.sql', '.yql'], suites=None, currentPart=0, partsCount=1, data_path=None, mode_expander=None):
     if isinstance(template, str):
         template = [template]
 
@@ -134,7 +136,7 @@ def pytest_generate_tests_for_run(metafunc, template={'.sql', '.yql'}, suites=No
     )
 
 
-def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None, template={'.sql', '.yql'}, mode_expander=None):
+def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None, template=['.sql', '.yql'], mode_expander=None):
     return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount,
                                          data_path=data_path, template=template, mode_expander=mode_expander)
 
@@ -311,7 +313,7 @@ def replace_vars(sql_query, var_tag):
     return sql_query
 
 
-def get_case_file(data, suite, case, exts):
+def get_case_file(data, suite, case, exts=['.sql', '.yql']):
     if isinstance(exts, str):
         exts = [exts]
 

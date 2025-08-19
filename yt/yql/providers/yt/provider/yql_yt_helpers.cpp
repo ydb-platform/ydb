@@ -1085,7 +1085,7 @@ TExprNode::TPtr GetLimitExpr(const TExprNode::TPtr& limitSetting, TExprContext& 
 }
 
 IGraphTransformer::TStatus UpdateTableMeta(const TExprNode::TPtr& tableNode, TExprNode::TPtr& newTableNode,
-    const TYtTablesData::TPtr& tablesData, bool checkSqlView, bool updateRowSpecType, TExprContext& ctx)
+    const TYtTablesData::TPtr& tablesData, bool checkSqlView, bool updateRowSpecType, bool useNativeYtDefaultColumnOrder, TExprContext& ctx)
 {
     newTableNode = tableNode;
     TYtTableInfo tableInfo = tableNode;
@@ -1192,10 +1192,10 @@ IGraphTransformer::TStatus UpdateTableMeta(const TExprNode::TPtr& tableNode, TEx
 
             if (prevRowSpec) {
                 if (auto nativeType = prevRowSpec->GetNativeYtType()) {
-                    tableInfo.RowSpec->CopyTypeOrders(*nativeType);
+                    tableInfo.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
                 }
                 if (prevRowSpec->IsSorted()) {
-                    tableInfo.RowSpec->CopySortness(ctx, *prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                    tableInfo.RowSpec->CopySortness(ctx, *prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                     tableInfo.RowSpec->MakeCommonSortness(ctx, *prevRowSpec); // Truncated keys with changed types
                 }
             }
@@ -1216,7 +1216,7 @@ IGraphTransformer::TStatus UpdateTableMeta(const TExprNode::TPtr& tableNode, TEx
 }
 
 TExprNode::TPtr ValidateAndUpdateTablesMeta(const TExprNode::TPtr& input, TStringBuf cluster, const TYtTablesData::TPtr& tablesData,
-    bool updateRowSpecType, ERuntimeClusterSelectionMode selectionMode, TExprContext& ctx)
+    bool updateRowSpecType, bool useNativeYtDefaultColumnOrder, ERuntimeClusterSelectionMode selectionMode, TExprContext& ctx)
 {
     TNodeSet tables;
     VisitExpr(input, [&](const TExprNode::TPtr& node) {
@@ -1253,7 +1253,7 @@ TExprNode::TPtr ValidateAndUpdateTablesMeta(const TExprNode::TPtr& input, TStrin
             if (tables.find(node.Get()) != tables.cend()) {
                 if (!TYtTableInfo::HasSubstAnonymousLabel(TExprBase(node))) {
                     TExprNode::TPtr newNode;
-                    auto status = UpdateTableMeta(node, newNode, tablesData, true, updateRowSpecType, ctx);
+                    auto status = UpdateTableMeta(node, newNode, tablesData, true, updateRowSpecType, useNativeYtDefaultColumnOrder, ctx);
                     if (IGraphTransformer::TStatus::Error == status.Level) {
                         return {};
                     }
@@ -1595,7 +1595,10 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         outNativeType = outRowSpec->GetNativeYtType();
     }
     bool first = !outRowSpec;
+
     const bool useNativeDescSort = state->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = state->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
     for (auto path: section.Paths()) {
         TYtPathInfo pathInfo(path);
         const bool hasRowSpec = !!pathInfo.Table->RowSpec;
@@ -1625,7 +1628,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         }
     }
     if (!needMap && outNativeType) {
-        outTable.RowSpec->CopyTypeOrders(*outNativeType);
+        outTable.RowSpec->CopyTypeOrders(*outNativeType, useNativeYtDefaultColumnOrder);
     }
     useExplicitColumns = useExplicitColumns || (!tryKeepSortness && hasAux);
 
@@ -1649,7 +1652,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                         ? TYqlRowSpecInfo::ECopySort::Exact
                         : TYqlRowSpecInfo::ECopySort::WithDesc;
                 }
-                sortIsChanged = outTable.RowSpec->CopySortness(ctx, *rowSpecs[i].first, mode);
+                sortIsChanged = outTable.RowSpec->CopySortness(ctx, *rowSpecs[i].first, useNativeYtDefaultColumnOrder, mode);
             } else {
                 sortIsChanged = outTable.RowSpec->MakeCommonSortness(ctx, *rowSpecs[i].first) || sortIsChanged;
                 if (rowSpecs[i].second && !sortConstraintEnabled) {
@@ -1714,7 +1717,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                 if (rowSpecs[i].second) {
                     TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
                     if (outNativeType) {
-                        mapOutTable.RowSpec->CopyTypeOrders(*outNativeType);
+                        mapOutTable.RowSpec->CopyTypeOrders(*outNativeType, useNativeYtDefaultColumnOrder);
                     }
                     YQL_ENSURE(rowSpecs[i].first);
                     mapOutTable.SetUnique(getPathUniq(path), path.Pos(), ctx);
@@ -1723,7 +1726,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                         .Body("stream")
                         .Done().Ptr();
 
-                    mapOutTable.RowSpec->CopySortness(ctx, *rowSpecs[i].first, sortConstraintEnabled ? TYqlRowSpecInfo::ECopySort::WithDesc : TYqlRowSpecInfo::ECopySort::Pure);
+                    mapOutTable.RowSpec->CopySortness(ctx, *rowSpecs[i].first, useNativeYtDefaultColumnOrder, sortConstraintEnabled ? TYqlRowSpecInfo::ECopySort::WithDesc : TYqlRowSpecInfo::ECopySort::Pure);
                     if (sortConstraintEnabled) {
                         TKeySelectorBuilder builder(path.Pos(), ctx, useNativeDescSort, scheme.Cast<TStructExprType>());
                         builder.ProcessRowSpec(*mapOutTable.RowSpec);

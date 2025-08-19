@@ -40,6 +40,8 @@ constexpr auto MinWarmupPerTerminalMs = std::chrono::milliseconds(1);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
 
+const TDuration SaturatedThreadsWindowDuration = TDuration::Minutes(5);
+
 //-----------------------------------------------------------------------------
 
 void InterruptHandler(int) {
@@ -112,6 +114,9 @@ private:
     std::shared_ptr<TRunDisplayData> DataToDisplay;
 
     std::unique_ptr<TRunnerTui> Tui;
+
+    Clock::time_point SaturationWindowStartTs{};
+    size_t SaturationWindowMaxSaturatedThreads = 0;
 };
 
 //-----------------------------------------------------------------------------
@@ -411,6 +416,27 @@ void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
 
     CollectDataToDisplay(now);
 
+    // Maintain tumbling window for saturated threads
+    if (SaturationWindowStartTs == Clock::time_point{}) {
+        SaturationWindowStartTs = now;
+        SaturationWindowMaxSaturatedThreads = 0;
+    }
+
+    size_t currentSaturated = DataToDisplay->Statistics.SaturatedThreads;
+    if (currentSaturated > SaturationWindowMaxSaturatedThreads) {
+        SaturationWindowMaxSaturatedThreads = currentSaturated;
+    }
+
+    auto windowElapsedSec = duration_cast<std::chrono::seconds>(now - SaturationWindowStartTs).count();
+    if (windowElapsedSec >= static_cast<long long>(SaturatedThreadsWindowDuration.Seconds())) {
+        if (SaturationWindowMaxSaturatedThreads > 0) {
+            LOG_W("Observed " << SaturationWindowMaxSaturatedThreads << " saturated threads within last "
+                << SaturatedThreadsWindowDuration);
+        }
+        SaturationWindowStartTs = now;
+        SaturationWindowMaxSaturatedThreads = 0;
+    }
+
     switch (Config.DisplayMode) {
     case TRunConfig::EDisplayMode::Text:
         UpdateDisplayTextMode();
@@ -471,7 +497,7 @@ void TPCCRunner::UpdateDisplayTextMode() {
         std::stringstream leftLine;
         if (i < threadCount) {
             const auto& stats = DataToDisplay->Statistics.StatVec[i];
-            double load = stats.ExecutingTime / stats.TotalTime;
+            double load = stats.Load;
             leftLine << std::left
                      << std::setw(5) << (i + 1)
                      << std::setw(5) << std::fixed << std::setprecision(2) << load
@@ -487,7 +513,7 @@ void TPCCRunner::UpdateDisplayTextMode() {
         size_t rightIndex = i + halfCount;
         if (rightIndex < threadCount) {
             const auto& stats = DataToDisplay->Statistics.StatVec[rightIndex];
-            double load = stats.ExecutingTime / stats.TotalTime;
+            double load = stats.Load;
             rightLine << std::left
                       << std::setw(5) << (rightIndex + 1)
                       << std::setw(5) << std::fixed << std::setprecision(2) << load

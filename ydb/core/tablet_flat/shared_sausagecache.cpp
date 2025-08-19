@@ -1,10 +1,9 @@
 #include "flat_bio_actor.h"
 #include "flat_bio_events.h"
-#include "shared_cache_clock_pro.h"
 #include "shared_cache_events.h"
 #include "shared_cache_pages.h"
-#include "shared_cache_s3fifo.h"
 #include "shared_cache_tiered.h"
+#include "shared_cache_counters.h"
 #include "shared_page.h"
 #include "shared_sausagecache.h"
 #include "util_fmt_abort.h"
@@ -14,7 +13,6 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/bootstrap.pb.h>
-#include <ydb/core/util/cache_cache.h>
 #include <ydb/core/util/page_map.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -64,6 +62,54 @@ struct TCollection {
     }
 };
 
+struct TPageTraits {
+    struct TPageKey {
+        TLogoBlobID LogoBlobID;
+        ui32 PageId;
+    };
+    
+    static ui64 GetSize(const TPage* page) {
+        return sizeof(TPage) + page->Size;
+    }
+
+    static TPageKey GetKey(const TPage* page) {
+        return {page->Collection->Id, page->PageId};
+    }
+
+    static size_t GetHash(const TPageKey& key) {
+        return MultiHash(key.LogoBlobID.Hash(), key.PageId);
+    }
+
+    static TString ToString(const TPageKey& key) {
+        return TStringBuilder() << "LogoBlobID: " << key.LogoBlobID.ToString() << " PageId: " << key.PageId;
+    }
+
+    static TString GetKeyToString(const TPage* page) {
+        return ToString(GetKey(page));
+    }
+
+    static ES3FIFOPageLocation GetLocation(const TPage* page) {
+        return page->S3FIFOLocation;
+    }
+
+    static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
+        page->S3FIFOLocation = location;
+    }
+
+    static ui32 GetFrequency(const TPage* page) {
+        return page->S3FIFOFrequency;
+    }
+
+    static void SetFrequency(TPage* page, ui32 frequency) {
+        Y_ENSURE(frequency < (1 << 4));
+        page->S3FIFOFrequency = frequency;
+    }
+
+    static ui32 GetTier(TPage* page) {
+        return static_cast<ui32>(page->CacheMode);
+    }
+};
+
 struct TRequestQueue {
     TMap<TActorId, TDeque<TIntrusivePtr<TRequest>>> Requests;
 
@@ -91,136 +137,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     static const ui64 ASYNC_QUEUE_COOKIE = 2;
     static const ui64 SCAN_QUEUE_COOKIE = 3;
 
-    struct TCacheCachePageTraits {
-        static ui64 GetWeight(const TPage* page) {
-            return sizeof(TPage) + page->Size;
-        }
-
-        static ECacheCacheGeneration GetGeneration(const TPage *page) {
-            return static_cast<ECacheCacheGeneration>(page->CacheFlags1);
-        }
-
-        static void SetGeneration(TPage *page, ECacheCacheGeneration generation) {
-            ui32 generation_ = static_cast<ui32>(generation);
-            Y_ENSURE(generation_ < (1 << 4));
-            page->CacheFlags1 = generation_;
-        }
-    };
-
-    struct TS3FIFOPageTraits {
-        struct TPageKey {
-            TLogoBlobID LogoBlobID;
-            ui32 PageId;
-        };
-        
-        static ui64 GetSize(const TPage* page) {
-            return sizeof(TPage) + page->Size;
-        }
-
-        static TPageKey GetKey(const TPage* page) {
-            return {page->Collection->Id, page->PageId};
-        }
-
-        static size_t GetHash(const TPageKey& key) {
-            return MultiHash(key.LogoBlobID.Hash(), key.PageId);
-        }
-
-        static TString ToString(const TPageKey& key) {
-            return TStringBuilder() << "LogoBlobID: " << key.LogoBlobID.ToString() << " PageId: " << key.PageId;
-        }
-
-        static TString GetKeyToString(const TPage* page) {
-            return ToString(GetKey(page));
-        }
-
-        static ES3FIFOPageLocation GetLocation(const TPage* page) {
-            return static_cast<ES3FIFOPageLocation>(page->CacheFlags1);
-        }
-
-        static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
-            ui32 location_ = static_cast<ui32>(location);
-            Y_ENSURE(location_ < (1 << 4));
-            page->CacheFlags1 = location_;
-        }
-
-        static ui32 GetFrequency(const TPage* page) {
-            return page->CacheFlags2;
-        }
-
-        static void SetFrequency(TPage* page, ui32 frequency) {
-            Y_ENSURE(frequency < (1 << 4));
-            page->CacheFlags2 = frequency;
-        }
-    };
-
-    struct TClockProPageTraits {
-        struct TPageKey {
-            TLogoBlobID LogoBlobID;
-            ui32 PageId;
-        };
-        
-        static ui64 GetSize(const TPage* page) {
-            return sizeof(TPage) + page->Size;
-        }
-
-        static TPageKey GetKey(const TPage* page) {
-            return {page->Collection->Id, page->PageId};
-        }
-
-        static size_t GetHash(const TPageKey& key) {
-            return MultiHash(key.LogoBlobID.Hash(), key.PageId);
-        }
-
-        static bool Equals(const TPageKey& left, const TPageKey& right) {
-            return left.PageId == right.PageId && left.LogoBlobID == right.LogoBlobID;
-        }
-
-        static TString ToString(const TPageKey& key) {
-            return TStringBuilder() << "LogoBlobID: " << key.LogoBlobID.ToString() << " PageId: " << key.PageId;
-        }
-
-        static TString GetKeyToString(const TPage* page) {
-            return ToString(GetKey(page));
-        }
-
-        static EClockProPageLocation GetLocation(const TPage* page) {
-            return static_cast<EClockProPageLocation>(page->CacheFlags1);
-        }
-
-        static void SetLocation(TPage* page, EClockProPageLocation location) {
-            ui32 location_ = static_cast<ui32>(location);
-            Y_ENSURE(location_ < (1 << 4));
-            page->CacheFlags1 = location_;
-        }
-
-        static bool GetReferenced(const TPage* page) {
-            return page->CacheFlags2;
-        }
-
-        static void SetReferenced(TPage* page, bool referenced) {
-            page->CacheFlags2 = static_cast<ui32>(referenced);
-        }
-    };
-
-    struct TCompositeCachePageTraits {
-        static ui64 GetSize(const TPage* page) {
-            return sizeof(TPage) + page->Size;
-        }
-
-        static ui32 GetCacheId(const TPage* page) {
-            return page->CacheId;
-        }
-
-        static void SetCacheId(TPage* page, ui32 id) {
-            Y_ENSURE(id < (1 << 4));
-            page->CacheId = id;
-        }
-
-        static ui32 GetTier(TPage* page) {
-            return static_cast<ui32>(page->CacheMode);
-        }
-    };
-
     TActorId Owner;
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
     NSharedCache::TSharedCachePages* SharedCachePages;
@@ -232,7 +148,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TRequestQueue AsyncRequests;
     TRequestQueue ScanRequests;
 
-    TTieredCache<TPage, TCompositeCachePageTraits> Cache;
+    TTieredCache<TPage, TPageTraits> Cache;
 
     ui64 StatBioReqs = 0;
     ui64 StatActiveBytes = 0;
@@ -243,23 +159,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     ui64 MemLimitBytes = 0;
     ui64 TryKeepInMemoryBytes = 0;
-
-    THolder<ICacheCache<TPage>> CreateCache() {
-        // TODO: pass actual limit to cache config
-        // now it will be fixed by ActualizeCacheSizeLimit call
-
-        switch (Config.GetReplacementPolicy()) {
-            case NKikimrSharedCache::S3FIFO:
-                return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageTraits>>(1);
-            case NKikimrSharedCache::ClockPro:
-                return MakeHolder<TClockProCache<TPage, TClockProPageTraits>>(1);
-            case NKikimrSharedCache::ThreeLeveledLRU:
-            default: {
-                TCacheCacheConfig cacheCacheConfig(1, Counters.FreshBytes, Counters.StagingBytes, Counters.WarmBytes);
-                return MakeHolder<TCacheCache<TPage, TCacheCachePageTraits>>(std::move(cacheCacheConfig));
-            }
-        }
-    }
 
     void ActualizeCacheSizeLimit() {
         ui64 limitBytes = MemLimitBytes;
@@ -852,7 +751,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     continue;
                 }
 
-                page->Initialize(std::move(paged.Data));
+                page->ProvideBody(std::move(paged.Data));
                 BodyProvided(*collection, page);
                 Evict(Cache.Touch(page));
             }
@@ -1270,8 +1169,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        auto currentReplacementPolicy = Config.GetReplacementPolicy();
-
         {
             auto* appData = AppData(ctx);
             NKikimrSharedCache::TSharedCacheConfig config;
@@ -1295,14 +1192,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
         ScanRequests.Limit = Config.GetScanQueueInFlyLimit();
-
-        if (currentReplacementPolicy != Config.GetReplacementPolicy()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Switch replacement policy "
-                << "from " << currentReplacementPolicy << " to " << Config.GetReplacementPolicy());
-            Evict(Cache.Switch([this]() { return CreateCache(); }, Counters.ReplacementPolicySize(Config.GetReplacementPolicy())));
-            LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Switch replacement policy done "
-                << " from " << currentReplacementPolicy << " to " << Config.GetReplacementPolicy());
-        }
 
         DoGC();
     }
@@ -1354,7 +1243,7 @@ public:
     TSharedPageCache(const TSharedCacheConfig& config, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : Config(config)
         , Counters(counters)
-        , Cache(1, [this]() { return CreateCache(); }, Config.GetReplacementPolicy(), Counters)
+        , Cache(config.GetMemoryLimit())
     {
         AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
         ScanRequests.Limit = Config.GetScanQueueInFlyLimit();

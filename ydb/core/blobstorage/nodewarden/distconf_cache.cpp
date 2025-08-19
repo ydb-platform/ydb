@@ -47,8 +47,9 @@ namespace NKikimr::NStorage {
             SendEvent(*Binding, std::move(ev));
         }
         // propagate backwards
-        for (const auto& [nodeId, info] : DirectBoundNodes) {
-            auto ev = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), nullptr, false);
+        for (auto& [nodeId, info] : DirectBoundNodes) {
+            auto ev = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), nullptr);
+            info.LastReportedRootNodeId = GetRootNodeId();
             ev->Record.MutableCacheUpdate()->CopyFrom(updates);
             SendEvent(nodeId, info, std::move(ev));
         }

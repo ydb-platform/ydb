@@ -20,7 +20,6 @@ SRCS(
     bits_ut.cpp
     btree_cow_ut.cpp
     btree_ut.cpp
-    cache_cache_ut.cpp
     cache_ut.cpp
     circular_queue_ut.cpp
     concurrent_rw_hash_ut.cpp

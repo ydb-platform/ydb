@@ -14,6 +14,7 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tx_reader/composite.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -23,6 +24,12 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <concepts>
+
+namespace NKikimr::NColumnShard {
+
+LWTRACE_USING(YDB_CS);
+
+}
 
 namespace NKikimr::NOlap {
 
@@ -327,6 +334,15 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())("portions_prepared",
         changes->GetPortionsToAccess().size())("drop", portionsFromDrop)("skip", skipLocked)("portions_counter", portionsCount)(
         "chunks", chunksCount)("limit", limitExceeded)("max_portions", maxPortionsCount)("max_chunks", maxChunksCount);
+
+    using namespace NKikimr::NColumnShard;
+    if (LWPROBE_ENABLED(StartCleanup)) {
+        ui64 totalPortions = 0;
+        for (const auto& [_, portions]: CleanupPortions) {
+        totalPortions += portions.size();
+        }
+        LWPROBE(StartCleanup, TabletId, CleanupPortions.size(), totalPortions, changes->GetPortionsToAccess().size(), portionsFromDrop, skipLocked, portionsCount, chunksCount, limitExceeded, maxPortionsCount, maxChunksCount);
+    }
 
     if (changes->GetPortionsToAccess().empty()) {
         return nullptr;

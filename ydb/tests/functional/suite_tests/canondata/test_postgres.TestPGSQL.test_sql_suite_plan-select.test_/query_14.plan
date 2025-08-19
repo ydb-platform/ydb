@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 11,
+                "PlanNodeId": 13,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 9
+                                        "ExternalPlanNodeId": 11
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 10,
+                        "PlanNodeId": 12,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 9,
+                                "PlanNodeId": 11,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -34,18 +34,18 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 7
+                                                        "ExternalPlanNodeId": 9
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
                                             }
                                         ],
-                                        "PlanNodeId": 8,
+                                        "PlanNodeId": 10,
                                         "Plans": [
                                             {
                                                 "Node Type": "Merge",
-                                                "PlanNodeId": 7,
+                                                "PlanNodeId": 9,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -63,16 +63,37 @@
                                                             {
                                                                 "Inputs": [
                                                                     {
+                                                                        "ExternalPlanNodeId": 7
+                                                                    },
+                                                                    {
                                                                         "ExternalPlanNodeId": 5
                                                                     }
                                                                 ],
                                                                 "Name": "Union"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 6,
+                                                        "PlanNodeId": 8,
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "UnionAll",
+                                                                "Node Type": "DqCnParallelUnionAll",
+                                                                "PlanNodeId": 7,
+                                                                "PlanNodeType": "Connection",
+                                                                "Plans": [
+                                                                    {
+                                                                        "Node Type": "ConstantExpr",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Inputs": [],
+                                                                                "Iterator": "[{column0: 2 + 2,column1: 57}]",
+                                                                                "Name": "Iterator"
+                                                                            }
+                                                                        ],
+                                                                        "PlanNodeId": 6
+                                                                    }
+                                                                ]
+                                                            },
+                                                            {
+                                                                "Node Type": "DqCnParallelUnionAll",
                                                                 "PlanNodeId": 5,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [

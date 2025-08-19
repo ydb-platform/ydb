@@ -1451,14 +1451,16 @@ namespace Tests {
                     filePathPrefix = Settings->AppConfig->GetMonitoringConfig().GetMemAllocDumpPathPrefix();
                 }
 
-                const TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider(MakeIntrusive<NMemory::TProcessMemoryInfoProvider>());
+                if (!ProcessMemoryInfoProvider) {
+                    ProcessMemoryInfoProvider = MakeIntrusive<NMemory::TProcessMemoryInfoProvider>();
+                }
 
-                IActor* monitorActor = CreateMemProfMonitor(TDuration::Seconds(1), processMemoryInfoProvider,
+                IActor* monitorActor = CreateMemProfMonitor(TDuration::Seconds(1), ProcessMemoryInfoProvider,
                     Runtime->GetAppData(nodeIdx).Counters, filePathPrefix);
                 const TActorId monitorActorId = Runtime->Register(monitorActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
                 Runtime->RegisterService(MakeMemProfMonitorID(Runtime->GetNodeId(nodeIdx)), monitorActorId, nodeIdx);
 
-                IActor* controllerActor = NMemory::CreateMemoryController(TDuration::Seconds(1), processMemoryInfoProvider,
+                IActor* controllerActor = NMemory::CreateMemoryController(TDuration::Seconds(1), ProcessMemoryInfoProvider,
                     Settings->AppConfig->GetMemoryControllerConfig(), NKikimrConfigHelpers::CreateMemoryControllerResourceBrokerConfig(*Settings->AppConfig),
                     Runtime->GetAppData(nodeIdx).Counters);
                 const TActorId controllerActorId = Runtime->Register(controllerActor, nodeIdx, Runtime->GetAppData(nodeIdx).BatchPoolId);
@@ -1749,6 +1751,10 @@ namespace Tests {
         Y_ABORT_UNLESS(!nodesGRpc.empty());
         Y_ABORT_UNLESS(nodesGRpc.begin()->second.GRpcServer);
         return *nodesGRpc.begin()->second.GRpcServer;
+    }
+
+    TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> TServer::GetProcessMemoryInfoProvider() const {
+        return ProcessMemoryInfoProvider;
     }
 
     void TServer::WaitFinalization() {

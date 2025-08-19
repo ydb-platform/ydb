@@ -706,6 +706,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_agg_phases-sum_opt_/sql.yql"
         }
     ],
+    "test_sql2yql.test[agg_phases-udaf]": [
+        {
+            "checksum": "aa4656d0262aa0d2e29f8af7f6c5bc44",
+            "size": 17047,
+            "uri": "https://{canondata_backend}/212715/9b22c657c63c6ac462aeeed16fe52fa96123e0bb/resource.tar.gz#test_sql2yql.test_agg_phases-udaf_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[agg_phases_agg_apply-avg]": [
         {
             "checksum": "42d4988dbcc737bb6b6a3bebf5b4977a",
@@ -8531,6 +8538,11 @@
     "test_sql_format.test[agg_phases-sum_opt]": [
         {
             "uri": "file://test_sql_format.test_agg_phases-sum_opt_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-udaf]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-udaf_/formatted.sql"
         }
     ],
     "test_sql_format.test[agg_phases_agg_apply-avg]": [

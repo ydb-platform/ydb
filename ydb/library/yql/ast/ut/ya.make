@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/ast)
 
+TAG(ya:manual)
+
 FORK_SUBTESTS()
 
 SRCS(

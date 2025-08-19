@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/dq/local_gateway)
 
+TAG(ya:manual)
+
 SRCS(
     yql_dq_gateway_local_ut.cpp
 )

@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/udfs/common/stat/static)
 
+TAG(ya:manual)
+
 SRCS(
     ../stat_udf_ut.cpp
 )

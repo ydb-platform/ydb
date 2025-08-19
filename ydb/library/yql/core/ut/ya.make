@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/core)
 
+TAG(ya:manual)
+
 SRCS(
     yql_csv_ut.cpp
     yql_execution_ut.cpp

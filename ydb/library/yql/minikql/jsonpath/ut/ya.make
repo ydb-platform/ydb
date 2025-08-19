@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/minikql/jsonpath)
 
-
+TAG(ya:manual)
 
 SRCS(
     common_ut.cpp

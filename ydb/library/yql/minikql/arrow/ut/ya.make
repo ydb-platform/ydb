@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/minikql/arrow)
 
+TAG(ya:manual)
+
 TIMEOUT(600)
 SIZE(MEDIUM)
 

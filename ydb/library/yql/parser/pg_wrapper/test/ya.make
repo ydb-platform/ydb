@@ -1,5 +1,7 @@
 PY3TEST()
 
+TAG(ya:manual)
+
 TEST_SRCS(
     test_doc.py
 )

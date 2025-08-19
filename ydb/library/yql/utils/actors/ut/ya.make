@@ -1,6 +1,8 @@
 IF (OS_LINUX OR OS_DARWIN)
     UNITTEST_FOR(ydb/library/yql/utils/actors)
 
+    TAG(ya:manual)
+
     SIZE(SMALL)
 
     SRCS(

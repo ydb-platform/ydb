@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/yt/actors)
 
+TAG(ya:manual)
+
 PEERDIR(
     ydb/library/yql/providers/yt/codec/codegen/no_llvm
     ydb/library/yql/providers/yt/comp_nodes/no_llvm

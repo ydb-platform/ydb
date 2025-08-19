@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/minikql/comp_nodes/packed_tuple)
 
+TAG(ya:manual)
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)

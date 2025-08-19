@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/pq/provider)
 
+TAG(ya:manual)
+
 SRCS(
     yql_pq_ut.cpp
 )

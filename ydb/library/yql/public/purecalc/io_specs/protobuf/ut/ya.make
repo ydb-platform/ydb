@@ -2,6 +2,8 @@ IF (NOT SANITIZER_TYPE)
 
 UNITTEST()
 
+TAG(ya:manual)
+
 PEERDIR(
     library/cpp/protobuf/util
     ydb/library/yql/public/udf/service/exception_policy

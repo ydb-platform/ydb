@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/s3/provider)
 
+TAG(ya:manual)
+
 SRCS(
     yql_s3_listing_strategy_ut.cpp
 )

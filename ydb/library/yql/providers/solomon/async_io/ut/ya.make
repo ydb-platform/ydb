@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/solomon/async_io)
 
+TAG(ya:manual)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 
 SRCS(

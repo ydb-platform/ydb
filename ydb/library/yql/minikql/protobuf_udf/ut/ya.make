@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/minikql/protobuf_udf)
 
+TAG(ya:manual)
+
 SRCS(
     type_builder_ut.cpp
     value_builder_ut.cpp

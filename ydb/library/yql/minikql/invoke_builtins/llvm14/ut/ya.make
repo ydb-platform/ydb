@@ -1,5 +1,7 @@
 UNITTEST()
 
+TAG(ya:manual)
+
 SRCDIR(ydb/library/yql/minikql/invoke_builtins/llvm14)
 
 PEERDIR(

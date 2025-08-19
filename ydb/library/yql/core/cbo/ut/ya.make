@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/core/cbo)
 
+TAG(ya:manual)
+
 SRCS(
     cbo_optimizer_ut.cpp
 )

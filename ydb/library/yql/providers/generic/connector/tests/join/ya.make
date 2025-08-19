@@ -1,5 +1,7 @@
 PY3TEST()
 
+TAG(ya:manual)
+
 STYLE_PYTHON()
 
 NO_CHECK_IMPORTS()

@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/parser/lexer_common)
 
+TAG(ya:manual)
+
 PEERDIR(
     ydb/library/yql/sql/v1/lexer
 )

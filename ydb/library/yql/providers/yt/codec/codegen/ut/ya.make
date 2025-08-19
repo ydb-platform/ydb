@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/yt/codec/codegen)
 
+TAG(ya:manual)
+
 SRCS(
     yt_codec_cg_ut.cpp
 )

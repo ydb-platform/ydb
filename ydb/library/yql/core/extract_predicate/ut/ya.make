@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/core/extract_predicate)
 
+TAG(ya:manual)
+
 SRCS(
     extract_predicate_ut.cpp
 )

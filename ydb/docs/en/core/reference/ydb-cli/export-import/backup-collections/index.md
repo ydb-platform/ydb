@@ -1,46 +1,30 @@
 # Backup collections
 
+Efficient incremental backup and point-in-time recovery for YDB tables (v25.3+).
+
 ## Quick start
 
-To get started with backup collections:
+```sql
+-- 1. Create collection
+CREATE BACKUP COLLECTION `my_backups`
+    ( TABLE `/Root/db/table1`, TABLE `/Root/db/table2` )
+WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 
-1. [Create a backup collection](create-collection.md) with your tables
-2. [Take incremental backups](incremental-backups.md) regularly  
-3. [Restore from collections](restore-from-collection.md) when needed
+-- 2. Take full backup
+BACKUP `my_backups`;
 
-This section describes backup collections and incremental backup functionality in YDB.
+-- 3. Take incremental backups
+BACKUP `my_backups` INCREMENTAL;
+```
 
-{% note info %}
+## Key features
 
-Backup collections are available starting from YDB vX.Y+ (version TBD).
+- **Incremental backups** - Store only changes, reducing storage requirements
+- **Point-in-time recovery** - Restore to any backup point in the chain
+- **SQL API** - Manage backups with familiar SQL commands
 
-{% endnote %}
+## Documentation
 
-## In this section
-
-- [Overview](overview.md) — Introduction to backup collections
-- [SQL API](sql-api.md) — Using SQL commands for backup operations
-- [Creating collections](create-collection.md) — How to create and configure backup collections
-- [Incremental backups](incremental-backups.md) — Working with incremental backups
-- [Restore operations](restore-from-collection.md) — Restoring from backup collections
-- [Managing collections](manage-collections.md) — Collection management and maintenance
-- [Compatibility](compatibility.md) — Format versions and migration
-
-## Getting started
-
-This section describes backup collections and incremental backup functionality in YDB. See the [overview](overview.md) for detailed concepts and usage examples.
-
-## Key concepts
-
-- **Backup collection**: Named set of backups for selected tables
-- **Full backup**: Complete snapshot of all data in the collection
-- **Incremental backup**: Changes since the previous backup in the chain
-- **Backup chain**: Ordered sequence of full and incremental backups
-- **Point-in-time recovery (PITR)**: Restore data to any specific point in the backup timeline
-
-## Benefits
-
-- **Storage efficiency**: Incremental backups store only changes, reducing storage requirements
-- **Flexible recovery**: Restore to any point in time within the backup chain
-- **Automated management**: Built-in retention policies and chain maintenance
-- **Multiple storage options**: Cluster storage, filesystem export, or S3-compatible storage
+- [Concepts](concepts.md) — Architecture, backup types, and storage backends
+- [Operations](operations.md) — Complete guide to creating, managing, and restoring
+- [SQL API](sql-api.md) — SQL command reference

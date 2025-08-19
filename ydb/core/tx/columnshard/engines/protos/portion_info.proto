@@ -33,6 +33,19 @@ message TIndexPortionMeta {
         optional bytes Last = 2;
     }
     optional TPKBordersV1 PrimaryKeyBordersV1 = 18;
+
+    message TWrittenPortion {
+    }
+
+    message TCompactedPortion {
+        optional TSnapshot AppearanceSnapshot = 1;
+    }
+
+    oneof SpecialPortionInfo {
+        TWrittenPortion WrittenPortion = 30;
+        TCompactedPortion CompactedPortion = 31;
+    }
+
 }
 
 message TIndexColumnMeta {

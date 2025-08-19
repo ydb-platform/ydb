@@ -36,10 +36,6 @@ void TInFlightReadsTracker::AddToInFlightRequest(
     if (!readMeta) {
         return;
     }
-
-    auto selectInfo = readMeta->SelectInfo;
-    Y_ABORT_UNLESS(selectInfo);
-    SelectStatsDelta += selectInfo->Stats();
 }
 
 namespace {

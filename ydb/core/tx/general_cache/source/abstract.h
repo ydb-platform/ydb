@@ -1,8 +1,10 @@
 #pragma once
+
+#include <ydb/core/tx/general_cache/usage/abstract.h>
+
 #include <util/generic/hash.h>
 
 #include <memory>
-#include <vector>
 
 namespace NKikimr::NGeneralCache::NSource {
 
@@ -15,8 +17,8 @@ private:
     using EConsumer = typename TPolicy::EConsumer;
 
     using TSelf = IObjectsProcessor<TPolicy>;
-    virtual void DoAskData(
-        const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr, const ui64 cookie) const = 0;
+    virtual void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr,
+        const ui64 cookie) const = 0;
     virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
         THashMap<TAddress, TString>&& errorAddresses) const = 0;
 

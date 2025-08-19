@@ -37,15 +37,18 @@ public:
         context.Send(
             GetCurrentNodeServiceId(), new NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo(sourceId, std::move(add), std::move(remove)));
     }
+
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcCach" + TPolicy::GetServiceCode());
     }
+
     static NActors::TActorId GetCurrentNodeServiceId() {
         AFL_VERIFY(NActors::TlsActivationContext);
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
         return MakeServiceId(selfId.NodeId());
     }
+
     static NActors::IActor* CreateService(const NPublic::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
         return new NPrivate::TDistributor<TPolicy>(config, conveyorSignals);
     }

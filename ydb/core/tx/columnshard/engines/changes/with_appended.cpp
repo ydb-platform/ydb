@@ -71,7 +71,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
         PortionsToMove.ApplyOnComplete(self, context, *FetchedDataAccessors);
     }
     for (auto& portionBuilder : AppendedPortions) {
-        context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());
+        context.EngineLogs.AppendPortion(portionBuilder.GetPortionResultPtr());
     }
 
 }
@@ -85,9 +85,9 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     }
 }
 
-void TChangesWithAppend::DoOnAfterCompile() {
+void TChangesWithAppend::DoOnAfterCompile(const TFinalizationContext& context) {
     for (auto&& i : AppendedPortions) {
-        i.FinalizePortionConstructor();
+        i.FinalizePortionConstructor(context.GetSnapshot());
     }
 }
 

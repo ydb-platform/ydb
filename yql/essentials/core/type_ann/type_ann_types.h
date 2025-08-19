@@ -40,13 +40,13 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus SerializeTypeHandleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ParseTypeHandleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus TypeKindWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-    IGraphTransformer::TStatus CallableArgumentWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus CallableArgumentWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
     template <ETypeAnnotationKind>
     IGraphTransformer::TStatus SplitTypeHandleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
     template <ETypeAnnotationKind>
-    IGraphTransformer::TStatus MakeTypeHandleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus MakeTypeHandleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
     IGraphTransformer::TStatus FormatCodeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ReprCodeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
@@ -54,6 +54,6 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus EvaluateExprIfPureWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
     template <TExprNode::EType>
-    IGraphTransformer::TStatus MakeCodeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus MakeCodeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 } // namespace NTypeAnnImpl
 } // namespace NYql

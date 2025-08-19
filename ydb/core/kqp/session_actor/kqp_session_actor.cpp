@@ -2964,7 +2964,6 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
                 hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
-
             default:
                 UnexpectedEvent("CleanupState", ev);
             }

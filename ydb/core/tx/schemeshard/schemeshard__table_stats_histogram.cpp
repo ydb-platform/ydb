@@ -291,12 +291,14 @@ void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const 
     ui64 dataSize = rec.GetTableStats().GetDataSize();
     ui64 rowCount = rec.GetTableStats().GetRowCount();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Got partition histogram at tablet " << TabletID()
                <<" from datashard " << datashardId
                << " state " << DatashardStateName(rec.GetShardState())
                << " data size " << dataSize
                << " row count " << rowCount
+               << " buckets " << rec.GetTableStats().GetDataSizeHistogram().BucketsSize()
+               << " ready " << rec.GetFullStatsReady()
     );
 
     Execute(new TTxPartitionHistogram(this, ev), ctx);
@@ -349,10 +351,10 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             << " at tablet " << Self->SelfTabletId()
             << " from datashard " << datashardId
             << " for pathId " << tableId
-            << " state '" << DatashardStateName(rec.GetShardState()).data() << "'"
-            << " dataSize " << dataSize
-            << " rowCount " << rowCount
-            << " dataSizeHistogram buckets " << rec.GetTableStats().GetDataSizeHistogram().BucketsSize());
+            << " state " << DatashardStateName(rec.GetShardState())
+            << " data size " << dataSize
+            << " row count " << rowCount
+            << " buckets " << rec.GetTableStats().GetDataSizeHistogram().BucketsSize());
 
     if (!Self->Tables.contains(tableId)) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

@@ -60,7 +60,7 @@ public:
     TIpPort Port;
 
     TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = true,
-                bool enableAutoTopicCreation = true, bool enableAutoConsumerCreation = true, bool enableQuoting = true) {
+                bool enableAutoTopicCreation = false, bool enableAutoConsumerCreation = true, bool enableQuoting = true) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -91,8 +91,8 @@ public:
         appConfig.MutableKafkaProxyConfig()->SetListeningPort(Port);
         appConfig.MutableKafkaProxyConfig()->SetMaxMessageSize(1024);
         appConfig.MutableKafkaProxyConfig()->SetMaxInflightSize(2048);
-        if (!enableAutoTopicCreation) {
-            appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(false);
+        if (enableAutoTopicCreation) {
+            appConfig.MutableKafkaProxyConfig()->SetAutoCreateTopicsEnable(true);
         }
         appConfig.MutableKafkaProxyConfig()->SetTopicCreationDefaultPartitions(2);
         if (!enableAutoConsumerCreation) {
@@ -2951,7 +2951,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     }
 
     Y_UNIT_TEST(MetadataTopicAutocreationEnabledScenario) {
-        TInsecureTestServer testServer("1", false, false, true);
+        TInsecureTestServer testServer("1", false, false, true, true);
 
         TString nonExistedTopicName1 = "non-existent-topic-1";
         TString nonExistedTopicName2 = "non-existent-topic-2";

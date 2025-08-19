@@ -51,10 +51,6 @@ ydb/core/kqp/ut/federated_query/s3 unittest.sole chunk
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
 ydb/core/kqp/ut/olap KqpOlap.ManyColumnShardsWithRestartsWithResolving
-ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_ResultTL_FilterL_Limit2
-ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_ResultTL_FilterL_OrderT_Limit2
-ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_ResultT_FilterL_Limit2
-ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_ResultT_FilterL_OrderT_Limit2
 ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationAfterDeletion
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore

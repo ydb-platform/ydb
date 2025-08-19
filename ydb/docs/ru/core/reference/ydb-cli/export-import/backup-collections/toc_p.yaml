@@ -1,2 +1,2 @@
-title: Коллекции резервных копий
-href: toc_i.yaml
+items:
+- include: { mode: link, path: toc_i.yaml }

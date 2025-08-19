@@ -3,21 +3,9 @@ items:
   href: file-structure.md
 - name: Коллекции резервных копий
   href: backup-collections/index.md
-  items:
-  - name: Обзор
-    href: backup-collections/overview.md
-  - name: SQL API
-    href: backup-collections/sql-api.md
-  - name: Создание коллекций
-    href: backup-collections/create-collection.md
-  - name: Инкрементальные резервные копии
-    href: backup-collections/incremental-backups.md
-  - name: Операции восстановления
-    href: backup-collections/restore-from-collection.md
-  - name: Управление коллекциями
-    href: backup-collections/manage-collections.md
-  - name: Совместимость
-    href: backup-collections/compatibility.md
+  include:
+    path: backup-collections/toc_p.yaml
+    mode: link
 - name: Выгрузка в файловую систему
   href: tools-dump.md
 - name: Загрузка из файловой системы

@@ -433,14 +433,16 @@ namespace NKikimr {
             return {NKikimrProto::ERROR, "empty garbage collection command"};
         }
 
-        auto blockStatus = THullDbRecovery::IsBlocked(record);
-        switch (blockStatus.Status) {
-            case TBlocksCache::EStatus::OK:
-                break;
-            case TBlocksCache::EStatus::BLOCKED_PERS:
-                return {NKikimrProto::BLOCKED, "blocked", 0, false};
-            case TBlocksCache::EStatus::BLOCKED_INFLIGH:
-                return {NKikimrProto::BLOCKED, "blocked", blockStatus.Lsn, true};
+        if (!record.GetIgnoreBlock()) {
+            auto blockStatus = THullDbRecovery::IsBlocked(record);
+            switch (blockStatus.Status) {
+                case TBlocksCache::EStatus::OK:
+                    break;
+                case TBlocksCache::EStatus::BLOCKED_PERS:
+                    return {NKikimrProto::BLOCKED, "blocked", 0, false};
+                case TBlocksCache::EStatus::BLOCKED_INFLIGH:
+                    return {NKikimrProto::BLOCKED, "blocked", blockStatus.Lsn, true};
+            }
         }
 
         // check per generation counter

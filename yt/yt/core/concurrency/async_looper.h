@@ -23,8 +23,8 @@ class TAsyncLooper
 public:
     TAsyncLooper(
         IInvokerPtr invoker,
-        TCallback<TFuture<void>(bool cleanStart)> asyncStart,
-        TCallback<void(bool cleanStart)> syncFinish,
+        TCallback<TFuture<void>()> asyncStart,
+        TClosure syncFinish,
         const NLogging::TLogger& logger = NLogging::TLogger("AsyncLooper"));
 
     // Starts polling.
@@ -38,8 +38,8 @@ public:
 
 private:
     const IInvokerPtr Invoker_;
-    const TCallback<TFuture<void>(bool)> AsyncStart_;
-    const TCallback<void(bool)> SyncFinish_;
+    const TCallback<TFuture<void>()> AsyncStart_;
+    const TClosure SyncFinish_;
     const NLogging::TLogger Logger;
 
     YT_DECLARE_SPIN_LOCK(NYT::NThreading::TSpinLock, StateLock_);
@@ -75,10 +75,10 @@ private:
 
     void DoStart();
 
-    void StartLoop(bool cleanStart, const TGuard& guard);
-    void AfterStart(bool cleanStart, bool wasRestarted, ui64 epochNumber, const TError& error);
-    void DoStep(bool cleanStart, bool wasRestarted);
-    void FinishStep(bool wasRestarted);
+    void StartLoop(const TGuard& guard);
+    void AfterStart(ui64 epochNumber, const TError& error);
+    void DoStep();
+    void FinishStep();
 };
 
 DEFINE_REFCOUNTED_TYPE(TAsyncLooper);

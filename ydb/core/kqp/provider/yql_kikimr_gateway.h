@@ -205,7 +205,8 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                return false;
+                // FIXME: Support updating prefixed vector indexes
+                return KeyColumns.size() == 1;
         }
     }
 
@@ -256,6 +257,7 @@ struct TTableSettings {
     TResetableSetting<TTtlSettings, void> TtlSettings;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
+    TMaybe<ui64> ExternalDataChannelsCount;
 
     // These parameters are only used for external sources
     TMaybe<TString> DataSourcePath;
@@ -946,6 +948,8 @@ struct TTransferSettings : public TReplicationSettingsBase {
 
         return *Batching;
     }
+
+    TMaybe<TString> DirectoryPath;
 };
 
 struct TCreateTransferSettings {

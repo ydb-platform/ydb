@@ -456,6 +456,16 @@
             ]
         },
         {
+            "Name": "TKqpCnVectorResolve",
+            "Base": "TKqpConnection",
+            "Match": {"Type": "Callable", "Name": "KqpCnVectorResolve"},
+            "Children": [
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "InputType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Index", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqlIndexLookupJoinBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},
@@ -642,7 +652,8 @@
             "Children": [
                 {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Left", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Right", "Type": "TExprBase"}
+                {"Index": 2, "Name": "Right", "Type": "TExprBase"},
+                {"Index": 3, "Name": "OpType", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

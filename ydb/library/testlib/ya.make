@@ -1,4 +1,6 @@
 RECURSE(
+    pq_helpers
+    s3_recipe_helper
     service_mocks
 )
 

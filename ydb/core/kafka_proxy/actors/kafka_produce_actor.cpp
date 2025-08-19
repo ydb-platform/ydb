@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
+#include <util/string/join.h>
 
 namespace NKafka {
 
@@ -305,7 +306,6 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
             res->set_key("__key");
             res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
         }
-
         if (record.Value) {
             proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
         }
@@ -408,6 +408,8 @@ void TKafkaProduceActor::HandleAccepting(TEvPartitionWriter::TEvWriteAccepted::T
     if (expectedCookies.empty()) {
         Become(&TKafkaProduceActor::StateWork);
         ProcessRequests(ctx);
+    } else {
+        KAFKA_LOG_W("Still in Accepting state after TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << JoinSeq(", ", expectedCookies));
     }
 }
 
@@ -425,12 +427,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
         KAFKA_LOG_W("Produce actor: Received TEvWriteResponse with unexpected cookie " << cookie);
         return;
     }
-
     auto& cookieInfo = it->second;
-    auto& partitionResult = cookieInfo.Request->Results[cookieInfo.Position];
-    partitionResult.ErrorCode = EKafkaErrors::NONE_ERROR;
-    partitionResult.Value = request;
-    cookieInfo.Request->WaitResultCookies.erase(cookie);
 
     // Missing supportive partition means that we wrote in transaction and that transaction ended, thus suppprtive partition was deleted
     // it means that we are writing in a new transaction and need to create a new partition writer (cause only partition writer in init state properly creates supportive partition)
@@ -454,8 +451,15 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
         }
     }
 
+    auto& partitionResult = cookieInfo.Request->Results[cookieInfo.Position];
+    partitionResult.ErrorCode = EKafkaErrors::NONE_ERROR;
+    partitionResult.Value = request;
+    cookieInfo.Request->WaitResultCookies.erase(cookie);
+
     if (cookieInfo.Request->WaitResultCookies.empty()) {
         SendResults(ctx);
+    } else {
+        KAFKA_LOG_T("Skipping sending results in Handle TEvPartitionWriter::TEvWriteResponse. WaitResultCookies=" << JoinSeq(", ", cookieInfo.Request->WaitResultCookies));
     }
 
     Cookies.erase(cookie);
@@ -485,6 +489,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
         bool expired = expireTime > pendingRequest->StartTime;
 
         if (!expired && !pendingRequest->WaitResultCookies.empty()) {
+            KAFKA_LOG_T("Skipping sending results. Expired=" << expired << " WaitResultCookies=" << JoinSeq(", ", pendingRequest->WaitResultCookies));
             return;
         }
 
@@ -520,6 +525,12 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                     partitionResponse.ErrorMessage = result.ErrorMessage;
 
                     SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
+                } else if (expired) {
+                    KAFKA_LOG_ERROR("Partition write expired.");
+                    SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
+                    partitionResponse.ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
+                    metricsErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
+                    partitionResponse.ErrorMessage = TStringBuilder() << "No answer from partition writer for " << REQUEST_EXPIRATION_INTERVAL << " seconds";
                 } else {
                     auto* msg = result.Value->Get();
                     if (msg->IsSuccess()) {
@@ -533,9 +544,9 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             partitionResponse.BaseOffset = writeResults.at(0).GetOffset();
                         }
                     } else {
-                        KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" 
-                            << static_cast<int>(Convert(msg->GetError().Code)) 
-                            << ", ErrorMessage=" << msg->GetError().Reason 
+                        KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode="
+                            << static_cast<int>(Convert(msg->GetError().Code))
+                            << ", ErrorMessage=" << msg->GetError().Reason
                             << ", Error from writer=" << static_cast<int>(msg->Record.GetErrorCode())
                             << ", #02");
                         SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
@@ -631,8 +642,8 @@ void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TAct
                 }
             }
         }
-
-        
+        cookieInfo.Request->WaitResultCookies.erase(cookie);
+        cookieInfo.Request->WaitAcceptingCookies.erase(cookie);
         Cookies.erase(it);
     }
 }

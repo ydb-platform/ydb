@@ -44,6 +44,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Table.ReadRows", ERequestType::TABLE_READROWS},
     {"Table.DescribeExternalDataSource", ERequestType::TABLE_DESCRIBEEXTERNALDATASOURCE},
     {"Table.DescribeExternalTable", ERequestType::TABLE_DESCRIBEEXTERNALTABLE},
+    {"Table.DescribeSystemView", ERequestType::TABLE_DESCRIBESYSTEMVIEW},
 
     {"Query.ExecuteQuery", ERequestType::QUERY_EXECUTEQUERY},
     {"Query.ExecuteScript", ERequestType::QUERY_EXECUTESCRIPT},

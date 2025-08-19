@@ -24,6 +24,7 @@ void ITask::Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr
             signals->FailsDuration->Add((TMonotonic::Now() - start).MicroSeconds());
         }
         AFL_ERROR(NKikimrServices::TX_CONVEYOR)("event", "exception_on_execute")("message", CurrentExceptionMessage());
+        OnCannotExecute(CurrentExceptionMessage());
     }
 }
 

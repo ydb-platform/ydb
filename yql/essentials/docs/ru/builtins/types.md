@@ -598,7 +598,7 @@ SELECT FormatType(ListTypeHandle(
 )); -- List<Bool>
 ```
 
-### EmptyListTypeHandle и EmptyDictTypeHandle
+### EmptyListTypeHandle и EmptyDictTypeHandle {#empty-list-dict-type-handle}
 
 #### Сигнатура
 
@@ -838,7 +838,7 @@ SELECT FormatType(VariantTypeHandle(
 )); -- Variant<Int32, String>
 ```
 
-### VoidTypeHandle и NullTypeHandle
+### VoidTypeHandle и NullTypeHandle {#void-null-type-handle}
 
 #### Сигнатура
 

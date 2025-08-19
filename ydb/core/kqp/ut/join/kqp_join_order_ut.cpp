@@ -129,8 +129,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(
     } else {
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
     }
-
-    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    TKikimrSettings serverSettings(appConfig);
     serverSettings.FeatureFlags.SetEnableSeparationComputeActorsFromRead(params.EnableSeparationComputeActorsFromRead);
     serverSettings.SetKqpSettings(settings);
 

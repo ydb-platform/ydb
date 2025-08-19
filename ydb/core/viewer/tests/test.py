@@ -59,6 +59,7 @@ cluster.wait_tenant_up(shared_db, token=root_token)
 cluster.create_serverless_database(serverless_db, shared_db, token=root_token)
 cluster.wait_tenant_up(serverless_db, token=root_token)
 databases = [domain_name, dedicated_db, shared_db, serverless_db]
+databases_and_no_database = ['no-database', domain_name, dedicated_db, shared_db, serverless_db]
 default_headers = {
     'Cookie': 'ydb_session_id=' + root_session_id,
 }
@@ -107,6 +108,7 @@ def call_viewer_db(url, params=None):
     if params is None:
         params = {}
     result = {}
+    result["no-database"] = call_viewer(url, params)
     for name in databases:
         params["database"] = name
         result[name] = call_viewer(url, params)
@@ -504,6 +506,7 @@ def normalize_result_nodes(result):
                                           'Roles',
                                           'ConnectTime',
                                           'Connections',
+                                          'ResolveHost',
                                           ])
 
 
@@ -585,6 +588,12 @@ def get_viewer_db_normalized(url, params=None):
     return normalize_result(get_viewer_db(url, params))
 
 
+def test_viewer_nodelist():
+    result = get_viewer_db_normalized("/viewer/nodelist", {
+    })
+    return result
+
+
 def test_viewer_nodes():
     result = get_viewer_db_normalized("/viewer/nodes", {
     })
@@ -642,10 +651,10 @@ def test_viewer_tabletinfo():
         'group': 'Type',
         'enums': 'true',
     })
-    for name in databases:
+    for name in databases_and_no_database:
         result['totals'][name]['TabletStateInfo'].sort(key=lambda x: x['Type'])
     result['detailed'] = get_viewer_db_normalized("/viewer/tabletinfo")
-    for name in databases:
+    for name in databases_and_no_database:
         result['detailed'][name]['TabletStateInfo'].sort(key=lambda x: x['TabletId'])
     return result
 
@@ -980,7 +989,7 @@ def test_topic_data():
     return result
 
 
-def test_transfer_describe():
+def test_async_replication_describe():
     grpc_port = cluster.nodes[1].grpc_port
     endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
 
@@ -998,6 +1007,42 @@ def test_transfer_describe():
     })
 
     return result
+
+
+def test_transfer_describe():
+    topic_result = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TOPIC TestTransferSourceTopic',
+        'schema': 'multi'
+    })
+
+    table_result = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TABLE TestTransferDestinationTable (id Uint64 NOT NULL, message String, PRIMARY KEY (id) )',
+        'schema': 'multi'
+    })
+
+    transfer_result = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': '''CREATE TRANSFER `TestTransfer` FROM `TestTransferSourceTopic` TO `TestTransferDestinationTable`
+            USING ($x) -> { return [<| id: $x._offset, message: $x._data |>]; }
+            WITH (CONSUMER='OurConsumer')''',
+        'schema': 'multi'
+    })
+
+    describe_result = get_viewer_normalized("/viewer/describe_transfer", {
+        'database': dedicated_db,
+        'path': '{}/TestTransfer'.format(dedicated_db),
+        'include_stats': 'true',
+        'enums': 'true'
+    })
+
+    return {
+        'topic_result': topic_result,
+        'table_result': table_result,
+        'transfer_result': transfer_result,
+        'describe_result': describe_result
+    }
 
 
 def normalize_result_query_long(result):

@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from operator import attrgetter
-from typing import Optional
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    import pytest
 
 
 @dataclass
@@ -13,7 +16,7 @@ class LazyFixtureWrapper:
     def fixture_name(self) -> str:
         return self.name.split(".", maxsplit=1)[0]
 
-    def _get_attr(self, fixture) -> Optional[str]:
+    def _get_attr(self, fixture) -> str | None:
         splitted = self.name.split(".", maxsplit=1)
         if len(splitted) == 1:
             return fixture

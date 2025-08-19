@@ -188,7 +188,7 @@ struct TKikimrEvents : TEvents {
         ES_CONVEYOR_COMPOSITE = 4265,
         ES_GENERAL_CACHE_PUBLIC = 4266,
         ES_GENERAL_CACHE_SOURCE = 4267,
-
+        ES_TRANSFER = 4268, 
     };
 };
 

@@ -1,5 +1,13 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.24.1 {#2-24-1}
+
+Released on July 28, 2025. To update to version **2.24.1**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Bug fixes
+
+* Fixed a bug where the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) silently skipped schema objects of unsupported types and created empty directories for them in the destination folder on the file system.
+
 ## Version 2.24.0 {#2-24-0}
 
 Released on July 23, 2025. To update to version **2.24.0**, select the [Downloads](downloads/ydb-cli.md) section.

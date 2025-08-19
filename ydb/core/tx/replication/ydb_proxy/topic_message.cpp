@@ -39,6 +39,10 @@ TTopicMessage::TTopicMessage(ui64 offset, const TString& data)
 {
 }
 
+NYdb::NTopic::TMessageMeta::TPtr TTopicMessage::GetMessageMeta() const {
+    return MessageMeta;
+}
+
 ECodec TTopicMessage::GetCodec() const {
     return Codec;
 }
@@ -63,6 +67,10 @@ TInstant TTopicMessage::GetCreateTime() const {
     return CreateTime;
 }
 
+TInstant TTopicMessage::GetWriteTime() const {
+    return WriteTime;
+}
+
 TString TTopicMessage::GetMessageGroupId() const {
     return TString(MessageGroupId);
 }
@@ -78,6 +86,7 @@ void TTopicMessage::Out(IOutputStream& out) const {
         << " Offset: " << Offset
         << " SeqNo: " << SeqNo
         << " CreateTime: " << CreateTime
+        << " WriteTime: " << WriteTime
         << " MessageGroupId: " << MessageGroupId
         << " ProducerId: " << ProducerId
     << " }";

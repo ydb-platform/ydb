@@ -5,8 +5,8 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
 
 TConstructor::TConstructor(
-    const IColumnEngine& engine, const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const bool isReverseSort)
-    : TabletId(tabletId) {
+    const IColumnEngine& engine, const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting)
+    : TBase(sorting, tabletId) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     std::vector<ISnapshotSchema::TPtr> schemasAll;
     for (auto&& i : engineImpl->GetVersionedSchemas().GetPresetVersionedIndex()) {
@@ -19,22 +19,25 @@ TConstructor::TConstructor(
     };
     std::sort(schemasAll.begin(), schemasAll.end(), pred);
     std::vector<ISnapshotSchema::TPtr> current;
+    std::deque<TDataSourceConstructor> constructors;
     for (auto&& i : schemasAll) {
-        current.emplace_back(i);
-        if (current.size() == 10) {
-            AddConstructors(std::move(current), pkFilter);
+        if (current.size() && current.back()->GetIndexInfo().GetPresetId() != i->GetIndexInfo().GetPresetId()) {
+            constructors.emplace_back(TabletId, std::move(current));
+            if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
+                constructors.pop_back();
+            }
             current.clear();
         }
+        current.emplace_back(i);
     }
     if (current.size()) {
-        AddConstructors(std::move(current), pkFilter);
+        constructors.emplace_back(TabletId, std::move(current));
+        if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
+            constructors.pop_back();
+        }
         current.clear();
     }
-
-    std::sort(Constructors.begin(), Constructors.end(), TDataConstructor::TComparator(isReverseSort));
-    for (ui32 idx = 0; idx < Constructors.size(); ++idx) {
-        Constructors[idx].SetIndex(idx);
-    }
+    Constructors.Initialize(std::move(constructors));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas

@@ -6,18 +6,15 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NGranules {
 
-TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TSchemeShardLocalPathId externalPathId,
-    const std::optional<NColumnShard::TInternalPathId> internalPathId)
-    : TBase(tablePath, NColumnShard::TUnifiedPathId::BuildNoCheck(internalPathId, externalPathId), "/.sys/primary_index_granule_stats",
-          "/.sys/store_primary_index_granule_stats")
-{
+TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptionalPathId pathId)
+    : TBase(tablePath, pathId) {
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool /*withUncommitted*/, const bool isPlain) const {
+    const NReader::TReadDescription& readDescription, const NColumnShard::IResolveWriteIdToLockId& /*resolver*/, const bool isPlain) const {
     AFL_VERIFY(!isPlain);
     return std::make_unique<TConstructor>(context.GetPathIdTranslator(), context.GetEngine(), readDescription.GetTabletId(),
-        GetTableFilterPathId(), readDescription.PKRangesFilter, readDescription.IsReverseSort());
+        GetTableFilterPathId(), readDescription.PKRangesFilter, readDescription.GetSorting());
 }
 
 std::shared_ptr<ISnapshotSchema> TAccessor::GetSnapshotSchemaOptional(

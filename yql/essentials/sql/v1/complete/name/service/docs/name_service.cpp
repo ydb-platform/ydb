@@ -13,7 +13,7 @@ namespace NSQLComplete {
             }
 
             NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const override {
-                return Origin_->Lookup(request).Apply([docs = Docs_](auto f) {
+                return Origin_->Lookup(request).Apply([docs = Docs_, constraints = request.Constraints](auto f) {
                     TNameResponse response = f.ExtractValue();
                     for (TGenericName& name : response.RankedNames) {
                         name = std::visit([&](auto&& name) -> TGenericName {
@@ -21,7 +21,8 @@ namespace NSQLComplete {
 
                             if constexpr (std::is_base_of_v<TDescribed, T> &&
                                           std::is_base_of_v<TIdentifier, T>) {
-                                name.Description = docs->Lookup(name.Identifier);
+                                T qualified = std::get<T>(constraints.Qualified(name));
+                                name.Description = docs->Lookup(qualified.Identifier);
                             }
 
                             return std::move(name);

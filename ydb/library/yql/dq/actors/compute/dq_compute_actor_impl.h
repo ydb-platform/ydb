@@ -1466,6 +1466,7 @@ protected:
                         .Alloc = Alloc,
                         .RandomProvider = randomProvider,
                         .TraceId = ComputeActorSpan.GetTraceId(),
+                        .TaskCounters = TaskCounters,
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create sink " << outputDesc.GetSink().GetType() << ": " << ex.what();

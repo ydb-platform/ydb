@@ -43,6 +43,18 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 private:
     void InitDefaultConfig() {
+        auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
+        auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
+        auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
+        exchangerSettings->SetStartDelayMs(10);
+        exchangerSettings->SetMaxDelayMs(10);
+        FeatureFlags.SetEnableSparsedColumns(true);
+        FeatureFlags.SetEnableWritePortionsOnInsert(true);
+        FeatureFlags.SetEnableParameterizedDecimal(true);
+        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
+        FeatureFlags.SetEnableFollowerStats(true);
+        FeatureFlags.SetEnableColumnStore(true);
+
         if (!AppConfig.MutableColumnShardConfig()->HasReaderClassName()) {
             SetColumnShardReaderClassName("SIMPLE");
         }
@@ -63,6 +75,7 @@ public:
     bool WithSampleTables = true;
     bool UseRealThreads = true;
     bool EnableForceFollowers = false;
+    bool EnableScriptExecutionBackgroundChecks = true;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
     TMaybe<NFake::TStorage> Storage = Nothing();
@@ -73,25 +86,15 @@ public:
     TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
 
     TKikimrSettings() {
-        auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
-        auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
-        auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
-        exchangerSettings->SetStartDelayMs(10);
-        exchangerSettings->SetMaxDelayMs(10);
-        FeatureFlags.SetEnableSparsedColumns(true);
-        FeatureFlags.SetEnableWritePortionsOnInsert(true);
-        FeatureFlags.SetEnableParameterizedDecimal(true);
-        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
-        FeatureFlags.SetEnableFollowerStats(true);
-        FeatureFlags.SetEnableColumnStore(true);
         InitDefaultConfig();
     }
 
-    TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) {
-        AppConfig = value;
+    explicit TKikimrSettings(const NKikimrConfig::TAppConfig& value)
+        : AppConfig(value)
+    {
         InitDefaultConfig();
-        return *this;
     }
+
     TKikimrSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
     TKikimrSettings& SetPQConfig(const NKikimrPQ::TPQConfig& value) { PQConfig = value; return *this; };
     TKikimrSettings& SetKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& value) { KqpSettings = value; return *this; }
@@ -212,8 +215,7 @@ private:
 inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings = {},
     const NKikimrConfig::TAppConfig& appConfig = {})
 {
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig)
+    auto settings = TKikimrSettings(appConfig)
         .SetKqpSettings(kqpSettings)
         .SetEnableScriptExecutionOperations(true);
 

@@ -10,7 +10,7 @@ using namespace NYdb::NConsoleClient;
 
 int TCommandWorkloadTopicInit::TScenario::DoRun(const TConfig& config)
 {
-    CreateTopic(config.Database, TopicName, TopicPartitionCount, ConsumerCount, TopicAutoscaling, GetTopicMaxPartitionCount(), StabilizationWindowSeconds, UpUtilizationPercent, DownUtilizationPercent);
+    CreateTopic(config.Database, TopicName, TopicPartitionCount, ConsumerCount, TopicAutoscaling, GetTopicMaxPartitionCount(), StabilizationWindowSeconds, UpUtilizationPercent, DownUtilizationPercent, CleanupPolicyCompact);
 
     return EXIT_SUCCESS;
 }
@@ -57,6 +57,11 @@ void TCommandWorkloadTopicInit::Config(TConfig& config)
     config.Opts->AddLongOption("auto-partitioning-down-utilization-percent", "The load percentage at which the number of partitions will decrease")
         .Optional()
         .StoreResult(&Scenario.DownUtilizationPercent);
+
+    config.Opts->AddLongOption("cleanup-policy-compact", "Set 'compact' cleanup policy for the topic")
+        .Optional()
+        .Hidden()
+        .StoreTrue(&Scenario.CleanupPolicyCompact);
 }
 
 void TCommandWorkloadTopicInit::Parse(TConfig& config)

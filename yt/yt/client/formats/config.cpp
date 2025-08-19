@@ -360,4 +360,22 @@ void TYamlFormatConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TArrowFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("enable_tz_index", &TThis::EnableTzIndex)
+        .Default(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TBlobFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("part_index_column_name", &TThis::PartIndexColumnName)
+        .Default();
+    registrar.Parameter("data_column_name", &TThis::DataColumnName)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NFormats

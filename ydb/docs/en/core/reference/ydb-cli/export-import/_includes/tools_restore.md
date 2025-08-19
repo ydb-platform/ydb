@@ -1,6 +1,6 @@
 # Importing data from the file system
 
-## Cluster
+## Cluster {#cluster}
 
 The `admin cluster restore` command restores a cluster from a backup on the file system. The backup must have been previously exported or prepared manually as described in the [{#T}](../file-structure.md) article:
 

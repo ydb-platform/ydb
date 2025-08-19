@@ -204,9 +204,17 @@ public:
 
     }
 
-    void FinalizePortionConstructor() {
+    void FinalizePortionConstructor(const TSnapshot& finalizationSnapshot) {
         AFL_VERIFY(!!PortionConstructor);
         AFL_VERIFY(!PortionResult);
+        if (PortionConstructor->MutablePortionConstructor().GetType() == EPortionType::Compacted) {
+            auto* cPortion = static_cast<TCompactedPortionInfoConstructor*>(&PortionConstructor->MutablePortionConstructor());
+            if (!cPortion->GetAppearanceSnapshot()) {
+                cPortion->SetAppearanceSnapshot(finalizationSnapshot);
+            } else {
+                AFL_VERIFY(cPortion->GetAppearanceSnapshot()->Valid());
+            }
+        }
         PortionResult = PortionConstructor->Build(true);
         PortionConstructor.reset();
     }

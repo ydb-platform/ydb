@@ -57,8 +57,8 @@ public:
     virtual ui64 GetPresetId() const = 0;
     virtual TIndexInfo GetIndexInfo(
         const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<TSchemaObjectsCache>& schemaObjectsCache) const = 0;
-    virtual std::shared_ptr<ITableMetadataAccessor> BuildMetadataAccessor(const TString& tableName,
-        const NColumnShard::TSchemeShardLocalPathId externalPathId, const std::optional<NColumnShard::TInternalPathId> internalPathId) const = 0;
+    virtual std::shared_ptr<ITableMetadataAccessor> BuildMetadataAccessor(
+        const TString& tableName, const NColumnShard::TUnifiedOptionalPathId pathId) const = 0;
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NAbstract

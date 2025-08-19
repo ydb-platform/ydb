@@ -1090,7 +1090,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         return node;
     }
 
-    static const TStringBuf canaryBaseName = "_yql_canary_";
+    static const TStringBuf canaryBaseName = YqlCanaryColumnName;
 
     THashMap<TStringBuf, THashSet<TStringBuf>> joinKeysByLabel = CollectEquiJoinKeyColumnsByLabel(*joinTree);
     const auto renames = LoadJoinRenameMap(*settings);
@@ -1109,7 +1109,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         const TTypeAnnotationNode* itemType = input.List().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         auto structType = itemType->Cast<TStructExprType>();
         for (auto& si : structType->GetItems()) {
-            if (si->GetName().find(canaryBaseName, 0) == 0) {
+            if (IsNoPullColumn(si->GetName())) {
                 // EquiJoin already processed
                 return node;
             }
@@ -1408,7 +1408,7 @@ TNodeMap<ESubgraphType> MarkSubgraphForAggregate(const TExprNode::TPtr& root, co
             result[node.Get()] = EXPR_CONST;
             return false;
         }
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             ++insideDependsOn;
             return true;
         }
@@ -1425,7 +1425,7 @@ TNodeMap<ESubgraphType> MarkSubgraphForAggregate(const TExprNode::TPtr& root, co
 
         return true;
     }, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             YQL_ENSURE(insideDependsOn);
             --insideDependsOn;
         }
@@ -1849,7 +1849,7 @@ TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, T
         if (curr->GetDependencyScope() && curr->IsComplete()) {
             return false;
         }
-        if (curr->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(curr.Get())) {
             TExprNodeList children = curr->Head().IsList() ? curr->Head().ChildrenList() : curr->ChildrenList();
             if (AllOf(children, [](const TExprNode::TPtr& child) { return child->IsArgument(); })) {
                 return false;

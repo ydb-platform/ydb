@@ -12,6 +12,7 @@
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/core/yql_gc_transformer.h>
 #include <yql/essentials/core/common_opt/yql_co_transformer.h>
+#include <yql/essentials/core/yql_opt_normalize_depends_on.h>
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_opt_rewrite_io.h>
 
@@ -144,6 +145,10 @@ TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool for
 }
 
 TTransformationPipeline& TTransformationPipeline::AddCommonOptimization(bool forPeephole, EYqlIssueCode issueCode) {
+    Transformers_.push_back(TTransformStage(
+        CreateNormalizeDependsOnTransformer(*TypeAnnotationContext_),
+        "NormalizeDependsOn",
+        issueCode));
     Transformers_.push_back(TTransformStage(
         CreateCommonOptTransformer(forPeephole, TypeAnnotationContext_.Get()),
         "CommonOptimization",

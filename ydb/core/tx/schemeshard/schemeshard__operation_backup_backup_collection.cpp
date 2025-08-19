@@ -86,7 +86,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             createCdcStreamOp.SetTableName(item.GetPath());
             auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
             streamDescription.SetName(streamName);
-            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeNewImage);
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
@@ -106,7 +106,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             createCdcStreamOp.SetTableName(item.GetPath());
             auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
             streamDescription.SetName(streamName);
-            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeNewImage);
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);

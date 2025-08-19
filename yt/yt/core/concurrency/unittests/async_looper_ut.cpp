@@ -5,9 +5,9 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
-#include <library/cpp/yt/threading/event_count.h>
+#include <yt/yt/core/actions/cancelable_context.h>
 
-#include <thread>
+#include <library/cpp/yt/threading/event_count.h>
 
 namespace NYT::NConcurrency {
 namespace {
@@ -22,13 +22,13 @@ TEST(TAsyncLooperTest, JustWorks)
 {
     auto queue = New<TActionQueue>();
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker()] {
         YT_ASSERT_INVOKER_AFFINITY(invoker);
         return BIND([] {}).AsyncVia(invoker).Run();
     });
 
     auto progress = std::make_shared<std::atomic<int>>(0);
-    auto syncFinish = BIND([progress, invoker = queue->GetInvoker()] (bool) {
+    auto syncFinish = BIND([progress, invoker = queue->GetInvoker()] {
         YT_ASSERT_INVOKER_AFFINITY(invoker);
         progress->fetch_add(1);
     });
@@ -59,52 +59,6 @@ TEST(TAsyncLooperTest, JustWorks)
     queue->Shutdown();
 }
 
-TEST(TAsyncLooperTest, Restart)
-{
-    auto queue = New<TActionQueue>();
-
-    auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
-        return BIND([] {}).AsyncVia(invoker).Run();
-    });
-
-    auto cleanStarts = std::make_shared<std::atomic<int>>(0);
-    auto syncFinish = BIND([cleanStarts] (bool cleanStart) {
-        if (cleanStart) {
-            cleanStarts->fetch_add(1);
-        }
-    });
-
-    auto looper = New<TAsyncLooper>(
-        queue->GetInvoker(),
-        asyncStart,
-        syncFinish);
-
-    looper->Start();
-
-    while (cleanStarts->load() == 0) {
-        Sleep(TDuration::MilliSeconds(1));
-    }
-
-    EXPECT_EQ(cleanStarts->load(), 1);
-
-    Sleep(TDuration::Seconds(1));
-
-    EXPECT_EQ(cleanStarts->load(), 1);
-
-    looper->Stop();
-
-    looper->Start();
-
-    while (cleanStarts->load() == 1) {
-        Sleep(TDuration::MilliSeconds(1));
-    }
-
-    EXPECT_EQ(cleanStarts->load(), 2);
-
-    looper->Stop();
-    queue->Shutdown();
-}
-
 TEST(TAsyncLooperTest, CancelAsyncStep)
 {
     auto queue = New<TActionQueue>();
@@ -113,7 +67,7 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
     auto promise = NewPromise<void>();
     bool callbackFinished = false;
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), promise, &started, &callbackFinished] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), promise, &started, &callbackFinished] {
         return BIND([promise, &started, &callbackFinished] {
             started.NotifyAll();
             WaitFor(promise.ToFuture())
@@ -122,7 +76,7 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
         }).AsyncVia(invoker).Run();
     });
 
-    auto syncFinish = BIND([] (bool) {
+    auto syncFinish = BIND([] {
     });
 
     auto looper = New<TAsyncLooper>(
@@ -152,12 +106,12 @@ TEST(TAsyncLooperTest, CancelSyncStep)
     NThreading::TEvent started;
     auto promise = NewPromise<void>();
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker()] {
         return BIND([] {
         }).AsyncVia(invoker).Run();
     });
 
-    auto syncFinish = BIND([promise, &started] (bool) {
+    auto syncFinish = BIND([promise, &started] {
         started.NotifyAll();
         WaitFor(promise.ToFuture())
             .ThrowOnError();
@@ -188,7 +142,7 @@ TEST(TAsyncLooperTest, StopDuringAsyncStep)
     NThreading::TEvent releaseAsync;
     NThreading::TEvent started;
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started] {
         return BIND([&releaseAsync, &started] {
             started.NotifyAll();
             releaseAsync.Wait();
@@ -196,7 +150,7 @@ TEST(TAsyncLooperTest, StopDuringAsyncStep)
     });
 
     auto mustBeFalse = std::make_shared<std::atomic<bool>>(false);
-    auto syncFinish = BIND([mustBeFalse] (bool) {
+    auto syncFinish = BIND([mustBeFalse] {
         mustBeFalse->store(true);
     });
 
@@ -230,7 +184,7 @@ TEST(TAsyncLooperTest, StopDuringAsyncStepWaitFor)
     auto releaseAsync = NewPromise<void>();
     NThreading::TEvent started;
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), &started, releaseAsync] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &started, releaseAsync] {
         return BIND([releaseAsync, &started] {
             started.NotifyAll();
             WaitFor(releaseAsync.ToFuture())
@@ -239,7 +193,7 @@ TEST(TAsyncLooperTest, StopDuringAsyncStepWaitFor)
     });
 
     auto mustBeFalse = std::make_shared<std::atomic<bool>>(false);
-    auto syncFinish = BIND([mustBeFalse] (bool) {
+    auto syncFinish = BIND([mustBeFalse] {
         mustBeFalse->store(true);
     });
 
@@ -276,14 +230,14 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStep)
 
     auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, asyncRunCount] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, asyncRunCount] {
         return BIND([&releaseAsync, asyncRunCount] {
             asyncRunCount->fetch_add(1);
             releaseAsync.Wait();
         }).AsyncVia(invoker).Run();
     });
 
-    auto syncFinish = BIND([] (bool) {
+    auto syncFinish = BIND([] {
     });
 
     auto looper = New<TAsyncLooper>(
@@ -320,7 +274,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepWaitFor)
 
     auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), releaseAsync, asyncRunCount] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), releaseAsync, asyncRunCount] {
         return BIND([releaseAsync, asyncRunCount] {
             asyncRunCount->fetch_add(1);
             WaitFor(releaseAsync.ToFuture())
@@ -328,7 +282,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepWaitFor)
         }).AsyncVia(invoker).Run();
     });
 
-    auto syncFinish = BIND([] (bool) {
+    auto syncFinish = BIND([] {
     });
 
     auto looper = New<TAsyncLooper>(
@@ -367,7 +321,7 @@ TEST(TAsyncLooperTest, StopDuringAsyncStepPreparation)
     NThreading::TEvent started;
 
     auto mustBeFalse = std::make_shared<std::atomic<bool>>(false);
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started, mustBeFalse] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started, mustBeFalse] {
         started.NotifyAll();
         releaseAsync.Wait();
 
@@ -380,7 +334,7 @@ TEST(TAsyncLooperTest, StopDuringAsyncStepPreparation)
         }).AsyncVia(invoker).Run();
     });
 
-    auto syncFinish = BIND([] (bool) {
+    auto syncFinish = BIND([] {
     });
 
     auto looper = New<TAsyncLooper>(
@@ -419,7 +373,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation1)
 
     auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started, asyncRunCount] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started, asyncRunCount] {
         started.NotifyAll();
         releaseAsync.Wait();
         return BIND([asyncRunCount] {
@@ -427,7 +381,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation1)
         }).AsyncVia(invoker).Run();
     });
 
-    auto syncFinish = BIND([] (bool) {
+    auto syncFinish = BIND([] {
     });
 
     auto looper = New<TAsyncLooper>(
@@ -452,67 +406,6 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation1)
     queue->Shutdown();
 }
 
-TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation2)
-{
-    auto queue = New<TActionQueue>();
-
-    // We use event and not future to
-    // ignore cancelation in this test.
-    NThreading::TEvent releaseAsync;
-    NThreading::TEvent secondIterationStarted;
-
-    auto asyncCleanStarts = std::make_shared<std::atomic<int>>(0);
-    auto syncCleanStarts = std::make_shared<std::atomic<int>>(0);
-
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &secondIterationStarted, asyncCleanStarts, syncCleanStarts] (bool cleanStart) {
-        if (cleanStart) {
-            asyncCleanStarts->fetch_add(1);
-        }
-
-        if (syncCleanStarts->load() == 1) {
-            // Clean start has fully finished.
-            secondIterationStarted.NotifyAll();
-            releaseAsync.Wait();
-        }
-
-        return BIND([] {
-        }).AsyncVia(invoker).Run();
-    });
-
-    auto syncFinish = BIND([syncCleanStarts] (bool cleanStart) {
-        if (cleanStart) {
-            syncCleanStarts->fetch_add(1);
-        }
-    });
-
-    auto looper = New<TAsyncLooper>(
-        queue->GetInvoker(),
-        asyncStart,
-        syncFinish);
-
-    looper->Start();
-
-    secondIterationStarted.Wait();
-
-    EXPECT_EQ(asyncCleanStarts->load(), 1);
-    EXPECT_EQ(syncCleanStarts->load(), 1);
-
-    looper->Stop();
-    looper->Start();
-
-    releaseAsync.NotifyAll();
-
-    while (syncCleanStarts->load() == 1) {
-        Sleep(TDuration::MilliSeconds(1));
-    }
-
-    EXPECT_EQ(asyncCleanStarts->load(), 2);
-    EXPECT_EQ(syncCleanStarts->load(), 2);
-
-    looper->Stop();
-    queue->Shutdown();
-}
-
 TEST(TAsyncLooperTest, StopDuringSyncStep)
 {
     auto queue = New<TActionQueue>();
@@ -523,13 +416,13 @@ TEST(TAsyncLooperTest, StopDuringSyncStep)
     NThreading::TEvent started;
 
     auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), asyncRunCount] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), asyncRunCount] {
         return BIND([asyncRunCount] {
             asyncRunCount->fetch_add(1);
         }).AsyncVia(invoker).Run();
     });
 
-    auto syncFinish = BIND([&releaseAsync, &started] (bool) {
+    auto syncFinish = BIND([&releaseAsync, &started] {
         started.NotifyAll();
         releaseAsync.Wait();
     });
@@ -567,13 +460,13 @@ TEST(TAsyncLooperTest, StopDuringSyncStepWaitFor)
     NThreading::TEvent started;
 
     auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), asyncRunCount] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), asyncRunCount] {
         return BIND([asyncRunCount] {
             asyncRunCount->fetch_add(1);
         }).AsyncVia(invoker).Run();
     });
 
-    auto syncFinish = BIND([releaseAsync, &started] (bool) {
+    auto syncFinish = BIND([releaseAsync, &started] {
         started.NotifyAll();
         WaitFor(releaseAsync.ToFuture())
             .ThrowOnError();
@@ -612,12 +505,12 @@ TEST(TAsyncLooperTest, RestartDuringSyncStep)
 
     auto syncRunCount = std::make_shared<std::atomic<int>>(0);
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker()] {
         return BIND([] {
         }).AsyncVia(invoker).Run();
     });
 
-    auto syncFinish = BIND([&releaseAsync, syncRunCount] (bool) {
+    auto syncFinish = BIND([&releaseAsync, syncRunCount] {
         syncRunCount->fetch_add(1);
         releaseAsync.Wait();
     });
@@ -656,12 +549,12 @@ TEST(TAsyncLooperTest, RestartDuringSyncStepWaitFor)
 
     auto syncRunCount = std::make_shared<std::atomic<int>>(0);
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker()] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker()] {
         return BIND([] {
         }).AsyncVia(invoker).Run();
     });
 
-    auto syncFinish = BIND([releaseAsync, syncRunCount] (bool) {
+    auto syncFinish = BIND([releaseAsync, syncRunCount] {
         syncRunCount->fetch_add(1);
         WaitFor(releaseAsync.ToFuture())
             .ThrowOnError();
@@ -700,7 +593,7 @@ TEST(TAsyncLooperTest, NullFuture)
     auto switcher = std::make_shared<std::atomic<bool>>(false);
     NThreading::TEvent loopBroken;
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), switcher, &loopBroken] (bool) {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), switcher, &loopBroken] {
         if (!switcher->load()) {
             loopBroken.NotifyAll();
             return TFuture<void>();
@@ -710,7 +603,7 @@ TEST(TAsyncLooperTest, NullFuture)
     });
 
     auto syncRunCount = std::make_shared<std::atomic<int>>(0);
-    auto syncFinish = BIND([syncRunCount] (bool) {
+    auto syncFinish = BIND([syncRunCount] {
         syncRunCount->fetch_add(1);
     });
 
@@ -737,7 +630,53 @@ TEST(TAsyncLooperTest, NullFuture)
     queue->Shutdown();
 }
 
+TEST(TAsyncLooperTest, CancelInvoker)
+{
+    auto queue = New<TActionQueue>();
+    auto cancelableContext = New<TCancelableContext>();
+    auto invoker = cancelableContext->CreateInvoker(queue->GetInvoker());
+
+    auto syncFinishPromise = NewPromise<void>();
+    auto syncFinishStarted = syncFinishPromise.ToFuture();
+
+    auto canceledPromise = NewPromise<void>();
+    auto canceled = canceledPromise.ToFuture();
+
+    auto firstCanceledPromise = NewPromise<void>();
+    auto firstCanceled = firstCanceledPromise.ToFuture();
+
+    auto looper = New<TAsyncLooper>(
+        invoker,
+        /*asyncStart*/ BIND([=] {
+            EXPECT_FALSE(syncFinishStarted.IsSet());
+            YT_ASSERT_INVOKER_AFFINITY(invoker);
+            return VoidFuture;
+        }),
+        /*syncFinish*/ BIND([=] {
+            YT_ASSERT_INVOKER_AFFINITY(invoker);
+            syncFinishPromise.Set();
+            try {
+                Y_UNUSED(WaitFor(canceled));
+                GTEST_FAIL() << "Should be canceled";
+            } catch (TFiberCanceledException) {
+                firstCanceledPromise.Set();
+                throw;
+            }
+        }));
+
+    looper->Start();
+
+    ASSERT_TRUE(WaitFor(syncFinishStarted).IsOK());
+
+    cancelableContext->Cancel(TError("Cancel"));
+    canceledPromise.Set();  // triggers unwinding of the awaiting fiber
+
+    ASSERT_TRUE(WaitFor(firstCanceled).IsOK());
+
+    queue->Shutdown();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT:::NConcurrency
+} // namespace NYT::NConcurrency

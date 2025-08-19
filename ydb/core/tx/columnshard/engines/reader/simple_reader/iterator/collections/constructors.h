@@ -75,6 +75,7 @@ class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSource
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
     ui32 CurrentSourceIdx = 0;
+    std::vector<TInsertWriteId> Uncommitted;    
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;
@@ -99,23 +100,23 @@ private:
 
     virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
 
-    virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
+    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
         auto constructor = TBase::PopObjectWithAccessor();
         constructor.MutableObject().SetIndex(CurrentSourceIdx);
         ++CurrentSourceIdx;
-        std::shared_ptr<NReader::NCommon::IDataSource> result = constructor.MutableObject().Construct(context, constructor.DetachAccessor());
-        return result;
+        return constructor.MutableObject().Construct(context, constructor.DetachAccessor());
     }
 
 public:
-    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting)
-        : TBase(sorting) {
+    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, std::vector<TInsertWriteId>&& uncommitted)
+        : TBase(sorting)
+        , Uncommitted(std::move(uncommitted))
+    {
         InitializeConstructors(std::move(sources));
     }
 
     static std::unique_ptr<TPortionsSources> BuildEmpty() {
-        std::deque<TSourceConstructor> sources;
-        return std::make_unique<TPortionsSources>(std::move(sources), ERequestSorting::NONE);
+        return std::make_unique<TPortionsSources>(std::deque<TSourceConstructor>{}, ERequestSorting::NONE, std::vector<TInsertWriteId>{});
     }
 };
 

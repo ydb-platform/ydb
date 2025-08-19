@@ -4,6 +4,7 @@
 #include "blobstorage_vdiskid.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/bridge.h>
+#include <ydb/core/blobstorage/base/blobstorage_host_record.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
@@ -225,7 +226,7 @@ namespace NKikimr {
     {
         bool SelfHeal = false;
         bool GroupLayoutSanitizer = false;
-
+        std::optional<NBsController::THostRecordMap> EnforceHostRecords;
         TEvControllerConfigRequest() = default;
     };
 
@@ -269,6 +270,15 @@ namespace NKikimr {
     {
     };
 
+    struct TEvBlobStorage::TEvControllerUpdateSyncerState
+        : TEventPB<
+            TEvControllerUpdateSyncerState,
+            NKikimrBlobStorage::TEvControllerUpdateSyncerState,
+            TEvBlobStorage::EvControllerUpdateSyncerState>
+    {
+        TEvControllerUpdateSyncerState() = default;
+    };
+
     struct TEvBlobStorage::TEvVStatus : public TEventPB<
         TEvBlobStorage::TEvVStatus,
         NKikimrBlobStorage::TEvVStatus,
@@ -302,12 +312,12 @@ namespace NKikimr {
             }
         }
 
-        TEvVStatusResult(NKikimrProto::EReplyStatus status, const NKikimrBlobStorage::TVDiskID &vdisk) {
+        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk) {
             Y_ABORT_UNLESS(status != NKikimrProto::OK);
             Record.SetStatus(status);
             Record.SetJoinedGroup(false);
             Record.SetReplicated(false);
-            Record.MutableVDiskID()->CopyFrom(vdisk);
+            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
         }
     };
 

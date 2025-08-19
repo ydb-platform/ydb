@@ -1768,6 +1768,10 @@ private:
     }
 
     void InitS3Provider(EKikimrQueryType queryType) {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::S3ProviderName))) {
+            return;
+        }
+
         auto state = MakeIntrusive<NYql::TS3State>();
         state->Types = TypesCtx.Get();
         state->FunctionRegistry = FuncRegistry;
@@ -1788,6 +1792,10 @@ private:
     }
 
     void InitGenericProvider() {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::GenericProviderName))) {
+            return;
+        }
+
         if (!FederatedQuerySetup->ConnectorClient) {
             return;
         }
@@ -1806,6 +1814,10 @@ private:
     }
 
     void InitYtProvider() {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
+            return;
+        }
+
         TString userName = CreateGuidAsString();
         if (SessionCtx->GetUserToken() && SessionCtx->GetUserToken()->GetUserSID()) {
             userName = SessionCtx->GetUserToken()->GetUserSID();
@@ -1841,6 +1853,10 @@ private:
     }
 
     void InitSolomonProvider() {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::SolomonProviderName))) {
+            return;
+        }
+
         auto solomonState = MakeIntrusive<TSolomonState>();
 
         solomonState->Types = TypesCtx.Get();
@@ -1855,6 +1871,10 @@ private:
     }
 
     void InitPqProvider() {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
+            return;
+        }
+
         TString sessionId = CreateGuidAsString();
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;

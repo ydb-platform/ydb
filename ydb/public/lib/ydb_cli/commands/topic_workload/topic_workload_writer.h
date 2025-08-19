@@ -23,7 +23,7 @@ namespace NYdb {
             const std::vector<TString>& GeneratedMessages;
             TString Database;
             TString TopicName;
-            size_t BytesPerSec;
+            double BytesPerSec;
             size_t MessageSize;
             ui32 ProducerThreadCount;
             ui32 WriterIdx;
@@ -38,6 +38,9 @@ namespace NYdb {
             size_t CommitIntervalMs = 15'000;
             size_t CommitMessages = 1'000'000;
             bool UseCpuTimestamp = false;
+            TMaybe<TString> KeyPrefix;
+            ui32 KeyCount = 0;
+            ui32 KeySeed = 0;
         };
 
         class TTopicWorkloadWriterProducer;

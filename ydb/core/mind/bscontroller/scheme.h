@@ -4,6 +4,7 @@
 #include "mood.h"
 
 namespace NKikimr {
+
 namespace NBsController {
 
 struct Schema : NIceDb::Schema {
@@ -69,7 +70,7 @@ struct Schema : NIceDb::Schema {
         struct SeenOperational : Column<14, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DecommitStatus : Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TGroupDecommitStatus::E; };
         struct GroupSizeInUnits : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
-        struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; };
+        struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; static constexpr Type Default = TBridgePileId(); };
 
         // VirtualGroup management code
         struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group

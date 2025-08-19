@@ -98,11 +98,9 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
 Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(StreamExecuteScanQueryCancelation) {
-        NKikimrConfig::TAppConfig appConfig;
+        TKikimrSettings settings;
         // This test expects SourceRead is enabled for ScanQuery
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
         TKikimrRunner kikimr{settings};
 
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
@@ -1707,19 +1705,40 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         ])", res);
     }
 
-    Y_UNIT_TEST(EmptySet) {
+    Y_UNIT_TEST(EmptySet_1) {
         auto kikimr = DefaultKikimrRunner({}, AppCfg());
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetQueryClient();
 
-        auto it = db.StreamExecuteScanQuery(R"(
+        auto response = db.ExecuteQuery(R"(
             SELECT Key FROM `/Root/EightShard` WHERE false;
-        )").GetValueSync();
-        auto res = StreamResultToYson(it);
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        CompareYson("[]",res);
+        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_UNEQUAL(response.GetResultSets().size(), 0);
+        for (const auto& resultSet : response.GetResultSets()) {
+            UNIT_ASSERT_EQUAL(resultSet.RowsCount(), 0);
+        }
     }
 
-     Y_UNIT_TEST(RestrictSqlV0) {
+    // TODO: #22459
+    /*
+    Y_UNIT_TEST(EmptySet_2) {
+        auto kikimr = DefaultKikimrRunner({}, AppCfg());
+        auto db = kikimr.GetQueryClient();
+
+        auto response = db.ExecuteQuery(R"(
+            SELECT Key FROM `/Root/EightShard` WHERE 1 = 2;
+        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_UNEQUAL(response.GetResultSets().size(), 0);
+        for (const auto& resultSet : response.GetResultSets()) {
+            UNIT_ASSERT_EQUAL(resultSet.RowsCount(), 0);
+        }
+    }
+    */
+
+    Y_UNIT_TEST(RestrictSqlV0) {
         auto kikimr = DefaultKikimrRunner({}, AppCfg());
         auto db = kikimr.GetTableClient();
 
@@ -1838,8 +1857,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(SecondaryIndex) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2214,11 +2232,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(DqSourceFullScan) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
+        TKikimrSettings settings = TKikimrSettings().SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -2233,11 +2248,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(DqSource) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
+        TKikimrSettings settings = TKikimrSettings().SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -2253,12 +2265,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(DqSourceLiteralRange) {
-        TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
-
+        TKikimrSettings settings = TKikimrSettings().SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
@@ -2354,8 +2362,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(StreamLookupByFullPk) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
 
@@ -2407,8 +2414,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(LimitOverSecondaryIndexRead) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2446,8 +2452,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(TopSortOverSecondaryIndexRead) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

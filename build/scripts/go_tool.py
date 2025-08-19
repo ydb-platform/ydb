@@ -29,7 +29,7 @@ vet_report_ext = '.vet.txt'
 FIXED_CGO1_SUFFIX = '.fixed.cgo1.go'
 
 COMPILE_OPTIMIZATION_FLAGS = ('-N',)
-IGNORED_FLAGS = ['-fprofile-instr-generate', '-fcoverage-mapping']
+IGNORED_FLAGS = ('-fprofile-instr-generate', '-fcoverage-mapping', '-fcoverage-mcdc')
 
 
 def get_sanitizer_libs(peers):

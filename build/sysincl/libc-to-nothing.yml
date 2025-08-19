@@ -130,6 +130,7 @@
   - sys/fanotify.h
   - sys/fcntl.h
   - sys/file.h
+  - sys/frame.h
   - sys/fsuid.h
   - sys/ifunc.h
   - sys/inotify.h

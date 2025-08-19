@@ -1,13 +1,12 @@
 #pragma once
 
-#include "utils.h"
-#include "db_counters.h"
-
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
+#include <ydb/core/sys_view/common/db_counters.h>
+#include <ydb/core/sys_view/common/utils.h>
 
 namespace NKikimr {
 namespace NSysView {

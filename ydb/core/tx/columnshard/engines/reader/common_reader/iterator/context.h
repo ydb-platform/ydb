@@ -34,19 +34,20 @@ private:
 
     TReadMetadata::TConstPtr ReadMetadata;
 
-    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) = 0;
+    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(
+        const std::shared_ptr<IDataSource>& source, const bool isFinalSyncPoint) = 0;
 
 protected:
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
 
 public:
     template <class T>
-    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<T>& source) {
-        return GetColumnsFetchingPlan(std::static_pointer_cast<IDataSource>(source));
+    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<T>& source, const bool isFinalSyncPoint) {
+        return DoGetColumnsFetchingPlan(std::static_pointer_cast<IDataSource>(source), isFinalSyncPoint);
     }
 
-    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) {
-        return DoGetColumnsFetchingPlan(source);
+    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source, const bool isFinalSyncPoint) {
+        return DoGetColumnsFetchingPlan(source, isFinalSyncPoint);
     }
 
     const TReadMetadata::TConstPtr& GetReadMetadata() const {

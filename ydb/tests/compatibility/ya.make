@@ -13,11 +13,15 @@ TEST_SRCS(
     test_compatibility.py
     test_stress.py
     test_statistics.py
+    test_system_views.py
+    test_simple_reader.py
     test_rolling.py
     test_data_type.py
+    test_ctas.py
     test_vector_index.py
     test_batch_operations.py
     test_topic.py
+    test_kafka_topic.py
     test_transfer.py
     test_node_broker_delta_protocol.py
     udf/test_datetime2.py
@@ -45,4 +49,5 @@ END()
 
 RECURSE(
     s3_backups
+    configs
 )

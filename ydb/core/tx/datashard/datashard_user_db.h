@@ -16,6 +16,7 @@ namespace NKikimr::NMiniKQL {
 namespace NKikimr::NDataShard {
 
 class TUniqueConstrainException: public yexception {};
+class TKeySizeConstraintException: public yexception {};
 
 class IDataShardUserDb {
 protected:

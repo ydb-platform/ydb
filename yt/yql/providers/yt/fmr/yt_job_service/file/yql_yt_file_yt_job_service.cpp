@@ -40,12 +40,21 @@ class TFileYtJobService: public NYql::NFmr::IYtJobService {
 public:
 
 NYT::TRawTableReaderPtr MakeReader(
-    const std::variant<NYT::TRichYPath, TString>& inputTableRef,
+    const TYtTableRef& ytTablePart,
     const TClusterConnection& /*clusterConnection*/,
     const TYtReaderSettings& /*readerSettings*/
 ) override {
-        TString filePath = std::get<TString>(inputTableRef);
-        auto textYsonInputs = NFile::MakeTextYsonInputs({{filePath, NFile::TColumnsInfo{}}}, false);
+        TMaybe<TString> filePath = ytTablePart.FilePath;
+        YQL_ENSURE(filePath.Defined(), "File path should be set for file yt reader");
+
+        NFile::TColumnsInfo columnsInfo;
+        auto ytPath = ytTablePart.RichPath;
+        if (!ytPath.Columns_.Empty()) {
+            TVector<TString> columns(ytPath.Columns_->Parts_.begin(), ytPath.Columns_->Parts_.end());
+            columnsInfo.Columns = NYT::TSortColumns(columns);
+        }
+
+        auto textYsonInputs = NFile::MakeTextYsonInputs({{*filePath, columnsInfo}}, false);
         return textYsonInputs[0];
     }
 

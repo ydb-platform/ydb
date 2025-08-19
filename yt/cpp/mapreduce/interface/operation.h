@@ -3214,7 +3214,7 @@ struct TJobTraceEvent
 
     ///
     /// @brief Index of the trace event.
-    i64 EventIndex;
+    i64 EventIndex = 0;
 
     ///
     /// @brief Raw evenr in json format.
@@ -3321,6 +3321,10 @@ struct IOperation
     ///
     /// @return `Nothing()` if operation has no running jobs yet, e.g. when it is in "materializing" or "pending" state.
     virtual TMaybe<TOperationBriefProgress> GetBriefProgress() = 0;
+
+    ///
+    /// Get operation alerts.
+    virtual TMaybe<THashMap<TString, TYtError>> GetAlerts() = 0;
 
     ///
     /// @brief Abort operation.

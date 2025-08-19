@@ -7,6 +7,7 @@
 #include <ydb/core/tx/general_cache/usage/config.h>
 
 #include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/signals/object_counter.h>
 
 #include <library/cpp/cache/cache.h>
@@ -249,7 +250,7 @@ public:
     }
 
     ~TSourceInfo() {
-        AFL_VERIFY(RequestedObjects.empty());
+        AFL_VERIFY(RequestedObjects.empty() || NActors::TActorSystem::IsStopped());
     }
 
     void DrainQueue() {
@@ -302,6 +303,8 @@ private:
     const std::shared_ptr<TManagerCounters> Counters;
     std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
     TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer> Cache;
+    const bool UseCacheSizeFromConfig;
+    static constexpr ui64 DEFAULT_CACHE_SIZE = (ui64)1 << 30;
 
     THashMap<TSourceId, TSourceInfo> SourcesInfo;
 
@@ -375,11 +378,12 @@ public:
     TManager(const NActors::TActorId& ownerActorId, const std::shared_ptr<TManagerCounters>& counters)
         : Counters(counters)
         , ObjectsProcessor(TPolicy::BuildObjectsProcessor(ownerActorId))
-        , Cache(Counters->GetConfig().GetMemoryLimit()) {
+        , Cache(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE))
+        , UseCacheSizeFromConfig(Counters->GetConfig().GetMemoryLimit().has_value()) {
         AFL_NOTICE(NKikimrServices::GENERAL_CACHE)("event", "general_cache_manager")("owner_actor_id", ownerActorId)(
             "config", Counters->GetConfig().DebugString());
         Counters->CacheSizeLimitBytes->Set(Cache.GetMaxSize());
-        Counters->CacheConfigSizeLimitBytes->Set(Counters->GetConfig().GetMemoryLimit());
+        Counters->CacheConfigSizeLimitBytes->Set(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE));
     }
 
     void CleanUseless(const ui32 countLimit) {
@@ -479,10 +483,14 @@ public:
     }
 
     void UpdateMaxCacheSize(const size_t maxCacheSize) {
+        if (UseCacheSizeFromConfig) {
+            return;
+        }
+
         if (Cache.GetMaxSize() == maxCacheSize) {
             return;
         }
-        return;
+
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "update_max_cache_size")("id", TPolicy::GetCacheName())("new_value", maxCacheSize)(
             "old_value", Cache.GetMaxSize());
         Cache.SetMaxSize(maxCacheSize);

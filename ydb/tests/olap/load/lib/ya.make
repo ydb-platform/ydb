@@ -10,6 +10,7 @@ PY3_LIBRARY()
         workload_executor.py
         workload_simple_queue.py
         workload_oltp.py
+        workload_topic.py
         upload.py
 
     )

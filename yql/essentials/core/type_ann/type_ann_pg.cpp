@@ -514,10 +514,10 @@ IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus PgCloneWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    Y_UNUSED(output);
-    if (!EnsureDependsOnTail(*input, ctx.Expr, 1)) {
-        return IGraphTransformer::TStatus::Error;
+IGraphTransformer::TStatus PgCloneWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+    if (status != IGraphTransformer::TStatus::Ok) {
+        return status;
     }
 
     if (IsNull(input->Head())) {

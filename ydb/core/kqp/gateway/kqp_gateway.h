@@ -162,6 +162,8 @@ public:
         TMaybe<NKikimrKqp::TRlPath> RlPath;
         bool NeedTxId = true;
         bool UseImmediateEffects = false;
+        bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
+        std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;

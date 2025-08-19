@@ -182,7 +182,9 @@ bool TryDeserializeProtoWithEnvelope(
         return false;
     }
 
-    const auto* fixedHeader = reinterpret_cast<const TEnvelopeFixedHeader*>(data.Begin());
+    TEnvelopeFixedHeader fixedHeaderStorage;
+    ::memcpy(&fixedHeaderStorage, data.Begin(), sizeof(fixedHeaderStorage));
+    const auto* fixedHeader = &fixedHeaderStorage;
     const char* sourceHeader = data.Begin() + sizeof(TEnvelopeFixedHeader);
     if (fixedHeader->EnvelopeSize + sizeof(*fixedHeader) > data.Size()) {
         return false;

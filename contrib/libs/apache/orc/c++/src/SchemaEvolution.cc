@@ -18,6 +18,7 @@
 
 #include "SchemaEvolution.hh"
 #include "orc/Exceptions.hh"
+#include "orc/Type.hh"
 
 namespace orc {
 
@@ -113,7 +114,9 @@ namespace orc {
         case TIMESTAMP:
         case TIMESTAMP_INSTANT:
         case DATE:
-        case BINARY: {
+        case BINARY:
+        case GEOMETRY:
+        case GEOGRAPHY: {
           // Not support
           break;
         }
@@ -235,6 +238,8 @@ namespace orc {
         case FLOAT:
         case DOUBLE:
         case BINARY:
+        case GEOMETRY:
+        case GEOGRAPHY:
         case TIMESTAMP:
         case LIST:
         case MAP:

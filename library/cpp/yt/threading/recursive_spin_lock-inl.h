@@ -32,7 +32,7 @@ inline bool TRecursiveSpinLock::TryAcquire() noexcept
     auto newValue = (oldRecursionDepth + 1) | (static_cast<TValue>(currentThreadId) << ThreadIdShift);
 
     bool acquired = Value_.compare_exchange_weak(oldValue, newValue);
-    NDetail::RecordSpinLockAcquired(acquired);
+    NDetail::MaybeRecordSpinLockAcquired(acquired);
     return acquired;
 }
 

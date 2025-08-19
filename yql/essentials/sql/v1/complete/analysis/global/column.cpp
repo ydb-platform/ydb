@@ -1,9 +1,8 @@
 #include "column.h"
 
 #include "base_visitor.h"
+#include "evaluate.h"
 #include "narrowing_visitor.h"
-
-#include <yql/essentials/sql/v1/complete/syntax/format.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
@@ -12,72 +11,10 @@ namespace NSQLComplete {
 
     namespace {
 
-        // TODO: Extract it to `identifier.cpp` and reuse it also at `use.cpp`
-        //       and replace `GetId` at `parse_tree.cpp`.
-        class TIdentifierVisitor: public SQLv1Antlr4BaseVisitor {
-        public:
-            std::any visitCluster_expr(SQLv1::Cluster_exprContext* ctx) override {
-                if (auto* x = ctx->pure_column_or_named()) {
-                    return visit(x);
-                }
-                return {};
-            }
-
-            std::any visitTable_key(SQLv1::Table_keyContext* ctx) override {
-                if (auto* x = ctx->id_table_or_type()) {
-                    return visit(x);
-                }
-                return {};
-            }
-
-            std::any visitUnary_casual_subexpr(SQLv1::Unary_casual_subexprContext* ctx) override {
-                std::any prev;
-                if (auto* x = ctx->id_expr()) {
-                    prev = visit(x);
-                } else if (auto* x = ctx->atom_expr()) {
-                    prev = visit(x);
-                }
-
-                std::any next = visit(ctx->unary_subexpr_suffix());
-                if (!next.has_value()) {
-                    return prev;
-                }
-
-                return {};
-            }
-
-            std::any visitTerminal(antlr4::tree::TerminalNode* node) override {
-                switch (node->getSymbol()->getType()) {
-                    case SQLv1::TOKEN_ID_QUOTED:
-                        return TString(Unquoted(GetText(node)));
-                    case SQLv1::TOKEN_ID_PLAIN:
-                        return GetText(node);
-                }
-                return {};
-            }
-
-        private:
-            TString GetText(antlr4::tree::ParseTree* tree) const {
-                return TString(tree->getText());
-            }
-        };
-
-        TMaybe<TString> GetId(antlr4::ParserRuleContext* ctx) {
-            if (ctx == nullptr) {
-                return Nothing();
-            }
-
-            std::any result = TIdentifierVisitor().visit(ctx);
-            if (!result.has_value()) {
-                return Nothing();
-            }
-            return std::any_cast<TString>(result);
-        }
-
         class TInferenceVisitor: public TSQLv1BaseVisitor {
         public:
-            explicit TInferenceVisitor(THashMap<TString, SQLv1::Subselect_stmtContext*> subqueries)
-                : Subqueries_(std::move(subqueries))
+            TInferenceVisitor(const TNamedNodes* nodes)
+                : Nodes_(nodes)
             {
             }
 
@@ -106,8 +43,9 @@ namespace NSQLComplete {
             }
 
             std::any visitTable_ref(SQLv1::Table_refContext* ctx) override {
-                if (TMaybe<TString> path = GetId(ctx->table_key())) {
-                    TString cluster = GetId(ctx->cluster_expr()).GetOrElse("");
+                if (TMaybe<TString> path; (path = GetObjectId(ctx->table_key())) ||
+                                          (path = GetObjectId(ctx->bind_parameter()))) {
+                    TString cluster = GetObjectId(ctx->cluster_expr()).GetOrElse("");
                     return TColumnContext{
                         .Tables = {
                             TTableId{std::move(cluster), std::move(*path)},
@@ -115,19 +53,22 @@ namespace NSQLComplete {
                     };
                 }
 
-                if (TMaybe<TString> named = NSQLComplete::GetId(ctx->bind_parameter())) {
-                    if (auto it = Subqueries_.find(*named); it != Subqueries_.end()) {
-                        if (Resolving_.contains(*named)) {
-                            return {};
-                        }
-
-                        Resolving_.emplace(*named);
-                        Y_DEFER {
-                            Resolving_.erase(*named);
-                        };
-
-                        return visit(it->second);
+                if (TMaybe<TString> named = NSQLComplete::GetName(ctx->bind_parameter())) {
+                    const TNamedNode* node = Nodes_->FindPtr(*named);
+                    if (!node || !std::holds_alternative<SQLv1::Subselect_stmtContext*>(*node)) {
+                        return {};
                     }
+
+                    if (Resolving_.contains(*named)) {
+                        return {};
+                    }
+
+                    Resolving_.emplace(*named);
+                    Y_DEFER {
+                        Resolving_.erase(*named);
+                    };
+
+                    return visit(std::get<SQLv1::Subselect_stmtContext*>(*node));
                 }
 
                 return {};
@@ -176,7 +117,7 @@ namespace NSQLComplete {
                 }
 
                 if (ctx->opt_id_prefix() != nullptr && ctx->TOKEN_ASTERISK() != nullptr) {
-                    TMaybe<TString> alias = GetId(ctx->opt_id_prefix()->an_id());
+                    TMaybe<TString> alias = GetColumnId(ctx->opt_id_prefix()->an_id());
                     if (alias.Empty()) {
                         return TColumnContext::Asterisk();
                     }
@@ -205,9 +146,9 @@ namespace NSQLComplete {
             };
 
             std::any visitWithout_column_name(SQLv1::Without_column_nameContext* ctx) override {
-                TString table = GetId(ctx->an_id(0)).GetOrElse("");
-                TMaybe<TString> column = GetId(ctx->an_id(1)).Or([&] {
-                    return GetId(ctx->an_id_without());
+                TString table = GetObjectId(ctx->an_id(0)).GetOrElse("");
+                TMaybe<TString> column = GetColumnId(ctx->an_id(1)).Or([&] {
+                    return GetColumnId(ctx->an_id_without());
                 });
 
                 if (column.Empty()) {
@@ -223,8 +164,8 @@ namespace NSQLComplete {
 
         private:
             TMaybe<TString> GetAlias(SQLv1::Named_single_sourceContext* ctx) const {
-                TMaybe<TString> alias = GetId(ctx->an_id());
-                alias = alias.Defined() ? alias : GetId(ctx->an_id_as_compat());
+                TMaybe<TString> alias = GetColumnId(ctx->an_id());
+                alias = alias.Defined() ? alias : GetColumnId(ctx->an_id_as_compat());
                 return alias;
             }
 
@@ -236,7 +177,7 @@ namespace NSQLComplete {
                     id = ctx->an_id_or_type();
                     id = id ? id : ctx->an_id_as_compat();
                 }
-                return GetId(id);
+                return GetColumnId(id);
             }
 
             TMaybe<TColumnContext> Head(SQLv1::Select_coreContext* ctx) {
@@ -269,14 +210,36 @@ namespace NSQLComplete {
                     });
             }
 
-            THashMap<TString, SQLv1::Subselect_stmtContext*> Subqueries_;
+            TMaybe<TString> GetColumnId(antlr4::ParserRuleContext* ctx) const {
+                if (!ctx) {
+                    return Nothing();
+                }
+
+                TPartialValue value = PartiallyEvaluate(ctx, *Nodes_);
+                if (!std::holds_alternative<TIdentifier>(value)) {
+                    return Nothing();
+                }
+
+                return std::get<TIdentifier>(value);
+            }
+
+            TMaybe<TString> GetObjectId(antlr4::ParserRuleContext* ctx) const {
+                if (!ctx) {
+                    return Nothing();
+                }
+
+                return ToObjectRef(PartiallyEvaluate(ctx, *Nodes_));
+            }
+
             THashSet<TString> Resolving_;
+            const TNamedNodes* Nodes_;
         };
 
         class TVisitor: public TSQLv1NarrowingVisitor {
         public:
-            TVisitor(const TParsedInput& input)
+            TVisitor(const TParsedInput& input, const TNamedNodes* nodes)
                 : TSQLv1NarrowingVisitor(input)
+                , Nodes_(nodes)
             {
             }
 
@@ -304,46 +267,22 @@ namespace NSQLComplete {
                     return {};
                 }
 
-                return TInferenceVisitor(std::move(Subqueries_)).visit(source);
+                return TInferenceVisitor(Nodes_).visit(source);
             }
 
         private:
-            std::any visitNamed_nodes_stmt(SQLv1::Named_nodes_stmtContext* ctx) override {
-                TMaybe<std::string> name = Name(ctx->bind_parameter_list());
-                if (name.Empty()) {
-                    return {};
-                }
-
-                SQLv1::Subselect_stmtContext* subselect = ctx->subselect_stmt();
-                if (subselect == nullptr) {
-                    return {};
-                }
-
-                Subqueries_[std::move(*name)] = subselect;
-                return {};
-            }
-
-            TMaybe<std::string> Name(SQLv1::Bind_parameter_listContext* ctx) const {
-                auto parameters = ctx->bind_parameter();
-                if (parameters.size() != 1) {
-                    return Nothing();
-                }
-
-                return NSQLComplete::GetId(parameters[0]);
-            }
-
             bool IsEnclosingStrict(antlr4::ParserRuleContext* ctx) const {
                 return ctx != nullptr && IsEnclosing(ctx);
             }
 
-            THashMap<TString, SQLv1::Subselect_stmtContext*> Subqueries_;
+            const TNamedNodes* Nodes_;
         };
 
     } // namespace
 
-    TMaybe<TColumnContext> InferColumnContext(TParsedInput input) {
+    TMaybe<TColumnContext> InferColumnContext(TParsedInput input, const TNamedNodes& nodes) {
         // TODO: add utility `auto ToMaybe<T>(std::any any) -> TMaybe<T>`
-        std::any result = TVisitor(input).visit(input.SqlQuery);
+        std::any result = TVisitor(input, &nodes).visit(input.SqlQuery);
         if (!result.has_value()) {
             return Nothing();
         }

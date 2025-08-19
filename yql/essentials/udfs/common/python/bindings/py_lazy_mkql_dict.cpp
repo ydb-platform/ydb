@@ -41,12 +41,12 @@ protected:
             }
 
             if (PyErr_Occurred()) {
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
             }
 
             return false;
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
         bool Next(NUdf::TUnboxedValue& value) override try {
@@ -58,12 +58,12 @@ protected:
             }
 
             if (PyErr_Occurred()) {
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
             }
 
             return false;
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) override {
@@ -97,12 +97,12 @@ protected:
             }
 
             if (PyErr_Occurred()) {
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
             }
 
             return false;
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& pay) override try {
@@ -115,12 +115,12 @@ protected:
             }
 
             if (PyErr_Occurred()) {
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
             }
 
             return false;
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
     private:
@@ -143,12 +143,12 @@ protected:
         const TPyGilLocker lock;
         const auto has = PyObject_IsTrue(PyObject_.Get());
         if (has < 0) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
         }
         return bool(has);
     }
     catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     const TPyCastContext::TPtr CastCtx_;
@@ -173,11 +173,11 @@ private:
         const TPyGilLocker lock;
         const auto len = PyMapping_Size(PyObject_.Get());
         if (len < 0) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
         }
         return ui64(len);
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override try {
@@ -187,9 +187,9 @@ private:
                 return NUdf::TUnboxedValuePod(new TIterator(CastCtx_, ItemType_, std::move(pyIter)));
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetPayloadsIterator() const override try {
@@ -199,9 +199,9 @@ private:
                 return NUdf::TUnboxedValuePod(new TIterator(CastCtx_, PayType_, std::move(pyIter)));
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetDictIterator() const override try {
@@ -211,9 +211,9 @@ private:
                 return NUdf::TUnboxedValuePod(new TPairIterator(CastCtx_, ItemType_, PayType_, std::move(pyIter)));
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override try {
@@ -229,9 +229,9 @@ private:
 
             return NUdf::TUnboxedValue();
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     bool Contains(const NUdf::TUnboxedValuePod& key) const override try {
@@ -246,9 +246,9 @@ private:
                 return bool(has);
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
 private:
@@ -272,11 +272,11 @@ private:
         const TPyGilLocker lock;
         const auto len = PyDict_Size(PyObject_.Get());
         if (len < 0) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
         }
         return ui64(len);
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override try {
@@ -286,9 +286,9 @@ private:
                 return NUdf::TUnboxedValuePod(new TIterator(CastCtx_, ItemType_, std::move(pyIter)));
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetPayloadsIterator() const override try {
@@ -298,9 +298,9 @@ private:
                 return NUdf::TUnboxedValuePod(new TIterator(CastCtx_, PayType_, std::move(pyIter)));
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetDictIterator() const override try {
@@ -310,9 +310,9 @@ private:
                 return NUdf::TUnboxedValuePod(new TPairIterator(CastCtx_, ItemType_, PayType_, std::move(pyIter)));
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override try {
@@ -324,9 +324,9 @@ private:
                 return NUdf::TUnboxedValue();
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     bool Contains(const NUdf::TUnboxedValuePod& key) const override try {
@@ -337,9 +337,9 @@ private:
                 return bool(has);
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
 private:
@@ -363,11 +363,11 @@ private:
         const TPyGilLocker lock;
         const auto len = PySet_Size(PyObject_.Get());
         if (len < 0) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
         }
         return ui64(len);
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
@@ -382,9 +382,9 @@ private:
                 return bool(has);
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override try {
@@ -392,9 +392,9 @@ private:
         if (TPyObjectPtr pyIter = PyObject_GetIter(PyObject_.Get())) {
             return NUdf::TUnboxedValuePod(new TIterator(CastCtx_, ItemType_, std::move(pyIter)));
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetPayloadsIterator() const override {
@@ -439,11 +439,11 @@ private:
         const TPyGilLocker lock;
         const auto len = PySequence_Size(PyObject_.Get());
         if (len < 0) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
         }
         return ui64(len);
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
@@ -458,9 +458,9 @@ private:
                 return bool(has);
             }
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override try {
@@ -468,9 +468,9 @@ private:
         if (TPyObjectPtr pyIter = PyObject_GetIter(PyObject_.Get())) {
             return NUdf::TUnboxedValuePod(new TIterator(CastCtx_, ItemType_, std::move(pyIter)));
         }
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetPayloadsIterator() const override {
@@ -561,7 +561,7 @@ private:
             value = FromPyObject(CastCtx_, ItemType_, PySequence_Fast_GET_ITEM(PySeq_.Get(), Index_++));
             return true;
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& pay) override try {
@@ -573,7 +573,7 @@ private:
             pay = FromPyObject(CastCtx_, ItemType_, PySequence_Fast_GET_ITEM(PySeq_.Get(), Index_++));
             return true;
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
     private:
@@ -613,10 +613,10 @@ private:
             if (const auto item = PySequence_Fast_GET_ITEM(PySeq_.Get(), index >= 0 ? index : Size_ + index)) {
                 return FromPyObject(CastCtx_, ItemType_, item).Release().MakeOptional();
             } else if (PyErr_Occurred()) {
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
             }
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
         return NUdf::TUnboxedValue();
     }
@@ -699,7 +699,7 @@ NUdf::TUnboxedValue FromPySequence(
         Y_ABORT("Invalid key type.");
     }
     }
-    UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).data());
+    UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).c_str());
 }
 
 } // namespace NPython

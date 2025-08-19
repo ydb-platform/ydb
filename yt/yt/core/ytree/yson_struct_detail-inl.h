@@ -120,6 +120,7 @@ template <CNodePtr TNodePtr>
 struct TYsonSourceTraits<TNodePtr>
 {
     static constexpr bool IsValid = true;
+    static constexpr bool IsPullParser = false;
 
     static INodePtr AsNode(TNodePtr& source)
     {
@@ -163,6 +164,7 @@ template <>
 struct TYsonSourceTraits<NYson::TYsonPullParserCursor*>
 {
     static constexpr bool IsValid = true;
+    static constexpr bool IsPullParser = true;
 
     static INodePtr AsNode(NYson::TYsonPullParserCursor*& source)
     {
@@ -240,7 +242,11 @@ void LoadFromSource(
     using TTraits = TYsonSourceTraits<TSource>;
 
     try {
-        Deserialize(parameter, TTraits::AsNode(source));
+        if constexpr (TTraits::IsPullParser && NYson::ArePullParserDeserializable<T>()) {
+            Deserialize(parameter, source);
+        } else {
+            Deserialize(parameter, TTraits::AsNode(source));
+        }
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", pathGetter())
             << ex;
@@ -758,6 +764,12 @@ bool CompareValues(const T& lhs, const T& rhs)
     return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
 }
 
+template <class TFrom, class TTo>
+constexpr bool IsPointerStaticCastable = requires { static_cast<TTo*>(static_cast<TFrom*>(nullptr)); };
+
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NPrivate
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -768,9 +780,18 @@ TYsonFieldAccessor<TStruct, TValue>::TYsonFieldAccessor(TYsonStructField<TStruct
 { }
 
 template <class TStruct, class TValue>
-TValue& TYsonFieldAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
+TValue& TYsonFieldAccessor<TStruct, TValue>::GetValue(TYsonStructBase* source)
 {
+    if constexpr (NPrivate::IsPointerStaticCastable<TYsonStructBase, TStruct>) {
+        return static_cast<TStruct*>(source)->*Field_;
+    }
     return TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(source)->*Field_;
+}
+
+template <class TStruct, class TValue>
+const TValue& TYsonFieldAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
+{
+    return TYsonFieldAccessor::GetValue(const_cast<TYsonStructBase*>(source));
 }
 
 template <class TStruct, class TValue>
@@ -796,9 +817,18 @@ bool TUniversalYsonParameterAccessor<TStruct, TValue>::HoldsField(ITypeErasedYso
 }
 
 template <class TStruct, class TValue>
-TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
+TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(TYsonStructBase* source)
 {
+    if constexpr (NPrivate::IsPointerStaticCastable<TYsonStructBase, TStruct>) {
+        return Accessor_(static_cast<TStruct*>(source));
+    }
     return Accessor_(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(source));
+}
+
+template <class TStruct, class TValue>
+const TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
+{
+    return TUniversalYsonParameterAccessor::GetValue(const_cast<TYsonStructBase*>(source));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -906,7 +936,7 @@ void TYsonStructParameter<TValue>::SafeLoad(
 }
 
 template <class TValue>
-void TYsonStructParameter<TValue>::PostprocessParameter(const TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const
+void TYsonStructParameter<TValue>::PostprocessParameter(TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const
 {
     TValue& value = FieldAccessor_->GetValue(self);
     NPrivate::PostprocessRecursive(value, pathGetter);
@@ -923,11 +953,10 @@ void TYsonStructParameter<TValue>::PostprocessParameter(const TYsonStructBase* s
 }
 
 template <class TValue>
-void TYsonStructParameter<TValue>::SetDefaultsInitialized(TYsonStructBase* self)
+void TYsonStructParameter<TValue>::SetDefaultsInitialized(TYsonStructBase* self, bool dontSetLiteMembers)
 {
-    TValue& value = FieldAccessor_->GetValue(self);
-
-    if (DefaultCtor_) {
+    if (DefaultCtor_ && !(std::is_base_of_v<TYsonStructLite, TValue> && dontSetLiteMembers && DefaultIsDefaultConstruction_)) {
+        TValue& value = FieldAccessor_->GetValue(self);
         value = (*DefaultCtor_)();
     }
 }
@@ -955,6 +984,13 @@ bool TYsonStructParameter<TValue>::CanOmitValue(const TYsonStructBase* self) con
 
     if (TriviallyInitializedIntrusivePtr_) {
         return false;
+    }
+
+    using TDefaultValue = decltype((*DefaultCtor_)());
+    using TCanOmitValueResult = decltype(NYT::NYTree::NDetail::CanOmitValue(&value, static_cast<TDefaultValue*>(nullptr)));
+    if constexpr (!std::is_same_v<bool, TCanOmitValueResult>) {
+        // TCanOmitValueResult is either bool or std::integral_constant. In the latter case there's no need to call the function.
+        return TCanOmitValueResult::value;
     }
 
     auto defaultValue = (*DefaultCtor_)();
@@ -1014,6 +1050,7 @@ TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Optional(bool init)
 
     if (init) {
         DefaultCtor_ = [] () { return TValue{}; };
+        DefaultIsDefaultConstruction_ = true;
     }
 
     return *this;

@@ -57,8 +57,7 @@ namespace {
 
 Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     Y_UNIT_TEST(Upsert) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -113,8 +112,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertDuplicates) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -146,8 +144,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertExistingKey) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -192,8 +189,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(Replace) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -248,8 +244,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ReplaceDuplicates) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -281,8 +276,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ReplaceExistingKey) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -327,8 +321,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(Insert) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -383,9 +376,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST_TWIN(InsertDuplicates, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -411,9 +403,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST_TWIN(InsertExistingKey, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -438,8 +429,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpdateOn) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -490,8 +480,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(Delete) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -538,8 +527,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpdateAfterUpsert) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -567,8 +555,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(DeleteAfterUpsert) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -605,8 +592,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpdateAfterInsert) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -634,8 +620,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(DeleteAfterInsert) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -673,8 +658,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertAfterInsert) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -698,8 +682,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertAfterInsertWithIndex) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -773,8 +756,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(DeleteOnAfterInsertWithIndex) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -834,8 +816,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(MultipleEffectsWithIndex) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -874,8 +855,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(InsertConflictTxAborted) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -914,8 +894,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertConflictInteractiveTxAborted) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -986,8 +965,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(MultiShardUpsertAfterRead) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1018,9 +996,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST_TWIN(TxWithReadAtTheEnd, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1062,9 +1039,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST_TWIN(InteractiveTxWithReadAtTheEnd, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1126,9 +1102,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST_TWIN(TxWithWriteAtTheEnd, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1169,8 +1144,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(InteractiveTxWithWriteAtTheEnd) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1230,8 +1204,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UnobservedUncommittedChangeConflict) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1308,8 +1281,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(AlreadyBrokenImmediateEffects) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1395,8 +1367,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(WriteThenReadWithCommit) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1445,8 +1416,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyR1WR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1502,8 +1472,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyR1RWR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1563,8 +1532,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyR1WRR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1624,8 +1592,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyW1RR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1681,8 +1648,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyW1WR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1736,8 +1702,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyW1RWR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1792,8 +1757,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyW1WRR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1848,8 +1812,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyRW1RR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1909,8 +1872,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyRW1WR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1965,8 +1927,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyRW1RWR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -2022,8 +1983,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyRW1WRR2) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -2082,9 +2042,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST_TWIN(ForceImmediateEffectsExecution, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig).SetEnableForceImmediateEffectsExecution(true);
+        TKikimrSettings serverSettings = TKikimrSettings().SetEnableForceImmediateEffectsExecution(true);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2239,8 +2198,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ManyFlushes) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2310,9 +2268,8 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
-     Y_UNIT_TEST(Interactive) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    Y_UNIT_TEST(Interactive) {
+        TKikimrSettings serverSettings;
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

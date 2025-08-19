@@ -380,7 +380,7 @@ SELECT FormatType(ListTypeHandle(
 )); -- List<Bool>
 ```
 
-### EmptyListTypeHandle and EmptyDictTypeHandle
+### EmptyListTypeHandle and EmptyDictTypeHandle {#empty-list-dict-type-handle}
 
 Constructs a handle for an empty list or dictionary.
 
@@ -546,7 +546,7 @@ SELECT FormatType(VariantTypeHandle(
 )); -- Variant<Int32, String>
 ```
 
-### VoidTypeHandle and NullTypeHandle
+### VoidTypeHandle and NullTypeHandle {#void-null-type-handle}
 
 Constructing a handle for Void and Null types, respectively.
 

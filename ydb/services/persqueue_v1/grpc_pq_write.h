@@ -108,23 +108,23 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
 
     if (TooMuchSessions()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - too much sessions");
-        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
-        ev->Get()->GetStreamCtx()->WriteAndFinish(
+        ev->Get()->Attach(ctx.SelfID);
+        ev->Get()->WriteAndFinish(
             FillWriteResponse<UseMigrationProtocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD),
-            grpc::Status::OK); // CANCELLED
+            Ydb::StatusIds::OVERLOADED); // CANCELLED
         return;
     }
 
     TString localCluster = AvailableLocalCluster(ctx);
 
     if (HaveClusters && localCluster.empty()) {
-        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
+        ev->Get()->Attach(ctx.SelfID);
         if (LocalCluster) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - cluster disabled");
-            ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse<UseMigrationProtocol>("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), grpc::Status::OK); //CANCELLED
+            ev->Get()->WriteAndFinish(FillWriteResponse<UseMigrationProtocol>("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), Ydb::StatusIds::UNSUPPORTED); //CANCELLED
         } else {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - initializing");
-            ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse<UseMigrationProtocol>("initializing", PersQueue::ErrorCode::INITIALIZING), grpc::Status::OK); //CANCELLED
+            ev->Get()->WriteAndFinish(FillWriteResponse<UseMigrationProtocol>("initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
         }
         return;
     } else {
@@ -140,7 +140,7 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
 
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new session created cookie " << cookie);
 
-        auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
+        auto ip = ev->Get()->GetPeerName();
         TActorId worker = ctx.Register(new TWriteSessionActor<UseMigrationProtocol>(
                 ev->Release().Release(), cookie, SchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",

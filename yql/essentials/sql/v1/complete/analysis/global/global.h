@@ -13,14 +13,18 @@
 
 namespace NSQLComplete {
 
-    struct TUseContext {
+    struct TClusterContext {
         TString Provider;
-        TString Cluster;
+        TString Name;
+
+        friend bool operator==(const TClusterContext& lhs, const TClusterContext& rhs) = default;
     };
 
     struct TFunctionContext {
         TString Name;
         size_t ArgumentNumber = 0;
+        TMaybe<TString> Arg0 = Nothing();
+        TMaybe<TClusterContext> Cluster = Nothing();
 
         friend bool operator==(const TFunctionContext& lhs, const TFunctionContext& rhs) = default;
     };
@@ -42,7 +46,7 @@ namespace NSQLComplete {
     };
 
     struct TGlobalContext {
-        TMaybe<TUseContext> Use;
+        TMaybe<TClusterContext> Use;
         TVector<TString> Names;
         TMaybe<TFunctionContext> EnclosingFunction;
         TMaybe<TColumnContext> Column;

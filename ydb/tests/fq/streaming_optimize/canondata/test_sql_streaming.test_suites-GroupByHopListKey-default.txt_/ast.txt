@@ -12,7 +12,7 @@
 (let $11 '('"UseSsl" '1))
 (let $12 '('('"Consumer" '"test_client") $9 $10 '('"ReconnectPeriod" '"") '('"Format" '"raw") '('"ReadGroup" '"fqrun") $11))
 (let $13 (SecureParam '"cluster:default_pq"))
-(let $14 (DqPqTopicSource $3 $8 '('"Data") $12 $13 '"" $7))
+(let $14 (DqPqTopicSource $3 $8 '('"Data") $12 $13 '"" $7 '""))
 (let $15 (ResourceType '"Yson2.Node"))
 (let $16 '('"strict"))
 (let $17 '($16))

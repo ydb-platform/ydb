@@ -365,6 +365,13 @@ def to_strings(o):
             elif isinstance(o, (str, int)):
                 yield str(o)
             else:
+                try:
+                    # Huge Python2 is still used for generating ymake.conf in case of ya.make yndexing
+                    if isinstance(o, unicode):
+                        yield o.decode('utf-8')
+                        return
+                except NameError:
+                    pass
                 raise ConfigureError('Unexpected value {} {}'.format(type(o), o))
 
 

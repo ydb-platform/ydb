@@ -411,11 +411,39 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExprBase node, TExprContext& ctx) const {
     const auto ytMap = node.Cast<TYtMap>();
+    auto ytMapInput = ytMap.Mapper().Args().Arg(0).Ptr();
+
+    {
+        static const char optName[] = "KeepPruneKeysOnInputTables";
+        if (!IsOptimizerEnabled<optName>(*State_->Types) || IsOptimizerDisabled<optName>(*State_->Types)) {
+            // Try remove PruneKeys over Input table
+            const auto pruneKeys = ytMap.Mapper().Body().Maybe<TCoPruneKeysBase>();
+
+            if (pruneKeys) {
+                if (pruneKeys.Cast().Input().Ptr() == ytMapInput) {
+                    auto identityLambda = MakeIdentityLambda(node.Pos(), ctx);
+                    return Build<TYtMap>(ctx, node.Pos())
+                        .InitFrom(ytMap)
+                        .Mapper(identityLambda)
+                    .Done();
+                }
+            }
+        }
+    }
+
     const auto flatMap = ytMap.Mapper().Body().Maybe<TCoFlatMapBase>();
     if (!flatMap) {
         return node;
     }
-    if (flatMap.Cast().Input().Ptr() != ytMap.Mapper().Args().Arg(0).Ptr()) {
+
+    auto flatMapInput = flatMap.Cast().Input().Ptr();
+
+    auto maybePruneKeys = flatMap.Cast().Input().Maybe<TCoPruneKeysBase>();
+    if (maybePruneKeys) {
+        flatMapInput = maybePruneKeys.Cast().Input().Ptr();
+    }
+
+    if (flatMapInput != ytMapInput) {
         return node;
     }
 
@@ -444,13 +472,31 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExpr
 
     auto newFilter = ctx.ChangeChild(flatMapLambda.Body().Ref(), TCoConditionalValueBase::idx_Predicate, std::move(newPredicate));
     auto newFlatMapLambda = ctx.ChangeChild(flatMapLambda.Ref(), TCoLambda::idx_Body, std::move(newFilter));
+
+    auto newInputLambda = MakeIdentityLambda(node.Pos(), ctx);
+    if (maybePruneKeys) {
+        auto pruneKeys = maybePruneKeys.Cast();
+        newInputLambda = ctx.Builder(node.Pos())
+            .Lambda()
+                .Param({"stream"})
+                .Callable(TCoPruneAdjacentKeys::Match(pruneKeys.Raw()) ? "PruneAdjacentKeys" : "PruneKeys")
+                    .Arg(0, "stream")
+                    .Add(1, pruneKeys.Extractor().Ptr())
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
     return Build<TYtMap>(ctx, node.Pos())
         .InitFrom(ytMap)
         .Mapper<TCoLambda>()
             .Args({"stream"})
             .Body<TCoFlatMapBase>()
                 .CallableName(flatMap.Ref().Content())
-                .Input("stream")
+                .Input<TExprApplier>()
+                    .Apply(TCoLambda(newInputLambda))
+                    .With(0, "stream")
+                .Build()
                 .Lambda<TCoLambda>()
                     .Args({"item"})
                     .Body<TExprApplier>()

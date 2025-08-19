@@ -331,7 +331,7 @@ template <TConverterPtr Converter = nullptr>
 TUnboxedValuePod YPathImpl(TUnboxedValuePod dict, const TUnboxedValuePod key, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     const std::string_view path = key.AsStringRef();
     if (path.size() < 2U || path.front() != '/' || path.back() == '/') {
-        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(pos) << " Invalid YPath: '" << path << "'.").data());
+        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(pos) << " Invalid YPath: '" << path << "'.").c_str());
     }
 
     for (const auto s : StringSplitter(path.substr(path[1U] == '/' ? 2U : 1U)).Split('/')) {
@@ -676,7 +676,7 @@ SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSerializeJson, TOptional<TJson>(TAutoMap<TNodeRes
     return valueBuilder->NewString(SerializeJsonDom(args[0], args[2].GetOrDefault(false), args[3].GetOrDefault(false), args[4].GetOrDefault(false)));
 } catch (const std::exception& e) {
     if (ParseOptions(args[1]).Strict) {
-        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(GetPos()) << " " << e.what()).data());
+        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(GetPos()) << " " << e.what()).c_str());
     }
     return {};
 }
@@ -1095,7 +1095,7 @@ TUnboxedValue TParse<TYson, false>::Run(const IValueBuilder* valueBuilder, const
     return TryParseYsonDom(args[0].AsStringRef(), valueBuilder);
 } catch (const std::exception& e) {
     if (StrictType_ || ParseOptions(args[1]).Strict) {
-        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
+        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).c_str());
     }
     return TUnboxedValuePod();
 }
@@ -1105,7 +1105,7 @@ TUnboxedValue TParse<TJson, false>::Run(const IValueBuilder* valueBuilder, const
     return TryParseJsonDom(args[0].AsStringRef(), valueBuilder);
 } catch (const std::exception& e) {
     if (StrictType_ || ParseOptions(args[1]).Strict) {
-        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
+        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).c_str());
     }
     return TUnboxedValuePod();
 }
@@ -1115,7 +1115,7 @@ TUnboxedValue TParse<TJson, true>::Run(const IValueBuilder* valueBuilder, const 
     return TryParseJsonDom(args[0].AsStringRef(), valueBuilder, true);
 } catch (const std::exception& e) {
     if (StrictType_ || ParseOptions(args[1]).Strict) {
-        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
+        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).c_str());
     }
     return TUnboxedValuePod();
 }

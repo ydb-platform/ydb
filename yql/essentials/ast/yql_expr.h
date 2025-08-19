@@ -1591,6 +1591,12 @@ inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const {
     }
 }
 
+enum class ESideEffects {
+    None = 0,
+    SemilatticeRT = 1,
+    General = 2
+};
+
 class TExprNode {
     friend class TExprNodeBuilder;
     friend class TExprNodeReplaceBuilder;
@@ -2208,6 +2214,46 @@ public:
         return bool(UnordChildren_);
     }
 
+    void SetPosAware() {
+        PosAware_ = 1;
+    }
+
+    bool IsPosAware() const {
+        return PosAware_;
+    }
+
+    void SetSideEffects(ESideEffects mode) {
+        switch (mode) {
+        case ESideEffects::None:
+            HasSideEffects_ = 0;
+            CseeSafe_ = 1;
+            break;
+        case ESideEffects::SemilatticeRT:
+            HasSideEffects_ = 1;
+            CseeSafe_ = 1;
+            break;
+        case ESideEffects::General:
+            HasSideEffects_ = 1;
+            CseeSafe_ = 0;
+            break;
+        }
+    }
+
+    bool HasSideEffects() const {
+        return HasSideEffects_ != 0;
+    }
+
+    bool IsCseeSafe() const {
+        return CseeSafe_ != 0;
+    }
+
+    void UpdateSideEffectsFromChildren() {
+        for (const auto& child : Children_) {
+            HasSideEffects_ = HasSideEffects_ | child->HasSideEffects_;
+            CseeSafe_ = CseeSafe_ & child->CseeSafe_;
+        }
+    }
+
     ~TExprNode() {
         Y_ABORT_UNLESS(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
             UniqueId_, ToString(Type_).data(),  TString(ContentUnchecked()).data());
@@ -2242,6 +2288,9 @@ private:
         , UnordChildren_(0)
         , ShallBeDisclosed_(0)
         , LiteralList_(0)
+        , PosAware_(0)
+        , HasSideEffects_(0)
+        , CseeSafe_(1)
     {}
 
     TExprNode(const TExprNode&) = delete;
@@ -2311,6 +2360,9 @@ private:
         ui8 UnordChildren_    : 1; // NOLINT(readability-identifier-naming)
         ui8 ShallBeDisclosed_ : 1; // NOLINT(readability-identifier-naming)
         ui8 LiteralList_      : 1; // NOLINT(readability-identifier-naming)
+        ui8 PosAware_         : 1; // NOLINT(readability-identifier-naming)
+        ui8 HasSideEffects_   : 1; // NOLINT(readability-identifier-naming)
+        ui8 CseeSafe_         : 1; // NOLINT(readability-identifier-naming)
     };
 };
 
@@ -2385,6 +2437,7 @@ struct TExprStep {
         LoadTablesMetadata,
         RewriteIO,
         Recapture,
+        NormalizeDependsOn,
         LastLevel
     };
 

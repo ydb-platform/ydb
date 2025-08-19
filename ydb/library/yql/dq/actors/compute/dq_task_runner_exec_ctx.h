@@ -13,6 +13,8 @@ public:
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const override;
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const override;
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller) const override;
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller, NActors::TActorSystem* actorSystem) const override;
   
     TWakeUpCallback GetWakeupCallback() const override;
     TErrorCallback GetErrorCallback() const override;

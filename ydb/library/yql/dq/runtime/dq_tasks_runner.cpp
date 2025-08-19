@@ -548,8 +548,11 @@ public:
         auto& typeEnv = TypeEnv();
 
         SpillingTaskCounters = execCtx.GetSpillingTaskCounters();
+        NKikimr::NMiniKQL::ISpiller::TPtr SharedSpiller;
         if (SpillerFactory) {
             SpillerFactory->SetTaskCounters(SpillingTaskCounters);
+            // Create shared spiller for all channels in this task
+            SharedSpiller = SpillerFactory->CreateSpiller();
         }
         AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
 
@@ -688,7 +691,8 @@ public:
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 
                     if (!outputChannelDesc.GetInMemory()) {
-                        settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                        // Always use new method, pass SharedSpiller (can be nullptr for fallback)
+                        settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling(), SharedSpiller);
                     }
 
                     if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {

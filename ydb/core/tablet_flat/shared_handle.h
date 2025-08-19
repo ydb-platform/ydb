@@ -114,7 +114,7 @@ public:
     }
 
     void SetFrequency(ui32 frequency) noexcept {
-        Frequency.store(frequency, std::memory_order_release);
+        Frequency.store(frequency, std::memory_order_relaxed);
     }
 
     /**

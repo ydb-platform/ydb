@@ -23,9 +23,29 @@
 
 Ключевое понятие {{ dbt }} — [модель данных](https://docs.getdbt.com/docs/build/sql-models). По своей сути, это SQL‑выражение, в котором могут быть использованы все источники данных внутри вашего хранилища, включая другие модели. Существуют разные подходы к физическому созданию модели (ее материализации) внутри {{ ydb }}, которые поддерживает коннектор {{dbt-ydb}}:
 
-- Представление (view) — сохраняется как view внутри {{ ydb }};
-- Таблица — сохраняется как таблица внутри {{ydb}} и пересоздаётся при каждом обновлении модели силами {{ dbt }};
-- [Инкрементальное представление](https://docs.getdbt.com/docs/build/incremental-models-overview) — создаётся как таблица внутри {{ydb}}, но при обновлении не пересоздаётся, а обновляется изменившимися и новыми строками. Коннектор, в данный момент, обеспечивает поддержку [стратегии](https://docs.getdbt.com/docs/build/incremental-strategy#merge) MERGE.
+1. Представление (view) — сохраняется как [представление {{ydb}}](https://ydb.tech/docs/ru/concepts/datamodel/view).
+2. Таблица (table) — сохраняется как [таблица](https://ydb.tech/docs/ru/concepts/datamodel/table) внутри {{ydb}} и пересоздаётся при каждом обновлении модели силами {{ dbt }}.
+
+{{dbt-ydb}} коннектор поддерживает возможность определять следующие параметры таблицы через [конфигурацию модели](https://docs.getdbt.com/reference/model-configs):
+
+
+| Параметр                            | Обязательность | Значение по умолчанию     | Описание                                                            |
+|-------------------------------------|----------------|---------------------------|---------------------------------------------------------------------|
+| primary_key                         | Да             |                           | [Первичный ключ](https://ydb.tech/docs/ru/dev/primary-key/) таблицы |
+| store_type                          | Нет            | row                       | Тип таблицы - [строковая](https://ydb.tech/docs/ru/concepts/datamodel/table#row-oriented-tables) или [колоночная](https://ydb.tech/docs/ru/concepts/datamodel/table#column-oriented-tables)      |
+| auto_partitioning_by_size           | Нет            |                           | [Автоматическое партиционирование по размеру](https://ydb.tech/docs/ru/concepts/datamodel/table#auto_partitioning_by_size)      |
+| auto_partitioning_partition_size_mb | Нет            |                           | [Порог размера партиции](https://ydb.tech/docs/ru/concepts/datamodel/table#auto_partitioning_partition_size_mb)      |
+| ttl                                 | Нет            |                           | Правило [Time-To-Live](https://ydb.tech/docs/ru/concepts/ttl)       |
+
+
+3. [Инкрементальное представление](https://docs.getdbt.com/docs/build/incremental-models-overview) (incremental model) — создаётся как таблица внутри {{ydb}}, но при обновлении не пересоздаётся, а обновляется изменившимися и новыми строками.
+
+{{dbt-ydb}} коннектор поддерживает те же параметры, что определены для табличной материализации, а также уникальные параметры инкрементального представления:
+
+| Параметр                            | Обязательность | Значение по умолчанию     | Описание                                                            |
+|-------------------------------------|----------------|---------------------------|---------------------------------------------------------------------|
+| incremental_strategy                | Нет            | MERGE                     | [Стратегия инкрементальной материлазации](https://docs.getdbt.com/docs/build/incremental-strategy). Поддерживается стратегия MERGE, использующая {{ydb}} операцию [UPSERT](https://ydb.tech/docs/ru/yql/reference/syntax/upsert_into). Стратегия APPEND находится в разработке  |
+
 
 {% note info %}
 
@@ -77,7 +97,7 @@ pip install dbt-ydb
 
 {{dbt}} подключается к {{ydb}} через {{dbt-ydb}} коннектор [стандартным](https://ydb.tech/docs/ru/concepts/connect) для {{ydb}} образом. Для успешного подключения требуется указать эндпоинт, путь к базе данных, а также параметры аутентификации в файле [профилей](https://docs.getdbt.com/docs/core/connect-data-platform/connection-profiles) dbt.
 
-Пример файла профилей с возможными вариантами аутентификации, а также значениями по умолчанию (в квадртаных скобках)
+Пример файла профилей с возможными вариантами аутентификации, а также значениями по умолчанию (в квадратных скобках)
 
    ```yml
    profile_name:
@@ -113,7 +133,7 @@ pip install dbt-ydb
 
 2. Cледуйте интерактивным подсказкам dbt для выбора коннектора {{dbt-ydb}} и настроек аутентификации, подходящих для вашего кластера {{ydb}}
 
-3. В результате директорая с вашим проектом, а также файл [профилей](https://docs.getdbt.com/docs/core/connect-data-platform/connection-profiles) {{dbt}} в домашней директории пользователя будет создан или обновлен новым соединением к {{ydb}}
+3. В результате директория с вашим проектом, а также файл [профилей](https://docs.getdbt.com/docs/core/connect-data-platform/connection-profiles) {{dbt}} в домашней директории пользователя будет создан или обновлен новым соединением к {{ydb}}
 
   ```bash
   ~/.dbt/profiles.yml
@@ -129,7 +149,30 @@ pip install dbt-ydb
 
 ![{{dbt-ydb}} new project structure](_assets/dbt-ydb-new-project.png)
 
-6. Теперь вы можете запустить ваш проект
+6. Адаптация модели my_first_dbt_model
+
+В данный момент {{dbt}} не поддерживает возможности модификации автоматически генерируемого примера индивидуально под коннектор, поэтому, для запуска данной модели через {{dbt-ydb}} требуется ее обновить следующим образом:
+
+   ```text
+   /*
+      Welcome to your first dbt model!
+      Did you know that you can also configure models directly within SQL files?
+      This will override configurations stated in dbt_project.yml
+
+      Try changing "table" to "view" below
+   */
+
+   {{ config(materialized='table', primary_key='id') }}
+
+   select *
+   from (
+      select 1 as id
+      union all
+      select null as id
+   )
+   ```
+
+7. Теперь вы можете запустить ваш проект
 
   ```bash
   dbt run
@@ -148,7 +191,7 @@ pip install dbt-ydb
 
 2. Настройка файла профиля подключения к вашей {{ ydb }} в файле `profiles.yml`. Для однонодовой инсталляции из [быстрого старта](../../quickstart.md) файл будет выглядеть следующим образом
 
-   ```yaml
+   ```text
    profile_name:
      target: dev
      outputs:

@@ -42,7 +42,6 @@ class Workload(unittest.TestCase):
         os.chmod(path_to_unpack, st.st_mode | stat.S_IEXEC)
         self.cli_path = path_to_unpack
 
-
     def loop(self):
         TEST_FILES_DIRECTORY = "./test-files/"
         JAR_FILE_NAME = "e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"

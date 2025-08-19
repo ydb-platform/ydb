@@ -990,7 +990,7 @@ def test_topic_data():
     return result
 
 
-def test_transfer_describe():
+def test_async_replication_describe():
     grpc_port = cluster.nodes[1].grpc_port
     endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
 
@@ -1008,6 +1008,42 @@ def test_transfer_describe():
     })
 
     return result
+
+
+def test_transfer_describe():
+    topic_result = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TOPIC TestTransferSourceTopic',
+        'schema': 'multi'
+    })
+
+    table_result = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TABLE TestTransferDestinationTable (id Uint64 NOT NULL, message String, PRIMARY KEY (id) )',
+        'schema': 'multi'
+    })
+
+    transfer_result = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': '''CREATE TRANSFER `TestTransfer` FROM `TestTransferSourceTopic` TO `TestTransferDestinationTable`
+            USING ($x) -> { return [<| id: $x._offset, message: $x._data |>]; }
+            WITH (CONSUMER='OurConsumer')''',
+        'schema': 'multi'
+    })
+
+    describe_result = get_viewer_normalized("/viewer/describe_transfer", {
+        'database': dedicated_db,
+        'path': '{}/TestTransfer'.format(dedicated_db),
+        'include_stats': 'true',
+        'enums': 'true'
+    })
+
+    return {
+        'topic_result': topic_result,
+        'table_result': table_result,
+        'transfer_result': transfer_result,
+        'describe_result': describe_result
+    }
 
 
 def normalize_result_query_long(result):

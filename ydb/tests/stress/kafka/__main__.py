@@ -15,7 +15,7 @@ if __name__ == '__main__':
     parser.add_argument("--target-path", help="Target topic name")
     parser.add_argument("-c", "--consumer", help="Consumer name")
     parser.add_argument("-n", "--num-workers", help="Number of workers")
-    parser.add_argument("-dur", "--duration", help="Duration of waiting")
+    parser.add_argument("--duration", help="Duration of waiting")
     args = parser.parse_args()
 
     os.environ["YDB_ANONYMOUS_CREDENTIALS"] = "1"

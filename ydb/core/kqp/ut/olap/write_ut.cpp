@@ -611,6 +611,14 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             auto resultSet = result.GetResultSetParser(0);
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+            resultSet.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint32(), 100);
+
+            resultSet.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint32(), 200);
         }
     }
 }

@@ -12,9 +12,14 @@
 namespace NKikimr {
 namespace NPQ {
 
+// Large messages are split into small 512KB parts, and stored in separate parts.
+// This structure stores information about the saved part of a large message.
 struct TPartData {
+    // The serial number of the message part. The first part has a value of 0.
     ui16 PartNo;
+    // The number of parts that the message was splitted.
     ui16 TotalParts;
+    // The size of the original message in bytes (the sum of the sizes of all parts)
     ui32 TotalSize;
 
     TPartData(const ui16 partNo, const ui16 totalParts, const ui32 totalSize)
@@ -29,7 +34,6 @@ struct TPartData {
 };
 
 struct TClientBlob {
-
     TString SourceId;
     ui64 SeqNo;
     TString Data;
@@ -45,17 +49,17 @@ struct TClientBlob {
         , UncompressedSize(0)
     {}
 
-    TClientBlob(const TString& sourceId, const ui64 seqNo, TString&& data, TMaybe<TPartData>&& partData, const TInstant writeTimestamp, const TInstant createTimestamp,
-                const ui64 uncompressedSize, const TString& partitionKey, const TString& explicitHashKey)
-        : SourceId(sourceId)
+    TClientBlob(const TString sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData, const TInstant writeTimestamp, const TInstant createTimestamp,
+                const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey)
+        : SourceId(std::move(sourceId))
         , SeqNo(seqNo)
         , Data(std::move(data))
-        , PartData(std::move(partData))
+        , PartData(partData)
         , WriteTimestamp(writeTimestamp)
         , CreateTimestamp(createTimestamp)
         , UncompressedSize(uncompressedSize)
-        , PartitionKey(partitionKey)
-        , ExplicitHashKey(explicitHashKey)
+        , PartitionKey(std::move(partitionKey))
+        , ExplicitHashKey(std::move(explicitHashKey))
     {
         Y_ENSURE(PartitionKey.size() <= 256);
     }
@@ -100,6 +104,8 @@ struct TClientBlob {
     static TClientBlob Deserialize(const char *data, ui32 size);
 
     static void CheckBlob(const TKey& key, const TString& blob);
+
+    TString DebugString() const;
 };
 
 static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;

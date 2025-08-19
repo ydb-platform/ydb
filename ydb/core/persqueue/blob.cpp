@@ -133,6 +133,28 @@ void TClientBlob::CheckBlob(const TKey& key, const TString& blob)
     for (TBlobIterator it(key, blob); it.IsValid(); it.Next());
 }
 
+TString TClientBlob::DebugString() const {
+    auto sb = TStringBuilder() << "{"
+        << " SourceId='" << SourceId << "'"
+        << ", SeqNo=" << SeqNo
+        << ", PartData=" << SourceId << "'"
+        << ", WriteTimestamp=" << WriteTimestamp
+        << ", CreateTimestamp=" << CreateTimestamp
+        << ", UncompressedSize=" << UncompressedSize
+        << ", PartitionKey='" << PartitionKey << "'"
+        << ", ExplicitHashKey='" << ExplicitHashKey << "'";
+
+    if (PartData) {
+        sb << ", PartNo=" << PartData->PartNo
+           << ", TotalParts=" << PartData->TotalParts
+           << ", TotalSize=" << PartData->TotalSize;
+    }
+
+    sb << " }";
+
+    return sb;
+}
+
 void TClientBlob::SerializeTo(TBuffer& res) const
 {
     const ui32 totalSize = GetBlobSize();
@@ -246,7 +268,7 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
 
     TString dt(data, end - data);
 
-    return TClientBlob(sourceId, seqNo, std::move(dt), std::move(partData), writeTimestamp, createTimestamp, uncompressedSize, partitionKey, explicitHashKey);
+    return TClientBlob(sourceId, seqNo, std::move(dt), partData, writeTimestamp, createTimestamp, uncompressedSize, std::move(partitionKey), std::move(explicitHashKey));
 }
 
 void TBatch::SerializeTo(TString& res) const{
@@ -677,12 +699,24 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) const {
     for (ui32 i = 0; i < totalBlobs; ++i) {
         TMaybe<TPartData> pd;
         auto it = partData.find(pos[i]);
-        if (it != partData.end())
+        if (it != partData.end()) {
             pd = it->second;
-        (*blobs)[pos[i]] = TClientBlob(sourceIds[currentSID], seqNo[i], std::move(dt[i]), std::move(pd), wtime[pos[i]], ctime[pos[i]], uncompressedSize[pos[i]],
-                                       partitionKey[i], explicitHash[i]);
-        if (i + 1 == end[currentSID])
+        }
+
+        auto& processedBlob = (*blobs)[pos[i]];
+        processedBlob.SourceId = sourceIds[currentSID]; // One SourceId used for all parts of the message (many client blobs)
+        processedBlob.SeqNo = seqNo[i];
+        processedBlob.Data = std::move(dt[i]);
+        processedBlob.PartData = pd;
+        processedBlob.WriteTimestamp = wtime[pos[i]];
+        processedBlob.CreateTimestamp = ctime[pos[i]];
+        processedBlob.UncompressedSize = uncompressedSize[pos[i]];
+        processedBlob.PartitionKey = std::move(partitionKey[i]);
+        processedBlob.ExplicitHashKey = std::move(explicitHash[i]);
+
+        if (i + 1 == end[currentSID]) {
             ++currentSID;
+        }
     }
 }
 

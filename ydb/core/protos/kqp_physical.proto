@@ -323,6 +323,7 @@ message TKqpPhyCnVectorResolve {
     repeated uint32 CopyColumnIndexes = 6;
     bytes InputType = 7;
     bytes OutputType = 8;
+    uint32 ClusterColumnOutPos = 9;
 }
 
 message TKqpPhyCnSequencer {

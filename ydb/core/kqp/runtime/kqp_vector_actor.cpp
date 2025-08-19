@@ -375,6 +375,11 @@ private:
             clusterIds.push_back(pp.first);
             clusterRows.push_back(std::move(pp.second));
         }
+        if (!ReadingChildClustersOf && !clusterRows.size()) {
+            // Index is empty
+            RuntimeError("Updating an empty vector index is not supported yet", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+            return;
+        }
         if (!clusters->SetClusters(std::move(clusterRows))) {
             // Clusters are invalid for some reason
             RuntimeError("Child clusters of "+std::to_string(ReadingChildClustersOf)+" are invalid", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -406,13 +411,20 @@ private:
             // Output columns: Cluster ID + Source table PK [ + Data Columns ]
             auto newValue = HolderFactory.CreateDirectArrayHolder(1 + Settings.CopyColumnIndexesSize(), rowItems);
 
-            *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
-            rowSize += sizeof(NUdf::TUnboxedValuePod);
-
+            if (Settings.GetClusterColumnOutPos() == 0) {
+                // We support inserting cluster ID column into any position to maintain alphabetical order of columns
+                *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
+                rowSize += sizeof(NUdf::TUnboxedValuePod);
+            }
             for (size_t i = 0; i < Settings.CopyColumnIndexesSize(); i++) {
                 auto colIdx = Settings.GetCopyColumnIndexes(i);
                 *rowItems++ = currentValue.GetElement(colIdx);
                 rowSize += NMiniKQL::GetUnboxedValueSize(currentValue.GetElement(colIdx), ColumnTypeInfos[colIdx]).AllocatedBytes;
+                if (Settings.GetClusterColumnOutPos() == i+1) {
+                    // We support inserting cluster ID column into any position to maintain alphabetical order of columns
+                    *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
+                    rowSize += sizeof(NUdf::TUnboxedValuePod);
+                }
             }
 
             totalSize += rowSize;

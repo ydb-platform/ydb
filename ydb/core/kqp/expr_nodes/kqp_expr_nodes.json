@@ -462,7 +462,8 @@
             "Children": [
                 {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 2, "Name": "InputType", "Type": "TExprBase"},
-                {"Index": 3, "Name": "Index", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "WithData", "Type": "TCoAtom"}
             ]
         },
         {

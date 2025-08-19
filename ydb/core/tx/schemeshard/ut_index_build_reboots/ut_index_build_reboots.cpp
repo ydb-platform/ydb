@@ -89,98 +89,7 @@ static void WriteNullKey(TTestActorRuntime& runtime, ui64 tabletId, ui32 index) 
 
 Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
-    Y_UNIT_TEST(BaseCase) {
-        TTestWithReboots t(false);
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            {
-                TInactiveZone inactive(activeZone);
-
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
-                  Name: "dir/Table"
-                  Columns { Name: "key"     Type: "Uint32" }
-                  Columns { Name: "index"   Type: "Uint32" }
-                  Columns { Name: "value"   Type: "Utf8"   }
-                  KeyColumnNames: ["key"]
-                  UniformPartitionsCount: 2
-                 )");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-
-                for (ui32 delta = 0; delta < 2; ++delta) {
-                    WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
-                }
-
-                // Check src shard has the lead key as null
-                {
-                    NKikimrMiniKQL::TResult result;
-                    TString err;
-                    ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, R"(
-                    (
-                        (let range '('('key (Null) (Void))))
-                        (let columns '('key 'index))
-                        (let result (SelectRange '__user__Table range columns '()))
-                        (return (AsList (SetResult 'Result result)))
-                    )
-                    )", result, err);
-
-                    UNIT_ASSERT_VALUES_EQUAL_C(status, static_cast<ui32>(NKikimrProto::OK), err);
-                    UNIT_ASSERT_VALUES_EQUAL(err, "");
-
-                    //                                   V -- here the null key
-                    NKqp::CompareYson(R"([[[[[["101000"];#];[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
-                }
-            }
-
-            AsyncBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
-            ui64 buildIndexId = t.TxId;
-
-            {
-                auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
-                UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_PREPARING);
-            }
-
-            t.TestEnv->TestWaitNotification(runtime, buildIndexId);
-
-            {
-                auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
-                UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(), (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
-            }
-
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table"),
-                               {NLs::PathExist,
-                                NLs::IndexesCount(1)});
-
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table/index1", true, true, true),
-                               {NLs::PathExist,
-                                NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
-
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table/index1/indexImplTable", true, true, true),
-                               {NLs::PathExist});
-
-            // Check result
-            {
-                TInactiveZone inactive(activeZone);
-
-                NKikimrMiniKQL::TResult result;
-                TString err;
-                ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets+2, R"(
-                (
-                    (let range '( '('index (Null) (Void))  '('key (Null) (Void))))
-                    (let columns '('key 'index) )
-                    (let result (SelectRange '__user__indexImplTable range columns '()))
-                    (return (AsList (SetResult 'Result result) ))
-                )
-                )", result, err);
-
-                UNIT_ASSERT_VALUES_EQUAL_C(status, static_cast<ui32>(NKikimrProto::OK), err);
-                UNIT_ASSERT_VALUES_EQUAL(err, "");
-
-                // record with null is there ->                                                                                                                                                                                                                                  V -- here is the null
-                NKqp::CompareYson(R"([[[[[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];#];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
-            }
-        });
-    }
-
-    Y_UNIT_TEST(BaseCaseUniqIndex) {
+    void BaseCase(NKikimrSchemeOp::EIndexType indexType) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
@@ -201,11 +110,38 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                     WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
                 }
 
-                // Unique index key with unique null table key
-                WriteNullKey(runtime, TTestTxConfig::FakeHiveTablets, 100500);
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    // Unique index key with unique null table key
+                    WriteNullKey(runtime, TTestTxConfig::FakeHiveTablets, 100500);
+                }
+
+                // Check src shard has the lead key as null
+                {
+                    NKikimrMiniKQL::TResult result;
+                    TString err;
+                    ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, R"(
+                    (
+                        (let range '('('key (Null) (Void))))
+                        (let columns '('key 'index))
+                        (let result (SelectRange '__user__Table range columns '()))
+                        (return (AsList (SetResult 'Result result)))
+                    )
+                    )", result, err);
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(status, static_cast<ui32>(NKikimrProto::OK), err);
+                    UNIT_ASSERT_VALUES_EQUAL(err, "");
+
+                    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                        //                                   V -- here the null key
+                        NKqp::CompareYson(R"([[[[[["100500"];#];[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                    } else {
+                        //                                   V -- here the null key
+                        NKqp::CompareYson(R"([[[[[["101000"];#];[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                    }
+                }
             }
 
-            AsyncBuildUniqIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
+            AsyncBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}});
             ui64 buildIndexId = t.TxId;
 
             {
@@ -249,10 +185,23 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 UNIT_ASSERT_VALUES_EQUAL_C(status, static_cast<ui32>(NKikimrProto::OK), err);
                 UNIT_ASSERT_VALUES_EQUAL(err, "");
 
-                // record with null is there ->                                                                                                                                                                                                                                  V -- here is the null
-                NKqp::CompareYson(R"([[[[[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["100500"];#];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    // record with null is there ->                                                                                                                                                                                                                                  V -- here is the null
+                    NKqp::CompareYson(R"([[[[[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["100500"];#];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                } else {
+                    // record with null is there ->                                                                                                                                                                                                                                  V -- here is the null
+                    NKqp::CompareYson(R"([[[[[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];#];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                }
             }
         });
+    }
+
+    Y_UNIT_TEST(BaseCase) {
+        BaseCase(NKikimrSchemeOp::EIndexTypeGlobal);
+    }
+
+    Y_UNIT_TEST(BaseCaseUniq) {
+        BaseCase(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
     Y_UNIT_TEST(BaseCaseWithDataColumns) {

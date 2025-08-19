@@ -1,4 +1,5 @@
 #include "kqp_compute.h"
+#include "kqp_stream_lookup_join_helpers.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
@@ -7,6 +8,8 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/public/udf/udf_terminator.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
+
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -90,8 +93,8 @@ public:
         using TComputationValue::TComputationValue;
         // i guess it can be changed to some sort
         // of bitmaps or vectors
-        std::unordered_map<ui64, bool> AllRowsAreNull;
-        std::unordered_map<ui64, bool> RightRowExists;
+        absl::flat_hash_map<ui64, bool, std::hash<ui64>, std::equal_to<ui64>, TMKQLAllocator<std::pair<const ui64, bool>>> AllRowsAreNull;
+        absl::flat_hash_map<ui64, bool, std::hash<ui64>, std::equal_to<ui64>, TMKQLAllocator<std::pair<const ui64, bool>>> RightRowExists;
     };
 
     class TStreamValue : public TComputationValue<TStreamValue> {
@@ -148,9 +151,10 @@ public:
 
         bool OmitRow(TState& state, ui64 header, bool isNull) {
 
-            bool lastRowInSequence = header & 1;
-            bool firstRowInSequence = header & 2;
-            ui32 rowId = header >> 2;
+            auto cookie = NKqp::TStreamLookupJoinRowCookie::Decode(header);
+            bool lastRowInSequence = cookie.LastRow;
+            bool firstRowInSequence = cookie.FirstRow;
+            ui32 rowId = cookie.RowSeqNo;
 
             if (lastRowInSequence) {
                 // if row is the first and last row in the sequence at the same time
@@ -195,9 +199,10 @@ public:
             if (isNull)
                 return true;
 
-            bool firstRowInSequence = header & 2;
-            bool lastRowInSequence = header & 1;
-            ui64 rowId = header >> 2;
+            auto cookie = NKqp::TStreamLookupJoinRowCookie::Decode(header);
+            bool lastRowInSequence = cookie.LastRow;
+            bool firstRowInSequence = cookie.FirstRow;
+            ui32 rowId = cookie.RowSeqNo;
 
             if (firstRowInSequence && lastRowInSequence) {
                 return false;

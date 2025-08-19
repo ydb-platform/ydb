@@ -1,4 +1,5 @@
 #include "kqp_stream_lookup_worker.h"
+#include "kqp_stream_lookup_join_helpers.h"
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_types.h>
@@ -765,7 +766,8 @@ public:
             YQL_ENSURE(leftRowIt != PendingLeftRowsByKey.end());
 
             TReadResultStats rowStats;
-            auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, result.ShardId);
+            bool lastRow = (result.UnprocessedResultRow + 1 == result.ReadResult->Get()->GetRowsCount()) && record.GetFinished();
+            auto resultRow = TryBuildResultRow(leftRowIt->second, row, rowStats, lastRow, result.ShardId);
             YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
             ResultRowsBySeqNo[leftRowIt->second.SeqNo].Rows.emplace_back(std::move(resultRow), std::move(rowStats));
         }
@@ -848,7 +850,7 @@ public:
             if (leftRowIt->second.PendingReads.empty()) {
                 YQL_ENSURE(!leftRowIt->second.RightRowExist);
                 TReadResultStats rowStats;
-                auto resultRow = TryBuildResultRow(leftRowIt->second, {}, rowStats);
+                auto resultRow = TryBuildResultRow(leftRowIt->second, {}, rowStats, true);
                 YQL_ENSURE(IsRowSeqNoValid(leftRowIt->second.SeqNo));
                 auto& result = ResultRowsBySeqNo[leftRowIt->second.SeqNo];
                 result.Rows.emplace_back(std::move(resultRow), std::move(rowStats));
@@ -1024,7 +1026,7 @@ private:
     }
 
     NUdf::TUnboxedValue TryBuildResultRow(TLeftRowInfo& leftRowInfo, TConstArrayRef<TCell> rightRow,
-        TReadResultStats& rowStats, TMaybe<ui64> shardId = {}) {
+        TReadResultStats& rowStats, bool lastRow, TMaybe<ui64> shardId = {}) {
 
         NUdf::TUnboxedValue* resultRowItems = nullptr;
         auto resultRow = HolderFactory.CreateDirectArrayHolder(3, resultRowItems);
@@ -1066,7 +1068,14 @@ private:
             resultRowItems[1] = NUdf::TUnboxedValuePod();
         }
 
-        resultRowItems[2] = NUdf::TUnboxedValuePod((leftRowInfo.SeqNo << 2) + 3);
+        leftRowInfo.MatchedRows++;
+        auto rowCookie = TStreamLookupJoinRowCookie{
+            .RowSeqNo=leftRowInfo.SeqNo,
+            .LastRow=lastRow,
+            .FirstRow=(leftRowInfo.MatchedRows == 1)
+        };
+
+        resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode());
 
         rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
         // TODO: use datashard statistics KIKIMR-16924

@@ -49,7 +49,7 @@ struct TClientBlob {
         , UncompressedSize(0)
     {}
 
-    TClientBlob(TString sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData, const TInstant writeTimestamp, const TInstant createTimestamp,
+    TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData, const TInstant writeTimestamp, const TInstant createTimestamp,
                 const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey)
         : SourceId(std::move(sourceId))
         , SeqNo(seqNo)

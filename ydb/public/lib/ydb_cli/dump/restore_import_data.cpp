@@ -140,11 +140,11 @@ class TValueConverter {
         case EPrimitiveType::Timestamp:
             return TValue(Parser.GetTimestamp().GetValue());
         case EPrimitiveType::Date32:
-            return TValue(Parser.GetDate32());
+            return TValue(Parser.GetDate32().count());
         case EPrimitiveType::Datetime64:
-            return TValue(Parser.GetDatetime64());
+            return TValue(Parser.GetDatetime64().count());
         case EPrimitiveType::Timestamp64:
-            return TValue(Parser.GetTimestamp64());
+            return TValue(Parser.GetTimestamp64().count());
         case EPrimitiveType::String:
             return TValue(Parser.GetString());
         case EPrimitiveType::Utf8:
@@ -270,16 +270,16 @@ public:
         return TInstant::ParseIso8601(Value);
     }
 
-    i32 GetDate32() const {
-        return FromString<i32>(Value);
+    TWideDays GetDate32() const {
+        return TWideDays(FromString<int32_t>(Value));
     }
 
-    i64 GetDatetime64() const {
-        return FromString<i64>(Value);
+    TWideSeconds GetDatetime64() const {
+        return TWideSeconds(FromString<int64_t>(Value));
     }
 
-    i64 GetTimestamp64() const {
-        return FromString<i64>(Value);
+    TWideMicroseconds GetTimestamp64() const {
+        return TWideMicroseconds(FromString<int64_t>(Value));
     }
 
     TString GetString() const {

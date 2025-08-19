@@ -15,15 +15,11 @@ TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, TWakeUp
 }
 
 IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling) const {
-    return CreateChannelStorage(channelId, withSpilling, NActors::TlsActivationContext->ActorSystem());
+    return CreateChannelStorage(channelId, withSpilling, nullptr, NActors::TlsActivationContext->ActorSystem());
 }
 
-IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling,  NActors::TActorSystem* actorSystem) const {
-    if (withSpilling) {
-        return CreateDqChannelStorage(TxId_, channelId, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, actorSystem);
-    } else {
-        return nullptr;
-    }
+IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const {
+    return CreateChannelStorage(channelId, withSpilling, nullptr, actorSystem);
 }
 
 TWakeUpCallback TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
@@ -40,6 +36,22 @@ TIntrusivePtr<TSpillingTaskCounters> TDqTaskRunnerExecutionContext::GetSpillingT
 
 TTxId TDqTaskRunnerExecutionContext::GetTxId() const {
     return TxId_;
+}
+
+IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling, NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller) const {
+    return CreateChannelStorage(channelId, withSpilling, sharedSpiller, NActors::TlsActivationContext->ActorSystem());
+}
+
+IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling, NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller, NActors::TActorSystem* actorSystem) const {
+    Y_UNUSED(actorSystem);
+    if (withSpilling) {
+        if (!sharedSpiller) {
+            Y_ABORT("SharedSpiller is required for channel storage with spilling enabled");
+        }
+        return CreateDqChannelStorageWithSharedSpiller(channelId, sharedSpiller, SpillingTaskCounters_);
+    } else {
+        return nullptr;
+    }
 }
 
 } // namespace NDq

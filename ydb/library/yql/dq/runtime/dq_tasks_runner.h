@@ -19,6 +19,7 @@
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_watermark.h>
+#include <yql/essentials/minikql/computation/mkql_spiller.h>
 
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
@@ -161,6 +162,10 @@ public:
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
+    
+    // Create channel storage with shared spiller
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller, NActors::TActorSystem* actorSystem) const = 0;
 
     virtual TWakeUpCallback GetWakeupCallback() const = 0;
     virtual TErrorCallback GetErrorCallback() const = 0;
@@ -184,6 +189,14 @@ public:
     };
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/) const override {
+        return {};
+    };
+
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NKikimr::NMiniKQL::ISpiller::TPtr /*sharedSpiller*/) const override {
+        return {};
+    };
+
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NKikimr::NMiniKQL::ISpiller::TPtr /*sharedSpiller*/, NActors::TActorSystem* /*actorSystem*/) const override {
         return {};
     };
 

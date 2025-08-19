@@ -1,5 +1,6 @@
 #include "blob.h"
 #include "blob_int.h"
+#include "header.h"
 #include "type_codecs.h"
 
 #include <util/string/builder.h>

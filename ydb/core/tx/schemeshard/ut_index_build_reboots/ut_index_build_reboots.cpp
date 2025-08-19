@@ -544,9 +544,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         CancelBuild(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    Y_UNIT_TEST(IndexPartitioning) {
+    void IndexPartitioning(NKikimrSchemeOp::EIndexType indexType) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
                 TInactiveZone inactive(activeZone);
 
@@ -579,7 +580,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
             const ui64 buildIndexId = ++t.TxId;
             AsyncBuildIndex(runtime, buildIndexId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
-                "Index", NKikimrSchemeOp::EIndexTypeGlobal, { "value" }, {},
+                "Index", indexType, { "value" }, {},
                 { NYdb::NTable::TGlobalIndexSettings::FromProto(settings) }
             });
 
@@ -613,6 +614,14 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 NLs::PartitionKeys({"alice", "bob", ""})
             });
         });
+    }
+
+    Y_UNIT_TEST(IndexPartitioning) {
+        IndexPartitioning(NKikimrSchemeOp::EIndexTypeGlobal);
+    }
+
+    Y_UNIT_TEST(IndexPartitioningUniq) {
+        IndexPartitioning(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
     void UniqueIndexValidationFails(bool crossShardsViolation) {

@@ -7,10 +7,10 @@ import os
 import time
 import unittest
 import urllib.request
+import tarfile
 import tempfile
 from library.python import resource
 import ydb
-import tarfile
 
 
 class Workload(unittest.TestCase):
@@ -26,31 +26,31 @@ class Workload(unittest.TestCase):
         self.duration = duration
         self.tmp_dirs = []
         self.archive_path = "https://storage.yandexcloud.net/ydb-ci/kafka/jdk-linux-x86_64.yandex.tgz"
+        self.jar_path = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"
         self._unpack_resource('ydb_cli')
-        self._unpack_resource("e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar")
 
     def _unpack_resource(self, name):
-        working_dir = os.path.join(tempfile.gettempdir(), name)
+        working_dir = os.path.join(tempfile.gettempdir(), "ydb_cli")
         self.tmp_dirs.append(working_dir)
         os.makedirs(working_dir, exist_ok=True)
         res = resource.find(name)
-        path_to_unpack = os.path.join(working_dir, name)
+        path_to_unpack = os.path.join(working_dir, "ydb_cli")
         with open(path_to_unpack, "wb") as f:
             f.write(res)
 
         st = os.stat(path_to_unpack)
         os.chmod(path_to_unpack, st.st_mode | stat.S_IEXEC)
-        if name == "ydb_cli":
-            self.cli_path = path_to_unpack
-        elif name == "e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar":
-            self.jar_path = path_to_unpack
+        self.cli_path = path_to_unpack
 
 
     def loop(self):
         TEST_FILES_DIRECTORY = "./test-files/"
+        JAR_FILE_NAME = "e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"
         JDK_FILE_NAME = "jdk-linux-x86_64.yandex.tgz"
         if not os.path.exists(TEST_FILES_DIRECTORY):
             os.makedirs(TEST_FILES_DIRECTORY)
+
+        urllib.request.urlretrieve(self.jar_path, TEST_FILES_DIRECTORY + JAR_FILE_NAME)
         urllib.request.urlretrieve(self.archive_path, TEST_FILES_DIRECTORY + JDK_FILE_NAME)
 
         tar = tarfile.open(TEST_FILES_DIRECTORY + JDK_FILE_NAME, "r:gz")
@@ -58,6 +58,7 @@ class Workload(unittest.TestCase):
         tar.close()
 
         java_path = TEST_FILES_DIRECTORY + "/bin/java"
+        jar_file_path = TEST_FILES_DIRECTORY + JAR_FILE_NAME
 
         workloadConsumerName = self.workload_consumer_name
         checkerConsumer = "targetCheckerConsumer"
@@ -73,7 +74,7 @@ class Workload(unittest.TestCase):
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
         for i in range(self.num_workers):
-            processes.append(subprocess.Popen([java_path, "-jar", self.jar_path, self.bootstrap, f"streams-store-{i}"]))
+            processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap, f"streams-store-{i}"]))
         processes[0].wait()
         assert processes[0].returncode == 0
 

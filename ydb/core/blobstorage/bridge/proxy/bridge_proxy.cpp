@@ -56,7 +56,6 @@ namespace NKikimr {
                 size_t NumResponses;
                 TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
                 bool IsIndexOnly;
-                bool MustRestoreFirst;
                 ui32 BlockedGeneration = 0;
             };
 
@@ -93,6 +92,7 @@ namespace NKikimr {
             THashMap<TLogoBlobID, size_t> RestoreQueueIndex;
             size_t RestoreIndex = Max<size_t>();
             bool IsRestoring = false;
+            bool MustRestoreFirst = false;
             NKikimrBlobStorage::EGetHandleClass GetHandleClass = NKikimrBlobStorage::FastRead;
 
             TDynBitMap Processed; // a set of piles we already got main reply from
@@ -114,9 +114,9 @@ namespace NKikimr {
                     State = TGetState{
                         .NumResponses = request->QuerySize,
                         .IsIndexOnly = request->IsIndexOnly,
-                        .MustRestoreFirst = request->MustRestoreFirst,
                     };
 
+                    MustRestoreFirst = request->MustRestoreFirst,
                     GetHandleClass = request->GetHandleClass;
                     RestoreQueue.resize(request->QuerySize);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvRange>) {
@@ -124,6 +124,8 @@ namespace NKikimr {
                         .Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, request->From,
                             request->To, self.GroupId),
                     };
+
+                    MustRestoreFirst = request->MustRestoreFirst;
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvDiscover>) {
                     State = TDiscoverState{
                         .MinGeneration = request->MinGeneration,
@@ -252,6 +254,15 @@ namespace NKikimr {
                 return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
+            bool DataIsTrustedInPile(const TBridgeInfo::TPile& pile) const {
+                if (!NBridge::PileStateTraits(pile.State).RequiresDataQuorum) {
+                    return false;
+                }
+                const auto& state = Info->Group->GetBridgeGroupState();
+                const auto& gp = state.GetPile(pile.BridgePileId.GetPileIndex());
+                return gp.GetStage() == NKikimrBridge::TGroupState::SYNCED;
+            }
+
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
                     const TBridgeInfo::TPile& pile, TRequestPayload& payload) {
                 if (ev->Status != NKikimrProto::OK) {
@@ -315,6 +326,10 @@ namespace NKikimr {
 
                 // ensure we got right number of responses
                 Y_ABORT_UNLESS(ev->ResponseSz == state.NumResponses);
+
+                if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
+                    return std::move(ev);
+                }
 
                 if (!state.Responses) {
                     // this is the first response, we just repeat what we got in response
@@ -498,6 +513,10 @@ namespace NKikimr {
 
                 Y_ABORT_UNLESS(std::holds_alternative<TRangeState>(State));
                 auto& state = std::get<TRangeState>(State);
+
+                if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
+                    return std::move(ev);
+                }
 
                 auto getRestoreItem = [&](const auto& item) -> TRestoreItem& {
                     const auto [it, inserted] = RestoreQueueIndex.try_emplace(item.Id, RestoreQueue.size());
@@ -745,9 +764,7 @@ namespace NKikimr {
             auto& pile = *item.Pile;
             std::shared_ptr<TRequest> request = item.Request;
 
-            const bool isError = ev->Get()->Status != NKikimrProto::OK
-                && ev->Get()->Status != NKikimrProto::NODATA
-                && NBridge::PileStateTraits(item.Pile->State).RequiresDataQuorum;
+            const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
             STLOG(isError ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_BRIDGE, BPB02, "intermediate response",
                 (RequestId, request->MakeRequestId()),

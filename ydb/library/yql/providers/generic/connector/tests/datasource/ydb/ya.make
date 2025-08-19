@@ -1,5 +1,7 @@
 PY3TEST()
 
+TAG(ya:manual)
+
 NO_CHECK_IMPORTS()
 
 DATA(

@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/dq/actors/spilling)
 
+TAG(ya:manual)
+
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)

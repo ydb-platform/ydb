@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/core/arrow_kernels/registry)
 
+TAG(ya:manual)
+
 PEERDIR(
 )
 

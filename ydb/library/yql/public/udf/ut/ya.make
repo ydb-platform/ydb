@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/public/udf)
 
+TAG(ya:manual)
+
 SRCS(
     udf_counter_ut.cpp
     udf_value_ut.cpp

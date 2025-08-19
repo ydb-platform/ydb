@@ -1,5 +1,7 @@
 UNITTEST()
 
+TAG(ya:manual)
+
 SIZE(MEDIUM)
 
 TIMEOUT(300)

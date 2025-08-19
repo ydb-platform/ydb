@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/core/file_storage)
 
+TAG(ya:manual)
+
 SRCS(
     file_storage_ut.cpp
     sized_cache_ut.cpp

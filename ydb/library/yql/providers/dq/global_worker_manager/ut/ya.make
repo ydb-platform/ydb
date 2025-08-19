@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/dq/global_worker_manager)
 
+TAG(ya:manual)
+
 NO_BUILD_IF(OS_WINDOWS)
 
 SIZE(SMALL)

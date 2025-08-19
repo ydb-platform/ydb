@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/dq/actors/compute)
 
+TAG(ya:manual)
+
 SRCS(
     dq_compute_actor_ut.cpp
     dq_compute_actor_async_input_helper_ut.cpp

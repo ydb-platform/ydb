@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/core/spilling)
 
+TAG(ya:manual)
+
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)

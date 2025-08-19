@@ -525,14 +525,15 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
                 AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() - ApproveStart < csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
+            constexpr std::string_view enablePushdownOlapAggregation = R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)";
             {
                 ResetZeroLevel(csController);
                 ui32 requestsCount = 100;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res, const TString& uid, const ui32 level) {
+                    const auto query = [&](const TString& res, const TString& uid, const ui32 level) {
                         TStringBuilder sb;
-                        sb << R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)" << Endl;
+                        sb << enablePushdownOlapAggregation << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE(" << Endl;
                         sb << "resource_id = '" << res << "' AND" << Endl;
@@ -552,9 +553,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res) {
+                    const auto query = [&](const TString& res) {
                         TStringBuilder sb;
-                        sb << R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)" << Endl;
+                        sb << enablePushdownOlapAggregation << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '%" << res << "%'" << Endl;
@@ -571,9 +572,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res) {
+                    const auto query = [&](const TString& res) {
                         TStringBuilder sb;
-                        sb << R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)" << Endl;
+                        sb << enablePushdownOlapAggregation << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '" << res << "%'" << Endl;
@@ -590,9 +591,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res) {
+                    const auto query = [&](const TString& res) {
                         TStringBuilder sb;
-                        sb << R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)" << Endl;
+                        sb << enablePushdownOlapAggregation << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '%" << res << "'" << Endl;

@@ -210,17 +210,58 @@ namespace NYql {
         private:
             const TGenericState::TPtr State_;
         };
+
+        class TGenericPhysicalOptProposalWithListTransformer : public TGraphTransformerBase {
+        public:
+            explicit TGenericPhysicalOptProposalWithListTransformer(TGenericState::TPtr state)
+                : PhysicalOptTransformer_(new TGenericPhysicalOptProposalTransformer(state))
+                , ListTransformer_(new TGenericListTransformer(state))
+                , AllowAsync_(false)
+            { }
+
+        public:
+            TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+                auto resultStatus = PhysicalOptTransformer_->DoTransform(input, output, ctx);
+
+                if (resultStatus != TStatus::Ok) {
+                    return resultStatus;
+                }
+
+                input = output;
+                resultStatus = ListTransformer_->DoTransform(input, output, ctx);
+
+                if (resultStatus == TStatus::Async) {
+                    AllowAsync_ = true;
+                }
+
+                return resultStatus;
+            }
+
+            NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& node) final {
+                Y_ENSURE(AllowAsync_);
+                return ListTransformer_->DoGetAsyncFuture(node);
+            }
+
+            TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+                Y_ENSURE(AllowAsync_);
+                return ListTransformer_->DoApplyAsyncChanges(input, output, ctx);
+            }
+
+            void Rewind() final {
+                AllowAsync_ = false;
+                PhysicalOptTransformer_->Rewind();
+                ListTransformer_->Rewind();
+            }
+
+        private:
+            const TAutoPtr<TGenericPhysicalOptProposalTransformer> PhysicalOptTransformer_;
+            const TAutoPtr<TGenericListTransformer> ListTransformer_;
+            bool AllowAsync_;
+        };
     } // namespace
 
     THolder<IGraphTransformer> CreateGenericPhysicalOptProposalTransformer(TGenericState::TPtr state) {
-        auto physicalOptProposal = TAutoPtr<IGraphTransformer>(new TGenericPhysicalOptProposalTransformer(state));
-        auto listSplits = TAutoPtr<IGraphTransformer>(new TGenericListTransformer(state));
-
-        return TTransformationPipeline(state->Types)
-           .Add(physicalOptProposal, "PushFilters")
-           .Add(listSplits, "ListSplits")
-           .Build();
-
+        return MakeHolder<TGenericPhysicalOptProposalWithListTransformer>(state);
     }
 
 } // namespace NYql

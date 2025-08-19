@@ -137,7 +137,6 @@ TString TClientBlob::DebugString() const {
     auto sb = TStringBuilder() << "{"
         << " SourceId='" << SourceId << "'"
         << ", SeqNo=" << SeqNo
-        << ", PartData=" << SourceId << "'"
         << ", WriteTimestamp=" << WriteTimestamp
         << ", CreateTimestamp=" << CreateTimestamp
         << ", UncompressedSize=" << UncompressedSize
@@ -701,8 +700,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) const {
     ui32 currentSID = 0;
     for (ui32 i = 0; i < totalBlobs; ++i) {
         TMaybe<TPartData> pd;
-        auto it = partData.find(pos[i]);
-        if (it != partData.end()) {
+        if (auto it = partData.find(pos[i]); it != partData.end()) {
             pd = it->second;
         }
 

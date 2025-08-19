@@ -42,16 +42,6 @@ class Workload(unittest.TestCase):
 
 
     def loop(self):
-        # JAR_FILE_LINK = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"
-        # JAR_FILE_NAME = "e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"
-        # TEST_FILES_DIRECTORY = "./test-files/"
-
-        # print(f"Downloading file: {JAR_FILE_LINK}")
-
-        # if not os.path.exists(TEST_FILES_DIRECTORY):
-        #     os.makedirs(TEST_FILES_DIRECTORY)
-        # urllib.request.urlretrieve(JAR_FILE_LINK, TEST_FILES_DIRECTORY + JAR_FILE_NAME)
-
         workloadConsumerName = self.workload_consumer_name
         checkerConsumer = "targetCheckerConsumer"
 
@@ -69,6 +59,7 @@ class Workload(unittest.TestCase):
         ]
         print("NumWorkers: ", self.num_workers)
         print("JAR PATH: ", self.jar_path)
+        print("Bootstrap:", self.bootstrap, "Endpoint": self.endpoint, "Database:", self.database)
         for i in range(self.num_workers):
             processes.append(subprocess.Popen(["ya", "tool", "java", "-jar", self.jar_path, self.bootstrap, f"streams-store-{i}"]),)
         processes[0].wait()

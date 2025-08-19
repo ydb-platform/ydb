@@ -549,6 +549,22 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
+        if (AppData(ctx)->FeatureFlags.GetEnableBulkUpsertRequireAllColumns()) {
+            THashSet<TString> allColumnsLeft;
+            for (auto&& [_, colInfo] : entry.Columns) {
+                allColumnsLeft.insert(colInfo.Name);
+            }
+
+            for (size_t pos = 0; pos < reqColumns->size(); ++pos) {
+                auto& name = (*reqColumns)[pos].first;
+                allColumnsLeft.erase(name);
+            }
+
+            if (!allColumnsLeft.empty()) {
+                return TConclusionStatus::Fail(Sprintf("Missing value columns (all columns are required): %s", JoinSeq(", ", allColumnsLeft).c_str()));
+            }
+        }
+
         return TConclusionStatus::Success();
     }
 

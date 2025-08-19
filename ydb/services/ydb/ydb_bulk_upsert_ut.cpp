@@ -1430,4 +1430,67 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         auto status = db.BulkUpsert("Root/Test", rows.Build()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(RequireAllColumnsFeatureFlag) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Shard", EPrimitiveType::Uint64)
+                .AddNullableColumn("App", EPrimitiveType::Utf8)
+                .AddNullableColumn("Timestamp", EPrimitiveType::Int64)
+                .AddNullableColumn("HttpCode", EPrimitiveType::Uint32)
+                .AddNullableColumn("Message", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumns({"Shard", "App", "Timestamp"});
+            auto result = session.CreateTable("/Root/TestAllColumns", tableBuilder.Build()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Shard").Uint64(42)
+                        .AddMember("App").Utf8("app")
+                        .AddMember("Timestamp").Int64(1)
+                        // Missing HttpCode and Message columns
+                    .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert("/Root/TestAllColumns", rows.Build()).GetValueSync();
+            Cerr << res.GetIssues().ToString() << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Missing value columns (all columns are required)");
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
+        }
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Shard").Uint64(42)
+                        .AddMember("App").Utf8("app")
+                        .AddMember("Timestamp").Int64(1)
+                        .AddMember("HttpCode").Uint32(200)
+                        .AddMember("Message").Utf8("test")
+                    .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert("/Root/TestAllColumns", rows.Build()).GetValueSync();
+            Cerr << res.GetStatus() << Endl;
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+        }
+    }
 }

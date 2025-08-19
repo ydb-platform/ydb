@@ -216,7 +216,7 @@ private:
     void AddRowDispatcher(NActors::TActorId actorId, bool isLocal);
     void PrintInternalState();
     TTopicInfo& GetOrCreateTopicInfo(const TTopicKey& topic);
-    std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key);  // std::nullopt if TopicPartitionsLimitPerNode reached
+    std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key, const TSet<ui32>& filteredNodeIds);  // std::nullopt if TopicPartitionsLimitPerNode reached
     bool ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request);
     void UpdatePendingReadActors();
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
@@ -372,7 +372,7 @@ TActorCoordinator::TTopicInfo& TActorCoordinator::GetOrCreateTopicInfo(const TTo
     return TopicsInfo.insert({topic, TTopicInfo(Metrics, topic.TopicName)}).first->second;
 }
 
-std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key) {
+std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key, const TSet<ui32>& filteredNodeIds) {
     Y_ENSURE(!PartitionLocations.contains(key));
 
     auto& topicInfo = GetOrCreateTopicInfo(key.Topic);
@@ -383,7 +383,9 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
         if (!info.Connected) {
             continue;
         }
-
+        if (!filteredNodeIds.empty() && !filteredNodeIds.contains(location.NodeId())) {
+            continue;
+        }
         ui64 numberPartitions = 0;
         if (const auto it = topicInfo.NodesInfo.find(location.NodeId()); it != topicInfo.NodesInfo.end()) {
             numberPartitions = it->second.NumberPartitions;
@@ -394,7 +396,9 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
             bestNumberPartitions = numberPartitions;
         }
     }
-    Y_ENSURE(bestLocation, "Local row dispatcher should always be connected");
+    if (!bestLocation) {
+        return std::nullopt;
+    }
 
     if (Config.GetTopicPartitionsLimitPerNode() > 0 && bestNumberPartitions >= Config.GetTopicPartitionsLimitPerNode()) {
         topicInfo.AddPendingPartition(key);
@@ -434,7 +438,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
 
 bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request) {
     const auto& source = request.Record.GetSource();
-
+    TSet<ui32> filteredNodeIds{source.GetNodeIds().begin(), source.GetNodeIds().end()};
     Y_ENSURE(!RowDispatchers.empty());
 
     bool hasPendingPartitions = false;
@@ -447,7 +451,7 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
         if (locationIt != PartitionLocations.end()) {
             rowDispatcherId = locationIt->second;
         } else {
-            if (const auto maybeLocation = GetAndUpdateLocation(key)) {
+            if (const auto maybeLocation = GetAndUpdateLocation(key, filteredNodeIds)) {
                 rowDispatcherId = *maybeLocation;
             } else {
                 hasPendingPartitions = true;

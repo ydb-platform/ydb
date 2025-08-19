@@ -1083,9 +1083,9 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         {
             auto result = session.ExecuteSchemeQuery(R"(
                 CREATE TABLE `/Root/TestAllColumnsColumnTable` (
-                    Shard Uint64,
-                    App Utf8,
-                    Timestamp Int64,
+                    Shard Uint64 NOT NULL,
+                    App Utf8 NOT NULL,
+                    Timestamp Int64 NOT NULL,
                     HttpCode Uint32,
                     Message Utf8,
                     PRIMARY KEY (Shard, App, Timestamp)

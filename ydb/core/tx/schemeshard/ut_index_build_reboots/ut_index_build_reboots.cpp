@@ -419,123 +419,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         DropIndexWithDataColumns(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    Y_UNIT_TEST(CancelBuild) {
-        TTestWithReboots t(false);
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            {
-                TInactiveZone inactive(activeZone);
-
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
-                  Name: "dir/Table"
-                  Columns { Name: "key"     Type: "Uint32" }
-                  Columns { Name: "index"   Type: "Uint32" }
-                  Columns { Name: "value"   Type: "Utf8"   }
-                  KeyColumnNames: ["key"]
-                  UniformPartitionsCount: 2
-                 )");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-
-                auto fnWriteRow = [&] (ui64 tabletId, ui32 key, ui32 index) {
-                    TString writeQuery = Sprintf(R"(
-                        (
-                            (let key0   '( '('key   (Uint32 '%u ) ) ) )
-                            (let row0   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-                            (let key1   '( '('key   (Uint32 '%u ) ) ) )
-                            (let row1   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-                            (let key2   '( '('key   (Uint32 '%u ) ) ) )
-                            (let row2   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-                            (let key3   '( '('key   (Uint32 '%u ) ) ) )
-                            (let row3   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-                            (let key4   '( '('key   (Uint32 '%u ) ) ) )
-                            (let row4   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-                            (let key5   '( '('key   (Uint32 '%u ) ) ) )
-                            (let row5   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-                            (let key6   '( '('key   (Uint32 '%u ) ) ) )
-                            (let row6   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-                            (let key7   '( '('key   (Uint32 '%u ) ) ) )
-                            (let row7   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-                            (let key8   '( '('key   (Uint32 '%u ) ) ) )
-                            (let row8   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-                            (let key9   '( '('key   (Uint32 '%u ) ) ) )
-                            (let row9   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-
-                            (return (AsList
-                                        (UpdateRow '__user__Table key0 row0)
-                                        (UpdateRow '__user__Table key1 row1)
-                                        (UpdateRow '__user__Table key2 row2)
-                                        (UpdateRow '__user__Table key3 row3)
-                                        (UpdateRow '__user__Table key4 row4)
-                                        (UpdateRow '__user__Table key5 row5)
-                                        (UpdateRow '__user__Table key6 row6)
-                                        (UpdateRow '__user__Table key7 row7)
-                                        (UpdateRow '__user__Table key8 row8)
-                                        (UpdateRow '__user__Table key9 row9)
-                                     )
-                            )
-                        )
-                    )",
-                                                 1000*key + 0, 1000*index + 0,
-                                                 1000*key + 1, 1000*index + 1,
-                                                 1000*key + 2, 1000*index + 2,
-                                                 1000*key + 3, 1000*index + 3,
-                                                 1000*key + 4, 1000*index + 4,
-                                                 1000*key + 5, 1000*index + 5,
-                                                 1000*key + 6, 1000*index + 6,
-                                                 1000*key + 7, 1000*index + 7,
-                                                 1000*key + 8, 1000*index + 8,
-                                                 1000*key + 9, 1000*index + 9);
-
-                    NKikimrMiniKQL::TResult result;
-                    TString err;
-                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
-                    UNIT_ASSERT_VALUES_EQUAL(err, "");
-                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
-                };
-                for (ui32 delta = 0; delta < 1; ++delta) {
-                    fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
-                }
-
-                TestBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
-            }
-
-            ui64 buildId = t.TxId;
-
-            auto response = TestCancelBuildIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", buildId,
-                                                 TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::SUCCESS, Ydb::StatusIds::PRECONDITION_FAILED});
-
-            t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitNotification(runtime, buildId);
-
-            auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
-
-            if (response.GetStatus() == Ydb::StatusIds::SUCCESS) {
-                Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_CANCELLED);
-
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table"),
-                                   {NLs::PathExist,
-                                    NLs::IndexesCount(0),
-                                    NLs::PathVersionEqual(6)});
-
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table/index1", true, true, true),
-                                   {NLs::PathNotExist});
-            } else {
-                Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
-
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table"),
-                                   {NLs::PathExist,
-                                    NLs::IndexesCount(1),
-                                    NLs::PathVersionEqual(6)});
-
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/Table/index1", true, true, true),
-                                   {NLs::PathExist});
-            }
-
-            TestForgetBuildIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
-
-        });
-    }
-
-    Y_UNIT_TEST(CancelUniqBuild) {
+    void CancelBuild(NKikimrSchemeOp::EIndexType indexType) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
@@ -612,7 +496,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                     fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
                 }
 
-                TestBuildUniqIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
+                TestBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}});
             }
 
             ui64 buildId = t.TxId;
@@ -648,7 +532,16 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
             }
 
             TestForgetBuildIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
+
         });
+    }
+
+    Y_UNIT_TEST(CancelBuild) {
+        CancelBuild(NKikimrSchemeOp::EIndexTypeGlobal);
+    }
+
+    Y_UNIT_TEST(CancelBuildUniq) {
+        CancelBuild(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
     Y_UNIT_TEST(IndexPartitioning) {

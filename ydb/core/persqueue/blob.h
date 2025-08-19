@@ -22,15 +22,13 @@ struct TPartData {
         , TotalParts(totalParts)
         , TotalSize(totalSize)
     {}
+
+    bool IsLastPart() const {
+        return PartNo + 1 == TotalParts;
+    }
 };
 
 struct TClientBlob {
-
-    static const ui8 HAS_PARTDATA = 1;
-    static const ui8 HAS_TS = 2;
-    static const ui8 HAS_TS2 = 4;
-    static const ui8 HAS_US = 8;
-    static const ui8 HAS_KINESIS = 16;
 
     TString SourceId;
     ui64 SeqNo;
@@ -47,7 +45,7 @@ struct TClientBlob {
         , UncompressedSize(0)
     {}
 
-    TClientBlob(const TString& sourceId, const ui64 seqNo, const TString&& data, TMaybe<TPartData> &&partData, TInstant writeTimestamp, TInstant createTimestamp,
+    TClientBlob(const TString& sourceId, const ui64 seqNo, TString&& data, TMaybe<TPartData>&& partData, const TInstant writeTimestamp, const TInstant createTimestamp,
                 const ui64 uncompressedSize, const TString& partitionKey, const TString& explicitHashKey)
         : SourceId(sourceId)
         , SeqNo(seqNo)
@@ -59,7 +57,7 @@ struct TClientBlob {
         , PartitionKey(partitionKey)
         , ExplicitHashKey(explicitHashKey)
     {
-        Y_ABORT_UNLESS(PartitionKey.size() <= 256);
+        Y_ENSURE(PartitionKey.size() <= 256);
     }
 
     ui32 GetPartDataSize() const {
@@ -93,7 +91,7 @@ struct TClientBlob {
     }
 
     bool IsLastPart() const {
-        return !PartData || PartData->PartNo + 1 == PartData->TotalParts;
+        return !PartData || PartData->IsLastPart();
     }
 
     static constexpr ui32 OVERHEAD = sizeof(ui32)/*totalSize*/ + sizeof(ui64)/*SeqNo*/ + sizeof(ui16) /*SourceId*/ + sizeof(ui64) /*WriteTimestamp*/ + sizeof(ui64) /*CreateTimestamp*/;

@@ -10,6 +10,8 @@ This article provides an overview of query execution in {{ ydb-short-name }}. It
 
 This section provides a step-by-step overview of how SQL queries are handled in {{ ydb-short-name }}. Understanding this process will help you familiarize yourself with {{ ydb-short-name }} components and have some insight on what’s happening under the hood.
 
+![query workflow](./_assets/query_workflow.png)
+
 1. Connecting to the Database
 Your application uses one of the official YDB SDKs to connect to the database. The SDK automatically manages a pool of sessions, logical connections required to execute queries. Behind the scenes, each session is physically connected to one of the nodes in the YDB  cluster. When you need to run a query, the SDK provides a session from this pool so you don’t need to manage connections manually.
 
@@ -56,6 +58,7 @@ Supported transaction modes:
 For more information about transactions in {{ ydb-short-name }}, see [Transactions](transactions.md) article.
 
 ## Retries
+
 YDB employs an optimistic concurrency control approach for transaction management. This means that a transaction may be aborted during execution if YDB detects a conflict and cannot guarantee the requested isolation level — for instance, when two transactions attempt to modify the same data concurrently. Also, because YDB operates as a distributed system across potentially large clusters, there is also a possibility of temporary unavailability of some nodes due to network partitions, hardware failures, or maintenance. These events may also cause transaction failures that require retries.
 
 Retries should always be handled at the transaction level, not at the level of individual queries. This is because, particularly in interactive transactions, where the sequence of queries and their intermediate results may affect subsequent operations, it is often not possible or safe to retry only a single query after a failure. Therefore, if a query fails due to a conflict or a transient error, the entire transaction should be retried from the beginning to ensure correctness and consistency.

@@ -524,6 +524,7 @@ public:
 
     TAtomic Pieces = 0;
     TAtomic Aborted = 0;
+    std::atomic<ui8> ReadyForBlockDevice = 0;
 
     TCompletionChunkWrite* Completion = nullptr;
 
@@ -584,8 +585,6 @@ public:
 
     TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span);
 
-    ~TChunkWritePiece();
-
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWritePiece;
     }
@@ -602,6 +601,7 @@ public:
     }
     
     void Process(void*) override;
+    void MarkReady(const TString& logPrefix);
 };
 
 //

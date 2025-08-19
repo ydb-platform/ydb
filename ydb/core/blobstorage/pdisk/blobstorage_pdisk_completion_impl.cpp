@@ -40,12 +40,10 @@ void TCompletionChunkWritePart::Exec(TActorSystem *actorSystem) {
         Release(actorSystem);
         return;
     }
-    Y_UNUSED(PieceShift);
-    Y_UNUSED(PieceSize);
     
-
-    // double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
-    // LWTRACK(PDiskChunkWritePieceComplete, ChunkWrite->Orbit, PDisk->PCtx->PDiskId, PieceSize, PieceShift, deviceTimeMs);
+    Y_UNUSED(PieceSize); Y_UNUSED(PieceShift);
+    //double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
+    //LWTRACK(PDiskChunkWritePieceComplete, ChunkWrite->Orbit, PDisk->PCtx->PDiskId, PieceSize, PieceShift, deviceTimeMs);
 
     CumulativeCompletion->CompletePart(actorSystem);
     CumulativeCompletion = nullptr;

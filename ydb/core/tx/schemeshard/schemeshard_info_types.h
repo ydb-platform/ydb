@@ -3096,6 +3096,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildSecondaryIndex = 10,
         BuildVectorIndex = 11,
         BuildPrefixedVectorIndex = 12,
+        BuildSecondaryUniqueIndex = 13,
         BuildColumns = 20,
     };
 
@@ -3633,11 +3634,15 @@ public:
     }
 
     bool IsFillBuildIndex() const {
-        return IsBuildSecondaryIndex() || IsBuildColumns();
+        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildColumns();
     }
 
     bool IsBuildSecondaryIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryIndex;
+    }
+
+    bool IsBuildSecondaryUniqueIndex() const {
+        return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
     bool IsBuildPrefixedVectorIndex() const {
@@ -3649,7 +3654,7 @@ public:
     }
 
     bool IsBuildIndex() const {
-        return IsBuildSecondaryIndex() || IsBuildVectorIndex();
+        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex();
     }
 
     bool IsBuildColumns() const {

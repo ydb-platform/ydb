@@ -958,22 +958,33 @@ private:
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
         }
-        const bool sendValidateRequest = buildInfo.IsValidatingUniqueIndex();
-        bool done = SendToShards(buildInfo,
-            [&](TShardIdx shardIdx) {
-                if (sendValidateRequest) {
-                    SendValidateUniqueIndexRequest(shardIdx, buildInfo);
-                } else {
-                    SendBuildSecondaryIndexRequest(shardIdx, buildInfo);
-                }
-            });
 
-        if (buildInfo.DoneShards.size() != buildInfo.Shards.size()) {
-            done = false;
-        }
+        auto done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildSecondaryIndexRequest(shardIdx, buildInfo); }) &&
+               buildInfo.DoneShards.size() == buildInfo.Shards.size();
 
         if (done) {
             LOG_D("FillSecondaryIndex Done");
+        }
+
+        return done;
+    }
+
+    bool FillSecondaryUniqueIndex(TIndexBuildInfo& buildInfo) {
+        if (!buildInfo.IsValidatingUniqueIndex()) { // The first stage is equal to the first stage of building usual secondary index
+            return FillSecondaryIndex(buildInfo);
+        }
+
+        LOG_D("ValidateSecondaryUniqueIndex Start");
+
+        if (NoShardsAdded(buildInfo)) {
+            AddAllShards(buildInfo);
+        }
+
+        auto done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendValidateUniqueIndexRequest(shardIdx, buildInfo); }) &&
+               buildInfo.DoneShards.size() == buildInfo.Shards.size();
+
+        if (done) {
+            LOG_D("ValidateSecondaryUniqueIndex Done");
         }
 
         return done;
@@ -1267,6 +1278,8 @@ private:
             case TIndexBuildInfo::EBuildKind::BuildSecondaryIndex:
             case TIndexBuildInfo::EBuildKind::BuildColumns:
                 return FillSecondaryIndex(buildInfo);
+            case TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex:
+                return FillSecondaryUniqueIndex(buildInfo);
             case TIndexBuildInfo::EBuildKind::BuildVectorIndex:
                 return FillVectorIndex(txc, buildInfo);
             case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:

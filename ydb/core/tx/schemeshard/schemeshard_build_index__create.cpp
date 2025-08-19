@@ -233,7 +233,7 @@ private:
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
             if (AppData()->FeatureFlags.GetEnableAddUniqueIndex()) {
-                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
+                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;
                 buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
                 break;
             } else {

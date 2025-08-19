@@ -1013,7 +1013,7 @@ public:
                                 << "' for table '" << indexState.Table
                                 << "', operation id '" << indexState.Id.ToString() << "'");
                         } else {
-                            LOG_W("Failed to cancelled creation of index '" << indexState.Name
+                            LOG_W("Failed to cancel creation of index '" << indexState.Name
                                 << "' for table '" << indexState.Table
                                 << "', operation id '" << indexState.Id.ToString() << "'");
                         }

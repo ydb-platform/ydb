@@ -78,6 +78,7 @@ class TCompletionChunkWrite : public TCompletionAction {
     NWilson::TSpan Span;
     std::atomic<ui8> PartsStarted, PartsRemoved, PartsWritten;
 public:
+    bool IsReplied = false;
     ui8 Pieces;
     TEvChunkWrite::TPartsPtr Parts;
     std::optional<TAlignedData> Buffer;
@@ -95,7 +96,6 @@ public:
         , ReqId(reqId)
         , Span(std::move(span))
     {
-        Cerr << "TCompletionChunkWrite" << Endl;
         TCompletionAction::ShouldBeExecutedInCompletionThread = false;
     }
 
@@ -143,7 +143,6 @@ public:
     }
 
     ~TCompletionChunkWrite() {
-        Cerr << "~TCompletionChunkWrite" << Endl;
         OnDestroy();
     }
 
@@ -171,10 +170,12 @@ public:
     }
 
     void Release(TActorSystem *actorSystem) override {
-        Event->Status = NKikimrProto::CORRUPTED;
-        Event->ErrorReason = ErrorReason;
-        actorSystem->Send(Recipient, Event.Release());
-        Span.EndError(ErrorReason);
+        if (!IsReplied) {
+            Event->Status = NKikimrProto::CORRUPTED;
+            Event->ErrorReason = ErrorReason;
+            actorSystem->Send(Recipient, Event.Release());
+            Span.EndError(ErrorReason);
+        }
         delete this;
     }
 
@@ -188,7 +189,6 @@ public:
 
     void RemovePart(TActorSystem *actorSystem) {
         PartsRemoved++;
-        Cerr << "partsremoved: " << (int)PartsRemoved.load() << ", pieces: " << (int)Pieces << Endl;
         if (PartsRemoved == Pieces) {
             if (PartsWritten == Pieces) {
                 Exec(actorSystem);

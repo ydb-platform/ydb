@@ -22,7 +22,8 @@ void ReplyPersQueueError(
     const ui64 responseCookie,
     NPersQueue::NErrorCode::EErrorCode errorCode,
     const TString& error,
-    bool logDebug = false
+    bool logDebug = false,
+    bool isInternal = false
 );
 
 }// NPQ

@@ -219,6 +219,56 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    Y_UNIT_TEST(Create_WithoutAlterTopicPermission_AndGrant)
+    {
+        auto id = RandomNumber<ui16>();
+        auto username = TStringBuilder() << "u" << id;
+
+        MainTestCase testCase(std::nullopt, "ROW");
+        testCase.CreateUser(username);
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        testCase.CreateTopic(1);
+        testCase.Grant(testCase.TopicName, username, {"ydb.generic.read"});
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithUsername(username));
+
+        // Hasn't the alter topic permission. Can't create consumer
+        testCase.CheckTransferStateError("Create stream error: UNAUTHORIZED");
+
+        testCase.PauseTransfer();
+        testCase.Grant(testCase.TopicName, username, {"ydb.granular.alter_schema"});
+        testCase.ResumeTransfer();
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
+        testCase.DropTable();
+    }
+
     Y_UNIT_TEST(LocalTopic_WithPermission)
     {
         auto id = RandomNumber<ui16>();

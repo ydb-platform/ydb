@@ -18,6 +18,7 @@ constexpr TDuration IDLE_DURATION = TDuration::Seconds(60);
 struct TDatabaseState {
     TActorId SelfId;
     bool& EnabledResourcePoolsOnServerless;
+    NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
 
     std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequersts = {};
     std::unordered_set<TString> PendingSessionIds = {};
@@ -33,7 +34,7 @@ struct TDatabaseState {
         const TString& poolId = ev->Get()->PoolId;
         auto& subscribers = PendingSubscriptions[poolId];
         if (subscribers.empty()) {
-            TActivationContext::Register(CreatePoolFetcherActor(SelfId, ev->Get()->DatabaseId, poolId, nullptr));
+            TActivationContext::Register(CreatePoolFetcherActor(SelfId, ev->Get()->DatabaseId, poolId, nullptr, WorkloadManagerConfig));
         }
 
         subscribers.emplace(ev->Sender);
@@ -103,7 +104,7 @@ private:
         }
 
         for (auto& ev : PendingRequersts) {
-            TActivationContext::Register(CreatePoolResolverActor(std::move(ev), HasDefaultPool));
+            TActivationContext::Register(CreatePoolResolverActor(std::move(ev), HasDefaultPool, WorkloadManagerConfig));
         }
         PendingRequersts.clear();
     }

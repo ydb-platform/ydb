@@ -347,22 +347,23 @@ namespace Tests {
         TServer& operator =(TServer&& server) = default;
         virtual ~TServer();
 
-        void EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId = 0);
-        void EnableGRpc(ui16 port, ui32 grpcServiceNodeId = 0);
+        void EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId = 0, const std::optional<TString>& tenant = std::nullopt);
+        void EnableGRpc(ui16 port, ui32 grpcServiceNodeId = 0, const std::optional<TString>& tenant = std::nullopt);
         void SetupRootStoragePools(const TActorId sender) const;
 
         void SetupDefaultProfiles();
 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
-            return GRpcServerRootCounters;
+            return RootGRpc.GRpcServerRootCounters;
         }
 
         void ShutdownGRpc() {
-            if (GRpcServer) {
-                GRpcServer->Stop();
-                GRpcServer = nullptr;
+            RootGRpc.Shutdown();
+            for (auto& [_, tenantGRpc] : TenantsGRpc) {
+                tenantGRpc.Shutdown();
             }
         }
+
         void StartDummyTablets();
         TVector<ui64> StartPQTablets(ui32 pqTabletsN, bool wait = true);
         TTestActorRuntime* GetRuntime() const;
@@ -371,6 +372,7 @@ namespace Tests {
         const NMiniKQL::IFunctionRegistry* GetFunctionRegistry();
         const NYdb::TDriver& GetDriver() const;
         const NYdbGrpc::TGRpcServer& GetGRpcServer() const;
+        const NYdbGrpc::TGRpcServer& GetTenantGRpcServer(const TString& tenant) const;
 
         ui32 StaticNodes() const {
             return Settings->NodeCount;
@@ -392,9 +394,22 @@ namespace Tests {
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;
         const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
-        std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> GRpcServerRootCounters;
         NFq::IYqSharedResources::TPtr YqSharedResources;
+
+        struct TGRpcInfo {
+            std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
+            TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
+
+            void Shutdown() {
+                if (GRpcServer) {
+                    GRpcServer->Stop();
+                    GRpcServer = nullptr;
+                }
+            }
+        };
+
+        TGRpcInfo RootGRpc;
+        std::unordered_map<TString, TGRpcInfo> TenantsGRpc;
     };
 
     class TClient {

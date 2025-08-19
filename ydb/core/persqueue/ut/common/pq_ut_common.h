@@ -261,10 +261,19 @@ struct TTabletPreparationParameters {
     TString databasePath{"/Root/PQ"};
     TString account{"federationAccount"};
     ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
+    bool enableCompactificationByKey{false};
 };
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TVector<std::pair<TString, bool>>& users,
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    TActorId edge);
+
+void PQTabletPrepareFromResource(
+    const TTabletPreparationParameters& parameters,
+    const TVector<std::pair<TString, bool>>& users,
+    const TString& resourceName,
     TTestActorRuntime& runtime,
     ui64 tabletId,
     TActorId edge);
@@ -296,6 +305,12 @@ THashSet<TString> GetTabletKeys(TTestActorRuntime& runtime,
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TVector<std::pair<TString, bool>>& users,
+    TTestContext& context);
+
+void PQTabletPrepareFromResource(
+    const TTabletPreparationParameters& parameters,
+    const TVector<std::pair<TString, bool>>& users,
+    const TString& resourceName,
     TTestContext& context);
 
 void PQBalancerPrepare(

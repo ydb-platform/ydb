@@ -8,11 +8,10 @@
 namespace NKikimr::NOlap::NReader::NPlain {
 
 NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
-    const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
-    AFL_VERIFY(vIndex);
-    auto& indexInfo = vIndex->GetSchemaVerified(Snapshot)->GetIndexInfo();
-    NCommon::TIndexColumnResolver columnResolver(indexInfo);
-    return TBase::ParseProgram(vIndex, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
+    const TProgramParsingContext& context, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
+    const ISnapshotSchema::TPtr schema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(context.GetVersionedSchemas(), read.GetSnapshot());
+    NCommon::TIndexColumnResolver columnResolver(schema->GetIndexInfo());
+    return TBase::ParseProgram(context, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
 }
 
 std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const NColumnShard::TColumnShard* self) const {
@@ -32,15 +31,13 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
                                                         << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
     }
 
-    TDataStorageAccessor dataAccessor(index);
-    AFL_VERIFY(read.PathId);
     auto readCopy = read;
     if (readCopy.GetSorting() == ERequestSorting::NONE) {
         readCopy.SetSorting(ERequestSorting::ASC);
     }
-    auto readMetadata = std::make_shared<TReadMetadata>(index->CopyVersionedIndexPtr(), readCopy);
+    auto readMetadata = std::make_shared<TReadMetadata>(index->GetVersionedIndexReadonlyCopy(), readCopy);
 
-    auto initResult = readMetadata->Init(self, read, dataAccessor);
+    auto initResult = readMetadata->Init(self, read, true);
     if (!initResult) {
         return initResult;
     }

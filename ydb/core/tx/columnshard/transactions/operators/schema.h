@@ -26,7 +26,7 @@ private:
         THashSet<TInternalPathId> result;
         for (auto&& i : tables) {
             const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(i);
-            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId)) {
+            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
                 if (owner.TablesManager.HasTable(*internalPathId, true)) {
                     result.emplace(*internalPathId);
                 }

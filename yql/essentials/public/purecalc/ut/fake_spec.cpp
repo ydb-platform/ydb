@@ -32,5 +32,51 @@ namespace NYql {
             spec.Schema = MakeFakeSchema(pg);
             return spec;
         }
+
+        NYT::TNode CreateTypeNode(const TString& fieldType) {
+            return NYT::TNode::CreateList()
+                .Add("DataType")
+                .Add(fieldType);
+        }
+
+        NYT::TNode CreateOptionalTypeNode(const TString& fieldType) {
+            return NYT::TNode::CreateList()
+                .Add("OptionalType")
+                .Add(CreateTypeNode(fieldType));
+        }
+
+        void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
+            node.Add(
+                NYT::TNode::CreateList()
+                    .Add(fieldName)
+                    .Add(CreateOptionalTypeNode(fieldType))
+            );
+        }
+
+        NYT::TNode MakeFakeStructSchema() {
+            auto structMembers = NYT::TNode::CreateList();
+            AddField(structMembers, "Id", "Uint32");
+            AddField(structMembers, "Name", "Utf8");
+            AddField(structMembers, "Body", "String");
+
+            auto rootMembers = NYT::TNode::CreateList();
+            rootMembers.Add(
+                NYT::TNode::CreateList()
+                    .Add("_r")
+                    .Add(NYT::TNode::CreateList()
+                        .Add("StructType")
+                        .Add(std::move(structMembers)))
+            );
+
+            return NYT::TNode::CreateList()
+                .Add("StructType")
+                .Add(std::move(rootMembers));
+        }
+
+        TFakeOutputSpec FakeStructOS() {
+            auto spec = TFakeOutputSpec();
+            spec.Schema = MakeFakeStructSchema();
+            return spec;
+        }
     }
 }

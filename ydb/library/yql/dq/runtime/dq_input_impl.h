@@ -167,7 +167,7 @@ public:
         }
 
         Batches.emplace_back(std::move(batch));
-        static_cast<TDerived *>(this)->AddBatchCounts(space, rows);
+        AddBatchCounts(space, rows);
 
         return rows;
     }
@@ -175,7 +175,7 @@ public:
     [[nodiscard]]
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
         Y_ABORT_UNLESS(batch.Width() == GetWidth());
-        if (static_cast<TDerived *>(this)->Empty()) {
+        if (Empty()) {
             static_cast<TDerived*>(this)->PushStats.TryPause();
             return false;
         }
@@ -186,7 +186,7 @@ public:
 
         popStats.Resume(); //save timing before processing
 
-        auto [popBytes, popRows, batchesCount] = static_cast<TDerived*>(this)->PopReadyCounts();
+        auto [popBytes, popRows, batchesCount] = PopReadyCounts();
         Y_ABORT_UNLESS(batchesCount > 0);
         Y_ABORT_UNLESS(batchesCount <= Batches.size());
 
@@ -247,7 +247,7 @@ public:
     }
 
     bool IsFinished() const override {
-        return Finished && (!static_cast<const TDerived *>(this)->IsPaused() || Batches.empty());
+        return Finished && (!IsPaused() || Batches.empty());
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {

@@ -314,9 +314,10 @@ namespace NActors {
         if (termEv) {
             if (RdmaQp) {
                 Cerr << "input session move to reset state: " << RdmaReadInflight.load() << Endl;
-                RdmaQp->ToResetState();
+                //RdmaQp->ToResetState();
                 while (RdmaReadInflight.load() != 0) {
-                    Sleep(TDuration::MilliSeconds(1));
+                    Cerr << "whait:... " << RdmaReadInflight.load() << Endl; 
+                    Sleep(TDuration::MilliSeconds(1000));
                 }
             }
             --Context->NumInputSessions;
@@ -801,7 +802,7 @@ namespace NActors {
                     // const ui64 checkSum = ReadUnaligned<ui64>(ptr);
                     context.PendingEvents.back().CheckSum = ReadUnaligned<ui32>(ptr);
                     ptr += sizeof(ui32);
-                    auto err = context.ScheduleRdmaReadRequests(creds, *RdmaQp.get(), RdmaCq, SelfId(), channel);
+                    auto err = context.ScheduleRdmaReadRequests(creds, *RdmaQp.get(), RdmaCq, SelfId(), channel, RdmaReadInflight);
                     if (std::holds_alternative<NInterconnect::NRdma::ICq::TBusy>(err)) {
                         LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};

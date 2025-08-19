@@ -1,0 +1,6 @@
+items:
+  - name: Перенос данных c помощью TRANSFER
+    href: transfer/index.md
+    include:
+      mode: link
+      path: transfer/toc_p.yaml

@@ -1,0 +1,5 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: Подходы к построению хранилищ данных
+    href: scd.md

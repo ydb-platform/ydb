@@ -45,10 +45,6 @@ class Workload(unittest.TestCase):
         workloadConsumerName = self.workload_consumer_name
         checkerConsumer = "targetCheckerConsumer"
 
-        print("Dropping workload-consumer-0-state-store-changelog topic")
-        print("Driver loop: ", self.driver)
-        self.drop_topic("workload-consumer-0-state-store-changelog")
-
         print("Creating topics")
         self.create_topic(self.test_topic_path, [workloadConsumerName, checkerConsumer])
         self.create_topic(self.target_topic_path, [checkerConsumer])

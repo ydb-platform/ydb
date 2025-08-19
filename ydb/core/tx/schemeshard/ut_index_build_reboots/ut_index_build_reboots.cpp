@@ -204,9 +204,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         BaseCase(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    Y_UNIT_TEST(BaseCaseWithDataColumns) {
+    void BaseCaseWithDataColumns(NKikimrSchemeOp::EIndexType indexType) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
                 TInactiveZone inactive(activeZone);
 
@@ -223,9 +224,14 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 for (ui32 delta = 0; delta < 2; ++delta) {
                     WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
                 }
+
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    // Unique index key with unique null table key
+                    WriteNullKey(runtime, TTestTxConfig::FakeHiveTablets, 100500);
+                }
             }
 
-            AsyncBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"}, {"value"});
+            AsyncBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {"value"}});
             ui64 buildIndexId = t.TxId;
 
             {
@@ -269,9 +275,21 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 UNIT_ASSERT_VALUES_EQUAL_C(status, static_cast<ui32>(NKikimrProto::OK), err);
                 UNIT_ASSERT_VALUES_EQUAL(err, "");
 
-                NKqp::CompareYson(R"([[[[[["100000"];["1000"];["aaaa"]];[["100001"];["1001"];["aaaa"]];[["100002"];["1002"];["aaaa"]];[["100003"];["1003"];["aaaa"]];[["100004"];["1004"];["aaaa"]];[["100005"];["1005"];["aaaa"]];[["100006"];["1006"];["aaaa"]];[["100007"];["1007"];["aaaa"]];[["100008"];["1008"];["aaaa"]];[["100009"];["1009"];["aaaa"]];[["101000"];#;["aaaa"]];[["101000"];["2000"];["aaaa"]];[["101001"];["2001"];["aaaa"]];[["101002"];["2002"];["aaaa"]];[["101003"];["2003"];["aaaa"]];[["101004"];["2004"];["aaaa"]];[["101005"];["2005"];["aaaa"]];[["101006"];["2006"];["aaaa"]];[["101007"];["2007"];["aaaa"]];[["101008"];["2008"];["aaaa"]];[["101009"];["2009"];["aaaa"]]];%false]]])", result);
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    NKqp::CompareYson(R"([[[[[["100000"];["1000"];["aaaa"]];[["100001"];["1001"];["aaaa"]];[["100002"];["1002"];["aaaa"]];[["100003"];["1003"];["aaaa"]];[["100004"];["1004"];["aaaa"]];[["100005"];["1005"];["aaaa"]];[["100006"];["1006"];["aaaa"]];[["100007"];["1007"];["aaaa"]];[["100008"];["1008"];["aaaa"]];[["100009"];["1009"];["aaaa"]];[["100500"];#;["aaaa"]];[["101000"];["2000"];["aaaa"]];[["101001"];["2001"];["aaaa"]];[["101002"];["2002"];["aaaa"]];[["101003"];["2003"];["aaaa"]];[["101004"];["2004"];["aaaa"]];[["101005"];["2005"];["aaaa"]];[["101006"];["2006"];["aaaa"]];[["101007"];["2007"];["aaaa"]];[["101008"];["2008"];["aaaa"]];[["101009"];["2009"];["aaaa"]]];%false]]])", result);
+                } else {
+                    NKqp::CompareYson(R"([[[[[["100000"];["1000"];["aaaa"]];[["100001"];["1001"];["aaaa"]];[["100002"];["1002"];["aaaa"]];[["100003"];["1003"];["aaaa"]];[["100004"];["1004"];["aaaa"]];[["100005"];["1005"];["aaaa"]];[["100006"];["1006"];["aaaa"]];[["100007"];["1007"];["aaaa"]];[["100008"];["1008"];["aaaa"]];[["100009"];["1009"];["aaaa"]];[["101000"];#;["aaaa"]];[["101000"];["2000"];["aaaa"]];[["101001"];["2001"];["aaaa"]];[["101002"];["2002"];["aaaa"]];[["101003"];["2003"];["aaaa"]];[["101004"];["2004"];["aaaa"]];[["101005"];["2005"];["aaaa"]];[["101006"];["2006"];["aaaa"]];[["101007"];["2007"];["aaaa"]];[["101008"];["2008"];["aaaa"]];[["101009"];["2009"];["aaaa"]]];%false]]])", result);
+                }
             }
         });
+    }
+
+    Y_UNIT_TEST(BaseCaseWithDataColumns) {
+        BaseCaseWithDataColumns(NKikimrSchemeOp::EIndexTypeGlobal);
+    }
+
+    Y_UNIT_TEST(BaseCaseWithDataColumnsUniq) {
+        BaseCaseWithDataColumns(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
     Y_UNIT_TEST(DropIndex) {

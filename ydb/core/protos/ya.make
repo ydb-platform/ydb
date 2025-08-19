@@ -66,7 +66,6 @@ SRCS(
     data_events.proto
     data_integrity_trails.proto
     database_basic_sausage_metainfo.proto
-    datashard_backup.proto
     datashard_config.proto
     datashard_load.proto
     db_metadata_cache.proto

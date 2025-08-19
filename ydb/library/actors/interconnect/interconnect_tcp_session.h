@@ -132,6 +132,7 @@ namespace NActors {
 
         struct TPerChannelContext {
             struct TPendingEvent {
+                 
                 TEventSerializationInfo SerializationInfo;
                 TRope InternalPayload;
                 TRope ExternalPayload;
@@ -142,6 +143,7 @@ namespace NActors {
 
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 std::shared_ptr<std::atomic<size_t>> RdmaSizeLeft = nullptr;
+                ui32 CheckSum = 0;
             };
 
             std::deque<TPendingEvent> PendingEvents;

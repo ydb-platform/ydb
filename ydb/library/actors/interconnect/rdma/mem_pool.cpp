@@ -19,6 +19,8 @@
 
 #include <sys/mman.h>
 
+#include <ydb/library/actors/core/actor.h>
+
 static constexpr size_t CacheLineSz = 64;
 static constexpr size_t HPageSz = (1 << 21);
 
@@ -34,6 +36,11 @@ namespace NInterconnect::NRdma {
                     region = pool->AllocImpl(size, flags);
                 }
             }
+            int s = 'Z';
+            //if (NActors::TlsActivationContext) {
+            //    s |= ((NActors::TlsActivationContext->AsActorContext().SelfID.NodeId()) << 1);
+            //}
+            memset(region->GetAddr(), s, region->GetSize());
             return region;
         }
     };

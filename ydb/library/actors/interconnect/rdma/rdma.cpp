@@ -10,6 +10,7 @@
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
 #include <thread>
+#include <mutex>
 
 namespace NInterconnect::NRdma {
 
@@ -73,11 +74,15 @@ public:
     }
 
     void Release() noexcept override {
-        Cb = TCb(); 
+        {
+            std::lock_guard<std::mutex> guard(Lock);
+            Cb = TCb();
+        }
         CqCommon->ReturnWr(this);
     }
 
     void Reply(NActors::TActorSystem* as, const ibv_wc* wc) noexcept {
+        std::lock_guard<std::mutex> guard(Lock);
         if (Cb) {
             if (wc) {
                 if (wc->status == IBV_WC_SUCCESS) {
@@ -93,6 +98,7 @@ public:
     }
 
     void ReplyErr(NActors::TActorSystem* as) noexcept {
+        std::lock_guard<std::mutex> guard(Lock);
         if (Cb) {
             Cb(as, TEvRdmaIoDone::CqError());
             Cb = TCb();
@@ -100,10 +106,12 @@ public:
     }
 
     void AttachCb(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept {
+        std::lock_guard<std::mutex> guard(Lock);
         Cb = std::move(cb);
     }
 
 private:
+    std::mutex Lock;
     const ui64 Id;
     TCqCommon* const CqCommon;
     using TCb = std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)>;
@@ -121,13 +129,13 @@ public:
         WrBuf.reserve(sz);
         // Enumerate all work requests for this CQ
         for (size_t i = 0; i < sz; i++) {
-            WrBuf.emplace_back(i, this);
+            WrBuf.emplace_back(new TWr(i, this));
         }
 
         // Fill queue
         for (size_t i = 0; i < sz; i++) {
             Returned.fetch_add(1);
-            Queue.Enqueue(&WrBuf[i]);
+            Queue.Enqueue(WrBuf[i].get());
         }
     }
 
@@ -180,7 +188,7 @@ public:
 
     void HandleErr() noexcept {
         for (size_t i = 0; i < WrBuf.size(); i++) {
-            TWr* wr = &WrBuf[i];
+            TWr* wr = WrBuf[i].get();
             wr->ReplyErr(As);
             //This it retminal error. Cq should be recreated.
             // So no need to return wr in to the queue
@@ -189,7 +197,7 @@ public:
 
     void HandleWc(ibv_wc* wc, size_t sz) noexcept {
         for (size_t i = 0; i < sz; i++, wc++) {
-            TWr* wr = &WrBuf[wc->wr_id];
+            TWr* wr = WrBuf[wc->wr_id].get();
             wr->Reply(As, wc);
             ReturnWr(wr); 
         }
@@ -210,7 +218,7 @@ protected:
     std::optional<std::thread> Thread;
     std::atomic<bool> Cont;
 
-    std::vector<TWr> WrBuf;
+    std::vector<std::unique_ptr<TWr>> WrBuf;
     std::atomic<size_t> WrCurSz;
     // Queue is used to commnicate with client code (from actors)
     // It is possible to use Single Producer Multiple Consumer queue here but in this case

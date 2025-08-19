@@ -374,7 +374,7 @@ namespace NActors {
         }
 
         if (*iter.ContiguousData() != PayloadMarker && *iter.ContiguousData() != ExtendedPayloadMarker) {
-            Y_ABORT_UNLESS(false, "invalid event");
+            Y_ABORT_UNLESS(false, "invalid event, %d", (int)*iter.ContiguousData());
         }
 
         const bool dataIsSeparate = *iter.ContiguousData() == ExtendedPayloadMarker; // ropes go after sizes

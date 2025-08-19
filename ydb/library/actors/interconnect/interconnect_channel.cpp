@@ -310,21 +310,25 @@ namespace NActors {
         return complete;
     }
 
-    bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ssize_t rdmaDeviceIndex) {
+    bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ui32& checkSum, ssize_t rdmaDeviceIndex) {
         Y_ABORT_UNLESS(GetDefaultRcBufAllocator());
         if (!event.Buffer && event.Event) {
-            std::optional<TRope> rope = event.Event->SerializeToRope(
+            //std::optional<TRope> rope = event.Event->SerializeToRope(
                 //TODO: !!! handle allocation error
                 // [&](ui32 size) -> TRcBuf { return RdmaMemPool->AllocRcBuf(size, NInterconnect::NRdma::IMemPool::BLOCK_MODE).value(); }
-               [&](ui32 size) -> TRcBuf { return GetDefaultRcBufAllocator()->AllocRcBuf(size, 0, 0); } 
-            );
-            if (!rope) {
-                Cerr << "Failed to allocate rcbuf" << Endl;
-                return false; // serialization failed
-            }
-            event.Buffer = MakeIntrusive<TEventSerializedData>(
-                std::move(*rope), event.Event->CreateSerializationInfo()
-            );
+            //   [&](ui32 size) -> TRcBuf { return GetDefaultRcBufAllocator()->AllocRcBuf(size, 0, 0); } 
+            //);
+            //if (!rope) {
+            //    Cerr << "Failed to allocate rcbuf" << Endl;
+            //    return false; // serialization failed
+            //}
+             NActors::TAllocChunkSerializer chunker;
+             event.Event->SerializeToArcadiaStream(&chunker);
+             event.Buffer= chunker.Release(event.Event->CreateSerializationInfo());
+            //event.Buffer->GetRope()
+   //         event.Buffer = MakeIntrusive<TEventSerializedData>(
+   //             std::move(*rope), event.Event->CreateSerializationInfo()
+    //        );
         }
         Y_ABORT_UNLESS(event.Buffer);
         Y_ABORT_UNLESS(RdmaMemPool);
@@ -341,6 +345,8 @@ namespace NActors {
                 // }
                 // Cerr << "ALLOC:" << buf.GetSize() << Endl;
                 auto memReg = RdmaMemPool->Alloc(buf.GetSize(), NInterconnect::NRdma::IMemPool::BLOCK_MODE);
+
+                checkSum = Crc32cExtendMSanCompatible(checkSum, buf.GetData(), buf.GetSize());
 
                 Y_ABORT_UNLESS(memReg);
                 auto data = memReg->GetDataMut();
@@ -361,14 +367,25 @@ namespace NActors {
     std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex) {
         Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
         NActorsInterconnect::TRdmaCreds rdmaCreds;
+        ui32 checkSum = 0;
         Y_ABORT_UNLESS(this);
-        if (!SerializeEventRdma(event, rdmaCreds, rdmaDeviceIndex)) {
+        if (!SerializeEventRdma(event, rdmaCreds, checkSum, rdmaDeviceIndex)) {
             Y_ABORT("RDMA payload serialization failed for event");
             return std::nullopt; // serialization failed
         }
 
-        // Part = | TChannelPart | EXdcCommand::RDMA_READ | rdmaCreds.Size | rdmaCreds |
-        size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + rdmaCreds.ByteSizeLong();
+        // Part = | TChannelPart | EXdcCommand::RDMA_READ | rdmaCreds.Size | rdmaCreds | checkSum |
+        size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + rdmaCreds.ByteSizeLong() + sizeof(ui32);
+        if (partSize >= 4096) {
+            Cerr << "PartSize: " << partSize << Endl;
+            TStringBuilder sb;
+            if (event.Buffer) {
+                for (const auto& si : event.Buffer->GetSerializationInfo().Sections) {
+                    sb << "serializationInfo: " << si.Alignment << " " << si.Headroom << " " << si.IsRdma << " " << si.Size << Endl;
+                }
+            }
+            Cerr << rdmaCreds.DebugString() << '\n' << sb << Endl;
+        }
         Y_ABORT_UNLESS(partSize < 4096);
 
         if (partSize > Max<ui16>() || partSize > task.GetInternalFreeAmount()) {
@@ -388,6 +405,8 @@ namespace NActors {
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
         Y_ABORT_UNLESS(rdmaCreds.SerializePartialToArray(ptr, credsSerializedSize));
+        ptr += credsSerializedSize;
+        WriteUnaligned<ui32>(ptr, checkSum);
         OutputQueueSize -= event.EventSerializedSize;
 
         task.Write<false>(buffer, partSize);

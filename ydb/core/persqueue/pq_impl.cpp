@@ -3198,7 +3198,7 @@ void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
 
     for (auto& [txId, tx] : Txs) {
         if ((tx.MaxStep < step) && (tx.State <= NKikimrPQ::TTransaction::PREPARED)) {
-            DeleteTx(tx);
+            BeginDeleteTransaction(ctx, tx, NKikimrPQ::TTransaction::EXPIRED);
         }
     }
 
@@ -3258,6 +3258,15 @@ void TPersQueue::SetTxInFlyCounter()
     Counters->Simple()[COUNTER_PQ_TABLET_TX_IN_FLY] = Txs.size();
 }
 
+void TPersQueue::BeginDeleteTransaction(const TActorContext& ctx,
+                                        TDistributedTransaction& tx,
+                                        NKikimrPQ::TTransaction::EState state)
+{
+    BeginDeletePartitions(tx);
+    ChangeTxState(tx, state);
+    CheckTxState(ctx, tx);
+}
+
 void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
 {
     if (!InitCompleted) {
@@ -3268,12 +3277,12 @@ void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, co
     NKikimrPQ::TEvCancelTransactionProposal& event = ev->Get()->Record;
     Y_ABORT_UNLESS(event.HasTxId());
 
-    PQ_LOG_TX_W("Handle TEvPersQueue::TEvCancelTransactionProposal for tx " << event.GetTxId());
+    PQ_LOG_TX_W("Handle TEvPersQueue::TEvCancelTransactionProposal for TxId " << event.GetTxId());
 
     if (auto tx = GetTransaction(ctx, event.GetTxId()); tx) {
         Y_ABORT_UNLESS(tx->State <= NKikimrPQ::TTransaction::PREPARED);
 
-        DeleteTx(*tx);
+        BeginDeleteTransaction(ctx, *tx, NKikimrPQ::TTransaction::CANCELED);
 
         TryWriteTxs(ctx);
     }
@@ -4606,9 +4615,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
             WriteTx(tx, NKikimrPQ::TTransaction::EXECUTED);
 
-            PQ_LOG_TX_I("delete partitions for TxId " << tx.TxId);
-            BeginDeletePartitions(tx);
-
             TryChangeTxState(tx, NKikimrPQ::TTransaction::EXECUTED);
         }
 
@@ -4630,6 +4636,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         SendEvReadSetAckToSenders(ctx, tx);
 
+        PQ_LOG_TX_I("delete partitions for TxId " << tx.TxId);
+        BeginDeletePartitions(tx);
+
         TryChangeTxState(tx, NKikimrPQ::TTransaction::WAIT_RS_ACKS);
 
         [[fallthrough]];
@@ -4638,6 +4647,16 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_LOG_TX_D("HaveAllRecipientsReceive " << tx.HaveAllRecipientsReceive() <<
                  ", AllSupportivePartitionsHaveBeenDeleted " << AllSupportivePartitionsHaveBeenDeleted(tx.WriteId));
         if (tx.HaveAllRecipientsReceive() && AllSupportivePartitionsHaveBeenDeleted(tx.WriteId)) {
+            DeleteTx(tx);
+            // implicitly switch to the state DELETING
+        }
+
+        break;
+
+    case NKikimrPQ::TTransaction::EXPIRED:
+    case NKikimrPQ::TTransaction::CANCELED:
+        PQ_LOG_TX_D("AllSupportivePartitionsHaveBeenDeleted " << AllSupportivePartitionsHaveBeenDeleted(tx.WriteId));
+        if (AllSupportivePartitionsHaveBeenDeleted(tx.WriteId)) {
             DeleteTx(tx);
             // implicitly switch to the state DELETING
         }
@@ -5265,7 +5284,9 @@ void TPersQueue::Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorCon
         }
         if (writeInfo.TxId.Defined()) {
             if (auto tx = GetTransaction(ctx, *writeInfo.TxId); tx) {
-                if (tx->State == NKikimrPQ::TTransaction::WAIT_RS_ACKS) {
+                if ((tx->State == NKikimrPQ::TTransaction::WAIT_RS_ACKS) ||
+                    (tx->State == NKikimrPQ::TTransaction::EXPIRED) ||
+                    (tx->State == NKikimrPQ::TTransaction::CANCELED)) {
                     TryExecuteTxs(ctx, *tx);
                 }
             }

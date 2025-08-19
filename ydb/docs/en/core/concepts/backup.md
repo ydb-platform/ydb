@@ -2,26 +2,46 @@
 
 This section covers backup concepts and technologies available in {{ ydb-short-name }}.
 
-{{ ydb-short-name }} provides several approaches for creating backups:
+{{ ydb-short-name }} provides several approaches for creating backups, each designed for different use cases and requirements:
 
-## Traditional export/import
+## Export/import
 
-For single tables or small datasets, you can use the traditional export/import functionality:
+For large-scale data migration and portability scenarios:
 
-- [Export and import](../reference/ydb-cli/export-import/index.md) - Basic export/import operations
-- [Backup and recovery](../devops/backup-and-recovery.md) - Comprehensive backup strategies
+- **Use cases**: Large data migration between systems, archival storage, production data transfers
+- **Characteristics**: Point-in-time snapshots with flexible format options, optimized for large datasets
+- **Storage**: S3-compatible storage
 
-## Backup collections (New)
+## Backup/restore
 
-For production workloads and large datasets, use backup collections with incremental backup capabilities:
+For local database backups and development workflows:
 
-- [Backup collections](backup/collections.md) - Full and incremental backups organized in collections
-- [CLI tools](../reference/ydb-cli/export-import/backup-collections/index.md) - Command-line tools for backup collections
+- **Use cases**: Local development environments, testing scenarios, smaller production environments, database cloning for local use
+- **Characteristics**: Designed for local filesystem operations with moderate data volumes
+- **Storage**: Filesystem
+
+## Backup collections
+
+For production workloads requiring incremental backups:
+
+- **Use cases**: Production environments, large datasets, regular backup schedules
+- **Characteristics**: Full and incremental backups organized in collections
+- **Storage**: Cluster-managed storage with optional export to external systems
+- **Operations**: Background operations with progress monitoring via long operations API
+
+Learn more:
+
+- [Export and import reference](../reference/ydb-cli/export-import/index.md) - Export/import operations
+- [Backup collections](backup/collections.md) - Concepts, architecture, and when to use
+- [CLI tools](../reference/ydb-cli/export-import/backup-collections/index.md) - Command-line tools and detailed usage guide
 
 ## Choosing the right approach
 
-- **Traditional export/import**: Small databases, one-time backups, simple recovery scenarios
-- **Backup collections**: Production environments, large datasets, regular backup schedules, point-in-time recovery requirements
+| Approach | Best for | Key advantages | Considerations |
+|----------|----------|----------------|----------------|
+| **Export/import** | Large data migration, archival, production data transfers | Portability between systems, flexible formats, handles large datasets | Full snapshots only |
+| **Backup/restore** | Local development, testing, smaller production environments | Local filesystem operations, suitable for moderate data volumes | Full snapshots only, primarily for local use |
+| **Backup collections** | Production environments, large datasets | Incremental efficiency, point-in-time recovery | More complex setup, requires planning |
 
 ## See also
 

@@ -137,32 +137,32 @@ public:
         case EPrimitiveType::Date32: {
             TInstant date;
             if (TInstant::TryParseIso8601(token, date)) {
-                Builder.Date32(date.Days());
+                Builder.Date32(TWideDays(date.Days()));
             } else {
-                Builder.Date32(GetArithmetic<i32>(token));
+                Builder.Date32(TWideDays(GetArithmetic<int32_t>(token)));
             }
             break;
         }
         case EPrimitiveType::Datetime64: {
             TInstant date;
             if (TInstant::TryParseIso8601(token, date)) {
-                Builder.Datetime64(date.Seconds());
+                Builder.Datetime64(TWideSeconds(date.Seconds()));
             } else {
-                Builder.Datetime64(GetArithmetic<i64>(token));
+                Builder.Datetime64(TWideSeconds(GetArithmetic<int64_t>(token)));
             }
             break;
         }
         case EPrimitiveType::Timestamp64: {
             TInstant date;
             if (TInstant::TryParseIso8601(token, date)) {
-                Builder.Timestamp64(date.MicroSeconds());
+                Builder.Timestamp64(TWideMicroseconds(date.MicroSeconds()));
             } else {
-                Builder.Timestamp64(GetArithmetic<i64>(token));
+                Builder.Timestamp64(TWideMicroseconds(GetArithmetic<int64_t>(token)));
             }
             break;
         }
         case EPrimitiveType::Interval64:
-            Builder.Interval64(GetArithmetic<i64>(token));
+            Builder.Interval64(TWideMicroseconds(GetArithmetic<int64_t>(token)));
             break;
         case EPrimitiveType::TzDate:
             Builder.TzDate(token);

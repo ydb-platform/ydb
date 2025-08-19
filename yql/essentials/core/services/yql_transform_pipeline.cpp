@@ -182,10 +182,20 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
         "RecaptureDataProposals",
         issueCode));
     Transformers_.push_back(TTransformStage(
-        CreateStatisticsProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+        CreateChoiceGraphTransformer(
+            [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
+                return typesCtx.CostBasedOptimizer != ECostBasedOptimizerType::Disable;
+            },
+            TTransformStage(
+                CreateStatisticsProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+                "StatisticsProposalsDq",
+                issueCode),
+            TTransformStage(
+                new TNullTransformer(),
+                "SkipStatisticsProposals",
+                issueCode)),
         "StatisticsProposals",
-        issueCode
-    ));
+        issueCode));
     Transformers_.push_back(TTransformStage(
         CreateLogicalDataProposalsInspector(*TypeAnnotationContext_),
         "LogicalDataProposals",

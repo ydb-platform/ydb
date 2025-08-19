@@ -75,19 +75,16 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 ui64 originalOpId = finalize.GetOriginalOperationId();
                 NIceDb::TNiceDb db(context.GetDB());
                 
-                auto shardProgressRowset = db.Table<Schema::IncrementalRestoreShardProgress>().Range().Select();
-                if (!shardProgressRowset.IsReady()) {
-                    return false;
-                }
-                
-                while (!shardProgressRowset.EndOfSet()) {
-                    ui64 opId = shardProgressRowset.GetValue<Schema::IncrementalRestoreShardProgress::OperationId>();
-                    ui64 shardIdx = shardProgressRowset.GetValue<Schema::IncrementalRestoreShardProgress::ShardIdx>();
-                    if (opId == originalOpId) {
-                        db.Table<Schema::IncrementalRestoreShardProgress>().Key(opId, shardIdx).Delete();
-                    }
-                    if (!shardProgressRowset.Next()) {
-                        break;
+                auto stateIt = context.SS->IncrementalRestoreStates.find(originalOpId);
+                if (stateIt != context.SS->IncrementalRestoreStates.end()) {
+                    const auto& involvedShards = stateIt->second.InvolvedShards;
+
+                    LOG_I("Cleaning up " << involvedShards.size() << " shard progress entries for operation " << originalOpId);
+
+                    for (const auto& shardIdx : involvedShards) {
+                        db.Table<Schema::IncrementalRestoreShardProgress>()
+                            .Key(originalOpId, ui64(shardIdx.GetLocalId()))
+                            .Delete();
                     }
                 }
                 

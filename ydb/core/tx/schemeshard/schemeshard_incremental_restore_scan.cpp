@@ -296,6 +296,34 @@ public:
         db.Table<Schema::IncrementalRestoreShardProgress>().Key(OpId, ShardIdx).Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreShardProgress::Status>(static_cast<ui32>(Status))
         );
+
+        auto stateIt = Self->IncrementalRestoreStates.find(OpId);
+        if (stateIt != Self->IncrementalRestoreStates.end()) {
+            TShardIdx shardIdxObj = Self->GetShardIdx(TTabletId(ShardIdx));
+            stateIt->second.InvolvedShards.insert(shardIdxObj);
+
+            // Persist to long operation if exists
+            auto longOpIt = Self->LongIncrementalRestoreOps.find(TOperationId(OpId, 0));
+            if (longOpIt != Self->LongIncrementalRestoreOps.end()) {
+                // Add shard to the protobuf if not already present
+                auto& proto = longOpIt->second;
+                bool shardAlreadyTracked = false;
+                for (size_t i = 0; i < proto.InvolvedShardsSize(); ++i) {
+                    if (proto.GetInvolvedShards(i) == ShardIdx) {
+                        shardAlreadyTracked = true;
+                        break;
+                    }
+                }
+                if (!shardAlreadyTracked) {
+                    proto.AddInvolvedShards(ShardIdx);
+                    // Persist the updated long operation
+                    db.Table<Schema::IncrementalRestoreOperations>().Key(OpId).Update(
+                        NIceDb::TUpdate<Schema::IncrementalRestoreOperations::Operation>(proto.SerializeAsString())
+                    );
+                }
+            }
+        }
+
         return true;
     }
 
@@ -533,6 +561,7 @@ void TSchemeShard::CreateIncrementalRestoreOperation(
                     if (tableInfo) {
                         for (const auto& [shardIdx, partitionIdx] : (*tableInfo)->GetShard2PartitionIdx()) {
                             tableOpState.ExpectedShards.insert(shardIdx);
+                            stateIt->second.InvolvedShards.insert(shardIdx);
                         }
                         LOG_I("Table operation " << tableRestoreOpId << " expects " << tableOpState.ExpectedShards.size() << " shards");
                     }

@@ -3836,6 +3836,8 @@ struct TIncrementalRestoreState {
     // Table operation state tracking for DataShard completion
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
+    THashSet<TShardIdx> InvolvedShards;
+
     bool AllIncrementsProcessed() const {
         return CurrentIncrementalIdx >= IncrementalBackups.size();
     }
@@ -3871,6 +3873,7 @@ struct TIncrementalRestoreState {
             InProgressOperations.clear();
             CompletedOperations.clear();
             TableOperations.clear();
+            // Note: We don't clear InvolvedShards as it accumulates across all incrementals
         }
     }
 

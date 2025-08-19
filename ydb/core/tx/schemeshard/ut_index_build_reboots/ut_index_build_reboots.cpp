@@ -355,13 +355,14 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         DropIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    Y_UNIT_TEST(DropIndexWithDataColumns) {
+    void DropIndexWithDataColumns(NKikimrSchemeOp::EIndexType indexType) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
                     TableDescription {
                       Name: "Table"
                       Columns { Name: "key"   Type: "Uint64" }
@@ -373,8 +374,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                       Name: "UserDefinedIndexByValue0"
                       KeyColumnNames: ["value0"]
                       DataColumnNames: ["value1"]
+                      Type: %s
                     }
-                )");
+                )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
+
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -383,7 +386,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                                     NLs::IndexesCount(1)});
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0"),
                                    {NLs::Finished,
-                                    NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                                    NLs::IndexType(indexType),
                                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                                     NLs::IndexKeys({"value0"})});
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
@@ -406,6 +409,14 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndexByValue0/indexImplTable"),
                            {NLs::PathNotExist});
         });
+    }
+
+    Y_UNIT_TEST(DropIndexWithDataColumns) {
+        DropIndexWithDataColumns(NKikimrSchemeOp::EIndexTypeGlobal);
+    }
+
+    Y_UNIT_TEST(DropIndexWithDataColumnsUniq) {
+        DropIndexWithDataColumns(NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
     Y_UNIT_TEST(CancelBuild) {

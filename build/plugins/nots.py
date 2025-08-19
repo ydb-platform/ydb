@@ -593,10 +593,10 @@ def _filter_inputs_by_rules_from_tsconfig(unit: NotsUnitType, tsconfig: 'TsConfi
     mod_dir = unit.get("MODDIR")
     target_path = os.path.join("${ARCADIA_ROOT}", mod_dir, "")  # To have "/" in the end
 
-    all_files = [__strip_prefix(target_path, f) for f in unit.get("TS_GLOB_FILES").split(" ")]
-    filtered_files = tsconfig.filter_files(all_files)
-
-    __set_append(unit, "TS_INPUT_FILES", [os.path.join(target_path, f) for f in filtered_files])
+    for from_var, to_var in [("TS_GLOB_FILES", "TS_INPUT_FILES"), ("TS_GLOB_TEST_FILES", "TS_INPUT_TEST_FILES")]:
+        all_files = [__strip_prefix(target_path, f) for f in unit.get(from_var).split(" ")]
+        filtered_files = tsconfig.filter_files(all_files)
+        __set_append(unit, to_var, [os.path.join(target_path, f) for f in filtered_files])
 
 
 def _is_tests_enabled(unit: NotsUnitType) -> bool:
@@ -662,11 +662,18 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if unit.get("_TS_TYPECHECK_VALUE") == "none":
         return
 
-    test_files = df.TestFiles.ts_input_files(unit, (), {})[df.TestFiles.KEY]
+    test_files = df.TestFiles.tsc_typecheck_input_files(unit, (), {})[df.TestFiles.KEY]
     if not test_files:
         return
 
-    tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+    tsconfig_paths = unit.get("_TS_TYPECHECK_TSCONFIG").split(" ")
+    if len(tsconfig_paths) > 1:
+        raise Exception(
+            f"You have set several tsconfig files for TS_TYPECHECK: {tsconfig_paths}. "
+            f"Only one tsconfig is allowed for `TS_TYPECHECK(<config_filename>)` macro."
+        )
+
+    tsconfig_path = tsconfig_paths[0]
     if not tsconfig_path:
         tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
         if len(tsconfig_paths) > 1:

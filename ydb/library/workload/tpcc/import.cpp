@@ -999,6 +999,33 @@ public:
             thread.join();
         }
 
+        // if there is either error we have failed to retry or user wants to cancel import,
+        // we must try to cancel indices being created
+        if (GetGlobalInterruptSource().stop_requested() && !LoadState.IndexBuildStates.empty()) {
+            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                auto& indexState = LoadState.IndexBuildStates[i];
+                try {
+                    auto operation = operationClient.Get<NTable::TBuildIndexOperation>(indexState.Id).GetValueSync();
+                    if (operation.Metadata().State == NTable::EBuildIndexState::TransferData) {
+                        auto cancelResult = operationClient.Cancel(indexState.Id).GetValueSync();
+                        if (cancelResult.IsSuccess()) {
+                            LOG_I("Cancelled creation of index '" << indexState.Name
+                                << "' for table '" << indexState.Table
+                                << "', operation id '" << indexState.Id.ToString() << "'");
+                        } else {
+                            LOG_W("Failed to cancelled creation of index '" << indexState.Name
+                                << "' for table '" << indexState.Table
+                                << "', operation id '" << indexState.Id.ToString() << "'");
+                        }
+                    }
+                } catch (const std::exception& ex) {
+                    LOG_W("Exception while cancelling index '" << indexState.Name << "' for table '"
+                        << indexState.Table << "', operation id '" << indexState.Id.ToString() << "': "
+                        << ex.what());
+                }
+            }
+        }
+
         for (auto& driver : drivers) {
             driver.Stop(true);
         }

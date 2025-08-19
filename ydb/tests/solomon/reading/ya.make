@@ -5,8 +5,8 @@ FORK_TEST_FILES()
 
 TEST_SRCS(
     base.py
-    settings_validation.py
     basic_reading.py
+    settings_validation.py
 )
 
 SIZE(MEDIUM)

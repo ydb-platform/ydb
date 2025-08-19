@@ -165,7 +165,6 @@ class TestMapping(TestYdsBase):
         sql = R'''SELECT Data FROM yds1.`{input_topic}` LIMIT 1'''.format(input_topic=self.input_topic)
         c_client.create_yds_connection("yds1", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
         query_id = c_client.create_query("a", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        #kikimr.tenants["/beta"].wait_completed_checkpoints(query_id, kikimr.tenants["/beta"].get_completed_checkpoints(query_id) + 2)
         c_client.wait_query_status(query_id, fq.QueryMeta.FAILED, timeout=600)
         describe_result = c_client.describe_query(query_id).result
         describe_string = "{}".format(describe_result)

@@ -355,12 +355,54 @@ def main():
         last_exist_df = None
         last_day_data = None
 
-        # If no data exists, set last_exist_day to a default start date
+        # If no data exists, try to find when this branch was created
         if last_exist_day is None:
-            last_exist_day = default_start_date
+            print(f"Monitor data do not exist for branch '{branch}' - checking when branch was created")
+            
+            # Try to find the earliest date when this branch had any test runs
+            query_branch_creation = f"""
+                SELECT MIN(run_timestamp) as earliest_run
+                FROM `test_results/test_runs_column`
+                WHERE branch = '{branch}' AND build_type = '{build_type}'
+            """
+            query = ydb.ScanQuery(query_branch_creation, {})
+            it = driver.table_client.scan_query(query)
+            branch_creation_date = None
+            
+            while True:
+                try:
+                    result = next(it)
+                    if result.result_set.rows and result.result_set.rows[0]['earliest_run']:
+                        earliest_run = result.result_set.rows[0]['earliest_run']
+                        
+                        # Convert timestamp to datetime
+                        if earliest_run > 1000000000000000:  # Microseconds
+                            timestamp_seconds = earliest_run / 1000000
+                            branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                            print(f"Converted from microseconds: {branch_creation_date}")
+                        else:  # Seconds or milliseconds
+                            if earliest_run > 1000000000000:  # Milliseconds
+                                timestamp_seconds = earliest_run / 1000
+                                branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                                print(f"Converted from milliseconds: {branch_creation_date}")
+                            else:  # Seconds
+                                branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
+                                print(f"Converted from seconds: {branch_creation_date}")
+                        break
+                except StopIteration:
+                    break
+            
+            # Use branch creation date if found, otherwise fall back to 1 week ago
+            if branch_creation_date:
+                last_exist_day = branch_creation_date
+                print(f"Found branch creation date: {branch_creation_date}")
+            else:
+                last_exist_day = today - datetime.timedelta(days=7)
+                print(f"No test runs found for branch, using 1 week ago: {last_exist_day}")
+            
             last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
             date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days + 1)]
-            print(f"Monitor data do not exist - init new monitor collecting from default date {last_exist_day_str}")
+            print(f"Init new monitor collecting from date {last_exist_day_str}")
         else:
             # Get data from tests_monitor for last existing day
             last_exist_day = (base_date + datetime.timedelta(days=last_exist_day)).date()
@@ -586,7 +628,7 @@ def main():
         df['success_rate'] = df.apply(calculate_success_rate, axis=1).astype(int)
         df['summary'] = df.apply(calculate_summary, axis=1)
         df['owner'] = df['owners'].apply(compute_owner)
-        df['is_test_chunk'] = df['full_name'].str.contains(']? chunk|sole chunk|chunk chunk|chunk\+chunk', regex=True).astype(int)
+        df['is_test_chunk'] = df['full_name'].str.contains(r']? chunk|sole chunk|chunk chunk|chunk\+chunk', regex=True).astype(int)
         df['is_muted'] = df['is_muted'].fillna(0).astype(int)
         df['success_rate'].astype(int)
         df['state'] = df.apply(determine_state, axis=1)

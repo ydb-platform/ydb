@@ -104,6 +104,11 @@ IGraphTransformer::TStatus TGenericListTransformer::DoTransform(TExprNode::TPtr 
                 return TStatus::Error;
             }
 
+            // skip request to connector if splits information is filled
+            if (!table.first->Splits.empty()) {
+                continue;
+            }
+
             NConnector::NApi::TSelect select;
 
             *select.mutable_data_source_instance() = table.first->DataSourceInstance;

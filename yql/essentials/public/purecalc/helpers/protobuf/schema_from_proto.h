@@ -29,6 +29,7 @@ namespace NYql {
         public:
             EEnumPolicy EnumPolicy;
             bool ListIsOptional;
+            bool EnableRecursiveRenaming;
             THashMap<TString, TString> FieldRenames;
 
         public:
@@ -39,9 +40,9 @@ namespace NYql {
 
             TProtoSchemaOptions& SetListIsOptional(bool);
 
-            TProtoSchemaOptions& SetFieldRenames(
-                THashMap<TString, TString> fieldRenames
-            );
+            TProtoSchemaOptions& SetEnableRecursiveRenaming(bool);
+
+            TProtoSchemaOptions& SetFieldRenames(THashMap<TString, TString>);
         };
 
         EEnumFormatType EnumFormatType(const google::protobuf::FieldDescriptor& enumField, EEnumPolicy enumPolicy);

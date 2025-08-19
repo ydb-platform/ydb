@@ -196,9 +196,9 @@ enum EOperationType {
     ESchemeOpCreateLongIncrementalBackupOp = 124;
 
     // Streaming query
-    ESchemeOpCreateStreamingQuery = 125;
-    ESchemeOpDropStreamingQuery = 126;
-    ESchemeOpAlterStreamingQuery = 127;
+    ESchemeOpCreateStreamingQuery = 126;
+    ESchemeOpDropStreamingQuery = 127;
+    ESchemeOpAlterStreamingQuery = 128;
 
     // Some entries are grouped by semantics, so are out of order
 }

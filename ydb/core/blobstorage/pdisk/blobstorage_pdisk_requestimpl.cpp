@@ -96,13 +96,6 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkWritePiece
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-namespace {
-    std::atomic<int> deletecount;
-    std::atomic<int> deleteunreleased;
-
-    std::atomic<int> createcount;
-}
-
 TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span)
     : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
     , PDisk(pdisk)
@@ -110,27 +103,21 @@ TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &wr
     , PieceShift(pieceShift)
     , PieceSize(pieceSize)
 {
-    Cerr << "Createcount " << createcount.fetch_add(1) << Endl;
     ChunkWrite->RegisterPiece();
 }
 
-TChunkWritePiece::~TChunkWritePiece()  {
-    Cerr << "Deletecount " << deletecount.fetch_add(1) << Endl;
-    if (Completion) {
-        Cerr << "Delete w unreleased completion count " << deleteunreleased.fetch_add(1) << Endl;
-    }
-}
-
-namespace {
-    std::atomic<int> process;
-}
-
 void TChunkWritePiece::Process(void*) {
-    Cerr << "TChunkWritePiece::Process " << process.fetch_add(1) << Endl;
     this->ChunkWriteResult = MakeHolder<TChunkWriteResult>(PDisk->ChunkWritePiece(this));
     PDisk->PushChunkWrite(this);
 }
 
+void TChunkWritePiece::MarkReady(const TString& logPrefix) {
+    auto evChunkWrite = ChunkWrite.Get();
+    evChunkWrite->ReadyForBlockDevice++;
+    if (evChunkWrite->ReadyForBlockDevice == evChunkWrite->Pieces) {
+        Y_VERIFY_S(evChunkWrite->RemainingSize == 0, logPrefix);
+    }
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkReadPiece
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

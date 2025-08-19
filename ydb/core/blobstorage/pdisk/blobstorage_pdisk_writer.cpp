@@ -60,11 +60,6 @@ void TBufferedWriter::TBlockDeviceFlush::TReleaseFlushAction::operator()(TComple
 ////////////////////////////////////////////////////////////////////////////
 // BufferedWriter
 ////////////////////////////////////////////////////////////////////////////
-
-namespace {
-    std::atomic<int> pushes, pops;
-}
-
 void TBufferedWriter::WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
         TCompletionAction *flushAction, ui32 chunkIdx) {
     static NWilson::TTraceId noTrace;
@@ -76,7 +71,6 @@ void TBufferedWriter::WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
         CurrentBuffer->CostNs = DriveModel->TimeForSizeNs(sizeToWrite, chunkIdx, TDriveModel::OP_TYPE_WRITE);
         Y_VERIFY_DEBUG_S(sizeToWrite <= CurrentBuffer->Size(), PCtx->PDiskLogPrefix);
         if (WithDelayedFlush) {
-            Cerr << "bad pushes " << pushes.fetch_add(1) << Endl;
             BlockDeviceActions.push(MakeHolder<TBlockDeviceWrite>(reqId, std::move(CurrentBuffer), StartOffset, DirtyFrom, DirtyTo, traceId, PCtx->ActorSystem));
         } else {
             BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, CurrentBuffer.Release(), reqId, traceId);
@@ -89,7 +83,6 @@ void TBufferedWriter::WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
     } else if (flushAction) {
         flushAction->CostNs = 1;
         if (WithDelayedFlush) {
-            Cerr << "good pushes " << pushes.fetch_add(1);
             BlockDeviceActions.push(MakeHolder<TBlockDeviceFlush>(reqId, flushAction, PCtx->ActorSystem));
         } else {
             BlockDevice.FlushAsync(flushAction, reqId);
@@ -172,10 +165,10 @@ void TBufferedWriter::Obliterate() {
 
 void TBufferedWriter::WriteToBlockDevice() {
     Y_ENSURE(WithDelayedFlush);
+    // Y_ENSURE(BlockDeviceActions.size() == 2);
     while (!BlockDeviceActions.empty()) {
         const auto& action = BlockDeviceActions.front();
         action->DoCall(BlockDevice);
-        Cerr << "pops " << pops.fetch_add(1) << Endl;
         BlockDeviceActions.pop();
     }
 }

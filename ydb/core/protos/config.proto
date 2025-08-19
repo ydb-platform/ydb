@@ -2369,12 +2369,9 @@ message TAppConfig {
     optional NKikimrProto.TDataIntegrityTrailsConfig DataIntegrityTrailsConfig = 87;
     optional TDataErasureConfig DataErasureConfig = 88;
     optional THealthCheckConfig HealthCheckConfig = 89;
-<<<<<<< HEAD
+    optional TWorkloadManagerConfig WorkloadManagerConfig = 90;
     optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
     optional TBlockstoreConfig BlockstoreConfig = 93;
-=======
-    optional TWorkloadManagerConfig WorkloadManagerConfig = 90;
->>>>>>> 854ffaf7e7d (workload manager config has been supported (#17138))
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

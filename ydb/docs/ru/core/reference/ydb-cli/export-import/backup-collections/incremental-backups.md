@@ -47,6 +47,7 @@ CREATE BACKUP COLLECTION `daily_backup`
 WITH ( STORAGE = 'cluster' );
 
 BACKUP `daily_backup`;
+```
 
 ```sql
 -- День 2: Первый инкрементальный бэкап
@@ -124,6 +125,7 @@ else
     echo "Создание инкрементального бэкапа: $(date)"
     {{ ydb-cli }} yql -s "BACKUP \`${COLLECTION_NAME}\` INCREMENTAL;"
 fi
+```
 
 ## Преимущества и ограничения
 

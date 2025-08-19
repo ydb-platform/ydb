@@ -77,7 +77,7 @@ void CheckPathExistOrCreate(TDriver& driver, const TString& database, const TStr
         }
     }
 
-    Cout << "Path '" << path << "' was not found in the database and it had been created" << Endl;
+    Cout << "Path '" << path << "' was not found in the database, so it was created automatically." << Endl;
 }
 
 void CheckNoTablesExist(TDriver& driver, const TString& path, const char* what) {

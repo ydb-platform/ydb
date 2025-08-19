@@ -16,7 +16,6 @@ RESOURCE(
 PEERDIR(
     library/python/monlib
     library/python/resource
-    library/python/testing/yatest_common
     ydb/public/sdk/python
     ydb/public/sdk/python/enable_v3_new_behavior
 )

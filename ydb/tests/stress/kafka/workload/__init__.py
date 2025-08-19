@@ -10,7 +10,6 @@ import urllib.request
 import tempfile
 from library.python import resource
 import ydb
-import yatest.common
 import tarfile
 
 

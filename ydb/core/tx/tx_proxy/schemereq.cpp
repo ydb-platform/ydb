@@ -427,7 +427,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpChangePathState:
             return *modifyScheme.MutableChangePathState()->MutablePath();
-            
+
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize:
             return *modifyScheme.MutableIncrementalRestoreFinalize()->MutableTargetTablePaths(0);
         }
@@ -1709,6 +1709,13 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
 
     const TVector<TString>* workingDir = nullptr;
     for (auto it = resultSet.rbegin(); it != resultSet.rend(); ++it) {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+            "Actor# " << ctx.SelfID.ToString()
+                    << " txid# " << TxId
+                    << " HANDLE EvNavigateKeySetResult"
+                    << " result set index: " << it - resultSet.rbegin()
+                    << " result set status: " << it->Status
+        );
         if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             workingDir = &it->Path;
             break;

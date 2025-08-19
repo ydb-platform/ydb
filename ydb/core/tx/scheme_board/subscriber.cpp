@@ -52,7 +52,7 @@ namespace {
     }
 
     template <typename TPath>
-    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record, const TClusterState* clusterState = nullptr) {
+    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record, const TClusterState* clusterState = nullptr, TString* error = nullptr) {
         bool valid = false;
 
         if (record.HasPath()) {
@@ -64,7 +64,11 @@ namespace {
         }
 
         if (valid && clusterState && record.HasClusterState()) {
-            valid = (*clusterState == TClusterState(record.GetClusterState()));
+            TClusterState replicaClusterState(record.GetClusterState());
+            valid = (*clusterState == replicaClusterState);
+            if (!valid && error) {
+                *error = TStringBuilder() << "subscriber cluster state: " << *clusterState << ", replica cluster state: " << replicaClusterState;
+            }
         }
 
         return valid;
@@ -779,9 +783,10 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         SBS_LOG_D("Handle " << ev->Get()->ToString()
             << ": sender# " << ev->Sender);
 
-        if (!IsValidNotification(Path, ev->Get()->GetRecord(), &ClusterState)) {
+        if (TString error; !IsValidNotification(Path, ev->Get()->GetRecord(), &ClusterState, &error)) {
             SBS_LOG_E("Suspicious " << ev->Get()->ToString()
-                << ": sender# " << ev->Sender);
+                << ": sender# " << ev->Sender
+                << ": error# " << error);
             return;
         }
 

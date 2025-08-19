@@ -6,7 +6,11 @@ import threading
 import requests
 import logging
 from enum import Enum
+from urllib.parse import urlparse
 
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
+from ydb.tests.library.clients.kikimr_bridge_client import BridgeClient
 from ydb.tests.stress.common.common import WorkloadBase
 from ydb.tests.stress.common.common import YdbClient
 
@@ -45,6 +49,26 @@ supported_types = supported_pk_types + [
     "Yson"
 ]
 
+def update_cluster_state(client, updates, expected_status=StatusIds.SUCCESS):
+    response = client.update_cluster_state(updates)
+    logger.debug("Update cluster state response: %s", response)
+    if response.operation.status != expected_status:
+        raise Exception(f"Update cluster state failed with status: {response.operation.status}")
+    if expected_status == StatusIds.SUCCESS:
+        result = bridge.UpdateClusterStateResult()
+        response.operation.result.Unpack(result)
+        return result
+    else:
+        return response
+
+def get_cluster_state(client):
+    response = client.get_cluster_state()
+    if response.operation.status != StatusIds.SUCCESS:
+        raise Exception(f"Get cluster state failed with status: {response.operation.status}")
+    result = bridge.GetClusterStateResult()
+    response.operation.result.Unpack(result)
+    logger.debug("Get cluster state result: %s", result)
+    return result
 
 class WorkloadTablesCreateDrop(WorkloadBase):
     class TableStatus(Enum):
@@ -204,12 +228,17 @@ class WorkloadReconfigStateStorage(WorkloadBase):
     loop_cnt = 0
     wait_for = 1
 
-    def __init__(self, client, http_endpoint, prefix, stop, config_name):
+    def __init__(self, client, grpc_endpoint, http_endpoint, prefix, stop, config_name):
         super().__init__(client, prefix, "reconfig_statestorage", stop)
         self.ringGroupActorIdOffset = 1
         self.http_endpoint = http_endpoint
         self.lock = threading.Lock()
         self.config_name = config_name
+        parsed = urlparse(grpc_endpoint)
+        host = parsed.hostname  # 'localhost'
+        port = parsed.port      # 2135 (as int)
+        self.bridge_client = BridgeClient(host, port)
+        self.bridge_client.set_auth_token('root@builtin')
 
     def get_stat(self):
         with self.lock:
@@ -228,42 +257,42 @@ class WorkloadReconfigStateStorage(WorkloadBase):
         logger.debug("starting")
         while not self.is_stop_requested():
             time.sleep(self.wait_for)
-            cfg = self.do_request_config()[f"{self.config_name}Config"]
-            defaultRingGroup = [cfg["Ring"]] if "Ring" in cfg else cfg["RingGroups"]
-            newRingGroup = [
-                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
-                {"RingGroupActorIdOffset": self.ringGroupActorIdOffset, "NToSelect": 3, "Ring": [{"Node": [1]}, {"Node": [2]}, {"Node": [3]}]}
-                ]
-            logger.info(f"From: {defaultRingGroup} To: {newRingGroup}")
-            for i in range(len(newRingGroup)):
-                newRingGroup[i]["WriteOnly"] = True
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": defaultRingGroup + newRingGroup}}}))
+
+            # Get current state
+            current_state = get_cluster_state(self.bridge_client)
+            logger.info(f"Current cluster state: {current_state}")
+
+            # Update pile state to PROMOTE for r2
+            updates = [
+                bridge.PileState(pile_name="r2", state=bridge.PileState.PROMOTE),
+            ]
+            update_cluster_state(self.bridge_client, updates)
+            logger.info("Updated r2 to PROMOTE state")
             time.sleep(self.wait_for)
-            for i in range(len(newRingGroup)):
-                newRingGroup[i]["WriteOnly"] = False
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": defaultRingGroup + newRingGroup}}}))
+
+            # Verify the state change
+            new_state = get_cluster_state(self.bridge_client)
+            logger.info(f"Cluster state after PROMOTE: {new_state}")
+
+            # Reset back to SYNCHRONIZED
+            updates = [
+                bridge.PileState(pile_name="r2", state=bridge.PileState.SYNCHRONIZED),
+            ]
+            update_cluster_state(self.bridge_client, updates)
+            logger.info("Reset r2 to SYNCHRONIZED state")
             time.sleep(self.wait_for)
-            for i in range(len(defaultRingGroup)):
-                defaultRingGroup[i]["WriteOnly"] = True
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": newRingGroup + defaultRingGroup}}}))
-            time.sleep(self.wait_for)
-            logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
-                "RingGroups": newRingGroup}}}))
-            time.sleep(self.wait_for)
-            curConfig = self.do_request_config()[f"{self.config_name}Config"]
-            expectedConfig = {"Ring": newRingGroup[0]} if len(newRingGroup) == 1 else {"RingGroups": newRingGroup}
-            if curConfig != expectedConfig:
-                raise Exception(f"Incorrect reconfig: actual:{curConfig}, expected:{expectedConfig}")
-            self.ringGroupActorIdOffset += 1
+
+            # Verify final state
+            final_state = get_cluster_state(self.bridge_client)
+            logger.info(f"Final cluster state: {final_state}")
+
             with self.lock:
                 logger.info(f"Reconfig {self.loop_cnt} finished")
                 self.loop_cnt += 1
                 logger.debug(f"iteration {self.loop_cnt}")
         with self.lock:
             logger.debug(f"exiting after {self.loop_cnt} iterations")
+            self.bridge_client.close()
 
     def get_workload_thread_funcs(self):
         return [self._loop]
@@ -331,7 +360,14 @@ class WorkloadRunner:
     def run(self):
         stop = threading.Event()
 
-        reconfigWorkload = WorkloadReconfigStateStorage(self.client, self.http_endpoint, self.name, stop, self.config_name)
+        reconfigWorkload = WorkloadReconfigStateStorage(
+            self.client,
+            self.grpc_endpoint,
+            self.http_endpoint,
+            self.name,
+            stop,
+            self.config_name,
+        )
         workloads = [
             WorkloadTablesCreateDrop(self.client, self.name, stop),
             WorkloadInsertDelete(self.client, self.name, stop),

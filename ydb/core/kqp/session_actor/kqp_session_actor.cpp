@@ -1931,6 +1931,8 @@ public:
                 }
                 case Ydb::StatusIds::SCHEME_ERROR:
                 case Ydb::StatusIds::INTERNAL_ERROR:
+                    LOG_D("TEvTxResponse has status: " << status << ", CurrentTx: " << QueryState->CurrentTx
+                        << " ExecutionType: " << executionType);
                     InvalidateQuery();
                     issues.AddIssue(YqlIssue(TPosition(), TIssuesIds::KIKIMR_QUERY_INVALIDATED,
                         TStringBuilder() << "Query invalidated on scheme/internal error during "

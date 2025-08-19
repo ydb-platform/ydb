@@ -14,25 +14,39 @@ class ReconfigStateStorageWorkloadTest(object):
     def setup_class(cls):
         cls.cluster = KiKiMR(KikimrConfigGenerator(
             erasure=Erasure.BLOCK_4_2,
-            use_self_management=True,
-            simple_config=True,
+            nodes=16,
+            use_in_memory_pdisks=False,
+            use_config_store=True,
             metadata_section={
                 "kind": "MainConfig",
                 "version": 0,
                 "cluster": "",
             },
+            separate_node_configs = True,
+            simple_config=True,
+            use_self_management=True,
+            extra_grpc_services=['bridge'],
+            bridge_config = {
+                "piles": [
+                    {"name": "r1"},
+                    {"name": "r2"}
+                ]
+            },
             additional_log_configs={
-                'BS_NODE': LogLevels.DEBUG,
                 'BOARD_LOOKUP': LogLevels.DEBUG,
+                'BS_NODE': LogLevels.DEBUG,
+                'CMS_TENANTS': LogLevels.DEBUG,
                 'DISCOVERY': LogLevels.DEBUG,
-                'INTERCONNECT': LogLevels.INFO,
                 'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
+                'INTERCONNECT': LogLevels.INFO,
+                'KQP_COMPILE_ACTOR': LogLevels.DEBUG,
+                'KQP_GATEWAY': LogLevels.DEBUG,
+                'KQP_SESSION': LogLevels.DEBUG,
                 'SCHEME_BOARD_POPULATOR': LogLevels.DEBUG,
                 'SCHEME_BOARD_REPLICA': LogLevels.DEBUG,
                 'SCHEME_BOARD_SUBSCRIBER': LogLevels.DEBUG,
+                'TX_PROXY': LogLevels.DEBUG,
                 'TX_PROXY_SCHEME_CACHE': LogLevels.DEBUG,
-                'KQP_COMPILE_ACTOR': LogLevels.DEBUG,
-                'CMS_TENANTS': LogLevels.DEBUG,
                 # 'STATESTORAGE': LogLevels.DEBUG,
             }
         ))

@@ -1,15 +1,17 @@
 from collections import defaultdict
+import shutil
 import subprocess
 import signal
 import stat
 import os
 import time
-import urllib.request
 import unittest
+import urllib.request
 import tempfile
 from library.python import resource
 import ydb
 import yatest.common
+import tarfile
 
 
 class Workload(unittest.TestCase):
@@ -23,14 +25,17 @@ class Workload(unittest.TestCase):
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.num_workers = num_workers
         self.duration = duration
+        self.tmp_dirs = []
+        self.archive_path = "https://storage.yandexcloud.net/ydb-ci/kafka/jdk-linux-x86_64.yandex.tgz"
         self._unpack_resource('ydb_cli')
         self._unpack_resource("e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar")
 
     def _unpack_resource(self, name):
-        self.working_dir = os.path.join(tempfile.gettempdir(), name)
-        os.makedirs(self.working_dir, exist_ok=True)
+        working_dir = os.path.join(tempfile.gettempdir(), name)
+        self.tmp_dirs.append(working_dir)
+        os.makedirs(working_dir, exist_ok=True)
         res = resource.find(name)
-        path_to_unpack = os.path.join(self.working_dir, name)
+        path_to_unpack = os.path.join(working_dir, name)
         with open(path_to_unpack, "wb") as f:
             f.write(res)
 
@@ -43,6 +48,18 @@ class Workload(unittest.TestCase):
 
 
     def loop(self):
+        TEST_FILES_DIRECTORY = "./test-files/"
+        JDK_FILE_NAME = "jdk-linux-x86_64.yandex.tgz"
+        if not os.path.exists(TEST_FILES_DIRECTORY):
+            os.makedirs(TEST_FILES_DIRECTORY)
+        urllib.request.urlretrieve(self.archive_path, TEST_FILES_DIRECTORY + JDK_FILE_NAME)
+
+        tar = tarfile.open(TEST_FILES_DIRECTORY + JDK_FILE_NAME, "r:gz")
+        tar.extractall(path=TEST_FILES_DIRECTORY)
+        tar.close()
+
+        java_path = TEST_FILES_DIRECTORY + "/bin/java"
+
         workloadConsumerName = self.workload_consumer_name
         checkerConsumer = "targetCheckerConsumer"
 
@@ -57,16 +74,9 @@ class Workload(unittest.TestCase):
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
         for i in range(self.num_workers):
-            # processes.append(subprocess.Popen(["ya", "tool", "java", "-jar", self.jar_path, self.bootstrap, f"streams-store-{i}"]),)
-            diff_tool = [
-                yatest.common.java_bin(),
-                "-jar",
-                yatest.common.build_path("e2e-kafka-api-tests-1.0-SNAPSHOT-all.jar"),
-                self.bootstrap,
-                f"streams-store-{i}"
-            ]
-            yatest.common.execute(diff_tool)
+            processes.append(subprocess.Popen([java_path, "-jar", self.jar_path, self.bootstrap, f"streams-store-{i}"]))
         processes[0].wait()
+        assert processes[0].returncode == 0
 
         print("-----------------")
         print(f"Waiting for {self.duration} sec")
@@ -129,3 +139,5 @@ class Workload(unittest.TestCase):
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.driver is not None:
             self.driver.stop()
+        for tmp_dir in self.tmp_dirs:
+            shutil.rmtree(tmp_dir)

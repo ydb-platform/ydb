@@ -590,7 +590,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             auto result = queryClient.ExecuteQuery(insertQuery, 
                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), "INSERT should have failed with data integrity violation");
-            Cerr << "Expected error caught: " << result.GetIssues().ToString() << Endl;
+            Cerr << "Expected error caught: " << result.GetIssues().ToString() << Endl; // Intentionally inserting -1 as invalid data to trigger a data type violation for Uint32 field.
         }
 
         {

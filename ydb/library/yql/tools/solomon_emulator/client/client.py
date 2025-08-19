@@ -33,18 +33,31 @@ def cleanup_solomon(project, cluster, service):
     _do_request("POST", url)
 
 
-def cleanup_monitoring(folderId, service):
-    cleanup_solomon(folderId, folderId, service)
-
-
 def config_solomon(response_code):
     url = "{url}/config".format(
         url=get_api_url())
     _do_request("POST", url, {"response_code": response_code})
 
 
+def cleanup_monitoring(folderId, service):
+    cleanup_solomon(folderId, folderId, service)
+
+
+def add_solomon_metrics(project, cluster, service, metrics):
+    url = "{url}/metrics/post?project={project}&cluster={cluster}&service={service}".format(
+        url=get_api_url(),
+        project=project,
+        cluster=cluster,
+        service=service)
+    _do_request("POST", url, metrics)
+
+
+def add_monitoring_metrics(folderId, service):
+    return add_solomon_metrics(folderId, folderId, service)
+
+
 def get_solomon_metrics(project, cluster, service):
-    url = "{url}/metrics?project={project}&cluster={cluster}&service={service}".format(
+    url = "{url}/metrics/get?project={project}&cluster={cluster}&service={service}".format(
         url=get_api_url(),
         project=project,
         cluster=cluster,

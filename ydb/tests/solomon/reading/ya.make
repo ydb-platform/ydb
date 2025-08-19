@@ -5,6 +5,7 @@ FORK_TEST_FILES()
 
 TEST_SRCS(
     base.py
+    basic_reading.py
     settings_validation.py
 )
 
@@ -17,6 +18,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    ydb/library/yql/tools/solomon_emulator/client
     ydb/tests/library
     ydb/tests/library/test_meta
 )

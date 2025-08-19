@@ -176,8 +176,9 @@ void Init(
         yqCounters->GetSubgroup("subcomponent", "http_gateway"));
 
     NYql::NConnector::IClient::TPtr connectorClient = nullptr;
+
     if (protoConfig.GetGateways().GetGeneric().HasConnector()) {
-        connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric().GetConnector());
+        connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric());
     }
 
     if (protoConfig.GetTokenAccessor().GetEnabled()) {

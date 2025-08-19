@@ -2,6 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
     TString GetSymbolsString(char start, char end, const TString& skip) {
@@ -54,7 +55,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver,
         std::optional<NKikimrConfig::TAppConfig> appConfig,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-        const TKikimrRunnerOptions& optionst)
+        const TKikimrRunnerOptions& options)
     {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableExternalDataSources(true);
@@ -77,7 +78,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
             httpGateway,
             connectorClient,
-            nullptr,
+            options.CredentialsFactory,
             databaseAsyncResolver,
             appConfig->GetQueryServiceConfig().GetS3(),
             appConfig->GetQueryServiceConfig().GetGeneric(),
@@ -93,8 +94,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetKqpSettings({})
             .SetS3ActorsFactory(std::move(s3ActorsFactory))
             .SetWithSampleTables(false)
-            .SetDomainRoot(optionst.DomainRoot)
-            .SetNodeCount(optionst.NodeCount);
+            .SetDomainRoot(options.DomainRoot)
+            .SetNodeCount(options.NodeCount);
 
         settings = settings.SetAppConfig(appConfig.value());
 

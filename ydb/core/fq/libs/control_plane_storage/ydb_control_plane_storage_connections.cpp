@@ -18,13 +18,33 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
     }
 
     auto& setting = *connection.mutable_content()->mutable_setting();
-    if (setting.has_clickhouse_cluster()) {
-        auto& ch = *setting.mutable_clickhouse_cluster();
-        ch.set_password("");
-    }
-    if (setting.has_postgresql_cluster()) {
-        auto& pg = *setting.mutable_postgresql_cluster();
-        pg.set_password("");
+    switch (setting.connection_case()) {
+    case FederatedQuery::ConnectionSetting::kObjectStorage:
+        break;
+    case FederatedQuery::ConnectionSetting::kYdbDatabase:
+        break;
+    case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+        setting.mutable_clickhouse_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kDataStreams:
+        break;
+    case FederatedQuery::ConnectionSetting::kMonitoring:
+        break;
+    case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+        setting.mutable_postgresql_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+        setting.mutable_greenplum_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kMysqlCluster:
+        setting.mutable_mysql_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kLogging:
+        break;
+    case FederatedQuery::ConnectionSetting::kIceberg:
+        break;
+    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+        break;
     }
 }
 

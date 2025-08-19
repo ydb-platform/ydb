@@ -59,7 +59,7 @@ class Workload(unittest.TestCase):
         ]
         print("NumWorkers: ", self.num_workers)
         print("JAR PATH: ", self.jar_path)
-        print("Bootstrap:", self.bootstrap, "Endpoint": self.endpoint, "Database:", self.database)
+        print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
         for i in range(self.num_workers):
             processes.append(subprocess.Popen(["ya", "tool", "java", "-jar", self.jar_path, self.bootstrap, f"streams-store-{i}"]),)
         processes[0].wait()

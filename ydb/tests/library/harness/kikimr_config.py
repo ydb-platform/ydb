@@ -509,7 +509,8 @@ class KikimrConfigGenerator(object):
 
         if kafka_api_port is not None:
             kafka_proxy_config = dict()
-            kafka_proxy_config["enable_kafka_proxy"] = True
+            kafka_proxy_config["auto_create_topics_enable"] = False
+            kafka_proxy_config["auto_create_consumers_enable"] = False
             kafka_proxy_config["listening_port"] = kafka_api_port
 
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
@@ -555,6 +556,7 @@ class KikimrConfigGenerator(object):
             security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
             security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
         self.__enable_static_auth = enable_static_auth
+        print("TRANSACTION FLAG:", self.yaml_config['feature_flags']['enable_kafka_transactions'])
 
     @property
     def enable_static_auth(self):

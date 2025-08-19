@@ -9,6 +9,7 @@ This section covers all operations for creating, managing, and restoring from ba
 Use the SQL API to create a new backup collection. For detailed syntax, see [SQL API CREATE BACKUP COLLECTION](sql-api.md#create-backup-collection).
 
 **Basic example:**
+
 ```sql
 CREATE BACKUP COLLECTION `shop_backups`
     ( TABLE `/Root/test1/orders`, TABLE `/Root/test1/products` )
@@ -36,6 +37,7 @@ BACKUP `shop_backups` INCREMENTAL;
 ```
 
 **Best practices:**
+
 - Take incremental backups on a regular schedule (daily, hourly, etc.)
 - Keep backup chains reasonably short (7-14 incremental backups recommended)
 - Monitor backup completion and chain integrity
@@ -109,6 +111,7 @@ ydb scheme describe .backups/collections/shop_backups/backup_20240315/
 ```
 
 For SQL-based cleanup:
+
 ```sql
 -- Delete specific backup tables (syntax may vary)
 -- Caution: Ensure you don't break backup chains
@@ -184,11 +187,13 @@ Before critical restores, always verify:
 ### Export and import backups
 
 Export backups from source database:
+
 ```bash
 ydb tools dump -p .backups/collections/shop_backups -o shop_backups_export
 ```
 
 **Create collection in destination database first:**
+
 ```sql
 -- Create the collection structure to receive restored data
 CREATE BACKUP COLLECTION `restored_shop_backups`
@@ -197,6 +202,7 @@ WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 ```
 
 Import to target database (applies backups in chronological order):
+
 ```bash
 # Option 1: Restore entire collection (recommended)
 ydb tools restore -i shop_backups_export -d /Root/restored_db
@@ -211,6 +217,7 @@ ydb tools restore -i shop_backups_export/incremental_20240316 -d /Root/restored_
 ### SQL restore
 
 After importing, use SQL to restore:
+
 ```sql
 RESTORE `restored_shop_backups`;
 ```

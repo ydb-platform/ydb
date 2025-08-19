@@ -26,6 +26,7 @@ WITH ( STORAGE = '<storage_backend>'
 ### Примеры
 
 **Создание базовой коллекции:**
+
 ```sql
 CREATE BACKUP COLLECTION `my_backups`
     ( TABLE `/Root/database/users` )
@@ -33,21 +34,13 @@ WITH ( STORAGE = 'cluster' );
 ```
 
 **Коллекция с инкрементальными резервными копиями (рекомендуется):**
+
 ```sql
 CREATE BACKUP COLLECTION `shop_backups`
     ( TABLE `/Root/shop/orders`, TABLE `/Root/shop/products` )
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 ```
-```
 
-#### Создание коллекции с использованием переменных
-
-```sql
-$collection_name = "my_backup_" || CAST(CurrentUtcTimestamp() AS Utf8);
-$orders_table = "/Root/database/orders";
-
-CREATE BACKUP COLLECTION $collection_name
-    ( TABLE $orders_table
 ## BACKUP
 
 Создает резервную копию в существующей коллекции. Первая резервная копия всегда является полной; последующие резервные копии могут быть инкрементальными.
@@ -66,11 +59,13 @@ BACKUP <collection_name> [INCREMENTAL];
 ### Типы резервных копий
 
 **Полная резервная копия (по умолчанию для первой резервной копии):**
+
 ```sql
 BACKUP `shop_backups`;
 ```
 
 **Инкрементальная резервная копия:**
+
 ```sql
 BACKUP `shop_backups` INCREMENTAL;
 ```
@@ -127,25 +122,6 @@ ydb scheme ls .backups/collections/shop_backups/
 - **Параллельные резервные копии**: Множественные операции резервного копирования одной коллекции могут конфликтовать
 
 Подробные соображения производительности и рекомендации по управлению цепочками см. в [Концепциях](concepts.md).
-    )
-WITH ( STORAGE = 'cluster' );
-
-BACKUP `weekly_backup`;
-```
-
-```sql
--- Вторник-воскресенье: инкрементальные бэкапы
-BACKUP `weekly_backup` INCREMENTAL;
-```
-
-### Сценарий 2: Бэкап перед важными изменениями
-
-```sql
--- Создание точки восстановления перед миграцией
-CREATE BACKUP COLLECTION `pre_migration_backup`
-    ( TABLE `/Root/production/critical_table`
-    )
-WITH ( STORAGE = 'cluster' );
 
 ## Следующие шаги
 

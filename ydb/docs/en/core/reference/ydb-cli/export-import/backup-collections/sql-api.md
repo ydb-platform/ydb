@@ -26,6 +26,7 @@ WITH ( STORAGE = '<storage_backend>'
 ### Examples
 
 **Basic collection creation:**
+
 ```sql
 CREATE BACKUP COLLECTION `my_backups`
     ( TABLE `/Root/database/users` )
@@ -33,6 +34,7 @@ WITH ( STORAGE = 'cluster' );
 ```
 
 **Collection with incremental backups (recommended):**
+
 ```sql
 CREATE BACKUP COLLECTION `shop_backups`
     ( TABLE `/Root/shop/orders`, TABLE `/Root/shop/products` )
@@ -57,11 +59,13 @@ BACKUP <collection_name> [INCREMENTAL];
 ### Backup types
 
 **Full backup (default for first backup):**
+
 ```sql
 BACKUP `shop_backups`;
 ```
 
 **Incremental backup:**
+
 ```sql
 BACKUP `shop_backups` INCREMENTAL;
 ```
@@ -108,6 +112,7 @@ ydb scheme ls .backups/collections/
 # View specific collection structure  
 ydb scheme ls .backups/collections/shop_backups/
 ```
+
 ## Limitations and considerations
 
 ### Current limitations

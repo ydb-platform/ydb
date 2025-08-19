@@ -9,6 +9,7 @@
 Используйте SQL API для создания новой коллекции резервных копий. Подробный синтаксис см. в [SQL API CREATE BACKUP COLLECTION](sql-api.md#create-backup-collection).
 
 **Базовый пример:**
+
 ```sql
 CREATE BACKUP COLLECTION `shop_backups`
     ( TABLE `/Root/test1/orders`, TABLE `/Root/test1/products` )
@@ -36,6 +37,7 @@ BACKUP `shop_backups` INCREMENTAL;
 ```
 
 **Лучшие практики:**
+
 - Создавайте инкрементальные резервные копии по регулярному расписанию (ежедневно, ежечасно и т.д.)
 - Держите цепочки резервных копий разумно короткими (рекомендуется 7-14 инкрементальных резервных копий)
 - Отслеживайте завершение создания резервных копий и целостность цепочки
@@ -109,6 +111,7 @@ ydb scheme describe .backups/collections/shop_backups/backup_20240315/
 ```
 
 Для очистки на основе SQL:
+
 ```sql
 -- Удаление конкретных таблиц резервных копий (синтаксис может отличаться)
 -- Осторожно: Убедитесь, что не нарушаете цепочки резервных копий
@@ -184,11 +187,13 @@ ydb scheme ls .backups/collections/shop_backups/ | sort
 ### Экспорт и импорт резервных копий
 
 Экспорт резервных копий из исходной базы данных:
+
 ```bash
 ydb tools dump -p .backups/collections/shop_backups -o shop_backups_export
 ```
 
 **Сначала создайте коллекцию в целевой базе данных:**
+
 ```sql
 -- Создайте структуру коллекции для получения восстановленных данных
 CREATE BACKUP COLLECTION `restored_shop_backups`
@@ -197,6 +202,7 @@ WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 ```
 
 Импорт в целевую базу данных (применяет резервные копии в хронологическом порядке):
+
 ```bash
 # Вариант 1: Восстановление всей коллекции (рекомендуется)
 ydb tools restore -i shop_backups_export -d /Root/restored_db
@@ -211,6 +217,7 @@ ydb tools restore -i shop_backups_export/incremental_20240316 -d /Root/restored_
 ### SQL восстановление
 
 После импорта используйте SQL для восстановления:
+
 ```sql
 RESTORE `restored_shop_backups`;
 ```

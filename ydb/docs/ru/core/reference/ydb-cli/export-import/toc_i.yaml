@@ -4,7 +4,7 @@ items:
 - name: Коллекции резервных копий
   href: backup-collections/index.md
   include:
-    path: backup-collections/toc_p.yaml
+    path: backup-collections/toc_i.yaml
     mode: link
 - name: Выгрузка в файловую систему
   href: tools-dump.md

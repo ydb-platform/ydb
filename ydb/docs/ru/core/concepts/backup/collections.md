@@ -159,4 +159,4 @@ done
 
 - [Основы резервного копирования](../backup.md)
 - [Справочник команд экспорта и импорта](../../reference/ydb-cli/export-import/index.md)
-- [Коллекции резервных копий - детальное руководство](../../reference/ydb-cli/export-import/backup-collections/overview.md)
+- [Коллекции резервных копий - детальное руководство](../../reference/ydb-cli/export-import/backup-collections/index.md)

@@ -159,4 +159,4 @@ Operation IDs are returned when starting corresponding backup or restore command
 
 - [Backup basics](../backup.md)
 - [Export and import command reference](../../reference/ydb-cli/export-import/index.md)
-- [Backup collections - detailed guide](../../reference/ydb-cli/export-import/backup-collections/overview.md)
+- [Backup collections - detailed guide](../../reference/ydb-cli/export-import/backup-collections/index.md)

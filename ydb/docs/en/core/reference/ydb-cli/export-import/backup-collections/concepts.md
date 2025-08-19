@@ -24,6 +24,7 @@ A full backup contains a complete snapshot of all data in the collection at a sp
 - **Storage intensive**: Requires more storage space but faster to restore
 
 **When to use full backups:**
+
 - Initial backup creation
 - After significant data changes
 - To reset backup chains and reduce restore time
@@ -39,6 +40,7 @@ Incremental backups capture only the changes made since the previous backup in t
 - **Fast execution**: Completes quickly for typical change volumes
 
 **When to use incremental backups:**
+
 - For regular scheduled backups (daily, hourly)
 - When storage efficiency is important
 - To capture frequent changes with minimal overhead
@@ -62,6 +64,7 @@ For external storage (filesystem, S3), use [export/import operations](operations
 ### Chain structure
 
 A backup chain consists of:
+
 1. **One full backup** (the chain foundation)
 2. **Zero or more incremental backups** (applied in chronological order)
 
@@ -74,6 +77,7 @@ A backup chain consists of:
 {% endnote %}
 
 **Best practices:**
+
 - Apply retention policies carefully to preserve chain validity
 - Verify backup chains periodically before critical operations
 - Respect chronological order when applying backups during restore

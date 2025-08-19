@@ -212,4 +212,49 @@ IDqChannelStorage::TPtr CreateDqChannelStorageWithSharedSpiller(ui64 channelId,
     return new TDqChannelStorage(channelId, sharedSpiller, spillingTaskCounters);
 }
 
+// Channel spiller that implements ISpiller interface
+class TDqChannelSpiller : public NKikimr::NMiniKQL::ISpiller {
+public:
+    TDqChannelSpiller(ui64 channelId, NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller,
+        TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters)
+        : ChannelId_(channelId)
+        , SharedSpiller_(sharedSpiller)
+        , SpillingTaskCounters_(spillingTaskCounters)
+    {}
+
+    NThreading::TFuture<TKey> Put(NYql::TChunkedBuffer&& blob) override {
+        // Update counters
+        if (SpillingTaskCounters_) {
+            SpillingTaskCounters_->ChannelWriteBytes += blob.Size();
+        }
+        
+        // Delegate to shared spiller
+        return SharedSpiller_->Put(std::move(blob));
+    }
+
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Get(TKey key) override {
+        return SharedSpiller_->Get(key);
+    }
+
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Extract(TKey key) override {
+        return SharedSpiller_->Extract(key);
+    }
+
+    NThreading::TFuture<void> Delete(TKey key) override {
+        return SharedSpiller_->Delete(key);
+    }
+
+private:
+    const ui64 ChannelId_;
+    NKikimr::NMiniKQL::ISpiller::TPtr SharedSpiller_;
+    TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters_;
+};
+
+NKikimr::NMiniKQL::ISpiller::TPtr CreateDqChannelSpiller(ui64 channelId,
+    NKikimr::NMiniKQL::ISpiller::TPtr sharedSpiller,
+    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters)
+{
+    return std::make_shared<TDqChannelSpiller>(channelId, sharedSpiller, spillingTaskCounters);
+}
+
 } // namespace NYql::NDq

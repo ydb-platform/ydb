@@ -185,3 +185,157 @@ Y_UNIT_TEST(TestSharedSpillerEfficiency) {
 }
 
 } // Y_UNIT_TEST_SUITE(SharedSpillerChannelStorageTests)
+
+Y_UNIT_TEST_SUITE(DqChannelSpillerTests) {
+
+Y_UNIT_TEST(TestChannelSpillerBasicOperations) {
+    auto sharedSpiller = CreateMockSpiller();
+    auto spillingCounters = MakeIntrusive<TSpillingTaskCounters>();
+    
+    auto channelSpiller = CreateDqChannelSpiller(1, sharedSpiller, spillingCounters);
+    
+    // Test Put operation
+    NYql::TChunkedBuffer blob;
+    blob.Append("test data for spiller", 21);
+    
+    auto putFuture = channelSpiller->Put(std::move(blob));
+    UNIT_ASSERT(putFuture.HasValue());
+    
+    auto key = putFuture.GetValue();
+    
+    // Test Get operation
+    auto getFuture = channelSpiller->Get(key);
+    UNIT_ASSERT(getFuture.HasValue());
+    
+    auto result = getFuture.GetValue();
+    UNIT_ASSERT(result.has_value());
+    
+    // Convert back to string for verification
+    TString resultStr;
+    for (const auto& chunk : result->Chunks()) {
+        resultStr += TString(chunk.data(), chunk.size());
+    }
+    UNIT_ASSERT_STRINGS_EQUAL(resultStr, "test data for spiller");
+}
+
+Y_UNIT_TEST(TestChannelSpillerCounters) {
+    auto sharedSpiller = CreateMockSpiller();
+    auto spillingCounters = MakeIntrusive<TSpillingTaskCounters>();
+    
+    auto channelSpiller = CreateDqChannelSpiller(1, sharedSpiller, spillingCounters);
+    
+    // Initial counter should be zero
+    UNIT_ASSERT_VALUES_EQUAL(spillingCounters->ChannelWriteBytes.load(), 0);
+    
+    NYql::TChunkedBuffer blob;
+    const char* testData = "counter test data for spiller";
+    size_t testDataSize = strlen(testData);
+    blob.Append(testData, testDataSize);
+    
+    auto putFuture = channelSpiller->Put(std::move(blob));
+    UNIT_ASSERT(putFuture.HasValue());
+    
+    // Counter should be updated
+    UNIT_ASSERT_VALUES_EQUAL(spillingCounters->ChannelWriteBytes.load(), testDataSize);
+}
+
+Y_UNIT_TEST(TestMultipleChannelSpillersSharedSpiller) {
+    auto sharedSpiller = std::static_pointer_cast<TMockSpiller>(CreateMockSpiller());
+    auto spillingCounters = MakeIntrusive<TSpillingTaskCounters>();
+    
+    // Create multiple channel spillers using the same shared spiller
+    auto spiller1 = CreateDqChannelSpiller(1, sharedSpiller, spillingCounters);
+    auto spiller2 = CreateDqChannelSpiller(2, sharedSpiller, spillingCounters);
+    auto spiller3 = CreateDqChannelSpiller(3, sharedSpiller, spillingCounters);
+    
+    // Put data through different channel spillers
+    std::vector<NKikimr::NMiniKQL::ISpiller::TKey> keys;
+    
+    for (ui64 i = 1; i <= 3; ++i) {
+        auto spiller = (i == 1) ? spiller1 : (i == 2) ? spiller2 : spiller3;
+        
+        NYql::TChunkedBuffer blob;
+        TString data = TStringBuilder() << "data from channel spiller " << i;
+        blob.Append(data.data(), data.size());
+        
+        auto putFuture = spiller->Put(std::move(blob));
+        UNIT_ASSERT(putFuture.HasValue());
+        keys.push_back(putFuture.GetValue());
+    }
+    
+    // Verify that all data went to the same shared spiller
+    const auto& putSizes = sharedSpiller->GetPutSizes();
+    UNIT_ASSERT_VALUES_EQUAL(putSizes.size(), 3);
+    
+    // Get data back using different spillers
+    for (ui64 i = 0; i < 3; ++i) {
+        auto spiller = (i == 0) ? spiller1 : (i == 1) ? spiller2 : spiller3;
+        
+        auto getFuture = spiller->Get(keys[i]);
+        UNIT_ASSERT(getFuture.HasValue());
+        
+        auto result = getFuture.GetValue();
+        UNIT_ASSERT(result.has_value());
+        
+        TString resultStr;
+        for (const auto& chunk : result->Chunks()) {
+            resultStr += TString(chunk.data(), chunk.size());
+        }
+        
+        TString expectedData = TStringBuilder() << "data from channel spiller " << (i + 1);
+        UNIT_ASSERT_STRINGS_EQUAL(resultStr, expectedData);
+    }
+}
+
+Y_UNIT_TEST(TestChannelSpillerExtractAndDelete) {
+    auto sharedSpiller = CreateMockSpiller();
+    auto spillingCounters = MakeIntrusive<TSpillingTaskCounters>();
+    
+    auto channelSpiller = CreateDqChannelSpiller(1, sharedSpiller, spillingCounters);
+    
+    // Put data
+    NYql::TChunkedBuffer blob;
+    blob.Append("extract test data", 17);
+    
+    auto putFuture = channelSpiller->Put(std::move(blob));
+    UNIT_ASSERT(putFuture.HasValue());
+    auto key = putFuture.GetValue();
+    
+    // Test Extract (should remove data after reading)
+    auto extractFuture = channelSpiller->Extract(key);
+    UNIT_ASSERT(extractFuture.HasValue());
+    
+    auto result = extractFuture.GetValue();
+    UNIT_ASSERT(result.has_value());
+    
+    TString resultStr;
+    for (const auto& chunk : result->Chunks()) {
+        resultStr += TString(chunk.data(), chunk.size());
+    }
+    UNIT_ASSERT_STRINGS_EQUAL(resultStr, "extract test data");
+    
+    // Data should no longer be available
+    auto getFuture = channelSpiller->Get(key);
+    UNIT_ASSERT(getFuture.HasValue());
+    auto getResult = getFuture.GetValue();
+    UNIT_ASSERT(!getResult.has_value());
+    
+    // Test Delete operation
+    NYql::TChunkedBuffer blob2;
+    blob2.Append("delete test data", 16);
+    
+    auto putFuture2 = channelSpiller->Put(std::move(blob2));
+    UNIT_ASSERT(putFuture2.HasValue());
+    auto key2 = putFuture2.GetValue();
+    
+    auto deleteFuture = channelSpiller->Delete(key2);
+    UNIT_ASSERT(deleteFuture.HasValue());
+    
+    // Data should be deleted
+    auto getFuture2 = channelSpiller->Get(key2);
+    UNIT_ASSERT(getFuture2.HasValue());
+    auto getResult2 = getFuture2.GetValue();
+    UNIT_ASSERT(!getResult2.has_value());
+}
+
+} // Y_UNIT_TEST_SUITE(DqChannelSpillerTests)

@@ -75,6 +75,5 @@ class TestOrderBy(object):
         )
 
         keys = [row['id'] for result_set in result_sets for row in result_set.rows]
-        # TODO: fix me
-        # assert keys == [i for i in range(10)], keys
-        assert keys != [i for i in range(10)], keys
+
+        assert keys == [i for i in range(10)], keys

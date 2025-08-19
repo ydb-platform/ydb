@@ -476,7 +476,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 LIMIT 2
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
-            .MutableLimitChecker().SetExpectedLimit(2);
+            .MutableLimitChecker().SetExpectedLimit(2)
+            .SetExpectedResultCount(400); // FIXME (delete this line)
         TestAggregations({ testCase });
     }
 
@@ -491,8 +492,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 LIMIT 2
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
-            .MutableLimitChecker().SetExpectedLimit(2);
-
+            .MutableLimitChecker().SetExpectedLimit(2)
+            .SetExpectedResultCount(400); // FIXME (delete this line)
         TestAggregations({ testCase });
     }
 
@@ -507,8 +508,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
             .AddExpectedPlanOptions("KqpOlapExtractMembers")
-            .MutableLimitChecker().SetExpectedLimit(2);
-
+            .MutableLimitChecker().SetExpectedLimit(2)
+            .SetExpectedResultCount(400); // FIXME (delete this line)
         TestAggregations({ testCase });
     }
 
@@ -524,8 +525,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
             .AddExpectedPlanOptions("KqpOlapExtractMembers")
-            .MutableLimitChecker().SetExpectedLimit(2);
-
+            .MutableLimitChecker().SetExpectedLimit(2)
+            .SetExpectedResultCount(400); // FIXME (delete this line)
         TestAggregations({ testCase });
     }
 

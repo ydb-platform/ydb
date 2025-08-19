@@ -173,6 +173,9 @@ private:
             RuntimeError("Index settings are required", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
+        if (EmptyIndex) {
+            LevelsFinished = true;
+        }
         while (!LevelsFinished) {
             if (!LevelClusters.size()) {
                 LevelClusters.clear();
@@ -369,16 +372,17 @@ private:
             RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
+        if (!ReadingChildClustersOf && !FetchedClusters.size()) {
+            // Index is empty
+            EmptyIndex = true;
+            ContinueResolveClusters();
+            return;
+        }
         TVector<ui64> clusterIds;
         TVector<TString> clusterRows;
         for (auto & pp: FetchedClusters) {
             clusterIds.push_back(pp.first);
             clusterRows.push_back(std::move(pp.second));
-        }
-        if (!ReadingChildClustersOf && !clusterRows.size()) {
-            // Index is empty
-            RuntimeError("Updating an empty vector index is not supported yet", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
-            return;
         }
         if (!clusters->SetClusters(std::move(clusterRows))) {
             // Clusters are invalid for some reason
@@ -399,6 +403,11 @@ private:
 
     i64 ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) {
         auto guard = BindAllocator();
+
+        if (EmptyIndex) {
+            PendingRows.clear();
+            return 0;
+        }
 
         i64 totalSize = 0;
 
@@ -526,6 +535,7 @@ private:
     TSet<NTableIndex::TClusterId> LevelClusters;
     std::unique_ptr<NKikimr::NKMeans::IClusters> RootClusters;
     TVector<NTableIndex::TClusterId> RootClusterIds;
+    bool EmptyIndex = false;
     std::unique_ptr<NKikimr::NKMeans::IClusters> CurClusters;
     TVector<NTableIndex::TClusterId> CurClusterIds;
 

@@ -18,6 +18,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    schemeshard_build_index_helpers_ut.cpp
     ut_index_build.cpp
     ut_vector_index_build.cpp
 )

@@ -1277,7 +1277,7 @@ private:
         }
     }
 
-    bool PerformCrossShardIndexValidation(TIndexBuildInfo& buildInfo, TString& errorDesc) const {
+    bool PerformCrossShardUniqIndexValidation(TIndexBuildInfo& buildInfo, TString& errorDesc) const {
         if (buildInfo.Shards.size() == 1) {
             return true;
         }
@@ -1303,45 +1303,19 @@ private:
         }
 
         // Arrange shards in ascending order by shard index
-        using TShardsType = TMap<TShardIdx, TIndexBuildInfo::TShardStatus>;
-        std::vector<TShardsType::const_iterator> sortedIndexShards;
-        sortedIndexShards.reserve(buildInfo.Shards.size());
+        std::vector<const TSerializedTableRange*> sortedRanges;
+        sortedRanges.reserve(buildInfo.Shards.size());
         Y_ENSURE(buildInfo.Shards.size() == table->GetPartitions().size());
         for (const auto& x: table->GetPartitions()) {
             auto it = buildInfo.Shards.find(x.ShardIdx);
             Y_ENSURE(it != buildInfo.Shards.end());
-            sortedIndexShards.emplace_back(it);
+            Y_ENSURE(it->second.Status == NKikimrIndexBuilder::EBuildStatus::DONE);
+            sortedRanges.emplace_back(&it->second.Range);
         }
 
-        // Compare index shards edge keys
-        const TSerializedCellVec* prevLastKey = nullptr;
-        for (TShardsType::const_iterator it : sortedIndexShards) {
-            const TIndexBuildInfo::TShardStatus& status = it->second;
-            Y_ENSURE(status.Status == NKikimrIndexBuilder::EBuildStatus::DONE);
-            if (status.Range.From) {
-                if (prevLastKey) {
-                    Y_ENSURE(status.Range.From.GetCells().size() == indexColumnTypeInfos.size());
-                    if (TypedCellVectorsEqualWithNullSemantics(status.Range.From.GetCells().data(), prevLastKey->GetCells().data(), indexColumnTypeInfos.data(), indexColumnTypeInfos.size()) == ETriBool::True) {
-                        TStringBuilder err;
-                        err << "Duplicate key found: (";
-                        for (size_t i = 0; i < buildInfo.IndexColumns.size(); ++i) {
-                            if (i > 0) {
-                                err << ", ";
-                            }
-                            err << buildInfo.IndexColumns[i] << "=";
-                            DbgPrintValue(err, status.Range.From.GetCells()[i], indexColumnTypeInfos[i].ToTypeInfo());
-                        }
-                        err << ")";
-                        errorDesc = std::move(err);
-                        LOG_E("Cross shard index validation failed. Found duplicate key. Cancelling unique index build");
-                        return false;
-                    }
-                }
-            }
-            if (status.Range.To) {
-                prevLastKey = &status.Range.To;
-                Y_ENSURE(prevLastKey->GetCells().size() == indexColumnTypeInfos.size());
-            }
+        if (!NSchemeShard::PerformCrossShardUniqIndexValidation(indexColumnTypeInfos, buildInfo.IndexColumns, sortedRanges, errorDesc)) {
+            LOG_E("TTxBuildProgress: Cross shard index validation failed. " << errorDesc << ". Cancelling unique index build");
+            return false;
         }
         return true;
     }
@@ -1433,7 +1407,7 @@ public:
                     finalState = false;
                 } else if (buildInfo.IsValidatingUniqueIndex()) {
                     TString errorDesc;
-                    if (!PerformCrossShardIndexValidation(buildInfo, errorDesc)) {
+                    if (!PerformCrossShardUniqIndexValidation(buildInfo, errorDesc)) {
                         NIceDb::TNiceDb db(txc.DB);
                         Self->PersistBuildIndexAddIssue(db, buildInfo, errorDesc);
                         nextState = TIndexBuildInfo::EState::Rejection_Applying;

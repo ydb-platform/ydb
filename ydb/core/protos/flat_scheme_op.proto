@@ -1843,7 +1843,7 @@ message TModifyScheme {
     
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
-    optional TStreamingQueryDescription CreateStreamingQuery = 86;
+    optional TStreamingQueryDescription CreateStreamingQuery = 87;
 
     // Some entries are grouped by semantics, so are out of order
 }

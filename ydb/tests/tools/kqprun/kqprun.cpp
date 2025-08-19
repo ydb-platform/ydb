@@ -32,6 +32,9 @@ namespace NKqpRun {
 namespace {
 
 struct TExecutionOptions {
+    inline static constexpr char LOOP_ID_TEMPLATE[] = "${LOOP_ID}";
+    inline static constexpr char QUERY_ID_TEMPLATE[] = "${QUERY_ID}";
+
     enum class EExecutionCase {
         GenericScript,
         GenericQuery,
@@ -43,6 +46,7 @@ struct TExecutionOptions {
     TString SchemeQuery;
     std::unordered_map<TString, Ydb::TypedValue> Params;
     bool UseTemplates = false;
+    bool RunAsDeamon = false;
 
     ui32 LoopCount = 1;
     TDuration QueryDelay;
@@ -108,8 +112,8 @@ struct TExecutionOptions {
 
         TString sql = ScriptQueries[index];
         if (UseTemplates) {
-            SubstGlobal(sql, "${LOOP_ID}", ToString(loopId));
-            SubstGlobal(sql, "${QUERY_ID}", ToString(queryId));
+            SubstGlobal(sql, LOOP_ID_TEMPLATE, ToString(loopId));
+            SubstGlobal(sql, QUERY_ID_TEMPLATE, ToString(queryId));
         }
 
         return {
@@ -127,7 +131,7 @@ struct TExecutionOptions {
     }
 
     void Validate(const TRunnerOptions& runnerOptions) const {
-        if (!SchemeQuery && ScriptQueries.empty() && !runnerOptions.YdbSettings.MonitoringEnabled && !runnerOptions.YdbSettings.GrpcEnabled) {
+        if (!SchemeQuery && ScriptQueries.empty() && !runnerOptions.YdbSettings.MonitoringEnabled && !runnerOptions.YdbSettings.GrpcEnabled && !RunAsDeamon) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
 
@@ -403,7 +407,8 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
         }
     }
 
-    if (runnerOptions.YdbSettings.MonitoringEnabled || runnerOptions.YdbSettings.GrpcEnabled) {
+    if (executionOptions.RunAsDeamon ||
+        ((runnerOptions.YdbSettings.MonitoringEnabled || runnerOptions.YdbSettings.GrpcEnabled) && executionOptions.ScriptQueries.empty() && !executionOptions.SchemeQuery)) {
         RunAsDaemon();
     }
 
@@ -413,8 +418,6 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
 
 class TMain : public TMainBase {
     using EVerbose = TYdbSetupSettings::EVerbose;
-
-    inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
 
     TDuration PingPeriod;
     TExecutionOptions ExecutionOptions;
@@ -455,7 +458,7 @@ protected:
             .RequiredArgument("str")
             .AppendTo(&ExecutionOptions.ScriptQueries);
 
-        options.AddLongOption("templates", "Enable templates for -s and -p queries, such as ${YQL_TOKEN} and ${QUERY_ID}")
+        options.AddLongOption("templates", TStringBuilder() << "Enable templates for -s and -p queries, such as ${" << YQL_TOKEN_VARIABLE << "}, " << TExecutionOptions::QUERY_ID_TEMPLATE << " and " << TExecutionOptions::LOOP_ID_TEMPLATE)
             .NoArgument()
             .SetFlag(&ExecutionOptions.UseTemplates);
 
@@ -888,6 +891,10 @@ protected:
             .NoArgument()
             .SetFlag(&RunnerOptions.YdbSettings.DisableDiskMock);
 
+        options.AddLongOption("hold", "Hold kqprun process after finishing all -s and -p queries")
+            .NoArgument()
+            .SetFlag(&ExecutionOptions.RunAsDeamon);
+
         RegisterKikimrOptions(options, RunnerOptions.YdbSettings);
     }
 
@@ -966,12 +973,7 @@ private:
             SubstGlobal(sql, TStringBuilder() << "${" << variable <<"}", value);
         }
         if (ExecutionOptions.UseTemplates) {
-            const TString tokenVariableName = TStringBuilder() << "${" << YQL_TOKEN_VARIABLE << "}";
-            if (const TString& yqlToken = GetEnv(YQL_TOKEN_VARIABLE)) {
-                SubstGlobal(sql, tokenVariableName, yqlToken);
-            } else if (sql.Contains(tokenVariableName)) {
-                ythrow yexception() << "Failed to replace ${YQL_TOKEN} template, please specify YQL_TOKEN environment variable";
-            }
+            ReplaceYqlTokenTemplate(sql);
         }
     }
 

@@ -43,6 +43,18 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class F, class... As>
+auto RunFutureHandler(F&& functor, As&&... args) noexcept -> decltype(functor(std::forward<As>(args)...))
+{
+#ifndef NDEBUG
+    std::optional<NConcurrency::TForbidContextSwitchGuard> guard;
+    if (IsContextSwitchInFutureHandlerForbidden()) {
+        guard.emplace();
+    }
+#endif
+    return functor(std::forward<As>(args)...);
+}
+
 inline TError WrapIntoCancelationError(const TError& error)
 {
     return TError(NYT::EErrorCode::Canceled, "Operation canceled")
@@ -126,7 +138,7 @@ public:
     {
         for (const auto& callback : Callbacks_) {
             if (callback) {
-                RunNoExcept(callback, std::forward<As>(args)...);
+                RunFutureHandler(callback, std::forward<As>(args)...);
             }
         }
         Callbacks_.clear();
@@ -396,7 +408,7 @@ protected:
             } else if (Set_) {
                 return false;
             }
-            RunNoExcept(setter);
+            RunFutureHandler(setter);
             Set_ = true;
             canceled = Canceled_;
             readyEvent = ReadyEvent_.get();
@@ -481,7 +493,7 @@ private:
         }
 
         if (UniqueResultHandler_) {
-            RunNoExcept(UniqueResultHandler_, GetUniqueResult());
+            RunFutureHandler(UniqueResultHandler_, GetUniqueResult());
             UniqueResultHandler_ = {};
         }
 
@@ -626,7 +638,7 @@ public:
     {
         // Fast path.
         if (Set_) {
-            RunNoExcept(handler, GetResult());
+            RunFutureHandler(handler, GetResult());
             return NullFutureCallbackCookie;
         }
 
@@ -636,7 +648,7 @@ public:
             InstallAbandonedError();
             if (Set_) {
                 guard.Release();
-                RunNoExcept(handler, GetResult());
+                RunFutureHandler(handler, GetResult());
                 return NullFutureCallbackCookie;
             } else {
                 HasHandlers_ = true;
@@ -649,7 +661,7 @@ public:
     {
         // Fast path.
         if (Set_) {
-            RunNoExcept(handler, GetUniqueResult());
+            RunFutureHandler(handler, GetUniqueResult());
             return;
         }
 
@@ -659,7 +671,7 @@ public:
             InstallAbandonedError();
             if (Set_) {
                 guard.Release();
-                RunNoExcept(handler, GetUniqueResult());
+                RunFutureHandler(handler, GetUniqueResult());
             } else {
                 YT_ASSERT(!UniqueResultHandler_);
                 YT_ASSERT(ResultHandlers_.IsEmpty());

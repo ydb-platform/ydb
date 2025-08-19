@@ -6,6 +6,7 @@
 #include <library/cpp/getopt/modchooser.h>
 
 #include <util/stream/file.h>
+#include <util/system/env.h>
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/log_iface.h>
@@ -32,9 +33,12 @@ protected:
 
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry() const;
 
+    void ReplaceYqlTokenTemplate(TString& text) const;
+
 protected:
     inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
     inline static IOutputStream* ProfileAllocationsOutput = nullptr;
+    inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
 
     std::optional<NActors::NLog::EPriority> DefaultLogPriority;
     std::unordered_map<NKikimrServices::EServiceKikimr, NActors::NLog::EPriority> LogPriorities;

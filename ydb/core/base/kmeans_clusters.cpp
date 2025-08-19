@@ -37,7 +37,7 @@ Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rh
 template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
-    using TSum = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, i64>;
+    using TSum = std::conditional_t<std::is_floating_point_v<TCoord>, double, i64>;
 };
 
 template <typename TCoord>

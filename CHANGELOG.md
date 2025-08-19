@@ -53,7 +53,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19994:Added memory limits for column-oriented tables to the [Memory Controller](https://ydb.tech/docs/en/reference/configuration/#memory-controller) configuration. [#19994](https://github.com/ydb-platform/ydb/pull/19994) ([Vladilen](https://github.com/Vladilen))
 * 19678:Added support for [idempotent producers](https://cwiki.apache.org/confluence/display/KAFKA/Idempotent+Producer) to the YDB implementation of the Apache Kafka protocol. [#19678](https://github.com/ydb-platform/ydb/pull/19678) ([qyryq](https://github.com/qyryq))
 * 19444:Introduced a new UnorderedData protocol for full synchronization, which allows taking a full index snapshot only once per full sync session. The new protocol will be used to send DoNotKeep flags from Phantom Flag Storage, which will be sent without relying on the linear order. For now the new protocol is disabled by default. [#19444](https://github.com/ydb-platform/ydb/pull/19444) ([Sergey Belyakov](https://github.com/serbel324))
-* 19337:* Introduced two new Distributed Storage parameters — `GroupSizeInUnits` property of storage groups and `SlotSizeInUnits` of PDisks. Docs: #19364 [#19337](https://github.com/ydb-platform/ydb/pull/19337) ([Yaroslav Dynnikov](https://github.com/rosik))
+* 19337:Introduced two new Distributed Storage parameters — `GroupSizeInUnits` property of storage groups and `SlotSizeInUnits` of PDisks. Docs: #19364 [#19337](https://github.com/ydb-platform/ydb/pull/19337) ([Yaroslav Dynnikov](https://github.com/rosik))
 * 18955:Added a new external data source to YDB topics. [#18955](https://github.com/ydb-platform/ydb/pull/18955) ([Dmitry Kardymon](https://github.com/kardymonds))
 * 18544:Added shared metadata cache. Now all column shards on the same node share the same metadata cache by default. To disable the shared metadata cache, use the `EnableSharedMetadataAccessorCache` flag. The default cache size is 1 GB, this value can be changed in the `SharedMetadataAccessorCacheSize` parameter. [#18544](https://github.com/ydb-platform/ydb/pull/18544) ([Iurii Kravchenko](https://github.com/XJIE6))
 * 19680:Implemented the select load type for the vector workload test. [#19680](https://github.com/ydb-platform/ydb/pull/19680) ([azevaykin](https://github.com/azevaykin))
@@ -64,6 +64,12 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 21183:Added audit log events for [YMQ](https://yandex.cloud/ru/services/message-queue) events. [#21183](https://github.com/ydb-platform/ydb/pull/21183) ([flown4qqqq](https://github.com/flown4qqqq))
 * 21010:Added more attributes to DSProxy and VDisk [spans](https://ydb.tech/docs/ru/reference/observability/tracing/setup) to make it easier to find them in the metrics explorer. [#21010](https://github.com/ydb-platform/ydb/pull/21010) ([Sergey Belyakov](https://github.com/serbel324))
 * 19684:Added a command to dstool to move pdisk from one node to another, if both nodes have access to the underlying drive. This way we can skip data synchronization, since new disk will just use data of the "old" disk [#19684](https://github.com/ydb-platform/ydb/pull/19684) ([Semyon Danilov](https://github.com/SammyVimes))
+* 21448:Added support for a user-defined Certificate Authority (CA) in asynchronous replication. [#21448](https://github.com/ydb-platform/ydb/pull/21448) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 21420:Topics are now created with the number of partitions equal to datashards/16 instead of 1 partition. This improves table replication speed by avoiding delays from autopartitioning. [#21420](https://github.com/ydb-platform/ydb/pull/21420) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 21391:Implemented an optimized HashV2 hash function that improves data distribution and enhances query execution performance. This mode is enabled by setting the `table_service_config: default_hash_shuffle_func_type: HASH_V2` parameter in the cluster configuration. [#21391](https://github.com/ydb-platform/ydb/pull/21391) ([Ivan](https://github.com/abyss7))
+* 20303:Add `--iam-token-file` argument to ydb-dstool. [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
+* 22511:Added the ICB control to change ReadRequestsInFlightLimit via changing dynconfig. [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
+* 21997:Enabled the new compute scheduler based on the HDRF model. [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
 
 ### Bug fixes
 
@@ -123,15 +129,15 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20785:Fixed a [data race](https://github.com/ydb-platform/ydb/issues/20741) in Jaeger settings configurator. [#20785](https://github.com/ydb-platform/ydb/pull/20785) ([Sergey Belyakov](https://github.com/serbel324))
 * 20670:Resolved the issue with DDL errors for external sources and added more information to the `ALTER TABLE ... RENAME TO` error. [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20519:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20520) that caused VDisk to freeze in infinite local recovery mode when a ChunkRead request failed. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status. [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
+* 22298:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20812) where attach streams remained active after session shutdown, causing unexpected BadSession errors. [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
 
 ### YDB UI
 
 * 17942:Changed authentication mechanisms for `whoami` and `capabilities` handlers in the viewer. [#17942](https://github.com/ydb-platform/ydb/pull/17942) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 18056:Fixed an [issue](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164) to keep precision of double values on serialization. [#18056](https://github.com/ydb-platform/ydb/pull/18056) ([Alexey Efimov](https://github.com/adameat))
 * 20432:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20431) with the pdisk info timeout when target node is disconnected or dead. [#20432](https://github.com/ydb-platform/ydb/pull/20432) ([Alexey Efimov](https://github.com/adameat))
-* 17157: Fixed the retrieval of tablet lists for tables with secondary indexes in the Viewer API. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
+* 17157:Fixed the retrieval of tablet lists for tables with secondary indexes in the Viewer API. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 * 20929:Fixed [data doubling](https://github.com/ydb-platform/ydb/issues/20116) on memory reallocation when processing an incoming chunk. [#20929](https://github.com/ydb-platform/ydb/pull/20929) ([Alexey Efimov](https://github.com/adameat))
-* 17157:Viewer API: Fixed an [issue](https://github.com/ydb-platform/ydb/issues/17103) with retrieval of tablet list for tables implementing secondary indexes. [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 
 ### Performance
 
@@ -147,3 +153,6 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20048:Improved performance of upsert operations for tables with defaults. Upsert operations now ignore the last DefaulFilledColumnsCnt columns if a row exist. This logic allows QP to avoid reading rows to check if it exists (the whole operation with default columns is processed at a shard). [#20048](https://github.com/ydb-platform/ydb/pull/20048) ([r314-git](https://github.com/r314-git))
 * 19724:Added the `buffer_page_alloc_size` configuration parameter with the default value of 4Kb. [#19724](https://github.com/ydb-platform/ydb/pull/19724) ([Ivan](https://github.com/abyss7))
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
+* 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
+* 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+

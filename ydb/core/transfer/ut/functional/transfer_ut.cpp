@@ -620,6 +620,46 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    Y_UNIT_TEST(PausedAfterError)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return $x._unknown_field_for_lambda_compilation_error;
+                };
+            )");
+
+        testCase.CheckTransferStateError("_unknown_field_for_lambda_compilation_error");
+
+        {
+           auto result = testCase.DescribeReplication(testCase.TransferName);
+           UNIT_ASSERT_VALUES_EQUAL(result.GetReplicationDescription().GetState(), TReplicationDescription::EState::Error);
+        }
+
+        testCase.PauseTransfer();
+        testCase.CheckTransferState(TTransferDescription::EState::Paused);
+
+        {
+            auto result = testCase.DescribeReplication(testCase.TransferName);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReplicationDescription().GetState(), TReplicationDescription::EState::Paused);
+        }
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
     Y_UNIT_TEST(DescribeTransferWithErrorTopicNotFound)
     {
         MainTestCase testCase;

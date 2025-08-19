@@ -7,21 +7,19 @@
 
 #include <util/system/types.h>
 
-namespace NYT::NThreading::NPrivate {
+namespace NYT::NThreading {
+
+////////////////////////////////////////////////////////////////////////////////
 
 #ifndef NDEBUG
 
-////////////////////////////////////////////////////////////////////////////////
+namespace NDetail {
 
 YT_DEFINE_THREAD_LOCAL(i64, ActiveSpinLockCount, 0);
 
-////////////////////////////////////////////////////////////////////////////////
-
-void RecordSpinLockAcquired(bool isAcquired)
+void RecordSpinLockAcquired()
 {
-    if (isAcquired) {
-        ActiveSpinLockCount()++;
-    }
+    ActiveSpinLockCount()++;
 }
 
 void RecordSpinLockReleased()
@@ -30,14 +28,21 @@ void RecordSpinLockReleased()
     ActiveSpinLockCount()--;
 }
 
+} // namespace NDetail
+
+int GetActiveSpinLockCount()
+{
+    return NDetail::ActiveSpinLockCount();
+}
+
 void VerifyNoSpinLockAffinity()
 {
-    YT_VERIFY(ActiveSpinLockCount() == 0);
+    YT_VERIFY(NDetail::ActiveSpinLockCount() == 0);
 }
 
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NThreading::NPrivate
+} // namespace NYT::NThreading
 

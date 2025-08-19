@@ -696,8 +696,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         bool optUpsert = true;
         for (const auto& column : indexDesc->DataColumns) {
             // TODO: Consider not fetching/updating data columns without input value.
-            YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
-            indexTableColumns.emplace_back(column);
+            if (indexTableColumnsSet.emplace(column).second) {
+                indexTableColumns.emplace_back(column);
+            }
 
             if (inputColumnsSet.contains(column)) {
                 indexDataColumnsUpdated = true;
@@ -870,7 +871,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
             if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
                 deleteIndexKeys = BuildVectorIndexPostingRows(table, mainTableNode,
-                    indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, pos, ctx);
+                    indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
             }
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
@@ -897,7 +898,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
             if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
                 upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
-                    indexDesc->Name, indexTableColumns, upsertIndexRows, pos, ctx);
+                    indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
                 indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
             }
 

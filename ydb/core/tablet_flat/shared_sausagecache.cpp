@@ -23,6 +23,10 @@ namespace NKikimr::NSharedCache {
 
 using namespace NTabletFlatExecutor;
 
+::NFormatPrivate::THumanReadableSize HumanReadableBytes(ui64 bytes) {
+    return HumanReadableSize(bytes, SF_BYTES);
+}
+
 struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TRequest> {
     bool IsResponded() const {
         return !Sender;
@@ -89,20 +93,19 @@ struct TPageTraits {
     }
 
     static ES3FIFOPageLocation GetLocation(const TPage* page) {
-        return page->S3FIFOLocation;
+        return page->Location;
     }
 
     static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
-        page->S3FIFOLocation = location;
+        page->Location = location;
     }
 
     static ui32 GetFrequency(const TPage* page) {
-        return page->S3FIFOFrequency;
+        return page->GetFrequency();
     }
 
     static void SetFrequency(TPage* page, ui32 frequency) {
-        Y_ENSURE(frequency < (1 << 4));
-        page->S3FIFOFrequency = frequency;
+        page->SetFrequency(frequency);
     }
 
     static ui32 GetTier(TPage* page) {
@@ -131,8 +134,6 @@ static bool DoTraceLog() {
 class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     using ELnLev = NUtil::ELnLev;
 
-    static const ui64 DO_GC_TAG = 1;
-
     static const ui64 NO_QUEUE_COOKIE = 1;
     static const ui64 ASYNC_QUEUE_COOKIE = 2;
     static const ui64 SCAN_QUEUE_COOKIE = 3;
@@ -154,8 +155,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     ui64 StatActiveBytes = 0;
     ui64 StatPassiveBytes = 0;
     ui64 StatLoadInFlyBytes = 0;
-
-    bool GCScheduled = false;
 
     ui64 MemLimitBytes = 0;
     ui64 TryKeepInMemoryBytes = 0;
@@ -189,13 +188,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         while (GetStatAllBytes() > MemLimitBytes
             || GetStatAllBytes() > (Config.HasMemoryLimit() ? Config.GetMemoryLimit() : Max<ui64>()) && StatActiveBytes > configActiveReservedBytes)
         {
-            TIntrusiveList<TPage> pages = Cache.EvictNext();
-            if (pages.Empty()) {
+            if (TPage* evictedPage = Cache.EvictNext()) {
+                EvictNow(evictedPage, recheck);
+            } else {
                 break;
-            }
-            while (!pages.Empty()) {
-                TPage* page = pages.PopFront();
-                EvictNow(page, recheck);
             }
         }
         if (recheck) {
@@ -205,6 +201,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (MemoryConsumer) {
             MemoryConsumer->SetConsumption(GetStatAllBytes());
         }
+
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "GC has finished with"
+            << " Limit: " << HumanReadableBytes(Cache.GetLimit())
+            << " Active: " << HumanReadableBytes(StatActiveBytes)
+            << " Passive: " << HumanReadableBytes(StatPassiveBytes)
+            << " LoadInFly: " << HumanReadableBytes(StatLoadInFlyBytes)
+        );
     }
 
     void Handle(NMemory::TEvConsumerRegistered::TPtr &ev, const TActorContext& ctx) {
@@ -218,14 +221,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto *msg = ev->Get();
 
         LOG_INFO_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Limit memory consumer"
-            << " with " << HumanReadableSize(msg->LimitBytes, SF_BYTES));
+            << " with " << HumanReadableBytes(msg->LimitBytes));
 
         MemLimitBytes = msg->LimitBytes;
         Counters.MemLimitBytes->Set(MemLimitBytes);
 
         ActualizeCacheSizeLimit();
-
-        DoGC();
     }
 
     void Registered(TActorSystem *sys, const TActorId &owner) {
@@ -284,8 +285,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             TryMoveToTryKeepInMemoryCache(collection, std::move(msg->PageCollection), ev->Sender);
             break;
         }
-
-        DoGC();
     }
 
     void Handle(NSharedCache::TEvSaveCompactedPages::TPtr &ev, const TActorContext& ctx) {
@@ -309,10 +308,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             page->Collection = &collection;
             BodyProvided(collection, page.Get());
-            Evict(Cache.Touch(page.Get()));
+            Evict(Cache.Insert(page.Get()));
         }
-
-        DoGC();
     }
 
     void Handle(NSharedCache::TEvRequest::TPtr &ev, const TActorContext& ctx) {
@@ -360,7 +357,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (doTraceLog) {
                     pagesFromCacheTraceLog.push_back(pageId);
                 }
-                Evict(Cache.Touch(page));
+                Touch(page);
                 break;
             case PageStateNo:
                 ++pagesToRequestCount;
@@ -470,8 +467,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 << " from cache " << msg->Pages);
             SendResult(*request);
         }
-
-        DoGC();
     }
 
     void RequestFromQueue(TRequestQueue &queue) {
@@ -629,10 +624,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 case PageStatePending:
                     break;
                 case PageStateLoaded:
-                    Evict(Cache.Touch(page));
+                    Touch(page);
                     break;
                 default:
-                    Y_TABLET_ERROR("unknown load state");
+                    Y_TABLET_ERROR("unknown page state " << page->State);
                 }
             }
         }
@@ -640,8 +635,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (droppedPages) {
             SendDroppedPages(ev->Sender, std::move(droppedPages));
         }
-
-        DoGC();
     }
 
     void Handle(NSharedCache::TEvUnregister::TPtr &ev, const TActorContext& ctx) {
@@ -671,8 +664,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Remove owner " << ev->Sender);
         Owners.erase(ownerIt);
         Counters.Owners->Dec();
-
-        DoGC();
     }
 
     void Handle(NSharedCache::TEvDetach::TPtr &ev, const TActorContext& ctx) {
@@ -706,8 +697,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TryMoveToRegularCache(*collection, ev->Sender);
 
         TryDropExpiredCollection(*collection);
-
-        DoGC();
     }
 
     void Handle(NBlockIO::TEvData::TPtr &ev, const TActorContext& ctx) {
@@ -737,7 +726,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             if (queue) {
                 RequestFromQueue(*queue);
             }
-            DoGC();
             return;
         }
 
@@ -753,15 +741,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 page->ProvideBody(std::move(paged.Data));
                 BodyProvided(*collection, page);
-                Evict(Cache.Touch(page));
+                Evict(Cache.Insert(page));
             }
         }
 
         if (queue) {
             RequestFromQueue(*queue);
         }
-
-        DoGC();
     }
 
     TPage* EnsurePage(const NPageCollection::IPageCollection& pageCollection, TCollection& collection, const TPageId pageId, ECacheMode initialMode) {
@@ -785,6 +771,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             page->State = PageStateLoaded;
             RemovePassivePage(page);
             AddActivePage(page);
+            // WARN: Touch should be called after this to put a page into cache policy
+        }
+    }
+
+    void Touch(TPage* page) {
+        // TODO: touch and insert separately
+        if (page->Location == ES3FIFOPageLocation::None) {
+            Evict(Cache.Insert(page));
+        } else {
+            page->IncrementFrequency();
         }
     }
 
@@ -821,16 +817,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void Wakeup(TKikimrEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Wakeup " << ev->Get()->Tag);
+        auto tag = static_cast<EWakeupTag>(ev->Get()->Tag);
+        LOG_INFO_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Wakeup " << tag);
 
-        switch (ev->Get()->Tag) {
-        case DO_GC_TAG: {
-            GCScheduled = false;
-            ProcessGCList();
+        switch (tag) {
+        case EWakeupTag::DoGCScheduled:
+            ScheduleGC();
+            [[fallthrough]];
+        case EWakeupTag::DoGCManual:
+            // DoGC will be called at the end of StateFunc
             break;
-        }
-        default:
-            Y_TABLET_ERROR("Unknown wakeup tag: " << ev->Get()->Tag);
         }
     }
 
@@ -839,14 +835,18 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         while (auto rawPage = SharedCachePages->GCList->PopGC()) {
             auto* page = static_cast<TPage*>(rawPage.Get());
+            if (page->State == PageStateEvicted && page->GetFrequency() > 0) {
+                // page was accessed while being passive, load it back
+                TryLoadEvictedPage(page);
+                Touch(page);
+            }
+            // load evicted page may be evicted again
             TryDrop(page, recheck);
         }
 
         if (recheck) {
             CheckExpiredCollections(std::move(recheck));
         }
-
-        TryScheduleGC();
     }
 
     void TryDrop(TPage* page, THashSet<TCollection*>& recheck) {
@@ -870,11 +870,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void TryScheduleGC() {
-        if (!GCScheduled) {
-            TActivationContext::AsActorContext().Schedule(TDuration::Seconds(15), new TKikimrEvents::TEvWakeup(DO_GC_TAG));
-            GCScheduled = true;
-        }
+    void ScheduleGC() {
+        TActivationContext::AsActorContext().Schedule(TDuration::Seconds(15), new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCScheduled)));
     }
 
     void CheckExpiredCollections(THashSet<TCollection*> recheck) {
@@ -1100,7 +1097,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             switch (page->State) {
             case PageStateEvicted:
                 TryLoadEvictedPage(page);
-                Evict(Cache.Touch(page));
+                Touch(page);
                 break;
             case PageStateNo:
                 page->State = PageStateRequestedAsync;
@@ -1115,6 +1112,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             request.PageCollection = std::move(pageCollection);
             request.Sender = owner;
             request.Priority = NBlockIO::EPriority::Bulk;
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Request page collection " << request.PageCollection->Label()
+                << " owner " << owner
+                << " class " << request.Priority
+                << " pages " << pagesToRequest);
+
             // TODO: add some counters for these fetches?
             SendRequest(request, std::move(pagesToRequest), pagesToRequestBytes, nullptr);
         }
@@ -1127,7 +1130,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 Cache.Erase(page);
                 page->EnsureNoCacheFlags();
                 page->CacheMode = targetMode;
-                Evict(Cache.Touch(page));
+                Evict(Cache.Insert(page));
                 break;
             default:
                 page->CacheMode = targetMode;
@@ -1192,8 +1195,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
         ScanRequests.Limit = Config.GetScanQueueInFlyLimit();
-
-        DoGC();
     }
 
     inline ui64 GetStatAllBytes() const {
@@ -1264,6 +1265,8 @@ public:
                 NKikimrConsole::TConfigItem::BootstrapConfigItem, NKikimrConsole::TConfigItem::SharedCacheConfigItem}));
 
         Become(&TThis::StateFunc);
+
+        ScheduleGC();
     }
 
     STFUNC(StateFunc) {
@@ -1283,6 +1286,8 @@ public:
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
         }
+
+        DoGC();
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

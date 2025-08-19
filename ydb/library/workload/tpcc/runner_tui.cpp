@@ -157,7 +157,7 @@ ftxui::Element TRunnerTui::BuildThreadStatsPart() {
 
     for (size_t i = 0; i < threadCount; ++i) {
         const auto& stats = data->Statistics.StatVec[i];
-        double load = stats.TotalTime != 0 ? stats.ExecutingTime / stats.TotalTime : 0;
+        double load = stats.Load;
 
         // Create custom progress bar with individual "|" characters
         constexpr int barWidth = 10;

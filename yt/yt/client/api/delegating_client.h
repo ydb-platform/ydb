@@ -782,7 +782,7 @@ public:
         const TListUserTokensOptions& options),
         (user, passwordSha256, options))
 
-    DELEGATE_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+    DELEGATE_METHOD(TFuture<TGetCurrentUserResult>, GetCurrentUser, (
         const TGetCurrentUserOptions& options),
         (options))
 

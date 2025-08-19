@@ -138,6 +138,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
         case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
         case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
         case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:

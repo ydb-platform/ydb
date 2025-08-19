@@ -166,7 +166,7 @@ bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
         || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
         || ReadReplicasSettings || TtlSettings || DataSourcePath || Location || ExternalSourceParameters
-        || StoreExternalBlobs;
+        || StoreExternalBlobs || ExternalDataChannelsCount;
 }
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {

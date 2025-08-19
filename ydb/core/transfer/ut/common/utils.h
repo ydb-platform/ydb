@@ -686,13 +686,17 @@ struct MainTestCase {
         ExecuteDDL(Sprintf("DROP ASYNC REPLICATION `%s`;", ReplicationName.data()));
     }
 
-    auto DescribeReplication() {
+    auto DescribeReplication(const std::string& name) {
         TReplicationClient client(Driver);
 
         TDescribeReplicationSettings settings;
         settings.IncludeStats(true);
 
-        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + ReplicationName, settings).ExtractValueSync();
+        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + name, settings).ExtractValueSync();
+    }
+
+    auto DescribeReplication() {
+        return DescribeReplication(ReplicationName);
     }
 
     TReplicationDescription CheckReplicationState(TReplicationDescription::EState expected) {

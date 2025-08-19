@@ -17,16 +17,15 @@ namespace NKikimr {
         value.ApproximateFreeSpaceShare;
     };
 
-    template<typename T>
-    concept HasGroupId = requires(T value) {
-        value.GroupId;
-    };
-
     class TBridgedBlobStorageProxyActor : public TActorBootstrapped<TBridgedBlobStorageProxyActor> {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TGroupId GroupId;
 
         using TClusterState = NKikimrBridge::TClusterState;
+
+        struct TRequestPayload {
+            size_t Index;
+        };
 
         struct TRequest
             : std::enable_shared_from_this<TRequest>
@@ -42,6 +41,8 @@ namespace NKikimr {
             std::unique_ptr<IEventBase> CombinedResponse;
             bool Finished = false;
             THashSet<ui64> CookiesInFlight;
+            THPTimer Timer;
+            std::deque<std::tuple<TString, TDuration>> SubrequestTimings;
 
             struct TDiscoverState {
                 TLogoBlobID Id;
@@ -49,30 +50,18 @@ namespace NKikimr {
                 ui32 MinGeneration = 0;
                 ui32 BlockedGeneration = 0;
                 TBridgePileId Winner;
-                TDynBitMap Processed;
-                TDynBitMap WriteTo;
             };
 
             struct TGetState {
-                NKikimrBlobStorage::EGetHandleClass GetHandleClass;
                 size_t NumResponses;
                 TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
                 bool IsIndexOnly;
                 bool MustRestoreFirst;
                 ui32 BlockedGeneration = 0;
-
-                struct TRestoreItem {
-                    TBridgePileId ReadFrom;
-                    TDynBitMap WriteTo;
-                };
-                std::vector<TRestoreItem> RestoreQueue;
-                size_t RestoreIndex;
-                bool IsRestoring = false;
             };
 
             struct TRangeState {
-                TLogoBlobID From;
-                TLogoBlobID To;
+                std::unique_ptr<TEvBlobStorage::TEvRangeResult> Response;
             };
 
             struct TPutState {
@@ -86,8 +75,31 @@ namespace NKikimr {
 
             TState State;
 
+            struct TRestoreItem {
+                TLogoBlobID Id;
+                TRcBuf Buffer;
+                TBridgePileId ReadFrom;
+                TDynBitMap WriteTo;
+                bool IssueKeepFlag = false;
+
+                TRestoreItem() = default;
+
+                TRestoreItem(TLogoBlobID id, const TString& buffer)
+                    : Id(id)
+                    , Buffer(buffer)
+                {}
+            };
+            std::vector<TRestoreItem> RestoreQueue;
+            THashMap<TLogoBlobID, size_t> RestoreQueueIndex;
+            size_t RestoreIndex = Max<size_t>();
+            bool IsRestoring = false;
+            NKikimrBlobStorage::EGetHandleClass GetHandleClass = NKikimrBlobStorage::FastRead;
+
+            TDynBitMap Processed; // a set of piles we already got main reply from
+
             template<typename TEvRequest>
-            TRequest(TActorId sender, ui64 cookie, std::unique_ptr<TEvRequest>&& request, TIntrusivePtr<TBlobStorageGroupInfo> info)
+            TRequest(TActorId sender, ui64 cookie, std::unique_ptr<TEvRequest>&& request, TIntrusivePtr<TBlobStorageGroupInfo> info,
+                    TThis& self)
                 : Sender(sender)
                 , Cookie(cookie)
                 , Info(std::move(info))
@@ -98,23 +110,26 @@ namespace NKikimr {
 
                 if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvGet>) {
                     Y_ABORT_UNLESS(!request->PhantomCheck);
+
                     State = TGetState{
-                        .GetHandleClass = request->GetHandleClass,
                         .NumResponses = request->QuerySize,
                         .IsIndexOnly = request->IsIndexOnly,
                         .MustRestoreFirst = request->MustRestoreFirst,
-                        .RestoreQueue{request->QuerySize},
-                        .RestoreIndex = request->QuerySize,
                     };
+
+                    GetHandleClass = request->GetHandleClass;
+                    RestoreQueue.resize(request->QuerySize);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvRange>) {
                     State = TRangeState{
-                        .From = request->From,
-                        .To = request->To,
+                        .Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, request->From,
+                            request->To, self.GroupId),
                     };
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvDiscover>) {
                     State = TDiscoverState{
                         .MinGeneration = request->MinGeneration,
                     };
+
+                    RestoreQueue.resize(1);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvPut>) {
                     State = TPutState{
                     };
@@ -206,124 +221,192 @@ namespace NKikimr {
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvPutResult> ev,
-                    const TBridgeInfo::TPile& pile) {
-                return std::visit(TOverloaded{
-                    [&](TGetState& state) -> std::unique_ptr<IEventBase> {
-                        if (state.IsRestoring) {
-                            if (ev->Status != NKikimrProto::OK) { // can't restore this blob
-                                state.Responses[state.RestoreIndex] = {};
-                                state.Responses[state.RestoreIndex].Status = NKikimrProto::ERROR;
+                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& payload) {
+                if (IsRestoring) {
+                    if (ev->Status != NKikimrProto::OK) { // can't restore this blob
+                        return std::visit(TOverloaded{
+                            [&](TGetState& state) -> std::unique_ptr<IEventBase> {
+                                auto& r = state.Responses[payload.Index];
+                                r = {};
+                                r.Status = NKikimrProto::ERROR;
+                                return IssueNextRestoreGet(self);
+                            },
+                            [&](TRangeState&) -> std::unique_ptr<IEventBase> {
+                                return static_cast<TEvBlobStorage::TEvRange&>(*OriginalRequest).MakeErrorResponse(
+                                    ev->Status, ev->ErrorReason, self.GroupId);
+                            },
+                            [&](TDiscoverState&) -> std::unique_ptr<IEventBase> {
+                                return static_cast<TEvBlobStorage::TEvDiscover&>(*OriginalRequest).MakeErrorResponse(
+                                    ev->Status, ev->ErrorReason, self.GroupId);
+                            },
+                            [&](auto&) -> std::unique_ptr<IEventBase> {
+                                Y_ABORT();
                             }
-                            ++state.RestoreIndex;
-                            return IssueRestoreGet(self, state);
-                        }
-                        Y_ABORT();
-                    },
-                    [&](TDiscoverState& state) -> std::unique_ptr<IEventBase> {
-                        if (ev->Status != NKikimrProto::OK) {
-                            auto res = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(ev->Status, state.MinGeneration,
-                                state.BlockedGeneration);
-                            res->ErrorReason = TStringBuilder() << "failed to put blob for bridged discover to PileId# "
-                                << pile.BridgePileId << ": " << ev->ErrorReason;
-                            return res;
-                        }
-                        return ResponsesPending
-                            ? nullptr
-                            : std::make_unique<TEvBlobStorage::TEvDiscoverResult>(state.Id, state.MinGeneration,
-                                    state.Buffer, state.BlockedGeneration);
-                    },
-                    [&](TPutState&) -> std::unique_ptr<IEventBase> {
-                        return ProcessFullQuorumResponse(self, std::move(ev));
-                    },
-                    [&](auto&) -> std::unique_ptr<IEventBase> {
-                        Y_ABORT();
+                        }, State);
+                    } else {
+                        return IssueNextRestoreGet(self);
                     }
-                }, State);
+                }
+
+                Y_ABORT_UNLESS(std::holds_alternative<TPutState>(State));
+                return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
-                    const TBridgeInfo::TPile& pile) {
+                    const TBridgeInfo::TPile& pile, TRequestPayload& payload) {
+                if (ev->Status != NKikimrProto::OK) {
+                    return std::visit(TOverloaded{
+                        [&](TGetState&) -> std::unique_ptr<IEventBase> {
+                            return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(
+                                ev->Status, ev->ErrorReason, self.GroupId);
+                        },
+                        [&](TRangeState&) -> std::unique_ptr<IEventBase> {
+                            return static_cast<TEvBlobStorage::TEvRange&>(*OriginalRequest).MakeErrorResponse(
+                                ev->Status, ev->ErrorReason, self.GroupId);
+                        },
+                        [&](TDiscoverState&) -> std::unique_ptr<IEventBase> {
+                            return static_cast<TEvBlobStorage::TEvDiscover&>(*OriginalRequest).MakeErrorResponse(
+                                ev->Status, ev->ErrorReason, self.GroupId);
+                        },
+                        [&](auto&) -> std::unique_ptr<IEventBase> {
+                            Y_ABORT();
+                        }
+                    }, State);
+                }
+
+                if (IsRestoring) {
+                    Y_ABORT_UNLESS(ev->ResponseSz == 1);
+                    if (auto& response = ev->Responses[0]; response.Status == NKikimrProto::OK) {
+                        Y_ABORT_UNLESS(response.Id == RestoreQueue[payload.Index].Id);
+                        Y_ABORT_UNLESS(response.Buffer.size() == response.Id.BlobSize());
+                        RestoreQueue[payload.Index].Buffer = static_cast<TRcBuf>(response.Buffer);
+                        RestoreQueue[payload.Index].IssueKeepFlag = response.DoNotKeep < response.Keep;
+                        IssueRestorePut(self, payload.Index);
+                        return nullptr;
+                    } else {
+                        return std::visit(TOverloaded{
+                            [&](TGetState& state) -> std::unique_ptr<IEventBase> {
+                                auto& r = state.Responses[payload.Index];
+                                r = {};
+                                r.Status = NKikimrProto::ERROR;
+                                return IssueNextRestoreGet(self);
+                            },
+                            [&](TRangeState&) -> std::unique_ptr<IEventBase> {
+                                return static_cast<TEvBlobStorage::TEvRange&>(*OriginalRequest).MakeErrorResponse(
+                                    NKikimrProto::ERROR, TStringBuilder() << "couldn't restore blob content across bridge"
+                                    << " BlobId# " << response.Id
+                                    << " Status# " << NKikimrProto::EReplyStatus_Name(response.Status), self.GroupId);
+                            },
+                            [&](TDiscoverState&) -> std::unique_ptr<IEventBase> {
+                                return static_cast<TEvBlobStorage::TEvDiscover&>(*OriginalRequest).MakeErrorResponse(
+                                    NKikimrProto::ERROR, TStringBuilder() << "couldn't restore blob content across bridge"
+                                    << " BlobId# " << response.Id
+                                    << " Status# " << NKikimrProto::EReplyStatus_Name(response.Status), self.GroupId);
+                            },
+                            [&](auto&) -> std::unique_ptr<IEventBase> {
+                                Y_ABORT();
+                            }
+                        }, State);
+                    }
+                }
+
+                Y_ABORT_UNLESS(std::holds_alternative<TGetState>(State));
+                auto& state = std::get<TGetState>(State);
+
+                // ensure we got right number of responses
+                Y_ABORT_UNLESS(ev->ResponseSz == state.NumResponses);
+
+                if (!state.Responses) {
+                    // this is the first response, we just repeat what we got in response
+                    state.Responses.Reset(new TEvBlobStorage::TEvGetResult::TResponse[state.NumResponses]);
+                    std::move(&ev->Responses[0], &ev->Responses[state.NumResponses], &state.Responses[0]);
+                } else {
+                    // this is additional response, merge data with already received responses
+                    for (size_t i = 0; i < state.NumResponses; ++i) {
+                        auto& existing = state.Responses[i];
+                        auto& current = ev->Responses[i];
+                        Y_ABORT_UNLESS(existing.Id == current.Id);
+
+                        if (current.Status == NKikimrProto::ERROR) {
+                            existing = current;
+                        } else if (existing.Status == NKikimrProto::ERROR) {
+                            // we do not process blobs with ERROR, report them as failed ones
+                        } else if (existing.Status == current.Status) {
+                            // status did not change, so there is nothing to do
+                            Y_DEBUG_ABORT_UNLESS(existing.Buffer == current.Buffer);
+                        } else if (existing.Status == NKikimrProto::NODATA && current.Status == NKikimrProto::OK) {
+                            // we have to restore blob to existing groups
+                            existing = current;
+                        }
+
+                        existing.Keep |= current.Keep;
+                        existing.DoNotKeep |= current.DoNotKeep;
+                    }
+                }
+
+                for (size_t i = 0; i < state.NumResponses; ++i) {
+                    auto& current = ev->Responses[i];
+                    auto& item = RestoreQueue[i];
+
+                    if (current.Status == NKikimrProto::OK) {
+                        item.Id = current.Id;
+                        item.Buffer = TRcBuf(current.Buffer);
+                        item.ReadFrom = pile.BridgePileId;
+                        item.IssueKeepFlag = current.DoNotKeep < current.Keep;
+                    } else if (current.Status == NKikimrProto::NODATA) {
+                        item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
+                        RestoreIndex = Min(RestoreIndex, i); // we gonna restore this
+                    }
+                }
+
+                state.BlockedGeneration = Max(state.BlockedGeneration, ev->BlockedGeneration);
+
+                return IssueNextRestoreGet(self);
+            }
+
+            std::unique_ptr<IEventBase> IssueNextRestoreGet(TThis& self) {
+                if (ResponsesPending) {
+                    return nullptr; // wait for all puts to complete
+                }
+
+                while (RestoreIndex < RestoreQueue.size()) {
+                    auto& item = RestoreQueue[RestoreIndex];
+
+                    if (!item.ReadFrom || item.WriteTo.Empty()) {
+                        ++RestoreIndex;
+                        continue;
+                    }
+
+                    Y_ABORT_UNLESS(item.Id);
+
+                    if (item.Buffer && item.Buffer.size() == item.Id.BlobSize()) {
+                        IssueRestorePut(self, RestoreIndex);
+                    } else {
+                        self.SendQuery(shared_from_this(), item.ReadFrom, std::make_unique<TEvBlobStorage::TEvGet>(
+                            item.Id, 0, 0, TInstant::Max(), GetHandleClass), {.Index = RestoreIndex});
+                        IsRestoring = true;
+                    }
+
+                    ++RestoreIndex;
+                    return nullptr;
+                }
+
+                Y_ABORT_UNLESS(RestoreQueue.size() <= RestoreIndex);
+
                 return std::visit(TOverloaded{
                     [&](TGetState& state) -> std::unique_ptr<IEventBase> {
-                        if (ev->Status != NKikimrProto::OK) {
-                            return MakeErrorFrom(self, ev.get());
-                        }
-
-                        if (state.IsRestoring) {
-                            Y_ABORT_UNLESS(ev->ResponseSz == 1);
-                            auto& response = ev->Responses[0];
-                            if (response.Status == NKikimrProto::OK) {
-                                Y_ABORT_UNLESS(response.Id == state.Responses[state.RestoreIndex].Id);
-                                Y_ABORT_UNLESS(response.Buffer.size() == response.Id.BlobSize());
-                                IssueRestorePut(self, state, TRcBuf(response.Buffer));
-                                return nullptr;
-                            } else {
-                                state.Responses[state.RestoreIndex] = {};
-                                state.Responses[state.RestoreIndex].Status = NKikimrProto::ERROR;
-                                return IssueRestoreGet(self, state);
-                            }
-                        }
-
-                        // ensure we got right number of responses
-                        Y_ABORT_UNLESS(ev->ResponseSz == state.NumResponses);
-
-                        if (!state.Responses) {
-                            // this is the first response, we just repeat what we got in response
-                            state.Responses.Reset(new TEvBlobStorage::TEvGetResult::TResponse[state.NumResponses]);
-                            std::move(&ev->Responses[0], &ev->Responses[state.NumResponses], &state.Responses[0]);
-                        } else {
-                            // this is additional response, merge data with already received responses
-                            for (size_t i = 0; i < state.NumResponses; ++i) {
-                                auto& existing = state.Responses[i];
-                                auto& current = ev->Responses[i];
-                                Y_ABORT_UNLESS(existing.Id == current.Id);
-
-                                if (current.Status == NKikimrProto::ERROR) {
-                                    existing = current;
-                                } else if (existing.Status == NKikimrProto::ERROR) {
-                                    // we do not process blobs with ERROR, report them as failed ones
-                                } else if (existing.Status == current.Status) {
-                                    // status did not change, so there is nothing to do
-                                    Y_DEBUG_ABORT_UNLESS(existing.Buffer == current.Buffer);
-                                } else if (existing.Status == NKikimrProto::NODATA && current.Status == NKikimrProto::OK) {
-                                    // we have to restore blob to existing groups
-                                    existing = current;
-                                }
-
-                                existing.Keep |= current.Keep;
-                                existing.DoNotKeep |= current.DoNotKeep;
-                            }
-                        }
-
-                        for (size_t i = 0; i < state.NumResponses; ++i) {
-                            auto& current = ev->Responses[i];
-                            auto& item = state.RestoreQueue[i];
-
-                            if (current.Status == NKikimrProto::OK) {
-                                item.ReadFrom = pile.BridgePileId;
-                            } else if (current.Status == NKikimrProto::NODATA) {
-                                item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
-                                state.RestoreIndex = Min(state.RestoreIndex, i); // we gonna restore this
-                            }
-                        }
-
-                        state.BlockedGeneration = Max(state.BlockedGeneration, ev->BlockedGeneration);
-
-                        return ResponsesPending
-                            ? nullptr
-                            : IssueRestoreGet(self, state);
+                        auto res = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, state.NumResponses,
+                            std::move(state.Responses), self.GroupId);
+                        res->BlockedGeneration = state.BlockedGeneration;
+                        return res;
                     },
                     [&](TDiscoverState& state) -> std::unique_ptr<IEventBase> {
-                        if (ev->Status == NKikimrProto::OK && ev->ResponseSz == 1 && ev->Responses->Status == NKikimrProto::OK) {
-                            IssueRestorePut(self, state, static_cast<TRcBuf>(ev->Responses->Buffer));
-                            return nullptr;
-                        }
-                        auto res = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::ERROR,
-                            state.MinGeneration, state.BlockedGeneration);
-                        res->ErrorReason = TStringBuilder() << "failed to get blob for bridged discover from PileId# "
-                            << pile.BridgePileId << " Status# " << NKikimrProto::EReplyStatus_Name(ev->Responses->Status)
-                            << " ErrorReason# " << ev->ErrorReason;
-                        return res;
+                        Y_ABORT_UNLESS(state.Id);
+                        return std::make_unique<TEvBlobStorage::TEvDiscoverResult>(state.Id, state.MinGeneration,
+                            state.Buffer, state.BlockedGeneration);
+                    },
+                    [&](TRangeState& state) -> std::unique_ptr<IEventBase> {
+                        return std::move(state.Response);
                     },
                     [&](auto&) -> std::unique_ptr<IEventBase> {
                         Y_ABORT();
@@ -331,156 +414,185 @@ namespace NKikimr {
                 }, State);
             }
 
-            std::unique_ptr<IEventBase> IssueRestoreGet(TThis& self, TGetState& state) {
-                while (state.RestoreIndex < state.RestoreQueue.size()) {
-                    auto& response = state.Responses[state.RestoreIndex];
-                    auto& item = state.RestoreQueue[state.RestoreIndex];
-
-                    if (response.Status != NKikimrProto::OK || item.WriteTo.Empty()) {
-                        ++state.RestoreIndex;
-                        continue;
-                    }
-
-                    Y_ABORT_UNLESS(item.ReadFrom);
-
-                    if (response.Buffer && response.Buffer.size() == response.Id.BlobSize()) {
-                        IssueRestorePut(self, state, static_cast<TRcBuf>(response.Buffer));
-                    } else {
-                        self.SendQuery(shared_from_this(), item.ReadFrom, std::make_unique<TEvBlobStorage::TEvGet>(
-                            response.Id, 0, 0, TInstant::Max(), state.GetHandleClass));
-                        state.IsRestoring = true;
-                    }
-
-                    break;
-                }
-
-                if (state.RestoreIndex == state.RestoreQueue.size()) {
-                    auto res = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, state.NumResponses,
-                        std::move(state.Responses), self.GroupId);
-                    res->BlockedGeneration = state.BlockedGeneration;
-                    return res;
-                }
-
-                return nullptr;
-            }
-
-            void IssueRestorePut(TThis& self, TGetState& state, TRcBuf buffer) {
-                auto& item = state.RestoreQueue[state.RestoreIndex];
-                auto& response = state.Responses[state.RestoreIndex];
+            void IssueRestorePut(TThis& self, size_t index) {
+                auto& item = RestoreQueue[index];
 
                 Y_FOR_EACH_BIT(i, item.WriteTo) {
                     const auto bridgePileId = TBridgePileId::FromPileIndex(i);
                     NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog;
-                    if (state.GetHandleClass == NKikimrBlobStorage::AsyncRead ||
-                            state.GetHandleClass == NKikimrBlobStorage::LowRead) {
+                    if (GetHandleClass == NKikimrBlobStorage::AsyncRead || GetHandleClass == NKikimrBlobStorage::LowRead) {
                         handleClass = NKikimrBlobStorage::AsyncBlob;
                     }
 
-                    Y_ABORT_UNLESS(response.Id);
-                    Y_ABORT_UNLESS(buffer.size() == response.Id.BlobSize());
+                    Y_ABORT_UNLESS(item.Id);
+                    Y_ABORT_UNLESS(item.Buffer.size() == item.Id.BlobSize());
                     self.SendQuery(shared_from_this(), bridgePileId, std::make_unique<TEvBlobStorage::TEvPut>(
-                        response.Id, TRcBuf(buffer), TInstant::Max(), handleClass, TEvBlobStorage::TEvPut::TacticDefault,
-                        response.DoNotKeep < response.Keep, true));
+                        item.Id, TRcBuf(item.Buffer), TInstant::Max(), handleClass, TEvBlobStorage::TEvPut::TacticDefault,
+                        item.IssueKeepFlag, true), {.Index = index});
                 }
 
-                state.IsRestoring = true;
-            }
-
-            void IssueRestorePut(TThis& self, TDiscoverState& state, TRcBuf buffer) {
-                Y_FOR_EACH_BIT(i, state.WriteTo) {
-                    Y_ABORT_UNLESS(state.Id);
-                    Y_ABORT_UNLESS(buffer.size() == state.Id.BlobSize());
-                    self.SendQuery(shared_from_this(), TBridgePileId::FromPileIndex(i),
-                        std::make_unique<TEvBlobStorage::TEvPut>(state.Id, TRcBuf(buffer), TInstant::Max(),
-                        NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault, false, true));
-                }
+                IsRestoring = true;
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvBlockResult> ev,
-                    const TBridgeInfo::TPile& /*pile*/) {
+                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
                 return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetBlockResult> ev,
-                    const TBridgeInfo::TPile& pile) {
+                    const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
                 return ProcessPrimaryPileResponse(self, std::move(ev), pile);
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> ev,
-                    const TBridgeInfo::TPile& pile) {
-                return std::visit(TOverloaded{
-                    [&](TDiscoverState& state) -> std::unique_ptr<IEventBase> {
-                        state.BlockedGeneration = Max(state.BlockedGeneration, ev->BlockedGeneration);
-                        if (ev->Status != NKikimrProto::OK && ev->Status != NKikimrProto::NODATA) {
-                            auto res = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(ev->Status, state.MinGeneration,
-                                state.BlockedGeneration);
-                            res->ErrorReason = TStringBuilder() << "failed to discover PileId# " << pile.BridgePileId
-                                << ": " << ev->ErrorReason;
-                            return res;
-                        }
-                        if (ev->Status != NKikimrProto::NODATA && state.Id < ev->Id) { // this record gives newer blob
-                            state.WriteTo |= state.Processed;
-                            state.Id = ev->Id;
-                            state.Buffer = std::move(ev->Buffer);
-                            state.Winner = pile.BridgePileId;
-                        } else if (ev->Status == NKikimrProto::NODATA || ev->Id < state.Id) { // this pile has older version than already discovered
-                            state.WriteTo.Set(pile.BridgePileId.GetPileIndex());
-                        } else { // exactly same blob
-                            Y_ABORT_UNLESS(state.Buffer == ev->Buffer);
-                        }
-                        state.Processed.Set(pile.BridgePileId.GetPileIndex());
-                        if (ResponsesPending) {
-                            return nullptr;
-                        }
-                        if (!state.Winner || state.WriteTo.Empty()) { // no winner or piles are in full sync
-                            return state.Winner
-                                ? std::make_unique<TEvBlobStorage::TEvDiscoverResult>(state.Id, state.MinGeneration,
-                                    state.Buffer, state.BlockedGeneration)
-                                : std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::NODATA,
-                                    state.MinGeneration, state.BlockedGeneration);
-                        } else if (state.Buffer) {
-                            Y_ABORT_UNLESS(state.Buffer.size() == state.Id.BlobSize());
-                            IssueRestorePut(self, state, TRcBuf(TString(state.Buffer)));
-                        } else {
-                            self.SendQuery(shared_from_this(), state.Winner, std::make_unique<TEvBlobStorage::TEvGet>(
-                                state.Id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
-                        }
-                        return nullptr; // no answer yet
-                    },
-                    [&](auto&) -> std::unique_ptr<IEventBase> {
-                        Y_ABORT();
-                    }
-                }, State);
+                    const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
+                Y_ABORT_UNLESS(std::holds_alternative<TDiscoverState>(State));
+                auto& state = std::get<TDiscoverState>(State);
+
+                state.BlockedGeneration = Max(state.BlockedGeneration, ev->BlockedGeneration);
+
+                if (ev->Status != NKikimrProto::OK && ev->Status != NKikimrProto::NODATA) {
+                    auto res = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(ev->Status, state.MinGeneration,
+                        state.BlockedGeneration);
+                    res->ErrorReason = TStringBuilder() << "failed to discover PileId# " << pile.BridgePileId
+                        << ": " << ev->ErrorReason;
+                    return res;
+                }
+
+                auto& item = RestoreQueue.front();
+                if (ev->Status == NKikimrProto::OK && state.Id < ev->Id) { // this record gives newer blob
+                    state.Id = ev->Id;
+                    state.Buffer = std::move(ev->Buffer);
+                    state.Winner = pile.BridgePileId;
+
+                    item.Id = state.Id;
+                    item.Buffer = TRcBuf(state.Buffer);
+                    item.ReadFrom = state.Winner;
+                    item.WriteTo |= Processed;
+                } else if (ev->Status == NKikimrProto::NODATA || ev->Id < state.Id) { // this pile has older version than already discovered
+                    item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
+                } else { // exactly same blob
+                    Y_ABORT_UNLESS(state.Buffer == ev->Buffer);
+                }
+
+                Processed.Set(pile.BridgePileId.GetPileIndex());
+
+                if (ResponsesPending) {
+                    return nullptr;
+                }
+                if (!state.Winner) { // no winner or piles are in full sync
+                    return std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::NODATA,
+                        state.MinGeneration, state.BlockedGeneration);
+                }
+                if (!item.WriteTo.Empty()) {
+                    RestoreIndex = 0;
+                }
+                return IssueNextRestoreGet(self);
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvRangeResult> ev,
-                    const TBridgeInfo::TPile& pile) {
-                return ProcessPrimaryPileResponse(self, std::move(ev), pile);
+                    const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
+                if (ev->Status != NKikimrProto::OK) {
+                    return MakeErrorFrom(self, ev.get());
+                }
+
+                Y_ABORT_UNLESS(std::holds_alternative<TRangeState>(State));
+                auto& state = std::get<TRangeState>(State);
+
+                auto getRestoreItem = [&](const auto& item) -> TRestoreItem& {
+                    const auto [it, inserted] = RestoreQueueIndex.try_emplace(item.Id, RestoreQueue.size());
+                    RestoreIndex = Min(RestoreIndex, it->second);
+                    if (inserted) {
+                        RestoreQueue.emplace_back(item.Id, item.Buffer);
+                    }
+                    return RestoreQueue[it->second];
+                };
+
+                auto merge = [&](auto&& comp) {
+                    auto& target = state.Response->Responses;
+                    auto targetIt = std::ranges::begin(target);
+                    const auto targetEnd = std::ranges::end(target);
+
+                    auto sourceIt = std::ranges::begin(ev->Responses);
+                    const auto sourceEnd = std::ranges::end(ev->Responses);
+
+                    TVector<TEvBlobStorage::TEvRangeResult::TResponse> itemsToAdd;
+
+                    while (sourceIt != sourceEnd || targetIt != targetEnd) {
+                        if (sourceIt == sourceEnd || (targetIt != targetEnd && comp(targetIt->Id, sourceIt->Id))) {
+                            // restore it unless this is the first response
+                            auto& item = getRestoreItem(*targetIt);
+                            item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
+                            ++targetIt;
+                        } else if (targetIt == targetEnd || comp(sourceIt->Id, targetIt->Id)) {
+                            // item is in new range, no matching item in target range
+                            auto& item = getRestoreItem(*sourceIt);
+                            item.ReadFrom = pile.BridgePileId;
+                            item.WriteTo |= Processed;
+                            item.IssueKeepFlag = sourceIt->DoNotKeep < sourceIt->Keep;
+                            itemsToAdd.push_back(std::move(*sourceIt));
+                            ++sourceIt;
+                        } else { // items in both ranges, so both present
+                            targetIt->Keep |= sourceIt->Keep;
+                            targetIt->DoNotKeep |= sourceIt->DoNotKeep;
+                            Y_ABORT_UNLESS(!targetIt->Buffer == !sourceIt->Buffer);
+                            if (targetIt->Buffer && sourceIt->Buffer) {
+                                Y_ABORT_UNLESS(targetIt->Buffer == sourceIt->Buffer);
+                            }
+                            ++sourceIt;
+                            ++targetIt;
+                        }
+                    }
+                    if (itemsToAdd.empty()) {
+                        return;
+                    }
+                    if (target.empty()) {
+                        target = std::move(itemsToAdd);
+                    } else {
+                        auto temp = std::exchange(target, {});
+                        target.reserve(itemsToAdd.size() + temp.size());
+                        std::ranges::set_union(std::move(itemsToAdd), std::move(temp), std::back_inserter(target), comp,
+                            &TEvBlobStorage::TEvRangeResult::TResponse::Id,
+                            &TEvBlobStorage::TEvRangeResult::TResponse::Id);
+                    }
+                };
+
+                if (ev->From <= ev->To) {
+                    merge(std::less<TLogoBlobID>());
+                } else {
+                    merge(std::greater<TLogoBlobID>());
+                }
+
+                // mark pile as reponded
+                Processed.Set(pile.BridgePileId.GetPileIndex());
+
+                return ResponsesPending ? nullptr : IssueNextRestoreGet(self);
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self,
-                    std::unique_ptr<TEvBlobStorage::TEvCollectGarbageResult> ev, const TBridgeInfo::TPile& /*pile*/) {
+                    std::unique_ptr<TEvBlobStorage::TEvCollectGarbageResult> ev, const TBridgeInfo::TPile& /*pile*/,
+                    TRequestPayload& /*payload*/) {
                 return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvStatusResult> ev,
-                    const TBridgeInfo::TPile& /*pile*/) {
+                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
                 return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvPatchResult> ev,
-                    const TBridgeInfo::TPile& /*pile*/) {
+                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
                 return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvAssimilateResult> ev,
-                    const TBridgeInfo::TPile& /*pile*/) {
+                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
                 (void)self, (void)ev;
                 return nullptr;
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult> ev,
-                    const TBridgeInfo::TPile& /*pile*/) {
+                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
                 (void)self, (void)ev;
                 return nullptr;
             }
@@ -494,6 +606,8 @@ namespace NKikimr {
             TBridgeInfo::TPtr BridgeInfo;
             const TBridgeInfo::TPile *Pile;
             TGroupId GroupId;
+            TRequestPayload Payload;
+            THPTimer Timer;
         };
         THashMap<ui64, TRequestInFlight> RequestsInFlight;
         ui64 LastRequestCookie = 0;
@@ -532,7 +646,7 @@ namespace NKikimr {
 
             std::unique_ptr<TEvent> evPtr(ev->Release().Release());
             const TEvent& originalRequest = *evPtr;
-            auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info);
+            auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this);
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->MakeRequestId()),
                 (GroupId, GroupId), (Request, originalRequest.ToString()));
@@ -556,7 +670,8 @@ namespace NKikimr {
             Y_ABORT_UNLESS(request->ResponsesPending);
         }
 
-        void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev) {
+        void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
+                TRequestPayload&& payload = {}) {
             const auto& state = Info->Group->GetBridgeGroupState();
             const auto& groupPileInfo = state.GetPile(bridgePileId.GetPileIndex());
             const auto groupId = TGroupId::FromProto(&groupPileInfo, &NKikimrBridge::TGroupState::TPile::GetGroupId);
@@ -568,7 +683,7 @@ namespace NKikimr {
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;
             const auto [it, inserted] = RequestsInFlight.try_emplace(cookie, request, BridgeInfo,
-                BridgeInfo->GetPile(bridgePileId), groupId);
+                BridgeInfo->GetPile(bridgePileId), groupId, std::move(payload));
             Y_DEBUG_ABORT_UNLESS(inserted);
             const auto [it1, inserted1] = request->CookiesInFlight.insert(cookie);
             Y_DEBUG_ABORT_UNLESS(inserted1);
@@ -634,7 +749,7 @@ namespace NKikimr {
                 && ev->Get()->Status != NKikimrProto::NODATA
                 && NBridge::PileStateTraits(item.Pile->State).RequiresDataQuorum;
 
-            STLOG(isError ? PRI_DEBUG : PRI_NOTICE, BS_PROXY_BRIDGE, BPB02, "intermediate response",
+            STLOG(isError ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_BRIDGE, BPB02, "intermediate response",
                 (RequestId, request->MakeRequestId()),
                 (GroupId, item.GroupId),
                 (Status, ev->Get()->Status),
@@ -676,12 +791,24 @@ namespace NKikimr {
                     request->Finished = true;
                 } else {
                     std::unique_ptr<TEvent> ptr(ev->Release().Release());
-                    if (auto response = request->ProcessResponse(*this, std::move(ptr), pile)) {
-                        STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB01, "request finished", (RequestId, request->MakeRequestId()),
-                            (Response, response->ToString()));
+                    request->SubrequestTimings.emplace_back(TypeName<TEvent>(), TDuration::Seconds(item.Timer.Passed()));
+                    if (auto response = request->ProcessResponse(*this, std::move(ptr), pile, item.Payload)) {
                         auto *common = dynamic_cast<TEvBlobStorage::TEvResultCommon*>(response.get());
                         Y_ABORT_UNLESS(common);
                         Y_DEBUG_ABORT_UNLESS(common->Status != NKikimrProto::RACE);
+                        const bool success = common->Status == NKikimrProto::OK
+                            || (common->Status == NKikimrProto::NODATA && response->Type() == TEvBlobStorage::EvDiscoverResult);
+                        auto makeSubrequestTimings = [&] {
+                            return FormatList(std::views::transform(request->SubrequestTimings, [&](const auto& item) {
+                                const auto& [name, duration] = item;
+                                return TStringBuilder() << name << ':' << duration;
+                            }));
+                        };
+                        STLOG(success ? PRI_INFO : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished",
+                            (RequestId, request->MakeRequestId()),
+                            (Response, response->ToString()),
+                            (Passed, TDuration::Seconds(request->Timer.Passed())),
+                            (SubrequestTimings, makeSubrequestTimings()));
                         Send(request->Sender, response.release(), 0, request->Cookie);
                         request->Finished = true;
                     }

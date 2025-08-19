@@ -173,6 +173,9 @@ private:
             RuntimeError("Index settings are required", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
+        if (EmptyIndex) {
+            LevelsFinished = true;
+        }
         while (!LevelsFinished) {
             if (!LevelClusters.size()) {
                 LevelClusters.clear();
@@ -369,6 +372,12 @@ private:
             RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
+        if (!ReadingChildClustersOf && !FetchedClusters.size()) {
+            // Index is empty
+            EmptyIndex = true;
+            ContinueResolveClusters();
+            return;
+        }
         TVector<ui64> clusterIds;
         TVector<TString> clusterRows;
         for (auto & pp: FetchedClusters) {
@@ -395,6 +404,11 @@ private:
     i64 ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) {
         auto guard = BindAllocator();
 
+        if (EmptyIndex) {
+            PendingRows.clear();
+            return 0;
+        }
+
         i64 totalSize = 0;
 
         while (PendingRows.size() > 0 && freeSpace > 0) {
@@ -406,13 +420,20 @@ private:
             // Output columns: Cluster ID + Source table PK [ + Data Columns ]
             auto newValue = HolderFactory.CreateDirectArrayHolder(1 + Settings.CopyColumnIndexesSize(), rowItems);
 
-            *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
-            rowSize += sizeof(NUdf::TUnboxedValuePod);
-
+            if (Settings.GetClusterColumnOutPos() == 0) {
+                // We support inserting cluster ID column into any position to maintain alphabetical order of columns
+                *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
+                rowSize += sizeof(NUdf::TUnboxedValuePod);
+            }
             for (size_t i = 0; i < Settings.CopyColumnIndexesSize(); i++) {
                 auto colIdx = Settings.GetCopyColumnIndexes(i);
                 *rowItems++ = currentValue.GetElement(colIdx);
                 rowSize += NMiniKQL::GetUnboxedValueSize(currentValue.GetElement(colIdx), ColumnTypeInfos[colIdx]).AllocatedBytes;
+                if (Settings.GetClusterColumnOutPos() == i+1) {
+                    // We support inserting cluster ID column into any position to maintain alphabetical order of columns
+                    *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
+                    rowSize += sizeof(NUdf::TUnboxedValuePod);
+                }
             }
 
             totalSize += rowSize;
@@ -514,6 +535,7 @@ private:
     TSet<NTableIndex::TClusterId> LevelClusters;
     std::unique_ptr<NKikimr::NKMeans::IClusters> RootClusters;
     TVector<NTableIndex::TClusterId> RootClusterIds;
+    bool EmptyIndex = false;
     std::unique_ptr<NKikimr::NKMeans::IClusters> CurClusters;
     TVector<NTableIndex::TClusterId> CurClusterIds;
 

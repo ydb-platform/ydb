@@ -36,7 +36,7 @@ public:
         : OutputType(outputType)
         , Packer(OutputType, settings.BufferPageAllocSize)
         , Width(OutputType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(OutputType)->GetElementsCount() : 1u)
-        , Storage(settings.ChannelStorage)
+        , Storage(GetEffectiveStorage(settings))
         , HolderFactory(holderFactory)
         , TransportVersion(transportVersion)
         , MaxStoredBytes(settings.MaxStoredBytes)
@@ -419,6 +419,13 @@ public:
     }
 
 private:
+    static IDqChannelStorage::TPtr GetEffectiveStorage(const TDqOutputChannelSettings& settings) {
+        // Prefer new spiller interface over legacy channel storage
+        if (settings.ChannelSpiller) {
+            return MakeIntrusive<TSpillerToChannelStorageAdapter>(settings.ChannelSpiller);
+        }
+        return settings.ChannelStorage;
+    }
     NKikimr::NMiniKQL::TType* OutputType;
     NKikimr::NMiniKQL::TValuePackerTransport<FastPack> Packer;
     const ui32 Width;

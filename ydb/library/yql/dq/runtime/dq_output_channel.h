@@ -7,6 +7,7 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_spiller.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
 #include <util/generic/size_literals.h>
@@ -34,7 +35,13 @@ struct TDqOutputChannelSettings {
     ui64 MaxChunkBytes = 2_MB;
     ui64 ChunkSizeLimit = 48_MB;
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
+    
+    // Legacy channel storage interface (deprecated)
     IDqChannelStorage::TPtr ChannelStorage;
+    
+    // New spiller interface (preferred)
+    NKikimr::NMiniKQL::ISpiller::TPtr ChannelSpiller;
+    
     TCollectStatsLevel Level = TCollectStatsLevel::None;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMaybe<size_t> BufferPageAllocSize;

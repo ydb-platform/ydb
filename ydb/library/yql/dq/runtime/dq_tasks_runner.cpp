@@ -10,6 +10,7 @@
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/dq/actors/spilling/channel_storage.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
@@ -691,8 +692,13 @@ public:
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 
                     if (!outputChannelDesc.GetInMemory()) {
-                        // Always use new method, pass SharedSpiller (can be nullptr for fallback)
-                        settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling(), SharedSpiller);
+                        if (SharedSpiller && outputChannelDesc.GetEnableSpilling()) {
+                            // Use new spiller interface - create channel spiller that wraps shared spiller
+                            settings.ChannelSpiller = CreateDqChannelSpiller(channelId, SharedSpiller, SpillingTaskCounters);
+                        } else {
+                            // Fallback to legacy channel storage for non-spilling channels
+                            settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling(), SharedSpiller);
+                        }
                     }
 
                     if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {

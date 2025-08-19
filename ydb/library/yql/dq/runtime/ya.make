@@ -31,6 +31,7 @@ SRCS(
     dq_input_producer.cpp
     dq_output_channel.cpp
     dq_output_consumer.cpp
+    dq_spiller_channel_adapter.cpp
     dq_tasks_counters.cpp
     dq_tasks_runner.cpp
     dq_transport.cpp

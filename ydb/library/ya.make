@@ -37,5 +37,4 @@ RECURSE(
     yaml_config
     yaml_config
     ycloud
-    yql
 )

@@ -82,7 +82,7 @@ TString GetSolomonMetrics(TString folderId, TString service) {
     const auto solomonPort = TString(getenv("SOLOMON_HTTP_PORT"));
     TSimpleHttpClient httpClient("localhost", std::stoi(solomonPort));
     TStringStream str;
-    httpClient.DoGet("/metrics?folderId=" + folderId + "&service=" + service, &str);
+    httpClient.DoGet("/metrics/get?folderId=" + folderId + "&service=" + service, &str);
     return TString(str.Str());
 }
 

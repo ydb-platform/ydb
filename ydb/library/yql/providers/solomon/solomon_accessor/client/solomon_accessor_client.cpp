@@ -301,8 +301,9 @@ public:
 
         TInstant downsamplingFrom = from;
         TInstant downsamplingTo = Settings.GetDownsampling().GetDisabled() ? std::max(std::min(sevenDaysAgo, to), from) : to;
+        ui64 gridMs = Settings.GetDownsampling().GetDisabled() ? TDuration::Minutes(5).MilliSeconds() : Settings.GetDownsampling().GetGridMs();
 
-        ui64 downsampledPointsCount = floor((downsamplingTo - downsamplingFrom).Seconds() * 1000.0 / Settings.GetDownsampling().GetGridMs()) + 1;
+        ui64 downsampledPointsCount = ceil((downsamplingTo - downsamplingFrom).Seconds() * 1000.0 / gridMs) + 1;
 
         if (downsamplingTo < to) {
             auto fullSelectors = AddRequiredLabels(selectors);

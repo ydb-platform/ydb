@@ -234,7 +234,8 @@ class YdbQueue(object):
         # a set with keys that are ready to be removed
         self.outdated_keys = collections.deque()
         self.outdated_keys_max_size = 50
-        self.alter_column_ids = dict() # table_name -> set of column ids
+        # a dict with table_name -> set of column ids
+        self.alter_column_ids = dict()
 
     def table_name_with_timestamp(self, working_dir=None):
         if working_dir is not None:

@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineSimilarity", "DESC", covered);
     }
 
-    TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable, const TString& dataCol = "data") {
+    TSession DoOnlyCreateTableForVectorIndex(TTableClient& db, bool nullable, const TString& dataCol = "data") {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
@@ -204,6 +204,11 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
+        return session;
+    }
+
+    TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable, const TString& dataCol = "data") {
+        auto session = DoOnlyCreateTableForVectorIndex(db, nullable, dataCol);
         {
             const TString query1 = TStringBuilder()
                 << "UPSERT INTO `/Root/TestTable` (pk, emb, " << dataCol << ") VALUES "
@@ -225,23 +230,23 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return session;
     }
 
+    void DoCreateVectorIndex(TSession& session, bool covered = true, bool ___data = false) {
+        // Add an index
+        const TString createIndex(Q_(Sprintf(R"(
+            ALTER TABLE `/Root/TestTable`
+                ADD INDEX index1
+                GLOBAL USING vector_kmeans_tree
+                ON (emb)%s
+                WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+        )", covered ? (___data ? " COVER (___data, emb)" : " COVER (data, emb)") : "")));
+
+        auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     TSession DoCreateTableAndVectorIndex(TTableClient& db, bool nullable, bool covered = true, bool ___data = false) {
         auto session = DoCreateTableForVectorIndex(db, nullable, ___data ? "___data" : "data");
-
-        // Add an index
-        {
-            const TString createIndex(Q_(Sprintf(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index1
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb)%s
-                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )", covered ? (___data ? " COVER (___data, emb)" : " COVER (data, emb)") : "")));
-
-            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
+        DoCreateVectorIndex(session, covered, ___data);
         return session;
     }
 
@@ -464,6 +469,55 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         const TString postingTable1_bulk = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
         UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_bulk);
+    }
+
+    Y_UNIT_TEST(VectorIndexNoEmptyUpdate) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoOnlyCreateTableForVectorIndex(db, true);
+        DoCreateVectorIndex(session, false);
+
+        const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+
+        // Insert to the table with index should succeed, but without updating the index
+        {
+            TString query1(Q_(R"(
+                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
+                (10, "\x11\x62\x03", "10"),
+                (11, "\x77\x75\x03", "11");
+            )"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable"));
+
+        // Update to the table with index should succeed, but without updating the index
+        {
+            TString query1(Q_("UPDATE `/Root/TestTable` SET data=\"20\" WHERE pk=10;"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable"));
+
+        // Delete from the table with index should succeed, but without updating the index
+        {
+            TString query1(Q_("DELETE FROM `/Root/TestTable`"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable"));
     }
 
     void DoTestVectorIndexDelete(const TString& deleteQuery, bool returning, bool covered) {

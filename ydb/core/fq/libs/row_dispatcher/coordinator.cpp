@@ -12,6 +12,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -221,6 +224,7 @@ private:
     void UpdatePendingReadActors();
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
     TString GetInternalState();
+    void SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message);
 };
 
 TActorCoordinator::TActorCoordinator(
@@ -450,6 +454,10 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
         NActors::TActorId rowDispatcherId;
         if (locationIt != PartitionLocations.end()) {
             rowDispatcherId = locationIt->second;
+            if (!filteredNodeIds.empty() && !filteredNodeIds.contains(rowDispatcherId.NodeId())) {
+                SendError(readActorId, request, TStringBuilder() << "Can't read the same topic with different mappings");
+                return true;
+            }
         } else {
             if (const auto maybeLocation = GetAndUpdateLocation(key, filteredNodeIds)) {
                 rowDispatcherId = *maybeLocation;
@@ -492,6 +500,13 @@ void TActorCoordinator::UpdatePendingReadActors() {
 void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     PrintInternalState();
+}
+
+void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message) {
+    LOG_ROW_DISPATCHER_WARN("Send TEvCoordinatorResult to " << readActorId << ", issues: " << message);
+    auto response = std::make_unique<TEvRowDispatcher::TEvCoordinatorResult>();
+    NYql::IssuesToMessage(NYql::TIssues{NYql::TIssue{message}}, response->Record.MutableIssues());
+    Send(readActorId, response.release(), IEventHandle::FlagTrackDelivery, request.Cookie);               
 }
 
 } // namespace

@@ -17,11 +17,6 @@ namespace NKikimr {
         value.ApproximateFreeSpaceShare;
     };
 
-    template<typename T>
-    concept HasGroupId = requires(T value) {
-        value.GroupId;
-    };
-
     class TBridgedBlobStorageProxyActor : public TActorBootstrapped<TBridgedBlobStorageProxyActor> {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TGroupId GroupId;
@@ -46,6 +41,8 @@ namespace NKikimr {
             std::unique_ptr<IEventBase> CombinedResponse;
             bool Finished = false;
             THashSet<ui64> CookiesInFlight;
+            THPTimer Timer;
+            std::deque<std::tuple<TString, TDuration>> SubrequestTimings;
 
             struct TDiscoverState {
                 TLogoBlobID Id;
@@ -375,13 +372,12 @@ namespace NKikimr {
                 while (RestoreIndex < RestoreQueue.size()) {
                     auto& item = RestoreQueue[RestoreIndex];
 
-                    if (item.WriteTo.Empty()) {
+                    if (!item.ReadFrom || item.WriteTo.Empty()) {
                         ++RestoreIndex;
                         continue;
                     }
 
                     Y_ABORT_UNLESS(item.Id);
-                    Y_ABORT_UNLESS(item.ReadFrom);
 
                     if (item.Buffer && item.Buffer.size() == item.Id.BlobSize()) {
                         IssueRestorePut(self, RestoreIndex);
@@ -611,6 +607,7 @@ namespace NKikimr {
             const TBridgeInfo::TPile *Pile;
             TGroupId GroupId;
             TRequestPayload Payload;
+            THPTimer Timer;
         };
         THashMap<ui64, TRequestInFlight> RequestsInFlight;
         ui64 LastRequestCookie = 0;
@@ -752,7 +749,7 @@ namespace NKikimr {
                 && ev->Get()->Status != NKikimrProto::NODATA
                 && NBridge::PileStateTraits(item.Pile->State).RequiresDataQuorum;
 
-            STLOG(isError ? PRI_DEBUG : PRI_NOTICE, BS_PROXY_BRIDGE, BPB02, "intermediate response",
+            STLOG(isError ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_BRIDGE, BPB02, "intermediate response",
                 (RequestId, request->MakeRequestId()),
                 (GroupId, item.GroupId),
                 (Status, ev->Get()->Status),
@@ -794,14 +791,24 @@ namespace NKikimr {
                     request->Finished = true;
                 } else {
                     std::unique_ptr<TEvent> ptr(ev->Release().Release());
+                    request->SubrequestTimings.emplace_back(TypeName<TEvent>(), TDuration::Seconds(item.Timer.Passed()));
                     if (auto response = request->ProcessResponse(*this, std::move(ptr), pile, item.Payload)) {
                         auto *common = dynamic_cast<TEvBlobStorage::TEvResultCommon*>(response.get());
                         Y_ABORT_UNLESS(common);
                         Y_DEBUG_ABORT_UNLESS(common->Status != NKikimrProto::RACE);
                         const bool success = common->Status == NKikimrProto::OK
                             || (common->Status == NKikimrProto::NODATA && response->Type() == TEvBlobStorage::EvDiscoverResult);
-                        STLOG(success ? PRI_DEBUG : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished", (RequestId, request->MakeRequestId()),
-                            (Response, response->ToString()));
+                        auto makeSubrequestTimings = [&] {
+                            return FormatList(std::views::transform(request->SubrequestTimings, [&](const auto& item) {
+                                const auto& [name, duration] = item;
+                                return TStringBuilder() << name << ':' << duration;
+                            }));
+                        };
+                        STLOG(success ? PRI_INFO : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished",
+                            (RequestId, request->MakeRequestId()),
+                            (Response, response->ToString()),
+                            (Passed, TDuration::Seconds(request->Timer.Passed())),
+                            (SubrequestTimings, makeSubrequestTimings()));
                         Send(request->Sender, response.release(), 0, request->Cookie);
                         request->Finished = true;
                     }

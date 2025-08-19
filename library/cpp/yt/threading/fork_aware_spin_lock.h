@@ -14,6 +14,8 @@ namespace NYT::NThreading {
 class TForkAwareSpinLock
 {
 public:
+    static constexpr bool Traced = true;
+
     TForkAwareSpinLock(const TForkAwareSpinLock&) = delete;
     TForkAwareSpinLock& operator =(const TForkAwareSpinLock&) = delete;
 

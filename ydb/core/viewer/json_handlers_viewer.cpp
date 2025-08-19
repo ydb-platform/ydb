@@ -12,6 +12,7 @@
 #include "viewer_describe.h"
 #include "viewer_describe_replication.h"
 #include "viewer_describe_topic.h"
+#include "viewer_describe_transfer.h"
 #include "viewer_feature_flags.h"
 #include "viewer_topic_data.h"
 #include "viewer_graph.h"
@@ -166,6 +167,10 @@ void InitViewerDescribeReplicationJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/describe_replication", new TJsonHandler<TJsonDescribeReplication>(TJsonDescribeReplication::GetSwagger()));
 }
 
+void InitViewerDescribeTransferJsonHandler(TJsonHandlers& jsonHandlers) {
+    jsonHandlers.AddHandler("/viewer/describe_transfer", new TJsonHandler<TJsonDescribeTransfer>(TJsonDescribeTransfer::GetSwagger()));
+}
+
 void InitViewerDescribeTopicJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/describe_topic", new TJsonHandler<TJsonDescribeTopic>(TJsonDescribeTopic::GetSwagger()));
 }
@@ -311,6 +316,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerDescribeJsonHandler(jsonHandlers);
     InitViewerDescribeReplicationJsonHandler(jsonHandlers);
     InitViewerDescribeTopicJsonHandler(jsonHandlers);
+    InitViewerDescribeTransferJsonHandler(jsonHandlers);
     InitViewerDescribeConsumerJsonHandler(jsonHandlers);
     InitViewerHotkeysJsonHandler(jsonHandlers);
     InitViewerHiveInfoJsonHandler(jsonHandlers);

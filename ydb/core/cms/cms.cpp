@@ -2544,15 +2544,20 @@ void TCms::Handle(::NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorC
     }
 
     const auto& cs = record.Config->GetClusterState();
-    if (cs.GetSuspendedPiles().empty()) {
+    THashSet<TBridgePileId> suspended;
+    for (ui32 i = 0; i < cs.PerPileStateSize(); ++i) {
+        if (cs.GetPerPileState(i) == NKikimrBridge::TClusterState::SUSPENDED) {
+            suspended.insert(TBridgePileId::FromPileIndex(i));
+        }
+    }
+    if (suspended.empty()) {
         return;
     }
-
-    for (ui32 pileIdx : cs.GetSuspendedPiles()) {
+    for (const auto& pileId : suspended) {
         auto evInvoke = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         auto* req = evInvoke->Record.MutableNotifyBridgeSuspended();
         req->SetGeneration(cs.GetGeneration());
-        req->SetPileId(pileIdx);
+        pileId.CopyToProto(req, &std::decay_t<decltype(*req)>::SetPileId);
         ctx.Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), evInvoke.release());
     }
 }

@@ -143,6 +143,9 @@ namespace NDiscovery {
                 case NKikimrBridge::TClusterState::DISCONNECTED:
                     pileInfo->set_state(Ydb::Bridge::PileState::DISCONNECTED);
                     break;
+                case NKikimrBridge::TClusterState::SUSPENDED:
+                    pileInfo->set_state(Ydb::Bridge::PileState::SUSPENDED);
+                    break;
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_ABORT("Unknown pile state");

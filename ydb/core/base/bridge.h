@@ -16,7 +16,6 @@ namespace NKikimr {
             NKikimrBridge::TClusterState::EPileState State = {}; // state of this pile
             bool IsPrimary = false; // is this pile selected as primary
             bool IsBeingPromoted = false; // is this pile being promoted right now (and not the primary, but in sync with one)
-            bool IsSuspended = false; // is this pile being taken down gracefully
         };
 
         THashMap<ui32, const TPile*> StaticNodeIdToPile; // node to pile map for static nodes
@@ -65,6 +64,7 @@ namespace NKikimr {
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1: return {false, false, true };
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2: return {true,  true,  true };
                 case NKikimrBridge::TClusterState::DISCONNECTED:       return {false, false, false};
+                case NKikimrBridge::TClusterState::SUSPENDED:          return {false, true,  true };
 
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:

@@ -227,16 +227,16 @@ bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStrin
     auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
     if (mainTableImpl) {
         for (const auto& index: mainTableImpl->Metadata->Indexes) {
-            if (index.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                continue;
-            }
-            if (index.KeyColumns.size() > 1) {
-                // prefixed index update is not supported yet
-                return true;
-            }
-            auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::LevelTable;
-            if (path == levelTablePath) {
-                return true;
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                if (index.KeyColumns.size() > 1) {
+                    // prefixed index update is not supported yet
+                    return true;
+                }
+                const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::LevelTable;
+                const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::PostingTable;
+                if (path == levelTablePath || path == postingTablePath) {
+                    return true;
+                }
             }
         }
     }

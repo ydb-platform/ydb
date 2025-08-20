@@ -519,6 +519,7 @@ namespace NKikimr::NStorage {
             TActorId ActorId; // originating actor id or empty if this was triggered by system
         };
         std::deque<TInvokeOperation> InvokeQ; // operations queue; first is always the being executed one
+        std::deque<TInvokeOperation> InvokePending; // collected while in ERROR_TIMEOUT state
         bool DeadActorWaitingForProposition = false;
 
         class TInvokeRequestHandlerActor;

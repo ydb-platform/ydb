@@ -3582,18 +3582,37 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
 }
 
 bool TVectorIndexSettings::Validate(TContext& ctx) const {
+    auto validateInRange = [&](const TString& name, std::optional<ui64> value, ui64 minValue, ui64 maxValue) {
+        if (!value.has_value()) {
+            ctx.Error() << name << " should be set";
+            return false;
+        }
+
+        if (minValue <= value && value <= maxValue) {
+            return true;
+        }
+
+        ctx.Error() << "Invalid " << name << ": " << value << " should be in range [" << minValue << ", " << maxValue << "]";
+        return false;
+    };
+
     if (!Distance && !Similarity) {
         ctx.Error() << "either distance or similarity should be set";
+        return false;
+    }
+    if (Distance && Similarity) {
+        ctx.Error() << "only one of distance or similarity should be set, not both";
         return false;
     }
     if (!VectorType) {
         ctx.Error() << "vector_type should be set";
         return false;
     }
-    if (!VectorDimension) {
-        ctx.Error() << "vector_dimension should be set";
-        return false;
-    }
+
+    validateInRange("vector_dimension", VectorDimension, 1, 16384);
+    validateInRange("levels", Levels, 1, 32); // TODO
+    validateInRange("clusters", Clusters, 2, 100); // TODO
+
     return true;
 }
 

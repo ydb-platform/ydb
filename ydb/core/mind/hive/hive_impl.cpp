@@ -1962,6 +1962,9 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
                 }
             }
         }
+        if (info->LockedToActor) {
+            ActorIdToProto(info->LockedToActor, tabletInfo.MutableLockedToActor());
+        }
     }
 }
 

@@ -3985,14 +3985,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
             "Error: Invalid vector_dimension: XxX");
         check("similarity=inner_product, vector_type=float, vector_dimension=0, levels=3, clusters=10",
-            "Error: Invalid vector_dimension: 0 should be in range [1, 16384]");
+            "Error: Invalid vector_dimension: 0 should be between 1 and 16384");
         check("similarity=inner_product, vector_type=float, vector_dimension=1, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=10, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=16384, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=16385, levels=3, clusters=10",
-            "Error: Invalid vector_dimension: 16385 should be in range [1, 16384]");
+            "Error: Invalid vector_dimension: 16385 should be between 1 and 16384");
         check("similarity=inner_product, vector_type=float, vector_dimension=999999999999, levels=3, clusters=10",
-            "Error: Invalid vector_dimension: 999999999999 should be in range [1, 16384]");
+            "Error: Invalid vector_dimension: 999999999999 should be between 1 and 16384");
         check("similarity=inner_product, vector_type=float, vector_dimension=99999999999999999999, levels=3, clusters=10",
             "Error: Invalid vector_dimension: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, levels=3, clusters=10",
@@ -4002,14 +4002,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=2",
             "Error: Invalid levels: XxX");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=0, clusters=2",
-            "Error: Invalid levels: 0 should be in range [1, 16]");
+            "Error: Invalid levels: 0 should be between 1 and 16");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=2", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=16, clusters=2", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=17, clusters=2",
-            "Error: Invalid levels: 17 should be in range [1, 16]");
+            "Error: Invalid levels: 17 should be between 1 and 16");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=999999999999, clusters=2",
-            "Error: Invalid levels: 999999999999 should be in range [1, 16]");
+            "Error: Invalid levels: 999999999999 should be between 1 and 16");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=99999999999999999999, clusters=2",
             "Error: Invalid levels: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2",
@@ -4019,16 +4019,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=XxX",
             "Error: Invalid clusters: XxX");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=0",
-            "Error: Invalid clusters: 0 should be in range [2, 1024]");
+            "Error: Invalid clusters: 0 should be between 2 and 1024");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=1",
             "Error: Invalid clusters: 1");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=1024", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=1025",
-            "Error: Invalid clusters: 1025 should be in range [2, 1024]");
+            "Error: Invalid clusters: 1025 should be between 2 and 1024");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=999999999999",
-            "Error: Invalid clusters: 999999999999 should be in range [2, 1024]");
+            "Error: Invalid clusters: 999999999999 should be between 2 and 1024");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=99999999999999999999",
             "Error: Invalid clusters: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1",

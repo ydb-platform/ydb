@@ -1951,6 +1951,26 @@ void ParseRequest(
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
+    TReqPingDistributedWriteSession* req,
+    const TSignedDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionPingOptions& options)
+{
+    Y_UNUSED(options);
+    req->set_signed_session(ToProto(ConvertToYsonString(session)));
+}
+
+void ParseRequest(
+    TSignedDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionPingOptions* mutableOptions,
+    const TReqPingDistributedWriteSession& req)
+{
+    Y_UNUSED(mutableOptions);
+    *mutableSession = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
     TReqFinishDistributedWriteSession* req,
     const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)

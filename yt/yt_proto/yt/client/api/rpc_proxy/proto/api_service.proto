@@ -3640,6 +3640,15 @@ message TRspStartDistributedWriteSession
     repeated bytes signed_cookies = 2; // vector of YSON-serialized TSignedDistributedWriteCookiePtr
 }
 
+message TReqPingDistributedWriteSession
+{
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr
+}
+
+message TRspPingDistributedWriteSession
+{
+}
+
 message TReqFinishDistributedWriteSession
 {
     required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteSessionPtr

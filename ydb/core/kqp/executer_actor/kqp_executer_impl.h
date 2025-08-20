@@ -922,10 +922,7 @@ protected:
     }
 
     template <bool isScan>
-    auto BuildAllTasks(bool limitTasksPerNode) {
-        // for data: limitTasksPerNode = StreamResult || EnableReadsMerge;
-        // for scan: limitTasksPerNode = false;
-
+    auto BuildAllTasks(bool limitTasksPerNode, bool buildStageChannels) {
         size_t sourceScanPartitionsCount = 0;
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
@@ -985,7 +982,17 @@ protected:
                         YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
                     }
                 }
+
+                // Not task-related
+                TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
+                if (buildStageChannels) {
+                    BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
+                }
             }
+
+            // Not task-related
+            ResponseEv->InitTxResult(tx.Body);
+            BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
         }
 
         return sourceScanPartitionsCount;
@@ -1179,7 +1186,7 @@ protected:
             }
         }
 
-        if (Request.QueryPhysicalGraph) {
+        if (TasksGraph.GetMeta().IsRestored) {
             for (const auto taskId : stageInfo.Tasks) {
                 auto& task = TasksGraph.GetTask(taskId);
                 FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
@@ -1564,7 +1571,7 @@ protected:
         auto& intros = stageInfo.Introspections;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-        if (Request.QueryPhysicalGraph) {
+        if (TasksGraph.GetMeta().IsRestored) {
             for (const auto taskId : stageInfo.Tasks) {
                 auto& task = TasksGraph.GetTask(taskId);
                 task.Meta.Type = TTaskMeta::TTaskType::Compute;
@@ -2535,6 +2542,31 @@ protected:
         return TasksGraph.GetMeta().UserRequestContext;
     }
 
+    bool RestoreTasksGraph() {
+        if (Request.QueryPhysicalGraph) {
+            RestoreTasksGraphInfo(TasksGraph, *Request.QueryPhysicalGraph);
+        }
+
+        return TasksGraph.GetMeta().IsRestored;
+    }
+
+    NYql::NDqProto::TDqTask* SerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings) {
+        return ArenaSerializeTaskToProto(TasksGraph, task, serializeAsyncIoSettings);
+    }
+
+    const TKqpTasksGraph& GetTasksGraph() const {
+        return TasksGraph;
+    }
+
+    auto& GetMeta() {
+        return TasksGraph.GetMeta();
+    }
+
+    // TODO: remove this method, so that all task-related stuff is outside executers
+    auto& GetTask(ui64 taskId) {
+        return TasksGraph.GetTask(taskId);
+    }
+
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
@@ -2558,7 +2590,6 @@ protected:
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
 
     bool ShardsResolved = false;
-    TKqpTasksGraph TasksGraph;
 
     TActorId KqpTableResolverId;
     TActorId KqpShardsResolverId;
@@ -2627,8 +2658,11 @@ protected:
     THashSet<ui32> SentResultIndexes;
 
     THashSet<ui64> ShardsWithEffects; // tracks which shards are expected to have effects - only Data executer
+
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
+
+    TKqpTasksGraph TasksGraph;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

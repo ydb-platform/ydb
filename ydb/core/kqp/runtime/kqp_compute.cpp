@@ -117,7 +117,7 @@ public:
 
         TState& GetState() const {
             auto& result = Ctx.MutableValues[StateIndex];
-            if (!result.HasValue()) {
+            if (result.IsInvalid()) {
                 result = Ctx.HolderFactory.Create<TState>();
             }
             return *static_cast<TState*>(result.AsBoxed().Get());

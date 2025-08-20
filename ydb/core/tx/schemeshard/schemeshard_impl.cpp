@@ -1740,6 +1740,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateSysView:
     case TTxState::TxCreateLongIncrementalBackupOp:
     case TTxState::TxCreateSecret:
+    case TTxState::TxCreateStreamingQuery:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1780,6 +1781,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterBackupCollection:
     case TTxState::TxChangePathState:
     case TTxState::TxAlterSecret:
+    case TTxState::TxAlterStreamingQuery:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1809,6 +1811,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropBackupCollection:
     case TTxState::TxDropSysView:
     case TTxState::TxDropSecret:
+    case TTxState::TxDropStreamingQuery:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -3451,6 +3454,25 @@ void TSchemeShard::PersistSecretAlterRemove(NIceDb::TNiceDb& db, TPathId pathId)
     db.Table<Schema::SecretsAlterData>().Key(pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId, TStreamingQueryInfo::TPtr streamingQuery) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    db.Table<Schema::StreamingQuery>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::StreamingQuery::AlterVersion>{streamingQuery->AlterVersion},
+        NIceDb::TUpdate<Schema::StreamingQuery::Properties>{streamingQuery->Properties.SerializeAsString()}
+    );
+}
+
+void TSchemeShard::PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    if (const auto it = StreamingQueries.find(pathId); it != StreamingQueries.end()) {
+        StreamingQueries.erase(it);
+        DecrementPathDbRefCount(pathId);
+    }
+
+    db.Table<Schema::StreamingQuery>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -4789,6 +4811,13 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetSysViewVersion();
                 break;
             }
+            case NKikimrSchemeOp::EPathType::EPathTypeStreamingQuery: {
+                const auto it = StreamingQueries.find(pathId);
+                Y_ABORT_UNLESS(it != StreamingQueries.end());
+                result.SetStreamingQueryVersion(it->second->AlterVersion);
+                generalVersion += result.GetStreamingQueryVersion();
+                break;
+            }
 
             case NKikimrSchemeOp::EPathType::EPathTypeSecret: {
                 auto it = Secrets.find(pathId);
@@ -5715,6 +5744,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         break;
     case TPathElement::EPathType::EPathTypeSecret:
         TabletCounters->Simple()[COUNTER_SECRET_COUNT].Sub(1);
+        break;
+    case TPathElement::EPathType::EPathTypeStreamingQuery:
+        TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");

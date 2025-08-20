@@ -1907,6 +1907,8 @@ message TModifyScheme {
     optional TSecretSchemaOp CreateSecret = 88;
     optional TSecretSchemaOp AlterSecret = 89;
 
+    optional TStreamingQueryDescription CreateStreamingQuery = 90;
+
     // Some entries are grouped by semantics, so are out of order
 }
 
@@ -1977,6 +1979,7 @@ enum EPathType {
     EPathTypeTransfer = 23;
     EPathTypeSysView = 24;
     EPathTypeSecret = 25;
+    EPathTypeStreamingQuery = 26;
 }
 
 enum EPathSubType {
@@ -2038,6 +2041,7 @@ message TPathVersion {
     optional uint64 BackupCollectionVersion = 31;
     optional uint64 SysViewVersion = 32;
     optional uint64 SecretVersion = 33;
+    optional uint64 StreamingQueryVersion = 34;
 }
 
 // Describes single path
@@ -2131,6 +2135,7 @@ message TPathDescription {
     optional TBackupCollectionDescription BackupCollectionDescription = 31;
     optional TSysViewDescription SysViewDescription = 32;
     optional TSecretDescription SecretDescription = 33;
+    optional TStreamingQueryDescription StreamingQueryDescription = 34;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2375,4 +2380,16 @@ message TSecretSchemaOp {
     optional string Name = 1;
     optional string Value = 2; // original, unencrypted value
     optional bool InheritPermissions = 3;
+}
+
+message TStreamingQueryProperties {
+    map<string, string> Properties = 1;
+}
+
+message TStreamingQueryDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+    optional TStreamingQueryProperties Properties = 4;
+    optional bool ReplaceIfExists = 5;
 }

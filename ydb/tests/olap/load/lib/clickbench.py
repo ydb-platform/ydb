@@ -119,7 +119,7 @@ class TestWorkloadMangerClickbenchConcurentQueryLimit(ClickbenchParallelBase):
         sessions_pool = ydb.QuerySessionPool(YdbCluster.get_ydb_driver())
 
         for pool in cls.resource_pools:
-            if _exists('.metadata/workload_manager/classifiers/resource_pool_classifiers') and sessions_pool.execute_with_retries(f'SELECT count(*) from `.metadata/workload_manager/classifiers/resource_pool_classifiers` WHERE name="{pool}"')[0].rows[0] > 0:
+            if _exists('.metadata/workload_manager/classifiers/resource_pool_classifiers') and sessions_pool.execute_with_retries(f'SELECT count(*) from `.metadata/workload_manager/classifiers/resource_pool_classifiers` WHERE name="{pool}"')[0].rows[0][0] > 0:
                 sessions_pool.execute_with_retries(f'DROP RESOURCE POOL CLASSIFIER {pool}')
             if _exists(f'.metadata/workload_manager/pools/{pool}'):
                 sessions_pool.execute_with_retries(f'DROP RESOURCE POOL {pool}')

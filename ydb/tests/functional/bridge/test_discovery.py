@@ -47,15 +47,15 @@ class TestDiscovery(BridgeKiKiMRTest):
         })
 
         updates = [
-            PileState(pile_name="r2", state=PileState.PROMOTE),
+            PileState(pile_name="r2", state=PileState.PROMOTED),
         ]
         self.update_cluster_state(self.bridge_client, updates)
-        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.PROMOTE})
+        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.PROMOTED})
 
         result, status = self.list_endpoints()
         assert_that(status, is_(StatusIds.SUCCESS))
         self.check_endpoints(result)
         self.check_states(result, {
             "r1": PileState.PRIMARY,
-            "r2": PileState.PROMOTE,
+            "r2": PileState.PROMOTED,
         })

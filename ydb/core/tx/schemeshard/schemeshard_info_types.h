@@ -1627,7 +1627,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         if (isBackup) {
             Y_ENSURE(Max<ui64>() - BackupPathsCount >= delta);
             BackupPathsCount += delta;
-        } else if (counters) {
+        } else {
             counters->ChangePathCount(delta);
         }
     }

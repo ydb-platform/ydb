@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
     }
 
-    Ydb::Monitoring::SelfCheckResult RequestHcWithBridgeVdisks(const TVector<TVDisks>& groupVdisks) {
+    Ydb::Monitoring::SelfCheckResult RequestHcWithBridgeVdisks(const TVector<TVDisks>& groupVdisks, size_t bridgeGroupCount = 1) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -618,8 +618,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TAutoPtr<IEventHandle> handle;
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "1", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "2", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -639,7 +640,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
-                    AddBridgeGroupsToSysViewResponse(x);
+                    AddBridgeGroupsToSysViewResponse(x, bridgeGroupCount);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
@@ -929,6 +930,18 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("1"));
         CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("2"));;
+    }
+
+    Y_UNIT_TEST(BridgeTwoGroups) {
+        TVector<TVDisks> disks;
+        disks.emplace_back(3, NKikimrBlobStorage::ERROR);
+        disks.emplace_back();
+        disks.emplace_back();
+        disks.emplace_back(3, NKikimrBlobStorage::ERROR);
+        disks.emplace_back();
+        auto result = RequestHcWithBridgeVdisks(disks, 2);
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test"));
     }
 
     /* HC currently infers group status on its own, so it's never unknown
@@ -2808,8 +2821,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TTestActorRuntime& runtime = *server.GetRuntime();
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .State = NKikimrBridge::TClusterState::SYNCHRONIZED, .IsPrimary = true});
-        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "1", .State = NKikimrBridge::TClusterState::SYNCHRONIZED, .IsPrimary = true});
+        bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(1), .Name = "2", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
         bridgeInfo->PrimaryPile = bridgeInfo->Piles.data();
 

@@ -127,6 +127,7 @@ message LocationNode {
     uint32 id = 1;
     string host = 2;
     uint32 port = 3;
+    LocationBridgePile pile = 4;
 }
 
 message LocationStoragePDisk {

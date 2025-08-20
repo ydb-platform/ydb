@@ -1775,16 +1775,26 @@ private:
             vectorResolveProto.SetVectorColumnIndex(columnIndexes.at(vectorColumn));
 
             TSet<TString> copyColumns;
+            copyColumns.insert(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
             for (const auto& keyColumn : tableMeta->KeyColumnNames) {
-                YQL_ENSURE(columnIndexes.contains(keyColumn));
-                vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(keyColumn));
                 copyColumns.insert(keyColumn);
             }
-            for (const auto& dataColumn : indexDesc->DataColumns) {
-                if (!copyColumns.contains(dataColumn)) {
-                    YQL_ENSURE(columnIndexes.contains(dataColumn));
-                    vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(dataColumn));
+            if (vectorResolve.WithData() == "true") {
+                for (const auto& dataColumn : indexDesc->DataColumns) {
                     copyColumns.insert(dataColumn);
+                }
+            }
+
+            // Maintain alphabetical output column order
+
+            ui32 pos = 0;
+            for (const auto& copyCol : copyColumns) {
+                if (copyCol == NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn) {
+                    vectorResolveProto.SetClusterColumnOutPos(pos);
+                } else {
+                    YQL_ENSURE(columnIndexes.contains(copyCol));
+                    vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(copyCol));
+                    pos++;
                 }
             }
 

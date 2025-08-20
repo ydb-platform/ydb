@@ -11,7 +11,7 @@ def post_install(self):
 
 
 ftxui = CMakeNinjaNixProject(
-    owners=["g:taxi-common"],
+    owners=["g:contrib"],
     nixattr="ftxui",
     flags=[
         "-DFTXUI_BUILD_EXAMPLES=OFF",

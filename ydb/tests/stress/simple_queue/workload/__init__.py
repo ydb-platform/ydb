@@ -27,8 +27,11 @@ def generate_blobs(count=32):
 
 class EventKind(object):
     CREATE_TABLE = 'create_table'
-    ALTER_TABLE = 'alter_table'
+    ADD_COLUMN = 'add_column'
     DROP_TABLE = 'drop_table'
+
+    ADD_COLUMN_DEFAULT = 'add_column_default'
+    DROP_COLUMN = 'drop_column'
 
     READ_TABLE = 'read_table'
 
@@ -55,9 +58,20 @@ class EventKind(object):
         )
 
     @classmethod
+    def basic_schema_row(cls):
+        return (
+            cls.ADD_COLUMN_DEFAULT,
+            cls.DROP_COLUMN,
+        )
+
+    @classmethod
+    def basic_schema_column(cls):
+        return ()
+
+    @classmethod
     def rare(cls):
         return (
-            cls.ALTER_TABLE,
+            cls.ADD_COLUMN,
             cls.DROP_TABLE,
         )
 
@@ -65,7 +79,10 @@ class EventKind(object):
     def list(cls):
         return (
             cls.DROP_TABLE,
-            cls.ALTER_TABLE,
+            cls.ADD_COLUMN,
+
+            cls.ADD_COLUMN_DEFAULT,
+            cls.DROP_COLUMN,
 
             cls.READ_TABLE,
 
@@ -217,6 +234,8 @@ class YdbQueue(object):
         # a set with keys that are ready to be removed
         self.outdated_keys = collections.deque()
         self.outdated_keys_max_size = 50
+        # a dict with table_name -> set of column ids
+        self.alter_column_ids = dict()
 
     def table_name_with_timestamp(self, working_dir=None):
         if working_dir is not None:
@@ -277,6 +296,13 @@ class YdbQueue(object):
         self.process_dir_content(
             self.working_dir, response, switch=True,
         )
+
+    def generate_alter_column_id(self):
+        val = random.randint(1, 100000)
+        while val in self.alter_column_ids.get(self.table_name, set()):
+            val = random.randint(1, 100000)
+        self.alter_column_ids.setdefault(self.table_name, set()).add(val)
+        return val
 
     def read_table(self):
         it = self.send_query("SELECT `key` FROM `{}`".format(self.table_name), None, EventKind.READ_TABLE)
@@ -349,13 +375,36 @@ class YdbQueue(object):
 
         self.send_query(query=query, event_kind=EventKind.WRITE, parameters=parameters)
 
-    def alter_table(self):
+    def add_column(self):
         query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8".format(
             table_name=self.table_name,
-            val=random.randint(1, 100000),
+            val=self.generate_alter_column_id(),
         )
 
-        self.send_query(query, parameters=None, event_kind=EventKind.ALTER_TABLE)
+        self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN)
+
+    def add_column_default(self):
+        query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8 NOT NULL DEFAULT '{default_value}'".format(
+            table_name=self.table_name,
+            val=self.generate_alter_column_id(),
+            default_value=random_string(10),
+        )
+
+        self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN_DEFAULT)
+
+    def drop_column(self):
+        if len(self.alter_column_ids.get(self.table_name, set())) == 0:
+            return
+
+        val = random.choice(list(self.alter_column_ids[self.table_name]))
+        self.alter_column_ids[self.table_name].remove(val)
+
+        query = "ALTER TABLE `{table_name}` DROP COLUMN column_{val}".format(
+            table_name=self.table_name,
+            val=val,
+        )
+
+        self.send_query(query, parameters=None, event_kind=EventKind.DROP_COLUMN)
 
     def drop_table(self):
         duplicates = set()
@@ -441,6 +490,9 @@ class Workload:
             schedule = []
             for op in EventKind.rare():
                 schedule.extend([(point, op) for point in self.random_points()])
+
+            for op in EventKind.basic_schema_row() if self.mode == 'row' else EventKind.basic_schema_column():
+                schedule.extend([(point, op) for point in self.random_points(size=10)])
 
             for op in EventKind.periodic_tasks_row() if self.mode == 'row' else EventKind.periodic_tasks_column():
                 schedule.extend([(point, op) for point in self.random_points(size=50)])

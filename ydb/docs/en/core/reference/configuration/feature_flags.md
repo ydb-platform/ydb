@@ -1,4 +1,4 @@
-# Feature Flags
+# feature_flags
 
 The `feature_flags` configuration section enables or disables specific {{ ydb-short-name }} features using boolean flags. These flags control experimental features, performance optimizations, and compatibility settings that can be toggled without changing the {{ ydb-short-name }} code. For general information about {{ ydb-short-name }} configuration, see [{#T}](../../devops/configuration-management/index.md).
 

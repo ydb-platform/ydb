@@ -1111,7 +1111,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
             auto res = client.BulkUpsert("/Root/TestAllColumnsColumnTable", rows.Build()).GetValueSync();
             Cerr << res.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Missing value columns (all columns are required)");
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "All columns are required during BulkUpsert. Missing columns");
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
         }
 

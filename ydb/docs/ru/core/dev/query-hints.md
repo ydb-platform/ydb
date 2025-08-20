@@ -72,7 +72,7 @@ JoinType(t1 t2 ... tn Broadcast | Shuffle | Lookup)
   - `Lookup` - выбрать алгоритм LookupJoin
 
 **Принцип работы**
-Если в плане запроса находится оператор соединения, который соединяет те и только те таблицы, которые перечислены в списке, то оптимизатор выберет заданный алгоритм соединения, если это не приведет к построению неправильного плана.
+Если в плане запроса находится оператор соединения, который соединяет те и только те таблицы, которые перечислены в списке, то оптимизатор выберет заданный алгоритм соединения, если это не приведет к построению неправильного плана. Тип соединения `Lookup` поддерживается только в запросах поверх [строковых таблиц](../concepts/datamodel/table.md).
 
 **Примеры:**
 ```sql
@@ -84,6 +84,52 @@ JoinType(customers orders products Shuffle)
 
 JoinType(nation region Lookup)
 ```
+
+Применим подсказки алгоритмов соединений к следующему запросу:
+
+```sql
+PRAGMA ydb.OptimizerHints =
+'
+    JoinType(R S Shuffle)
+    JoinType(R S T Broadcast)
+    JoinType(R S T U Shuffle)
+    JoinType(R S T U V Broadcast)
+';
+
+SELECT * FROM
+    R   INNER JOIN  S   on  R.id = S.id
+        INNER JOIN  T   on  R.id = T.id
+        INNER JOIN  U   on  T.id = U.id
+        INNER JOIN  V   on  U.id = V.id;
+```
+
+Посмореть план выполнения запроса можно с помощью команды [CLI](../reference/ydb-cli/commands/explain-plan.md):
+```bash
+ ydb -p <profile_name> sql --explain -f query.sql
+```
+
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│ Operation                                                                               │
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│ ┌> ResultSet                                                                            │
+│ └─┬> InnerJoin (MapJoin) (U.id = V.id)                                                  │
+│   ├─┬> InnerJoin (Grace) (T.id = U.id)                                                  │
+│   │ ├─┬> HashShuffle (KeyColumns: ["T.id"], HashFunc: "HashV2")                         │
+│   │ │ └─┬> InnerJoin (MapJoin) (R.id = T.id)                                            │
+│   │ │   ├─┬> InnerJoin (Grace) (R.id = S.id)                                            │
+│   │ │   │ ├─┬> HashShuffle (KeyColumns: ["id"], HashFunc: "HashV2")                     │
+│   │ │   │ │ └──> TableFullScan (Table: R, ReadColumns: ["id (-∞, +∞)","payload1","ts"]) │
+│   │ │   │ └─┬> HashShuffle (KeyColumns: ["id"], HashFunc: "HashV2")                     │
+│   │ │   │   └──> TableFullScan (Table: S, ReadColumns: ["id (-∞, +∞)","payload2"])      │
+│   │ │   └──> TableFullScan (Table: T, ReadColumns: ["id (-∞, +∞)","payload3"])          │
+│   │ └─┬> HashShuffle (KeyColumns: ["id"], HashFunc: "HashV2")                           │
+│   │   └──> TableFullScan (Table: U, ReadColumns: ["id (-∞, +∞)","payload4"])            │
+│   └──> TableFullScan (Table: V, ReadColumns: ["id (-∞, +∞)","payload5"])                │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+Так как в процессе оптимизации запроса оптимизатор может поменять порядок соединенй, подсказка должна отражать точный список таблиц которые соединяются.
+Например, в следующем запросе мы предполагаем что порядок соединений будет R с S, затем T и в итоге U. Указание другого алгоритма соединения может поменять порядок соединений в плане и некоторые подсказки не применятся. В этом случае можно добавить дополнительную подсказку порядка соединений.
+
 
 ### 2. Rows - Подсказки по кардинальности
 
@@ -121,6 +167,63 @@ Rows(filtered_table / 228)
 -- Добавить 5000 строк к ожидаемому результату
 Rows(table1 table2 + 5000)
 ```
+
+Запустим запрос без подсказок кардинальностей, и затем посмотрим как подсказки меняют план запроса.
+
+```sql
+SELECT * FROM
+    R   INNER JOIN  S   on  R.id = S.id
+        INNER JOIN  T   on  R.id = T.id;
+```
+
+Без подсказок оптимизатор строит следующий план:
+
+┌────────┬────────┬────────┬───────────────────────────────────────────────────────────────────────────────┐
+│ E-Cost │ E-Rows │ E-Size │ Operation                                                                     │
+├────────┼────────┼────────┼───────────────────────────────────────────────────────────────────────────────┤
+|        │        │        │ ┌> ResultSet                                                                  │
+│ 114    │ 10     │ 300    │ └─┬> InnerJoin (MapJoin) (S.id = R.id)                                        │
+│ 57     │ 10     │ 200    │   ├─┬> InnerJoin (MapJoin) (S.id = T.id)                                      │
+│ 0      │ 10     │ 100    │   │ ├──> TableFullScan (Table: S, ReadColumns: ["id (-∞, +∞)","payload2"])    │
+│ 0      │ 10     │ 100    │   │ └──> TableFullScan (Table: T, ReadColumns: ["id (-∞, +∞)","payload3"])    │
+│ 0      │ 10     │ 100    │   └──> TableFullScan (Table: R, ReadColumns: ["id (-∞, +∞)","payload1","ts"]) │
+└────────┴────────┴────────┴───────────────────────────────────────────────────────────────────────────────┘
+
+Если применить следующие подсказки:
+
+```sql
+PRAGMA ydb.OptimizerHints =
+'
+    Rows(R # 10e8)
+    Rows(T # 1)
+    Rows(S # 10e8)
+    Rows(R T # 1)
+    Rows(R S # 10e8)
+';
+SELECT * FROM
+    R   INNER JOIN  S   on  R.id = S.id
+        INNER JOIN  T   on  R.id = T.id;
+```
+
+То получится следующий план:
+
+┌───────────┬────────┬────────┬─────────────────────────────────────────────────────────────────────────────────┐
+│E-Cost     │ E-Rows │ E-Size │ Operation                                                                       │
+├───────────┼────────┼────────┼─────────────────────────────────────────────────────────────────────────────────┤
+│           │        │        │ ┌> ResultSet                                                                    │
+| 3.000e+09 │ 1      │ 100    │ └─┬> InnerJoin (MapJoin) (S.id = R.id)                                          │
+│ 0         │ 1e+09  │ 100    │   ├──> TableFullScan (Table: S, ReadColumns: ["id (-∞, +∞)","payload2"])        │
+│ 1.500e+09 │ 1      │ 100    │   └─┬> InnerJoin (MapJoin) (R.id = T.id)                                        │
+│ 0         │ 1e+09  │ 100    │     ├──> TableFullScan (Table: R, ReadColumns: ["id (-∞, +∞)","payload1","ts"]) │
+│ 0         │ 10     │ 100    │     └──> TableFullScan (Table: T, ReadColumns: ["id (-∞, +∞)","payload3"])      │
+└───────────┴────────┴────────┴─────────────────────────────────────────────────────────────────────────────────┘
+
+Также вернутся оповещения:
+```
+Warning: Unapplied hint: Rows(R S # 10e8)
+```
+
+Здесь видно, что после применения подсказок кардинальности базовых таблиц, поменялся порядок соединений, и одна из подсказок не смогла примениться, так как такого соединения в плане нет.
 
 ### 3. Bytes - Подсказки по размеру данных
 
@@ -180,6 +283,55 @@ JoinOrder((table1 table2) (table3 table4))
 JoinOrder((users (orders products)) (addresses phones))
 ```
 
+Применим подсказку порядка соединений к следующему запросу:
+
+```sql
+SELECT * FROM
+    R   INNER JOIN  S   on  R.id = S.id
+        INNER JOIN  T   on  R.id = T.id;
+```
+
+План запроса без применения подсказок получается следующий:
+
+┌────────┬────────┬────────┬───────────────────────────────────────────────────────────────────────────────┐
+│ E-Cost │ E-Rows │ E-Size │ Operation                                                                     │
+├────────┼────────┼────────┼───────────────────────────────────────────────────────────────────────────────┤
+│        │        │        │ ┌> ResultSet                                                                  │
+│ 114    │ 10     │ 300    │ └─┬> InnerJoin (MapJoin) (S.id = R.id)                                        │
+│ 57     │ 10     │ 200    │   ├─┬> InnerJoin (MapJoin) (S.id = T.id)                                      │
+│ 0      │ 10     │ 100    │   │ ├──> TableFullScan (Table: S, ReadColumns: ["id (-∞, +∞)","payload2"])    │
+│ 0      │ 10     │ 100    │   │ └──> TableFullScan (Table: T, ReadColumns: ["id (-∞, +∞)","payload3"])    │
+│ 0      │ 10     │ 100    │   └──> TableFullScan (Table: R, ReadColumns: ["id (-∞, +∞)","payload1","ts"]) │
+└────────┴────────┴────────┴───────────────────────────────────────────────────────────────────────────────┘
+
+Применив следующую подсказку порядка соединений:
+
+```sql
+PRAGMA ydb.OptimizerHints =
+'
+    JoinOrder(T (R S))
+';
+SELECT * FROM
+    R   INNER JOIN  S   on  R.id = S.id
+        INNER JOIN  T   on  R.id = T.id;
+```
+
+Получим такой план:
+
+┌────────┬────────┬────────┬─────────────────────────────────────────────────────────────────────────────────┐
+│ E-Cost │ E-Rows │ E-Size │ Operation                                                                       │
+├────────┼────────┼────────┼─────────────────────────────────────────────────────────────────────────────────┤
+│        │        │        │ ┌> ResultSet                                                                    │
+│ 114    │ 10     │ 300    │ └─┬> InnerJoin (MapJoin) (T.id = R.id)                                          │
+│ 0      │ 10     │ 100    │   ├──> TableFullScan (Table: T, ReadColumns: ["id (-∞, +∞)","payload3"])        │
+│ 57     │ 10     │ 200    │   └─┬> InnerJoin (MapJoin) (R.id = S.id)                                        │
+│ 0      │ 10     │ 100    │     ├──> TableFullScan (Table: R, ReadColumns: ["id (-∞, +∞)","payload1","ts"]) │
+│ 0      │ 10     │ 100    │     └──> TableFullScan (Table: S, ReadColumns: ["id (-∞, +∞)","payload2"])      │
+└────────┴────────┴────────┴─────────────────────────────────────────────────────────────────────────────────┘
+
+Здесь видно, что изменился порядок соединений на тот, который указан в подсказке.
+
+
 ## Комбинирование подсказок
 
 Можно использовать несколько типов подсказок одновременно в рамках одной прагмы:
@@ -192,46 +344,4 @@ PRAGMA ydb.OptimizerHints =
     JoinOrder((users orders) products)
     Bytes(products # 1073741824)
 ';
-```
-
-## Пример использования
-
-```sql
-PRAGMA ydb.OptimizerHints =
-'
-    JoinOrder((((R S) T) U) V)
-    JoinType(R S Shuffle)
-    JoinType(R S T Broadcast)
-    JoinType(R S T U Shuffle)
-    JoinType(R S T U V Broadcast)
-';
-
-SELECT * FROM
-    R   INNER JOIN  S   on  R.id = S.id
-        INNER JOIN  T   on  R.id = T.id
-        INNER JOIN  U   on  T.id = U.id
-        INNER JOIN  V   on  U.id = V.id;
-```
-
-Как можно увидеть - порядок соединений сохранился и для нужных поддеревьев выбрались запрошенные алгоритмы.
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│ Operation                                                                               │
-├─────────────────────────────────────────────────────────────────────────────────────────┤
-│ ┌> ResultSet                                                                            │
-│ └─┬> InnerJoin (MapJoin) (U.id = V.id)                                                  │
-│   ├─┬> InnerJoin (Grace) (T.id = U.id)                                                  │
-│   │ ├─┬> HashShuffle (KeyColumns: ["T.id"], HashFunc: "HashV2")                         │
-│   │ │ └─┬> InnerJoin (MapJoin) (R.id = T.id)                                            │
-│   │ │   ├─┬> InnerJoin (Grace) (R.id = S.id)                                            │
-│   │ │   │ ├─┬> HashShuffle (KeyColumns: ["id"], HashFunc: "HashV2")                     │
-│   │ │   │ │ └──> TableFullScan (Table: R, ReadColumns: ["id (-∞, +∞)","payload1","ts"]) │
-│   │ │   │ └─┬> HashShuffle (KeyColumns: ["id"], HashFunc: "HashV2")                     │
-│   │ │   │   └──> TableFullScan (Table: S, ReadColumns: ["id (-∞, +∞)","payload2"])      │
-│   │ │   └──> TableFullScan (Table: T, ReadColumns: ["id (-∞, +∞)","payload3"])          │
-│   │ └─┬> HashShuffle (KeyColumns: ["id"], HashFunc: "HashV2")                           │
-│   │   └──> TableFullScan (Table: U, ReadColumns: ["id (-∞, +∞)","payload4"])            │
-│   └──> TableFullScan (Table: V, ReadColumns: ["id (-∞, +∞)","payload5"])                │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
 ```

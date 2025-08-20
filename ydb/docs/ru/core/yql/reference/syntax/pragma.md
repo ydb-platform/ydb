@@ -477,6 +477,14 @@ SELECT $foo;
 
 ## YDB
 
+### `ydb.CostBasedOptimization` {#costbasedoptimization}
+
+|  Значение | Поведение оптимизатора |
+| ------- | ---------------------- |
+| on | Cтоимостный оптимизатор выключен для текущего запроса |
+| off | Cтоимостный оптимизатор выключен для текущего запроса |
+| auto | Cтоимостный оптимизатор работает в соотвествии с текущем уровнем CostBasedOptimizationLevel
+
 ### `ydb.CostBasedOptimizationLevel` {#costbasedoptimizationlevel}
 
 | Уровень | Поведение оптимизатора |
@@ -487,6 +495,9 @@ SELECT $foo;
 | 3 | Cтоимостный оптимизатор включается для всех запросов, но для строковых таблиц предпочитается алгоритм джоина LookupJoin |
 | 4 | Cтоимостный оптимизатор включен для всех запросов |
 
+### `ydb.OptimizerHints` {#optimizerhints}
+
+Значение прагмы описано в [отдельном разделе](../../../dev/query-hints.md).
 {% if tech %}
 
 ### `kikimr.IsolationLevel`

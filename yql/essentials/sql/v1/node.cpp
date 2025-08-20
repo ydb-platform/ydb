@@ -3600,7 +3600,7 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
             return true;
         }
 
-        ctx.Error() << "Invalid " << name << ": " << value << " should be in range [" << minValue << ", " << maxValue << "]";
+        ctx.Error() << "Invalid " << name << ": " << value << " should be between " << minValue << " and " << maxValue;
         return false;
     };
 

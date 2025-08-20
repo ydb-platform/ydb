@@ -2,7 +2,10 @@
 
 #include "base_visitor.h"
 #include "evaluate.h"
+#include "function.h"
 #include "narrowing_visitor.h"
+
+#include <yql/essentials/sql/v1/complete/core/name.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
@@ -49,6 +52,27 @@ namespace NSQLComplete {
                     return TColumnContext{
                         .Tables = {
                             TTableId{std::move(cluster), std::move(*path)},
+                        },
+                    };
+                }
+
+                if (TMaybe<TFunctionContext> function = GetFunction(ctx, *Nodes_)) {
+                    TString cluster = function->Cluster.GetOrElse({}).Name;
+
+                    TString path;
+                    function->Name = NormalizeName(function->Name);
+                    if (function->Name == "concat" && function->Arg0) {
+                        path = std::move(*function->Arg0);
+                    } else if (function->Name == "range" && function->Arg0 && function->Arg1) {
+                        path = std::move(*function->Arg0);
+                        path.append('/').append(*function->Arg1);
+                    } else {
+                        return {};
+                    }
+
+                    return TColumnContext{
+                        .Tables = {
+                            TTableId{std::move(cluster), std::move(path)},
                         },
                     };
                 }
@@ -102,7 +126,7 @@ namespace NSQLComplete {
                         alias = Nothing();
                     }
 
-                    auto aliased = source.ExtractAliased(alias);
+                    TColumnContext aliased = source.ExtractAliased(alias);
                     imported = std::move(imported) | std::move(aliased);
                 }
 
@@ -252,10 +276,7 @@ namespace NSQLComplete {
 
             std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
                 antlr4::ParserRuleContext* source = nullptr;
-                if (IsEnclosingStrict(ctx->expr(0)) ||
-                    IsEnclosingStrict(ctx->group_by_clause()) ||
-                    IsEnclosingStrict(ctx->expr(1)) ||
-                    IsEnclosingStrict(ctx->window_clause()) ||
+                if (IsEnclosingStrict(ctx->window_clause()) ||
                     IsEnclosingStrict(ctx->ext_order_by_clause())) {
                     source = ctx;
                 } else {

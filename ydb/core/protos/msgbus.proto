@@ -358,6 +358,7 @@ message TLocalEnumerateTablets {
     optional uint64 DomainUid = 1; // mandatory
     optional uint32 NodeId = 2; // optional, msgbus proxy will contact it's own node if not set
     optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3; // optional, local will enumerate all tablets if not set
+    optional string SecurityToken = 4 [(Ydb.sensitive) = true];
 }
 
 message TLocalEnumerateTabletsResult {

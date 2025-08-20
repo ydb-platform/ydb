@@ -653,14 +653,51 @@ namespace NActors {
         }
         XdcCatchStream.Ready = Context->LastProcessedSerial == CurrentSerial;
         ApplyXdcCatchStream();
-        ProcessInboundPacketQ(0);
+        ProcessInboundPacketQ(0, 0);
 
         ++PacketsReadFromSocket;
         ++DataPacketsReadFromSocket;
         IgnoredDataPacketsFromSocket += IgnorePayload;
     }
 
-    void TInputSessionTCP::ProcessInboundPacketQ(ui64 numXdcBytesRead) {
+    void TInputSessionTCP::UpdateInboundPacketQ(ui64& numXdcBytesRead, ui64& numRdmaBytesRead) {
+        for (auto& packet: InboundPacketQ) {
+            if (numXdcBytesRead == 0 && numRdmaBytesRead == 0) {
+                break;
+            }
+
+            const size_t xdcBytes = Min(numXdcBytesRead, packet.XdcUnreadBytes);
+            numXdcBytesRead -= xdcBytes;
+            packet.XdcUnreadBytes -= xdcBytes;
+
+            const size_t rdmaBytes = Min(numRdmaBytesRead, packet.RdmaUnreadBytes);
+            numRdmaBytesRead -= rdmaBytes;
+            packet.RdmaUnreadBytes -= rdmaBytes;
+        }
+    }
+
+    void TInputSessionTCP::ProcessInboundPacketQ(ui64 numXdcBytesRead, ui64 numRdmaBytesRead) {
+        UpdateInboundPacketQ(numXdcBytesRead, numRdmaBytesRead);
+
+        for (; !InboundPacketQ.empty(); InboundPacketQ.pop_front()) {
+            auto& front = InboundPacketQ.front();
+
+            if (front.XdcUnreadBytes || front.RdmaUnreadBytes) { // we haven't finished this packet yet
+                Y_ABORT_UNLESS(!numXdcBytesRead && !numRdmaBytesRead);
+                break;
+            }
+
+            Y_DEBUG_ABORT_UNLESS(front.Serial + InboundPacketQ.size() - 1 <= Context->LastProcessedSerial,
+                "front.Serial# %" PRIu64 " LastProcessedSerial# %" PRIu64 " InboundPacketQ.size# %zu",
+                front.Serial, Context->LastProcessedSerial, InboundPacketQ.size());
+
+            if (Context->GetLastPacketSerialToConfirm() < front.Serial && !Context->AdvanceLastPacketSerialToConfirm(front.Serial)) {
+                throw TExReestablishConnection{TDisconnectReason::NewSession()};
+            }
+        }
+    }
+
+    /*void TInputSessionTCP::ProcessInboundPacketQ(ui64 numXdcBytesRead) {
         for (; !InboundPacketQ.empty(); InboundPacketQ.pop_front()) {
             auto& front = InboundPacketQ.front();
 
@@ -681,7 +718,7 @@ namespace NActors {
                 throw TExReestablishConnection{TDisconnectReason::NewSession()};
             }
         }
-    }
+    }*/
 
     TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma) {
         if (isRdma) {
@@ -731,8 +768,10 @@ namespace NActors {
                                 }
                                 if (!pendingEvent.RdmaSizeLeft) {
                                     pendingEvent.RdmaSizeLeft = std::make_shared<std::atomic<size_t>>(0);
+                                    pendingEvent.RdmaSize = 0;
                                 }
                                 *pendingEvent.RdmaSizeLeft += size;
+                                pendingEvent.RdmaSize += size;
                             } else {
                                 if (size) {
                                     context.XdcBuffers.push_back(buffer.GetContiguousSpanMut());
@@ -810,9 +849,11 @@ namespace NActors {
                         LOG_CRIT_IC_SESSION("ICIS21", "RDMA_READ error: can not allocate cq work request: error");
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
+                    auto& packet = InboundPacketQ.back();
                     for (const auto& cred : creds.GetCreds()) {
                         RdmaBytesReadScheduled += cred.GetSize();
                         RdmaWrReadScheduled++;
+                        packet.RdmaUnreadBytes += cred.GetSize();
                     }
                     continue;
                 }
@@ -831,6 +872,8 @@ namespace NActors {
                 break; // event is not ready yet
             }
             auto& descr = *pendingEvent.EventData;
+            ui64 z = 0;
+            UpdateInboundPacketQ(z, pendingEvent.RdmaSize);
 
             // create aggregated payload
             TRope payload;
@@ -1123,7 +1166,7 @@ namespace NActors {
                 process(context);
             }
 
-            ProcessInboundPacketQ(XdcCatchStream.BytesProcessed);
+            ProcessInboundPacketQ(XdcCatchStream.BytesProcessed, 0);
 
             XdcCatchStream.Buffer = {};
             XdcCatchStream.Applied = true;
@@ -1191,7 +1234,7 @@ namespace NActors {
         }
 
         // drop fully processed inbound packets
-        ProcessInboundPacketQ(recvres);
+        ProcessInboundPacketQ(recvres, 0);
 
         LastReceiveTimestamp = TActivationContext::Monotonic();
 

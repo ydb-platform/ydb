@@ -143,6 +143,7 @@ namespace NActors {
 
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 std::shared_ptr<std::atomic<size_t>> RdmaSizeLeft = nullptr;
+                size_t RdmaSize = 0;
                 ui32 CheckSum = 0;
             };
 
@@ -331,7 +332,8 @@ namespace NActors {
         void ReceiveData();
         void ProcessHeader();
         void ProcessPayload(ui64 *numDataBytes);
-        void ProcessInboundPacketQ(ui64 numXdcBytesRead);
+        void ProcessInboundPacketQ(ui64 numXdcBytesRead, ui64 numRdmaBytesRead);
+        void UpdateInboundPacketQ(ui64& numXdcBytesRead, ui64& numRdmaBytesRead);
         void ProcessXdcCommand(ui16 channel, TReceiveContext::TPerChannelContext& context);
         void ProcessEvents(TReceiveContext::TPerChannelContext& context);
         ssize_t Read(NInterconnect::TStreamSocket& socket, const TPollerToken::TPtr& token, bool *readPending,

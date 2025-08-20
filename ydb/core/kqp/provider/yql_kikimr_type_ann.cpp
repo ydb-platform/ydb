@@ -274,6 +274,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::Secret:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;
@@ -2402,6 +2406,21 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleRestore(TKiRestore node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleCreateSecret(TKiCreateSecret node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterSecret(TKiAlterSecret node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropSecret(TKiDropSecret node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

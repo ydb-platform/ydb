@@ -100,6 +100,8 @@ public:
             return NKikimrViewer::EObjectType::ResourcePool;
         case NKikimrSchemeOp::EPathType::EPathTypeSysView:
             return NKikimrViewer::EObjectType::SysView;
+        case NKikimrSchemeOp::EPathType::EPathTypeSecret:
+            return NKikimrViewer::EObjectType::Secret;
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
         case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
         case NKikimrSchemeOp::EPathType::EPathTypeInvalid:

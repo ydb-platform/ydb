@@ -33,6 +33,14 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistSequenceAlter(db, pId);
     }
 
+    for (const auto& pathId : Secrets) {
+        ss->PersistSecret(db, pathId);
+    }
+
+    for (const auto& pathId : AlterSecrets) {
+        ss->PersistSecretAlter(db, pathId);
+    }
+
     for (const auto& pId : ApplyIndexes) {
         ss->PersistTableIndex(db, pId);
     }

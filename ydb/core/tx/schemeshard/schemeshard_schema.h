@@ -2219,6 +2219,24 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct Secrets : Table<127> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Description : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description>;
+    };
+
+    struct SecretsAlterData : Table<128> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Description : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2343,7 +2361,9 @@ struct Schema : NIceDb::Schema {
         IncrementalRestoreShardProgress,
         SystemShardsToDelete,
         IncrementalBackups,
-        IncrementalBackupItems
+        IncrementalBackupItems,
+        Secrets,
+        SecretsAlterData
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

@@ -1896,6 +1896,10 @@ message TModifyScheme {
 
     optional TSetColumnConstraintsInitiate SetColumnConstraintsInitiate = 87;
 
+    // Secret
+    optional TSecretSchemaOp CreateSecret = 88;
+    optional TSecretSchemaOp AlterSecret = 89;
+
     // Some entries are grouped by semantics, so are out of order
 }
 
@@ -1965,6 +1969,7 @@ enum EPathType {
     EPathTypeBackupCollection = 22;
     EPathTypeTransfer = 23;
     EPathTypeSysView = 24;
+    EPathTypeSecret = 25;
 }
 
 enum EPathSubType {
@@ -2025,6 +2030,7 @@ message TPathVersion {
     optional uint64 ResourcePoolVersion = 30;
     optional uint64 BackupCollectionVersion = 31;
     optional uint64 SysViewVersion = 32;
+    optional uint64 SecretVersion = 33;
 }
 
 // Describes single path
@@ -2117,6 +2123,7 @@ message TPathDescription {
     optional TResourcePoolDescription ResourcePoolDescription = 30;
     optional TBackupCollectionDescription BackupCollectionDescription = 31;
     optional TSysViewDescription SysViewDescription = 32;
+    optional TSecretDescription SecretDescription = 33;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2349,4 +2356,16 @@ message TLongIncrementalRestoreOp {
 message TChangePathState {
     optional string Path = 1;
     optional EPathState TargetState = 2;
+}
+
+message TSecretDescription {
+    optional string Name = 1;
+    optional string Value = 2; // original, unencrypted value
+    optional uint64 Version = 3;
+}
+
+message TSecretSchemaOp {
+    optional string Name = 1;
+    optional string Value = 2; // original, unencrypted value
+    optional bool InheritPermissions = 3;
 }

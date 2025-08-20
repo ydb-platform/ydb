@@ -1125,6 +1125,17 @@ void TPathDescriber::DescribeSysView(const TActorContext&, TPathId pathId, TPath
     sourceObjectPath.GetPathIdForDomain().ToProto(entry->MutableSourceObject());
 }
 
+void TPathDescriber::DescribeSecret(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->Secrets.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "Secret is not found");
+    TSecretInfo::TPtr secretInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableSecretDescription();
+    entry->SetName(pathEl->Name);
+    entry->SetValue(secretInfo->Description.GetValue()); // TODO(yurikiselev): Hide this value by default [issue:23462]
+    entry->SetVersion(secretInfo->Description.GetVersion());
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1288,6 +1299,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeSysView:
             DescribeSysView(ctx, base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeSecret:
+            DescribeSecret(ctx, base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

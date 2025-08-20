@@ -272,6 +272,7 @@ public:
     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
     THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
     THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
+    THashMap<TPathId, TSecretInfo::TPtr> Secrets;
 
     TTempDirsState TempDirsState;
 
@@ -895,6 +896,14 @@ public:
     void PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId);
 
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
+
+    // Secret
+    void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);
+    void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistSecretRemove(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistSecretAlter(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);
+    void PersistSecretAlter(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistSecretAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
     TTabletId GetGlobalHive() const;
 

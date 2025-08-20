@@ -23,28 +23,28 @@
 
 Ключевое понятие {{ dbt }} — [модель данных](https://docs.getdbt.com/docs/build/sql-models). По своей сути, это SQL‑выражение, в котором могут быть использованы все источники данных внутри вашего хранилища, включая другие модели. Существуют разные подходы к физическому созданию модели (ее материализации) внутри {{ ydb }}, которые поддерживает коннектор {{dbt-ydb}}:
 
-1. Представление (view) — сохраняется как [представление {{ydb}}](https://ydb.tech/docs/ru/concepts/datamodel/view).
-2. Таблица (table) — сохраняется как [таблица](https://ydb.tech/docs/ru/concepts/datamodel/table) внутри {{ydb}} и пересоздаётся при каждом обновлении модели силами {{ dbt }}.
+1. Представление (view) — сохраняется как [представление {{ydb}}](../../concepts/datamodel/view.md).
+2. Таблица (table) — сохраняется как [таблица](../../concepts/datamodel/table.md) внутри {{ydb}} и пересоздаётся при каждом обновлении модели силами {{ dbt }}.
 
-{{dbt-ydb}} коннектор поддерживает возможность определять следующие параметры таблицы через [конфигурацию модели](https://docs.getdbt.com/reference/model-configs):
+   {{dbt-ydb}} коннектор поддерживает возможность определять следующие параметры таблицы через [конфигурацию модели](https://docs.getdbt.com/reference/model-configs):
 
 
-| Параметр                            | Обязательность | Значение по умолчанию     | Описание                                                            |
-|-------------------------------------|----------------|---------------------------|---------------------------------------------------------------------|
-| primary_key                         | Да             |                           | [Первичный ключ](https://ydb.tech/docs/ru/dev/primary-key/) таблицы |
-| store_type                          | Нет            | row                       | Тип таблицы - [строковая](https://ydb.tech/docs/ru/concepts/datamodel/table#row-oriented-tables) или [колоночная](https://ydb.tech/docs/ru/concepts/datamodel/table#column-oriented-tables)      |
-| auto_partitioning_by_size           | Нет            |                           | [Автоматическое партиционирование по размеру](https://ydb.tech/docs/ru/concepts/datamodel/table#auto_partitioning_by_size)      |
-| auto_partitioning_partition_size_mb | Нет            |                           | [Порог размера партиции](https://ydb.tech/docs/ru/concepts/datamodel/table#auto_partitioning_partition_size_mb)      |
-| ttl                                 | Нет            |                           | Правило [Time-To-Live](https://ydb.tech/docs/ru/concepts/ttl)       |
+   | Параметр                            | Обязательность | Значение по умолчанию     | Описание                                                            |
+   |-------------------------------------|----------------|---------------------------|---------------------------------------------------------------------|
+   | primary_key                         | Да             |                           | [Первичный ключ](../../dev/primary-key/index.md) таблицы |
+   | store_type                          | Нет            | row                       | Тип таблицы - [строковая](../../concepts/datamodel/table.md#row-oriented-tables) или [колоночная](../../concepts/datamodel/table.md#column-oriented-tables)      |
+   | auto_partitioning_by_size           | Нет            |                           | [Автоматическое партиционирование по размеру](../../concepts/datamodel/table.md#auto_partitioning_by_size)      |
+   | auto_partitioning_partition_size_mb | Нет            |                           | [Порог размера партиции](../../concepts/datamodel/table.md#auto_partitioning_partition_size_mb)      |
+   | ttl                                 | Нет            |                           | Правило [Time-To-Live](../../concepts/ttl.md)       |
 
 
 3. [Инкрементальное представление](https://docs.getdbt.com/docs/build/incremental-models-overview) (incremental model) — создаётся как таблица внутри {{ydb}}, но при обновлении не пересоздаётся, а обновляется изменившимися и новыми строками.
 
-{{dbt-ydb}} коннектор поддерживает те же параметры, что определены для табличной материализации, а также уникальные параметры инкрементального представления:
+   {{dbt-ydb}} коннектор поддерживает те же параметры, что определены для табличной материализации, а также уникальные параметры инкрементального представления:
 
-| Параметр                            | Обязательность | Значение по умолчанию     | Описание                                                            |
-|-------------------------------------|----------------|---------------------------|---------------------------------------------------------------------|
-| incremental_strategy                | Нет            | MERGE                     | [Стратегия инкрементальной материлазации](https://docs.getdbt.com/docs/build/incremental-strategy). Поддерживается стратегия MERGE, использующая {{ydb}} операцию [UPSERT](https://ydb.tech/docs/ru/yql/reference/syntax/upsert_into). Поддержка стратегии APPEND находится в разработке  |
+   | Параметр                            | Обязательность | Значение по умолчанию     | Описание                                                            |
+   |-------------------------------------|----------------|---------------------------|---------------------------------------------------------------------|
+   | incremental_strategy                | Нет            | MERGE                     | [Стратегия инкрементальной материлазации](https://docs.getdbt.com/docs/build/incremental-strategy). Поддерживается стратегия MERGE, использующая {{ydb}} операцию [UPSERT](../../yql/reference/syntax//upsert_into.md). Поддержка стратегии APPEND находится в разработке  |
 
 
 {% note info %}
@@ -95,7 +95,7 @@ pip install dbt-ydb
 
 ### Подключение {{dbt}} к {{ydb}} кластеру
 
-{{dbt}} подключается к {{ydb}} через {{dbt-ydb}} коннектор [стандартным](https://ydb.tech/docs/ru/concepts/connect) для {{ydb}} образом. Для успешного подключения требуется указать эндпоинт, путь к базе данных, а также параметры аутентификации в файле [профилей](https://docs.getdbt.com/docs/core/connect-data-platform/connection-profiles) dbt.
+{{dbt}} подключается к {{ydb}} через {{dbt-ydb}} коннектор [стандартным](../../concepts/connect.md) для {{ydb}} образом. Для успешного подключения требуется указать эндпоинт, путь к базе данных, а также параметры аутентификации в файле [профилей](https://docs.getdbt.com/docs/core/connect-data-platform/connection-profiles) dbt.
 
 Пример файла профилей с возможными вариантами аутентификации, а также значениями по умолчанию (в квадратных скобках)
 
@@ -245,4 +245,4 @@ outputs:
 ## Дальнейшие шаги
 
 Официальную документацию {{ dbt }} можно найти по [ссылке](https://docs.getdbt.com/docs).
-Дополнительно, вы можете изучить исходные коды коннектора, а также поучаствовать в его развитии через публичный репозиторий {{ dbt-ydb }}.
+Дополнительно, вы можете изучить исходные коды коннектора, а также поучаствовать в его развитии через публичный репозиторий [{{dbt-ydb}}](https://github.com/ydb-platform/dbt-ydb).

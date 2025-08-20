@@ -1599,7 +1599,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(DisablePushdownAggregate) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
         auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -1632,8 +1636,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         std::vector<TString> queries = {
             R"(
-                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "false";
-
                 SELECT count(*) FROM `/Root/foo`
                 where b > a
                 GROUP BY a;

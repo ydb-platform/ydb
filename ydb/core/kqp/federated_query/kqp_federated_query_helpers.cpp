@@ -197,6 +197,10 @@ namespace {
     }
 
     std::optional<TKqpFederatedQuerySetup> TKqpFederatedQuerySetupFactoryDefault::Make(NActors::TActorSystem* actorSystem) {
+        if (!ActorSystemPtr->load(std::memory_order_relaxed)) {
+            ActorSystemPtr->store(actorSystem, std::memory_order_relaxed);
+        }
+
         auto result = TKqpFederatedQuerySetup{
             HttpGateway,
             ConnectorClient,

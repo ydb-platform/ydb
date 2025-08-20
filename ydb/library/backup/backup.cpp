@@ -149,13 +149,13 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         CASE_PRINT_PRIMITIVE_TYPE(out, Timestamp);
         CASE_PRINT_PRIMITIVE_TYPE(out, Interval);
         case EPrimitiveType::Date32:
-            out << parser.GetDate32().count();
+            out << parser.GetDate32().time_since_epoch().count();
             break;
         case EPrimitiveType::Datetime64:
-            out << parser.GetDatetime64().count();
+            out << parser.GetDatetime64().time_since_epoch().count();
             break;
         case EPrimitiveType::Timestamp64:
-            out << parser.GetTimestamp64().count();
+            out << parser.GetTimestamp64().time_since_epoch().count();
             break;
         case EPrimitiveType::Interval64:
             out << parser.GetInterval64().count();

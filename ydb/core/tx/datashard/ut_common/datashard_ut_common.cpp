@@ -2576,13 +2576,13 @@ namespace {
             PRINT_PRIMITIVE(Datetime);
             PRINT_PRIMITIVE(Timestamp);
             case NYdb::EPrimitiveType::Date32:
-                out << parser.GetDate32().count();
+                out << parser.GetDate32().time_since_epoch().count();
                 break;
             case NYdb::EPrimitiveType::Datetime64:
-                out << parser.GetDatetime64().count();
+                out << parser.GetDatetime64().time_since_epoch().count();
                 break;
             case NYdb::EPrimitiveType::Timestamp64:
-                out << parser.GetTimestamp64().count();
+                out << parser.GetTimestamp64().time_since_epoch().count();
                 break;
             PRINT_PRIMITIVE(String);
             PRINT_PRIMITIVE(Utf8);

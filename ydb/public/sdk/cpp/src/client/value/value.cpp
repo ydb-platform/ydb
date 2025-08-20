@@ -1200,19 +1200,19 @@ public:
         return GetProto().int64_value();
     }
 
-    TWideDays GetDate32() const {
+    std::chrono::sys_time<TWideDays> GetDate32() const {
         CheckPrimitive(NYdb::EPrimitiveType::Date32);
-        return TWideDays(GetProto().int32_value());
+        return std::chrono::sys_time<TWideDays>(TWideDays(GetProto().int32_value()));
     }
 
-    TWideSeconds GetDatetime64() const {
+    std::chrono::sys_time<TWideSeconds> GetDatetime64() const {
         CheckPrimitive(NYdb::EPrimitiveType::Datetime64);
-        return TWideSeconds(GetProto().int64_value());
+        return std::chrono::sys_time<TWideSeconds>(TWideSeconds(GetProto().int64_value()));
     }
 
-    TWideMicroseconds GetTimestamp64() const {
+    std::chrono::sys_time<TWideMicroseconds> GetTimestamp64() const {
         CheckPrimitive(NYdb::EPrimitiveType::Timestamp64);
-        return TWideMicroseconds(GetProto().int64_value());
+        return std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(GetProto().int64_value()));
     }
 
     TWideMicroseconds GetInterval64() const {
@@ -1728,15 +1728,15 @@ int64_t TValueParser::GetInterval() const {
     return Impl_->GetInterval();
 }
 
-TWideDays TValueParser::GetDate32() const {
+std::chrono::sys_time<TWideDays> TValueParser::GetDate32() const {
     return Impl_->GetDate32();
 }
 
-TWideSeconds TValueParser::GetDatetime64() const {
+std::chrono::sys_time<TWideSeconds> TValueParser::GetDatetime64() const {
     return Impl_->GetDatetime64();
 }
 
-TWideMicroseconds TValueParser::GetTimestamp64() const {
+std::chrono::sys_time<TWideMicroseconds> TValueParser::GetTimestamp64() const {
     return Impl_->GetTimestamp64();
 }
 
@@ -1860,16 +1860,16 @@ std::optional<int64_t> TValueParser::GetOptionalInterval() const {
     RET_OPT_VALUE(int64_t, Interval);
 }
 
-std::optional<TWideDays> TValueParser::GetOptionalDate32() const {
-    RET_OPT_VALUE(TWideDays, Date32);
+std::optional<std::chrono::sys_time<TWideDays>> TValueParser::GetOptionalDate32() const {
+    RET_OPT_VALUE(std::chrono::sys_time<TWideDays>, Date32);
 }
 
-std::optional<TWideSeconds> TValueParser::GetOptionalDatetime64() const {
-    RET_OPT_VALUE(TWideSeconds, Datetime64);
+std::optional<std::chrono::sys_time<TWideSeconds>> TValueParser::GetOptionalDatetime64() const {
+    RET_OPT_VALUE(std::chrono::sys_time<TWideSeconds>, Datetime64);
 }
 
-std::optional<TWideMicroseconds> TValueParser::GetOptionalTimestamp64() const {
-    RET_OPT_VALUE(TWideMicroseconds, Timestamp64);
+std::optional<std::chrono::sys_time<TWideMicroseconds>> TValueParser::GetOptionalTimestamp64() const {
+    RET_OPT_VALUE(std::chrono::sys_time<TWideMicroseconds>, Timestamp64);
 }
 
 std::optional<TWideMicroseconds> TValueParser::GetOptionalInterval64() const {
@@ -2149,19 +2149,19 @@ public:
         GetValue().set_int64_value(value);
     }
 
-    void Date32(const TWideDays& value) {
+    void Date32(const std::chrono::sys_time<TWideDays>& value) {
         FillPrimitiveType(EPrimitiveType::Date32);
-        GetValue().set_int32_value(value.count());
+        GetValue().set_int32_value(value.time_since_epoch().count());
     }
 
-    void Datetime64(const TWideSeconds& value) {
+    void Datetime64(const std::chrono::sys_time<TWideSeconds>& value) {
         FillPrimitiveType(EPrimitiveType::Datetime64);
-        GetValue().set_int64_value(value.count());
+        GetValue().set_int64_value(value.time_since_epoch().count());
     }
 
-    void Timestamp64(const TWideMicroseconds& value) {
+    void Timestamp64(const std::chrono::sys_time<TWideMicroseconds>& value) {
         FillPrimitiveType(EPrimitiveType::Timestamp64);
-        GetValue().set_int64_value(value.count());
+        GetValue().set_int64_value(value.time_since_epoch().count());
     }
 
     void Interval64(const TWideMicroseconds& value) {
@@ -2907,19 +2907,19 @@ TDerived& TValueBuilderBase<TDerived>::Interval(int64_t value) {
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Date32(const TWideDays& value) {
+TDerived& TValueBuilderBase<TDerived>::Date32(const std::chrono::sys_time<TWideDays>& value) {
     Impl_->Date32(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Datetime64(const TWideSeconds& value) {
+TDerived& TValueBuilderBase<TDerived>::Datetime64(const std::chrono::sys_time<TWideSeconds>& value) {
     Impl_->Datetime64(value);
     return static_cast<TDerived&>(*this);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Timestamp64(const TWideMicroseconds& value) {
+TDerived& TValueBuilderBase<TDerived>::Timestamp64(const std::chrono::sys_time<TWideMicroseconds>& value) {
     Impl_->Timestamp64(value);
     return static_cast<TDerived&>(*this);
 }
@@ -3094,17 +3094,17 @@ TDerived& TValueBuilderBase<TDerived>::OptionalInterval(const std::optional<int6
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDate32(const std::optional<TWideDays>& value) {
+TDerived& TValueBuilderBase<TDerived>::OptionalDate32(const std::optional<std::chrono::sys_time<TWideDays>>& value) {
     SET_OPT_VALUE_FROM_OPTIONAL(Date32);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDatetime64(const std::optional<TWideSeconds>& value) {
+TDerived& TValueBuilderBase<TDerived>::OptionalDatetime64(const std::optional<std::chrono::sys_time<TWideSeconds>>& value) {
     SET_OPT_VALUE_FROM_OPTIONAL(Datetime64);
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp64(const std::optional<TWideMicroseconds>& value) {
+TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp64(const std::optional<std::chrono::sys_time<TWideMicroseconds>>& value) {
     SET_OPT_VALUE_FROM_OPTIONAL(Timestamp64);
 }
 

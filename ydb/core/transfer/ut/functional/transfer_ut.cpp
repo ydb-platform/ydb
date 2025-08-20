@@ -787,7 +787,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             UNIT_ASSERT_VALUES_EQUAL(0, consumers.size());
         }
 
-        testCase.CheckTransferStateError("consumer 'PredefinedConsumer' does not exists");
+        testCase.CheckTransferStateError("consumer 'PredefinedConsumer' does not exist");
 
         testCase.DropTable();
         testCase.DropTopic();

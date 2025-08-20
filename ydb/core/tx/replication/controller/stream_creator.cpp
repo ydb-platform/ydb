@@ -189,7 +189,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         } else {
             NYdb::NIssue::TIssues issues;
-            issues.AddIssue(TStringBuilder() << "consumer '" << SrcConsumerName << "' does not exists");
+            issues.AddIssue(TStringBuilder() << "consumer '" << SrcConsumerName << "' does not exist");
             Reply(NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, std::move(issues)));
         }
     }

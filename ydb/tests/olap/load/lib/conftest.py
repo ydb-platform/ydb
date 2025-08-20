@@ -42,6 +42,10 @@ class LoadSuiteBase:
     __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
 
     @classmethod
+    def get_users(cls) -> list[str]:
+        return ['']
+
+    @classmethod
     def get_external_path(cls) -> str:
         if not hasattr(cls, 'external_folder'):
             return ''
@@ -467,6 +471,7 @@ class LoadSuiteBase:
             query_prefix=qparams.query_prefix,
             external_path=self.get_external_path(),
             float_mode=self.float_mode,
+            users=self.get_users(),
         )[query_name]
         self.process_query_result(result, query_name, True)
 
@@ -833,6 +838,7 @@ class LoadSuiteParallel(LoadSuiteBase):
             external_path=cls.get_external_path(),
             threads=cls.threads,
             float_mode=cls.float_mode,
+            users=cls.get_users(),
         )
 
     def test(self, query_name):

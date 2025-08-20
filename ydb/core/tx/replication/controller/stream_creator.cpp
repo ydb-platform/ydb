@@ -166,6 +166,15 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         Become(&TThis::StateCheckConsumerExists);
     }
 
+    STATEFN(StateCheckConsumerExists) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
+            sFunc(TEvents::TEvWakeup, CheckConsumerExists);
+        default:
+            return StateBase(ev);
+        }
+    }
+
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
 
@@ -191,15 +200,6 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             NYdb::NIssue::TIssues issues;
             issues.AddIssue(TStringBuilder() << "consumer '" << SrcConsumerName << "' does not exist");
             Reply(NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, std::move(issues)));
-        }
-    }
-
-    STATEFN(StateCheckConsumerExists) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
-            sFunc(TEvents::TEvWakeup, CheckConsumerExists);
-        default:
-            return StateBase(ev);
         }
     }
 

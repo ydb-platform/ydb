@@ -30,7 +30,7 @@ namespace NKikimr {
         struct TRequest
             : std::enable_shared_from_this<TRequest>
         {
-            ui64 RequestId = RandomNumber<ui64>();
+            TString RequestId = Sprintf("%016" PRIx64, RandomNumber<ui64>());
             TActorId Sender;
             ui64 Cookie;
             TIntrusivePtr<TBlobStorageGroupInfo> Info;
@@ -55,7 +55,6 @@ namespace NKikimr {
             struct TGetState {
                 size_t NumResponses;
                 TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
-                bool IsIndexOnly;
                 ui32 BlockedGeneration = 0;
             };
 
@@ -113,7 +112,6 @@ namespace NKikimr {
 
                     State = TGetState{
                         .NumResponses = request->QuerySize,
-                        .IsIndexOnly = request->IsIndexOnly,
                     };
 
                     MustRestoreFirst = request->MustRestoreFirst,
@@ -615,10 +613,6 @@ namespace NKikimr {
                 (void)self, (void)ev;
                 return nullptr;
             }
-
-            TString MakeRequestId() const {
-                return Sprintf("%016" PRIx64, RequestId);
-            }
         };
         struct TRequestInFlight {
             std::shared_ptr<TRequest> Request;
@@ -667,7 +661,7 @@ namespace NKikimr {
             const TEvent& originalRequest = *evPtr;
             auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this);
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->MakeRequestId()),
+            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
                 (GroupId, GroupId), (Request, originalRequest.ToString()));
 
             Y_ABORT_UNLESS(Info->Group);
@@ -767,7 +761,7 @@ namespace NKikimr {
             const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
             STLOG(isError ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_BRIDGE, BPB02, "intermediate response",
-                (RequestId, request->MakeRequestId()),
+                (RequestId, request->RequestId),
                 (GroupId, item.GroupId),
                 (Status, ev->Get()->Status),
                 (PileState, pile.State),
@@ -809,6 +803,7 @@ namespace NKikimr {
                 } else {
                     std::unique_ptr<TEvent> ptr(ev->Release().Release());
                     request->SubrequestTimings.emplace_back(TypeName<TEvent>(), TDuration::Seconds(item.Timer.Passed()));
+
                     if (auto response = request->ProcessResponse(*this, std::move(ptr), pile, item.Payload)) {
                         auto *common = dynamic_cast<TEvBlobStorage::TEvResultCommon*>(response.get());
                         Y_ABORT_UNLESS(common);
@@ -821,8 +816,9 @@ namespace NKikimr {
                                 return TStringBuilder() << name << ':' << duration;
                             }));
                         };
+
                         STLOG(success ? PRI_INFO : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished",
-                            (RequestId, request->MakeRequestId()),
+                            (RequestId, request->RequestId),
                             (Response, response->ToString()),
                             (Passed, TDuration::Seconds(request->Timer.Passed())),
                             (SubrequestTimings, makeSubrequestTimings()));

@@ -338,7 +338,11 @@ private:
     }
 
     TConclusionStatus CheckRequiredColumns(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, 
-                                         const TVector<std::pair<TString, Ydb::Type>>* reqColumns) {
+                                         const TConclusion<TVector<std::pair<TString, Ydb::Type>>>& reqColumns) {
+        if (reqColumns.IsFail()) {
+            return reqColumns;
+        }
+        
         THashSet<TString> allColumnsLeft;
         for (auto&& [_, colInfo] : entry.Columns) {
             allColumnsLeft.insert(colInfo.Name);

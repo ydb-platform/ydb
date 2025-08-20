@@ -542,7 +542,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
             // Set OL_DELIVERY_D and OL_AMOUNT based on itemId condition (like Benchbase!)
             TInstant deliveryDate;
             double amount;
-            if (itemId < FIRST_UNPROCESSED_O_ID) {
+            if (orderId < FIRST_UNPROCESSED_O_ID) {
                 deliveryDate = TInstant::Now();
                 amount = 0.0;
             } else {

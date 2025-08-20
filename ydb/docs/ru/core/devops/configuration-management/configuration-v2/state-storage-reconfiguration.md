@@ -14,7 +14,7 @@
 	Recommended: true вернет рекоммендуемую конфигурацию для этого кластера - можно сравнить с текущей для принятия решения о необходимости ее применения
 	PileupReplicas - создавать рекоммендуемую конфигурацию с учетом возможности отката конфига на V1
 Пример запроса
-```sh
+```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '{"GetStateStorageConfig": {"Recommended": true}}' | jq
 ```
 
@@ -22,7 +22,7 @@ curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Con
 
 Команда начать перевод конфигурации к рекоммендуемой. Выполняется в 4 шага, между шагами делается пауза WaitForConfigStep, чтобы новая конфигураия успела распространиться на узлы, примениться, новые реплики создались и наполнились данными.
 Пример:
-```sh
+```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
 	"SelfHealStateStorage": {
@@ -46,7 +46,7 @@ curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Con
 
 **Шаг 1**
 На первом шаге первая группа колец должна соответствовать текущей. Добавляем новую группу колец, которая соответствует целевой конфигурации и помечаем ее WriteOnly: true.
-```sh
+```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
 	ReconfigStateStorage: {
@@ -62,7 +62,7 @@ curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Con
 
 **Шаг 2**
 Снимаем флаг WriteOnly.
-```sh
+```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
 	ReconfigStateStorage: {
@@ -78,7 +78,7 @@ curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Con
 
 **Шаг 3**
 Делаем новую группу колец основной. Старую конфигурацию готовим к удалению выставляя флаг WriteOnly: true
-```sh
+```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
 	ReconfigStateStorage: {
@@ -94,7 +94,7 @@ curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Con
 
 **Шаг 4**
 Остается одна новая конфигурация.
-```sh
+```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
 	ReconfigStateStorage: {

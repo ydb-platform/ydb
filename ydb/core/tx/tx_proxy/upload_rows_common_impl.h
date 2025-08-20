@@ -569,7 +569,7 @@ private:
         }
 
         TConclusionStatus res = TConclusionStatus::Success();
-        if (isColumnTable && AppData(ctx)->FeatureFlags.GetDisableCSBulkUpsertRequireAllColumns()) {
+        if (isColumnTable && !AppData(ctx)->FeatureFlags.GetDisableCSBulkUpsertRequireAllColumns()) {
             res = CheckRequiredColumns(entry, reqColumns);
         }
 

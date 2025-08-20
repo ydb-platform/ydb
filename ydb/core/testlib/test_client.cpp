@@ -1347,6 +1347,13 @@ namespace Tests {
                     driver);
             }
 
+            const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
+            for (const auto& source : Settings->AppConfig->GetQueryServiceConfig().GetAvailableExternalDataSources()) {
+                if (!allExternalSourcesTypes.contains(source)) {
+                    ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
+                }
+            }
+
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),
                                                                   Settings->AppConfig->GetQueryServiceConfig(),

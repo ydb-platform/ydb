@@ -167,6 +167,41 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         ValidateRowCount(runtime, 1, pathId2, 6);
     }
 
+    Y_UNIT_TEST(DedicatedTimeIntervals) {
+        // Test that time intervals set in config for the serverless environment are honored.
+        auto modifyConfig = [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetBaseStatsSendIntervalSecondsDedicated(3);
+            settings.AppConfig->MutableStatisticsConfig()->SetBaseStatsPropagateIntervalSecondsDedicated(3);
+        };
+        TTestEnv env(1, 2, false, modifyConfig);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database1", 1, false, "hdd1");
+        CreateDatabase(env, "Database2", 1, false, "hdd2");
+        CreateTable(env, "Database1", "Table1", 5);
+        CreateTable(env, "Database2", "Table2", 6);
+
+        auto pathId1 = ResolvePathId(runtime, "/Root/Database1/Table1");
+        auto pathId2 = ResolvePathId(runtime, "/Root/Database2/Table2");
+        ValidateRowCount(runtime, 2, pathId1, 5);
+        ValidateRowCount(runtime, 1, pathId2, 6);
+
+        size_t sendCount = 0;
+        auto sendObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto&){
+            ++sendCount;
+        });
+
+        size_t propagateCount = 0;
+        auto propagateObserver = runtime.AddObserver<TEvStatistics::TEvPropagateStatistics>([&](auto&){
+            ++propagateCount;
+        });
+
+        runtime.SimulateSleep(TDuration::Seconds(4));
+        UNIT_ASSERT_GE(sendCount, 2); // at least one event from each tenant schemeshard
+        UNIT_ASSERT_GE(propagateCount, 2); // at least one propagate event to each node
+    }
+
     Y_UNIT_TEST(Serverless) {
         TTestEnv env(1, 1);
 
@@ -335,6 +370,10 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         runtime.SimulateSleep(TDuration::Seconds(15));
         UNIT_ASSERT_VALUES_EQUAL(sendCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(propagateCount, 0);
+
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        UNIT_ASSERT_VALUES_EQUAL(sendCount, 2); // events from 2 serverless schemeshards
+        UNIT_ASSERT_VALUES_EQUAL(propagateCount, 2); // SA -> node1 and node1 -> node2
     }
 }
 

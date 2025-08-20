@@ -386,7 +386,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         return true;
     }
 
-    const auto& readResult = ev->Get()->Response->MutablePartitionResponse()->GetCmdReadResult();
+    auto& readResult = *ev->Get()->Response->MutablePartitionResponse()->MutableCmdReadResult();
 
     ui64 lastExpectedOffset = (KeysIter + 1 == DataKeysBody.end())
                                ? FirstHeadOffset
@@ -410,7 +410,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
                                       << readResult.GetResult(0).GetOffset() << ":" << readResult.GetResult(0).GetPartNo()
                                       << " isTruncatedBlob " << isTruncatedBlob);
     for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
-        auto& res = readResult.GetResult(i);
+        auto& res = *readResult.MutableResult(i);
         if (res.GetOffset() == lastExpectedOffset && res.GetPartNo() == lastExpectedPartNo) {
             break;
         }
@@ -419,10 +419,10 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             currentBatch.ConstructInPlace(res.GetOffset(), res.GetPartNo());
         }
 
-        TClientBlob blob{res.GetSourceId(), res.GetSeqNo(), std::move(res.GetData()),
+        TClientBlob blob(std::move(*res.MutableSourceId()), res.GetSeqNo(), std::move(*res.MutableData()),
                          Nothing(),
                          TInstant::MilliSeconds(res.GetWriteTimestampMS()), TInstant::MilliSeconds(res.GetCreateTimestampMS()),
-                         res.GetUncompressedSize(), res.GetPartitionKey(), res.GetExplicitHash()};
+                         res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()));
 
         if (res.HasTotalParts()) {
             blob.PartData = TPartData{static_cast<ui16>(res.GetPartNo()), static_cast<ui16>(res.GetTotalParts()), res.GetTotalSize()};

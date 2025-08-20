@@ -112,7 +112,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
 
         if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
             auto resolveUnion = BuildVectorIndexPostingRows(table, del.Table(), indexDesc->Name,
-                indexTableColumns, deleteIndexKeys, del.Pos(), ctx);
+                indexTableColumns, deleteIndexKeys, false, del.Pos(), ctx);
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
                 .Table(tableNode)
@@ -145,7 +145,8 @@ TExprBase BuildVectorIndexPostingRows(const TKikimrTableDescription& table,
     const TKqpTable& tableNode,
     const TString& indexName,
     const TVector<TStringBuf>& indexTableColumns,
-    const TExprBase& deleteIndexKeys,
+    const TExprBase& inputRows,
+    bool withData,
     TPositionHandle pos, TExprContext& ctx) {
     // Generate input type for vector resolve
     TVector<const TItemExprType*> rowItems;
@@ -160,10 +161,10 @@ TExprBase BuildVectorIndexPostingRows(const TKikimrTableDescription& table,
     YQL_ENSURE(rowType->Validate(pos, ctx));
     const TTypeAnnotationNode* resolveInputType = ctx.MakeType<TListExprType>(rowType);
 
-    auto resolveInput = (deleteIndexKeys.Maybe<TDqCnUnionAll>()
-        ? deleteIndexKeys.Maybe<TDqCnUnionAll>().Cast().Output()
+    auto resolveInput = (inputRows.Maybe<TDqCnUnionAll>()
+        ? inputRows.Maybe<TDqCnUnionAll>().Cast().Output()
         : Build<TDqOutput>(ctx, pos)
-            .Stage(ReadTableToStage(deleteIndexKeys, ctx))
+            .Stage(ReadTableToStage(inputRows, ctx))
             .Index().Build(0)
             .Done());
 
@@ -172,6 +173,7 @@ TExprBase BuildVectorIndexPostingRows(const TKikimrTableDescription& table,
         .Table(tableNode)
         .InputType(ExpandType(pos, *resolveInputType, ctx))
         .Index(ctx.NewAtom(pos, indexName))
+        .WithData(ctx.NewAtom(pos, withData ? "true" : "false"))
         .Done();
 
     auto resolveStage = Build<TDqStage>(ctx, pos)

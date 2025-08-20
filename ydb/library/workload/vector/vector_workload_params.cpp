@@ -54,6 +54,8 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .StoreTrue(&Recall);
         opts.AddLongOption( "non-indexed", "Take vector settings from the index, but search without the index.")
             .StoreTrue(&NonIndexedSearch);
+        opts.AddLongOption("stale-ro", "Read with StaleRO mode")
+            .StoreTrue(&StaleRO);            
     };
 
     switch (commandType) {

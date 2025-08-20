@@ -23,6 +23,7 @@ message TEvPartitionAddress {
 
 message TEvGetAddressResponse {
     repeated TEvPartitionAddress Partitions = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
 }
 
 message TPartitionOffset {

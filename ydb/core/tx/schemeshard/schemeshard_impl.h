@@ -1615,8 +1615,8 @@ public:
     // statistics
     TTabletId StatisticsAggregatorId;
     TActorId SAPipeClientId;
-    static constexpr ui64 SendStatsIntervalMinSeconds = 180;
-    static constexpr ui64 SendStatsIntervalMaxSeconds = 240;
+    ui64 SendStatsIntervalSecondsDedicated = 5;
+    ui64 SendStatsIntervalSecondsServerless = 240;
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr& ev, const TActorContext& ctx);

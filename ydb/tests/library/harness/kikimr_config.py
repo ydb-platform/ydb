@@ -509,7 +509,9 @@ class KikimrConfigGenerator(object):
 
         if kafka_api_port is not None:
             kafka_proxy_config = dict()
-            kafka_proxy_config["enable_kafka_proxy"] = True
+            kafka_proxy_config['enable_kafka_proxy'] = True
+            kafka_proxy_config["auto_create_topics_enable"] = False
+            kafka_proxy_config["auto_create_consumers_enable"] = False
             kafka_proxy_config["listening_port"] = kafka_api_port
 
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config

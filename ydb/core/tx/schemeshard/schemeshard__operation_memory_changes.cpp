@@ -144,6 +144,17 @@ void TMemoryChanges::GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id) {
     IncrementalBackups.emplace(id, nullptr);
 }
 
+namespace {
+
+void SetCounters(TSchemeShard* ss, TPathId pathId, const TSubDomainInfo& target) {
+    if (ss->GetCurrentSubDomainPathId() == pathId) {
+        ss->TabletCounters->Simple()[COUNTER_PATHS].Set(target.GetPathsInside());
+        ss->TabletCounters->Simple()[COUNTER_SHARDS].Set(target.GetShardsInside());
+    }
+}
+
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -236,8 +247,9 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     // Restore ss->SubDomains entries to saved copies of TSubDomainInfo objects.
     // No copy, simple pointer replacement.
-    for (const auto& [id, elem] : SubDomains) {
-        ss->SubDomains[id] = elem;
+    for (const auto& [id, savedState] : SubDomains) {
+        ss->SubDomains[id] = savedState;
+        SetCounters(ss, id, *savedState);
     }
     SubDomains.clear();
 

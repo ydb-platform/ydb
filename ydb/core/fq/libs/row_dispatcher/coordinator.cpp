@@ -506,7 +506,7 @@ void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorReques
     LOG_ROW_DISPATCHER_WARN("Send TEvCoordinatorResult to " << readActorId << ", issues: " << message);
     auto response = std::make_unique<TEvRowDispatcher::TEvCoordinatorResult>();
     NYql::IssuesToMessage(NYql::TIssues{NYql::TIssue{message}}, response->Record.MutableIssues());
-    Send(readActorId, response.release(), IEventHandle::FlagTrackDelivery, request.Cookie);               
+    Send(readActorId, response.release(), IEventHandle::FlagTrackDelivery, request.Cookie);
 }
 
 } // namespace

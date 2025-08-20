@@ -975,6 +975,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
         NYql::TIssues issues;
         IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
         Stop(NYql::NDqProto::StatusIds::BAD_REQUEST, issues);
+        return;
     }
     LastReceivedPartitionDistribution.clear();
     TMap<NActors::TActorId, TSet<ui32>> distribution;

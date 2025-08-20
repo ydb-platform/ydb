@@ -69,7 +69,6 @@ const THashSet<ui32> DYNAMIC_KINDS({
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
-    (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem,
 });
 

@@ -5,6 +5,7 @@ import threading
 
 from ydb.tests.stress.olap_workload.workload.type.tables_create_drop import WorkloadTablesCreateDrop
 from ydb.tests.stress.olap_workload.workload.type.insert_delete import WorkloadInsertDelete
+from ydb.tests.stress.olap_workload.workload.type.transactions import WorkloadTransactions
 
 
 class WorkloadRunner:
@@ -33,6 +34,7 @@ class WorkloadRunner:
         workloads = [
             WorkloadTablesCreateDrop(self.client, self.name, stop, self.allow_nullables_in_pk),
             WorkloadInsertDelete(self.client, self.name, stop),
+            WorkloadTransactions(self.client, self.name, stop),
         ]
         for w in workloads:
             w.start()

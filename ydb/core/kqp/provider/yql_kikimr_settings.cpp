@@ -172,7 +172,7 @@ bool TKikimrSettings::HasOptEnableOlapPushdown() const {
 }
 
 bool TKikimrSettings::HasOptEnableOlapPushdownAggregate() const {
-    return GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) != EOptionalFlag::Disabled;
+    return GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {

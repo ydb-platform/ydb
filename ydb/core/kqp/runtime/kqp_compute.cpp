@@ -1,4 +1,5 @@
 #include "kqp_compute.h"
+#include "kqp_stream_lookup_join_helpers.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
@@ -7,6 +8,8 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/public/udf/udf_terminator.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
+
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -86,14 +89,24 @@ private:
 
 class TKqpIndexLookupJoinWrapper : public TMutableComputationNode<TKqpIndexLookupJoinWrapper> {
 public:
+    struct TState : public TComputationValue<TState> {
+        using TComputationValue::TComputationValue;
+        // i guess it can be changed to some sort
+        // of bitmaps or vectors
+        absl::flat_hash_map<ui64, bool, std::hash<ui64>, std::equal_to<ui64>, TMKQLAllocator<std::pair<const ui64, bool>>> AllRowsAreNull;
+        absl::flat_hash_map<ui64, bool, std::hash<ui64>, std::equal_to<ui64>, TMKQLAllocator<std::pair<const ui64, bool>>> RightRowExists;
+    };
+
     class TStreamValue : public TComputationValue<TStreamValue> {
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream, TComputationContext& ctx,
-            const TKqpIndexLookupJoinWrapper* self)
+            const TKqpIndexLookupJoinWrapper* self, ui32 stateIndex)
             : TComputationValue<TStreamValue>(memInfo)
             , Stream(std::move(stream))
             , Self(self)
-            , Ctx(ctx) {
+            , Ctx(ctx)
+            , StateIndex(stateIndex)
+        {
         }
 
     private:
@@ -101,6 +114,14 @@ public:
             OnlyLeftRow,
             Both
         };
+
+        TState& GetState() const {
+            auto& result = Ctx.MutableValues[StateIndex];
+            if (result.IsInvalid()) {
+                result = Ctx.HolderFactory.Create<TState>();
+            }
+            return *static_cast<TState*>(result.AsBoxed().Get());
+        }
 
         NUdf::TUnboxedValue FillResultItems(NUdf::TUnboxedValue leftRow, NUdf::TUnboxedValue rightRow, EOutputMode mode) {
             auto resultRowSize = (mode == EOutputMode::OnlyLeftRow) ? Self->LeftColumnsIndices.size()
@@ -128,7 +149,79 @@ public:
             return resultRow;
         }
 
-        bool TryBuildResultRow(NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result) {
+        bool OmitRow(TState& state, ui64 header, bool isNull) {
+
+            auto cookie = NKqp::TStreamLookupJoinRowCookie::Decode(header);
+            bool lastRowInSequence = cookie.LastRow;
+            bool firstRowInSequence = cookie.FirstRow;
+            ui32 rowId = cookie.RowSeqNo;
+
+            if (lastRowInSequence) {
+                // if row is the first and last row in the sequence at the same time
+                // we can return it as a result row
+                if (firstRowInSequence)
+                    return false;
+
+                auto it = state.AllRowsAreNull.find(rowId);
+                Y_ENSURE(it != state.AllRowsAreNull.end());
+                bool allRowsAreNull = it->second;
+                state.AllRowsAreNull.erase(it);
+
+                if (isNull) {
+                    //
+                    // [left_row_1, null] -- omitted
+                    // [left_row_1, null] -- omitted
+                    // [left_row_1, null] -- omitted
+                    // [left_row_1, null] - not omitted, because it's a last row in the sequence for the specified left key.
+
+                    // [left_row_2, null] -- omitted
+                    // [left_row_2, right_row] -- not omitted, not null
+                    // [left_key_2, null] -- omitted, because we had at least one not omitted row in the returned sequence.
+                    if (allRowsAreNull) {
+                        return false;
+                    }
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (firstRowInSequence) {
+                state.AllRowsAreNull[rowId] = isNull;
+            } else {
+                state.AllRowsAreNull[rowId] &= isNull;
+            }
+
+            return isNull;
+        }
+
+        bool OmitRowSemiJoin(TState& state, ui64 header, bool isNull) {
+            if (isNull)
+                return true;
+
+            auto cookie = NKqp::TStreamLookupJoinRowCookie::Decode(header);
+            bool lastRowInSequence = cookie.LastRow;
+            bool firstRowInSequence = cookie.FirstRow;
+            ui32 rowId = cookie.RowSeqNo;
+
+            if (firstRowInSequence && lastRowInSequence) {
+                return false;
+            }
+
+            bool prevExists = state.RightRowExists[rowId];
+
+            if (!prevExists) {
+                state.RightRowExists[rowId] = true;
+            }
+
+            if (lastRowInSequence) {
+                state.RightRowExists.erase(rowId);
+            }
+
+            return prevExists;
+        }
+
+        bool TryBuildResultRow(TState& state, NUdf::TUnboxedValue inputRow, NUdf::TUnboxedValue& result, ui64 header) {
             auto leftRow = inputRow.GetElement(0);
             auto rightRow = inputRow.GetElement(1);
 
@@ -144,6 +237,11 @@ public:
                     break;
                 }
                 case EJoinKind::Left: {
+                    if (OmitRow(state, header, !rightRow.HasValue())) {
+                        ok = false;
+                        break;
+                    }
+
                     result = FillResultItems(std::move(leftRow), std::move(rightRow), EOutputMode::Both);
                     break;
                 }
@@ -157,7 +255,7 @@ public:
                     break;
                 }
                 case EJoinKind::LeftSemi: {
-                    if (!rightRow.HasValue()) {
+                    if (OmitRowSemiJoin(state, header, !rightRow.HasValue())) {
                         ok = false;
                         break;
                     }
@@ -173,18 +271,27 @@ public:
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            NUdf::TUnboxedValue row;
-            NUdf::EFetchStatus status = Stream.Fetch(row);
+            auto& state = GetState();
+            for(;;) {
 
-            while (status == NUdf::EFetchStatus::Ok) {
-                if (TryBuildResultRow(std::move(row), result)) {
-                    break;
+                NUdf::TUnboxedValue item;
+                auto status = Stream.Fetch(item);
+
+                if (status == NUdf::EFetchStatus::Yield) {
+                    return status;
                 }
 
-                status = Stream.Fetch(row);
-            }
+                if (status == NUdf::EFetchStatus::Finish) {
+                    return status;
+                }
 
-            return status;
+                ui64 header = item.GetElement(2).Get<ui64>();
+                bool buildRow = TryBuildResultRow(state, item, result, header);
+                if (buildRow) {
+                    return NUdf::EFetchStatus::Ok;
+                }
+            }
+            return NUdf::EFetchStatus::Ok;
         }
 
     private:
@@ -192,6 +299,7 @@ public:
         const TKqpIndexLookupJoinWrapper* Self;
         TComputationContext& Ctx;
         NUdf::TUnboxedValue* ResultItems = nullptr;
+        ui32 StateIndex;
     };
 
 public:
@@ -202,11 +310,13 @@ public:
         , JoinType(joinType)
         , LeftColumnsIndices(std::move(leftColumnsIndices))
         , RightColumnsIndices(std::move(rightColumnsIndices))
-        , ResultRowCache(mutables) {
+        , ResultRowCache(mutables)
+        , StateIndex(mutables.CurValueIndex++)
+    {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(InputNode->GetValue(ctx), ctx, this);
+        return ctx.HolderFactory.Create<TStreamValue>(InputNode->GetValue(ctx), ctx, this, StateIndex);
     }
 
 private:
@@ -220,6 +330,7 @@ private:
     const TVector<ui32> LeftColumnsIndices;
     const TVector<ui32> RightColumnsIndices;
     const TContainerCacheOnContext ResultRowCache;
+    const ui32 StateIndex;
 };
 
 } // namespace

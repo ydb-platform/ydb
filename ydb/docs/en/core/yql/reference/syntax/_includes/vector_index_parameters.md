@@ -4,6 +4,6 @@
     * `distance` - distance function (`cosine`, `manhattan`, or `euclidean`), mutually exclusive with `similarity`
 	  * `similarity` - similarity function (`inner_product` or `cosine`), mutually exclusive with `distance`
   * specific parameters for `vector_kmeans_tree` (see [the reference](../../../../dev/vector-indexes.md#kmeans-tree-type)):
-    * `clusters` - number of centroids for k-means algorithm (should be between 2 and 1024)
+    * `clusters` - number of centroids for k-means algorithm (should be between 2 and 2048)
     * `levels` - number of levels in the tree (should be between 1 and 16)
     * the total number of nodes in the tree, calculated as clusters raised to the power of levels, should be no more than 1073741824

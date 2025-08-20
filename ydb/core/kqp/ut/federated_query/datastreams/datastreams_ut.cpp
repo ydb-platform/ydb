@@ -213,7 +213,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST(ReadTopic) {
-        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory());
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("YdbTopics");
+        appCfg.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
+        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appCfg, NYql::NDq::CreateS3ActorsFactory());
 
         TString sourceName = "sourceName";
         TString topicName = "topicName";

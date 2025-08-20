@@ -220,5 +220,5 @@ message TFeatureFlags {
     optional bool EnableArrowResultSetFormat = 194 [default = false];
     optional bool EnableCSOverloadsSubscriptionRetries = 195 [default = false];
     optional bool EnableTopicCompactificationByKey = 196 [default = false];
-    optional bool EnableBulkUpsertRequireAllColumns = 197 [default = true];
+    optional bool DisableCSBulkUpsertRequireAllColumns = 197 [default = false]
 }

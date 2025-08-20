@@ -549,7 +549,7 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
-        if (isColumnTable && AppData(ctx)->FeatureFlags.GetEnableBulkUpsertRequireAllColumns()) {
+        if (isColumnTable && AppData(ctx)->FeatureFlags.GetDisableCSBulkUpsertRequireAllColumns()) {
             THashSet<TString> allColumnsLeft;
             for (auto&& [_, colInfo] : entry.Columns) {
                 allColumnsLeft.insert(colInfo.Name);

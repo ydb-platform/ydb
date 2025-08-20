@@ -111,9 +111,9 @@ public:
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", streamResult, bufferActorId, txManager, std::move(batchOperationSettings))
         , ShardIdToTableInfo(shardIdToTableInfo)
-        , AllowOlapDataQuery(executerConfig.TableServiceConfig.GetAllowOlapDataQuery())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
     {
+        AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
 
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
@@ -1620,119 +1620,6 @@ private:
         return true;
     }
 
-    void BuildDatashardTasks(TStageInfo& stageInfo) {
-        THashMap<ui64, ui64> shardTasks; // shardId -> taskId
-        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-
-        auto getShardTask = [&](ui64 shardId) -> TTask& {
-            YQL_ENSURE(!TxManager);
-            auto it  = shardTasks.find(shardId);
-            if (it != shardTasks.end()) {
-                return TasksGraph.GetTask(it->second);
-            }
-            auto& task = TasksGraph.AddTask(stageInfo);
-            task.Meta.Type = TTaskMeta::TTaskType::DataShard;
-            task.Meta.ExecuterId = SelfId();
-            task.Meta.ShardId = shardId;
-            shardTasks.emplace(shardId, task.Id);
-
-            FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-            BuildSinks(stage, stageInfo, task);
-
-            return task;
-        };
-
-        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-        const auto& keyTypes = tableInfo->KeyColumnTypes;
-
-        for (auto& op : stage.GetTableOps()) {
-            Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
-            switch (op.GetTypeCase()) {
-                case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                case NKqpProto::TKqpPhyTableOperation::kReadRange: {
-                    auto columns = BuildKqpColumns(op, tableInfo);
-                    bool isFullScan = false;
-                    auto partitions = PartitionPruner.Prune(op, stageInfo, isFullScan);
-                    auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
-
-                    if (!readSettings.ItemsLimit && isFullScan) {
-                        Counters->Counters->FullScansExecuted->Inc();
-                    }
-
-                    for (auto& [shardId, shardInfo] : partitions) {
-                        YQL_ENSURE(!shardInfo.KeyWriteRanges);
-
-                        auto& task = getShardTask(shardId);
-                        MergeReadInfoToTaskMeta(task.Meta, shardId, shardInfo.KeyReadRanges, readSettings,
-                            columns, op, /*isPersistentScan*/ false);
-                    }
-
-                    break;
-                }
-
-                case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
-                case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
-                    YQL_ENSURE(stage.InputsSize() <= 1, "Effect stage with multiple inputs: " << stage.GetProgramAst());
-
-                    auto result = PartitionPruner.PruneEffect(op, stageInfo);
-                    for (auto& [shardId, shardInfo] : result) {
-                        YQL_ENSURE(!shardInfo.KeyReadRanges);
-                        YQL_ENSURE(shardInfo.KeyWriteRanges);
-
-                        auto& task = getShardTask(shardId);
-
-                        if (!task.Meta.Writes) {
-                            task.Meta.Writes.ConstructInPlace();
-                            task.Meta.Writes->Ranges = std::move(*shardInfo.KeyWriteRanges);
-                        } else {
-                            task.Meta.Writes->Ranges.MergeWritePoints(std::move(*shardInfo.KeyWriteRanges), keyTypes);
-                        }
-
-                        if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
-                            task.Meta.Writes->AddEraseOp();
-                        } else {
-                            task.Meta.Writes->AddUpdateOp();
-                        }
-
-                        for (const auto& [name, info] : shardInfo.ColumnWrites) {
-                            auto& column = tableInfo->Columns.at(name);
-
-                            auto& taskColumnWrite = task.Meta.Writes->ColumnWrites[column.Id];
-                            taskColumnWrite.Column.Id = column.Id;
-                            taskColumnWrite.Column.Type = column.Type;
-                            taskColumnWrite.Column.Name = name;
-                            taskColumnWrite.MaxValueSizeBytes = std::max(taskColumnWrite.MaxValueSizeBytes,
-                                info.MaxValueSizeBytes);
-                        }
-                        ShardsWithEffects.insert(shardId);
-                    }
-
-                    break;
-                }
-
-                case NKqpProto::TKqpPhyTableOperation::kReadOlapRange: {
-                    YQL_ENSURE(false, "The previous check did not work! Data query read does not support column shard tables." << Endl
-                        << this->DebugString());
-                }
-
-                default: {
-                    YQL_ENSURE(false, "Unexpected table operation: " << (ui32) op.GetTypeCase() << Endl
-                        << this->DebugString());
-                }
-            }
-        }
-
-        LOG_D("Stage " << stageInfo.Id << " will be executed on " << shardTasks.size() << " shards.");
-
-        for (auto& shardTask : shardTasks) {
-            auto& task = TasksGraph.GetTask(shardTask.second);
-            LOG_D("ActorState: " << CurrentStateFuncName()
-                << ", stage: " << stageInfo.Id << " create datashard task: " << shardTask.second
-                << ", shard: " << shardTask.first
-                << ", meta: " << task.Meta.ToString(keyTypes, *AppData()->TypeRegistry));
-        }
-    }
-
     void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
         YQL_ENSURE(ReadOnlyTx || !TxManager);
@@ -2000,16 +1887,14 @@ private:
             RestoreTasksGraphInfo(TasksGraph, *Request.QueryPhysicalGraph);
         }
 
-        size_t sourceScanPartitionsCount = 0;
+        size_t sourceScanPartitionsCount = BuildAllTasks<false>(StreamResult || EnableReadsMerge);
+
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
-            auto& tx = Request.Transactions[txIdx];
-            auto scheduledTaskCount = ScheduleByCost(tx, ResourcesSnapshot);
+            const auto& tx = Request.Transactions[txIdx];
             AFL_ENSURE(tx.Body->StagesSize() < (static_cast<ui64>(1) << PriorityTxShift));
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
-                auto& stage = tx.Body->GetStages(stageIdx);
-                const auto stageId = TStageId(txIdx, stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(stageId);
-                AFL_ENSURE(stageInfo.Id == stageId);
+                const auto& stage = tx.Body->GetStages(stageIdx);
+                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
 
                 if (graphRestored && (stageInfo.Meta.ShardOperations || stageInfo.Meta.ShardKind != NSchemeCache::ETableKind::KindUnknown)) {
                     ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, YqlIssue({}, NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Restore is not supported for table operations"));
@@ -2041,37 +1926,6 @@ private:
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                         YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
                     return;
-                }
-
-                LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
-
-                if (stage.SourcesSize() > 0) {
-                    switch (stage.GetSources(0).GetTypeCase()) {
-                        case NKqpProto::TKqpSource::kReadRangesSource:
-                            if (auto partitionsCount = BuildScanTasksFromSource(
-                                    stageInfo,
-                                    /* limitTasksPerNode */ StreamResult || EnableReadsMerge)) {
-                                sourceScanPartitionsCount += *partitionsCount;
-                            } else {
-                                UnknownAffectedShardCount = true;
-                            }
-                            break;
-                        case NKqpProto::TKqpSource::kExternalSource: {
-                            auto it = scheduledTaskCount.find(stageIdx);
-                            BuildReadTasksFromSource(stageInfo, ResourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
-                        }
-                            break;
-                        default:
-                            YQL_ENSURE(false, "unknown source type");
-                    }
-                } else if ((AllowOlapDataQuery || StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0) {
-                    BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination());
-                } else if (stageInfo.Meta.IsSysView()) {
-                    BuildSysViewScanTasks(stageInfo);
-                } else if (stageInfo.Meta.ShardOperations.empty() || stage.SinksSize() > 0) {
-                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourcesSnapshot.size()));
-                } else {
-                    BuildDatashardTasks(stageInfo);
                 }
 
                 if (stage.GetIsSinglePartition()) {
@@ -3055,7 +2909,6 @@ private:
 
 private:
     TShardIdToTableInfoPtr ShardIdToTableInfo;
-    const bool AllowOlapDataQuery = false;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -3074,8 +2927,6 @@ private:
     TInstant FirstPrepareReply;
     TInstant LastPrepareReply;
 
-    // Tracks which shards are expected to have effects
-    THashSet<ui64> ShardsWithEffects;
     bool HasPersistentChannels = false;
 
     THashSet<ui64> SubscribedNodes;

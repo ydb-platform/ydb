@@ -121,7 +121,7 @@ void TClientBlob::SerializeTo(TBuffer& res) const
     flags.F.HasCreateTimestamp = 1;
     flags.F.HasWriteTimestamp = 1;
     flags.F.HasPartData = !PartData.Empty();
-    flags.F.HasUncompressedSize = !!UncompressedSize;
+    flags.F.HasUncompressedSize = UncompressedSize != 0;
     flags.F.HasKinesisData = !PartitionKey.empty();
 
     res.Append((const char*)&flags.V, sizeof(char));
@@ -171,9 +171,8 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     ui64 seqNo = ReadUnaligned<ui64>(data);
     data += sizeof(ui64);
 
-    TMessageFlags flags {
-        .V = ReadUnaligned<ui8>(data)
-    };
+    TMessageFlags flags;
+    flags.V = ReadUnaligned<ui8>(data);
     ++data;
 
     TMaybe<TPartData> partData;

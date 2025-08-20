@@ -3582,6 +3582,11 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
 }
 
 bool TVectorIndexSettings::Validate(TContext& ctx) const {
+    constexpr ui64 MaxVectorDimension = 16384;
+    constexpr ui64 MaxLevels = 16;
+    constexpr ui64 MaxClusters = 1024;
+    constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
+
     auto validateInRange = [&](const TString& name, std::optional<ui64> value, ui64 minValue, ui64 maxValue) {
         if (!value.has_value()) {
             ctx.Error() << name << " should be set";
@@ -3609,9 +3614,21 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
         return false;
     }
 
-    validateInRange("vector_dimension", VectorDimension, 1, 16384);
-    validateInRange("levels", Levels, 1, 32); // TODO
-    validateInRange("clusters", Clusters, 2, 100); // TODO
+    if (!validateInRange("vector_dimension", VectorDimension, 1, MaxVectorDimension)) {
+        return false;
+    }
+    if (!validateInRange("levels", Levels, 1, MaxLevels)) {
+        return false;
+    }
+    if (!validateInRange("clusters", Clusters, 2, MaxClusters)) {
+        return false;
+    }
+
+    if (std::pow(static_cast<double>(*Clusters), static_cast<double>(*Levels)) > static_cast<double>(MaxClustersPowLevels)
+            || std::pow(*Clusters, *Levels) > MaxClustersPowLevels) {
+        ctx.Error() << "Invalid clusters^levels: " << *Clusters << "^" << *Levels << " should be less than " << MaxClustersPowLevels;
+        return false;
+    }
 
     return true;
 }

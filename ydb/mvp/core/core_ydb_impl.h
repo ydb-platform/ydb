@@ -1083,13 +1083,13 @@ struct THandlerActorYdb {
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return TStringBuilder() << valueParser.GetDate32();
+                return TStringBuilder() << valueParser.GetDate32().count();
             case NYdb::EPrimitiveType::Datetime64:
-                return TStringBuilder() << valueParser.GetDatetime64();
+                return TStringBuilder() << valueParser.GetDatetime64().count();
             case NYdb::EPrimitiveType::Timestamp64:
-                return TStringBuilder() << valueParser.GetTimestamp64();
+                return TStringBuilder() << valueParser.GetTimestamp64().count();
             case NYdb::EPrimitiveType::Interval64:
-                return TStringBuilder() << valueParser.GetInterval64();
+                return TStringBuilder() << valueParser.GetInterval64().count();
             case NYdb::EPrimitiveType::TzDate:
                 return TStringBuilder() << valueParser.GetTzDate();
             case NYdb::EPrimitiveType::TzDatetime:

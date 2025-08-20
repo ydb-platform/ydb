@@ -113,7 +113,6 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
 
     NKikimrSchemeOp::TTableDescription schema;
     context.SS->DescribeTable(*table, typeRegistry, true, &schema);
-    schema.MutablePartitionConfig()->CopyFrom(table->TableDescription.GetPartitionConfig());
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {

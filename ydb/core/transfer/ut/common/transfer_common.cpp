@@ -284,7 +284,199 @@ void ColumnType_Utf8_LongValue(const std::string& tableType) {
     });
 }
 
-void MessageField_Partition(const std::string& tableType) {
+void ColumnType_Uuid(const std::string& tableType) {
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Uuid,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key:CAST($x._offset AS Uint64),
+                        Message:CAST($x._data AS Uuid)
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {{"123e4567-e89b-12d3-a456-426614174000"}},
+
+        .Expectations = {{
+            _C("Key", ui64(0)),
+            _C("Message", TUuidValue("123e4567-e89b-12d3-a456-426614174000")),
+        }}
+    });
+}
+
+void ColumnType_Bool(const std::string& tableType) {
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Bool,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key:CAST($x._offset AS Uint64),
+                        Message:CAST($x._data AS Bool)
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {{"true"}},
+
+        .Expectations = {{
+            _C("Key", ui64(0)),
+            _C("Message", true),
+        }}
+    });
+}
+
+void ColumnType_Int8(const std::string& tableType) {
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Int8,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key:CAST($x._offset AS Uint64),
+                        Message:CAST($x._data AS Int8)
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {{"7"}},
+
+        .Expectations = {{
+            _C("Key", ui64(0)),
+            _C("Message", i8(7)),
+        }}
+    });
+}
+
+void ColumnType_Int16(const std::string& tableType) {
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Int16,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key:CAST($x._offset AS Uint64),
+                        Message:CAST($x._data AS Int16)
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {{"32767"}},
+
+        .Expectations = {{
+            _C("Key", ui64(0)),
+            _C("Message", i16(32767)),
+        }}
+    });
+}
+
+void ColumnType_Int32(const std::string& tableType) {
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Int32,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key:CAST($x._offset AS Uint64),
+                        Message:CAST($x._data AS Int32)
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {{"2147483647"}},
+
+        .Expectations = {{
+            _C("Key", ui64(0)),
+            _C("Message", i32(2147483647)),
+        }}
+    });
+}
+
+void ColumnType_Int64(const std::string& tableType) {
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Int64,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key:CAST($x._offset AS Uint64),
+                        Message:CAST($x._data AS Int64)
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {{"9223372036854775807"}},
+
+        .Expectations = {{
+            _C("Key", ui64(0)),
+            _C("Message", i64(9223372036854775807LL)),
+        }}
+    });
+}
+
+void MessageField_Partition(const std::string& tableType, bool local) {
     MainTestCase(std::nullopt, tableType).Run({
         .TableDDL = R"(
             CREATE TABLE `%s` (
@@ -313,7 +505,7 @@ void MessageField_Partition(const std::string& tableType) {
             _C("Partition", ui32(7)),
             _C("Message", TString("Message-1")),
         }}
-    });
+    }, MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 }
 
 void MessageField_SeqNo(const std::string& tableType) {
@@ -409,7 +601,7 @@ void MessageField_MessageGroupId(const std::string& tableType) {
     });
 }
 
-void MessageField_Attributes(const std::string& tableType) {
+void MessageField_Attributes(const std::string& tableType, bool local) {
     MainTestCase(std::nullopt, tableType).Run({
         .TableDDL = R"(
             CREATE TABLE `%s` (
@@ -437,10 +629,10 @@ void MessageField_Attributes(const std::string& tableType) {
         .Expectations = {{
             _C("Value", TString("attribute_value")),
         }}
-    });
+    }, MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 }
 
-void MessageField_CreateTimestamp(const std::string& tableType) {
+void MessageField_CreateTimestamp(const std::string& tableType, bool local) {
     TInstant timestamp = TInstant::Now() - TDuration::Minutes(1);
 
     MainTestCase(std::nullopt, tableType).Run({
@@ -470,10 +662,10 @@ void MessageField_CreateTimestamp(const std::string& tableType) {
         .Expectations = {{
             _T<Timestamp64Checker>("CreateTimestamp", std::move(timestamp), TDuration::MilliSeconds(1)),
         }}
-    });
+    }, MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 }
 
-void MessageField_WriteTimestamp(const std::string& tableType) {
+void MessageField_WriteTimestamp(const std::string& tableType, bool local) {
     TInstant timestamp = TInstant::Now();
 
     MainTestCase(std::nullopt, tableType).Run({
@@ -503,7 +695,7 @@ void MessageField_WriteTimestamp(const std::string& tableType) {
         .Expectations = {{
             _T<Timestamp64Checker>("WriteTimestamp", std::move(timestamp), TDuration::Seconds(5)),
         }}
-    });
+    }, MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 }
 
 void WriteNullToKeyColumn(const std::string& tableType) {
@@ -806,7 +998,6 @@ void Upsert_DifferentBatch(const std::string& tableType) {
     testCase.CheckResult({{
         _C("Message", TString("Message-2"))
     }});
-
     testCase.DropTransfer();
     testCase.DropTable();
 }

@@ -1,13 +1,17 @@
-#include "utils.h"
-
 #include <util/thread/pool.h>
 
 #include <string.h>
 
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
+#include <ydb/library/actors/interconnect/rdma/events.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/interconnect_address.h>
 #include <ydb/library/actors/interconnect/poller_actor.h>
+
+#include <library/cpp/testing/gtest/gtest.h>
+#include <ydb/library/testlib/unittest_gtest_macro_subst.h>
+
+#include "utils.h"
 
 using namespace NInterconnect::NRdma;
 using namespace NActors;

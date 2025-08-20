@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 import ydb
 import time
-import random
 import threading
-from enum import Enum
 
-from ydb.tests.datashard.lib.types_of_variables import non_pk_types, pk_types, types_not_supported_yet_in_columnshard
-from ydb.tests.stress.common.common import WorkloadBase
 from ydb.tests.stress.olap_workload.workload.type.tables_create_drop import WorkloadTablesCreateDrop
 from ydb.tests.stress.olap_workload.workload.type.insert_delete import WorkloadInsertDelete
+
 
 class WorkloadRunner:
     def __init__(self, client, path, duration, allow_nullables_in_pk):

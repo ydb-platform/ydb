@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import ydb
 import time
 import random
 import threading
@@ -100,4 +99,3 @@ class WorkloadTablesCreateDrop(WorkloadBase):
         r = [self._create_tables_loop for x in range(0, 10)]
         r.append(self._delete_tables_loop)
         return r
-

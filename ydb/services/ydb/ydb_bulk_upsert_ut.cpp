@@ -413,6 +413,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                     .BeginStruct()
                         .AddMember("Shard").Uint64(42)
                         .AddMember("App").Utf8("app_")
+                        .AddMember("Timestamp").Int64(1)
                         .AddMember("Message").OptionalUtf8("message")
                         .AddMember("Ratio").Double(0.33)
                     .EndStruct();
@@ -450,6 +451,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                     .BeginStruct()
                         .AddMember("App").Utf8("app_")
                         .AddMember("Timestamp").Int64(-3)
+                        .AddMember("Timestamp").Int64(1)
                         .AddMember("Message").Utf8("message")
                         .AddMember("Ratio").Double(0.33)
                     .EndStruct();
@@ -499,25 +501,6 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             Cerr << res.GetIssues().ToString() << Endl;
             UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Type mismatch, got type Uint64 for column Message, but expected Utf8");
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
-        }
-
-        // Missing value column - it's ok
-        {
-            TValueBuilder rows;
-            rows.BeginList();
-                rows.AddListItem()
-                    .BeginStruct()
-                        .AddMember("Shard").Uint64(42)
-                        .AddMember("App").Utf8("app")
-                        .AddMember("Timestamp").Int64(-3)
-                        .AddMember("Ratio").OptionalDouble(0.33)
-                    .EndStruct();
-            rows.EndList();
-
-            auto res = client.BulkUpsert("/Root/Logs", rows.Build()).GetValueSync();
-            Cerr << res.GetIssues().ToString() << Endl;
-            UNIT_ASSERT(res.GetIssues().ToString().empty());
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
         }
 
         // Unknown column
@@ -1431,7 +1414,17 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(RequireAllColumnsFeatureFlag) {
+    void TestRequireAllColumnsFeatureFlag(bool useColumnTable);
+
+    Y_UNIT_TEST(RequireAllColumnsFeatureFlagRow) {
+        TestRequireAllColumnsFeatureFlag(false);
+    }
+
+    Y_UNIT_TEST(RequireAllColumnsFeatureFlagColumn) {
+        TestRequireAllColumnsFeatureFlag(true);
+    }
+
+    void TestRequireAllColumnsFeatureFlag(bool useColumnTable) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1442,20 +1435,25 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         NYdb::NTable::TTableClient client(connection);
         auto session = client.GetSession().ExtractValueSync().GetSession();
 
-        {
-            auto tableBuilder = client.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Shard", EPrimitiveType::Uint64)
-                .AddNullableColumn("App", EPrimitiveType::Utf8)
-                .AddNullableColumn("Timestamp", EPrimitiveType::Int64)
-                .AddNullableColumn("HttpCode", EPrimitiveType::Uint32)
-                .AddNullableColumn("Message", EPrimitiveType::Utf8);
-            tableBuilder.SetPrimaryKeyColumns({"Shard", "App", "Timestamp"});
-            auto result = session.CreateTable("/Root/TestAllColumns", tableBuilder.Build()).ExtractValueSync();
+        TString tablePath = "/Root/TestAllColumns";
+        TString storeType = useColumnTable ? "COLUMN" : "ROW";
+        
+        auto result = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `/Root/TestAllColumns` (
+                Shard Uint64 NOT NULL,
+                App Utf8 NOT NULL,
+                Timestamp Int64 NOT NULL,
+                HttpCode Uint32,
+                Message Utf8,
+                PRIMARY KEY (Shard, App, Timestamp)
+            )
+            WITH (
+                STORE = )" << storeType << R"(
+            )
+        )").ExtractValueSync();
 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         {
             TValueBuilder rows;
@@ -1469,9 +1467,9 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                     .EndStruct();
             rows.EndList();
 
-            auto res = client.BulkUpsert("/Root/TestAllColumns", rows.Build()).GetValueSync();
+            auto res = client.BulkUpsert(tablePath, rows.Build()).GetValueSync();
             Cerr << res.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Missing value columns (all columns are required)");
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "All columns are required during BulkUpsert. Missing columns:");
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
         }
 
@@ -1488,7 +1486,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                     .EndStruct();
             rows.EndList();
 
-            auto res = client.BulkUpsert("/Root/TestAllColumns", rows.Build()).GetValueSync();
+            auto res = client.BulkUpsert(tablePath, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
         }

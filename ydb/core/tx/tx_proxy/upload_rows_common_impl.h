@@ -561,7 +561,7 @@ private:
             }
 
             if (!allColumnsLeft.empty()) {
-                return TConclusionStatus::Fail(Sprintf("Missing value columns (all columns are required): %s", JoinSeq(", ", allColumnsLeft).c_str()));
+                return TConclusionStatus::Fail(Sprintf("All columns are required during BulkUpsert. Missing columns: %s", JoinSeq(", ", allColumnsLeft).c_str()));
             }
         }
 

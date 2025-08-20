@@ -101,6 +101,9 @@ public:
             }
             tablet->InitiateStop(SideEffects);
             db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::LeaderNode>(0);
+            if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                tablet->BecomeUnknown(tablet->Hive.FindNode(tablet->LockedToActor.NodeId()));
+            }
         }
         if (tablet->LockedToActor == OwnerActor && tablet->PendingUnlockSeqNo == 0) {
             // Lock is still valid, watch for node disconnections

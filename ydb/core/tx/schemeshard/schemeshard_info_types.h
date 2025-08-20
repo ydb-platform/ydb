@@ -1703,7 +1703,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return BackupShards.size();
     }
 
-    void ResetCounters(IQuotaCounters* counters);
+    void UpdateCounters(IQuotaCounters* counters);
 
     void ActualizeAlterData(const THashMap<TShardIdx, TShardInfo>& allShards, TInstant now, bool isExternal, IQuotaCounters* counters) {
         Y_ENSURE(AlterData);

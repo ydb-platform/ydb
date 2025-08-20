@@ -240,7 +240,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         auto& subdomain = ss->SubDomains[id];
         subdomain = savedState;
         if (ss->GetCurrentSubDomainPathId() == id) {
-            subdomain->ResetCounters(ss);
+            subdomain->UpdateCounters(ss);
         }
     }
     SubDomains.clear();

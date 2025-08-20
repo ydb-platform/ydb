@@ -315,8 +315,10 @@ namespace NActors {
             if (RdmaQp) {
                 Cerr << "input session move to reset state: " << RdmaReadInflight.load() << Endl;
                 //RdmaQp->ToResetState();
-                while (RdmaReadInflight.load() != 0) {
-                    Cerr << "whait:... " << RdmaReadInflight.load() << Endl; 
+                while (false && RdmaReadInflight.load() != 0) {
+                    TStringStream ss;
+                    RdmaQp->Output(ss);
+                    Cerr << "whait:... " << RdmaReadInflight.load() << " " << ss.Data() << Endl; 
                     Sleep(TDuration::MilliSeconds(1000));
                 }
             }

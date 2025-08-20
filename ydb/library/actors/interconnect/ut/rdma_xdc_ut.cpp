@@ -544,9 +544,10 @@ Y_UNIT_TEST_SUITE(RdmaXdc) {
     };
 
     Y_UNIT_TEST(SendMixBig) {
-        double bandWidth = 1000000;
-        TTestICCluster::TTrafficInterrupterSettings interrupterSettings{TDuration::Seconds(2), bandWidth, true};
-        TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings);
+        //double bandWidth = 1000000;
+        //TTestICCluster::TTrafficInterrupterSettings interrupterSettings{TDuration::Seconds(2), bandWidth, true};
+        //TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings);
+        TTestICCluster cluster(2);
         TEventsForTest events(10000);
 
         auto recieverPtr = new TReceiveActor([&events](TEvTestSerialization::TPtr ev) {

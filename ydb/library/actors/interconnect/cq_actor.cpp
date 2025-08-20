@@ -38,6 +38,11 @@ public:
         return IActor::EActivityType::INTERCONNECT_RDMA_CQ;
     }
 
+    void PassAway() override {
+        Cerr << "TCqActor::PassAway" << Endl; 
+       IActor::PassAway(); 
+    }
+
     void Bootstrap() {
         Become(&TCqActor::StateFunc);
     }

@@ -331,13 +331,13 @@ namespace NYdb {
                 Writer.WriteLongLong(Parser.GetInterval());
                 break;
             case EPrimitiveType::Date32:
-                Writer.WriteString(FormatDate(Parser.GetDate32().count()));
+                Writer.WriteString(FormatDate(Parser.GetDate32().time_since_epoch().count()));
                 break;
             case EPrimitiveType::Datetime64:
-                Writer.WriteString(FormatDatetime(Parser.GetDatetime64().count()));
+                Writer.WriteString(FormatDatetime(Parser.GetDatetime64().time_since_epoch().count()));
                 break;
             case EPrimitiveType::Timestamp64:
-                Writer.WriteString(FormatTimestamp(Parser.GetTimestamp64().count()));
+                Writer.WriteString(FormatTimestamp(Parser.GetTimestamp64().time_since_epoch().count()));
                 break;
             case EPrimitiveType::Interval64:
                 Writer.WriteLongLong(Parser.GetInterval64().count());
@@ -731,7 +731,7 @@ namespace {
                 if (!date.ok()) {
                     ThrowFatalError(TStringBuilder() << "Can't parse date from string \"" << jsonValue.GetString() << "\"");
                 }
-                ValueBuilder.Date32(std::chrono::sys_days(date).time_since_epoch());
+                ValueBuilder.Date32(std::chrono::sys_time<TWideDays>(date));
                 break;
             }
             case EPrimitiveType::Datetime64:
@@ -742,7 +742,7 @@ namespace {
                 if (!datetime) {
                     ThrowFatalError(TStringBuilder() << "Can't parse time point from string \"" << jsonValue.GetString() << "\"");
                 }
-                ValueBuilder.Datetime64(TWideSeconds(*datetime));
+                ValueBuilder.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(*datetime)));
                 break;
             }
             case EPrimitiveType::Timestamp64:
@@ -752,7 +752,7 @@ namespace {
                 if (!timestamp) {
                     ThrowFatalError(TStringBuilder() << "Can't parse timestamp from string \"" << jsonValue.GetString() << "\"");
                 }
-                ValueBuilder.Timestamp64(TWideMicroseconds(*timestamp));
+                ValueBuilder.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(*timestamp)));
                 break;
             }
             case EPrimitiveType::Interval64:

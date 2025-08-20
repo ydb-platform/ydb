@@ -137,27 +137,27 @@ public:
         case EPrimitiveType::Date32: {
             TInstant date;
             if (TInstant::TryParseIso8601(token, date)) {
-                Builder.Date32(TWideDays(date.Days()));
+                Builder.Date32(std::chrono::sys_time<TWideDays>(TWideDays(date.Days())));
             } else {
-                Builder.Date32(TWideDays(GetArithmetic<int32_t>(token)));
+                Builder.Date32(std::chrono::sys_time<TWideDays>(TWideDays(GetArithmetic<int32_t>(token))));
             }
             break;
         }
         case EPrimitiveType::Datetime64: {
             TInstant date;
             if (TInstant::TryParseIso8601(token, date)) {
-                Builder.Datetime64(TWideSeconds(date.Seconds()));
+                Builder.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(date.Seconds())));
             } else {
-                Builder.Datetime64(TWideSeconds(GetArithmetic<int64_t>(token)));
+                Builder.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(GetArithmetic<int64_t>(token))));
             }
             break;
         }
         case EPrimitiveType::Timestamp64: {
             TInstant date;
             if (TInstant::TryParseIso8601(token, date)) {
-                Builder.Timestamp64(TWideMicroseconds(date.MicroSeconds()));
+                Builder.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(date.MicroSeconds())));
             } else {
-                Builder.Timestamp64(TWideMicroseconds(GetArithmetic<int64_t>(token)));
+                Builder.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(GetArithmetic<int64_t>(token))));
             }
             break;
         }

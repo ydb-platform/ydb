@@ -328,9 +328,9 @@ public:
     TInstant GetDatetime() const;
     TInstant GetTimestamp() const;
     int64_t GetInterval() const;
-    TWideDays GetDate32() const;
-    TWideSeconds GetDatetime64() const;
-    TWideMicroseconds GetTimestamp64() const;
+    std::chrono::sys_time<TWideDays> GetDate32() const;
+    std::chrono::sys_time<TWideSeconds> GetDatetime64() const;
+    std::chrono::sys_time<TWideMicroseconds> GetTimestamp64() const;
     TWideMicroseconds GetInterval64() const;
     const std::string& GetTzDate() const;
     const std::string& GetTzDatetime() const;
@@ -360,9 +360,9 @@ public:
     std::optional<TInstant> GetOptionalDatetime() const;
     std::optional<TInstant> GetOptionalTimestamp() const;
     std::optional<int64_t> GetOptionalInterval() const;
-    std::optional<TWideDays> GetOptionalDate32() const;
-    std::optional<TWideSeconds> GetOptionalDatetime64() const;
-    std::optional<TWideMicroseconds> GetOptionalTimestamp64() const;
+    std::optional<std::chrono::sys_time<TWideDays>> GetOptionalDate32() const;
+    std::optional<std::chrono::sys_time<TWideSeconds>> GetOptionalDatetime64() const;
+    std::optional<std::chrono::sys_time<TWideMicroseconds>> GetOptionalTimestamp64() const;
     std::optional<TWideMicroseconds> GetOptionalInterval64() const;
     std::optional<std::string> GetOptionalTzDate() const;
     std::optional<std::string> GetOptionalTzDatetime() const;
@@ -454,9 +454,9 @@ public:
     TDerived& Uuid(const TUuidValue& value);
     TDerived& JsonDocument(const std::string& value);
     TDerived& DyNumber(const std::string& value);
-    TDerived& Date32(const TWideDays& value);
-    TDerived& Datetime64(const TWideSeconds& value);
-    TDerived& Timestamp64(const TWideMicroseconds& value);
+    TDerived& Date32(const std::chrono::sys_time<TWideDays>& value);
+    TDerived& Datetime64(const std::chrono::sys_time<TWideSeconds>& value);
+    TDerived& Timestamp64(const std::chrono::sys_time<TWideMicroseconds>& value);
     TDerived& Interval64(const TWideMicroseconds& value);
 
     TDerived& OptionalBool(const std::optional<bool>& value);
@@ -484,9 +484,9 @@ public:
     TDerived& OptionalUuid(const std::optional<TUuidValue>& value);
     TDerived& OptionalJsonDocument(const std::optional<std::string>& value);
     TDerived& OptionalDyNumber(const std::optional<std::string>& value);
-    TDerived& OptionalDate32(const std::optional<TWideDays>& value);
-    TDerived& OptionalDatetime64(const std::optional<TWideSeconds>& value);
-    TDerived& OptionalTimestamp64(const std::optional<TWideMicroseconds>& value);
+    TDerived& OptionalDate32(const std::optional<std::chrono::sys_time<TWideDays>>& value);
+    TDerived& OptionalDatetime64(const std::optional<std::chrono::sys_time<TWideSeconds>>& value);
+    TDerived& OptionalTimestamp64(const std::optional<std::chrono::sys_time<TWideMicroseconds>>& value);
     TDerived& OptionalInterval64(const std::optional<TWideMicroseconds>& value);
 
     // Optional

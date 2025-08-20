@@ -513,11 +513,11 @@ bool CompareValuePrimitive(IOutputStream& errStream, const TValueParser& vp, TSt
     case EPrimitiveType::Interval:
         return CompareValueImpl(errStream, vp.GetInterval(), vExpected);
     case EPrimitiveType::Date32:
-        return CompareValueImplDatetime64(errStream, vp.GetDate32().count(), vExpected, TDuration::Days(1));
+        return CompareValueImplDatetime64(errStream, vp.GetDate32().time_since_epoch().count(), vExpected, TDuration::Days(1));
     case EPrimitiveType::Datetime64:
-        return CompareValueImplDatetime64(errStream, vp.GetDatetime64().count(), vExpected, TDuration::Seconds(1));
+        return CompareValueImplDatetime64(errStream, vp.GetDatetime64().time_since_epoch().count(), vExpected, TDuration::Seconds(1));
     case EPrimitiveType::Timestamp64:
-        return CompareValueImplDatetime64(errStream, vp.GetTimestamp64().count(), vExpected, TDuration::MicroSeconds(1));
+        return CompareValueImplDatetime64(errStream, vp.GetTimestamp64().time_since_epoch().count(), vExpected, TDuration::MicroSeconds(1));
     case EPrimitiveType::Interval64:
         return CompareValueImpl(errStream, vp.GetInterval64().count(), vExpected);
     case EPrimitiveType::String:

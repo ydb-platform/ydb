@@ -1083,11 +1083,11 @@ struct THandlerActorYdb {
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return TStringBuilder() << valueParser.GetDate32().count();
+                return TStringBuilder() << valueParser.GetDate32().time_since_epoch().count();
             case NYdb::EPrimitiveType::Datetime64:
-                return TStringBuilder() << valueParser.GetDatetime64().count();
+                return TStringBuilder() << valueParser.GetDatetime64().time_since_epoch().count();
             case NYdb::EPrimitiveType::Timestamp64:
-                return TStringBuilder() << valueParser.GetTimestamp64().count();
+                return TStringBuilder() << valueParser.GetTimestamp64().time_since_epoch().count();
             case NYdb::EPrimitiveType::Interval64:
                 return TStringBuilder() << valueParser.GetInterval64().count();
             case NYdb::EPrimitiveType::TzDate:
@@ -1174,11 +1174,11 @@ struct THandlerActorYdb {
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return valueParser.GetDate32().count();
+                return valueParser.GetDate32().time_since_epoch().count();
             case NYdb::EPrimitiveType::Datetime64:
-                return valueParser.GetDatetime64().count();
+                return valueParser.GetDatetime64().time_since_epoch().count();
             case NYdb::EPrimitiveType::Timestamp64:
-                return valueParser.GetTimestamp64().count();
+                return valueParser.GetTimestamp64().time_since_epoch().count();
             case NYdb::EPrimitiveType::Interval64:
                 return valueParser.GetInterval64().count();
             case NYdb::EPrimitiveType::TzDate:

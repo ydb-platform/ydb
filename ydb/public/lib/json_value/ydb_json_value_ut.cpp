@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
 
     Y_UNIT_TEST(PrimitiveValueDate32) {
         TValue value = TValueBuilder()
-            .Date32(TWideDays(-10))
+            .Date32(std::chrono::sys_time<TWideDays>(TWideDays(-10)))
             .Build();
         const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
         UNIT_ASSERT_NO_DIFF(jsonString, R"("1969-12-22")");
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
 
     Y_UNIT_TEST(PrimitiveValueDatetime64) {
         TValue value = TValueBuilder()
-            .Datetime64(-10s)
+            .Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(-10)))
             .Build();
         const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
         UNIT_ASSERT_NO_DIFF(jsonString, R"("1969-12-31T23:59:50Z")");
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
 
     Y_UNIT_TEST(PrimitiveValueTimestamp64) {
         TValue value = TValueBuilder()
-            .Timestamp64(-10us)
+            .Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(-10)))
             .Build();
         const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
         UNIT_ASSERT_NO_DIFF(jsonString, R"("1969-12-31T23:59:59.999990Z")");
@@ -573,11 +573,11 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
             .AddMember("Interval64")
                 .Interval64(1us)
             .AddMember("Date32")
-                .Date32(TWideDays(-1024))
+                .Date32(std::chrono::sys_time<TWideDays>(TWideDays(-1024)))
             .AddMember("Datetime64")
-                .Datetime64(-123456789s)
+                .Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(-123456789)))
             .AddMember("Timestamp64")
-                .Timestamp64(-123456789000100us)
+                .Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(-123456789000100)))
             .EndStruct()
             .Build();
         const TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);

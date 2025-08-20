@@ -747,6 +747,60 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    void CustomConsumer_NotExists(bool local)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        testCase.CreateTopic(1);
+
+        auto settings = MainTestCase::CreateTransferSettings::WithConsumerName("PredefinedConsumer");
+        settings.LocalTopic = local;
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", settings);
+
+        testCase.Write({"Message-1"});
+
+        Sleep(TDuration::Seconds(3));
+
+        { // Check that consumer was not created
+            auto result = testCase.DescribeTopic();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            auto& consumers = result.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_VALUES_EQUAL(0, consumers.size());
+        }
+
+        testCase.CheckTransferStateError("consumer 'PredefinedConsumer' not exists");
+
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(CustomConsumer_NotExists_Remote) {
+        CustomConsumer_NotExists(false);
+    }
+
+    Y_UNIT_TEST(CustomConsumer_NotExists_Local) {
+        CustomConsumer_NotExists(true);
+    }
+
     Y_UNIT_TEST(CustomFlushInterval)
     {
         TDuration flushInterval = TDuration::Seconds(5);

@@ -535,6 +535,7 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
             TVector<const TTypeAnnotationNode*> outputTypes;
             outputTypes.push_back(leftRowType);
             outputTypes.push_back(ctx.MakeType<TOptionalExprType>(rowType));
+            outputTypes.push_back(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64));
 
             rowType = ctx.MakeType<TTupleExprType>(outputTypes);
         } else {
@@ -1723,6 +1724,7 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
         TVector<const TTypeAnnotationNode*> outputTypes;
         outputTypes.push_back(leftRowType);
         outputTypes.push_back(ctx.MakeType<TOptionalExprType>(rightRowType));
+        outputTypes.push_back(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
 
         auto outputItemType = ctx.MakeType<TTupleExprType>(outputTypes);
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputItemType));
@@ -1753,7 +1755,7 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    if (!EnsureTupleTypeSize(node->Pos(), inputItemType, 2, ctx)) {
+    if (!EnsureTupleTypeSize(node->Pos(), inputItemType, 3, ctx)) {
         return TStatus::Error;
     }
 

@@ -3587,7 +3587,7 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
     constexpr ui64 MinLevels = 1;
     constexpr ui64 MaxLevels = 16;
     constexpr ui64 MinClusters = 2;
-    constexpr ui64 MaxClusters = 1024;
+    constexpr ui64 MaxClusters = 2048;
     constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
 
     auto validateInRange = [&](const TString& name, std::optional<ui64> value, ui64 minValue, ui64 maxValue) {

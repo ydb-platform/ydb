@@ -50,7 +50,6 @@ ydb/core/kqp/ut/service KqpQueryService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithCancelAfterAndTimeout
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service unittest.[*/*] chunk
-ydb/core/kqp/ut/tx KqpSinkMvcc.OlapNamedStatement
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/sys_view/ut SystemView.AuthGroupMembers_Access

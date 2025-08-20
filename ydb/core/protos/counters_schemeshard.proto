@@ -260,6 +260,11 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxIncrementalRestoreFinalize = 203 [(CounterOpts) = {Name: "InFlightOps/IncrementalRestoreFinalize"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateLongIncrementalBackupOp = 204 [(CounterOpts) = {Name: "InFlightOps/CreateLongIncrementalBackupOp"}];
+
+    COUNTER_STREAMING_QUERY_COUNT = 205                [(CounterOpts) = {Name: "StreamingQueryCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateStreamingQuery = 206 [(CounterOpts) = {Name: "InFlightOps/CreateStreamingQuery"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropStreamingQuery = 207   [(CounterOpts) = {Name: "InFlightOps/DropStreamingQuery"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterStreamingQuery = 208  [(CounterOpts) = {Name: "InFlightOps/AlterStreamingQuery"}];
 }
 
 enum ECumulativeCounters {
@@ -422,6 +427,10 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxIncrementalRestoreFinalize = 125 [(CounterOpts) = {Name: "FinishedOps/IncrementalRestoreFinalize"}];
     COUNTER_FINISHED_OPS_TxCreateLongIncrementalBackupOp = 126 [(CounterOpts) = {Name: "FinishedOps/CreateLongIncrementalBackupOp"}];
+
+    COUNTER_FINISHED_OPS_TxCreateStreamingQuery = 127 [(CounterOpts) = {Name: "FinishedOps/CreateStreamingQuery"}];
+    COUNTER_FINISHED_OPS_TxDropStreamingQuery = 128   [(CounterOpts) = {Name: "FinishedOps/DropStreamingQuery"}];
+    COUNTER_FINISHED_OPS_TxAlterStreamingQuery = 129  [(CounterOpts) = {Name: "FinishedOps/AlterStreamingQuery"}];
 }
 
 enum EPercentileCounters {

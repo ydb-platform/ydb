@@ -328,7 +328,7 @@ def main():
                 print(f'✓ Successfully upserted data for date {date}')
 
         print('\n' + '='*50)
-        print('✓ FLaky tests history collection completed successfully!')
+        print('✓ Flaky tests history collection completed successfully!')
         print(f'  Branch: {branch}')
         print(f'  Build type: {build_type}')
         print(f'  Date range: {min(date_list)} to {max(date_list)}')

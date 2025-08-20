@@ -1,6 +1,7 @@
 #include "coordinator.h"
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/core/fq/libs/actors/nodes_manager_events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/schema.h>
 #include <ydb/core/fq/libs/ydb/util.h>
@@ -174,6 +175,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     NConfig::TRowDispatcherCoordinatorConfig Config;
     TYqSharedResources::TPtr YqSharedResources;
     TActorId LocalRowDispatcherId;
+    NActors::TActorId NodesManagerId;
     const TString LogPrefix;
     const TString Tenant;
     TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
@@ -182,6 +184,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     std::unordered_map<TActorId, TCoordinatorRequest> PendingReadActors;
     TCoordinatorMetrics Metrics;
     THashSet<TActorId> InterconnectSessions;
+    ui64 NodesCount = 0;
 
 public:
     TActorCoordinator(
@@ -189,7 +192,8 @@ public:
         const NConfig::TRowDispatcherCoordinatorConfig& config,
         const TYqSharedResources::TPtr& yqSharedResources,
         const TString& tenant,
-        const ::NMonitoring::TDynamicCounterPtr& counters);
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        NActors::TActorId nodesManagerId);
 
     void Bootstrap();
 
@@ -202,6 +206,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev);
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
+    void Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr&);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -212,6 +217,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorRequest, Handle);
         hFunc(TEvPrivate::TEvPrintState, Handle);
+        hFunc(NFq::TEvNodesManager::TEvGetNodesResponse, Handle);
     })
 
 private:
@@ -224,6 +230,7 @@ private:
     void UpdatePendingReadActors();
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
     TString GetInternalState();
+    bool IsReady() const;
     void SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message);
 };
 
@@ -232,21 +239,25 @@ TActorCoordinator::TActorCoordinator(
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    NActors::TActorId nodesManagerId)
     : Config(config)
     , YqSharedResources(yqSharedResources)
     , LocalRowDispatcherId(localRowDispatcherId)
+    , NodesManagerId(nodesManagerId)
     , LogPrefix("Coordinator: ")
     , Tenant(tenant)
     , Metrics(counters)
 {
-    Metrics.PartitionsLimitPerNode->Set(Config.GetTopicPartitionsLimitPerNode());
     AddRowDispatcher(localRowDispatcherId, true);
 }
 
 void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
+
+    Send(NodesManagerId, new NFq::TEvNodesManager::TEvGetNodesRequest());
+
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
     auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
@@ -381,6 +392,11 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
 
     auto& topicInfo = GetOrCreateTopicInfo(key.Topic);
 
+    if (!IsReady()) {
+        topicInfo.AddPendingPartition(key);
+        return std::nullopt;
+    }
+
     TActorId bestLocation;
     ui64 bestNumberPartitions = std::numeric_limits<ui64>::max();
     for (auto& [location, info] : RowDispatchers) {
@@ -401,11 +417,6 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
         }
     }
     if (!bestLocation) {
-        return std::nullopt;
-    }
-
-    if (Config.GetTopicPartitionsLimitPerNode() > 0 && bestNumberPartitions >= Config.GetTopicPartitionsLimitPerNode()) {
-        topicInfo.AddPendingPartition(key);
         return std::nullopt;
     }
 
@@ -433,8 +444,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     if (ComputeCoordinatorRequest(ev->Sender, request)) {
         PendingReadActors.erase(ev->Sender);
     } else {
-        LOG_ROW_DISPATCHER_INFO("All nodes are overloaded, add request into pending queue");
-        // All nodes are overloaded, add request into pending queue
+        LOG_ROW_DISPATCHER_INFO("Not all nodes connected, nodes count: " << NodesCount << ", known rd count: " << RowDispatchers.size() << ", add request into pending queue");
         // We save only last request from each read actor
         PendingReadActors[ev->Sender] = request;
     }
@@ -488,6 +498,9 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
 }
 
 void TActorCoordinator::UpdatePendingReadActors() {
+    if (!IsReady()) {
+        return;
+    }
     for (auto readActorIt = PendingReadActors.begin(); readActorIt != PendingReadActors.end();) {
         if (ComputeCoordinatorRequest(readActorIt->first, readActorIt->second)) {
             readActorIt = PendingReadActors.erase(readActorIt);
@@ -500,6 +513,22 @@ void TActorCoordinator::UpdatePendingReadActors() {
 void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     PrintInternalState();
+}
+
+void TActorCoordinator::Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr& ev) {
+    NodesCount = ev->Get()->NodeIds.size();
+    LOG_ROW_DISPATCHER_DEBUG("TEvGetNodesResponse, nodes count " << NodesCount);
+    if (!NodesCount) {
+        NActors::TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(NodesManagerId, SelfId(), new NFq::TEvNodesManager::TEvGetNodesRequest()));
+    }
+    UpdatePendingReadActors();
+}
+
+bool TActorCoordinator::IsReady() const {
+    if (!NodesCount) {
+        return false;
+    }
+    return RowDispatchers.size() >= NodesCount - 1; 
 }
 
 void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message) {
@@ -518,9 +547,10 @@ std::unique_ptr<NActors::IActor> NewCoordinator(
     const NConfig::TRowDispatcherCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    NActors::TActorId nodesManagerId)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, yqSharedResources, tenant, counters));
+    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, yqSharedResources, tenant, counters, nodesManagerId));
 }
 
 } // namespace NFq

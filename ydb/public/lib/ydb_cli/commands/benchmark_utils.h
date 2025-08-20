@@ -39,27 +39,30 @@ private:
     YDB_READONLY_DEF(TDuration, ServerTiming);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
+    YDB_READONLY_DEF(TString, ExecStats);
     YDB_READONLY_DEF(TString, DiffErrors);
     YDB_READONLY_DEF(TString, DiffWarrnings);
     TQueryBenchmarkResult() = default;
 public:
     static TQueryBenchmarkResult Result(TRawResults&& rawResults,
-        const TDuration& serverTiming, const TString& queryPlan, const TString& planAst, TStringBuf expected)
+        const TDuration& serverTiming, const TString& queryPlan, const TString& planAst, const TString& execStats, TStringBuf expected)
     {
         TQueryBenchmarkResult result;
         result.RawResults = std::move(rawResults);
         result.ServerTiming = serverTiming;
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
+        result.ExecStats = execStats;
         result.CompareWithExpected(expected);
         return result;
     }
 
-    static TQueryBenchmarkResult Error(const TString& error, const TString& queryPlan, const TString& planAst) {
+    static TQueryBenchmarkResult Error(const TString& error, const TString& queryPlan, const TString& planAst, const TString& execStats) {
         TQueryBenchmarkResult result;
         result.ErrorInfo = error;
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
+        result.ExecStats = execStats;
         return result;
     }
 

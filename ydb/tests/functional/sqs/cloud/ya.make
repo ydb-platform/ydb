@@ -9,6 +9,8 @@ TEST_SRCS(
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(SQS_CLIENT_BINARY="ydb/core/ymq/client/bin/sqs")
 
+TAG(ya:manual)
+
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SIZE(LARGE)

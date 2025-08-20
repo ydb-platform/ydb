@@ -88,7 +88,6 @@ TString TClientBlob::DebugString() const {
 
 void TClientBlob::SerializeTo(TBuffer& res) const
 {
-
     const ui32 totalSize = GetBlobSize();
     const ui32 psize = res.Size();
 

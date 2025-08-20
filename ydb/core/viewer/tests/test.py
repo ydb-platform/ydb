@@ -717,6 +717,12 @@ def test_topic_data():
 
 
 def test_topic_data_cdc():
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'create table table1(id int64, name text, primary key(id))',
+        'schema': 'multi'
+    })
+
     alter_response = call_viewer("/viewer/query", {
         'database': dedicated_db,
         'query': "alter table table1 add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"

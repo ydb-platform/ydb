@@ -337,6 +337,25 @@ private:
         return ok;
     }
 
+    TConclusionStatus CheckRequiredColumns(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, 
+                                         const TVector<std::pair<TString, Ydb::Type>>* reqColumns) {
+        THashSet<TString> allColumnsLeft;
+        for (auto&& [_, colInfo] : entry.Columns) {
+            allColumnsLeft.insert(colInfo.Name);
+        }
+
+        for (size_t pos = 0; pos < reqColumns->size(); ++pos) {
+            auto& name = (*reqColumns)[pos].first;
+            allColumnsLeft.erase(name);
+        }
+
+        if (!allColumnsLeft.empty()) {
+            return TConclusionStatus::Fail(Sprintf("All columns are required during BulkUpsert. Missing columns: %s", JoinSeq(", ", allColumnsLeft).c_str()));
+        }
+        
+        return TConclusionStatus::Success();
+    }
+
     [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema, bool isColumnTable) {
         Y_UNUSED(ctx);
         Y_ABORT_UNLESS(ResolveNamesResult);
@@ -549,20 +568,9 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
+        TConclusionStatus res = TConclusionStatus::Success();
         if (isColumnTable && AppData(ctx)->FeatureFlags.GetDisableCSBulkUpsertRequireAllColumns()) {
-            THashSet<TString> allColumnsLeft;
-            for (auto&& [_, colInfo] : entry.Columns) {
-                allColumnsLeft.insert(colInfo.Name);
-            }
-
-            for (size_t pos = 0; pos < reqColumns->size(); ++pos) {
-                auto& name = (*reqColumns)[pos].first;
-                allColumnsLeft.erase(name);
-            }
-
-            if (!allColumnsLeft.empty()) {
-                return TConclusionStatus::Fail(Sprintf("All columns are required during BulkUpsert. Missing columns: %s", JoinSeq(", ", allColumnsLeft).c_str()));
-            }
+            res = CheckRequiredColumns(entry, reqColumns);
         }
 
         return TConclusionStatus::Success();

@@ -775,9 +775,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(CoveredVectorIndexWithFollowers, StaleRO) {
+        const TString mainTableName = "/Root/TestTable";
+        const TString levelTableName = "/Root/TestTable/index/indexImplLevelTable";
+        const TString postingTableName = "/Root/TestTable/index/indexImplPostingTable";
         std::vector<TString> tableNames = {
-            "/Root/TestTable/index/indexImplLevelTable",
-            //"/Root/TestTable/index/indexImplPostingTable"
+            mainTableName,
+            levelTableName,
+            postingTableName
         };
 
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -835,20 +839,22 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         DoPositiveQueriesVectorIndexOrderByCosine(session, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW(), true /*covered*/);
 
-        for (const TString& tableName: tableNames) {
-            if (StaleRO) {
-                // from master - should NOT read
-                CheckTableReads(session, tableName, false, false);
-                // from followers - should read
-                CheckTableReads(session, tableName, true, true);
-            } else {
-                // https://github.com/ydb-platform/ydb/issues/18680
-                // from master - should read
-                // CheckTableReads(session, tableName, false, true);
-                // from followers - should NOT read
-                // CheckTableReads(session, tableName, true, false);
-            }
+        // from leader - should NOT read
+        CheckTableReads(session, postingTableName, false, false);
+        // from followers - should read
+        CheckTableReads(session, postingTableName, true, true);
+
+        if (StaleRO) {
+            CheckTableReads(session, levelTableName, false, false);
+            CheckTableReads(session, levelTableName, true, true);
+        } else {
+            CheckTableReads(session, levelTableName, false, true);
+            CheckTableReads(session, levelTableName, true, false);
         }
+
+        // Etalon reads from main table
+        CheckTableReads(session, mainTableName, false, true);
+        CheckTableReads(session, mainTableName, true, false);
     }
 
     Y_UNIT_TEST(OrderByReject) {

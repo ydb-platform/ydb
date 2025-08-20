@@ -70,7 +70,7 @@ struct TTokenManagerRegisterSettings {
 };
 
 void RegisterTokenManager(TTestActorSystem* runtime, const TTokenManagerRegisterSettings& settings) {
-    IActor* tokenManager = NKikimr::CreateTokenManager(settings.TokenManagerConfig, settings.HttpProxyId);
+    IActor* tokenManager = NKikimr::CreateTokenManager({.Config = settings.TokenManagerConfig, .HttpProxyId = settings.HttpProxyId});
     TActorId tokenManagerId = runtime->Register(tokenManager, settings.NodeId);
     runtime->RegisterService(MakeTokenManagerID(), tokenManagerId);
 }

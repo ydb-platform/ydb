@@ -1247,7 +1247,7 @@ namespace Tests {
         {
             if (Settings->AuthConfig.GetTokenManager().GetEnable()) {
                 TActorId fakeHttProxy = Runtime->AllocateEdgeActor(nodeIdx);
-                IActor* tokenManager = NKikimr::CreateTokenManager(Settings->AuthConfig.GetTokenManager(), fakeHttProxy);
+                IActor* tokenManager = Settings->CreateTokenManager({.Config = Settings->AuthConfig.GetTokenManager(), .HttpProxyId = fakeHttProxy});
                 TActorId tokenManagerId = Runtime->Register(tokenManager, nodeIdx, userPoolId);
                 Runtime->RegisterService(MakeTokenManagerID(), tokenManagerId, nodeIdx);
             }

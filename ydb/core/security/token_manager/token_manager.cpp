@@ -14,15 +14,14 @@
 
 namespace NKikimr {
 
-TTokenManager::TTokenManager(const TInitializer& initializer)
-    : HttpProxyId(initializer.HttpProxyId)
-    , Config(initializer.Config)
-{}
-
-TTokenManager::TTokenManager(const NKikimrProto::TTokenManager& config)
-    : Config(config)
+TTokenManager::TTokenManager(const TTokenManagerSettings& settings)
+    : Config(settings.Config)
 {
-    HttpProxyId = Register(NHttp::CreateHttpProxy());
+    if (settings.HttpProxyId.has_value()) {
+        HttpProxyId = settings.HttpProxyId.value();
+    } else {
+        HttpProxyId = Register(NHttp::CreateHttpProxy());
+    }
 }
 
 void TTokenManager::Bootstrap() {
@@ -126,12 +125,8 @@ void TTokenManager::Handle(TEvTokenManager::TEvSubscribeUpdateToken::TPtr& ev) {
     }
 }
 
-NActors::IActor* CreateTokenManager(const NKikimrProto::TTokenManager& config) {
-    return new TTokenManager(config);
-}
-
-NActors::IActor* CreateTokenManager(const NKikimrProto::TTokenManager& config, const NActors::TActorId& HttpProxyId) {
-    return new TTokenManager({.Config = config, .HttpProxyId = HttpProxyId});
+NActors::IActor* CreateTokenManager(const TTokenManagerSettings& settings) {
+    return new TTokenManager(settings);
 }
 
 } // NKikimr

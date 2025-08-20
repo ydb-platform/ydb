@@ -8,6 +8,7 @@
 
 #include <util/generic/queue.h>
 
+#include "token_manager_settings.h"
 #include "token_provider_settings.h"
 
 namespace NKikimrProto {
@@ -75,12 +76,6 @@ using TEvUpdateToken_HandlePtr = TAutoPtr<NActors::TEventHandle<TEvUpdateToken>>
 class TTokenManager : public NActors::TActorBootstrapped<TTokenManager> {
     using TBase = NActors::TActorBootstrapped<TTokenManager>;
 
-public:
-    struct TInitializer {
-        NKikimrProto::TTokenManager Config;
-        NActors::TActorId HttpProxyId;
-    };
-
 private:
     struct TRefreshRecord {
         TInstant RefreshTime;
@@ -103,8 +98,7 @@ private:
     THashMap<TString, std::shared_ptr<NTokenManager::TTokenProvider>> TokenProviders;
 
 public:
-    TTokenManager(const TInitializer& initializer);
-    TTokenManager(const NKikimrProto::TTokenManager& config);
+    TTokenManager(const TTokenManagerSettings& settings);
 
     void Bootstrap();
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev);
@@ -128,7 +122,6 @@ inline NActors::TActorId MakeTokenManagerID() {
     return NActors::TActorId(0, TStringBuf(name, 12));
 }
 
-NActors::IActor* CreateTokenManager(const NKikimrProto::TTokenManager& config);
-NActors::IActor* CreateTokenManager(const NKikimrProto::TTokenManager& config, const NActors::TActorId& HttpProxyId);
+NActors::IActor* CreateTokenManager(const TTokenManagerSettings& settings);
 
 } // NKikimr

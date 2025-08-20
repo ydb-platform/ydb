@@ -100,6 +100,26 @@ inline bool Checker<bool>::Get(const ::Ydb::Value& value) {
 }
 
 template<>
+inline i8 Checker<i8>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i16 Checker<i16>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i32 Checker<i32>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i64 Checker<i64>::Get(const ::Ydb::Value& value) {
+    return value.int64_value();
+}
+
+template<>
 inline ui32 Checker<ui32>::Get(const ::Ydb::Value& value) {
     return value.uint32_value();
 }
@@ -229,7 +249,7 @@ struct MainTestCase {
         return config;
     }
 
-    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "COLUMN")
+    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "ROW")
         : TableType(std::move(tableType))
         , Id(RandomNumber<size_t>())
         , ConnectionString(GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE"))
@@ -666,13 +686,17 @@ struct MainTestCase {
         ExecuteDDL(Sprintf("DROP ASYNC REPLICATION `%s`;", ReplicationName.data()));
     }
 
-    auto DescribeReplication() {
+    auto DescribeReplication(const std::string& name) {
         TReplicationClient client(Driver);
 
         TDescribeReplicationSettings settings;
         settings.IncludeStats(true);
 
-        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + ReplicationName, settings).ExtractValueSync();
+        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + name, settings).ExtractValueSync();
+    }
+
+    auto DescribeReplication() {
+        return DescribeReplication(ReplicationName);
     }
 
     TReplicationDescription CheckReplicationState(TReplicationDescription::EState expected) {
@@ -842,7 +866,7 @@ struct MainTestCase {
         UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
     }
 
-    void Run(const TConfig& config) {
+    void Run(const TConfig& config, const CreateTransferSettings settings = {}) {
 
         CreateTable(config.TableDDL);
         CreateTopic();
@@ -854,7 +878,7 @@ struct MainTestCase {
         for (size_t i = 0; i < lambdas.size(); ++i) {
             auto lambda = lambdas[i];
             if (!i) {
-                CreateTransfer(lambda);
+                CreateTransfer(lambda, settings);
             } else {
                 Sleep(TDuration::Seconds(1));
 

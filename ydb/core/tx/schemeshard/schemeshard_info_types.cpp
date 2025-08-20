@@ -97,6 +97,15 @@ void TSubDomainInfo::ApplyAuditSettings(const TSubDomainInfo::TMaybeAuditSetting
     }
 }
 
+void TSubDomainInfo::ResetCounters(IQuotaCounters* counters) {
+    counters->SetPathCount(GetPathsInside());
+
+    const auto shardsTotal = GetShardsInside();
+    const auto backupShards = GetBackupShards();
+    Y_ABORT_UNLESS(shardsTotal >= backupShards);
+    counters->SetShardCount(shardsTotal - backupShards);
+}
+
 TDiskSpaceQuotas TSubDomainInfo::GetDiskSpaceQuotas() const {
     if (!DatabaseQuotas) {
         return {};
@@ -1882,7 +1891,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
                                     const TForceShardSplitSettings& forceShardSplitSettings,
                                     TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                                     THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                                    float cpuUsageThreshold, const TTableInfo* mainTableForIndex, 
+                                    float cpuUsageThreshold, const TTableInfo* mainTableForIndex,
                                     TString& reason) const
 {
     if (ExpectedPartitionCount + 1 - shardsToMerge.size() <= GetMinPartitionsCount()) {

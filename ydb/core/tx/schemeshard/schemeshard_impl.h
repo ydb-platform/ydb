@@ -285,10 +285,10 @@ public:
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
-    
-    // Simplified state tracking for sequential incremental restore 
 
-    
+    // Simplified state tracking for sequential incremental restore
+
+
     THashMap<ui64, TIncrementalRestoreState> IncrementalRestoreStates;
     THashMap<TOperationId, ui64> IncrementalRestoreOperationToState;
 
@@ -1028,7 +1028,7 @@ public:
 
     struct TTxDeleteTabletReply;
     NTabletFlatExecutor::ITransaction* CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev);
-    
+
     class TTxProgressIncrementalRestore;
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(ui64 operationId);
 
@@ -1592,12 +1592,12 @@ public:
     void ProgressIncrementalRestore(ui64 operationId);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev);
-    
+
     // Transaction lifecycle constructor functions
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TTxId completedTxId);
-    
+
     NTabletFlatExecutor::ITransaction* CreateTxIncrementalRestoreResponse(TEvDataShard::TEvProposeTransactionResult::TPtr& ev);
 
     void ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActorContext& ctx);
@@ -1642,8 +1642,10 @@ public:
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
     void ChangePathCount(i64 delta) override;
+    void SetPathCount(ui64 value) override;
     void SetPathsQuota(ui64 value) override;
     void ChangeShardCount(i64 delta) override;
+    void SetShardCount(ui64 value) override;
     void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;

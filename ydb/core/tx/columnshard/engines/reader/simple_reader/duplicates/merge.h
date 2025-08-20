@@ -20,6 +20,7 @@ private:
     TActorId Owner;
     std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     std::optional<NArrow::NMerger::TCursor> MaxVersion;
+    std::optional<NArrow::NMerger::TCursor> MinUncommittedVersion;;
     NArrow::NMerger::TSortableBatchPosition Finish;
     bool IncludeFinish;
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> AllocationGuards;
@@ -33,7 +34,7 @@ private:
     }
 
 public:
-    TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& sortingSchema, const std::optional<NArrow::NMerger::TCursor>& maxVersion,
+    TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& sortingSchema, const std::optional<NArrow::NMerger::TCursor>& maxVersion, const std::optional<NArrow::NMerger::TCursor>& minUncommittedVersion,
         const NArrow::NMerger::TSortableBatchPosition& finishKey, const bool includeFinish,
         const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, const TActorId& owner)
         : PKSchema(sortingSchema)
@@ -41,6 +42,7 @@ public:
         , Owner(owner)
         , Counters(counters)
         , MaxVersion(maxVersion)
+        , MinUncommittedVersion(minUncommittedVersion)
         , Finish(finishKey)
         , IncludeFinish(includeFinish)
     {

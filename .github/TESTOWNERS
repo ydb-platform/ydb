@@ -102,6 +102,7 @@
 
 #Federative query @uzhastik TEAM:@ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
+/ydb/tests/solomon @ydb-platform/fq
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/services/fq/ @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq

@@ -40,6 +40,7 @@ public:
         auto path = TPath::Init(pathId, context.SS);
 
         context.SS->TabletCounters->Simple()[COUNTER_DIR_COUNT].Add(1);
+        context.SS->TabletCounters->Simple()[COUNTER_PATHS].Add(1);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -259,7 +260,7 @@ public:
                 newDir->TempDirOwnerActorId, newDir->PathId);
         }
 
-        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        dstPath.DomainInfo()->IncPathsInside(nullptr); // increment counters on reply
         IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         context.OnComplete.ActivateTx(OperationId);

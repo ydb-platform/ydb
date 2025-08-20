@@ -485,7 +485,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // YdbTopics is not allowed.
         ExecSchemeQuery(TStringBuilder() << R"(
             CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
-                SOURCE_TYPE=")" << ToString(NKikimr::NExternalSource::YdbTopicsType) << R"(",
+                SOURCE_TYPE=")" << ToString(NYql::EDatabaseType::YdbTopics) << R"(",
                 LOCATION=")" << YDB_ENDPOINT << R"(",
                 DATABASE_NAME=")" << YDB_DATABASE << R"(",
                 AUTH_METHOD="NONE"

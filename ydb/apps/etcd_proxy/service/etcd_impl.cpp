@@ -1103,7 +1103,7 @@ private:
         sql << Stuff->TablePrefix;
         const auto& paramName = AddParam("Revision", params, KeyRevision);
         sql << "$Trash = select c.key as key, c.modified as modified from `history` as c inner join (" << std::endl;
-        sql << "select max_by((`key`, `modified`), `modified`) as pair from `history`" << std::endl;
+        sql << "select max_by((`key`, `modified` + if(`version` > 0L, 0L, 1L)), `modified`) as pair from `history`" << std::endl;
         sql << "where `modified` <= " << paramName << " group by `key`" << std::endl;
         sql << ") as keys on keys.pair.0 = c.key where c.modified < keys.pair.1;" << std::endl;
         sql << "delete from `history` on select * from $Trash;" << std::endl;
@@ -1122,11 +1122,12 @@ private:
     }
 
     void SendBackgrondRequest() const {
-        Stuff->Client->RetryQuery(GetQueryAsyncResultFunc()).Subscribe([](const auto& future) {
+        Stuff->Client->RetryQuery(GetQueryAsyncResultFunc()).Subscribe([rev = KeyRevision](const auto& future) {
+            std::cout << "Async compaction up to revision " << rev << " finished ";
             if (const auto res = future.GetValue(); res.IsSuccess())
-                std::cout << "Async compaction finished succesfully." << std::endl;
+                std::cout << "succesfully." << std::endl;
             else
-                std::cout << "Async compaction finished with errors: " << res.GetIssues().ToString() << std::endl;
+                std::cout << "with errors: " << res.GetIssues().ToString() << std::endl;
         });
     }
 

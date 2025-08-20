@@ -1205,7 +1205,10 @@
         }
     },
     "test.test_topic_data_cdc": {
-        "result": {
+        "alter": null,
+        "insert":  {"version": 9},
+        "update": {"version": 9},
+        "data": {
             "Messages": [
                 {
                     "Offset": 0,
@@ -1245,7 +1248,7 @@
                 }
             ],
             "StartOffset": 0,
-            "EndOffset": 3,
+            "EndOffset": 5,
             "Truncated": false
         }
     },

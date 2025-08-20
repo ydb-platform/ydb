@@ -989,25 +989,20 @@ def test_topic_data():
 
 
 def test_topic_data_cdc():
-    call_viewer("/viewer/query", {
+    alter_response = call_viewer("/viewer/query", {
         'database': dedicated_db,
         'query': "alter table table1 add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"
     })
 
-    call_viewer("/viewer/query", {
+    insert_response = call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': "alter topic table1/updates_feed add consumer consumer1"
-    })
-
-    call_viewer("/viewer/query", {
-        'database': dedicated_db,
-        'query': 'insert into table1(id, name) values(1, "one")',
+        'query': 'insert into table1(id, name) values(11, "elleven")',
         'schema': 'multi'
     })
 
-    call_viewer("/viewer/query", {
+    update_response = call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': "update table1 set name = 'ONE' where id = 1)",
+        'query': "update table1 set name = 'ONE' where id = 1",
         'schema': 'multi'
     })
 
@@ -1017,16 +1012,17 @@ def test_topic_data_cdc():
         'path': topic_path,
         'partition': '0',
         'offset': '0',
-        'last_offset': '3',
-        'limit': '10'
+        'limit': '3'
     })
 
-    print("Result: {}".format(data_response))
     data_response = replace_values_by_key(
         data_response, ['CreateTimestamp', 'WriteTimestamp', 'ProducerId', ]
     )
     data_response = replace_types_by_key(data_response, ['TimestampDiff'])
-    return {"result": data_response}
+
+    final_result = {"alter" : alter_response, "insert" : insert_response, "update" : update_response, "data" : data_response}
+    logging.info("Results: {}".format(final_result))
+    return final_result
 
 
 def test_transfer_describe():

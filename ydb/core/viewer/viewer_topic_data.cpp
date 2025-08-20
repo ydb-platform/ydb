@@ -50,12 +50,7 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", error));
     }
 
-    if (request.ResultSet.size() != 1 || request.ResultSet[0].Status != TSchemeCacheNavigate::EStatus::Ok) {
-        return ReplyAndPassAway(GetHTTPINTERNALERROR(
-            "text/plain", "Ran into unexpected state trying to describe topic"));
-    }
     const auto& response = request.ResultSet[0];
-
     {
         TString authError;
         auto pathWithName = TStringBuilder() << "topic " << TopicPath;

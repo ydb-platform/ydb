@@ -1,6 +1,6 @@
 # admin cluster bridge list
 
-С помощью команды `admin cluster bridge list` можно вывести состояние каждого пайла в [режиме bridge](../../../../concepts/bridge.md).
+С помощью команды `admin cluster bridge list` можно вывести состояние каждого pile в [режиме bridge](../../../../concepts/bridge.md).
 
 Общий вид команды:
 
@@ -26,7 +26,7 @@ ydb admin cluster bridge list --help
 
 ## Примеры {#examples}
 
-Вывести список пайлов в человекочитаемом формате:
+Вывести список pile в человекочитаемом формате:
 
 ```bash
 ydb admin cluster bridge list

@@ -1,6 +1,6 @@
 # admin cluster bridge failover
 
-С помощью команды `admin cluster bridge failover` можно выполнить [аварийное отключение](../../../../concepts/bridge.md#failover) пайла, когда он недоступен. При необходимости можно указать пайл, который станет новым `PRIMARY`.
+С помощью команды `admin cluster bridge failover` можно выполнить [аварийное отключение](../../../../concepts/bridge.md#failover) pile, когда он недоступен. При необходимости можно указать pile, который станет новым `PRIMARY`.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -23,24 +23,25 @@ ydb admin cluster bridge failover --help
 
 #|
 || Имя | Описание ||
-|| `--pile <pile>` | Имя недоступного пайла. ||
-|| `--new-primary <pile>` | Имя пайла, который должен стать новым `PRIMARY` пайлом. Укажите, если недоступный пайл был `PRIMARY`. ||
+|| `--pile <pile>` | Имя недоступного pile. ||
+|| `--new-primary <pile>` | Имя pile, который должен стать новым `PRIMARY` pile. Укажите, если недоступный pile был `PRIMARY`. ||
 |#
 
 ## Требования {#requirements}
 
-- Команда применяется, когда один из пайлов недоступен.
-- Если недоступен текущий `PRIMARY`, укажите `--new-primary` и выбирайте пайл в состоянии `SYNCHRONIZED` (переключение на `DISCONNECTED`, `NOT_SYNCHRONIZED` или `SUSPENDED` невозможно).
+- Если недоступен текущий `PRIMARY`, обязательно укажите `--new-primary` и выберите pile в состоянии `SYNCHRONIZED`. При отсутствии `--new-primary` или выборе pile в состоянии, отличном от `SYNCHRONIZED`, команда вернёт ошибку без каких‑либо изменений.
+- Кластер не перейдёт в невалидное состояние: при нарушении требований команда ничего не изменяет и сообщает об ошибке.
+- Если pile не вышел из строя, но его нужно отключить, используйте [плановое отключение](../../../../concepts/bridge.md#takedown) — команду [`takedown`](takedown.md).
 
 ## Примеры {#examples}
 
-Выполнение аварийного отключения для недоступного пайла под названием `pile-a`:
+Выполнение аварийного отключения для недоступного pile под названием `pile-a`:
 
 ```bash
 ydb admin cluster bridge failover --pile pile-a
 ``` 
 
-Выполнение аварийного отключения для недоступного `PRIMARY`-пайла и назначение новым `PRIMARY` синхронизированного пайла:
+Выполнение аварийного отключения для недоступного `PRIMARY`-pile и назначение новым `PRIMARY` синхронизированного pile:
 
 ```bash
 ydb admin cluster bridge failover --pile pile-a --new-primary pile-b
@@ -48,7 +49,7 @@ ydb admin cluster bridge failover --pile pile-a --new-primary pile-b
 
 ### Проверка результата {#verify}
 
-Проверьте, что недоступный пайл переведён в состояние `DISCONNECTED` и (если указан `--new-primary`) выбран новый `PRIMARY` пайл:
+Проверьте, что недоступный pile переведён в состояние `DISCONNECTED` и (если указан `--new-primary`) выбран новый `PRIMARY` pile с помощью команды [list](list.md):
 
 ```bash
 ydb admin cluster bridge list

@@ -1,6 +1,6 @@
 # Команды управления кластером в режиме bridge
 
-Команды управления кластером в режиме [bridge](../../../../concepts/bridge.md) позволяют просматривать состояние [пайлов](../../../../concepts/glossary.md#pile), выполнять плановую и аварийную смену PRIMARY, временно выводить пайл на обслуживание и возвращать его в кластер.
+Команды управления кластером в режиме [bridge](../../../../concepts/bridge.md) позволяют просматривать состояние [pile](../../../../concepts/glossary.md#pile), выполнять плановую и аварийную смену PRIMARY, временно выводить pile на обслуживание и возвращать его в кластер.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -24,8 +24,8 @@
 
 Команда / подкоманда | Краткое описание
 --- | ---
-[admin cluster bridge list](./list.md) | Вывод состояния пайлов
+[admin cluster bridge list](./list.md) | Вывод состояния pile
 [admin cluster bridge switchover](./switchover.md) | Плановая смена `PRIMARY`
 [admin cluster bridge failover](./failover.md) | Аварийное переключение
-[admin cluster bridge takedown](./takedown.md) | Вывод пайла из кластера
-[admin cluster bridge rejoin](./rejoin.md) | Возвращение пайла в кластер
+[admin cluster bridge takedown](./takedown.md) | Вывод pile из кластера
+[admin cluster bridge rejoin](./rejoin.md) | Возвращение pile в кластер

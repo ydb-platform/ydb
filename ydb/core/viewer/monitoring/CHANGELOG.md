@@ -1,5 +1,26 @@
 # Changelog
 
+## [11.7.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.6.0...v11.7.0) (2025-08-19)
+
+
+### Features
+
+* 2dc ([#2699](https://github.com/ydb-platform/ydb-embedded-ui/issues/2699)) ([a4b737b](https://github.com/ydb-platform/ydb-embedded-ui/commit/a4b737bc82927a2d47bba1c804931b8a66c0a885))
+* add isBeingPromoted field to piles ([#2719](https://github.com/ydb-platform/ydb-embedded-ui/issues/2719)) ([75e92c3](https://github.com/ydb-platform/ydb-embedded-ui/commit/75e92c3112ec8e9eeaf71e11c02d47785c878f26))
+* add metrics infrustructure to ui ([#2698](https://github.com/ydb-platform/ydb-embedded-ui/issues/2698)) ([e229c75](https://github.com/ydb-platform/ydb-embedded-ui/commit/e229c75bbb52a01355fdda38fec7e6c951cd793c))
+* **Versions:** redesign ([#2707](https://github.com/ydb-platform/ydb-embedded-ui/issues/2707)) ([7a826b6](https://github.com/ydb-platform/ydb-embedded-ui/commit/7a826b6a3544aed63330cb9e47496c9c3473305c))
+
+
+### Bug Fixes
+
+* 2dc format from backend ([#2733](https://github.com/ydb-platform/ydb-embedded-ui/issues/2733)) ([dcded29](https://github.com/ydb-platform/ydb-embedded-ui/commit/dcded291bd0d7fd6ebed8a81b9cb6cfc95130407))
+* broken tests for healthcheck ([#2705](https://github.com/ydb-platform/ydb-embedded-ui/issues/2705)) ([7734edb](https://github.com/ydb-platform/ydb-embedded-ui/commit/7734edb74f117a71598305b030e4a2b78bd03335))
+* **Content:** do not request whoami if auth is in progress ([#2727](https://github.com/ydb-platform/ydb-embedded-ui/issues/2727)) ([a1ff7a2](https://github.com/ydb-platform/ydb-embedded-ui/commit/a1ff7a293ffac6c8597546a8ae45abbb725ee0a2))
+* fixed the transfer status value ([#2726](https://github.com/ydb-platform/ydb-embedded-ui/issues/2726)) ([a049065](https://github.com/ydb-platform/ydb-embedded-ui/commit/a04906590b2f690caeee92859269f1c061c24825))
+* **query:** incorrect selector ([#2703](https://github.com/ydb-platform/ydb-embedded-ui/issues/2703)) ([7e3aabb](https://github.com/ydb-platform/ydb-embedded-ui/commit/7e3aabb97bd027b8513a8cdecde830978fe8c105))
+* **ResultSetsViewer:** recount rows if fullscreen ([#2704](https://github.com/ydb-platform/ydb-embedded-ui/issues/2704)) ([cc751a5](https://github.com/ydb-platform/ydb-embedded-ui/commit/cc751a591d3337bfc28db8f4cababafbef68f608))
+* **SpeedMultiMeter:** update title it new props ([#2700](https://github.com/ydb-platform/ydb-embedded-ui/issues/2700)) ([69bdb59](https://github.com/ydb-platform/ydb-embedded-ui/commit/69bdb59705cdb4b496fb1fb85abd11d2f1e367e0))
+
 ## [11.6.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v11.5.0...v11.6.0) (2025-08-08)
 
 

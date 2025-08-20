@@ -301,9 +301,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             fields.push_back(std::make_shared<arrow::Field>("a", arrow::utf8()));
             fields.push_back(std::make_shared<arrow::Field>("b", arrow::utf8()));
             fields.push_back(std::make_shared<arrow::Field>("b", arrow::utf8())); // not unique column
-            if (i) {
-                fields.push_back(std::make_shared<arrow::Field>("c", arrow::utf8()));
-            }
+            fields.push_back(std::make_shared<arrow::Field>("c", arrow::utf8()));
 
             auto schema = std::make_shared<arrow::Schema>(fields);
             std::unique_ptr<arrow::RecordBatchBuilder> builder;

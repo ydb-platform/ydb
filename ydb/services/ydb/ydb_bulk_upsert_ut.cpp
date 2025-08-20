@@ -808,7 +808,20 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
             val.Low_ = 0;
             val.Hi_ =  11000000000000000000ULL;
             TValueBuilder rows;
-            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).AddMember("Value_Decimal").Decimal(val).EndStruct().EndList();
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(1)
+                .AddMember("Value_Decimal").Decimal(val)
+                .AddMember("Value_Decimal35").Decimal(TDecimalValue("0", 35, 10))
+                .AddMember("Value_Date").Date(TInstant())
+                .AddMember("Value_DateTime").Datetime(TInstant())
+                .AddMember("Value_Timestamp").Timestamp(TInstant())
+                .AddMember("Value_Interval").Interval(0)
+                .AddMember("Value_Utf8").Utf8("")
+                .AddMember("Value_Yson").Yson("{}")
+                .AddMember("Value_Json").Json("{}")
+                .AddMember("Value_JsonDocument").JsonDocument("{}")
+                .AddMember("Value_DyNumber").DyNumber("0")
+                .EndStruct().EndList();
 
             auto res = client.BulkUpsert(table, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;
@@ -819,7 +832,20 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         {
             TString table = "/Root/TestInvalidData";
             TValueBuilder rows;
-            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).AddMember("Value_Date").Date(TInstant::Days(50000)).EndStruct().EndList();
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(1)
+                .AddMember("Value_Date").Date(TInstant::Days(50000))
+                .AddMember("Value_Decimal").Decimal(TDecimalValue("0", 22, 9))
+                .AddMember("Value_Decimal35").Decimal(TDecimalValue("0", 35, 10))
+                .AddMember("Value_DateTime").Datetime(TInstant())
+                .AddMember("Value_Timestamp").Timestamp(TInstant())
+                .AddMember("Value_Interval").Interval(0)
+                .AddMember("Value_Utf8").Utf8("")
+                .AddMember("Value_Yson").Yson("{}")
+                .AddMember("Value_Json").Json("{}")
+                .AddMember("Value_JsonDocument").JsonDocument("{}")
+                .AddMember("Value_DyNumber").DyNumber("0")
+                .EndStruct().EndList();
 
             auto res = client.BulkUpsert(table, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;
@@ -830,7 +856,20 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         {
             TString table = "/Root/TestInvalidData";
             TValueBuilder rows;
-            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).AddMember("Value_DateTime").Datetime(TInstant::Seconds(Max<ui32>())).EndStruct().EndList();
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(1)
+                .AddMember("Value_DateTime").Datetime(TInstant::Seconds(Max<ui32>()))
+                .AddMember("Value_Decimal").Decimal(TDecimalValue("0", 22, 9))
+                .AddMember("Value_Decimal35").Decimal(TDecimalValue("0", 35, 10))
+                .AddMember("Value_Date").Date(TInstant())
+                .AddMember("Value_Timestamp").Timestamp(TInstant())
+                .AddMember("Value_Interval").Interval(0)
+                .AddMember("Value_Utf8").Utf8("")
+                .AddMember("Value_Yson").Yson("{}")
+                .AddMember("Value_Json").Json("{}")
+                .AddMember("Value_JsonDocument").JsonDocument("{}")
+                .AddMember("Value_DyNumber").DyNumber("0")
+                .EndStruct().EndList();
 
             auto res = client.BulkUpsert(table, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;
@@ -841,7 +880,20 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         {
             TString table = "/Root/TestInvalidData";
             TValueBuilder rows;
-            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).AddMember("Value_Timestamp").Timestamp(TInstant::Days(50000)).EndStruct().EndList();
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(1)
+                .AddMember("Value_Timestamp").Timestamp(TInstant::Days(50000))
+                .AddMember("Value_Decimal").Decimal(TDecimalValue("0", 22, 9))
+                .AddMember("Value_Decimal35").Decimal(TDecimalValue("0", 35, 10))
+                .AddMember("Value_Date").Date(TInstant())
+                .AddMember("Value_DateTime").Datetime(TInstant())
+                .AddMember("Value_Interval").Interval(0)
+                .AddMember("Value_Utf8").Utf8("")
+                .AddMember("Value_Yson").Yson("{}")
+                .AddMember("Value_Json").Json("{}")
+                .AddMember("Value_JsonDocument").JsonDocument("{}")
+                .AddMember("Value_DyNumber").DyNumber("0")
+                .EndStruct().EndList();
 
             auto res = client.BulkUpsert(table, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;
@@ -852,7 +904,20 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         {
             TString table = "/Root/TestInvalidData";
             TValueBuilder rows;
-            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).AddMember("Value_Interval").Interval(TDuration::Days(50000).MicroSeconds()).EndStruct().EndList();
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(1)
+                .AddMember("Value_Interval").Interval(TDuration::Days(50000).MicroSeconds())
+                .AddMember("Value_Decimal").Decimal(TDecimalValue("0", 22, 9))
+                .AddMember("Value_Decimal35").Decimal(TDecimalValue("0", 35, 10))
+                .AddMember("Value_Date").Date(TInstant())
+                .AddMember("Value_DateTime").Datetime(TInstant())
+                .AddMember("Value_Timestamp").Timestamp(TInstant())
+                .AddMember("Value_Utf8").Utf8("")
+                .AddMember("Value_Yson").Yson("{}")
+                .AddMember("Value_Json").Json("{}")
+                .AddMember("Value_JsonDocument").JsonDocument("{}")
+                .AddMember("Value_DyNumber").DyNumber("0")
+                .EndStruct().EndList();
 
             auto res = client.BulkUpsert(table, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;
@@ -863,7 +928,20 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         {
             TString table = "/Root/TestInvalidData";
             TValueBuilder rows;
-            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).AddMember("Value_Utf8").Utf8("\xff").EndStruct().EndList();
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(1)
+                .AddMember("Value_Utf8").Utf8("\xff")
+                .AddMember("Value_Decimal").Decimal(TDecimalValue("0", 22, 9))
+                .AddMember("Value_Decimal35").Decimal(TDecimalValue("0", 35, 10))
+                .AddMember("Value_Date").Date(TInstant())
+                .AddMember("Value_DateTime").Datetime(TInstant())
+                .AddMember("Value_Timestamp").Timestamp(TInstant())
+                .AddMember("Value_Interval").Interval(0)
+                .AddMember("Value_Yson").Yson("{}")
+                .AddMember("Value_Json").Json("{}")
+                .AddMember("Value_JsonDocument").JsonDocument("{}")
+                .AddMember("Value_DyNumber").DyNumber("0")
+                .EndStruct().EndList();
 
             auto res = client.BulkUpsert(table, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;
@@ -875,7 +953,20 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         {
             TString table = "/Root/TestInvalidData";
             TValueBuilder rows;
-            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).AddMember("Value_Yson").Yson("]][").EndStruct().EndList();
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(1)
+                .AddMember("Value_Yson").Yson("]][")
+                .AddMember("Value_Decimal").Decimal(TDecimalValue("0", 22, 9))
+                .AddMember("Value_Decimal35").Decimal(TDecimalValue("0", 35, 10))
+                .AddMember("Value_Date").Date(TInstant())
+                .AddMember("Value_DateTime").Datetime(TInstant())
+                .AddMember("Value_Timestamp").Timestamp(TInstant())
+                .AddMember("Value_Interval").Interval(0)
+                .AddMember("Value_Utf8").Utf8("")
+                .AddMember("Value_Json").Json("{}")
+                .AddMember("Value_JsonDocument").JsonDocument("{}")
+                .AddMember("Value_DyNumber").DyNumber("0")
+                .EndStruct().EndList();
 
             auto res = client.BulkUpsert(table, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;
@@ -886,7 +977,20 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         {
             TString table = "/Root/TestInvalidData";
             TValueBuilder rows;
-            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).AddMember("Value_Json").Json("]]]").EndStruct().EndList();
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(1)
+                .AddMember("Value_Json").Json("]]]")
+                .AddMember("Value_Decimal").Decimal(TDecimalValue("0", 22, 9))
+                .AddMember("Value_Decimal35").Decimal(TDecimalValue("0", 35, 10))
+                .AddMember("Value_Date").Date(TInstant())
+                .AddMember("Value_DateTime").Datetime(TInstant())
+                .AddMember("Value_Timestamp").Timestamp(TInstant())
+                .AddMember("Value_Interval").Interval(0)
+                .AddMember("Value_Utf8").Utf8("")
+                .AddMember("Value_Yson").Yson("{}")
+                .AddMember("Value_JsonDocument").JsonDocument("{}")
+                .AddMember("Value_DyNumber").DyNumber("0")
+                .EndStruct().EndList();
 
             auto res = client.BulkUpsert(table, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;
@@ -897,7 +1001,20 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         {
             TString table = "/Root/TestInvalidData";
             TValueBuilder rows;
-            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).AddMember("Value_JsonDocument").JsonDocument("]]]").EndStruct().EndList();
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(1)
+                .AddMember("Value_JsonDocument").JsonDocument("]]]")
+                .AddMember("Value_Decimal").Decimal(TDecimalValue("0", 22, 9))
+                .AddMember("Value_Decimal35").Decimal(TDecimalValue("0", 35, 10))
+                .AddMember("Value_Date").Date(TInstant())
+                .AddMember("Value_DateTime").Datetime(TInstant())
+                .AddMember("Value_Timestamp").Timestamp(TInstant())
+                .AddMember("Value_Interval").Interval(0)
+                .AddMember("Value_Utf8").Utf8("")
+                .AddMember("Value_Yson").Yson("{}")
+                .AddMember("Value_Json").Json("{}")
+                .AddMember("Value_DyNumber").DyNumber("0")
+                .EndStruct().EndList();
 
             auto res = client.BulkUpsert(table, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;
@@ -908,7 +1025,20 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         {
             TString table = "/Root/TestInvalidData";
             TValueBuilder rows;
-            rows.BeginList().AddListItem().BeginStruct().AddMember("Key").Uint32(1).AddMember("Value_DyNumber").DyNumber("[[[]]]").EndStruct().EndList();
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(1)
+                .AddMember("Value_DyNumber").DyNumber("[[[]]]")
+                .AddMember("Value_Decimal").Decimal(TDecimalValue("0", 22, 9))
+                .AddMember("Value_Decimal35").Decimal(TDecimalValue("0", 35, 10))
+                .AddMember("Value_Date").Date(TInstant())
+                .AddMember("Value_DateTime").Datetime(TInstant())
+                .AddMember("Value_Timestamp").Timestamp(TInstant())
+                .AddMember("Value_Interval").Interval(0)
+                .AddMember("Value_Utf8").Utf8("")
+                .AddMember("Value_Yson").Yson("{}")
+                .AddMember("Value_Json").Json("{}")
+                .AddMember("Value_JsonDocument").JsonDocument("{}")
+                .EndStruct().EndList();
 
             auto res = client.BulkUpsert(table, rows.Build()).GetValueSync();
             Cerr << res.GetStatus() << Endl;

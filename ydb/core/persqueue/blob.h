@@ -11,6 +11,8 @@
 namespace NKikimr {
 namespace NPQ {
 
+class TBlobSerializer;
+
 // Large messages are split into small 512KB parts, and stored in separate parts.
 // This structure stores information about the saved part of a large message.
 struct TPartData {
@@ -21,18 +23,15 @@ struct TPartData {
     // The size of the original message in bytes (the sum of the sizes of all parts)
     ui32 TotalSize;
 
-    TPartData(const ui16 partNo, const ui16 totalParts, const ui32 totalSize)
-        : PartNo(partNo)
-        , TotalParts(totalParts)
-        , TotalSize(totalSize)
-    {}
+    TPartData(const ui16 partNo, const ui16 totalParts, const ui32 totalSize);
 
-    bool IsLastPart() const {
-        return PartNo + 1 == TotalParts;
-    }
+    bool IsLastPart() const;
 };
 
 struct TClientBlob {
+    static constexpr ui32 OVERHEAD = sizeof(ui32)/*totalSize*/ + sizeof(ui64)/*SeqNo*/ + sizeof(ui16) /*SourceId*/
+        + sizeof(ui64) /*WriteTimestamp*/ + sizeof(ui64) /*CreateTimestamp*/;
+
     TString SourceId;
     ui64 SeqNo;
     TString Data;
@@ -43,25 +42,10 @@ struct TClientBlob {
     TString PartitionKey;
     TString ExplicitHashKey;
 
-    TClientBlob()
-        : SeqNo(0)
-        , UncompressedSize(0)
-    {}
-
-    TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData, const TInstant writeTimestamp, const TInstant createTimestamp,
-                const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey)
-        : SourceId(std::move(sourceId))
-        , SeqNo(seqNo)
-        , Data(std::move(data))
-        , PartData(partData)
-        , WriteTimestamp(writeTimestamp)
-        , CreateTimestamp(createTimestamp)
-        , UncompressedSize(uncompressedSize)
-        , PartitionKey(std::move(partitionKey))
-        , ExplicitHashKey(std::move(explicitHashKey))
-    {
-        Y_ENSURE(PartitionKey.size() <= 256);
-    }
+    TClientBlob();
+    TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
+        const TInstant writeTimestamp, const TInstant createTimestamp,
+        const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey);
 
     ui32 GetPartDataSize() const {
         if (PartData) {
@@ -96,8 +80,6 @@ struct TClientBlob {
     bool IsLastPart() const {
         return !PartData || PartData->IsLastPart();
     }
-
-    static constexpr ui32 OVERHEAD = sizeof(ui32)/*totalSize*/ + sizeof(ui64)/*SeqNo*/ + sizeof(ui16) /*SourceId*/ + sizeof(ui64) /*WriteTimestamp*/ + sizeof(ui64) /*CreateTimestamp*/;
 
     void SerializeTo(TBuffer& buffer) const;
     static TClientBlob Deserialize(const char *data, ui32 size);

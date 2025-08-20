@@ -10,6 +10,38 @@
 namespace NKikimr {
 namespace NPQ {
 
+TPartData::TPartData(const ui16 partNo, const ui16 totalParts, const ui32 totalSize)
+        : PartNo(partNo)
+        , TotalParts(totalParts)
+        , TotalSize(totalSize) {
+}
+
+bool TPartData::IsLastPart() const {
+        return PartNo + 1 == TotalParts;
+}
+
+
+TClientBlob::TClientBlob()
+    : SeqNo(0)
+    , UncompressedSize(0) {
+}
+
+TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
+        const TInstant writeTimestamp, const TInstant createTimestamp, const ui64 uncompressedSize,
+        TString&& partitionKey, TString&& explicitHashKey)
+        : SourceId(std::move(sourceId))
+        , SeqNo(seqNo)
+        , Data(std::move(data))
+        , PartData(partData)
+        , WriteTimestamp(writeTimestamp)
+        , CreateTimestamp(createTimestamp)
+        , UncompressedSize(uncompressedSize)
+        , PartitionKey(std::move(partitionKey))
+        , ExplicitHashKey(std::move(explicitHashKey)) {
+    Y_ENSURE(PartitionKey.size() <= 256);
+}
+
+
 TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
     : Key(key)
     , Data(blob.c_str())

@@ -1,4 +1,5 @@
 #include <ydb/library/actors/interconnect/rdma/ut/utils.h>
+#include <ydb/library/actors/interconnect/rdma/link_manager.h>
 
 #include <ydb/library/actors/interconnect/channel_scheduler.h>
 #include <ydb/library/actors/interconnect/events_local.h>

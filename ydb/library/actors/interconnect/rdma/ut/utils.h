@@ -1,22 +1,37 @@
 #pragma once
 
 #include <ydb/library/actors/interconnect/cq_actor.h>
-#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/ctx.h>
-#include <ydb/library/actors/interconnect/rdma/events.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/interconnect/rdma/rdma.h>
 #include <ydb/library/actors/interconnect/rdma/link_manager.h>
-
+#include <ydb/library/actors/interconnect/rdma/events.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
-#include <library/cpp/testing/gtest/gtest.h>
-#include <ydb/library/testlib/unittest_gtest_macro_subst.h>
+#ifdef IC_RDMA_GTEST
 
+#define RDMA_UT_EXPECT_TRUE(val) EXPECT_TRUE(val)
+
+#else
+
+#define RDMA_UT_EXPECT_TRUE(val) Y_ABORT_UNLESS(val)
+
+#endif
 
 using namespace NInterconnect::NRdma;
 using namespace NActors;
 
+struct TLocalRdmaStuff {
+    std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool;
+    THolder<NActors::TTestActorRuntimeBase> ActorSystem;
+    TActorId CqActorId;
+    ICq::TPtr CqPtr;
+    TRdmaCtx* Ctx;
+    TQueuePair Qp1;
+    TQueuePair Qp2;
+};
 
-ICq::TPtr GetCqHandle(NActors::TTestActorRuntimeBase* actorSystem, TRdmaCtx* ctx, TActorId cqActorId) {
+inline ICq::TPtr GetCqHandle(NActors::TTestActorRuntimeBase* actorSystem, TRdmaCtx* ctx, TActorId cqActorId) {
     const TActorId edge = actorSystem->AllocateEdgeActor(0);
     auto ev = std::make_unique<TEvGetCqHandle>(ctx);
 
@@ -26,11 +41,11 @@ ICq::TPtr GetCqHandle(NActors::TTestActorRuntimeBase* actorSystem, TRdmaCtx* ctx
     actorSystem->GrabEdgeEvent<TEvGetCqHandle>(handle);
 
     TEvGetCqHandle* cqHandle = handle->Get<TEvGetCqHandle>();
-    EXPECT_TRUE(cqHandle->CqPtr);
+    RDMA_UT_EXPECT_TRUE(cqHandle->CqPtr);
     return cqHandle->CqPtr;
 }
 
-std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntime(TString defIp) {
+inline std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntime(TString defIp) {
     auto actorSystem = MakeHolder<NActors::TTestActorRuntimeBase>(1, 1, true);
     actorSystem->Initialize();
 
@@ -44,23 +59,13 @@ std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntim
 
     NInterconnect::TAddress address(ip, 7777);
     auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(address.GetV6CompatAddr());
-    EXPECT_TRUE(ctx);
+    RDMA_UT_EXPECT_TRUE(ctx);
     Cerr << "Using verbs context: " << *ctx << ", on addr: " << ip << Endl;
 
     return {std::move(actorSystem), ctx};
 }
 
-struct TLocalRdmaStuff {
-    std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool;
-    THolder<NActors::TTestActorRuntimeBase> ActorSystem;
-    TActorId CqActorId;
-    ICq::TPtr CqPtr;
-    TRdmaCtx* Ctx;
-    TQueuePair Qp1;
-    TQueuePair Qp2;
-};
-
-std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo="::1") {
+inline std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo="::1") {
     auto rdma = std::make_shared<TLocalRdmaStuff>();
 
     rdma->MemPool = NInterconnect::NRdma::CreateDummyMemPool();
@@ -75,21 +80,21 @@ std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo="::1") {
 
     {
         int err = rdma->Qp1.Init(rdma->Ctx, rdma->CqPtr.get(), 16);
-        EXPECT_TRUE(err == 0) << strerror(err);
+        RDMA_UT_EXPECT_TRUE(err == 0);
     }
 
     auto qp1num = rdma->Qp1.GetQpNum();
 
     {
         int err = rdma->Qp2.Init(rdma->Ctx, rdma->CqPtr.get(), 16);
-        EXPECT_TRUE(err == 0);
+        RDMA_UT_EXPECT_TRUE(err == 0);
         err = rdma->Qp2.ToRtsState(rdma->Ctx, qp1num, rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
-        EXPECT_TRUE(err == 0);
+        RDMA_UT_EXPECT_TRUE(err == 0);
     }
 
     {
         int err = rdma->Qp1.ToRtsState(rdma->Ctx, rdma->Qp2.GetQpNum(), rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
-        EXPECT_TRUE(err == 0);
+        RDMA_UT_EXPECT_TRUE(err == 0);
     }
 
     return rdma;
@@ -101,7 +106,7 @@ enum class EReadResult {
     READ_ERR
 };
 
-EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueuePair& qp, void* dstAddr, ui32 dstRkey, int dstSize, TMemRegionPtr& src, std::function<void()> hook = {}) {
+inline EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueuePair& qp, void* dstAddr, ui32 dstRkey, int dstSize, TMemRegionPtr& src, std::function<void()> hook = {}) {
     auto asptr = rdma->ActorSystem->GetActorSystem(0);
     NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();
     auto future = promise.GetFuture();
@@ -114,7 +119,7 @@ EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueuePair& 
     auto allocResult = rdma->CqPtr->AllocWr(cb);
     ICq::IWr* wr = (allocResult.index() == 0) ? std::get<0>(allocResult) : nullptr;
 
-    EXPECT_TRUE(wr);
+    RDMA_UT_EXPECT_TRUE(wr);
 
     if (hook)
         hook();
@@ -132,5 +137,4 @@ EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, TQueuePair& 
         return EReadResult::OK;
     }
 }
-
 

@@ -82,6 +82,19 @@ void AuditContextStart(IAuditCtx* ctx, const TString& database, const TString& u
     }
 }
 
+void AuditSharedContext(IAuditCtx* ctx, const std::vector<std::pair<TString, TString>>& databaseAttrs) {
+    auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databaseAttrs);
+    if (cloud_id) {
+        ctx->AddSharedAuditLogPart("cloud_id", cloud_id);
+    }
+    if (folder_id) {
+        ctx->AddSharedAuditLogPart("folder_id", folder_id);
+    }
+    if (database_id) {
+        ctx->AddSharedAuditLogPart("resource_id", database_id);
+    }
+}
+
 void AuditContextEnd(IAuditCtx* ctx) {
     ctx->AddAuditLogPart("end_time", TInstant::Now().ToString());
 }

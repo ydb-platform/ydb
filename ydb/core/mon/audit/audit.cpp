@@ -117,14 +117,16 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
     }
 }
 
-void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
-    if (!Auditable) {
+void TAuditCtx::AddAuditLogParts(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result) {
+    if (!Auditable || !result || !result->UserToken) {
         return;
     }
+    const auto& userToken = result->UserToken;
     SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-    if (userToken) {
-        Subject = userToken->GetUserSID();
-        SanitizedToken = userToken->GetSanitizedToken();
+    Subject = userToken->GetUserSID();
+    SanitizedToken = userToken->GetSanitizedToken();
+    for (const auto& [key, value] : result->AuditLogParts) {
+        AddAuditLogPart(key, value);
     }
 }
 

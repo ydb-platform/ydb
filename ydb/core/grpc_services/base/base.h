@@ -277,6 +277,8 @@ class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
+    virtual void AddSharedAuditLogPart(const TStringBuf& name, const TString& value) = 0;
+    virtual const TAuditLogParts& GetSharedAuditLogParts() const = 0;
 };
 
 class IRequestCtxBase
@@ -711,6 +713,12 @@ public:
     const TAuditLogParts& GetAuditLogParts() const override {
         Y_ABORT("unimplemented for TRefreshTokenImpl");
     }
+    void AddSharedAuditLogPart(const TStringBuf&, const TString&) override {
+        Y_ABORT("unimplemented for TRefreshTokenImpl");
+    }
+    const TAuditLogParts& GetSharedAuditLogParts() const override {
+        Y_ABORT("unimplemented for TRefreshTokenImpl");
+    }
 
 private:
     const TString Token_;
@@ -978,6 +986,12 @@ public:
     const TAuditLogParts& GetAuditLogParts() const override {
         return AuditLogParts;
     }
+    void AddSharedAuditLogPart(const TStringBuf& name, const TString& value) override {
+        SharedAuditLogParts.emplace_back(name, value);
+    }
+    const TAuditLogParts& GetSharedAuditLogParts() const override {
+        return SharedAuditLogParts;
+    }
 
     void AuditLogRequestEnd(Ydb::StatusIds::StatusCode status) {
         if (AuditLogHook) {
@@ -1030,6 +1044,7 @@ private:
     const TRequestAuxSettings AuxSettings;
 
     TAuditLogParts AuditLogParts;
+    TAuditLogParts SharedAuditLogParts;
     TAuditLogHook AuditLogHook;
 };
 
@@ -1400,6 +1415,14 @@ public:
         return AuditLogParts;
     }
 
+    void AddSharedAuditLogPart(const TStringBuf& name, const TString& value) override {
+        SharedAuditLogParts.emplace_back(name, value);
+    }
+
+    const TAuditLogParts& GetSharedAuditLogParts() const override {
+        return SharedAuditLogParts;
+    }
+
     void StartTracing(NWilson::TSpan&& span) override {
         Span_ = std::move(span);
     }
@@ -1471,6 +1494,7 @@ private:
     std::function<TFinishWrapper(std::function<void()>&&)> FinishWrapper = &GetStdFinishWrapper;
 
     TAuditLogParts AuditLogParts;
+    TAuditLogParts SharedAuditLogParts;
     TAuditLogHook AuditLogHook;
     bool RequestFinished = false;
     bool IsTracingDecided_ = false;
@@ -1676,9 +1700,10 @@ private:
 
 class TEvRequestAuthAndCheckResult : public TEventLocal<TEvRequestAuthAndCheckResult, TRpcServices::EvRequestAuthAndCheckResult> {
 public:
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TAuditLogParts& auditLogParts = {})
         : Status(status)
         , Issues(issues)
+        , AuditLogParts(auditLogParts)
     {}
 
     TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue)
@@ -1693,10 +1718,11 @@ public:
         Issues.AddIssue(error);
     }
 
-    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
+    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TAuditLogParts& auditLogParts = {})
         : Database(database)
         , YdbToken(ydbToken)
         , UserToken(userToken)
+        , AuditLogParts(auditLogParts)
     {}
 
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
@@ -1704,6 +1730,7 @@ public:
     TString Database;
     TMaybe<TString> YdbToken;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TAuditLogParts AuditLogParts;
 };
 
 class TEvRequestAuthAndCheck
@@ -1748,14 +1775,16 @@ public:
                 new TEvRequestAuthAndCheckResult(
                     Database,
                     YdbToken,
-                    UserToken
+                    UserToken,
+                    SharedAuditLogParts
                 )
             );
         } else {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
                     status,
-                    IssueManager.GetIssues()
+                    IssueManager.GetIssues(),
+                    SharedAuditLogParts
                 )
             );
         }
@@ -1833,6 +1862,14 @@ public:
         return AuditLogParts;
     }
 
+    void AddSharedAuditLogPart(const TStringBuf& name, const TString& value) override {
+        SharedAuditLogParts.emplace_back(name, value);
+    }
+
+    const TAuditLogParts& GetSharedAuditLogParts() const override {
+        return SharedAuditLogParts;
+    }
+
     TMaybe<TString> GetTraceId() const override {
         return {};
     }
@@ -1899,6 +1936,7 @@ public:
     IGRpcProxyCounters::TPtr Counters;
     TMaybe<NRpcService::TRlPath> RlPath;
     TAuditLogParts AuditLogParts;
+    TAuditLogParts SharedAuditLogParts;
     NYql::TIssueManager IssueManager;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TInstant deadline = TInstant::Now() + TDuration::Seconds(10);

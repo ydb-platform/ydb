@@ -494,6 +494,7 @@ private:
                 });
             }
         }
+        AuditSharedContext(requestBaseCtx, Attributes_);
     }
 
 private:

@@ -46,6 +46,7 @@ class IAuditCtx;
 //
 
 void AuditContextStart(IAuditCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken, const std::vector<std::pair<TString, TString>>& databaseAttrs);
+void AuditSharedContext(IAuditCtx* ctx, const std::vector<std::pair<TString, TString>>& databaseAttrs);
 void AuditContextEnd(IAuditCtx* ctx);
 
 template <class TProtoRequest>

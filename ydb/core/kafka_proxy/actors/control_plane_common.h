@@ -294,6 +294,15 @@ public:
         return DummyAuditLogParts;
     };
 
+    void AddSharedAuditLogPart(const TStringBuf& name, const TString& value) override {
+        Y_UNUSED(name);
+        Y_UNUSED(value);
+    };
+
+    const NKikimr::NGRpcService::TAuditLogParts& GetSharedAuditLogParts() const override {
+        return DummyAuditLogParts;
+    };
+
     void SetRuHeader(ui64 ru) override {
         Y_UNUSED(ru);
     };

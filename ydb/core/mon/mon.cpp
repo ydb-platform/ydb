@@ -524,7 +524,7 @@ public:
         }
         TString serializedToken;
         if (result && result->UserToken) {
-            AuditCtx.AddAuditLogParts(result->UserToken);
+            AuditCtx.AddAuditLogParts(result);
             serializedToken = result->UserToken->GetSerializedToken();
         }
         AuditCtx.LogOnReceived();
@@ -1171,7 +1171,7 @@ public:
                 << " " << request->URL);
         }
         if (result && result->UserToken) {
-            AuditCtx.AddAuditLogParts(result->UserToken);
+            AuditCtx.AddAuditLogParts(result);
             Event->Get()->UserToken = result->UserToken->GetSerializedToken();
         }
         AuditCtx.LogOnReceived();

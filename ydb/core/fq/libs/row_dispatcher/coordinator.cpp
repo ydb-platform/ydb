@@ -12,6 +12,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -216,11 +219,12 @@ private:
     void AddRowDispatcher(NActors::TActorId actorId, bool isLocal);
     void PrintInternalState();
     TTopicInfo& GetOrCreateTopicInfo(const TTopicKey& topic);
-    std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key);  // std::nullopt if TopicPartitionsLimitPerNode reached
+    std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key, const TSet<ui32>& filteredNodeIds);  // std::nullopt if TopicPartitionsLimitPerNode reached
     bool ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request);
     void UpdatePendingReadActors();
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
     TString GetInternalState();
+    void SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message);
 };
 
 TActorCoordinator::TActorCoordinator(
@@ -372,7 +376,7 @@ TActorCoordinator::TTopicInfo& TActorCoordinator::GetOrCreateTopicInfo(const TTo
     return TopicsInfo.insert({topic, TTopicInfo(Metrics, topic.TopicName)}).first->second;
 }
 
-std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key) {
+std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key, const TSet<ui32>& filteredNodeIds) {
     Y_ENSURE(!PartitionLocations.contains(key));
 
     auto& topicInfo = GetOrCreateTopicInfo(key.Topic);
@@ -383,7 +387,9 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
         if (!info.Connected) {
             continue;
         }
-
+        if (!filteredNodeIds.empty() && !filteredNodeIds.contains(location.NodeId())) {
+            continue;
+        }
         ui64 numberPartitions = 0;
         if (const auto it = topicInfo.NodesInfo.find(location.NodeId()); it != topicInfo.NodesInfo.end()) {
             numberPartitions = it->second.NumberPartitions;
@@ -394,7 +400,9 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
             bestNumberPartitions = numberPartitions;
         }
     }
-    Y_ENSURE(bestLocation, "Local row dispatcher should always be connected");
+    if (!bestLocation) {
+        return std::nullopt;
+    }
 
     if (Config.GetTopicPartitionsLimitPerNode() > 0 && bestNumberPartitions >= Config.GetTopicPartitionsLimitPerNode()) {
         topicInfo.AddPendingPartition(key);
@@ -434,7 +442,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
 
 bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request) {
     const auto& source = request.Record.GetSource();
-
+    TSet<ui32> filteredNodeIds{source.GetNodeIds().begin(), source.GetNodeIds().end()};
     Y_ENSURE(!RowDispatchers.empty());
 
     bool hasPendingPartitions = false;
@@ -446,8 +454,12 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
         NActors::TActorId rowDispatcherId;
         if (locationIt != PartitionLocations.end()) {
             rowDispatcherId = locationIt->second;
+            if (!filteredNodeIds.empty() && !filteredNodeIds.contains(rowDispatcherId.NodeId())) {
+                SendError(readActorId, request, TStringBuilder() << "Can't read the same topic with different mappings");
+                return true;
+            }
         } else {
-            if (const auto maybeLocation = GetAndUpdateLocation(key)) {
+            if (const auto maybeLocation = GetAndUpdateLocation(key, filteredNodeIds)) {
                 rowDispatcherId = *maybeLocation;
             } else {
                 hasPendingPartitions = true;
@@ -488,6 +500,13 @@ void TActorCoordinator::UpdatePendingReadActors() {
 void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     PrintInternalState();
+}
+
+void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message) {
+    LOG_ROW_DISPATCHER_WARN("Send TEvCoordinatorResult to " << readActorId << ", issues: " << message);
+    auto response = std::make_unique<TEvRowDispatcher::TEvCoordinatorResult>();
+    NYql::IssuesToMessage(NYql::TIssues{NYql::TIssue{message}}, response->Record.MutableIssues());
+    Send(readActorId, response.release(), IEventHandle::FlagTrackDelivery, request.Cookie);
 }
 
 } // namespace

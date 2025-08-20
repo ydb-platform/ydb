@@ -454,7 +454,10 @@ NTable::TBulkUpsertResult LoadOpenOrders(
 
     for (int orderId = 1; orderId <= CUSTOMERS_PER_DISTRICT; ++orderId) {
         int customerId = customerIds[orderId - 1]; // Use shuffled customer ID
-        int carrierId = (orderId < FIRST_UNPROCESSED_O_ID) ? RandomNumber(fastRng, 1, 10) : 0;
+        std::optional<int> carrierId;
+        if (orderId < FIRST_UNPROCESSED_O_ID) {
+            carrierId = RandomNumber(fastRng, 1, 10);
+        }
         int olCnt = GetRandomCount(wh, orderId, district); // Deterministic count
 
         valueBuilder.AddListItem()
@@ -463,7 +466,7 @@ NTable::TBulkUpsertResult LoadOpenOrders(
             .AddMember("O_D_ID").Int32(district)
             .AddMember("O_ID").Int32(orderId)
             .AddMember("O_C_ID").Int32(customerId)
-            .AddMember("O_CARRIER_ID").Int32(carrierId)
+            .AddMember("O_CARRIER_ID").OptionalInt32(carrierId)
             .AddMember("O_OL_CNT").Int32(olCnt)
             .AddMember("O_ALL_LOCAL").Int32(1)
             .AddMember("O_ENTRY_D").Timestamp(TInstant::Now())
@@ -540,13 +543,12 @@ NTable::TBulkUpsertResult LoadOrderLines(
             int itemId = RandomNumber(fastRng, 1, ITEM_COUNT);
 
             // Set OL_DELIVERY_D and OL_AMOUNT based on itemId condition (like Benchbase!)
-            TInstant deliveryDate;
+            std::optional<TInstant> deliveryDate;
             double amount;
             if (orderId < FIRST_UNPROCESSED_O_ID) {
                 deliveryDate = TInstant::Now();
                 amount = 0.0;
             } else {
-                deliveryDate = TInstant::Zero(); // epoch timestamp
                 // random within [0.01 .. 9,999.99]
                 amount = RandomNumber(fastRng, 1, 999999) / 100.0;
             }
@@ -558,7 +560,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
                 .AddMember("OL_O_ID").Int32(orderId)
                 .AddMember("OL_NUMBER").Int32(lineNumber)
                 .AddMember("OL_I_ID").Int32(itemId)
-                .AddMember("OL_DELIVERY_D").Timestamp(deliveryDate)
+                .AddMember("OL_DELIVERY_D").OptionalTimestamp(deliveryDate)
                 .AddMember("OL_AMOUNT").Double(amount)
                 .AddMember("OL_SUPPLY_W_ID").Int32(wh)
                 .AddMember("OL_QUANTITY").Double(5.0)

@@ -3582,8 +3582,11 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
 }
 
 bool TVectorIndexSettings::Validate(TContext& ctx) const {
+    constexpr ui64 MinVectorDimension = 1;
     constexpr ui64 MaxVectorDimension = 16384;
+    constexpr ui64 MinLevels = 1;
     constexpr ui64 MaxLevels = 16;
+    constexpr ui64 MinClusters = 2;
     constexpr ui64 MaxClusters = 1024;
     constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
 
@@ -3614,13 +3617,13 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
         return false;
     }
 
-    if (!validateInRange("vector_dimension", VectorDimension, 1, MaxVectorDimension)) {
+    if (!validateInRange("vector_dimension", VectorDimension, MinVectorDimension, MaxVectorDimension)) {
         return false;
     }
-    if (!validateInRange("levels", Levels, 1, MaxLevels)) {
+    if (!validateInRange("levels", Levels, MinLevels, MaxLevels)) {
         return false;
     }
-    if (!validateInRange("clusters", Clusters, 2, MaxClusters)) {
+    if (!validateInRange("clusters", Clusters, MinClusters, MaxClusters)) {
         return false;
     }
 

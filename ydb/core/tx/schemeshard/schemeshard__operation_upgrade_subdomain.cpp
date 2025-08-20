@@ -366,6 +366,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
             case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
             case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection:
+            case NKikimrSchemeOp::EPathType::EPathTypeSecret:
                 Y_ABORT("UNIMPLEMENTED");
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
                 Y_UNREACHABLE();

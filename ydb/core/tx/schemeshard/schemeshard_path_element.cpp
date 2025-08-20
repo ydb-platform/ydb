@@ -243,6 +243,10 @@ bool TPathElement::IsBackupCollection() const {
     return PathType == EPathType::EPathTypeBackupCollection;
 }
 
+bool TPathElement::IsSecret() const {
+    return PathType == EPathType::EPathTypeSecret;
+}
+
 void TPathElement::SetDropped(TStepId step, TTxId txId) {
     PathState = EPathState::EPathStateNotExist;
     StepDropped = step;

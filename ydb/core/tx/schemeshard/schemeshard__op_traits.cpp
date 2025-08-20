@@ -46,6 +46,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
             return EOperationClass::Create;
 
         // Simple operations that drop paths
@@ -79,6 +80,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
             return EOperationClass::Drop;
 
         // Simple operations that alter paths
@@ -106,6 +108,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret:
             return EOperationClass::Alter;
 
         // Compound or special operations

@@ -1207,9 +1207,9 @@ namespace NSQLTranslationV1 {
         std::optional<EDistance> Distance;
         std::optional<ESimilarity> Similarity;
         std::optional<EVectorType> VectorType;
-        ui32 VectorDimension = 0;
-        ui32 Clusters = 0;
-        ui32 Levels = 0;
+        std::optional<ui64> VectorDimension;
+        std::optional<ui64> Clusters;
+        std::optional<ui64> Levels;
 
         bool Validate(TContext& ctx) const;
     };

@@ -12,14 +12,14 @@ TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(const std::string& 
 
 void TBaseLocalTopicPartitionActor::Bootstrap() {
     LogPrefix = MakeLogPrefix();
-    DoDescribe();
+    DoDescribe(TopicPath);
 }
 
-void TBaseLocalTopicPartitionActor::DoDescribe() {
-    auto path = TStringBuilder() << "/" << Database << TopicPath;
+void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
+    auto path = TStringBuilder() << "/" << Database << topicPath;
     LOG_D("Describe topic '" << path << "'");
     auto request = MakeHolder<TNavigate>();
-    request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpTopic));
+    request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpUnknown));
     Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     Become(&TThis::StateDescribe);
 }
@@ -27,7 +27,7 @@ void TBaseLocalTopicPartitionActor::DoDescribe() {
 void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     static const TString errorMarket = "LocalYdbProxy";
 
-    LOG_T("Handle " << ev->Get()->ToString());
+    LOG_D("Handle " << ev->Get()->ToString());
 
     auto& result = ev->Get()->Request;
 
@@ -49,6 +49,10 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKey
         return;
     }
 
+    if (entry.Kind == TNavigate::EKind::KindCdcStream) {
+        return DoDescribe(TStringBuilder() << TopicPath << "/streamImpl");
+    }
+
     if (!CheckEntryKind(errorMarket, entry, TNavigate::EKind::KindTopic, LeaveOnError())) {
         return;
     }
@@ -63,7 +67,7 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKey
 
 void TBaseLocalTopicPartitionActor::HandleOnDescribe(TEvents::TEvWakeup::TPtr& ev) {
     if (static_cast<ui64>(EWakeupType::Describe) == ev->Get()->Tag) {
-        DoDescribe();
+        DoDescribe(TopicPath);
     }
 }
 

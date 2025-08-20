@@ -3685,32 +3685,35 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CreateTableAlterTableVectorIndexInvalidSettings, createTable) {
+    Y_UNIT_TEST_TWIN(CreateTableAlterTableVectorIndexInvalidSettings, CreateTable) {
         TKikimrRunner kikimr;
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         ui32 tableId = 0;
 
         {
-            TString create_index_query = R"(
+            TString query = R"(
                 --!syntax_v1
-                CREATE TABLE `/Root/TestTable0` (
+                CREATE TABLE `/Root/TestTable` (
                     Key Uint64,
                     Embedding String,
                     PRIMARY KEY (Key)
                 );
             )";
-            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         auto check = [&](const TString& indexSettings, const TString& expectedError) {
             TStringBuilder explain;
-            explain << (createTable ? "CREATE" : "ALTER") <<  " WITH (" << indexSettings << ")" << Endl;
+            explain << (CreateTable ? "CREATE" : "ALTER") <<  " WITH (" << indexSettings << ")" << Endl;
             Cerr << explain;
 
-            TStatus result(EStatus::SUCCESS, NIssue::TIssues());
-            if (true || createTable) {
-                TString create_index_query = Sprintf(R"(
+            TString query;
+
+            if (CreateTable) {
+                query = Sprintf(R"(
                     --!syntax_v1
                     CREATE TABLE `/Root/TestTable%d` (
                         Key Uint64,
@@ -3723,8 +3726,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                             WITH (%s)
                     );
                 )", ++tableId, indexSettings.c_str());
-                result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+            } else {
+                query = Sprintf(R"(
+                    --!syntax_v1
+                    ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx%d 
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (%s);
+                )", ++tableId, indexSettings.c_str());
             }
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
 
             explain << result.GetStatus() << Endl;
             explain << result.GetIssues().ToString() << Endl;
@@ -3793,40 +3805,46 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Error: vector_dimension should be set");
             
         // levels
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=10",
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=2",
             "Error: Invalid levels: XxX");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=0, clusters=10",
-            "Error: Invalid levels: 0 should be in range [1, 32]");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10", "");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10", "");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=32, clusters=10", "");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=33, clusters=10",
-            "Error: Invalid levels: 33 should be in range [1, 32]");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=999999999999, clusters=10",
-            "Error: Invalid levels: 999999999999 should be in range [1, 32]");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=99999999999999999999, clusters=10",
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=0, clusters=2",
+            "Error: Invalid levels: 0 should be in range [1, 16]");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=16, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=17, clusters=2",
+            "Error: Invalid levels: 17 should be in range [1, 16]");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=999999999999, clusters=2",
+            "Error: Invalid levels: 999999999999 should be in range [1, 16]");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=99999999999999999999, clusters=2",
             "Error: Invalid levels: 99999999999999999999");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=10",
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2",
             "Error: levels should be set");
 
         // clusters
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=XxX",
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=XxX",
             "Error: Invalid clusters: XxX");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=0",
-            "Error: Invalid clusters: 0 should be in range [2, 100]");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=1",
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=0",
+            "Error: Invalid clusters: 0 should be in range [2, 1024]");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=1",
             "Error: Invalid clusters: 1");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=2", "");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10", "");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=100", "");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=101",
-            "Error: Invalid clusters: 101 should be in range [2, 100]");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=999999999999",
-            "Error: Invalid clusters: 999999999999 should be in range [2, 100]");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=99999999999999999999",
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=1024", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=1025",
+            "Error: Invalid clusters: 1025 should be in range [2, 1024]");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=999999999999",
+            "Error: Invalid clusters: 999999999999 should be in range [2, 1024]");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=99999999999999999999",
             "Error: Invalid clusters: 99999999999999999999");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3",
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1",
             "Error: clusters should be set");
+        
+        // clusters^levels
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=10, clusters=10",
+            "Error: Invalid clusters^levels: 10^10 should be less than 1073741824");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=16, clusters=1024",
+            "Error: Invalid clusters^levels: 1024^16 should be less than 1073741824");
     }
 
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {

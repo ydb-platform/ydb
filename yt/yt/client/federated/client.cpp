@@ -354,7 +354,7 @@ public:
     void Terminate() override
     { }
 
-    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(const TGetCurrentUserOptions& options) override
+    TFuture<TGetCurrentUserResult> GetCurrentUser(const TGetCurrentUserOptions& options) override
     {
         auto [client, _] = GetActiveClient();
         return client->GetCurrentUser(options);

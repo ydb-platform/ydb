@@ -11,6 +11,7 @@ namespace NScheme {
 constexpr ui32 DECIMAL_MAX_PRECISION = 35;
 constexpr ui32 DECIMAL_PRECISION = 22;
 constexpr ui32 DECIMAL_SCALE = 9;
+constexpr ui32 FSB_SIZE = 16; // fixed_size_binary size
 
 using TTypeId = ui16;
 

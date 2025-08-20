@@ -212,10 +212,11 @@ struct TGraphMeta {
 };
 
 struct TTaskInputMeta {
-    // these message are allocated using the protubuf arena.
+    // these message are allocated using the protobuf arena.
     NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings = nullptr;
     NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
     NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
+    NKikimrTxDataShard::TKqpVectorResolveSettings* VectorResolveSettings = nullptr;
 };
 
 struct TTaskOutputMeta {

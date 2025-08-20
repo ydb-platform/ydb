@@ -1,6 +1,7 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
 #include "util_fmt_abort.h"
+#include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
@@ -589,6 +590,19 @@ public:
 THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
     return MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(env->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
 };
+
+void ZeroSharedCache(TMyEnvBase &env) {
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
+}
+
+// simulates other tablet shared cache usage
+void WakeupSharedCache(TMyEnvBase& env) {
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCManual)));
+    TWaitForFirstEvent<TKikimrEvents::TEvWakeup>(*env, [&](const auto& ev) {
+        return ev->Get()->Tag == static_cast<ui64>(EWakeupTag::DoGCManual) 
+            && env->FindActorName(ev->GetRecipientRewrite()) == "SAUSAGE_CACHE";
+    }).Wait(TDuration::Seconds(5));
+}
 
 /**
  * Test scan going in parallel with compactions.
@@ -5599,10 +5613,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
         }
     };
 
-    void ZeroSharedCache(TMyEnvBase &env) {
-        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
-    }
-
     Y_UNIT_TEST(CalculateReadSize_FlatIndex) {
         TMyEnvBase env;
         TRowsModel rows;
@@ -5629,12 +5639,15 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
         
         env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 0, 1) });
         UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{20566, 20566}));
+        WakeupSharedCache(env);
 
         env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 100, 200) });
         UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{1048866, 1048866}));
+        WakeupSharedCache(env);
 
         env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 300, 700) });
         UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{4133766, 4133766}));
+        WakeupSharedCache(env);
     }
 
     Y_UNIT_TEST(CalculateReadSize_BTreeIndex) {
@@ -5665,12 +5678,15 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
         
         env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 0, 1) });
         UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 20566, 20566}));
+        WakeupSharedCache(env);
 
         env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 100, 200) });
         UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 1048866, 1048866}));
+        WakeupSharedCache(env);
 
         env.SendSync(new NFake::TEvExecute{ new TTxCalculateReadSize(sizes, 300, 700) });
         UNIT_ASSERT_VALUES_EQUAL(sizes, (TVector<ui64>{0, 0, 0, 0, 4133766, 4133766}));
+        WakeupSharedCache(env);
     }
 
     Y_UNIT_TEST(PrechargeAndSeek_FlatIndex) {
@@ -5795,6 +5811,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 1025;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // small read ahead
@@ -5803,6 +5820,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 171;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // infinite read ahead
@@ -5811,6 +5829,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             env.SendAsync(std::move(queueScan));
             queueScan->ExpectedPageFaults = 2;
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
@@ -5821,6 +5840,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->LeadKey = leadKey_;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
             if (!expectedRowsCount) {
                 break;
             }
@@ -5862,6 +5882,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 1028;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // small read ahead
@@ -5870,6 +5891,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 189;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // infinite read ahead
@@ -5878,6 +5900,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 5;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
@@ -5888,6 +5911,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->LeadKey = leadKey_;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
             if (!expectedRowsCount) {
                 break;
             }
@@ -5928,6 +5952,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             env.SendAsync(std::move(queueScan));
             queueScan->ExpectedPageFaults = 2050;
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // small read ahead
@@ -5936,6 +5961,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 173;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // infinite read ahead
@@ -5944,6 +5970,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 4;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
@@ -5954,6 +5981,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->LeadKey = leadKey_;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
             if (!expectedRowsCount) {
                 break;
             }
@@ -5996,6 +6024,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 2056;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // small read ahead
@@ -6004,6 +6033,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 194;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // infinite read ahead
@@ -6012,6 +6042,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 10;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
@@ -6022,6 +6053,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->LeadKey = leadKey_;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
             if (!expectedRowsCount) {
                 break;
             }
@@ -6061,6 +6093,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 1029;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // small read ahead
@@ -6069,6 +6102,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 173;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // infinite read ahead
@@ -6077,6 +6111,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 4;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
@@ -6087,6 +6122,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->LeadKey = leadKey_;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
             if (!expectedRowsCount) {
                 break;
             }
@@ -6128,6 +6164,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 1032;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // small read ahead
@@ -6136,6 +6173,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 191;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // infinite read ahead
@@ -6144,6 +6182,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 7;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         for (ui64 leadKey = 1; ; leadKey += rowsCount / 10) {
@@ -6154,6 +6193,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->LeadKey = leadKey_;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
             if (!expectedRowsCount) {
                 break;
             }
@@ -6193,6 +6233,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 2;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         { // read ahead
@@ -6201,6 +6242,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = 2;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
         }
 
         for (ui64 leadKey = 1; ; leadKey++) {
@@ -6212,6 +6254,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_IndexLoading) {
             queueScan->ExpectedPageFaults = expectedRowsCount ? 2 : 0;
             env.SendAsync(std::move(queueScan));
             env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+            WakeupSharedCache(env);
             if (!expectedRowsCount) {
                 break;
             }
@@ -6297,9 +6340,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
     };
+
+    void DoFullScan(TMyEnvBase& env, int& failedAttempts, bool retry = false) {
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, retry);
     
-    void ZeroSharedCache(TMyEnvBase &env) {
-        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
+        WakeupSharedCache(env);
     }
 
     void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}) {
@@ -6334,17 +6379,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // 20 data pages, 2 index pages are sticky
     }
 
@@ -6369,17 +6414,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 22); // 20 data pages, 2 index nodes
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 22); // 20 data pages, 2 index nodes
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 22); // 20 data pages, 2 index nodes
     }
 
@@ -6405,7 +6450,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
 
         // restart tablet
@@ -6413,7 +6458,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         // should have the same behaviour
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
     }
 
@@ -6438,17 +6483,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 3 index pages are sticky
     }
 
@@ -6473,17 +6518,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 13); // index root nodes, 1 groups[0], 1 historic[0], 10 historic[1] pages
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 13); // index root nodes, 1 groups[0], 1 historic[0], 10 historic[1] pages
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 13); // index root nodes, 1 groups[0], 1 historic[0], 10 historic[1] pages
     }
 
@@ -6509,7 +6554,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 10); // 10 historic[1] pages
 
         // restart tablet
@@ -6517,7 +6562,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         // should have the same behaviour
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 10);
     }
 
@@ -6544,17 +6589,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
     }
 
@@ -6581,17 +6626,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 3); // index root nodes, 1 groups[0], 1 historic[0]
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 3); // index root nodes, 1 groups[0], 1 historic[0]
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 3); // index root nodes, 1 groups[0], 1 historic[0]
     }
 
@@ -6618,7 +6663,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
 
         // restart tablet
@@ -6626,7 +6671,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         // should have the same behaviour
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
     }
 
@@ -6656,14 +6701,14 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(TRowsModel::AltFamilyId) });
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // parts become sticky soon after it's enabled
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // all old columns were made sticky, load them on start
     }
 
@@ -6692,14 +6737,14 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(0) });
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // parts become sticky soon after it's enabled
 
         // restart tablet
         env.SendSync(new TEvents::TEvPoison, false, true);
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // if at least one family of a group is for memory load it 
     }
 }
@@ -6798,6 +6843,12 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     }
 
+    void DoFullScan(TMyEnvBase& env, int& failedAttempts, bool retry = false) {
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, retry);
+    
+        WakeupSharedCache(env);
+    }
+
     void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}) {
         env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
         env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
@@ -6831,7 +6882,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // should be cached
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
 
@@ -6840,7 +6891,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
         // should not be preloaded in private cache
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 24);
     }
@@ -6867,7 +6918,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
 
@@ -6876,7 +6927,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
         // should be preloaded
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // TODO: preload
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // should be no more cache misses
     }
@@ -6903,7 +6954,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
 
@@ -6911,7 +6962,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         RestartAndClearCache(env, 8_MB);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be: 10 historic[1] pages
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 14); // 10 historic[1] pages, 4 cache misses before preloading
     }
@@ -6939,7 +6990,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
 
@@ -6947,7 +6998,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         RestartAndClearCache(env, 8_MB);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // cache misses before preloading
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be: 1 groups[0], 1 historic[0], 3 index pages are sticky
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 8); // 1 groups[0], 1 historic[0], 6 cache misses before preloading, 3 index pages are sticky
     }
@@ -6975,7 +7026,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
 
@@ -6983,7 +7034,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         RestartAndClearCache(env, 8_MB);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be: index root nodes, 1 groups[0], 1 historic[0]
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // 1 groups[0], 1 historic[0], 4 cache misses before preloading, should be index root nodes?
     }
@@ -7011,7 +7062,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.WaitFor<NFake::TEvCompacted>();
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
 
@@ -7020,7 +7071,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
         // should have the same behaviour
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be 0
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // should be no more cache misses
     }
@@ -7051,7 +7102,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
 
@@ -7059,7 +7110,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         RestartAndClearCache(env, 8_MB);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // TODO: preload, should be 0
         // 4 cache misses before preloading, all old and new colums in try-keep-in-memory family sould be preloaded
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4);
@@ -7090,7 +7141,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::TryKeepInMemory) });
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
 
@@ -7098,7 +7149,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         RestartAndClearCache(env, 8_MB);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // TODO: preload, should be 0
         // 4 cache misses before preloading, if at least one family of a group is for memory load it 
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4);
@@ -7131,7 +7182,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(TRowsModel::AltFamilyId, NTable::NPage::ECache::Once, ECacheMode::Regular) });
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
 
@@ -7140,7 +7191,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
         // should not be preloaded
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 16); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 4 cache misses before preloading
     }
@@ -7171,7 +7222,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, NTable::NPage::ECache::Once, ECacheMode::Regular) });
 
         int failedAttempts = 0;
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
 
@@ -7180,7 +7231,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // cache misses before preloading
 
         // should not be preloaded
-        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // TODO: preload, should be 6
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // 1 groups[0], 1 historic[0], 4 cache misses before preloading
     }

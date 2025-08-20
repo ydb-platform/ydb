@@ -332,11 +332,11 @@ public:
                     Result = Explain(Query, *Owner.QueryClient, settings);
                 }
             } else {
-                Result = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "", "");
+                Result = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "", "", "");
             }
         } catch (...) {
             const auto msg = CurrentExceptionMessage();
-            Result = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
+            Result = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "", "");
         }
         ClientDuration = TInstant::Now() - t1;
         Owner.SavePlans(Result, QueryName, execute ? ToString(Iteration) : "explain");
@@ -377,7 +377,7 @@ public:
         }
     }
 
-    YDB_READONLY(TQueryBenchmarkResult, Result, TQueryBenchmarkResult::Error("undefined", "undefined", "undefined"));
+    YDB_READONLY(TQueryBenchmarkResult, Result, TQueryBenchmarkResult::Error("undefined", "undefined", "undefined", ""));
     YDB_READONLY_DEF(TString, QueryName);
     YDB_READONLY_DEF(TString, Query);
     YDB_READONLY_DEF(TString, Expected);
@@ -606,6 +606,10 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
     if (res.GetPlanAst()) {
         TFileOutput out(planFName + "ast");
         out << res.GetPlanAst();
+    }
+    if (res.GetExecStats()) {
+        TFileOutput out(planFName + "stats");
+        out << res.GetExecStats();
     }
 }
 

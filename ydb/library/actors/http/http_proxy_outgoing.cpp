@@ -99,6 +99,7 @@ public:
                 Send(RequestOwner, dataChunk.release());
             } else {
                 ALOG_DEBUG(HttpLog, GetSocketName() << "-> (" << GetResponseDebugText() << ")");
+                ALOG_TRACE(HttpLog, GetSocketName() << "Response:\n" << Response->GetObfuscatedData());
                 Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
                 RequestOwner = TActorId();
             }
@@ -330,6 +331,7 @@ protected:
         ALOG_DEBUG(HttpLog, GetSocketName() << "outgoing connection opened");
         TBase::Become(&TOutgoingConnectionActor::StateConnected);
         ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << GetRequestDebugText() << ")");
+        ALOG_TRACE(HttpLog, GetSocketName() << "Request:\n" << Request->GetObfuscatedData());
         Send(SelfId(), new NActors::TEvPollerReady(nullptr, true, true));
     }
 
@@ -397,6 +399,7 @@ protected:
         Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
         LastActivity = NActors::TActivationContext::Now();
         ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << GetRequestDebugText() << ")");
+        ALOG_TRACE(HttpLog, GetSocketName() << "Request:\n" << Request->GetObfuscatedData());
         FlushOutput();
         PullInput();
     }

@@ -301,8 +301,9 @@ public:
 
         TInstant downsamplingFrom = from;
         TInstant downsamplingTo = Settings.GetDownsampling().GetDisabled() ? std::max(std::min(sevenDaysAgo, to), from) : to;
+        ui64 gridMs = Settings.GetDownsampling().GetDisabled() ? TDuration::Minutes(5).MilliSeconds() : Settings.GetDownsampling().GetGridMs();
 
-        ui64 downsampledPointsCount = floor((downsamplingTo - downsamplingFrom).Seconds() * 1000.0 / Settings.GetDownsampling().GetGridMs()) + 1;
+        ui64 downsampledPointsCount = ceil((downsamplingTo - downsamplingFrom).Seconds() * 1000.0 / gridMs) + 1;
 
         if (downsamplingTo < to) {
             auto fullSelectors = AddRequiredLabels(selectors);
@@ -404,6 +405,17 @@ private:
         return TStringBuilder() << Settings.GetGrpcEndpoint();
     }
 
+    TString GetProjectId() const {
+        switch (Settings.GetClusterType()) {
+            case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
+                return Settings.GetProject();
+            case NSo::NProto::ESolomonClusterType::CT_MONITORING:
+                return Settings.GetCluster();
+            default:
+                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(Settings.GetClusterType()));
+        }
+    }
+
     template <typename TCallback>
     void DoHttpRequest(TCallback&& callback, TString&& url, TString&& body = "") const {
         IHTTPGateway::THeaders headers;
@@ -459,6 +471,7 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("names");
 
+        builder.AddUrlParam("projectId", GetProjectId());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("from", from.ToString());
@@ -476,6 +489,7 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
+        builder.AddUrlParam("projectId", GetProjectId());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("from", from.ToString());
@@ -495,6 +509,8 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("data");
+
+        builder.AddUrlParam("projectId", GetProjectId());
 
         return builder.Build();
     }
@@ -532,7 +548,6 @@ private:
         }
         *request.mutable_from_time() = NProtoInterop::CastToProto(from);
         *request.mutable_to_time() = NProtoInterop::CastToProto(to);
-        *request.mutable_force_replica() = DefaultReplica;
 
         if (Settings.GetDownsampling().GetDisabled()) {
             request.mutable_downsampling()->set_disabled(true);

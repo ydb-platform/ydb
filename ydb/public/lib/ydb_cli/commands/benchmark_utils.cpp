@@ -150,6 +150,7 @@ private:
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
     YDB_ACCESSOR_DEF(TString, DeadlineName);
+    YDB_ACCESSOR_DEF(TString, ExecStats);
     TQueryBenchmarkResult::TRawResults RawResults;
 public:
     TQueryBenchmarkResult::TRawResults&& ExtractRawResults() {
@@ -240,6 +241,7 @@ public:
             ServerTiming += execStats->GetTotalDuration();
             QueryPlan = execStats->GetPlan().value_or("");
             PlanAst = execStats->GetAst().value_or("");
+            ExecStats = execStats->ToString();
         }
         return TStatus(EStatus::SUCCESS, NIssue::TIssues());
     }
@@ -253,11 +255,12 @@ TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THol
             scaner->GetServerTiming(),
             scaner->GetQueryPlan(),
             scaner->GetPlanAst(),
+            scaner->GetExecStats(),
             expected
         );
     }
     TStringBuilder errorInfo;
-    TString plan, ast;
+    TString plan, ast, execStats;
     switch (status.GetStatus()) {
         case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
             errorInfo << becnhmarkSettings.Deadline.Name << " deadline expiried: " << status.GetIssues();
@@ -267,19 +270,20 @@ TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THol
                 errorInfo << scaner->GetErrorInfo();
                 plan = scaner->GetQueryPlan();
                 ast = scaner->GetPlanAst();
+                execStats = scaner->GetExecStats();
             } else {
                 errorInfo << "Operation failed with status " << status.GetStatus() << ": " << status.GetIssues().ToString();
             }
             break;
     }
-    return TQueryBenchmarkResult::Error(errorInfo, plan, ast);
+    return TQueryBenchmarkResult::Error(errorInfo, plan, ast, execStats);
 }
 
 TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(NQuery::TExecuteQuerySettings& settings, const TQueryBenchmarkDeadline& deadline) {
     if (deadline.Deadline != TInstant::Max()) {
         auto now = Now();
         if (now >= deadline.Deadline) {
-            return TQueryBenchmarkResult::Error(deadline.Name + " deadline expiried", "", "");
+            return TQueryBenchmarkResult::Error(deadline.Name + " deadline expiried", "", "", "");
         }
         settings.ClientTimeout(deadline.Deadline - now);
     }

@@ -102,6 +102,14 @@ std::optional<bool> TStorageSettings::GetStoreExternalBlobs() const {
     }
 }
 
+std::optional<std::uint32_t> TStorageSettings::GetExternalDataChannelsCount() const {
+    if (GetProto().has_external_data_channels_count()) {
+        return GetProto().external_data_channels_count();
+    } else {
+        return { };
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnFamilyDescription::TImpl {
@@ -992,6 +1000,11 @@ TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternal(const std::string&
 TStorageSettingsBuilder& TStorageSettingsBuilder::SetStoreExternalBlobs(bool enabled) {
     Impl_->Proto.set_store_external_blobs(
         enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    return *this;
+}
+
+TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternalDataChannelsCount(uint32_t count) {
+    Impl_->Proto.set_external_data_channels_count(count);
     return *this;
 }
 

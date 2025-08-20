@@ -2,6 +2,7 @@ RECURSE(
     cdc
     common
     ctas
+    kafka
     kv
     log
     mixedpy
@@ -14,5 +15,6 @@ RECURSE(
     simple_queue
     statistics_workload
     topic
+    topic_kafka
     transfer
 )

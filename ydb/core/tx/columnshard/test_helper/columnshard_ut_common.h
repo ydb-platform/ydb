@@ -534,7 +534,7 @@ public:
                     }
                 }
 
-                if constexpr (std::is_same<TData, NYdb::Dev::TDecimalValue>::value) {
+                if constexpr (std::is_same<TData, NYdb::TDecimalValue>::value) {
                     if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
                         char bytes[NScheme::FSB_SIZE] = {0};
                         for (i32 i = 0; i < 8; ++i) {

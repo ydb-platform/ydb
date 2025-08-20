@@ -135,9 +135,7 @@ def post_install(self):
 hyperscan = CMakeNinjaNixProject(
     owners=[
         "galtsev",
-        "g:antiinfra",
         "g:cpp-contrib",
-        "g:yql",
     ],
     arcdir="contrib/libs/hyperscan",
     nixattr="hyperscan",

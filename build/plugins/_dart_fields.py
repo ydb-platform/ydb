@@ -1241,9 +1241,10 @@ class TestFiles:
         return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
-    def ts_input_files(cls, unit, flat_args, spec_args):
+    def tsc_typecheck_input_files(cls, unit, flat_args, spec_args):
         typecheck_files = get_values_list(unit, "TS_INPUT_FILES")
-        test_files = [_common.resolve_common_const(f) for f in typecheck_files]
+        typecheck_test_files = get_values_list(unit, "TS_INPUT_TEST_FILES")
+        test_files = [_common.resolve_common_const(f) for f in typecheck_files + typecheck_test_files]
         value = serialize_list(test_files)
         return {cls.KEY: value, cls.KEY2: value}
 

@@ -1921,7 +1921,7 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData) {
 
-    if (!EnsureArgsCount(*node, 4, ctx)) {
+    if (!EnsureArgsCount(*node, 5, ctx)) {
         return TStatus::Error;
     }
 
@@ -2023,19 +2023,23 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
         outputColSet.insert(keyColumn);
     }
 
-    // Then index data columns which are not also part of the PK
-    for (const auto& dataColumn : indexDesc->DataColumns) {
-        if (!inputColSet.contains(dataColumn) || outputColSet.contains(dataColumn)) {
-            continue;
-        }
-        auto type = tableDesc->GetColumnType(dataColumn);
-        YQL_ENSURE(type, "No data column: " << dataColumn);
+    if (node->Child(TKqpCnVectorResolve::idx_WithData)->Content() == "true") {
+        // Then index data columns which are not also part of the PK
+        for (const auto& dataColumn : indexDesc->DataColumns) {
+            YQL_ENSURE(inputColSet.contains(dataColumn), "No data column in input: " << dataColumn);
+            if (outputColSet.contains(dataColumn)) {
+                continue;
+            }
+            auto type = tableDesc->GetColumnType(dataColumn);
+            YQL_ENSURE(type, "No data column: " << dataColumn);
 
-        auto itemType = ctx.MakeType<TItemExprType>(dataColumn, type);
-        if (!itemType->Validate(node->Pos(), ctx)) {
-            return TStatus::Error;
+            auto itemType = ctx.MakeType<TItemExprType>(dataColumn, type);
+            if (!itemType->Validate(node->Pos(), ctx)) {
+                return TStatus::Error;
+            }
+            rowItems.push_back(itemType);
+            outputColSet.insert(dataColumn);
         }
-        rowItems.push_back(itemType);
     }
 
     auto rowType = ctx.MakeType<TStructExprType>(rowItems);

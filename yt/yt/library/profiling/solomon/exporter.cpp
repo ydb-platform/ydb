@@ -376,7 +376,7 @@ void TSolomonExporter::HandleDebugTags(const IRequestPtr&, const IResponseWriter
     rsp->SetStatus(EStatusCode::OK);
     rsp->GetHeaders()->Add("Content-Type", "text/plain; charset=UTF-8");
 
-    auto tags = Registry_->GetTags().GetTopByKey();
+    auto tags = Registry_->GetTagRegistry().GetTopByKey();
     std::vector<std::pair<std::string, size_t>> tagList{tags.begin(), tags.end()};
     std::sort(tagList.begin(), tagList.end(), [] (auto a, auto b) {
         return std::tie(a.second, a.first) > std::tie(b.second, b.first);

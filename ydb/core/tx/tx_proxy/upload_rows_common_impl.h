@@ -573,7 +573,7 @@ private:
             res = CheckRequiredColumns(entry, reqColumns);
         }
 
-        return TConclusionStatus::Success();
+        return res;
     }
 
     void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {

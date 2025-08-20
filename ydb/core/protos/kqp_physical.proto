@@ -528,6 +528,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
         NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
         NKikimrSchemeOp.TModifyScheme SetConstraint = 55;
+        NKikimrSchemeOp.TModifyScheme CreateSecret = 56;
+        NKikimrSchemeOp.TModifyScheme AlterSecret = 57;
+        NKikimrSchemeOp.TModifyScheme DropSecret = 58;
     }
 }
 

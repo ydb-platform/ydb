@@ -10,21 +10,15 @@ namespace NPQ {
 
 namespace {
 
-union TMessageFlags {
-
+struct TMessageFlags {
     using TValue = ui8;
 
-    TValue Value = 0;
-    struct {
-        TValue HasPartData : 1 = 0;
-        TValue HasWriteTimestamp : 1 = 0;
-        TValue HasCreateTimestamp : 1 = 0;
-        TValue HasUncompressedSize : 1 = 0;
-        TValue HasKinesisData : 1 = 0;
-        TValue Reserve: 3 = 0;
-    } F;
-
-    static_assert(sizeof(Value) == sizeof(F));
+    TValue HasPartData : 1 = 0;
+    TValue HasWriteTimestamp : 1 = 0;
+    TValue HasCreateTimestamp : 1 = 0;
+    TValue HasUncompressedSize : 1 = 0;
+    TValue HasKinesisData : 1 = 0;
+    TValue Reserve: 3 = 0;
 };
 
 static_assert(sizeof(TMessageFlags) == sizeof(TMessageFlags::TValue));
@@ -119,21 +113,21 @@ void TClientBlob::SerializeTo(TBuffer& res) const
     res.Append((const char*)&SeqNo, sizeof(ui64));
 
     TMessageFlags flags;
-    flags.F.HasCreateTimestamp = 1;
-    flags.F.HasWriteTimestamp = 1;
-    flags.F.HasPartData = !PartData.Empty();
-    flags.F.HasUncompressedSize = !!UncompressedSize;
-    flags.F.HasKinesisData = !PartitionKey.empty();
+    flags.HasCreateTimestamp = 1;
+    flags.HasWriteTimestamp = 1;
+    flags.HasPartData = !PartData.Empty();
+    flags.HasUncompressedSize = !!UncompressedSize;
+    flags.HasKinesisData = !PartitionKey.empty();
 
-    res.Append((const char*)&flags.Value, sizeof(char));
+    res.Append((const char*)&flags, sizeof(char));
 
-    if (flags.F.HasPartData) {
+    if (flags.HasPartData) {
         res.Append((const char*)&(PartData->PartNo), sizeof(ui16));
         res.Append((const char*)&(PartData->TotalParts), sizeof(ui16));
         res.Append((const char*)&(PartData->TotalSize), sizeof(ui32));
     }
 
-    if (flags.F.HasKinesisData) {
+    if (flags.HasKinesisData) {
         ui8 partitionKeySize = PartitionKey.size();
         res.Append((const char*)&(partitionKeySize), sizeof(ui8));
         res.Append(PartitionKey.data(), PartitionKey.size());
@@ -149,7 +143,7 @@ void TClientBlob::SerializeTo(TBuffer& res) const
     ui64 createTimestampMs = CreateTimestamp.MilliSeconds();
     res.Append((const char*)&createTimestampMs, sizeof(ui64));
 
-    if (flags.F.HasUncompressedSize) {
+    if (flags.HasUncompressedSize) {
         res.Append((const char*)&(UncompressedSize), sizeof(ui32));
     }
 
@@ -172,18 +166,12 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     ui64 seqNo = ReadUnaligned<ui64>(data);
     data += sizeof(ui64);
 
-    {
     TMessageFlags flags;
-    flags.F.HasCreateTimestamp = 1;
-    Y_ENSURE(flags.Value = 4);
-    }
-
-    TMessageFlags flags;
-    flags.Value = ReadUnaligned<ui8>(data);
+    *(ui8*)(&flags) = ReadUnaligned<ui8>(data);
     ++data;
 
     TMaybe<TPartData> partData;
-    if (flags.F.HasPartData) {
+    if (flags.HasPartData) {
         ui16 partNo = ReadUnaligned<ui16>(data);
         data += sizeof(ui16);
         ui16 totalParts = ReadUnaligned<ui16>(data);
@@ -195,7 +183,7 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
 
     TString partitionKey;
     TString explicitHashKey;
-    if (flags.F.HasKinesisData) {
+    if (flags.HasKinesisData) {
         ui8 keySize = ReadUnaligned<ui8>(data);
         data += sizeof(ui8);
         partitionKey = TString(data, keySize == 0 ? 256 : keySize);
@@ -207,17 +195,17 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     }
 
     TInstant writeTimestamp;
-    if (flags.F.HasWriteTimestamp) {
+    if (flags.HasWriteTimestamp) {
         writeTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
         data += sizeof(ui64);
     }
     TInstant createTimestamp;
-    if (flags.F.HasCreateTimestamp) {
+    if (flags.HasCreateTimestamp) {
         createTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
         data += sizeof(ui64);
     }
     ui32 uncompressedSize = 0;
-    if (flags.F.HasUncompressedSize) {
+    if (flags.HasUncompressedSize) {
         uncompressedSize = ReadUnaligned<ui32>(data);
         data += sizeof(ui32);
     }

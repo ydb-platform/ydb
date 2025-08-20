@@ -1047,6 +1047,12 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView)
 
+    // streaming query
+    GENERIC_HELPERS(CreateStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableCreateStreamingQuery)
+    GENERIC_HELPERS(AlterStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableCreateStreamingQuery)
+    GENERIC_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

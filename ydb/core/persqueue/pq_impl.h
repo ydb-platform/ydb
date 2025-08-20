@@ -584,6 +584,10 @@ private:
     bool HasTxPersistSpan = false;
     bool HasTxDeleteSpan = false;
     ui8 WriteTxsSpanVerbosity = 0;
+
+    void BeginDeleteTransaction(const TActorContext& ctx,
+                                TDistributedTransaction& tx,
+                                NKikimrPQ::TTransaction::EState state);
 };
 
 

@@ -110,6 +110,7 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     fields.emplace_back(arrow::field("uid", arrow::utf8(), false));
     fields.emplace_back(arrow::field("level", arrow::int32()));
     fields.emplace_back(arrow::field("message", arrow::utf8()));
+    fields.emplace_back(arrow::field("f", arrow::int32()));
     if (GetWithJsonDocument()) {
         fields.emplace_back(arrow::field("json_payload", arrow::utf8()));
     }
@@ -126,8 +127,9 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     arrow::StringBuilder b3;
     arrow::Int32Builder b4;
     arrow::StringBuilder b5;
-    arrow::StringBuilder b6;
-    arrow::UInt64Builder b7;
+    arrow::Int32Builder b6;
+    arrow::StringBuilder b7;
+    arrow::UInt64Builder b8;
 
     NJson::TJsonValue jsonInfo;
     jsonInfo["a"]["b"] = 1;
@@ -153,10 +155,11 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
         else
             Y_ABORT_UNLESS(b5.Append(message).ok());
 
+        Y_ABORT_UNLESS(b6.Append(i % 100).ok());
         jsonInfo["a"]["b"] = i;
         auto jsonStringBase = jsonInfo.GetStringRobust();
-        Y_ABORT_UNLESS(b6.Append(jsonStringBase.data(), jsonStringBase.size()).ok());
-        Y_ABORT_UNLESS(b7.Append(i * 1000).ok());
+        Y_ABORT_UNLESS(b7.Append(jsonStringBase.data(), jsonStringBase.size()).ok());
+        Y_ABORT_UNLESS(b8.Append(i * 1000).ok());
     }
 
     std::shared_ptr<arrow::TimestampArray> a1;
@@ -164,8 +167,9 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     std::shared_ptr<arrow::StringArray> a3;
     std::shared_ptr<arrow::Int32Array> a4;
     std::shared_ptr<arrow::StringArray> a5;
-    std::shared_ptr<arrow::StringArray> a6;
-    std::shared_ptr<arrow::UInt64Array> a7;
+    std::shared_ptr<arrow::Int32Array> a6;
+    std::shared_ptr<arrow::StringArray> a7;
+    std::shared_ptr<arrow::UInt64Array> a8;
 
     Y_ABORT_UNLESS(b1.Finish(&a1).ok());
     Y_ABORT_UNLESS(b2.Finish(&a2).ok());
@@ -174,11 +178,12 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     Y_ABORT_UNLESS(b5.Finish(&a5).ok());
     Y_ABORT_UNLESS(b6.Finish(&a6).ok());
     Y_ABORT_UNLESS(b7.Finish(&a7).ok());
+    Y_ABORT_UNLESS(b8.Finish(&a8).ok());
 
     if (GetWithJsonDocument()) {
-        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a6, a7 });
+        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a6, a7, a8 });
     } else {
-        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a7 });
+        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a6, a8 });
     }
 
 }

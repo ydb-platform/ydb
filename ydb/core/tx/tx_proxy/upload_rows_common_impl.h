@@ -337,7 +337,7 @@ private:
         return ok;
     }
 
-    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema) {
+    [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema, bool isColumnTable) {
         Y_UNUSED(ctx);
         Y_ABORT_UNLESS(ResolveNamesResult);
         AFL_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
@@ -549,7 +549,7 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
-        if (AppData(ctx)->FeatureFlags.GetEnableBulkUpsertRequireAllColumns()) {
+        if (isColumnTable) {
             THashSet<TString> allColumnsLeft;
             for (auto&& [_, colInfo] : entry.Columns) {
                 allColumnsLeft.insert(colInfo.Name);
@@ -667,7 +667,7 @@ private:
 
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
         {
-            auto conclusion = BuildSchema(ctx, makeYdbSchema);
+            auto conclusion = BuildSchema(ctx, makeYdbSchema, isColumnTable);
             if (conclusion.IsFail()) {
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, conclusion.GetErrorMessage(), ctx);
             }

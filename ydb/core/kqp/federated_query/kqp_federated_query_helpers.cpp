@@ -14,6 +14,8 @@
 
 #include <yql/essentials/public/issue/yql_issue_utils.h>
 
+#include <yql/essentials/public/issue/yql_issue_utils.h>
+
 #include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>

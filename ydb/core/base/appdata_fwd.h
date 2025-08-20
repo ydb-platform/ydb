@@ -75,6 +75,8 @@ namespace NKikimrConfig {
     class TMemoryControllerConfig;
     class TFeatureFlags;
     class THealthCheckConfig;
+    class TWorkloadManagerConfig;
+    class TQueryServiceConfig;
 }
 
 namespace NKikimrReplication {
@@ -251,6 +253,8 @@ struct TAppData {
     NKikimrProto::TDataIntegrityTrailsConfig& DataIntegrityTrailsConfig;
     NKikimrConfig::TDataErasureConfig& DataErasureConfig;
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
+    NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
+    NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

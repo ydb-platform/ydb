@@ -785,7 +785,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     Y_UNIT_TEST(InsertIntoBucketWithSelect) {
         const TString writeDataSourceName = "/Root/write_data_source";
         const TString writeBucket = "test_bucket_write_with_select";
-        const TString writeObject = "test_object_write/";
+
+        // Also tests large object path with size >= 128 
+        // for atomic upload commit case
+        const TString writeObject = TStringBuilder() << "test_object_write/" << TString(512, 'x') << "/";
 
         {
             Aws::S3::S3Client s3Client = MakeS3Client();
@@ -811,6 +814,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         const TString sql = fmt::format(R"(
+                PRAGMA s3.AtomicUploadCommit = "true";
+
                 INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "csv_with_names")
                 SELECT * FROM AS_TABLE([<|id: 0, payload: "#######"|>]);
 
@@ -2731,6 +2736,199 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         auto kikimr = NTestUtils::MakeKikimrRunner(config);
         ReadLargeParquetFiles(kikimr, "test_local_read_large_file_bucket");
+    }
+
+    Y_UNIT_TEST(TestBlockInsertNullColumn) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        config.MutableTableServiceConfig()->SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_FORCE);
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+
+        const TString bucket = "test_block_insert_null_column_bucket";
+        CreateBucket(bucket);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `test_bucket` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        {
+            const TString query = R"(
+                CREATE TABLE `test_table` (
+                    PRIMARY KEY (key)
+                )
+                WITH (STORE = COLUMN)
+                AS SELECT * FROM
+                AS_TABLE([<|key: 1, value: Nothing(Optional<String>)|>]);
+            )";
+            const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                PRAGMA s3.UseBlocksSink = "true";
+
+                INSERT INTO test_bucket.`/result/` WITH (FORMAT = "parquet")
+                SELECT value FROM test_table
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            SELECT * FROM test_bucket.`/result/` WITH (
+                FORMAT = "parquet",
+                SCHEMA (
+                    value String
+                )
+            )
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT(!parser.ColumnParser(0).GetOptionalString());
+    }
+
+    Y_UNIT_TEST(TestRawFormatInsertValidation) {
+        const TString bucket = "test_raw_format_insert_validation_bucket";
+        CreateBucket(bucket);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `test_bucket` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        const TString query = R"(
+            INSERT INTO test_bucket.`/result/` WITH (
+                FORMAT = "raw",
+                SCHEMA (
+                    data String??
+                )
+            )
+                (data)
+            VALUES
+                ("some_string")
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        const auto& issues = result.GetIssues().ToString();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Only a column with a primitive type is allowed for the raw format");
+    }
+
+    Y_UNIT_TEST(TestPartitionedByInsertValidation) {
+        const TString bucket = "test_partitioned_by_insert_validation_bucket";
+        CreateBucket(bucket);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `test_bucket` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        const TString query = R"(
+            INSERT INTO test_bucket.`/result/` WITH (
+                FORMAT = "csv_with_names",
+                PARTITIONED_BY = (data)
+            )
+                (data)
+            VALUES
+                ("some_string")
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        const auto& issues = result.GetIssues().ToString();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Write schema contains no columns except partitioning columns.");
+    }
+
+    Y_UNIT_TEST(TestVariantTypeValidation) {
+        const TString bucket = "test_partitioned_by_insert_validation_bucket";
+        CreateBucket(bucket);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `test_bucket` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        {
+            const TString query = R"(
+                INSERT INTO test_bucket.`/result/` WITH (
+                    FORMAT = "json_list"
+                )
+                    (data)
+                VALUES
+                    (Variant(6, "foo", Variant<foo: Int32, bar: Bool>))
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            SELECT * FROM test_bucket.`/result/` WITH (
+                FORMAT = "json_list",
+                SCHEMA (
+                    data Variant<foo: Int32, bar: Bool>
+                )
+            )
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        const auto& issues = result.GetIssues().ToString();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Field 'data' has incompatible with S3 json_list input format type: Variant");
     }
 }
 

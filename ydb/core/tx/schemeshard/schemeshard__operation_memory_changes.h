@@ -72,6 +72,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TIncrementalBackupState = std::pair<ui64, TIncrementalBackupInfo::TPtr>;
     TStack<TIncrementalBackupState> IncrementalBackups;
 
+    using TStreamingQueryState = std::pair<TPathId, TStreamingQueryInfo::TPtr>;
+    TStack<TStreamingQueryState> StreamingQueries;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -120,6 +123,8 @@ public:
     void GrabLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId);
 
     void GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id);
+
+    void GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

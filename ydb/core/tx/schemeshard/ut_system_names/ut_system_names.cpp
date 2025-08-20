@@ -472,6 +472,17 @@ const std::vector<TCreatePathOp> CreatePathOperations({
         //     return CreateSysViewRequest(0 /* txId */, workingDir, modifyScheme);
         // }
     },
+    {
+        .Type = NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery,
+        .CreateRequest = [](const TString& workingDir, const TString& path) {
+            const TString modifyScheme = Sprintf(R"(
+                    Name: "%s"
+                )",
+                path.c_str()
+            );
+            return CreateStreamingQueryRequest(0 /* txId */, workingDir, modifyScheme);
+        }
+    },
 
     //NOTE: ADD NEW ENTRY ABOVE THIS LINE
 });

@@ -427,116 +427,41 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
             .Done();
     }
 
-    // Stream lookup join output: stream<tuple<left_row_struct, optional<right_row_struct>>>
+    // Stream lookup join output: stream<tuple<left_row_struct, optional<right_row_struct>, ui64>>
     // so we should apply filters to second element of tuple for each row
+    auto arg = Build<TCoArgument>(ctx, join.Pos()).Name("_join_tuple_argument").Done();
+    TExprBase maybeRightRow = Build<TCoNth>(ctx, join.Pos())
+        .Tuple(arg)
+        .Index().Value("1").Build()
+        .Done();
+
+    TExprBase newSecondElement = maybeRightRow;
 
     if (extraRightFilter.IsValid()) {
-        lookupJoin = Build<TCoMap>(ctx, join.Pos())
-            .Input(lookupJoin.Cast())
-            .Lambda()
-                .Args({"tuple"})
-                .Body<TExprList>()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("0").Build()
-                        .Build()
-                    .Add<TCoFlatMap>()
-                        .Input<TCoNth>()
-                            .Tuple("tuple")
-                            .Index().Value("1").Build()
-                            .Build()
-                        .Lambda(ctx.DeepCopyLambda(extraRightFilter.Cast().Ref()))
-                        .Build()    
-                    .Build()  
-                .Build()    
+        newSecondElement = Build<TCoFlatMap>(ctx, join.Pos())
+            .Input(newSecondElement)
+            .Lambda(ctx.DeepCopyLambda(extraRightFilter.Cast().Ref()))
             .Done();
     }
 
-    if (rightReadMatch.ExtractMembers) {
+    newSecondElement = rightReadMatch.BuildProcessNodes(newSecondElement, ctx);
+    if (newSecondElement.Raw() != maybeRightRow.Raw()) {
         lookupJoin = Build<TCoMap>(ctx, join.Pos())
             .Input(lookupJoin.Cast())
             .Lambda()
-                .Args({"tuple"})
+                .Args({arg})
                 .Body<TExprList>()
                     .Add<TCoNth>()
-                        .Tuple("tuple")
+                        .Tuple(arg)
                         .Index().Value("0").Build()
                         .Build()
-                    .Add<TCoExtractMembers>()
-                        .Input<TCoNth>()
-                            .Tuple("tuple")
-                            .Index().Value("1").Build()
-                            .Build()
-                        .Members(rightReadMatch.ExtractMembers.Cast().Members())
-                        .Build()    
+                    .Add(newSecondElement)
+                    .Add<TCoNth>()
+                        .Tuple(arg)
+                        .Index().Value("2").Build()
+                        .Build()
                     .Build()
                 .Build()
-            .Done();
-    }    
-
-    if (rightReadMatch.FilterNullMembers) {
-        lookupJoin = Build<TCoMap>(ctx, join.Pos())
-            .Input(lookupJoin.Cast())
-            .Lambda()
-                .Args({"tuple"})
-                .Body<TExprList>()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("0").Build()
-                        .Build()
-                    .Add<TCoFilterNullMembers>()
-                        .Input<TCoNth>()
-                            .Tuple("tuple")
-                            .Index().Value("1").Build()
-                            .Build()
-                        .Members(rightReadMatch.FilterNullMembers.Cast().Members())
-                        .Build()    
-                    .Build()
-                .Build()
-            .Done();
-    }
-    
-    if (rightReadMatch.SkipNullMembers) {
-        lookupJoin = Build<TCoMap>(ctx, join.Pos())
-            .Input(lookupJoin.Cast())
-            .Lambda()
-                .Args({"tuple"})
-                .Body<TExprList>()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("0").Build()
-                        .Build()
-                    .Add<TCoSkipNullMembers>()
-                        .Input<TCoNth>()
-                            .Tuple("tuple")
-                            .Index().Value("1").Build()
-                            .Build()
-                        .Members(rightReadMatch.SkipNullMembers.Cast().Members())
-                        .Build()    
-                    .Build()
-                .Build()
-            .Done();
-    }
-
-    if (rightReadMatch.FlatMap) {
-        lookupJoin = Build<TCoMap>(ctx, join.Pos())
-            .Input(lookupJoin.Cast())
-            .Lambda()
-                .Args({"tuple"})
-                .Body<TExprList>()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("0").Build()
-                        .Build()
-                    .Add<TCoFlatMap>()
-                        .Input<TCoNth>()
-                            .Tuple("tuple")
-                            .Index().Value("1").Build()
-                            .Build()
-                        .Lambda(rightReadMatch.FlatMap.Cast().Lambda())
-                        .Build()    
-                    .Build()  
-                .Build()    
             .Done();
     }
 

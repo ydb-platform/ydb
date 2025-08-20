@@ -15,6 +15,7 @@ SRCS(
     kqp_sequencer_actor.cpp
     kqp_sequencer_factory.cpp
     kqp_scan_data_meta.cpp
+    kqp_stream_lookup_join_helpers.cpp
     kqp_stream_lookup_actor.cpp
     kqp_stream_lookup_actor.h
     kqp_stream_lookup_factory.cpp

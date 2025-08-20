@@ -961,21 +961,10 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     if (inputItemType->GetKind() == ETypeAnnotationKind::Tuple) {
-        if (!EnsureTupleTypeSize(replicateInput->Pos(), inputItemType, 2, ctx)) {
+        if (!EnsureTupleType(replicateInput->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }
 
-        auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-        bool isOptional = false;
-        const TStructExprType* structType = nullptr;
-
-        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], isOptional, structType, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[1], isOptional, structType, ctx)) {
-            return TStatus::Error;
-        }
     } else if (!EnsureStructType(replicateInput->Pos(), *inputItemType, ctx)) {
         return TStatus::Error;
     }

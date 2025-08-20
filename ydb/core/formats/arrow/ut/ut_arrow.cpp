@@ -1,17 +1,17 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/reader/result_builder.h>
 
+#include <yql/essentials/types/binary_json/write.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <util/string/printf.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <util/random/shuffle.h>
-#include <util/string/printf.h>
-#include <yql/essentials/types/binary_json/write.h>
 
 namespace NKikimr {
 namespace {
@@ -23,14 +23,32 @@ using TTypeInfo = NScheme::TTypeInfo;
 struct TDataRow {
     static const TTypeInfo* MakeTypeInfos() {
         static const TTypeInfo types[27] = {
-            TTypeInfo(NTypeIds::Bool), TTypeInfo(NTypeIds::Int8), TTypeInfo(NTypeIds::Int16), TTypeInfo(NTypeIds::Int32),
-            TTypeInfo(NTypeIds::Int64), TTypeInfo(NTypeIds::Uint8), TTypeInfo(NTypeIds::Uint16), TTypeInfo(NTypeIds::Uint32),
-            TTypeInfo(NTypeIds::Uint64), TTypeInfo(NTypeIds::Float), TTypeInfo(NTypeIds::Double), TTypeInfo(NTypeIds::String),
-            TTypeInfo(NTypeIds::Utf8), TTypeInfo(NTypeIds::Json), TTypeInfo(NTypeIds::Yson), TTypeInfo(NTypeIds::Date),
-            TTypeInfo(NTypeIds::Datetime), TTypeInfo(NTypeIds::Timestamp), TTypeInfo(NTypeIds::Interval), TTypeInfo(NTypeIds::JsonDocument),
-            TTypeInfo(NPg::TypeDescFromPgTypeId(INT2OID)), TTypeInfo(NPg::TypeDescFromPgTypeId(INT4OID)),
-            TTypeInfo(NPg::TypeDescFromPgTypeId(INT8OID)), TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT4OID)),
-            TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT8OID)), TTypeInfo(NPg::TypeDescFromPgTypeId(BYTEAOID)),
+            TTypeInfo(NTypeIds::Bool),
+            TTypeInfo(NTypeIds::Int8),
+            TTypeInfo(NTypeIds::Int16),
+            TTypeInfo(NTypeIds::Int32),
+            TTypeInfo(NTypeIds::Int64),
+            TTypeInfo(NTypeIds::Uint8),
+            TTypeInfo(NTypeIds::Uint16),
+            TTypeInfo(NTypeIds::Uint32),
+            TTypeInfo(NTypeIds::Uint64),
+            TTypeInfo(NTypeIds::Float),
+            TTypeInfo(NTypeIds::Double),
+            TTypeInfo(NTypeIds::String),
+            TTypeInfo(NTypeIds::Utf8),
+            TTypeInfo(NTypeIds::Json),
+            TTypeInfo(NTypeIds::Yson),
+            TTypeInfo(NTypeIds::Date),
+            TTypeInfo(NTypeIds::Datetime),
+            TTypeInfo(NTypeIds::Timestamp),
+            TTypeInfo(NTypeIds::Interval),
+            TTypeInfo(NTypeIds::JsonDocument),
+            TTypeInfo(NPg::TypeDescFromPgTypeId(INT2OID)),
+            TTypeInfo(NPg::TypeDescFromPgTypeId(INT4OID)),
+            TTypeInfo(NPg::TypeDescFromPgTypeId(INT8OID)),
+            TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT4OID)),
+            TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT8OID)),
+            TTypeInfo(NPg::TypeDescFromPgTypeId(BYTEAOID)),
             TTypeInfo(NPg::TypeDescFromPgTypeId(TEXTOID)),
             // TODO: DyNumber, Decimal
         };
@@ -66,28 +84,65 @@ struct TDataRow {
     std::string PgText;
     //ui64 Decimal[2];
 
-    bool operator==(const TDataRow& r) const {
-        return (Bool == r.Bool) && (Int8 == r.Int8) && (Int16 == r.Int16) && (Int32 == r.Int32) && (Int64 == r.Int64) && (UInt8 == r.UInt8) &&
-               (UInt16 == r.UInt16) && (UInt32 == r.UInt32) && (UInt64 == r.UInt64) && (Float32 == r.Float32) && (Float64 == r.Float64) &&
-               (String == r.String) && (Utf8 == r.Utf8) && (Json == r.Json) && (Yson == r.Yson) && (Date == r.Date) &&
-               (Datetime == r.Datetime) && (Timestamp == r.Timestamp) && (Interval == r.Interval) && (JsonDocument == r.JsonDocument) &&
-               (PgInt2 == r.PgInt2) && (PgInt4 == r.PgInt4) && (PgInt8 == r.PgInt8) && (PgFloat4 == r.PgFloat4) && (PgFloat8 == r.PgFloat8) &&
-               (PgBytea == r.PgBytea) && (PgText == r.PgText);
-        //(Decimal[0] == r.Decimal[0] && Decimal[1] == r.Decimal[1]);
+    bool operator == (const TDataRow& r) const {
+        return (Bool == r.Bool) &&
+            (Int8 == r.Int8) &&
+            (Int16 == r.Int16) &&
+            (Int32 == r.Int32) &&
+            (Int64 == r.Int64) &&
+            (UInt8 == r.UInt8) &&
+            (UInt16 == r.UInt16) &&
+            (UInt32 == r.UInt32) &&
+            (UInt64 == r.UInt64) &&
+            (Float32 == r.Float32) &&
+            (Float64 == r.Float64) &&
+            (String == r.String) &&
+            (Utf8 == r.Utf8) &&
+            (Json == r.Json) &&
+            (Yson == r.Yson) &&
+            (Date == r.Date) &&
+            (Datetime == r.Datetime) &&
+            (Timestamp == r.Timestamp) &&
+            (Interval == r.Interval) &&
+            (JsonDocument == r.JsonDocument) &&
+            (PgInt2 == r.PgInt2) &&
+            (PgInt4 == r.PgInt4) &&
+            (PgInt8 == r.PgInt8) &&
+            (PgFloat4 == r.PgFloat4) &&
+            (PgFloat8 == r.PgFloat8) &&
+            (PgBytea == r.PgBytea) &&
+            (PgText == r.PgText);
+            //(Decimal[0] == r.Decimal[0] && Decimal[1] == r.Decimal[1]);
     }
 
     static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
         std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("bool", arrow::boolean()), arrow::field("i8", arrow::int8()), arrow::field("i16", arrow::int16()),
-            arrow::field("i32", arrow::int32()), arrow::field("i64", arrow::int64()), arrow::field("ui8", arrow::uint8()),
-            arrow::field("ui16", arrow::uint16()), arrow::field("ui32", arrow::uint32()), arrow::field("ui64", arrow::uint64()),
-            arrow::field("f32", arrow::float32()), arrow::field("f64", arrow::float64()), arrow::field("string", arrow::binary()),
-            arrow::field("utf8", arrow::utf8()), arrow::field("json", arrow::utf8()), arrow::field("yson", arrow::binary()),
-            arrow::field("date", arrow::uint16()), arrow::field("datetime", arrow::uint32()),
+            arrow::field("bool", arrow::boolean()),
+            arrow::field("i8", arrow::int8()),
+            arrow::field("i16", arrow::int16()),
+            arrow::field("i32", arrow::int32()),
+            arrow::field("i64", arrow::int64()),
+            arrow::field("ui8", arrow::uint8()),
+            arrow::field("ui16", arrow::uint16()),
+            arrow::field("ui32", arrow::uint32()),
+            arrow::field("ui64", arrow::uint64()),
+            arrow::field("f32", arrow::float32()),
+            arrow::field("f64", arrow::float64()),
+            arrow::field("string", arrow::binary()),
+            arrow::field("utf8", arrow::utf8()),
+            arrow::field("json", arrow::utf8()),
+            arrow::field("yson", arrow::binary()),
+            arrow::field("date", arrow::uint16()),
+            arrow::field("datetime", arrow::uint32()),
             arrow::field("ts", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
-            arrow::field("ival", arrow::duration(arrow::TimeUnit::TimeUnit::MICRO)), arrow::field("json_doc", arrow::binary()),
-            arrow::field("pgint2", arrow::int16()), arrow::field("pgint4", arrow::int32()), arrow::field("pgint8", arrow::int64()),
-            arrow::field("pgfloat4", arrow::float32()), arrow::field("pgfloat8", arrow::float64()), arrow::field("pgbytea", arrow::binary()),
+            arrow::field("ival", arrow::duration(arrow::TimeUnit::TimeUnit::MICRO)),
+            arrow::field("json_doc", arrow::binary()),
+            arrow::field("pgint2", arrow::int16()),
+            arrow::field("pgint4", arrow::int32()),
+            arrow::field("pgint8", arrow::int64()),
+            arrow::field("pgfloat4", arrow::float32()),
+            arrow::field("pgfloat8", arrow::float64()),
+            arrow::field("pgbytea", arrow::binary()),
             arrow::field("pgtext", arrow::utf8()),
             //arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
         };
@@ -97,17 +152,33 @@ struct TDataRow {
 
     static std::vector<std::pair<TString, TTypeInfo>> MakeYdbSchema() {
         std::vector<std::pair<TString, TTypeInfo>> columns = {
-            { "bool", TTypeInfo(NTypeIds::Bool) }, { "i8", TTypeInfo(NTypeIds::Int8) }, { "i16", TTypeInfo(NTypeIds::Int16) },
-            { "i32", TTypeInfo(NTypeIds::Int32) }, { "i64", TTypeInfo(NTypeIds::Int64) }, { "ui8", TTypeInfo(NTypeIds::Uint8) },
-            { "ui16", TTypeInfo(NTypeIds::Uint16) }, { "ui32", TTypeInfo(NTypeIds::Uint32) }, { "ui64", TTypeInfo(NTypeIds::Uint64) },
-            { "f32", TTypeInfo(NTypeIds::Float) }, { "f64", TTypeInfo(NTypeIds::Double) }, { "string", TTypeInfo(NTypeIds::String) },
-            { "utf8", TTypeInfo(NTypeIds::Utf8) }, { "json", TTypeInfo(NTypeIds::Json) }, { "yson", TTypeInfo(NTypeIds::Yson) },
-            { "date", TTypeInfo(NTypeIds::Date) }, { "datetime", TTypeInfo(NTypeIds::Datetime) }, { "ts", TTypeInfo(NTypeIds::Timestamp) },
-            { "ival", TTypeInfo(NTypeIds::Interval) }, { "json_doc", TTypeInfo(NTypeIds::JsonDocument) },
-            { "pgint2", TTypeInfo(NPg::TypeDescFromPgTypeId(INT2OID)) }, { "pgint4", TTypeInfo(NPg::TypeDescFromPgTypeId(INT4OID)) },
-            { "pgint8", TTypeInfo(NPg::TypeDescFromPgTypeId(INT8OID)) }, { "pgfloat4", TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT4OID)) },
-            { "pgfloat8", TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT8OID)) }, { "pgbytea", TTypeInfo(NPg::TypeDescFromPgTypeId(BYTEAOID)) },
-            { "pgtext", TTypeInfo(NPg::TypeDescFromPgTypeId(TEXTOID)) },
+            {"bool", TTypeInfo(NTypeIds::Bool) },
+            {"i8", TTypeInfo(NTypeIds::Int8) },
+            {"i16", TTypeInfo(NTypeIds::Int16) },
+            {"i32", TTypeInfo(NTypeIds::Int32) },
+            {"i64", TTypeInfo(NTypeIds::Int64) },
+            {"ui8", TTypeInfo(NTypeIds::Uint8) },
+            {"ui16", TTypeInfo(NTypeIds::Uint16) },
+            {"ui32", TTypeInfo(NTypeIds::Uint32) },
+            {"ui64", TTypeInfo(NTypeIds::Uint64) },
+            {"f32", TTypeInfo(NTypeIds::Float) },
+            {"f64", TTypeInfo(NTypeIds::Double) },
+            {"string", TTypeInfo(NTypeIds::String) },
+            {"utf8", TTypeInfo(NTypeIds::Utf8) },
+            {"json", TTypeInfo(NTypeIds::Json) },
+            {"yson", TTypeInfo(NTypeIds::Yson) },
+            {"date", TTypeInfo(NTypeIds::Date) },
+            {"datetime", TTypeInfo(NTypeIds::Datetime) },
+            {"ts", TTypeInfo(NTypeIds::Timestamp) },
+            {"ival", TTypeInfo(NTypeIds::Interval) },
+            {"json_doc", TTypeInfo(NTypeIds::JsonDocument) },
+            {"pgint2", TTypeInfo(NPg::TypeDescFromPgTypeId(INT2OID)) },
+            {"pgint4", TTypeInfo(NPg::TypeDescFromPgTypeId(INT4OID)) },
+            {"pgint8", TTypeInfo(NPg::TypeDescFromPgTypeId(INT8OID)) },
+            {"pgfloat4", TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT4OID)) },
+            {"pgfloat8", TTypeInfo(NPg::TypeDescFromPgTypeId(FLOAT8OID)) },
+            {"pgbytea", TTypeInfo(NPg::TypeDescFromPgTypeId(BYTEAOID)) },
+            {"pgtext", TTypeInfo(NPg::TypeDescFromPgTypeId(TEXTOID)) },
             //{"dec", TTypeInfo(NTypeIds::Decimal) }
         };
         return columns;
@@ -203,11 +274,14 @@ std::vector<TDataRow> ToVector(const std::shared_ptr<T>& table) {
     for (int64_t i = 0; i < table->num_rows(); ++i) {
         //ui64 dec[2];
         //memcpy(dec, ardec->Value(i), 16);
-        TDataRow r{
-            arbool->Value(i), ari8->Value(i), ari16->Value(i), ari32->Value(i), ari64->Value(i), aru8->Value(i), aru16->Value(i),
-            aru32->Value(i), aru64->Value(i), arf32->Value(i), arf64->Value(i), arstr->GetString(i), arutf->GetString(i), arj->GetString(i),
-            ary->GetString(i), ard->Value(i), ardt->Value(i), arts->Value(i), arival->Value(i), arjd->GetString(i), arpgi2->Value(i),
-            arpgi4->Value(i), arpgi8->Value(i), arpgf4->Value(i), arpgf8->Value(i), arpgb->GetString(i), arpgt->GetString(i)
+        TDataRow r{ arbool->Value(i),
+            ari8->Value(i), ari16->Value(i), ari32->Value(i), ari64->Value(i),
+            aru8->Value(i), aru16->Value(i), aru32->Value(i), aru64->Value(i),
+            arf32->Value(i), arf64->Value(i),
+            arstr->GetString(i), arutf->GetString(i), arj->GetString(i), ary->GetString(i),
+            ard->Value(i), ardt->Value(i), arts->Value(i), arival->Value(i), arjd->GetString(i),
+            arpgi2->Value(i), arpgi4->Value(i), arpgi8->Value(i), arpgf4->Value(i), arpgf8->Value(i),
+            arpgb->GetString(i), arpgt->GetString(i)
             //{dec[0], dec[1]}
         };
         rows.emplace_back(std::move(r));
@@ -216,14 +290,14 @@ std::vector<TDataRow> ToVector(const std::shared_ptr<T>& table) {
     return rows;
 }
 
-class TDataRowTableBuilder {
+class TDataRowTableBuilder
+{
 public:
     TDataRowTableBuilder()
         : Bts(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool())
         , Bival(arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool())
-    //, Bdec(arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE), arrow::default_memory_pool())
-    {
-    }
+        //, Bdec(arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE), arrow::default_memory_pool())
+    {}
 
     void AddRow(const TDataRow& row) {
         UNIT_ASSERT(Bbool.Append(row.Bool).ok());
@@ -326,10 +400,16 @@ public:
 
         std::shared_ptr<arrow::Schema> schema = TDataRow::MakeArrowSchema();
         return arrow::Table::Make(schema, {
-                                              arbool, ari8, ari16, ari32, ari64, aru8, aru16, aru32, aru64, arf32, arf64, arstr, arutf, arj, ary,
-                                              ard, ardt, arts, arival, arjd, arpgi2, arpgi4, arpgi8, arpgf4, arpgf8, arpgb, arpgt
-                                              //ardec
-                                          });
+            arbool,
+            ari8, ari16, ari32, ari64,
+            aru8, aru16, aru32, aru64,
+            arf32, arf64,
+            arstr, arutf, arj, ary,
+            ard, ardt, arts, arival, arjd,
+            arpgi2, arpgi4, arpgi8, arpgf4, arpgf8,
+            arpgb, arpgt
+            //ardec
+        });
     }
 
     static std::shared_ptr<arrow::Table> Build(const std::vector<struct TDataRow>& rows) {
@@ -388,14 +468,14 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
 
 std::vector<TDataRow> TestRows() {
     std::vector<TDataRow> rows = {
-        { false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1", "u1", "{\"j\":1}", "{y:1}", 0, 0, 0, 0, "{\"jd\":1}", -5, -5, -5, -5.1f, -5.1,
-            "s5", "u5" },
-        { false, 2, 2, 2, 2, 2, 2, 2, 2, 2.0f, 2.0, "s2", "u2", "{\"j\":2}", "{y:2}", 0, 0, 0, 0, "{\"jd\":1}", -3, -3, -3, -3.1f, -3.1, "s3",
-            "u3" },
-        { false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3", "u3", "{\"j\":3}", "{y:3}", 0, 0, 0, 0, "{\"jd\":1}", -2, -2, -2, -2.1f, -2.1,
-            "s2", "u2" },
-        { false, -4, -4, -4, -4, 4, 4, 4, 4, 4.0f, 4.0, "s4", "u4", "{\"j\":4}", "{y:4}", 0, 0, 0, 0, "{\"jd\":1}", -7, -7, -7, -7.1f, -7.1,
-            "s7", "u7" },
+        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1", "u1", "{\"j\":1}", "{y:1}", 0, 0, 0, 0, "{\"jd\":1}",
+            -5, -5, -5, -5.1f, -5.1, "s5", "u5"},
+        {false, 2, 2, 2, 2, 2, 2, 2, 2, 2.0f, 2.0, "s2", "u2", "{\"j\":2}", "{y:2}", 0, 0, 0, 0, "{\"jd\":1}",
+            -3, -3, -3, -3.1f, -3.1, "s3", "u3"},
+        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3", "u3", "{\"j\":3}", "{y:3}", 0, 0, 0, 0, "{\"jd\":1}",
+            -2, -2, -2, -2.1f, -2.1, "s2", "u2"},
+        {false, -4, -4, -4, -4, 4, 4, 4, 4, 4.0f, 4.0, "s4", "u4", "{\"j\":4}", "{y:4}", 0, 0, 0, 0, "{\"jd\":1}",
+            -7, -7, -7, -7.1f, -7.1, "s7", "u7"},
     };
     return rows;
 }
@@ -404,16 +484,21 @@ std::shared_ptr<arrow::Table> MakeTable1000() {
     TDataRowTableBuilder builder;
 
     for (int i = 0; i < 1000; ++i) {
-        i8 a = i / 100;
-        i16 b = (i % 100) / 10;
-        i32 c = i % 10;
-        builder.AddRow(TDataRow{ false, a, b, c, i, 1, 1, 1, 1, 1.0f, 1.0, "", "", "", "", 0, 0, 0, 0, { 0, 0 }, 0, 0, 0, 0.0f, 0.0, "", "" });
+        i8 a = i/100;
+        i16 b = (i%100)/10;
+        i32 c = i%10;
+        builder.AddRow(
+            TDataRow{false, a, b, c, i, 1, 1, 1, 1, 1.0f, 1.0, "", "", "", "", 0, 0, 0, 0, {0,0},
+                0, 0, 0, 0.0f, 0.0, "", ""});
     }
 
     auto table = builder.Finish();
     auto schema = table->schema();
-    auto tres =
-        table->SelectColumns(std::vector<int>{ schema->GetFieldIndex("i8"), schema->GetFieldIndex("i16"), schema->GetFieldIndex("i32") });
+    auto tres = table->SelectColumns(std::vector<int>{
+        schema->GetFieldIndex("i8"),
+        schema->GetFieldIndex("i16"),
+        schema->GetFieldIndex("i32")
+    });
     UNIT_ASSERT(tres.ok());
     return *tres;
 }
@@ -448,15 +533,11 @@ std::shared_ptr<arrow::RecordBatch> ExtractBatch(std::shared_ptr<arrow::Table> t
     return batch;
 }
 
-std::shared_ptr<arrow::RecordBatch> AddUi64Column(const std::shared_ptr<arrow::RecordBatch>& batch, const TString& columnName, ui64 value) {
-    auto snapColumn = NArrow::MakeUI64Array(value, batch->num_rows());
-    auto result = batch->AddColumn(batch->num_columns(), columnName, snapColumn);
+std::shared_ptr<arrow::RecordBatch> AddSnapColumn(const std::shared_ptr<arrow::RecordBatch>& batch, ui64 snap) {
+    auto snapColumn = NArrow::MakeUI64Array(snap, batch->num_rows());
+    auto result = batch->AddColumn(batch->num_columns(), "snap", snapColumn);
     Y_ABORT_UNLESS(result.ok());
     return *result;
-}
-
-std::shared_ptr<arrow::RecordBatch> AddSnapColumn(const std::shared_ptr<arrow::RecordBatch>& batch, ui64 snap) {
-    return AddUi64Column(batch, "snap", snap);
 }
 
 NArrow::NMerger::TCursor MakeSingleUi64CellTableCursor(const TString& columnName, ui64 value) {
@@ -511,7 +592,8 @@ bool CheckSorted(const std::shared_ptr<arrow::RecordBatch>& batch, bool desc = f
 
     for (int i = 1; i < arrA->length(); ++i) {
         ui32 value = RestoreValue(arrA->Value(i), arrB->Value(i), arrC->Value(i));
-        if ((desc && value > prev) || (!desc && value < prev)) {
+        if ((desc && value > prev) ||
+            (!desc && value < prev)) {
             return false;
         }
         prev = value;
@@ -558,10 +640,10 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
 
         UNIT_ASSERT_EQUAL(expectedSchema->Equals(*batch->schema()), true);
 
-        struct TRowWriter: public NArrow::IRowWriter {
+        struct TRowWriter : public NArrow::IRowWriter {
             std::vector<TOwnedCellVec> Rows;
 
-            void AddRow(const TConstArrayRef<TCell>& cells) override {
+            void AddRow(const TConstArrayRef<TCell> &cells) override {
                 Rows.push_back(TOwnedCellVec(cells));
             }
         } rowWriter;
@@ -575,8 +657,10 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT_VALUES_EQUAL(cellRows.size(), rowWriter.Rows.size());
 
         for (size_t i = 0; i < rows.size(); ++i) {
-            UNIT_ASSERT(0 == CompareTypedCellVectors(cellRows[i].data(), rowWriter.Rows[i].data(), TDataRow::MakeTypeInfos(), cellRows[i].size(),
-                                 rowWriter.Rows[i].size()));
+            UNIT_ASSERT(0 == CompareTypedCellVectors(
+                            cellRows[i].data(), rowWriter.Rows[i].data(),
+                            TDataRow::MakeTypeInfos(),
+                            cellRows[i].size(), rowWriter.Rows[i].size()));
         }
     }
 
@@ -604,11 +688,11 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT(CheckSorted1000(batch));
 
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        batches.push_back(batch->Slice(0, 100));   // 0..100 +100
-        batches.push_back(batch->Slice(100, 200));   // 100..300 +200
-        batches.push_back(batch->Slice(200, 400));   // 200..600 +300
+        batches.push_back(batch->Slice(0, 100));    // 0..100 +100
+        batches.push_back(batch->Slice(100, 200));  // 100..300 +200
+        batches.push_back(batch->Slice(200, 400));  // 200..600 +300
         batches.push_back(batch->Slice(500, 50));   // 500..550 +50
-        batches.push_back(batch->Slice(600, 1));   // 600..601 +1
+        batches.push_back(batch->Slice(600, 1));    // 600..601 +1
 
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
@@ -632,11 +716,11 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT(CheckSorted1000(batch));
 
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        batches.push_back(batch->Slice(0, 100));   // 0..100 +100
-        batches.push_back(batch->Slice(100, 200));   // 100..300 +200
-        batches.push_back(batch->Slice(200, 400));   // 200..600 +300
+        batches.push_back(batch->Slice(0, 100));    // 0..100 +100
+        batches.push_back(batch->Slice(100, 200));  // 100..300 +200
+        batches.push_back(batch->Slice(200, 400));  // 200..600 +300
         batches.push_back(batch->Slice(500, 50));   // 500..550 +50
-        batches.push_back(batch->Slice(600, 1));   // 600..601 +1
+        batches.push_back(batch->Slice(600, 1));    // 600..601 +1
 
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
@@ -702,7 +786,6 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         NArrow::NMerger::TCursor maxVersionCursor{MakeSingleUi64CellTableCursor("snap", 1)};
         NArrow::NMerger::TCursor uncommittedVersionCursor{MakeSingleUi64CellTableCursor("snap", 100)};
 
-
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
@@ -728,8 +811,8 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     Y_UNIT_TEST(EqualKeysVersionFilter) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> batchesByKey(3);
         for (ui64 i = 0; i < batchesByKey.size(); ++i) {
-            batchesByKey[i] =
-                arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
+            batchesByKey[i] = arrow::RecordBatch::Make(
+                std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
             batchesByKey[i] = batchesByKey[i]
                                   ->AddColumn(batchesByKey[i]->num_columns(), "key", NArrow::MakeUI64Array(i, batchesByKey[i]->num_rows()))
                                   .ValueOrDie();

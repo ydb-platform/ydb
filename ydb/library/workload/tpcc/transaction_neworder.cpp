@@ -473,11 +473,11 @@ TAsyncExecuteQueryResult InsertOrderLines(
     static std::string query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
 
-        DECLARE $values as List<Struct<p1:Int32,p2:Int32,p3:Int32,p4:Int32,p5:Int32,p6:Timestamp,p7:Double,p8:Int32,p9:Double,p10:Utf8>>;
+        DECLARE $values as List<Struct<p1:Int32,p2:Int32,p3:Int32,p4:Int32,p5:Int32,p6:Double,p7:Int32,p8:Double,p9:Utf8>>;
         $mapper = ($row) -> (AsStruct(
             $row.p1 as OL_W_ID, $row.p2 as OL_D_ID, $row.p3 as OL_O_ID, $row.p4 as OL_NUMBER, $row.p5 as OL_I_ID,
-            $row.p6 as OL_DELIVERY_D, $row.p7 as OL_AMOUNT, $row.p8 as OL_SUPPLY_W_ID, $row.p9 as OL_QUANTITY,
-            $row.p10 as OL_DIST_INFO));
+            $row.p6 as OL_AMOUNT, $row.p7 as OL_SUPPLY_W_ID, $row.p8 as OL_QUANTITY,
+            $row.p9 as OL_DIST_INFO));
 
         UPSERT INTO `{}` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
     )", context.Path.c_str(), TABLE_ORDER_LINE);
@@ -491,11 +491,10 @@ TAsyncExecuteQueryResult InsertOrderLines(
             .AddMember("p3").Int32(line.OrderId)
             .AddMember("p4").Int32(line.Number)
             .AddMember("p5").Int32(line.ItemId)
-            .AddMember("p6").Timestamp(TInstant::Now())
-            .AddMember("p7").Double(line.Amount)
-            .AddMember("p8").Int32(line.SupplyWarehouseId)
-            .AddMember("p9").Double(line.Quantity)
-            .AddMember("p10").Utf8(line.DistInfo)
+            .AddMember("p6").Double(line.Amount)
+            .AddMember("p7").Int32(line.SupplyWarehouseId)
+            .AddMember("p8").Double(line.Quantity)
+            .AddMember("p9").Utf8(line.DistInfo)
         .EndStruct();
     }
 

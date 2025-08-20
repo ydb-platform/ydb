@@ -784,7 +784,8 @@ THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNaviga
     THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     entry.RedirectRequired = false;
     entry.ShowPrivatePath = true;
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+    if (entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpUnknown)
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     request->ResultSet.emplace_back(std::move(entry));
     return request;
 }
@@ -850,12 +851,13 @@ TViewerPipeClient::TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSch
 }
 
 TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> TViewerPipeClient::MakeRequestSchemeCacheNavigateWithToken(
-        const TString& path, bool showPrivate, ui32 access, ui64 cookie
+        const TString& path, ui32 access, ui64 cookie
 ) {
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.Path = SplitPath(path);
-    entry.ShowPrivatePath = showPrivate;
     entry.Access = access;
+    entry.SyncVersion = true;
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpList;
     auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
 
     if (!Event->Get()->UserToken.empty())

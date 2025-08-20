@@ -1750,5 +1750,38 @@ Y_UNIT_TEST_SUITE(Transfer)
     Y_UNIT_TEST(ReadFromCDC_Local) {
         ReadFromCDC(true);
     }
+
+    Y_UNIT_TEST(MessageField_CreateTimestamp_Remote) {
+        MessageField_CreateTimestamp("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_CreateTimestamp_Local) {
+        MessageField_CreateTimestamp("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_WriteTimestamp_Remote) {
+        MessageField_WriteTimestamp("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_WriteTimestamp_Local) {
+        MessageField_WriteTimestamp("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_Attributes_Remote) {
+        MessageField_Attributes("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_Attributes_Local) {
+        MessageField_Attributes("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_Partition_Remote) {
+        MessageField_Partition("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_Partition_Local) {
+        MessageField_Partition("ROW", true);
+    }
+
 }
 

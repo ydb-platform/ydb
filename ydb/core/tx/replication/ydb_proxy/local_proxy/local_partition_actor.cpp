@@ -27,7 +27,7 @@ void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
 void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     static const TString errorMarket = "LocalYdbProxy";
 
-    LOG_D("Handle " << ev->Get()->ToString());
+    LOG_T("Handle " << ev->Get()->ToString());
 
     auto& result = ev->Get()->Request;
 

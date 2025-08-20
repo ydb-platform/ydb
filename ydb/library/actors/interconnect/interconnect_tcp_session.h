@@ -142,6 +142,7 @@ namespace NActors {
 
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 std::shared_ptr<std::atomic<size_t>> RdmaSizeLeft = nullptr;
+                size_t RdmaSize = 0;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -286,6 +287,7 @@ namespace NActors {
         struct TInboundPacket {
             ui64 Serial;
             size_t XdcUnreadBytes; // number of unread bytes from XDC stream for this exact unprocessed packet
+            size_t RdmaUnreadBytes = 0;
         };
         std::deque<TInboundPacket> InboundPacketQ;
         std::deque<std::tuple<ui16, TMutableContiguousSpan>> XdcInputQ; // target buffers for the XDC stream with channel reference
@@ -327,7 +329,8 @@ namespace NActors {
         void ReceiveData();
         void ProcessHeader();
         void ProcessPayload(ui64 *numDataBytes);
-        void ProcessInboundPacketQ(ui64 numXdcBytesRead);
+        void ProcessInboundPacketQ(ui64 numXdcBytesRead, ui64 numRdmaBytesRead);
+        void UpdateInboundPacketQ(ui64& numXdcBytesRead, ui64& numRdmaBytesRead);
         void ProcessXdcCommand(ui16 channel, TReceiveContext::TPerChannelContext& context);
         void ProcessEvents(TReceiveContext::TPerChannelContext& context);
         ssize_t Read(NInterconnect::TStreamSocket& socket, const TPollerToken::TPtr& token, bool *readPending,

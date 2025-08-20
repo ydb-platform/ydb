@@ -18,6 +18,8 @@
 namespace NKikimr::NReplication::NController {
 
 class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
+    static constexpr TDuration RetryDelay = TDuration::Seconds(10);
+
     static NYdb::NTable::TChangefeedDescription MakeChangefeed(
             const TString& name,
             const TDuration& retentionPeriod,
@@ -88,7 +90,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 LOG_D("Retry CreateStream");
-                return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+                return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
             LOG_E("Error"
@@ -144,7 +146,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 LOG_D("Retry CreateConsumer");
-                return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+                return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
             LOG_E("Error"
@@ -171,7 +173,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 LOG_W("Error of resolving topic '" << BuildStreamPath() << "': " << ev->Get()->ToString() << ". Retry.");
-                return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+                return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
             LOG_E("Error of resolving topic '" << BuildStreamPath() << "': " << ev->Get()->ToString() << ". Stop.");
@@ -187,7 +189,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         } else {
             NYdb::NIssue::TIssues issues;
-            issues.AddIssue(TStringBuilder() << "consumer '" << SrcConsumerName << "' not exists");
+            issues.AddIssue(TStringBuilder() << "consumer '" << SrcConsumerName << "' does not exists");
             Reply(NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, std::move(issues)));
         }
     }

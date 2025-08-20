@@ -1,4 +1,5 @@
 #include "blob.h"
+#include "blob_int.h"
 #include "type_codecs.h"
 
 #include <util/string/builder.h>
@@ -7,27 +8,6 @@
 
 namespace NKikimr {
 namespace NPQ {
-
-namespace {
-
-union TMessageFlags {
-    using TValue = ui8;
-
-    TValue V = 0;
-    struct {
-        TValue HasPartData : 1;
-        TValue HasWriteTimestamp : 1;
-        TValue HasCreateTimestamp : 1;
-        TValue HasUncompressedSize : 1;
-        TValue HasKinesisData : 1;
-        TValue Reserve: 3;
-    } F;
-
-    static_assert(sizeof(V) == sizeof(F));
-};
-
-static_assert(sizeof(TMessageFlags) == sizeof(TMessageFlags::TValue));
-}
 
 TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
     : Key(key)

@@ -12576,6 +12576,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        // runnerSettings.AppConfig.MutableFeatureFlags()->SetDisableCSBulkUpsertRequireAllColumns(true);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -12600,7 +12601,16 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
 
-            testHelper.BulkUpsert(testTable, batch);
+            TVector<NConstruction::IArrayBuilder::TPtr> newDataBuilders;
+            newDataBuilders.push_back(
+                NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+            newDataBuilders.push_back(
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
+            newDataBuilders.push_back(
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("column" + ToString(i)));
+            auto newBatch = NConstruction::TRecordBatchConstructor(newDataBuilders).BuildBatch(100);
+
+            testHelper.BulkUpsert(testTable, newBatch);
             auto alterQueryDrop = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN column" << i << ";";
             auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());

@@ -169,7 +169,7 @@ private:
     void Execute() {
         LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
 
-        BuildAllTasks<true>(false, true);
+        BuildAllTasks<true>(false);
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];

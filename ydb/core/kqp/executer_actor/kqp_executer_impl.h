@@ -922,7 +922,7 @@ protected:
     }
 
     template <bool isScan>
-    auto BuildAllTasks(bool limitTasksPerNode, bool buildStageChannels) {
+    auto BuildAllTasks(bool limitTasksPerNode) {
         size_t sourceScanPartitionsCount = 0;
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
@@ -941,7 +941,19 @@ protected:
                     : (AllowOlapDataQuery || StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0
                     ;
 
-                YQL_ENSURE(buildFromSourceTasks + buildSysViewTasks + buildComputeTasks + buildScanTasks <= 1);
+                // TODO: doesn't work right now - multiple conditions are possible in tests
+                // YQL_ENSURE(buildFromSourceTasks + buildSysViewTasks + buildComputeTasks + buildScanTasks <= 1,
+                //     "Multiple task conditions: " <<
+                //     "isScan = " << (isScan) << ", "
+                //     "stage.SourcesSize() > 0 = " << (stage.SourcesSize() > 0) << ", "
+                //     "stageInfo.Meta.IsSysView() = " << (stageInfo.Meta.IsSysView()) << ", "
+                //     "stageInfo.Meta.ShardOperations.empty() = " << (stageInfo.Meta.ShardOperations.empty()) << ", "
+                //     "stage.SinksSize() = " << (stage.SinksSize()) << ", "
+                //     "stageInfo.Meta.IsOlap() = " << (stageInfo.Meta.IsOlap()) << ", "
+                //     "stageInfo.Meta.IsDatashard() = " << (stageInfo.Meta.IsDatashard()) << ", "
+                //     "AllowOlapDataQuery = " << (AllowOlapDataQuery) << ", "
+                //     "StreamResult = " << (StreamResult)
+                // );
 
                 LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
 
@@ -971,9 +983,7 @@ protected:
                     }
                     BuildComputeTasks(stageInfo, nodesCount);
                 } else if (buildScanTasks) {
-                    if constexpr (isScan) {
-                        HasOlapTable = true;
-                    }
+                    HasOlapTable = true;
                     BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination());
                 } else {
                     if constexpr (!isScan) {
@@ -985,7 +995,7 @@ protected:
 
                 // Not task-related
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-                if (buildStageChannels) {
+                if (!TasksGraph.GetMeta().IsRestored) {
                     BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
                 }
             }

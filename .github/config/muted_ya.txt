@@ -62,7 +62,6 @@ ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboot
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/tests test.py.test_topic_data
-ydb/core/viewer/tests test.py.test_transfer_describe
 ydb/core/viewer/ut Viewer.TabletMerging
 ydb/core/viewer/ut Viewer.TabletMergingPacked
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll

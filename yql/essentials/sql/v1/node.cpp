@@ -3589,6 +3589,7 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
     constexpr ui64 MinClusters = 2;
     constexpr ui64 MaxClusters = 2048;
     constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
+    constexpr ui64 MaxVectorDimensionMultiplyClusters = ui64(4) << 20; // 4 bytes per dimension for float vector type ~= 16 MB
 
     auto validateInRange = [&](const TString& name, std::optional<ui64> value, ui64 minValue, ui64 maxValue) {
         if (!value.has_value()) {
@@ -3630,6 +3631,11 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
     if (std::pow(static_cast<double>(*Clusters), static_cast<double>(*Levels)) > static_cast<double>(MaxClustersPowLevels)
             || std::pow(*Clusters, *Levels) > MaxClustersPowLevels) {
         ctx.Error() << "Invalid clusters^levels: " << *Clusters << "^" << *Levels << " should be less than " << MaxClustersPowLevels;
+        return false;
+    }
+
+    if (*VectorDimension * *Clusters > MaxVectorDimensionMultiplyClusters) {
+        ctx.Error() << "Invalid vector_dimension*clusters: " << *VectorDimension << "^" << *Clusters << " should be less than " << MaxVectorDimensionMultiplyClusters;
         return false;
     }
 

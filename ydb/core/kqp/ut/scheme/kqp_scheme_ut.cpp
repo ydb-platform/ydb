@@ -4043,7 +4043,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // vector_dimension*clusters
         check("similarity=inner_product, vector_type=float, vector_dimension=2048, levels=1, clusters=2048", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=2049, levels=1, clusters=2048",
-            "Error: Invalid vector_dimension*clusters: 2049^2048 should be less than 4194304");
+            "Error: Invalid vector_dimension*clusters: 2049*2048 should be less than 4194304");
     }
 
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {

@@ -1,105 +1,31 @@
 # SQL API: Коллекции резервных копий
 
-Этот раздел предоставляет полный справочник SQL команд, используемых с коллекциями резервных копий.
+Этот раздел предоставляет руководство по использованию SQL команд с коллекциями резервных копий. Для полного справочника синтаксиса см. [Команды коллекций резервных копий](../../../yql/reference/syntax/backup-collections.md) в справочнике YQL.
 
-## CREATE BACKUP COLLECTION
+## Краткий справочник
 
-Создает новую коллекцию резервных копий с указанными таблицами и конфигурацией.
+Основные SQL команды для коллекций резервных копий:
 
-### Синтаксис
+- `CREATE BACKUP COLLECTION` - Создает новую коллекцию резервных копий
+- `BACKUP` - Создает резервную копию (полную или инкрементальную)  
+- `DROP BACKUP COLLECTION` - Удаляет коллекцию и все резервные копии
 
-```sql
-CREATE BACKUP COLLECTION <collection_name>
-    ( TABLE <table_path> [, TABLE <table_path>]... )
-WITH ( STORAGE = '<storage_backend>'
-     [, INCREMENTAL_BACKUP_ENABLED = '<true|false>']
-     [, <additional_options>] );
-```
+Для подробного синтаксиса, параметров и примеров обратитесь к [справочнику синтаксиса YQL](../../../yql/reference/syntax/backup-collections.md).
 
-### Параметры
-
-- **collection_name**: Уникальный идентификатор коллекции (должен быть заключен в обратные кавычки)
-- **table_path**: Абсолютный путь к таблице для включения в коллекцию
-- **STORAGE**: Тип варианта хранения (в настоящее время поддерживает 'cluster')
-- **INCREMENTAL_BACKUP_ENABLED**: Включить или отключить поддержку инкрементальных резервных копий
-
-### Примеры
-
-**Создание базовой коллекции:**
-
-```sql
-CREATE BACKUP COLLECTION `my_backups`
-    ( TABLE `/Root/database/users` )
-WITH ( STORAGE = 'cluster' );
-```
-
-**Коллекция с инкрементальными резервными копиями (рекомендуется):**
-
-```sql
-CREATE BACKUP COLLECTION `shop_backups`
-    ( TABLE `/Root/shop/orders`, TABLE `/Root/shop/products` )
-WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
-```
-
-## BACKUP
-
-Создает резервную копию в существующей коллекции. Первая резервная копия всегда является полной; последующие резервные копии могут быть инкрементальными.
-
-### Синтаксис
-
-```sql
-BACKUP <collection_name> [INCREMENTAL];
-```
-
-### Параметры
-
-- **collection_name**: Имя существующей коллекции резервных копий
-- **INCREMENTAL**: Необязательное ключевое слово для создания инкрементальной резервной копии
-
-### Типы резервных копий
-
-**Полная резервная копия (по умолчанию для первой резервной копии):**
-
-```sql
-BACKUP `shop_backups`;
-```
-
-**Инкрементальная резервная копия:**
-
-```sql
-BACKUP `shop_backups` INCREMENTAL;
-```
-
-### Пример полного рабочего процесса
+## Базовый рабочий процесс
 
 ```sql
 -- 1. Создать коллекцию
-CREATE BACKUP COLLECTION `sales_data`
-    ( TABLE `/Root/sales/transactions`, TABLE `/Root/sales/customers` )
+CREATE BACKUP COLLECTION `shop_backups`
+    ( TABLE `/Root/shop/orders`, TABLE `/Root/shop/products` )
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 
 -- 2. Создать начальную полную резервную копию
-BACKUP `sales_data`;
+BACKUP `shop_backups`;
 
 -- 3. Создать инкрементальные резервные копии
-BACKUP `sales_data` INCREMENTAL;
+BACKUP `shop_backups` INCREMENTAL;
 ```
-
-## DROP BACKUP COLLECTION
-
-Удаляет коллекцию резервных копий и все связанные с ней резервные копии.
-
-### Синтаксис
-
-```sql
-DROP BACKUP COLLECTION <collection_name>;
-```
-
-{% note warning %}
-
-Эта операция необратима и удалит все резервные копии в коллекции. Убедитесь, что у вас есть альтернативные резервные копии перед удалением коллекции.
-
-{% endnote %}
 
 ## Запрос информации о резервных копиях
 
@@ -109,21 +35,12 @@ DROP BACKUP COLLECTION <collection_name>;
 # Список всех коллекций
 ydb scheme ls .backups/collections/
 
-# Просмотр структуры конкретной коллекции
+# Просмотр структуры конкретной коллекции  
 ydb scheme ls .backups/collections/shop_backups/
 ```
 
-## Ограничения и соображения
-
-### Текущие ограничения
-
-- **Вариант хранения**: В настоящее время через SQL поддерживается только хранение 'cluster'
-- **Изменение коллекции**: Нельзя добавлять или удалять таблицы из существующих коллекций
-- **Параллельные резервные копии**: Множественные операции резервного копирования одной коллекции могут конфликтовать
-
-Подробные соображения производительности и рекомендации по управлению цепочками см. в [Концепциях](concepts.md).
-
 ## Следующие шаги
 
+- [Полный справочник синтаксиса YQL для коллекций резервных копий](../../../yql/reference/syntax/backup-collections.md)
 - [Изучите концепции коллекций резервных копий](concepts.md)
-- [Исследуйте все операции и задачи управления](operations.md)
+- [Изучите все операции и задачи управления](operations.md)

@@ -21,16 +21,16 @@ config:
 ---
 sankey-beta
 
-Hard memory limit,Soft memory limit,90
-Hard memory limit,"Other active processes",10
+Process Memory,Cache Components,60
+Process Memory,Activity Components, 30
+Process Memory,Other,10
 
-Soft memory limit,Shared Cache, 30
-Soft memory limit,MemTable, 30
-Soft memory limit,Activities, 30
+Cache Components,Shared Cache, 30
+Cache Components,MemTable, 10
+Cache Components,Allocator Caches, 20
 
-Activities,"KQP (query
-execution)", 15
-Activities,Compaction, 15
+Activity Components,"KQP (query execution)", 15
+Activity Components,Compaction, 15
 ```
 
 ## Hard Memory Limit {#hard-memory-limit}

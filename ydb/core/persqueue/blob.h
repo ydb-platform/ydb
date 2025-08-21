@@ -82,90 +82,26 @@ struct TBatch {
     TBuffer PackedData;
     TInstant EndWriteTimestamp;
 
-    TBatch()
-        : Packed(false)
-    {
-        PackedData.Reserve(8_MB);
-    }
+    TBatch();
+    TBatch(const ui64 offset, const ui16 partNo);
+    TBatch(const NKikimrPQ::TBatchHeader &header, const char* data);
 
-    TBatch(const ui64 offset, const ui16 partNo)
-        : TBatch()
-    {
-        Header.SetOffset(offset);
-        Header.SetPartNo(partNo);
-        Header.SetUnpackedSize(0);
-        Header.SetCount(0);
-        Header.SetInternalPartsCount(0);
-    }
+    static TBatch FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs);
 
-    static TBatch FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
-        Y_ABORT_UNLESS(!blobs.empty());
-        TBatch batch(offset, blobs.front().GetPartNo());
-        for (auto& b : blobs) {
-            batch.AddBlob(b);
-        }
-        return batch;
-    }
+    void AddBlob(const TClientBlob &b);
 
-    void AddBlob(const TClientBlob &b) {
-        ui32 count = GetCount();
-        ui32 unpackedSize = GetUnpackedSize();
-        ui32 i = Blobs.size();
-        Blobs.push_back(b);
-        unpackedSize += b.GetBlobSize();
-        if (b.IsLastPart())
-            ++count;
-        else {
-            InternalPartsPos.push_back(i);
-        }
+    ui64 GetOffset() const;
+    ui16 GetPartNo() const;
+    ui32 GetUnpackedSize() const;
+    ui32 GetCount() const;
+    ui16 GetInternalPartsCount() const;
 
-        Header.SetUnpackedSize(unpackedSize);
-        Header.SetCount(count);
-        Header.SetInternalPartsCount(InternalPartsPos.size());
+    bool IsGreaterThan(ui64 offset, ui16 partNo) const;
 
-        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
-    }
+    bool Empty() const;
+    TInstant GetEndWriteTimestamp() const;
 
-    ui64 GetOffset() const {
-        return Header.GetOffset();
-    }
-
-    ui16 GetPartNo() const {
-        return Header.GetPartNo();
-    }
-
-    ui32 GetUnpackedSize() const {
-        return Header.GetUnpackedSize();
-    }
-
-    ui32 GetCount() const {
-        return Header.GetCount();
-    }
-
-    ui16 GetInternalPartsCount() const {
-        return Header.GetInternalPartsCount();
-    }
-
-    bool IsGreaterThan(ui64 offset, ui16 partNo) const {
-        return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
-    }
-
-    bool Empty() const {
-        return Blobs.empty();
-    }
-
-    TInstant GetEndWriteTimestamp() const {
-        return EndWriteTimestamp;
-    }
-
-    TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
-        : Packed(true)
-        , Header(header)
-        , PackedData(data, header.GetPayloadSize())
-    {
-    }
-
-    ui32 GetPackedSize() const { Y_ABORT_UNLESS(Packed); return sizeof(ui16) + PackedData.size() + Header.ByteSize(); }
+    ui32 GetPackedSize() const;
     void Pack();
     void Unpack();
     void UnpackTo(TVector<TClientBlob> *result) const;

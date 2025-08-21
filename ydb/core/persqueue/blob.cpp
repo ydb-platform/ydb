@@ -10,6 +10,10 @@
 namespace NKikimr {
 namespace NPQ {
 
+//
+// TPartData
+//
+
 TPartData::TPartData(const ui16 partNo, const ui16 totalParts, const ui32 totalSize)
         : PartNo(partNo)
         , TotalParts(totalParts)
@@ -20,6 +24,10 @@ bool TPartData::IsLastPart() const {
         return PartNo + 1 == TotalParts;
 }
 
+
+//
+// TClientBlob
+//
 
 TClientBlob::TClientBlob()
     : SeqNo(0)
@@ -74,6 +82,103 @@ ui16 TClientBlob::GetTotalSize() const {
 bool TClientBlob::IsLastPart() const {
     return !PartData || PartData->IsLastPart();
 }
+
+
+//
+// TBatch
+//
+
+TBatch::TBatch()
+    : Packed(false)
+{
+    PackedData.Reserve(8_MB);
+}
+
+TBatch::TBatch(const ui64 offset, const ui16 partNo)
+    : TBatch()
+{
+    Header.SetOffset(offset);
+    Header.SetPartNo(partNo);
+    Header.SetUnpackedSize(0);
+    Header.SetCount(0);
+    Header.SetInternalPartsCount(0);
+}
+
+TBatch::TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
+    : Packed(true)
+    , Header(header)
+    , PackedData(data, header.GetPayloadSize())
+{
+}
+
+TBatch TBatch::FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
+    Y_ABORT_UNLESS(!blobs.empty());
+    TBatch batch(offset, blobs.front().GetPartNo());
+    for (auto& b : blobs) {
+        batch.AddBlob(b);
+    }
+    return batch;
+}
+
+void TBatch::AddBlob(const TClientBlob &b) {
+    ui32 count = GetCount();
+    ui32 unpackedSize = GetUnpackedSize();
+    ui32 i = Blobs.size();
+    Blobs.push_back(b);
+    unpackedSize += b.GetBlobSize();
+    if (b.IsLastPart())
+        ++count;
+    else {
+        InternalPartsPos.push_back(i);
+    }
+
+    Header.SetUnpackedSize(unpackedSize);
+    Header.SetCount(count);
+    Header.SetInternalPartsCount(InternalPartsPos.size());
+
+    EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
+}
+
+ui64 TBatch::GetOffset() const {
+    return Header.GetOffset();
+}
+
+ui16 TBatch::GetPartNo() const {
+    return Header.GetPartNo();
+}
+
+ui32 TBatch::GetUnpackedSize() const {
+    return Header.GetUnpackedSize();
+}
+
+ui32 TBatch::GetCount() const {
+    return Header.GetCount();
+}
+
+ui16 TBatch::GetInternalPartsCount() const {
+    return Header.GetInternalPartsCount();
+}
+
+bool TBatch::IsGreaterThan(ui64 offset, ui16 partNo) const {
+    return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
+}
+
+bool TBatch::Empty() const {
+    return Blobs.empty();
+}
+
+TInstant TBatch::GetEndWriteTimestamp() const {
+    return EndWriteTimestamp;
+}
+
+ui32 TBatch::GetPackedSize() const {
+    Y_ABORT_UNLESS(Packed);
+    return sizeof(ui16) + PackedData.size() + Header.ByteSize();
+}
+
+//
+// TBlobIterator
+//
 
 
 TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)

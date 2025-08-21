@@ -27,7 +27,6 @@ $lambda = ($msg) -> {
 |---------------------|----------------|----------------------------------|
 | `_create_timestamp` | `Timestamp`    | Время создания сообщения        |
 | `_data`             | `String`       | Тело сообщения                  |
-| `_message_group_id` | `String`       | Идентификатор группы сообщений  |
 | `_offset`           | `Uint64`       | [Смещение сообщения](../../../concepts/glossary.md#offset) |
 | `_partition`        | `Uint32`       | Номер [партиции](../../../concepts/glossary.md#partition) сообщения |
 | `_producer_id`      | `String`       | Идентификатор [писателя](../../../concepts/glossary.md#producer) |

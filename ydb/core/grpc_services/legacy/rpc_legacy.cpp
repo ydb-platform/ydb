@@ -287,6 +287,16 @@ void DoLocalSchemeTx(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider
     f.RegisterActor(NMsgBusProxy::CreateMessageBusLocalSchemeTx(ctx));
 }
 
+void DoLocalEnumerateTablets(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS);
+    f.RegisterActor(NMsgBusProxy::CreateMessageBusLocalEnumerateTablets(ctx));
+}
+
+void DoTabletKillRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_TABLET_KILL_REQUEST);
+    f.RegisterActor(NMsgBusProxy::CreateMessageBusTabletKillRequest(ctx));
+}
+
 } // namespace NLegacyGrpcService
 
 } // namespace NKikimr::NGRpcService

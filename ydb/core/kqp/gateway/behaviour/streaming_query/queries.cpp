@@ -1732,10 +1732,10 @@ private:
         }
 
         // Execution id for streaming queries:
-        // <GUID part>-<GUID part>-<GUID part>-<Node id>-<SS id>-<Path id in SS>
+        // <GUID part>-<GUID part>-<GUID part>-<SS id>-<Path id in SS>
 
         const auto& pathId = Settings.QueryPathId;
-        State.SetCurrentExecutionId(TStringBuilder() << CreateGuidAsString() << '-' << SelfId().NodeId() << '-' << pathId.OwnerId << '-' << pathId.LocalPathId);
+        State.SetCurrentExecutionId(TStringBuilder() << CreateGuidAsString() << '-' << pathId.OwnerId << '-' << pathId.LocalPathId);
         UpdateQueryState(TStringBuilder() << "allocate execution id: " << State.GetCurrentExecutionId());
         Become(&TStartStreamingQueryTableActor::StartQueryStateFunc);
     }

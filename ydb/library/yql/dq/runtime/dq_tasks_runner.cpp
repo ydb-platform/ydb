@@ -679,6 +679,7 @@ public:
 
                 taskOutputType = &transform->TransformOutputType;
             }
+            auto channelSpiller = SpillerFactory->CreateSpiller();
             if (outputDesc.HasSink()) {
                 auto sink = CreateDqAsyncOutputBuffer(i, outputDesc.GetSink().GetType(), *taskOutputType, memoryLimits.ChannelBufferSize,
                     StatsModeToCollectStatsLevel(Settings.StatsMode));

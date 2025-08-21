@@ -13,7 +13,7 @@ namespace NActors {
 namespace NYql::NDq {
 
 // This class will be refactored to be non-actor spiller part
-class TDqComputeStorage : public NKikimr::NMiniKQL::ISpiller
+class TDqComputeStorage : public NKikimr::NMiniKQL::ISpiller, public IDqSpiller
 {
 public:
     TDqComputeStorage(TTxId txId, TWakeUpCallback wakeUpCallback, TErrorCallback errorCallback,

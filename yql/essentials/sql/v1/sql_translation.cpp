@@ -866,7 +866,9 @@ std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_i
     T value{};
     const TString stringValue = GetIndexSettingStringValue(node);
     if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue1
-            && node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue2) {
+        && node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue2
+        || stringValue.empty())
+    {
         return {false, value, stringValue};
     }
     if (!TryFromString<T>(to_lower(stringValue), value)) {
@@ -879,7 +881,7 @@ template<>
 std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
     ui64 value = 0;
     const TString stringValue = GetIndexSettingStringValue(node);
-    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue3) {
+    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue3 || stringValue.empty()) {
         return {false, value, stringValue};
     }
     TString suffix;
@@ -893,7 +895,7 @@ template<>
 std::tuple<bool, bool, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
     bool value = false;
     const TString stringValue = GetIndexSettingStringValue(node);
-    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue4) {
+    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue4 || stringValue.empty()) {
         return {false, value, stringValue};
     }
     if (!TryFromString<bool>(to_lower(stringValue), value)) {

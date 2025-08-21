@@ -31,9 +31,9 @@ For production workloads requiring incremental backups:
 
 Learn more:
 
-- [Export and import reference](../reference/ydb-cli/export-import/index.md) - Export/import operations
-- [Backup collections](backup/collections.md) - Concepts, architecture, and when to use
-- [CLI tools](../reference/ydb-cli/export-import/backup-collections/index.md) - Command-line tools and detailed usage guide
+- [Export and import reference](../reference/ydb-cli/export-import/index.md) - Export/import operations.
+- [Backup collections](backup/collections.md) - Concepts, architecture, and when to use.
+- [CLI tools](../reference/ydb-cli/export-import/backup-collections/index.md) - Command-line tools and detailed usage guide.
 
 ## Choosing the right approach {#choosing-approach}
 
@@ -45,5 +45,5 @@ Learn more:
 
 ## See also
 
-- [Backup and recovery guide](../devops/backup-and-recovery.md)
-- [Export and import reference](../reference/ydb-cli/export-import/index.md)
+- [Backup and recovery guide](../devops/backup-and-recovery.md).
+- [Export and import reference](../reference/ydb-cli/export-import/index.md).

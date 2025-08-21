@@ -69,7 +69,7 @@ For detailed command reference and advanced usage, see [Backup collections CLI g
 
 ## See also
 
-- [Backup concepts overview](../backup.md) - General backup approaches in {{ ydb-short-name }}
-- [Backup collections CLI reference](../../reference/ydb-cli/export-import/backup-collections/index.md) - Detailed command reference and examples
-- [Export and import reference](../../reference/ydb-cli/export-import/index.md) - Traditional backup methods
-- [Backup and recovery guide](../../devops/backup-and-recovery.md) - Comprehensive backup strategies
+- [Backup concepts overview](../backup.md) - General backup approaches in {{ ydb-short-name }}.
+- [Backup collections CLI reference](../../reference/ydb-cli/export-import/backup-collections/index.md) - Detailed command reference and examples.
+- [Export and import reference](../../reference/ydb-cli/export-import/index.md) - Traditional backup methods.
+- [Backup and recovery guide](../../devops/backup-and-recovery.md) - Comprehensive backup strategies.

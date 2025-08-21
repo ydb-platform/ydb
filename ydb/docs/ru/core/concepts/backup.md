@@ -31,9 +31,9 @@
 
 Подробнее:
 
-- [Справочник по экспорту и импорту](../reference/ydb-cli/export-import/index.md) - Операции экспорта/импорта
-- [Коллекции резервных копий](backup/collections.md) - Концепции, архитектура и когда использовать
-- [CLI инструменты](../reference/ydb-cli/export-import/backup-collections/index.md) - Инструменты командной строки и подробное руководство по использованию
+- [Справочник по экспорту и импорту](../reference/ydb-cli/export-import/index.md) - Операции экспорта/импорта.
+- [Коллекции резервных копий](backup/collections.md) - Концепции, архитектура и когда использовать.
+- [CLI инструменты](../reference/ydb-cli/export-import/backup-collections/index.md) - Инструменты командной строки и подробное руководство по использованию.
 
 ## Выбор правильного подхода {#choosing-approach}
 
@@ -45,5 +45,5 @@
 
 ## См. также
 
-- [Руководство по резервному копированию и восстановлению](../devops/backup-and-recovery.md)
-- [Справочник по экспорту и импорту](../reference/ydb-cli/export-import/index.md)
+- [Руководство по резервному копированию и восстановлению](../devops/backup-and-recovery.md).
+- [Справочник по экспорту и импорту](../reference/ydb-cli/export-import/index.md).

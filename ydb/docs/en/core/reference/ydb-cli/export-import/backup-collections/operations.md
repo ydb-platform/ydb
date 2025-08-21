@@ -38,9 +38,9 @@ BACKUP `shop_backups` INCREMENTAL;
 
 **Best practices:**
 
-- Take incremental backups on a regular schedule (daily, hourly, etc.)
-- Keep backup chains reasonably short (7-14 incremental backups recommended)
-- Monitor backup completion and chain integrity
+- Take incremental backups on a regular schedule (daily, hourly, etc.).
+- Keep backup chains reasonably short (7-14 incremental backups recommended).
+- Monitor backup completion and chain integrity.
 
 For detailed guidelines and chain management, see [Chain validity rules](concepts.md#chain-validity-rules).
 
@@ -148,9 +148,9 @@ For chain validity rules and critical deletion warnings, see [Chain validity rul
 
 {% endnote %}
 
-- Always verify chain dependencies before deletion
-- Use schema browsing to understand backup structure
-- Test cleanup procedures in non-production environments first
+- Always verify chain dependencies before deletion.
+- Use schema browsing to understand backup structure.
+- Test cleanup procedures in non-production environments first.
 
 ## Verification and validation {#verification-validation}
 
@@ -238,5 +238,5 @@ Verify restored data with row counts, sample queries, and schema checks.
 
 ## Next steps
 
-- [Learn the complete SQL API syntax](sql-api.md)
-- [Understand backup collection concepts](concepts.md)
+- [Learn the complete SQL API syntax](sql-api.md).
+- [Understand backup collection concepts](concepts.md).

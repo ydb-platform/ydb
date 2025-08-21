@@ -20,10 +20,10 @@ WITH ( STORAGE = '<storage_backend>'
 
 ### Parameters
 
-- **collection_name**: Unique identifier for the collection (must be quoted with backticks)
-- **table_path**: Absolute path to a table to include in the collection
-- **STORAGE**: Storage backend type (currently supports 'cluster')
-- **INCREMENTAL_BACKUP_ENABLED**: Enable or disable incremental backup support
+- **collection_name**: Unique identifier for the collection (must be quoted with backticks).
+- **table_path**: Absolute path to a table to include in the collection.
+- **STORAGE**: Storage backend type (currently supports 'cluster').
+- **INCREMENTAL_BACKUP_ENABLED**: Enable or disable incremental backup support.
 
 ### Examples
 
@@ -55,8 +55,8 @@ BACKUP <collection_name> [INCREMENTAL];
 
 ### Parameters
 
-- **collection_name**: Name of the existing backup collection
-- **INCREMENTAL**: Optional keyword to create an incremental backup
+- **collection_name**: Name of the existing backup collection.
+- **INCREMENTAL**: Optional keyword to create an incremental backup.
 
 ### Backup types
 
@@ -107,11 +107,11 @@ This operation is irreversible and will delete all backups in the collection. En
 
 ### Current limitations
 
-- **Storage backend**: Only 'cluster' storage is currently supported via SQL
-- **Collection modification**: Cannot add or remove tables from existing collections  
-- **Concurrent backups**: Multiple backup operations on the same collection may conflict
+- **Storage backend**: Only 'cluster' storage is currently supported via SQL.
+- **Collection modification**: Cannot add or remove tables from existing collections.  
+- **Concurrent backups**: Multiple backup operations on the same collection may conflict.
 
 ## See also
 
-- [Backup collections concepts](../../concepts/backup/collections.md)
-- [Backup collections operations guide](../../reference/ydb-cli/export-import/backup-collections/operations.md)
+- [Backup collections concepts](../../concepts/backup/collections.md).
+- [Backup collections operations guide](../../reference/ydb-cli/export-import/backup-collections/operations.md).

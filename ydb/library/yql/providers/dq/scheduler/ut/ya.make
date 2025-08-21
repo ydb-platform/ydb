@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/dq/scheduler)
 
+TAG(ya:manual)
+
 SIZE(SMALL)
 
 SRCS(

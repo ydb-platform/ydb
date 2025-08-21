@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/dq/runtime)
 
+TAG(ya:manual)
+
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)

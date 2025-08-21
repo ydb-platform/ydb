@@ -1,5 +1,7 @@
 PY2TEST()
 
+TAG(ya:manual)
+
 SIZE(LARGE)
 
 TAG(

@@ -1,6 +1,8 @@
 IF (NOT WINDOWS)
     UNITTEST_FOR(ydb/library/yql/minikql/dom)
 
+    TAG(ya:manual)
+
     SRCS(
         yson_ut.cpp
         json_ut.cpp

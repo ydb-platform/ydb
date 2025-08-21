@@ -1,5 +1,7 @@
 UNITTEST()
 
+TAG(ya:manual)
+
 PEERDIR(
     ydb/library/yql/minikql/codegen/llvm14
     ydb/library/yql/minikql/comp_nodes/llvm14

@@ -1,5 +1,7 @@
 PY3TEST()
 
+TAG(ya:manual)
+
 IF(ORIGINAL)
 
 TEST_SRCS(

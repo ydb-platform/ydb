@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/yt/comp_nodes)
 
+TAG(ya:manual)
+
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)

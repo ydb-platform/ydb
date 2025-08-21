@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/yt/provider)
 
+TAG(ya:manual)
+
 SIZE(SMALL)
 
 SRCS(

@@ -1,4 +1,8 @@
 PY3TEST()
+
+TAG(ya:manual)
+
+
     TEST_SRCS(
         test_sql2yql.py
         test_sql_negative.py

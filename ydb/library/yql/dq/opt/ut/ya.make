@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/dq/opt)
 
+TAG(ya:manual)
+
 SRCS(
     dq_cbo_ut.cpp
     dq_opt_hypergraph_ut.cpp

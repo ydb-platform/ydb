@@ -260,6 +260,11 @@ message TEvLoadTestRequest {
         optional uint64 IntervalUs = 4;
     }
 
+    message TInterconnectLoad {
+        optional uint64 Tag = 1;
+        optional uint32 DurationSeconds = 2;
+    }
+
     optional uint64 Cookie = 1;
     oneof Command {
         TStop Stop = 3;
@@ -272,6 +277,7 @@ message TEvLoadTestRequest {
         TKqpLoad KqpLoad = 9;
         TMemoryLoad MemoryLoad = 10;
         NKikimrDataShardLoad.TEvYCSBTestLoadRequest YCSBLoad = 11;
+        TInterconnectLoad InterconnectLoad = 15;
     }
     optional uint64 Tag = 12;
     optional string Uuid = 13;

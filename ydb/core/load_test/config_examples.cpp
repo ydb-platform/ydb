@@ -67,6 +67,12 @@ TVector<TConfigTemplate> BuildExamples() {
     BlockSize: 1048576
     IntervalUs: 9000000
 })_"
+        },
+        TConfigTemplate{
+            .LoadName = "InterconnectLoad",
+            .Template = R"_(InterconnectLoad: {
+    DurationSeconds: 3600
+})_"
         }
     };
     return result;

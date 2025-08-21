@@ -43,7 +43,7 @@ TTpcBaseWorkloadParams::EFloatMode TTpcBaseWorkloadGenerator::DetectFloatMode() 
         switch (type.GetKind()) {
         case NYdb::TTypeParser::ETypeKind::Decimal: {
             const auto decimal = type.GetDecimal();
-            return (decimal.Precision == 22 && decimal.Scale == 9) ? TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB : TTpcBaseWorkloadParams::EFloatMode::DECIMAL;
+            return (decimal.Precision == NKikimr::NScheme::DECIMAL_PRECISION && decimal.Scale == NKikimr::NScheme::DECIMAL_SCALE) ? TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB : TTpcBaseWorkloadParams::EFloatMode::DECIMAL;
         }
         case NYdb::TTypeParser::ETypeKind::Primitive:
             if (type.GetPrimitive() == NYdb::EPrimitiveType::Double || type.GetPrimitive() == NYdb::EPrimitiveType::Float) {
@@ -169,7 +169,7 @@ TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
         break;
     }
 
-    if (Params.GetFloatMode() != TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB) {
+    if (FloatMode != TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB) {
         return header;
     }
     header.to_lower();

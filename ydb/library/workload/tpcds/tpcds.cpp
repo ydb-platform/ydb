@@ -10,6 +10,7 @@ namespace NYdbWorkload {
 
 TTpcdsWorkloadGenerator::TTpcdsWorkloadGenerator(const TTpcdsWorkloadParams& params)
     : TTpcBaseWorkloadGenerator(params)
+    , Params(params)
 {}
 
 TString TTpcdsWorkloadGenerator::GetTablesYaml() const {
@@ -22,7 +23,7 @@ std::pair<TString, TString> TTpcdsWorkloadGenerator::GetTableAndColumnForDetectF
 
 TWorkloadGeneratorBase::TSpecialDataTypes TTpcdsWorkloadGenerator::GetSpecialDataTypes() const {
     TString decimalType_5_2, decimalType_7_2, decimalType_15_2;
-    switch (FloatMode) {
+    switch (Params.GetFloatMode()) {
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         decimalType_5_2 = decimalType_7_2 = decimalType_15_2 = "Double";
         break;

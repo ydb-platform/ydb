@@ -1645,9 +1645,10 @@ private:
 class TCheckLeaseStatusActor : public TCheckLeaseStatusActorBase {
 public:
     TCheckLeaseStatusActor(const TActorId& replyActorId, const TString& database, const TString& executionId,
-        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, ui64 cookie = 0)
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, bool canRetry, ui64 cookie = 0)
         : TCheckLeaseStatusActorBase(replyActorId, __func__, database, executionId, queryServiceConfig, counters)
         , ReplyActorId(replyActorId)
+        , CanRetry(canRetry)
         , Cookie(cookie)
     {}
 
@@ -1717,7 +1718,11 @@ private:
 
         const auto& event = *Response->Get();
         if (event.RetryRequired) {
-            RestartScriptExecution(event.LeaseGeneration);
+            if (CanRetry) {
+                RestartScriptExecution(event.LeaseGeneration);
+            } else {
+                Reply();
+            }
         } else if (event.LeaseExpired) {
             StartLeaseChecking(event.RunScriptActorId, event.LeaseGeneration);
         } else if (const auto finalizationStatus = event.FinalizationStatus) {
@@ -1741,6 +1746,7 @@ private:
 
 private:
     const TActorId ReplyActorId;
+    const bool CanRetry = true;
     const ui64 Cookie;
     TEvPrivate::TEvLeaseCheckResult::TPtr Response;
 };
@@ -1930,7 +1936,7 @@ public:
 
         ExecutionId = *executionId;
 
-        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters));
+        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, true));
         KQP_PROXY_LOG_D("Bootstrap. Start TCheckLeaseStatusActor " << checkerId);
 
         Become(&TForgetScriptExecutionOperationActor::StateFunc);
@@ -2548,7 +2554,7 @@ public:
                 op.metadata().UnpackTo(&metadata);
 
                 const auto& executionId = metadata.execution_id();
-                const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Database, executionId, QueryServiceConfig, Counters, i));
+                const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Database, executionId, QueryServiceConfig, Counters, true, i));
                 KQP_PROXY_LOG_D("Start TCheckLeaseStatusActor #" << i << " " << checkerId << ", for ExecutionId: " << executionId);
 
                 ++OperationsToCheck;
@@ -2756,7 +2762,7 @@ public:
 
         ExecutionId = *executionId;
 
-        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters));
+        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, false));
         KQP_PROXY_LOG_D("Bootstrap. Start TCheckLeaseStatusActor " << checkerId);
 
         Become(&TCancelScriptExecutionOperationActor::StateFunc);
@@ -2782,7 +2788,7 @@ public:
             return;
         }
 
-        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters));
+        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, false));
         KQP_PROXY_LOG_D("Reset retry state " << ev->Sender << " success, start TCheckLeaseStatusActor " << checkerId);
     }
 
@@ -2834,7 +2840,7 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->Reason == TEvents::TEvUndelivered::ReasonActorUnknown) { // The actor probably had finished before our cancel message arrived.
-            const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters)); // Check if the operation has finished.
+            const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, false)); // Check if the operation has finished.
             KQP_PROXY_LOG_I("Got delivery problem to RunScriptActor: " << ev->Sender << ", maybe already finished, start lease check " << checkerId);
         } else {
             KQP_PROXY_LOG_W("Delivery failed " << ev->Get()->Reason << " to RunScriptActor: " << ev->Sender);
@@ -4416,7 +4422,7 @@ public:
         KQP_PROXY_LOG_D("Got list expired leases response " << ev->Sender << ", found " << leases.size() << " expired leases");
 
         for (const auto& lease : leases) {
-            const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), lease.Database, lease.ExecutionId, QueryServiceConfig, Counters, CookieId++));
+            const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), lease.Database, lease.ExecutionId, QueryServiceConfig, Counters, true, CookieId++));
             KQP_PROXY_LOG_D("Database: " << lease.Database << "ExecutionId: " << lease.ExecutionId << ", start TCheckLeaseStatusActor #" << CookieId << " " << checkerId);
             ++OperationsToCheck;
         }
@@ -4712,7 +4718,7 @@ IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const 
 }
 
 IActor* CreateCheckLeaseStatusActor(const TActorId& replyActorId, const TString& database, const TString& executionId, ui64 cookie) {
-    return new TCheckLeaseStatusActor(replyActorId, database, executionId, {}, MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()), cookie);
+    return new TCheckLeaseStatusActor(replyActorId, database, executionId, {}, MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()), true, cookie);
 }
 
 } // namespace NPrivate

@@ -14,6 +14,7 @@
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
@@ -31,10 +32,13 @@ using namespace NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-TGenericListTransformer::TGenericListTransformer(TGenericState::TPtr state) 
+TGenericListSplitTransformer::TGenericListSplitTransformer(TGenericState::TPtr state)
     : State_(std::move(state))
 { }
 
+///
+/// Fill columns in a select query
+///
 void FillColumns(NConnector::NApi::TSelect& select, const TGenReadTable& reader, NYql::NConnector::NApi::TSchema schema) {
     auto items = select.mutable_what()->mutable_items();
     auto columns = reader.Columns().Ptr();
@@ -72,15 +76,36 @@ void FillColumns(NConnector::NApi::TSelect& select, const TGenReadTable& reader,
         auto type = NConnector::GetColumnTypeByName(schema, columnName);
         *column->mutable_type() = type;
     }
-
 }
 
-IGraphTransformer::TStatus TGenericListTransformer::DoTransform(TExprNode::TPtr input,
+///
+/// Fill where clause in a select query
+///
+void FillPredicate(NConnector::NApi::TSelect& select, const TGenReadTable& reader, TExprContext& ctx) {
+    auto predicate = reader.FilterPredicate();
+
+    if (IsEmptyFilterPredicate(predicate)) {
+        return;
+    }
+
+    TStringBuilder err;
+
+    if (!SerializeFilterPredicate(ctx, reader.FilterPredicate(), select.mutable_where()->mutable_filter_typed(), err)) {
+        throw yexception() << "Failed to serialize filter predicate for source: " << err;
+    }
+}
+
+///
+/// Make an unique key for a select created for a table
+///
+TString MakeKeyFor(const TGenericState::TTableAddress& table, const NConnector::NApi::TSelect& select) {
+    return TStringBuilder() << table.ClusterName << GetSelectKey(select);
+}
+
+IGraphTransformer::TStatus TGenericListSplitTransformer::DoTransform(TExprNode::TPtr input,
                                                                 TExprNode::TPtr& output,
                                                                 TExprContext& ctx) {
     output = input;
-
-    std::unordered_map<TListResponseMap::key_type, NConnector::NApi::TSelect, TListResponseMap::hasher> pendingTables;
 
     const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
         if (const auto maybeRead = TMaybeNode<TGenReadTable>(node)) {
@@ -91,51 +116,54 @@ IGraphTransformer::TStatus TGenericListTransformer::DoTransform(TExprNode::TPtr 
         return false;
     });
 
-    if (!reads.empty()) {
-        for (const auto& r : reads) {
-            const TGenReadTable read(r);
-            const auto clusterName = read.DataSource().Cluster().StringValue();
-            const auto tableName = read.Table().Name().StringValue();
-            auto tableAddress = TGenericState::TTableAddress(clusterName, tableName);
-            auto table = State_->GetTable(tableAddress);
+    if (reads.empty()) {
+        return TStatus::Ok;
+    }
 
-            if (!table.first) {
-                ctx.AddError(TIssue(table.second.ToString()));
-                return TStatus::Error;
-            }
+    std::unordered_map<TString, TListSplitRequestData> pendingRequests;
 
-            // skip request to connector if splits information is filled
-            if (!table.first->Splits.empty()) {
-                continue;
-            }
+    // Iterate over all read table queries in the input expression, create ListSplit request if needed
+    for (const auto& r : reads) {
+        const TGenReadTable read(r);
+        const auto clusterName = read.DataSource().Cluster().StringValue();
+        const auto tableName = read.Table().Name().StringValue();
+        auto tableAddress = TGenericState::TTableAddress(clusterName, tableName);
+        auto table = State_->GetTable(tableAddress);
 
-            NConnector::NApi::TSelect select;
-
-            *select.mutable_data_source_instance() = table.first->DataSourceInstance;
-            select.mutable_from()->set_table(tableName);
-
-            FillColumns(select, read, table.first->Schema);
-
-            auto predicate = read.FilterPredicate();
-
-            if (!IsEmptyFilterPredicate(predicate)) {
-                TStringBuilder err;
-
-                if (!SerializeFilterPredicate(ctx, read.FilterPredicate(), select.mutable_where()->mutable_filter_typed(), err)) {
-                    throw yexception() << "Failed to serialize filter predicate for source: " << err;
-                }
-            }
-
-            pendingTables.emplace(tableAddress, std::move(select));
+        if (!table.first) {
+            ctx.AddError(TIssue(table.second.ToString()));
+            return TStatus::Error;
         }
+
+        // Grab select from a read table query
+        NConnector::NApi::TSelect select;
+
+        *select.mutable_data_source_instance() = table.first->DataSourceInstance;
+        select.mutable_from()->set_table(tableName);
+
+        FillColumns(select, read, table.first->Schema);
+        FillPredicate(select, read, ctx);
+
+        // Splits has been already acquired for such select, skip it
+        if (table.first->HasSplitsForSelect(select)) {
+            continue;
+        }
+
+        auto k = MakeKeyFor(tableAddress, select);
+        auto v = TListSplitRequestData{k, std::move(select), tableAddress};
+        pendingRequests.emplace(k, v);
+    }
+
+    if (pendingRequests.empty()) {
+        return TStatus::Ok;
     }
 
     std::vector<NThreading::TFuture<void>> handles;
-    handles.reserve(pendingTables.size());
-    ListResponses_.reserve(pendingTables.size());
+    handles.reserve(pendingRequests.size());
+    ListResponses_.reserve(pendingRequests.size());
 
-    for (auto& k : pendingTables) {
-        auto tIssues = ListTableFromConnector(k.first, std::move(k.second), handles);
+    for (auto& k : pendingRequests) {
+        auto tIssues = ListTableFromConnector(k.second, handles);
         if (!tIssues.Empty()) {
             ctx.AddError(TIssue(tIssues.ToString()));
             return TStatus::Error;
@@ -150,29 +178,28 @@ IGraphTransformer::TStatus TGenericListTransformer::DoTransform(TExprNode::TPtr 
     return TStatus::Async;
 }
 
-TIssues TGenericListTransformer::ListTableFromConnector(const TGenericState::TTableAddress& tableAddress,
-                                                        NConnector::NApi::TSelect select,
-                                                        std::vector<NThreading::TFuture<void>>& handles) {
-    auto table = State_->GetTable(tableAddress);
+TIssues TGenericListSplitTransformer::ListTableFromConnector(const TListSplitRequestData& data,
+                                                             std::vector<NThreading::TFuture<void>>& handles) {
+    auto table = State_->GetTable(data.TableAddress);
 
     if (!table.first) {
         return table.second;
     }
 
-    // preserve data source instance for the further usage
-    auto emplaceIt = ListResponses_.emplace(tableAddress, std::make_shared<TListResponse>());
+    // Preserve data source instance for the further usage
+    auto emplaceIt = ListResponses_.emplace(data.Key, std::make_shared<TListResponse>());
     auto desc = emplaceIt.first->second;
 
     // Call ListSplits
     NConnector::NApi::TListSplitsRequest request;
-    *request.mutable_selects()->Add() = select;
+    *request.mutable_selects()->Add() = data.Select;
 
     auto promise = NThreading::NewPromise();
     handles.emplace_back(promise.GetFuture());
 
     Y_ENSURE(State_->GenericClient);
 
-    State_->GenericClient->ListSplits(request).Subscribe([desc, promise, tableAddress]
+    State_->GenericClient->ListSplits(request).Subscribe([desc, promise, data]
         (const NConnector::TListSplitsStreamIteratorAsyncResult f3) mutable {
         NConnector::TListSplitsStreamIteratorAsyncResult f4(f3);
         auto streamIterResult = f4.ExtractValueSync();
@@ -180,7 +207,7 @@ TIssues TGenericListTransformer::ListTableFromConnector(const TGenericState::TTa
         // Check transport error
         if (!streamIterResult.Status.Ok()) {
             desc->Issues.AddIssue(TStringBuilder()
-                << "Call ListSplits for table " << tableAddress.ToString() << ": "
+                << "Call ListSplits for table " << data.Key << ": "
                 << streamIterResult.Status.ToDebugString());
             promise.SetValue();
             return;
@@ -191,16 +218,15 @@ TIssues TGenericListTransformer::ListTableFromConnector(const TGenericState::TTa
         auto drainer =
             NConnector::MakeListSplitsStreamIteratorDrainer(std::move(streamIterResult.Iterator));
 
-        // pass drainer to the callback because we want him to
-        // stay alive until the callback is called    
-        drainer->Run().Subscribe([desc, promise, tableAddress, drainer]
+        // Pass drainer to the callback because we want him to stay alive until the callback is called
+        drainer->Run().Subscribe([desc, promise, data, drainer]
             (const NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer>& f5) mutable {
             NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer> f6(f5);
             auto drainerResult = f6.ExtractValueSync();
 
             // check transport and logical errors
             if (drainerResult.Issues) {
-                TIssue dstIssue(TStringBuilder() << "Call ListSplits for table " << tableAddress.ToString());
+                TIssue dstIssue(TStringBuilder() << "Call ListSplits for table " << data.Key);
 
                 for (const auto& srcIssue : drainerResult.Issues) {
                     dstIssue.AddSubIssue(MakeIntrusive<TIssue>(srcIssue));
@@ -211,7 +237,7 @@ TIssues TGenericListTransformer::ListTableFromConnector(const TGenericState::TTa
                 return;
             }
 
-            // collect all the splits from every response into a single vector
+            // Collect all the splits from every response into a single vector
             for (auto&& response : drainerResult.Responses) {
                 std::transform(std::make_move_iterator(response.mutable_splits()->begin()),
                                std::make_move_iterator(response.mutable_splits()->end()),
@@ -226,7 +252,7 @@ TIssues TGenericListTransformer::ListTableFromConnector(const TGenericState::TTa
     return TIssues();
 }
 
-IGraphTransformer::TStatus TGenericListTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     AsyncFuture_.GetValue();
     output = input;
 
@@ -239,15 +265,39 @@ IGraphTransformer::TStatus TGenericListTransformer::DoApplyAsyncChanges(TExprNod
         return false;
     });
 
-    // Iterate over all the requested tables, check Connector responses
+    if (reads.empty()) {
+        return TStatus::Ok;
+    }
+
+    // Iterate over all read table queries in the input expression, check Connector responses
     for (const auto& r : reads) {
         const TGenReadTable genRead(r);
         const auto clusterName = genRead.DataSource().Cluster().StringValue();
         const auto tableName = genRead.Table().Name().StringValue();
         const TGenericState::TTableAddress tableAddress{clusterName, tableName};
+        auto table = State_->GetTable(tableAddress);
+
+        if (!table.first) {
+            ctx.AddError(TIssue(table.second.ToString()));
+            return TStatus::Error;
+        }
+
+        // Grab select from a read table query
+        NConnector::NApi::TSelect select;
+
+        *select.mutable_data_source_instance() = table.first->DataSourceInstance;
+        select.mutable_from()->set_table(tableName);
+
+        FillColumns(select, genRead, table.first->Schema);
+        FillPredicate(select, genRead, ctx);
+
+        // If splits for a similar select for this table was created skip it
+        if (table.first->HasSplitsForSelect(select)) {
+            continue;
+        }
 
         // Find appropriate response
-        auto iter = ListResponses_.find(tableAddress);
+        auto iter = ListResponses_.find(MakeKeyFor(tableAddress, select));
 
         if (iter == ListResponses_.end()) {
             ctx.AddError(TIssue(ctx.GetPosition(genRead.Pos()), TStringBuilder()
@@ -270,19 +320,16 @@ IGraphTransformer::TStatus TGenericListTransformer::DoApplyAsyncChanges(TExprNod
 
         Y_ENSURE(result->Splits.size() > 0);
 
-        if (!State_->AttachSplitsToTable(tableAddress, result->Splits)) {
+        if (!State_->AttachSplitsToTable(tableAddress, select, result->Splits)) {
             ctx.AddError(TIssue("Failed to attach splits to a table metadata"));
             return TStatus::Error;
         }
-
     }
 
     return TStatus::Ok;
 }
 
-// clang-format off
-
-void TGenericListTransformer::Rewind() {
+void TGenericListSplitTransformer::Rewind() {
     ListResponses_.clear();
     AsyncFuture_ = {};
 }

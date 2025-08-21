@@ -14,6 +14,7 @@
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
@@ -269,7 +270,6 @@ IGraphTransformer::TStatus TGenericDescribeTransformer::DoTransform(TExprNode::T
         return TStatus::Ok;
     }
 
-    std::unordered_set<TTableDescriptionMap::key_type, TTableDescriptionMap::hasher> pendingTables;
     const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
         if (const auto maybeRead = TMaybeNode<TGenRead>(node)) {
             return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
@@ -277,44 +277,60 @@ IGraphTransformer::TStatus TGenericDescribeTransformer::DoTransform(TExprNode::T
         return false;
     });
 
-    if (!reads.empty()) {
-        for (const auto& r : reads) {
-            const TGenRead read(r);
+    if (reads.empty()) {
+        return TStatus::Ok;
+    }
 
-            if (!read.FreeArgs().Get(2).Ref().IsCallable("MrTableConcat")) {
-                ctx.AddError(TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), "Expected key"));
-                return TStatus::Error;
-            }
+    std::unordered_set<TTableDescriptionMap::key_type, TTableDescriptionMap::hasher> pendingRequests;
 
-            const auto maybeKey = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Maybe<TCoKey>();
+    // Iterate over all read table queries in the input expression,
+    // create Describe requests for unique tables
+    for (const auto& r : reads) {
+        const TGenRead read(r);
 
-            if (!maybeKey) {
-                ctx.AddError(TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), "Expected key"));
-                return TStatus::Error;
-            }
+        if (!read.FreeArgs().Get(2).Ref().IsCallable("MrTableConcat")) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), "Expected key"));
+            return TStatus::Error;
+        }
 
-            const auto& keyArg = maybeKey.Cast().Ref().Head();
+        const auto maybeKey = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Maybe<TCoKey>();
 
-            if (!keyArg.IsList() || keyArg.ChildrenSize() != 2U || !keyArg.Head().IsAtom("table") ||
-                !keyArg.Tail().IsCallable(TCoString::CallableName())) {
-                ctx.AddError(TIssue(ctx.GetPosition(keyArg.Pos()), "Expected single table name"));
-                return TStatus::Error;
-            }
+        if (!maybeKey) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), "Expected key"));
+            return TStatus::Error;
+        }
 
-            const auto clusterName = read.DataSource().Cluster().StringValue();
-            const auto tableName = TString(keyArg.Tail().Head().Content());
+        const auto& keyArg = maybeKey.Cast().Ref().Head();
 
-            if (pendingTables.insert(TGenericState::TTableAddress(clusterName, tableName)).second) {
-                YQL_CLOG(INFO, ProviderGeneric) << "Describe table for: `" << clusterName << "`.`" << tableName << "`";
-            }
+        if (!keyArg.IsList() || keyArg.ChildrenSize() != 2U || !keyArg.Head().IsAtom("table") ||
+            !keyArg.Tail().IsCallable(TCoString::CallableName())) {
+            ctx.AddError(TIssue(ctx.GetPosition(keyArg.Pos()), "Expected single table name"));
+            return TStatus::Error;
+        }
+
+        const auto clusterName = read.DataSource().Cluster().StringValue();
+        const auto tableName = TString(keyArg.Tail().Head().Content());
+        auto tableAddress = TGenericState::TTableAddress(clusterName, tableName);
+
+        // Table meta has already been acquired
+        if (State_->HasTable(tableAddress)) {
+            continue;
+        }
+
+        if (pendingRequests.insert(tableAddress).second) {
+            YQL_CLOG(INFO, ProviderGeneric) << "Describe table for: `" << tableAddress.ToString() << "`";
         }
     }
 
-    std::vector<NThreading::TFuture<void>> handles;
-    handles.reserve(pendingTables.size());
-    TableDescriptions_.reserve(pendingTables.size());
+    if (pendingRequests.empty()) {
+        return TStatus::Ok;
+    }
 
-    for (const auto& tableAddress : pendingTables) {
+    std::vector<NThreading::TFuture<void>> handles;
+    handles.reserve(pendingRequests.size());
+    TableDescriptions_.reserve(pendingRequests.size());
+
+    for (const auto& tableAddress : pendingRequests) {
         auto tIssues = DescribeTableFromConnector(tableAddress, handles);
 
         if (!tIssues.Empty()) {
@@ -332,7 +348,7 @@ IGraphTransformer::TStatus TGenericDescribeTransformer::DoTransform(TExprNode::T
 }
 
 TIssues TGenericDescribeTransformer::DescribeTableFromConnector(const TGenericState::TTableAddress& tableAddress,
-                                       std::vector<NThreading::TFuture<void>>& handles) {
+                                                                std::vector<NThreading::TFuture<void>>& handles) {
     const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(tableAddress.ClusterName);
 
     YQL_ENSURE(
@@ -340,7 +356,7 @@ TIssues TGenericDescribeTransformer::DescribeTableFromConnector(const TGenericSt
         "cluster not found: " << tableAddress.ClusterName
     );
 
-    // preserve data source instance for the further usage
+    // Preserve data source instance for the further usage
     auto emplaceIt = TableDescriptions_.emplace(tableAddress, std::make_shared<TTableDescription>());
     auto desc = emplaceIt.first->second;   
     NConnector::NApi::TDescribeTableRequest request;
@@ -487,9 +503,13 @@ IGraphTransformer::TStatus TGenericDescribeTransformer::DoApplyAsyncChanges(TExp
         return false;
     });
 
+    if (!reads.size()) {
+        return TStatus::Ok;
+    }
+
     TNodeOnNodeOwnedMap replaces(reads.size());
 
-    // Iterate over all the requested tables, check Connector responses
+    // Iterate over all read table queries, check Connector responses
     for (const auto& r : reads) {
         const TGenRead genRead(r);
         const auto clusterName = genRead.DataSource().Cluster().StringValue();
@@ -533,7 +553,9 @@ IGraphTransformer::TStatus TGenericDescribeTransformer::DoApplyAsyncChanges(TExp
         }
 
         // Save table metadata into provider state
-        State_->AddTable(tableAddress, std::move(tableMeta));
+        if (!State_->HasTable(tableAddress)) {
+            State_->AddTable(tableAddress, std::move(tableMeta));
+        }
     }
 
     return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));

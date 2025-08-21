@@ -36,25 +36,7 @@
                     "black"
                 ]
             },
-            "formula": {
-                "by_platform": {
-                    "darwin-arm64": {
-                        "uri": "sbr:9001701041"
-                    },
-                    "darwin-x86_64": {
-                        "uri": "sbr:9001702459"
-                    },
-                    "linux-aarch64": {
-                        "uri": "sbr:9001699599"
-                    },
-                    "linux-x86_64": {
-                        "uri": "sbr:9001705785"
-                    },
-                    "win32-x86_64": {
-                        "uri": "sbr:9001704491"
-                    }
-                }
-            }
+            "formula": "build/external_resources/black/resources.json"
         },
         "bloat": {
             "executable": {

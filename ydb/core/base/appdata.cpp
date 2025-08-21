@@ -77,6 +77,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TBridgeConfig BridgeConfig;
+    NKikimrConfig::TStatisticsConfig StatisticsConfig;
 };
 
 TAppData::TAppData(
@@ -139,6 +140,7 @@ TAppData::TAppData(
     , WorkloadManagerConfig(Impl->WorkloadManagerConfig)
     , QueryServiceConfig(Impl->QueryServiceConfig)
     , BridgeConfig(Impl->BridgeConfig)
+    , StatisticsConfig(Impl->StatisticsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

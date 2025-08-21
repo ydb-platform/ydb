@@ -1615,8 +1615,8 @@ public:
     // statistics
     TTabletId StatisticsAggregatorId;
     TActorId SAPipeClientId;
-    static constexpr ui64 SendStatsIntervalMinSeconds = 180;
-    static constexpr ui64 SendStatsIntervalMaxSeconds = 240;
+    ui64 SendStatsIntervalSecondsDedicated = 5;
+    ui64 SendStatsIntervalSecondsServerless = 240;
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr& ev, const TActorContext& ctx);
@@ -1647,8 +1647,10 @@ public:
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
     void ChangePathCount(i64 delta) override;
+    void SetPathCount(ui64 value) override;
     void SetPathsQuota(ui64 value) override;
     void ChangeShardCount(i64 delta) override;
+    void SetShardCount(ui64 value) override;
     void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;

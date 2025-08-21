@@ -1406,8 +1406,10 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
     virtual void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) = 0;
     virtual void ChangePathCount(i64 delta) = 0;
+    virtual void SetPathCount(ui64 value) = 0;
     virtual void SetPathsQuota(ui64 value) = 0;
     virtual void ChangeShardCount(i64 delta) = 0;
+    virtual void SetShardCount(ui64 value) = 0;
     virtual void SetShardsQuota(ui64 value) = 0;
 };
 
@@ -1705,6 +1707,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     ui64 GetBackupShards() const {
         return BackupShards.size();
     }
+
+    void UpdateCounters(IQuotaCounters* counters);
 
     void ActualizeAlterData(const THashMap<TShardIdx, TShardInfo>& allShards, TInstant now, bool isExternal, IQuotaCounters* counters) {
         Y_ENSURE(AlterData);

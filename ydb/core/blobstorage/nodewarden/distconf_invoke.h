@@ -23,6 +23,8 @@ namespace NKikimr::NStorage {
 
         std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
 
+        bool InvokedWithoutScepter = false;
+
     public: // Error handling
         struct TExError : yexception {
             bool IsCritical = false; // the one what would case Y_ABORT if in debug mode

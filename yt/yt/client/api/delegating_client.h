@@ -902,6 +902,11 @@ public:
         const TDistributedWriteSessionStartOptions& options),
         (path, options))
 
+    DELEGATE_METHOD(TFuture<void>, PingDistributedWriteSession, (
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options),
+        (session, options))
+
     DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options),

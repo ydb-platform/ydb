@@ -8,8 +8,6 @@
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
-#include <ydb/library/yql/dq/actors/compute/dq_task_runner_exec_ctx.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
 
@@ -587,24 +585,6 @@ private:
         auto startTime = TInstant::Now();
         ExecCtx = ev->Get()->ExecCtx;
         auto* actorSystem = TActivationContext::ActorSystem();
-        
-        // Создаем спиллер для этого task_runner
-        auto wakeupCallbackForSpiller = ExecCtx->GetWakeupCallback();
-        auto errorCallbackForSpiller = ExecCtx->GetErrorCallback();
-        auto spillerFactory = std::make_shared<TDqSpillerFactory>(
-            ExecCtx->GetTxId(),
-            actorSystem,
-            wakeupCallbackForSpiller,
-            errorCallbackForSpiller
-        );
-        spillerFactory->SetTaskCounters(ExecCtx->GetSpillingTaskCounters());
-        auto spillerPtr = spillerFactory->CreateSpiller();
-        TaskSpiller_ = std::dynamic_pointer_cast<IDqSpiller>(spillerPtr);
-        
-        // Устанавливаем спиллер в ExecCtx, чтобы task_runner мог его использовать
-        if (auto execCtxImpl = std::dynamic_pointer_cast<TDqTaskRunnerExecutionContext>(ExecCtx)) {
-            execCtxImpl->SetSpiller(TaskSpiller_);
-        }
 
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
@@ -757,11 +737,13 @@ private:
     void CreateSpillingStorage(ui64 channelId, TActorSystem* actorSystem, bool enableSpilling) {
         TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
         
-        // Используем наш TaskSpiller_ для создания channel storage
+        // Пробуем получить спиллер из ExecCtx (если TaskRunner его создал)
+        auto spiller = ExecCtx->GetSpiller();
         IDqChannelStorage::TPtr channelStorage;
         
-        if (TaskSpiller_) {
-            channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, TaskSpiller_);
+        if (spiller) {
+            // Используем спиллер из TaskRunner
+            channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, spiller);
         } else {
             // Fallback на старый API
             channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem);
@@ -794,7 +776,6 @@ private:
     TString ClusterName;
 
     std::shared_ptr<IDqTaskRunnerExecutionContext> ExecCtx;
-    std::shared_ptr<IDqSpiller> TaskSpiller_;  // Один спиллер для этого task_runner
     std::unordered_map<ui64, TSpillingStorageInfo::TPtr> SpillingStoragesInfos;
 };
 

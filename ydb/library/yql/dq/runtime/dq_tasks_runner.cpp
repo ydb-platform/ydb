@@ -645,8 +645,17 @@ public:
             }
         }
 
-        // Получаем спиллер из ExecCtx (создается на уровне task_runner_actor)
-        std::shared_ptr<IDqSpiller> taskSpiller = execCtx.GetSpiller();
+        // Создаем один спиллер для всех каналов этого task_runner
+        std::shared_ptr<IDqSpiller> taskSpiller;
+        if (SpillerFactory) {
+            auto spillerPtr = SpillerFactory->CreateSpiller();
+            taskSpiller = std::dynamic_pointer_cast<IDqSpiller>(spillerPtr);
+            
+            // Устанавливаем созданный спиллер в ExecCtx для использования в task_runner_actor
+            if (auto execCtxImpl = dynamic_cast<TDqTaskRunnerExecutionContext*>(&execCtx)) {
+                execCtxImpl->SetSpiller(taskSpiller);
+            }
+        }
 
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
         for (ui32 i = 0; i < task.OutputsSize(); ++i) {

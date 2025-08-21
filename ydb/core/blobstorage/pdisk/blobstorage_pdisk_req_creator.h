@@ -23,6 +23,7 @@ private:
     TPDiskMon *Mon;
     TDriveModel *Model;
     TAtomic *EstimatedLogChunkIdx;
+    bool SeparateHugePriorities = false;
 
 public:
     // Self variables
@@ -95,14 +96,16 @@ private:
                         request->GateId = GateComp;
                         break;
                     case NPriWrite::HullHugeAsyncBlob:
+                        request->GateId = SeparateHugePriorities ? GateHugeAsync : GateHugeUser;
+                        break;
                     case NPriWrite::HullHugeUserData:
-                        request->GateId = GateHuge;
+                        request->GateId = GateHugeUser;
                         break;
                     case NPriWrite::SyncLog:
                         request->GateId = GateSyncLog;
                         break;
                     default:
-                        request->GateId = GateHuge;
+                        request->GateId = GateHugeUser;
                         break;
                 }
                 request->IsSensitive = false;
@@ -175,11 +178,12 @@ private:
     }
 
 public:
-    TReqCreator(std::shared_ptr<TPDiskCtx> pCtx, TPDiskMon *mon, TDriveModel *model, TAtomic *estimatedChunkIdx)
+    TReqCreator(std::shared_ptr<TPDiskCtx> pCtx, TPDiskMon *mon, TDriveModel *model, TAtomic *estimatedChunkIdx, bool separateHugePriorities)
         : PCtx(std::move(pCtx))
         , Mon(mon)
         , Model(model)
         , EstimatedLogChunkIdx(estimatedChunkIdx)
+        , SeparateHugePriorities(separateHugePriorities)
         , LastReqId(ui64(PCtx->PDiskId) * 10000000ull)
     {}
 

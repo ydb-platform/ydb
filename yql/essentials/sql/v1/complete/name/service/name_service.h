@@ -154,6 +154,4 @@ namespace NSQLComplete {
         virtual NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const = 0;
     };
 
-    TString NormalizeName(TStringBuf name);
-
 } // namespace NSQLComplete

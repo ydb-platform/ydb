@@ -31,12 +31,12 @@ void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 external
     RefreshSignals();
 }
 
-void TManager::UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume) {
+void TManager::AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId) {
     TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
     bool updated = false;
     {
         auto g = BuildProcessOrderGuard(process);
-        updated = process.UpdateAllocation(externalScopeId, allocationId, volume);
+        updated = process.AllocationUpdated(externalScopeId, allocationId);
         if (!updated) {
             g.Release();
         }
@@ -96,7 +96,7 @@ void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 exter
         process->RegisterAllocation(externalScopeId, externalGroupId, allocation, stageIdx);
     } else {
         LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), "", std::numeric_limits<ui64>::max(), std::numeric_limits<ui64>::max(), 0, 0, TDuration::Zero(), false, false);
-        AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory()), allocation))(
+        AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation))(
                                                                "process", externalProcessId)("scope", externalScopeId)(
                                                                "ext_group", externalGroupId)("stage_idx", stageIdx);
     }

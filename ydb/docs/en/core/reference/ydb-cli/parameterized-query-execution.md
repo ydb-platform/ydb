@@ -555,8 +555,6 @@ Command output:
 
 #### Deleting multiple records from a {{ ydb-short-name }} table based on primary keys {#example-adaptive-delete-pk}
 
-{% include [not_allow_for_olap_note](../../_includes/not_allow_for_olap_note.md) %}
-
 If you attempt to delete a large number of rows from a substantial table using a simple `DELETE FROM large_table WHERE id > 10;` statement, you may encounter an error due to exceeding the transaction record limit. This example shows how to delete an unlimited number of records from {{ ydb-short-name }} tables without breaching this limitation.
 
 Let's create a test table:

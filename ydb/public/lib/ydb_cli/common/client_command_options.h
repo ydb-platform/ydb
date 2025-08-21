@@ -225,6 +225,8 @@ public:
 
     TClientCommandOption& DefaultValue(const TString& defaultValue);
 
+    TClientCommandOption& ManualDefaultValueDescription(const TString& description);
+
     template <class TValue>
     TClientCommandOption& DefaultValue(const TValue& defaultValue) {
         return DefaultValue(ToString(defaultValue));
@@ -242,6 +244,7 @@ protected:
     TClientCommandOption& SetHandler();
     bool HandlerImpl(TString value, bool isFileName, const TString& humanReadableFileName, EOptionValueSource valueSource);
     void RebuildHelpMessage();
+    bool NeedPrintDefinitionsPriority() const;
 
     // Try parse from profile.
     // if parsedValue is not null, set it with parsed value, if actual
@@ -267,6 +270,7 @@ protected:
     TString* FilePath = nullptr;
     std::vector<TEnvInfo> EnvInfo;
     TString DefaultOptionValue;
+    TString ManualDefaultOptionValueDescription;
     TString ProfileParamName;
     bool ProfileParamIsFileName = false;
     bool CanParseFromProfile = false;

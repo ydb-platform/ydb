@@ -8,6 +8,7 @@ namespace NSQLComplete {
     enum class EObjectKind {
         Folder,
         Table,
+        Unknown,
     };
 
     enum class ENodeKind {
@@ -54,6 +55,8 @@ namespace NSQLComplete {
         friend bool operator<(const TColumnId& lhs, const TColumnId& rhs);
         friend bool operator==(const TColumnId& lhs, const TColumnId& rhs) = default;
     };
+
+    TString NormalizeName(TStringBuf name);
 
 } // namespace NSQLComplete
 

@@ -138,18 +138,18 @@ private:
     NProfiling::TGauge SizeCounter_;
 
     void SetResult(
-        const TWeakPtr<TEntry>& entry,
+        const TWeakPtr<TEntry>& weakEntry,
         const TKey& key,
         const TErrorOr<TValue>& valueOrError,
         bool isPeriodicUpdate);
 
     void InvokeGetMany(
-        const std::vector<TWeakPtr<TEntry>>& entries,
+        const std::vector<TWeakPtr<TEntry>>& weakEntries,
         const std::vector<TKey>& keys,
         std::optional<TDuration> periodicRefreshTime);
 
     void InvokeGet(
-        const TEntryPtr& entry,
+        TWeakPtr<TEntry> weakEntry,
         const TKey& key);
 
     bool TryEraseExpired(

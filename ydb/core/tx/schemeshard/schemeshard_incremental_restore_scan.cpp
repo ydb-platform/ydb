@@ -27,45 +27,38 @@ public:
         , OperationId(operationId)
     {}
 
-    bool Execute(NTabletFlatExecutor::TTransactionContext&, const TActorContext& ctx) override {
+    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_I("TTxProgressIncrementalRestore::Execute"
             << " operationId: " << OperationId
             << " tablet: " << Self->TabletID());
 
-        // Debug: Check what states exist
-        LOG_I("IncrementalRestoreStates contains " << Self->IncrementalRestoreStates.size() << " entries");
-        for (const auto& [key, value] : Self->IncrementalRestoreStates) {
-            LOG_I("  State key: " << key << " (comparing with " << OperationId << ")");
-        }
-
-        // Find the incremental restore state for this operation
-        LOG_I("Looking up state for operation: " << OperationId << " (type: ui64)");
         auto stateIt = Self->IncrementalRestoreStates.find(OperationId);
         if (stateIt == Self->IncrementalRestoreStates.end()) {
             LOG_W("No incremental restore state found for operation: " << OperationId);
-            LOG_I("Available states:");
-            for (const auto& [key, value] : Self->IncrementalRestoreStates) {
-                LOG_I("  Key: " << key);
-            }
             return true;
         }
 
         auto& state = stateIt->second;
         
-        LOG_I("Found state with " << state.IncrementalBackups.size() << " incremental backups, current index: " << state.CurrentIncrementalIdx);
-        
-        // Check for completed operations by seeing if they're still in the Operations map
         CheckForCompletedOperations(state, ctx);
         
         // Check if all operations for current incremental backup are complete
+        LOG_I("Checking completion: InProgressOperations.size()=" << state.InProgressOperations.size() 
+              << ", CompletedOperations.size()=" << state.CompletedOperations.size()
+              << ", CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
+              << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
+              
         if (state.AreAllCurrentOperationsComplete()) {
             LOG_I("All operations for current incremental backup completed, moving to next");
             state.MarkCurrentIncrementalComplete();
             state.MoveToNextIncremental();
             
+            LOG_I("After MoveToNextIncremental: CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
+                  << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
+            
             if (state.AllIncrementsProcessed()) {
-                LOG_I("All incremental backups processed, cleaning up");
-                Self->IncrementalRestoreStates.erase(OperationId);
+                LOG_I("All incremental backups processed, performing finalization");
+                FinalizeIncrementalRestoreOperation(txc, ctx, state);
                 return true;
             }
             
@@ -93,27 +86,18 @@ private:
     ui64 OperationId;
     
     void CheckForCompletedOperations(TIncrementalRestoreState& state, const TActorContext& ctx) {
-        // Check if any in-progress operations have completed by looking at the Operations map
         THashSet<TOperationId> stillInProgress;
-        
-        LOG_I("CheckForCompletedOperations: checking " << state.InProgressOperations.size() << " operations");
         
         for (const auto& opId : state.InProgressOperations) {
             TTxId txId = opId.GetTxId();
-            LOG_I("CheckForCompletedOperations: checking operation " << opId << " (txId: " << txId << ")");
             
             if (Self->Operations.contains(txId)) {
-                // Operation is still running
                 stillInProgress.insert(opId);
-                LOG_I("Operation " << opId << " still in progress");
             } else {
-                // Operation has completed
                 state.CompletedOperations.insert(opId);
                 LOG_I("Operation " << opId << " completed for incremental restore " << OperationId);
             }
         }
-        
-        LOG_I("CheckForCompletedOperations: " << stillInProgress.size() << " still in progress, " << state.CompletedOperations.size() << " completed");
         
         state.InProgressOperations = std::move(stillInProgress);
     }
@@ -127,12 +111,8 @@ private:
         
         LOG_I("Processing incremental backup #" << state.CurrentIncrementalIdx + 1 
             << " path: " << currentIncremental->BackupPath
-            << " timestamp: " << currentIncremental->Timestamp
-            << " (CurrentIncrementalIdx: " << state.CurrentIncrementalIdx << " of " << state.IncrementalBackups.size() << ")");
+            << " timestamp: " << currentIncremental->Timestamp);
         
-        LOG_I("[IncrementalRestore] About to call CreateIncrementalRestoreOperation");
-        
-        // Create separate restore operations for each table in this incremental backup
         Self->CreateIncrementalRestoreOperation(
             state.BackupCollectionPathId,
             OperationId,
@@ -140,18 +120,109 @@ private:
             ctx
         );
         
-        LOG_I("[IncrementalRestore] Finished calling CreateIncrementalRestoreOperation");
-        
-        // Mark this incremental backup as started
         state.CurrentIncrementalStarted = true;
         
-        // Schedule another progress check to monitor completion
         auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
         Self->Schedule(TDuration::Seconds(1), progressEvent.Release());
     }
+    
+    void FinalizeIncrementalRestoreOperation(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, TIncrementalRestoreState& state) {
+        Y_UNUSED(txc);
+        LOG_I("Starting finalization of incremental restore operation: " << OperationId);
+        
+        CreateFinalizationOperation(state, ctx);
+    }
+
+    void CreateFinalizationOperation(TIncrementalRestoreState& state, const TActorContext& ctx) {
+        // Build the finalization request
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        auto& record = request->Record;
+        
+        TTxId finalizeTxId = Self->GetCachedTxId(ctx);
+        record.SetTxId(ui64(finalizeTxId));
+        
+        auto& transaction = *record.AddTransaction();
+        transaction.SetOperationType(NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize);
+        transaction.SetInternal(true);
+        
+        // Add metadata about what needs finalization
+        auto& finalize = *transaction.MutableIncrementalRestoreFinalize();
+        finalize.SetOriginalOperationId(OperationId);
+        finalize.SetBackupCollectionPathId(state.BackupCollectionPathId.LocalPathId);
+        
+        // Add all paths that need normalization
+        CollectTargetTablePaths(state, finalize);
+        CollectBackupTablePaths(state, finalize);
+        
+        LOG_I("Sending finalization operation with txId: " << finalizeTxId);
+        Self->Send(Self->SelfId(), request.Release());
+    }
+
+    void CollectTargetTablePaths(TIncrementalRestoreState& state, 
+                               NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
+        Y_UNUSED(state);
+        auto opIt = Self->LongIncrementalRestoreOps.find(TOperationId(OperationId, 0));
+        if (opIt != Self->LongIncrementalRestoreOps.end()) {
+            const auto& op = opIt->second;
+            for (const auto& tablePath : op.GetTablePathList()) {
+                finalize.AddTargetTablePaths(tablePath);
+            }
+        } else {
+            // For simple operations, collect paths directly from affected paths
+            for (auto& [pathId, pathInfo] : Self->PathsById) {
+                if (pathInfo->PathState == NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore) {
+                    TString pathString = TPath::Init(pathId, Self).PathString();
+                    finalize.AddTargetTablePaths(pathString);
+                }
+            }
+        }
+    }
+
+    void CollectBackupTablePaths(TIncrementalRestoreState& state,
+                               NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
+        auto opIt = Self->LongIncrementalRestoreOps.find(TOperationId(OperationId, 0));
+        if (opIt != Self->LongIncrementalRestoreOps.end()) {
+            const auto& op = opIt->second;
+            
+            TString bcPathString = TPath::Init(state.BackupCollectionPathId, Self).PathString();
+            
+            // Add full backup tables
+            TString fullBackupPath = JoinPath({bcPathString, op.GetFullBackupTrimmedName()});
+            for (const auto& tablePath : op.GetTablePathList()) {
+                TPath fullPath = TPath::Resolve(tablePath, Self);
+                TString tableName = fullPath.LeafName();
+                TString sourceTablePath = JoinPath({fullBackupPath, tableName});
+                finalize.AddBackupTablePaths(sourceTablePath);
+            }
+            
+            // Add incremental backup tables
+            for (const auto& incrBackupName : op.GetIncrementalBackupTrimmedNames()) {
+                TString incrBackupPath = JoinPath({bcPathString, incrBackupName});
+                for (const auto& tablePath : op.GetTablePathList()) {
+                    TPath fullPath = TPath::Resolve(tablePath, Self);
+                    TString tableName = fullPath.LeafName();
+                    TString sourceTablePath = JoinPath({incrBackupPath, tableName});
+                    finalize.AddBackupTablePaths(sourceTablePath);
+                }
+            }
+        } else {
+            // For simple operations, collect backup paths directly
+            TString bcPathString = TPath::Init(state.BackupCollectionPathId, Self).PathString();
+            
+            for (auto& [pathId, pathInfo] : Self->PathsById) {
+                if (pathInfo->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore ||
+                    pathInfo->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore) {
+                    TString pathString = TPath::Init(pathId, Self).PathString();
+                    // Only add if it's under the backup collection
+                    if (pathString.StartsWith(bcPathString)) {
+                        finalize.AddBackupTablePaths(pathString);
+                    }
+                }
+            }
+        }
+    }
 };
 
-// Handler for TEvRunIncrementalRestore - starts sequential processing
 void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
     const auto& backupCollectionPathId = msg->BackupCollectionPathId;
@@ -163,11 +234,6 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
           << " backupCollectionPathId: " << backupCollectionPathId
           << " operationId: " << operationId
           << " tablet: " << TabletID());
-    
-    // Debug: print all incremental backup names
-    for (size_t i = 0; i < incrementalBackupNames.size(); ++i) {
-        LOG_I("Handle(TEvRunIncrementalRestore) incrementalBackupNames[" << i << "]: '" << incrementalBackupNames[i] << "'");
-    }
 
     // Find the backup collection to get restore settings
     auto itBc = BackupCollections.find(backupCollectionPathId);
@@ -199,8 +265,10 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
     
     IncrementalRestoreStates[ui64(operationId.GetTxId())] = std::move(state);
     
-    auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(ui64(operationId.GetTxId()));
-    Send(SelfId(), progressEvent.Release());
+    // Execute progress transaction immediately instead of sending an event
+    // This ensures the finalization logic gets triggered even for simple operations
+    LOG_I("Handle(TEvRunIncrementalRestore) executing progress transaction directly");
+    Execute(new TTxProgressIncrementalRestore(this, ui64(operationId.GetTxId())), ctx);
 }
 
 // Enhanced handler for TEvProgressIncrementalRestore  

@@ -95,8 +95,8 @@ public:
 
     TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpRequestCounters::TPtr counters, bool streamResult,
-        const TExecuterConfig& executerConfig,
+        TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
+        bool streamResult, const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
@@ -105,9 +105,10 @@ public:
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId bufferActorId,
-        TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing())
+        TMaybe<NBatchOperations::TSettings> batchOperationSettings)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
-            database, userToken, counters, executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
+            database, userToken, std::move(resultSetFormatSettings), counters,
+            executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", streamResult, bufferActorId, txManager, std::move(batchOperationSettings))
         , ShardIdToTableInfo(shardIdToTableInfo)
         , AllowOlapDataQuery(executerConfig.TableServiceConfig.GetAllowOlapDataQuery())
@@ -427,6 +428,7 @@ public:
                 hFunc(NShardResolver::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
                 hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
+                hFunc(TEvSaveScriptPhysicalGraphResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
@@ -1993,6 +1995,11 @@ private:
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
+        const bool graphRestored = Request.QueryPhysicalGraph != nullptr;
+        if (graphRestored) {
+            RestoreTasksGraphInfo(TasksGraph, *Request.QueryPhysicalGraph);
+        }
+
         size_t sourceScanPartitionsCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
@@ -2003,6 +2010,11 @@ private:
                 const auto stageId = TStageId(txIdx, stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(stageId);
                 AFL_ENSURE(stageInfo.Id == stageId);
+
+                if (graphRestored && (stageInfo.Meta.ShardOperations || stageInfo.Meta.ShardKind != NSchemeCache::ETableKind::KindUnknown)) {
+                    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, YqlIssue({}, NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Restore is not supported for table operations"));
+                    return;
+                }
 
                 if (stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
                     TMaybe<TString> error;
@@ -2067,7 +2079,9 @@ private:
                 }
 
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
+                if (!graphRestored) {
+                    BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
+                }
             }
 
             ResponseEv->InitTxResult(tx.Body);
@@ -2190,6 +2204,35 @@ private:
 
         TasksGraph.GetMeta().UseFollowers = GetUseFollowers();
 
+        if (Request.SaveQueryPhysicalGraph) {
+            SavePhysicalGraph();
+        } else {
+            ResolveShards();
+        }
+    }
+
+    void SavePhysicalGraph() {
+        NKikimrKqp::TQueryPhysicalGraph physicalGraph;
+
+        YQL_ENSURE(Request.Transactions.size() == 1);
+        const auto preparedQuery = Request.Transactions[0].Body->GetPreparedQuery();
+        YQL_ENSURE(preparedQuery);
+        *physicalGraph.MutablePreparedQuery() = *preparedQuery;
+
+        PersistTasksGraphInfo(TasksGraph, physicalGraph);
+
+        const auto runScriptActorId = GetUserRequestContext()->RunScriptActorId;
+        Y_ENSURE(runScriptActorId);
+        this->Send(runScriptActorId, new TEvSaveScriptPhysicalGraphRequest(std::move(physicalGraph)));
+        Become(&TKqpDataExecuter::WaitResolveState);
+    }
+
+    void HandleResolve(TEvSaveScriptPhysicalGraphResponse::TPtr& ev) {
+        YQL_ENSURE(ev->Get()->Status == Ydb::StatusIds::SUCCESS, "failed to save script physical graph with issues: " << ev->Get()->Issues.ToOneLineString());
+        ResolveShards();
+    }
+
+    void ResolveShards() {
         if (RemoteComputeTasks) {
             TSet<ui64> shardIds;
             for (const auto& [shardId, _] : RemoteComputeTasks) {
@@ -3053,7 +3096,7 @@ private:
 } // namespace
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    TKqpRequestCounters::TPtr counters, bool streamResult, const TExecuterConfig& executerConfig,
+    TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters, bool streamResult, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
@@ -3061,7 +3104,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings)
 {
-    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerConfig,
+    return new TKqpDataExecuter(std::move(request), database, userToken, std::move(resultSetFormatSettings), counters, streamResult, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
         std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings));
 }

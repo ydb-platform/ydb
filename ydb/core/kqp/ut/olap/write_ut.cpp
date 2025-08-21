@@ -428,6 +428,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         writeGuard.Finalize();
         {
             auto selectQuery = TString(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
                 SELECT
                     field, count(*) as count,
                 FROM `/Root/olapStore/olapTable`
@@ -531,6 +532,94 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 Sleep(TDuration::Seconds(2));
             }
             AFL_VERIFY(!Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
+        }
+    }
+
+    Y_UNIT_TEST(TestInsertDataIntegrityViolation) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        auto queryClient = kikimr.GetQueryClient();
+
+        TTypedLocalHelper helper("Utf8", kikimr);
+        helper.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/IntegrityTestTable` (
+                id Int32 NOT NULL,
+                uint_field Uint32 NOT NULL,
+                PRIMARY KEY (id)
+            )
+            WITH (
+                STORE = COLUMN)
+            ;
+        )");
+        
+        auto tableClient = kikimr.GetTableClient();
+        
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                INSERT INTO `/Root/IntegrityTestTable` (id, uint_field) VALUES 
+                (1, 100),
+                (2, 200);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        
+        {
+            auto result = queryClient.ExecuteQuery("SELECT * FROM `/Root/IntegrityTestTable` ORDER BY id", 
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto resultSet = result.GetResultSetParser(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+            resultSet.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint32(), 100);
+
+            resultSet.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint32(), 200);
+        }
+        
+        {
+            TStringBuilder insertQuery;
+            insertQuery << "INSERT INTO `/Root/IntegrityTestTable` (id, uint_field) VALUES ";
+            for (int i = 3; i <= 101; ++i) {
+                if (i > 3) insertQuery << ", ";
+                insertQuery << "(" << i << ", " << (i * 10) << ")";
+            }
+
+            insertQuery << ", (102, -1)";            
+            auto result = queryClient.ExecuteQuery(insertQuery, 
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "INSERT should have failed with data integrity violation");
+            Cerr << "Expected error caught: " << result.GetIssues().ToString() << Endl; // Intentionally inserting -1 as invalid data to trigger a data type violation for Uint32 field.
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery("SELECT COUNT(*) as count FROM `/Root/IntegrityTestTable`", 
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            
+            auto resultSet = result.GetResultSetParser(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+            
+            resultSet.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 2);
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery("SELECT * FROM `/Root/IntegrityTestTable` ORDER BY id", 
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto resultSet = result.GetResultSetParser(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+            resultSet.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint32(), 100);
+
+            resultSet.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint32(), 200);
         }
     }
 }

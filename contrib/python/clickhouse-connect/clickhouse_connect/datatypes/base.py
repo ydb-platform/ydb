@@ -126,16 +126,19 @@ class ClickHouseType(ABC):
         if self.low_card:
             write_uint64(low_card_version, dest)
 
-    def read_column_prefix(self, source: ByteSource, _ctx: QueryContext):
+    def read_column_prefix(self, source: ByteSource, _ctx: QueryContext) -> Any:
         """
         Read the low cardinality version.  Like the write method, this has to happen immediately for container classes
         :param source: The native protocol binary read buffer
-        :return: updated read pointer
+        :param _ctx: The current query context
+        :return: any state data required by the read_column_data method
         """
         if self.low_card:
             v = source.read_uint64()
             if v != low_card_version:
                 logger.warning('Unexpected low cardinality version %d reading type %s', v, self.name)
+            return v
+        return None
 
     def read_column(self, source: ByteSource, num_rows: int, ctx: QueryContext) -> Sequence:
         """
@@ -144,30 +147,31 @@ class ClickHouseType(ABC):
         :param source: Native protocol binary read buffer
         :param num_rows: Number of rows expected in the column
         :param ctx: QueryContext for query specific settings
-        :return: The decoded column data as a sequence and the updated location pointer
+        :return: The decoded column data as a sequence
         """
-        self.read_column_prefix(source, ctx)
-        return self.read_column_data(source, num_rows, ctx)
+        read_state = self.read_column_prefix(source, ctx)
+        return self.read_column_data(source, num_rows, ctx, read_state)
 
-    def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext) -> Sequence:
+    def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: Any) -> Sequence:
         """
         Public read method for all ClickHouseType data type columns
         :param source: Native protocol binary read buffer
         :param num_rows: Number of rows expected in the column
         :param ctx: QueryContext for query specific settings
-        :return: The decoded column plus the updated location pointer
+        :param read_state: Any information returned by the read_column_prefix method
+        :return: The decoded column
         """
         if self.low_card:
-            column = self._read_low_card_column(source, num_rows, ctx)
+            column = self._read_low_card_column(source, num_rows, ctx, read_state)
         elif self.nullable:
-            column = self._read_nullable_column(source, num_rows, ctx)
+            column = self._read_nullable_column(source, num_rows, ctx, read_state)
         else:
-            column = self._read_column_binary(source, num_rows, ctx)
+            column = self._read_column_binary(source, num_rows, ctx, read_state)
         return self._finalize_column(column, ctx)
 
-    def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext) -> Sequence:
+    def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: Any) -> Sequence:
         null_map = source.read_bytes(num_rows)
-        column = self._read_column_binary(source, num_rows, ctx)
+        column = self._read_column_binary(source, num_rows, ctx, read_state)
         null_obj = self._active_null(ctx)
         return data_conv.build_nullable_column(column, null_map, null_obj)
 
@@ -177,7 +181,8 @@ class ClickHouseType(ABC):
     # pylint: disable=no-self-use
     def _read_column_binary(self,
                             _source: ByteSource,
-                            _num_rows: int, _ctx: QueryContext) -> Union[Sequence, MutableSequence]:
+                            _num_rows: int, _ctx: QueryContext,
+                            _read_state: Any) -> Union[Sequence, MutableSequence]:
         """
         Lowest level read method for ClickHouseType native data columns
         :param _source: Native protocol binary read buffer
@@ -224,13 +229,13 @@ class ClickHouseType(ABC):
             self._write_column_binary(column, dest, ctx)
 
     # pylint: disable=no-member
-    def _read_low_card_column(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_low_card_column(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: Any):
         if num_rows == 0:
             return []
         key_data = source.read_uint64()
         key_sz = 2 ** (key_data & 0xff)
         index_cnt = source.read_uint64()
-        index = self._read_column_binary(source, index_cnt, ctx)
+        index = self._read_column_binary(source, index_cnt, ctx, read_state)
         key_cnt = source.read_uint64()
         keys = source.read_array(array_type(key_sz, False), key_cnt)
         if self.nullable:
@@ -313,12 +318,12 @@ class ArrayType(ClickHouseType, ABC, registered=False):
             cls._struct_type = '<' + cls._array_type
             cls.byte_size = array.array(cls._array_type).itemsize
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         if ctx.use_numpy:
             return numpy_conv.read_numpy_array(source, self.np_type, num_rows)
         return source.read_array(self._array_type, num_rows)
 
-    def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext) -> Sequence:
+    def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any) -> Sequence:
         return data_conv.read_nullable_array(source, self._array_type, num_rows, self._active_null(ctx))
 
     def _build_lc_column(self, index: Sequence, keys: array.array, ctx: QueryContext):
@@ -357,7 +362,7 @@ class UnsupportedType(ClickHouseType, ABC, registered=False):
         super().__init__(type_def)
         self._name_suffix = type_def.arg_str
 
-    def _read_column_binary(self, source: Sequence, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: Sequence, num_rows: int, ctx: QueryContext, read_state: Any):
         raise NotSupportedError(f'{self.name} deserialization not supported')
 
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):

@@ -931,7 +931,7 @@ private:
                     << "State: " << info.State << Endl
                     << "KMeans: " << info.KMeans.DebugString() << Endl
                     << "Sample: " << info.Sample.DebugString() << Endl
-                    << "IsBroken: " << info.IsBroken << Endl
+                    << "IsBroken: " << (info.IsBroken ? "YES" : "NO") << Endl
                     << "Issue: " << info.GetIssue() << Endl
 
                     << "Shards.size: " << info.Shards.size() << Endl
@@ -974,6 +974,10 @@ private:
                     << "UnlockTxId: " << info.UnlockTxId << Endl
                     << "UnlockTxStatus: " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus) << Endl
                     << "UnlockTxDone: " << (info.UnlockTxDone ? "DONE" : "not done") << Endl
+
+                    << "DropColumnsTxId: " << info.DropColumnsTxId << Endl
+                    << "DropColumnsTxStatus: " << NKikimrScheme::EStatus_Name(info.DropColumnsTxStatus) << Endl
+                    << "DropColumnsTxDone: " << (info.DropColumnsTxDone ? "DONE" : "not done") << Endl
 
                     << "SnapshotStep: " << info.SnapshotStep << Endl
                     << "SnapshotTxId: " << info.SnapshotTxId << Endl;

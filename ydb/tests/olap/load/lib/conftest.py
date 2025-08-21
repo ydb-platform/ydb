@@ -466,7 +466,6 @@ class LoadSuiteBase:
             scale=self.scale,
             query_prefix=qparams.query_prefix,
             external_path=self.get_external_path(),
-            float_mode=self.float_mode,
         )[query_name]
         self.process_query_result(result, query_name, True)
 
@@ -806,10 +805,12 @@ class LoadSuiteBase:
 class LoadSuiteParallel(LoadSuiteBase):
     threads: int = 0
 
-    def get_query_list() -> list[str]:
+    @classmethod
+    def get_query_list(cls) -> list[str]:
         return []
 
-    def get_path() -> str:
+    @classmethod
+    def get_path(cls) -> str:
         return ''
 
     __results: dict[str, YdbCliHelper.WorkloadRunResult] = {}
@@ -830,7 +831,6 @@ class LoadSuiteParallel(LoadSuiteBase):
             query_prefix=qparams.query_prefix,
             external_path=cls.get_external_path(),
             threads=cls.threads,
-            float_mode=cls.float_mode,
         )
 
     def test(self, query_name):

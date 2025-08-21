@@ -11,6 +11,7 @@
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/thread_affinity.h>
+#include <yt/yt/core/concurrency/context_switch.h>
 
 #include <library/cpp/yt/threading/event_count.h>
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -26,7 +27,7 @@ namespace NYT {
 
 namespace NConcurrency {
 
-// Forward declaration from scheduler.h
+// Forward declaration from scheduler_api.h
 TCallback<void(const NYT::TError&)> GetCurrentFiberCanceler();
 
 //! Thrown when a fiber is being terminated by an external event.
@@ -41,6 +42,18 @@ IInvokerPtr GetSyncInvoker();
 namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+template <class F, class... As>
+auto RunFutureHandler(F&& functor, As&&... args) noexcept -> decltype(functor(std::forward<As>(args)...))
+{
+#ifndef NDEBUG
+    std::optional<NConcurrency::TForbidContextSwitchGuard> guard;
+    if (IsContextSwitchInFutureHandlerForbidden()) {
+        guard.emplace();
+    }
+#endif
+    return functor(std::forward<As>(args)...);
+}
 
 inline TError WrapIntoCancelationError(const TError& error)
 {
@@ -125,7 +138,7 @@ public:
     {
         for (const auto& callback : Callbacks_) {
             if (callback) {
-                RunNoExcept(callback, std::forward<As>(args)...);
+                RunFutureHandler(callback, std::forward<As>(args)...);
             }
         }
         Callbacks_.clear();
@@ -395,7 +408,7 @@ protected:
             } else if (Set_) {
                 return false;
             }
-            RunNoExcept(setter);
+            RunFutureHandler(setter);
             Set_ = true;
             canceled = Canceled_;
             readyEvent = ReadyEvent_.get();
@@ -449,13 +462,32 @@ public:
 
 private:
     std::optional<TErrorOr<T>> Result_;
-#ifndef NDEBUG
-    mutable std::atomic<bool> ResultMovedOut_ = false;
-#endif
-
     TResultHandlers ResultHandlers_;
     TUniqueResultHandler UniqueResultHandler_;
 
+#ifndef NDEBUG
+    static constexpr ui8 GetInvokedFlag = 0x1;
+    static constexpr ui8 GetUniqueInvokedFlag = 0x2;
+    mutable std::atomic<ui8> ResultFlags_;
+#endif
+
+    void BeforeGetResult() const
+    {
+#ifndef NDEBUG
+        auto prevFlags = ResultFlags_.fetch_or(GetInvokedFlag);
+        // Check that no GetUnique calls were previously made.
+        YT_ASSERT((prevFlags & GetUniqueInvokedFlag) == 0);
+#endif
+    }
+
+    void BeforeGetUniqueResult() const
+    {
+#ifndef NDEBUG
+        auto prevFlags = ResultFlags_.fetch_or(GetUniqueInvokedFlag);
+        // Check that no Get or GetUnique calls were previously made.
+        YT_ASSERT(prevFlags == 0);
+#endif
+    }
 
     template <bool MustSet, class U>
     bool DoTrySet(U&& value) noexcept
@@ -480,7 +512,7 @@ private:
         }
 
         if (UniqueResultHandler_) {
-            RunNoExcept(UniqueResultHandler_, GetUniqueResult());
+            RunFutureHandler(UniqueResultHandler_, GetUniqueResult());
             UniqueResultHandler_ = {};
         }
 
@@ -490,29 +522,21 @@ private:
 
     const NYT::TErrorOr<T>& GetResult() const
     {
-#ifndef NDEBUG
-        YT_ASSERT(!ResultMovedOut_);
-#endif
+        BeforeGetResult();
         YT_ASSERT(Result_);
         return *Result_;
     }
 
     const std::optional<TErrorOr<T>>& GetOptionalResult() const
     {
-#ifndef NDEBUG
-        YT_ASSERT(!ResultMovedOut_);
-#endif
+        BeforeGetResult();
         return Result_;
     }
 
     NYT::TErrorOr<T> GetUniqueResult()
     {
-#ifndef NDEBUG
-        YT_ASSERT(!ResultMovedOut_.exchange(true));
-#endif
-        auto result = std::move(*Result_);
-        Result_.reset();
-        return result;
+        BeforeGetUniqueResult();
+        return std::move(*Result_);
     }
 
 
@@ -625,7 +649,7 @@ public:
     {
         // Fast path.
         if (Set_) {
-            RunNoExcept(handler, GetResult());
+            RunFutureHandler(handler, GetResult());
             return NullFutureCallbackCookie;
         }
 
@@ -635,7 +659,7 @@ public:
             InstallAbandonedError();
             if (Set_) {
                 guard.Release();
-                RunNoExcept(handler, GetResult());
+                RunFutureHandler(handler, GetResult());
                 return NullFutureCallbackCookie;
             } else {
                 HasHandlers_ = true;
@@ -648,7 +672,7 @@ public:
     {
         // Fast path.
         if (Set_) {
-            RunNoExcept(handler, GetUniqueResult());
+            RunFutureHandler(handler, GetUniqueResult());
             return;
         }
 
@@ -658,7 +682,7 @@ public:
             InstallAbandonedError();
             if (Set_) {
                 guard.Release();
-                RunNoExcept(handler, GetUniqueResult());
+                RunFutureHandler(handler, GetUniqueResult());
             } else {
                 YT_ASSERT(!UniqueResultHandler_);
                 YT_ASSERT(ResultHandlers_.IsEmpty());

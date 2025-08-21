@@ -61,6 +61,7 @@ public:
         , Sender(ev->Sender)
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
+        , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , StartTime(TInstant::Now())
@@ -68,6 +69,7 @@ public:
         , UserToken(ev->Get()->GetUserToken())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
+        , ResultSetFormatSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
     {
         RequestEv.reset(ev->Release().Release());
         bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
@@ -95,6 +97,13 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
+
+        if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
+            YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+            YQL_ENSURE(QueryAction == NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE);
+            YQL_ENSURE(HasImplicitTx());
+            SaveQueryPhysicalGraph = true;
+        }
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -118,6 +127,8 @@ public:
     TQueryData::TPtr QueryData;
     NKikimrKqp::EQueryAction QueryAction;
     NKikimrKqp::EQueryType QueryType;
+    bool SaveQueryPhysicalGraph = false;
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 
     TActorId RequestActorId;
 
@@ -172,6 +183,8 @@ public:
 
     TMaybe<TString> CommandTagName;
     THashSet<ui32> ParticipantNodes;
+
+    TResultSetFormatSettings ResultSetFormatSettings;
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {
@@ -269,6 +282,10 @@ public:
 
     bool IsCreateTableAs() const {
         return IsSplitted();
+    }
+
+    const TResultSetFormatSettings& GetResultSetFormatSettings() const {
+        return ResultSetFormatSettings;
     }
 
     // todo: gvit

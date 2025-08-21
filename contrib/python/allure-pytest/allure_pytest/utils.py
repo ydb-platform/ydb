@@ -1,11 +1,11 @@
 import pytest
-from itertools import chain, islice
+from itertools import repeat
 from allure_commons.utils import SafeFormatter, md5
 from allure_commons.utils import format_exception, format_traceback
 from allure_commons.model2 import Status
 from allure_commons.model2 import StatusDetails
 from allure_commons.types import LabelType
-
+from allure_pytest.stash import stashed
 
 ALLURE_DESCRIPTION_MARK = 'allure_description'
 ALLURE_DESCRIPTION_HTML_MARK = 'allure_description_html'
@@ -28,6 +28,24 @@ MARK_NAMES_TO_IGNORE = {
     "xfail",
     "parametrize",
 }
+
+
+class ParsedPytestNodeId:
+    def __init__(self, nodeid):
+        filepath, *class_names, function_segment = ensure_len(nodeid.split("::"), 2)
+        self.filepath = filepath
+        self.path_segments = filepath.split('/')
+        *parent_dirs, filename = ensure_len(self.path_segments, 1)
+        self.parent_package = '.'.join(parent_dirs)
+        self.module = filename.rsplit(".", 1)[0]
+        self.package = '.'.join(filter(None, [self.parent_package, self.module]))
+        self.class_names = class_names
+        self.test_function = function_segment.split("[", 1)[0]
+
+
+@stashed
+def parse_nodeid(item):
+    return ParsedPytestNodeId(item.nodeid)
 
 
 def get_marker_value(item, keyword):
@@ -101,9 +119,7 @@ def should_convert_mark_to_tag(mark):
 
 
 def allure_package(item):
-    parts = item.nodeid.split('::')
-    path = parts[0].rsplit('.', 1)[0]
-    return path.replace('/', '.')
+    return parse_nodeid(item).package
 
 
 def allure_name(item, parameters, param_id=None):
@@ -122,27 +138,41 @@ def allure_name(item, parameters, param_id=None):
 
 
 def allure_full_name(item: pytest.Item):
-    package = allure_package(item)
-    class_name = f".{item.parent.name}" if isinstance(item.parent, pytest.Class) else ''
-    test = item.originalname if isinstance(item, pytest.Function) else item.name.split("[")[0]
-    full_name = f'{package}{class_name}#{test}'
+    nodeid = parse_nodeid(item)
+    class_part = ("." + ".".join(nodeid.class_names)) if nodeid.class_names else ""
+    test = item.originalname if isinstance(item, pytest.Function) else nodeid.test_function
+    full_name = f"{nodeid.package}{class_part}#{test}"
     return full_name
 
 
-def allure_suite_labels(item):
-    head, possibly_clazz, tail = islice(chain(item.nodeid.split('::'), [None], [None]), 3)
-    clazz = possibly_clazz if tail else None
-    file_name, path = islice(chain(reversed(head.rsplit('/', 1)), [None]), 2)
-    module = file_name.split('.')[0]
-    package = path.replace('/', '.') if path else None
-    pairs = dict(zip([LabelType.PARENT_SUITE, LabelType.SUITE, LabelType.SUB_SUITE], [package, module, clazz]))
-    labels = dict(allure_labels(item))
-    default_suite_labels = []
-    for label, value in pairs.items():
-        if label not in labels.keys() and value:
-            default_suite_labels.append((label, value))
+def allure_title_path(item):
+    nodeid = parse_nodeid(item)
+    return list(
+        filter(None, [*nodeid.path_segments, *nodeid.class_names]),
+    )
 
-    return default_suite_labels
+
+def ensure_len(value, min_length, fill_value=None):
+    yield from value
+    yield from repeat(fill_value, min_length - len(value))
+
+
+def allure_suite_labels(item):
+    nodeid = parse_nodeid(item)
+
+    default_suite_labels = {
+        LabelType.PARENT_SUITE: nodeid.parent_package,
+        LabelType.SUITE: nodeid.module,
+        LabelType.SUB_SUITE: " > ".join(nodeid.class_names),
+    }
+
+    existing_labels = dict(allure_labels(item))
+    resolved_default_suite_labels = []
+    for label, value in default_suite_labels.items():
+        if label not in existing_labels and value:
+            resolved_default_suite_labels.append((label, value))
+
+    return resolved_default_suite_labels
 
 
 def get_outcome_status(outcome):

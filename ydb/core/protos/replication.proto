@@ -94,6 +94,8 @@ message TReplicationConfig {
             // transfer
             optional string TransformLambda = 6;
             optional string ConsumerName = 7;
+
+            optional string DirectoryPath = 8;
         }
         optional TTarget Target = 1;
         optional TBatchingSettings Batching = 2;
@@ -263,6 +265,7 @@ message TTransferWriterSettings {
     optional string TransformLambda = 2;
     optional TBatchingSettings Batching = 3;
     optional string RunAsUser = 4;
+    optional string DirectoryPath = 5;
 }
 
 message TRunWorkerCommand {

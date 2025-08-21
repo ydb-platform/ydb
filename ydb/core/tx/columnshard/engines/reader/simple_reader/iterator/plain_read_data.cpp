@@ -1,6 +1,7 @@
 #include "plain_read_data.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -9,6 +10,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
     auto constructor = SpecialReadContext->GetReadMetadata()->ExtractSelectInfo();
     constructor->FillReadStats(GetReadMetadata()->ReadStats);
+    SpecialReadContext->RegisterActors(*constructor);
     Scanner =
         std::make_shared<TScanHead>(std::move(constructor), SpecialReadContext);
     auto& stats = GetReadMetadata()->ReadStats;

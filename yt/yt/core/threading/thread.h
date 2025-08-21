@@ -26,7 +26,7 @@ class TThread
 {
 public:
     explicit TThread(
-        TString threadName,
+        std::string threadName,
         TThreadOptions options = {});
     ~TThread();
 

@@ -76,7 +76,7 @@ const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const std::stri
 IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
     IThreadPoolPollerPtr* pollerPtr,
     bool isXfer,
-    const TString& threadNamePrefix)
+    std::string threadNamePrefix)
 {
     {
         auto guard = ReaderGuard(PollersLock_);

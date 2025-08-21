@@ -3,10 +3,20 @@ PY3_LIBRARY()
 STYLE_PYTHON()
 
 PEERDIR(
-    contrib/tools/python3
-    contrib/tools/python3/lib2/py
     library/cpp/resource
 )
+
+IF (USE_PYTHON3_PREV)
+    PEERDIR(
+        contrib/tools/python3_prev
+        contrib/tools/python3_prev/lib2/py
+    )
+ELSE()
+    PEERDIR(
+        contrib/tools/python3
+        contrib/tools/python3/lib2/py
+    )
+ENDIF()
 
 NO_PYTHON_INCLUDES()
 

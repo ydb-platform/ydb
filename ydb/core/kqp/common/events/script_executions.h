@@ -296,6 +296,36 @@ struct TEvSaveScriptExternalEffectResponse : public TEventLocal<TEvSaveScriptExt
     NYql::TIssues Issues;
 };
 
+struct TEvSaveScriptPhysicalGraphRequest : public TEventLocal<TEvSaveScriptPhysicalGraphRequest, TKqpScriptExecutionEvents::EvSaveScriptPhysicalGraphRequest> {
+    explicit TEvSaveScriptPhysicalGraphRequest(NKikimrKqp::TQueryPhysicalGraph&& physicalGraph)
+        : PhysicalGraph(std::move(physicalGraph))
+    {}
+
+    NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
+};
+
+struct TEvSaveScriptPhysicalGraphResponse : public TEventLocal<TEvSaveScriptPhysicalGraphResponse, TKqpScriptExecutionEvents::EvSaveScriptPhysicalGraphResponse> {
+    TEvSaveScriptPhysicalGraphResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : Status(status)
+        , Issues(std::move(issues))
+    {}
+
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+};
+
+struct TEvGetScriptPhysicalGraphResponse : public TEventLocal<TEvGetScriptPhysicalGraphResponse, TKqpScriptExecutionEvents::EvGetScriptPhysicalGraphResponse> {
+    TEvGetScriptPhysicalGraphResponse(Ydb::StatusIds::StatusCode status, NKikimrKqp::TQueryPhysicalGraph&& physicalGraph, NYql::TIssues issues)
+        : Status(status)
+        , PhysicalGraph(std::move(physicalGraph))
+        , Issues(std::move(issues))
+    {}
+
+    Ydb::StatusIds::StatusCode Status;
+    NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
+    NYql::TIssues Issues;
+};
+
 struct TEvScriptFinalizeRequest : public TEventLocal<TEvScriptFinalizeRequest, TKqpScriptExecutionEvents::EvScriptFinalizeRequest> {
     struct TDescription {
         TDescription(EFinalizationStatus finalizationStatus, const TString& executionId, const TString& database,

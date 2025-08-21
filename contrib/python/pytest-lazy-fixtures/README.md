@@ -14,6 +14,7 @@ Improvements that have been made in this project:
 1. You can use fixtures in any data structures
 2. You can access the attributes of fixtures
 3. You can use functions in fixtures
+4. It is compatible with [pytest-deadfixtures](https://github.com/jllorencetti/pytest-deadfixtures)
 
 ## Installation
 

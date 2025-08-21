@@ -416,14 +416,12 @@ struct TEvControlPlaneProxy {
     struct TEvDeleteFolderResourcesRequest : NActors::TEventLocal<TEvDeleteFolderResourcesRequest, EvDeleteFolderResourcesRequest> {
 
         TEvDeleteFolderResourcesRequest(const TString& scope,
-                                 const TString& folderId,
                                  const TString& user,
                                  const TString& token,
                                  const TVector<TString>& permissions,
                                  TMaybe<TQuotaMap> quotas     = Nothing(),
                                  TTenantInfo::TPtr tenantInfo = nullptr)
             : Scope(scope)
-            , FolderId(folderId)
             , User(user)
             , Token(token)
             , Permissions(permissions)
@@ -434,7 +432,6 @@ struct TEvControlPlaneProxy {
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + FolderId.size()
                     + Scope.size()
                     + User.size()
                     + Token.size()

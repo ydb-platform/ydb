@@ -3954,5 +3954,54 @@ TEST(TYsonStructTest, ProtoSerialize)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTestYsonStructWithYsonString
+    : public TYsonStruct
+{
+    int Integer;
+    TYsonString YsonString;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructWithYsonString);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("integer", &TThis::Integer)
+            .Default();
+        registrar.Parameter("yson_string", &TThis::YsonString)
+            .Default();
+    }
+};
+
+using TTestYsonStructWithYsonStringPtr = TIntrusivePtr<TTestYsonStructWithYsonString>;
+
+TEST(TYsonStructTest, YsonStringSerialize)
+{
+    auto ysonStruct = New<TTestYsonStructWithYsonString>();
+    ysonStruct->Integer = 42;
+
+    auto node = ConvertToNode(ysonStruct);
+    auto fromNode = ConvertTo<TTestYsonStructWithYsonStringPtr>(node);
+    EXPECT_EQ(fromNode->Integer, ysonStruct->Integer);
+    EXPECT_EQ(fromNode->YsonString, ysonStruct->YsonString);
+
+    auto buffer = ConvertToYsonString(ysonStruct);
+    auto fromBuffer = ConvertTo<TTestYsonStructWithYsonStringPtr>(buffer);
+    EXPECT_EQ(fromBuffer->Integer, ysonStruct->Integer);
+    EXPECT_EQ(fromBuffer->YsonString, ysonStruct->YsonString);
+
+    ysonStruct->YsonString = ConvertToYsonString(42);
+
+    node = ConvertToNode(ysonStruct);
+    fromNode = ConvertTo<TTestYsonStructWithYsonStringPtr>(node);
+    EXPECT_EQ(fromNode->Integer, ysonStruct->Integer);
+    EXPECT_EQ(fromNode->YsonString, ysonStruct->YsonString);
+
+    buffer = ConvertToYsonString(ysonStruct);
+    fromBuffer = ConvertTo<TTestYsonStructWithYsonStringPtr>(buffer);
+    EXPECT_EQ(fromBuffer->Integer, ysonStruct->Integer);
+    EXPECT_EQ(fromBuffer->YsonString, ysonStruct->YsonString);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NYTree

@@ -1,3 +1,5 @@
+#include <ydb/core/fq/libs/actors/nodes_manager.h>
+#include <ydb/core/fq/libs/actors/nodes_manager_events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/coordinator.h>
@@ -32,6 +34,7 @@ public:
         RowDispatcher2Id = Runtime.AllocateEdgeActor(2);
         ReadActor1 = Runtime.AllocateEdgeActor(0);
         ReadActor2 = Runtime.AllocateEdgeActor(0);
+        NodesManager = Runtime.AllocateEdgeActor(0);
 
         NConfig::TRowDispatcherCoordinatorConfig config;
         config.SetCoordinationNodePath("RowDispatcher");
@@ -46,7 +49,8 @@ public:
             config,
             yqSharedResources,
             "Tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            NodesManager
             ).release());
 
         Runtime.EnableScheduleForActor(Coordinator);
@@ -100,6 +104,17 @@ public:
         return result;
     }
 
+    void ProcessNodesManagerRequest(ui64 nodesCount) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvNodesManager::TEvGetNodesRequest>(NodesManager, TDuration::Seconds(5));
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+
+        auto event = new NFq::TEvNodesManager::TEvGetNodesResponse();
+        for (ui64 i = 0; i < nodesCount; ++i) {
+            event->NodeIds.push_back(i);
+        }
+        Runtime.Send(new NActors::IEventHandle(Coordinator, NodesManager, event));
+    }
+
     TActorSystemStub actorSystemStub;
     NActors::TTestActorRuntime Runtime;
     NActors::TActorId Coordinator;
@@ -108,12 +123,15 @@ public:
     NActors::TActorId RowDispatcher2Id;
     NActors::TActorId ReadActor1;
     NActors::TActorId ReadActor2;
+    NActors::TActorId NodesManager;
 };
 
 Y_UNIT_TEST_SUITE(CoordinatorTests) {
     Y_UNIT_TEST_F(Route, TFixture) {
 
         ExpectCoordinatorChangesSubscribe();
+
+        ProcessNodesManagerRequest(3);
 
         TSet<NActors::TActorId> rowDispatcherIds{RowDispatcher1Id, RowDispatcher2Id, LocalRowDispatcherId};
         for (auto id : rowDispatcherIds) {
@@ -162,6 +180,7 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
 
     Y_UNIT_TEST_F(RouteTwoTopicWichSameName, TFixture) {
         ExpectCoordinatorChangesSubscribe();
+        ProcessNodesManagerRequest(3);
         TSet<NActors::TActorId> rowDispatcherIds{RowDispatcher1Id, RowDispatcher2Id, LocalRowDispatcherId};
         for (auto id : rowDispatcherIds) {
             Ping(id);
@@ -172,6 +191,17 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
 
         MockRequest(ReadActor2, "endpoint2", "topic1", {3});
         ExpectResult(ReadActor2);
+    }
+
+    Y_UNIT_TEST_F(WaitNodesConnected, TFixture) {
+        ExpectCoordinatorChangesSubscribe();
+        ProcessNodesManagerRequest(4);
+        Ping(RowDispatcher1Id);
+
+        MockRequest(ReadActor1, "endpoint", "topic1", {0});
+        Sleep(TDuration::MilliSeconds(1000));
+        Ping(RowDispatcher2Id);
+        ExpectResult(ReadActor1);
     }
 }
 

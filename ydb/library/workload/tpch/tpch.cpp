@@ -17,6 +17,10 @@ TString TTpchWorkloadGenerator::GetTablesYaml() const {
     return NResource::Find("tpch_schema.yaml");
 }
 
+std::pair<TString, TString> TTpchWorkloadGenerator::GetTableAndColumnForDetectFloatMode() const {
+    return std::make_pair("lineitem", "l_tax");
+}
+
 TWorkloadGeneratorBase::TSpecialDataTypes TTpchWorkloadGenerator::GetSpecialDataTypes() const {
     switch (Params.GetFloatMode()) {
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:

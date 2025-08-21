@@ -382,7 +382,7 @@ std::size_t TFDStorage::FindSorting(
     const TSorting& sorting,
     TTableAliasMap* tableAliases
 ) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, false, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, true, tableAliases);
     return orderingIdx;
 }
 

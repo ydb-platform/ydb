@@ -2503,13 +2503,12 @@ private:
         const TString scope = ev->Get()->Scope;
         TString user = ev->Get()->User;
         TString token = ev->Get()->Token;
-        const TString folderId = ev->Get()->FolderId;
         const int byteSize = ev->Get()->GetByteSize();
         TActorId sender = ev->Sender;
         ui64 cookie = ev->Cookie;
 
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
-            LWPROBE(DeleteFolderResourcesRequest, scope, user, folderId, delta, byteSize, isSuccess, isTimeout);
+            LWPROBE(DeleteFolderResourcesRequest, scope, user, delta, byteSize, isSuccess, isTimeout);
         };
 
         if (!cloudId) {

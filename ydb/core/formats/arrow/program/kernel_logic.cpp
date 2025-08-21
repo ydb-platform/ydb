@@ -9,8 +9,8 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
-    const std::shared_ptr<TAccessorsCollection>& resources) const {
+TConclusion<bool> TGetJsonPath::DoExecute(
+    const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const {
     auto description = BuildDescription(input, resources);
     if (description.IsFail()) {
         return description;
@@ -34,7 +34,7 @@ TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& i
     if (applied && !*applied) {
         return false;
     }
-    resources->AddVerified(output.front().GetColumnId(), builder.Finish(), false);
+    resources.AddVerified(output.front().GetColumnId(), builder.Finish(), false);
     return true;
 }
 

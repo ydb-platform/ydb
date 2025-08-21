@@ -17,6 +17,10 @@ TString TTpcdsWorkloadGenerator::GetTablesYaml() const {
     return NResource::Find("tpcds_schema.yaml");
 }
 
+std::pair<TString, TString> TTpcdsWorkloadGenerator::GetTableAndColumnForDetectFloatMode() const {
+    return std::make_pair("call_center", "cc_gmt_offset");
+}
+
 TWorkloadGeneratorBase::TSpecialDataTypes TTpcdsWorkloadGenerator::GetSpecialDataTypes() const {
     TString decimalType_5_2, decimalType_7_2, decimalType_15_2;
     switch (Params.GetFloatMode()) {

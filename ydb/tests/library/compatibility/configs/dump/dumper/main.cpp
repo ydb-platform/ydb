@@ -1,8 +1,10 @@
 #include <ydb/core/protos/config.pb.h>
+#include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <util/string/split.h>
+#include <util/system/env.h>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
@@ -93,6 +95,7 @@ void PrintSingleField(const Message& proto,
                      NJson::TJsonValue& json, TStringBuf key) {
         Y_ABORT_UNLESS(!field.is_repeated(), "field is repeated.");
         json[key]["id"] = field.number();
+        json[key]["file"] = field.file()->name();
         PrintSingleFieldValue(proto, field, json[key]["default-value"]);
 }
 
@@ -102,6 +105,7 @@ void PrintSingleField(const Message& proto,
         Y_ABORT_UNLESS(field.is_repeated(), "field isn't repeated.");
         const Reflection* reflection = proto.GetReflection();
         json[key]["id"] = field.number();
+        json[key]["file"] = field.file()->name();
         auto& array = json[key].InsertValue("default-value", NJson::TJsonArray());
         for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
             PrintRepeatedFieldValue(proto, field, array.AppendValue(NJson::JSON_UNDEFINED), i);
@@ -143,12 +147,17 @@ void Proto2Json(const Message& proto, NJson::TJsonValue& json) {
 }
 
 int main(int argc, const char** argv) {
-    Y_UNUSED(argc);
-    Y_UNUSED(argv);
+    NLastGetopt::TOpts opts;
+    auto branch = StringSplitter(GetBranch()).Split('/').ToList<TString>().back();
+    auto commit = GetProgramCommitId();
+
+    opts.AddLongOption("override-branch").StoreResult(&branch);
+    opts.AddLongOption("override-commit").StoreResult(&commit);
+    NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);
     const auto defaultConf = NKikimrConfig::TAppConfig::default_instance();
     NJson::TJsonValue json;
     Proto2Json(defaultConf, json["proto"]);
-    json["branch"] = StringSplitter(GetBranch()).Split('/').ToList<TString>().back();
-    json["commit"] = GetProgramCommitId();
+    json["branch"] = branch;
+    json["commit"] = commit;
     NJson::WriteJson(&Cout, &json, true, true);
 }

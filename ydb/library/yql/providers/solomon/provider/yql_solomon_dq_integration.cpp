@@ -104,9 +104,15 @@ public:
         return Nothing();
     }
 
-    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
         if (const auto& maybeSoReadObject = TMaybeNode<TSoReadObject>(read)) {
             const auto& soReadObject = maybeSoReadObject.Cast();
+
+            if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
+                ctx.AddError(TIssue(ctx.GetPosition(soReadObject.Pos()), "Cannot use watermarks in Solomon"));
+                return {};
+            }
+
             YQL_ENSURE(soReadObject.Ref().GetTypeAnn(), "No type annotation for node " << soReadObject.Ref().Content());
 
             const auto& clusterName = soReadObject.DataSource().Cluster().StringValue();
@@ -224,7 +230,7 @@ public:
 
             if (downsamplingDisabled.has_value() && *downsamplingDisabled) {
                 if (downsamplingAggregation || downsamplingFill || downsamplingGridSec) {
-                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsamplig.grid_interval is specified"));
+                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified"));
                     return {};
                 }
             } else {
@@ -260,6 +266,7 @@ public:
                     .DownsamplingFill<TCoAtom>().Build(downsamplingFill ? *downsamplingFill : "")
                     .DownsamplingGridSec<TCoUint32>().Literal().Build(ToString(downsamplingGridSec ? *downsamplingGridSec : 0)).Build()
                     .TotalMetricsCount(soReadObject.TotalMetricsCount())
+                    .LabelNameAliases(soReadObject.LabelNameAliases())
                     .Build()
                 .DataSource(soReadObject.DataSource().Cast<TCoDataSource>())
                 .RowType(soReadObject.RowType())
@@ -286,10 +293,10 @@ public:
         YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
 
         NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, settings.Project().StringValue());
-        
+
         source.SetFrom(TInstant::ParseIso8601(settings.From().StringValue()).Seconds());
         source.SetTo(TInstant::ParseIso8601(settings.To().StringValue()).Seconds());
-        
+
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
             std::map<TString, TString> selectorValues;
@@ -323,10 +330,15 @@ public:
 
         for (const auto& c : settings.LabelNames()) {
             const auto& columnAsString = c.StringValue();
+            source.AddLabelNames(columnAsString);
+        }
+
+        for (const auto& c : settings.LabelNameAliases()) {
+            const auto& columnAsString = c.StringValue();
             if (!uniqueColumns.insert(columnAsString).second) {
                 throw yexception() << "Column " << columnAsString << " already registered";
             }
-            source.AddLabelNames(columnAsString);
+            source.AddLabelNameAliases(columnAsString);
         }
 
         for (const auto& c : settings.RequiredLabelNames()) {
@@ -366,7 +378,7 @@ public:
 
             auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster));
             auto credentialsProvider = providerFactory->CreateProvider();
-            
+
             NDq::TDqSolomonReadParams readParams{ .Source = source };
 
             YQL_ENSURE(NActors::TlsActivationContext);

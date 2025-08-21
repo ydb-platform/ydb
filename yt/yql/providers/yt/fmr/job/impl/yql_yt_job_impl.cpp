@@ -51,7 +51,7 @@ public:
             YQL_ENSURE(clusterConnections.size() == 1);
 
             std::vector<NYT::TRawTableReaderPtr> ytTableReaders = GetYtTableReaders(YtJobService_, ytTableTaskRef, clusterConnections);
-            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(tableId, partId, TableDataService_, Settings_.FmrWriterSettings);
+            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(tableId, partId, TableDataService_, output.SerializedColumnGroups, Settings_.FmrWriterSettings);
 
             for (auto& ytTableReader: ytTableReaders) {
                 ParseRecords(ytTableReader, tableDataServiceWriter, Settings_.ParseRecordSettings.DonwloadReadBlockCount, Settings_.ParseRecordSettings.DonwloadReadBlockSize, cancelFlag);
@@ -76,8 +76,10 @@ public:
             const auto ytTable = params.Output;
             const auto tableId = params.Input.TableId;
             const auto tableRanges = params.Input.TableRanges;
+            const auto neededColumns = params.Input.Columns;
+            const auto columnGroups = params.Input.SerializedColumnGroups;
 
-            auto tableDataServiceReader = MakeIntrusive<TFmrTableDataServiceReader>(tableId, tableRanges, TableDataService_, Settings_.FmrReaderSettings);
+            auto tableDataServiceReader = MakeIntrusive<TFmrTableDataServiceReader>(tableId, tableRanges, TableDataService_, neededColumns, columnGroups, Settings_.FmrReaderSettings);
             YQL_ENSURE(clusterConnections.size() == 1);
             auto ytTableWriter = YtJobService_->MakeWriter(ytTable, clusterConnections.begin()->second, Settings_.YtWriterSettings);
             ParseRecords(tableDataServiceReader, ytTableWriter, Settings_.ParseRecordSettings.UploadReadBlockCount, Settings_.ParseRecordSettings.UploadReadBlockSize, cancelFlag);
@@ -101,7 +103,7 @@ public:
 
             auto& parseRecordSettings = Settings_.ParseRecordSettings;
 
-            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(output.TableId, output.PartId, TableDataService_, Settings_.FmrWriterSettings);
+            auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(output.TableId, output.PartId, TableDataService_, output.SerializedColumnGroups, Settings_.FmrWriterSettings);
             auto threadPool = CreateThreadPool(parseRecordSettings.MergeNumThreads);
             TMaybe<TMutex> mutex = TMutex();
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {

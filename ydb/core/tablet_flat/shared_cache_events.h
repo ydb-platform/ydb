@@ -15,6 +15,11 @@ namespace NKikimr::NSharedCache {
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
     using TPageId = NTable::NPage::TPageId;
 
+    enum class EWakeupTag {
+        DoGCScheduled = 1,
+        DoGCManual = 2
+    };
+
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
 
@@ -34,11 +39,6 @@ namespace NKikimr::NSharedCache {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
 
-    enum class ECacheMode {
-        Regular,
-        TryKeepInMemory,
-    };
-
     struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {
     };
 
@@ -50,11 +50,13 @@ namespace NKikimr::NSharedCache {
         {}
     };
 
-    struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> {
-        THashMap<TLogoBlobID, THashSet<TPageId>> Touched;
+    // notifies Shared Cache about Private Cache owned shared bodies
+    // so it can send back dropped pages
+    struct TEvSync : public TEventLocal<TEvSync, EvTouch> {
+        THashMap<TLogoBlobID, THashSet<TPageId>> Pages;
 
-        TEvTouch(THashMap<TLogoBlobID, THashSet<TPageId>> &&touched)
-            : Touched(std::move(touched))
+        TEvSync(THashMap<TLogoBlobID, THashSet<TPageId>> &&pages)
+            : Pages(std::move(pages))
         {}
     };
 
@@ -125,12 +127,12 @@ namespace NKikimr::NSharedCache {
         }
 
         struct TLoaded {
-            TLoaded(ui32 pageId, TSharedPageRef page)
+            TLoaded(TPageId pageId, TSharedPageRef page)
                 : PageId(pageId)
                 , Page(std::move(page))
             { }
 
-            ui32 PageId;
+            TPageId PageId;
             TSharedPageRef Page;
         };
 

@@ -154,7 +154,7 @@ public:
                     return nullptr;
                 }
             } else {
-//                return nullptr;
+                //                return nullptr;
             }
         }
         if (aggregators.size() > 1) {
@@ -243,7 +243,8 @@ public:
 
     TCompiledGraph(const NOptimization::TGraph& original, const IColumnResolver& resolver);
 
-    TConclusionStatus Apply(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TAccessorsCollection>& resources) const;
+    TConclusion<std::unique_ptr<TAccessorsCollection>> Apply(
+        const std::shared_ptr<IDataSource>& source, std::unique_ptr<TAccessorsCollection>&& resources) const;
 
     NJson::TJsonValue DebugJson() const;
 

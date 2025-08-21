@@ -17,7 +17,7 @@ private:
     const ui64 ExternalScopeId;
     TAllocationGroups WaitAllocations;
     THashMap<ui64, std::shared_ptr<TAllocationInfo>> AllocationInfo;
-    TIdsControl GroupIds;
+    TExternalIdsControl GroupIds;
     ui32 Links = 1;
     const NActors::TActorId OwnerActorId;
 
@@ -65,7 +65,7 @@ public:
         if (--Links) {
             return false;
         }
-        for (auto&& [i, _] : GroupIds.GetExternalIdToInternalIds()) {
+        for (auto&& i : GroupIds.GetExternalIds()) {
             UnregisterGroupImplExt(i);
         }
         GroupIds.Clear();
@@ -81,7 +81,7 @@ public:
         AFL_VERIFY(stage);
         if (!GroupIds.HasExternalId(externalGroupId)) {
             LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), TDuration::Zero(), false, false);
-            AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory()), allocation))
+            AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation))
                 ("ext_group", externalGroupId)("min_ext_group", GroupIds.GetMinExternalIdOptional())("stage", stage->GetName());
             AFL_VERIFY(!AllocationInfo.contains(allocation->GetIdentifier()));
         } else {
@@ -103,8 +103,8 @@ public:
         }
     }
 
-    bool UpdateAllocation(const ui64 allocationId, const ui64 volume) {
-        GetAllocationInfoVerified(allocationId).SetAllocatedVolume(volume);
+    bool AllocationUpdated(const ui64 allocationId) {
+        GetAllocationInfoVerified(allocationId);
         return true;
     }
 
@@ -153,7 +153,7 @@ public:
     }
 
     void RegisterGroup(const bool isPriorityProcess, const ui64 externalGroupId) {
-        Y_UNUSED(GroupIds.RegisterExternalId(externalGroupId));
+        GroupIds.RegisterExternalId(externalGroupId);
         AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "register_group")("external_group_id", externalGroupId)(
             "min_group", GroupIds.GetMinExternalIdOptional());
         if (isPriorityProcess && (externalGroupId < GroupIds.GetMinExternalIdDef(externalGroupId))) {
@@ -223,8 +223,8 @@ public:
         return PriorityProcessFlag;
     }
 
-    bool UpdateAllocation(const ui64 externalScopeId, const ui64 allocationId, const ui64 volume) {
-        if (GetAllocationScopeVerified(externalScopeId).UpdateAllocation(allocationId, volume)) {
+    bool AllocationUpdated(const ui64 externalScopeId, const ui64 allocationId) {
+        if (GetAllocationScopeVerified(externalScopeId).AllocationUpdated(allocationId)) {
             RefreshMemoryUsage();
             return true;
         } else {

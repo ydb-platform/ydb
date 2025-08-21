@@ -5,7 +5,6 @@
 #include <util/thread/pool.h>
 
 #include <latch>
-#include <thread>
 
 namespace NYT::NThreading {
 namespace {
@@ -53,4 +52,4 @@ TEST(TReaderWriterSpinLockTest, WriterPriority)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NConcurrency
+} // namespace NYT::NThreading

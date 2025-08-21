@@ -201,6 +201,17 @@ bool TKqpQueryState::TryGetFromCache(
     TIntrusivePtr<TKqpCounters>& counters,
     const TActorId& sender)
 {
+    if (QueryPhysicalGraph) {
+        YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+
+        auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>(QueryPhysicalGraph->GetPreparedQuery());
+        const auto compileResult = TKqpCompileResult::Make("", Ydb::StatusIds::SUCCESS, {}, ExtractMostHeavyReadType(preparedQuery->GetPhysicalQuery().GetQueryPlan()));
+        compileResult->PreparedQuery = std::make_shared<TPreparedQueryHolder>(preparedQuery.release(), AppData()->FunctionRegistry);
+        YQL_ENSURE(SaveAndCheckCompileResult(compileResult));
+
+        return true;
+    }
+
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
@@ -316,6 +327,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
     YQL_ENSURE(CompileResult);
+    YQL_ENSURE(!QueryPhysicalGraph);
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 

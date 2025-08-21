@@ -6,7 +6,6 @@
 
 namespace NKikimr::NBridge {
 
-    IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TBridgePileId targetPileId,
-        TGroupId groupId);
+    IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId);
 
 } // NKikimr::NBridge

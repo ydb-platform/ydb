@@ -16,14 +16,15 @@ from google.protobuf.duration_pb2 import Duration
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
+import ydb.tests.library.common.yatest_common as yatest_common
 
 final_statuses = [fq.QueryMeta.COMPLETED, fq.QueryMeta.FAILED, fq.QueryMeta.ABORTED_BY_SYSTEM,
                   fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.PAUSED]
 
-CONTROL_PLANE_REQUEST_TIMEOUT = 60.0
-WAIT_QUERY_TIMEOUT = 200.0
-WAIT_QUERY_SLEEP_TIME = 0.5
-WAIT_QUERY_STATUS_TIMEOUT = 150.0
+CONTROL_PLANE_REQUEST_TIMEOUT = yatest_common.plain_or_under_sanitizer(30, 60)
+WAIT_QUERY_TIMEOUT = yatest_common.plain_or_under_sanitizer(40, 200)
+WAIT_QUERY_SLEEP_TIME = yatest_common.plain_or_under_sanitizer(0.5, 2)
+WAIT_QUERY_STATUS_TIMEOUT = yatest_common.plain_or_under_sanitizer(60, 150)
 
 
 class FederatedQueryException(Exception):

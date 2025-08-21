@@ -299,4 +299,17 @@ public:
     }
 };
 
+
+class TUpdateAggregatedMemoryStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(
+        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
+
+    TUpdateAggregatedMemoryStep()
+        : TBase("ACTUALIZE_MEMORY_AGGR") {
+    }
+};
 }   // namespace NKikimr::NOlap::NReader::NSimple

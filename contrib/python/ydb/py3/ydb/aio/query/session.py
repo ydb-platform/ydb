@@ -15,9 +15,10 @@ from ..._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 from ...query import base
 from ...query.session import (
     BaseQuerySession,
-    DEFAULT_ATTACH_FIRST_RESP_TIMEOUT,
     QuerySessionStateEnum,
 )
+
+from ..._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT
 
 
 class QuerySession(BaseQuerySession):
@@ -47,7 +48,7 @@ class QuerySession(BaseQuerySession):
         try:
             first_response = await _utilities.get_first_message_with_timeout(
                 self._status_stream,
-                DEFAULT_ATTACH_FIRST_RESP_TIMEOUT,
+                DEFAULT_INITIAL_RESPONSE_TIMEOUT,
             )
             if first_response.status != issues.StatusCode.SUCCESS:
                 raise RuntimeError("Failed to attach session")

@@ -726,6 +726,9 @@ namespace orc {
     if (totalBytes <= lastBufferLength_) {
       // subtract the needed bytes from the ones left over
       lastBufferLength_ -= totalBytes;
+      if (lastBuffer_ == nullptr) {
+        throw ParseError("StringDirectColumnReader::skip: lastBuffer_ is null");
+      }
       lastBuffer_ += totalBytes;
     } else {
       // move the stream forward after accounting for the buffered bytes
@@ -780,7 +783,9 @@ namespace orc {
     byteBatch.blob.resize(totalLength);
     char* ptr = byteBatch.blob.data();
     while (bytesBuffered + lastBufferLength_ < totalLength) {
-      memcpy(ptr + bytesBuffered, lastBuffer_, lastBufferLength_);
+      if (lastBuffer_ != nullptr) {
+        memcpy(ptr + bytesBuffered, lastBuffer_, lastBufferLength_);
+      }
       bytesBuffered += lastBufferLength_;
       const void* readBuffer;
       int readLength;
@@ -1742,6 +1747,8 @@ namespace orc {
       case CHAR:
       case STRING:
       case VARCHAR:
+      case GEOMETRY:
+      case GEOGRAPHY:
         switch (static_cast<int64_t>(stripe.getEncoding(type.getColumnId()).kind())) {
           case proto::ColumnEncoding_Kind_DICTIONARY:
           case proto::ColumnEncoding_Kind_DICTIONARY_V2:

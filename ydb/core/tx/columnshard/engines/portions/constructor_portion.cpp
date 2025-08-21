@@ -60,7 +60,10 @@ std::shared_ptr<TPortionInfo> TWrittenPortionInfoConstructor::BuildPortionImpl(T
 }
 
 std::shared_ptr<TPortionInfo> TCompactedPortionInfoConstructor::BuildPortionImpl(TPortionMeta&& meta) {
-    return std::make_shared<TCompactedPortionInfo>(std::move(meta));
+    auto result = std::make_shared<TCompactedPortionInfo>(std::move(meta));
+    AFL_VERIFY(AppearanceSnapshot);
+    result->AppearanceSnapshot = *AppearanceSnapshot;
+    return result;
 }
 
 }   // namespace NKikimr::NOlap

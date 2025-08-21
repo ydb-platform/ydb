@@ -305,13 +305,13 @@ void TTablet::HandlePingBoot(TEvTablet::TEvPing::TPtr &ev) {
     // todo: handle wait-boot flag
     NKikimrTabletBase::TEvPing &record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.GetTabletID() == TabletID());
-    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagBoot | TEvTablet::TEvPong::FlagLeader));
+    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagBoot | TEvTablet::TEvPong::FlagLeader), 0, ev->Cookie);
 }
 
 void TTablet::HandlePingFollower(TEvTablet::TEvPing::TPtr &ev) {
     NKikimrTabletBase::TEvPing &record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.GetTabletID() == TabletID());
-    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagFollower));
+    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagFollower), 0, ev->Cookie);
 }
 
 void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev) {
@@ -1063,7 +1063,7 @@ void TTablet::HandleWriteZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
 void TTablet::Handle(TEvTablet::TEvPing::TPtr &ev) {
     NKikimrTabletBase::TEvPing &record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.GetTabletID() == TabletID());
-    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagLeader));
+    Send(ev->Sender, new TEvTablet::TEvPong(TabletID(), TEvTablet::TEvPong::FlagLeader), 0, ev->Cookie);
 }
 
 void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) {

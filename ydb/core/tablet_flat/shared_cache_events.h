@@ -50,7 +50,7 @@ namespace NKikimr::NSharedCache {
         {}
     };
 
-    // notifies Shared Cache about Private Cache owned page pins
+    // notifies Shared Cache about Private Cache owned shared bodies
     // so it can send back dropped pages
     struct TEvSync : public TEventLocal<TEvSync, EvTouch> {
         THashMap<TLogoBlobID, THashSet<TPageId>> Pages;

@@ -11,10 +11,11 @@ If you need to change the configuration on a cluster, you can do so manually usi
 ## GetStateStorageConfig
 
 Returns the current configuration for StateStorage, Board, and SchemeBoard
-	Recommended: true will return the recommended configuration for this cluster, which can be compared with the current configuration to determine whether it should be applied
-	PileupReplicas - create a recommended configuration that allows you to roll back to V1
+    Recommended: true will return the recommended configuration for this cluster, which can be compared with the current configuration to determine whether it should be applied
+    PileupReplicas - create a recommended configuration that allows you to roll back to V1
 
 Request example
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '{"GetStateStorageConfig": {"Recommended": true}}' | jq
 ```
@@ -23,12 +24,13 @@ curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Con
 
 The command starts the translation of the configuration to the recommended one. It is executed in 4 steps, and a WaitForConfigStep pause is made between the steps to allow the new configuration to spread to the nodes, apply, and create new replicas with data.
 Example:
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
-	"SelfHealStateStorage": {
-		"ForceHeal": true
-	}
+    "SelfHealStateStorage": {
+        "ForceHeal": true
+    }
 }' | jq
 ```
 
@@ -47,63 +49,67 @@ Using SchemeBoardConfig as an example (for the rest it is the same and can be pe
 
 **Step 1**
 In the first step, the first ring group must match the current one. Add a new ring group that matches the target configuration and mark it as WriteOnly: true.
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
-	ReconfigStateStorage: {
-		SchemeBoardConfig: {
-			RingGroups: [
-				{ NToSelect: 5, Node: [1,2,3,4,5,6,7,8] },
-				{ NToSelect: 5, Node: [10,20,30,40,5,6,7,8], WriteOnly: true }
-			]
-		}
-	}
+    ReconfigStateStorage: {
+        SchemeBoardConfig: {
+            RingGroups: [
+                { NToSelect: 5, Node: [1,2,3,4,5,6,7,8] },
+                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8], WriteOnly: true }
+            ]
+        }
+    }
 }
 ```
 
 **Step 2**
 Remove the WriteOnly flag.
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
-	ReconfigStateStorage: {
-		SchemeBoardConfig: {
-			RingGroups: [
-				{ NToSelect: 5, Node: [1,2,3,4,5,6,7,8] },
-				{ NToSelect: 5, Node: [10,20,30,40,5,6,7,8] }
-			]
-		}
-	}
+    ReconfigStateStorage: {
+        SchemeBoardConfig: {
+            RingGroups: [
+                { NToSelect: 5, Node: [1,2,3,4,5,6,7,8] },
+                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8] }
+            ]
+        }
+    }
 }
 ```
 
 **Step 3**
 Make the new ring group the main one. Prepare the old configuration for deletion by setting the WriteOnly: true flag
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
-	ReconfigStateStorage: {
-		SchemeBoardConfig: {
-			RingGroups: [
-				{ NToSelect: 5, Node: [10,20,30,40,5,6,7,8] },
-				{ NToSelect: 5, Node: [1,2,3,4,5,6,7,8], WriteOnly: true }
-			]
-		}
-	}
+    ReconfigStateStorage: {
+        SchemeBoardConfig: {
+            RingGroups: [
+                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8] },
+                { NToSelect: 5, Node: [1,2,3,4,5,6,7,8], WriteOnly: true }
+            ]
+        }
+    }
 }
 ```
 
 **Step 4**
 One new configuration remains.
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
-	ReconfigStateStorage: {
-		SchemeBoardConfig: {
-			RingGroups: [
-				{ NToSelect: 5, Node: [10,20,30,40,5,6,7,8] }
-			]
-		}
-	}
+    ReconfigStateStorage: {
+        SchemeBoardConfig: {
+            RingGroups: [
+                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8] }
+            ]
+        }
+    }
 }
 ```

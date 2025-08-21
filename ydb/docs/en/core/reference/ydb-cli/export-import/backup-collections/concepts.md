@@ -92,7 +92,6 @@ A backup chain consists of:
 
 ### Current limitations
 
-- Backup collections require YDB v25.3 or later
 - Cluster storage is the primary backend; filesystem and S3 require export/import operations
 - Chain order must be respected - cannot skip or reorder backups during restore
 

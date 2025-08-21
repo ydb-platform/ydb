@@ -1,6 +1,6 @@
 # Backup collections
 
-Efficient incremental backup and point-in-time recovery for YDB tables (v25.3+).
+Efficient incremental backup and point-in-time recovery for YDB tables.
 
 ## Quick start
 

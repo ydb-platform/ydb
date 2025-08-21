@@ -1,6 +1,6 @@
 # Backup collections operations
 
-This section covers all operations for creating, managing, and restoring from backup collections.
+This section covers all operations for creating, managing, and restoring from [backup collections](../../../concepts/backup/collections.md). For complete command syntax reference, see the [YQL backup collections syntax](../../../yql/reference/syntax/backup-collections.md).
 
 ## Creating collections
 
@@ -43,6 +43,16 @@ BACKUP `shop_backups` INCREMENTAL;
 - Monitor backup completion and chain integrity
 
 For detailed guidelines and chain management, see [Chain validity rules](concepts.md#chain-validity-rules).
+
+## Monitoring operations
+
+All backup operations run in the background and can be monitored using the [operation list](../../operation-list.md) command:
+
+```bash
+ydb operation list incbackup
+```
+
+This command shows all incremental backup operations and their current status.
 
 ### Backup scheduling
 

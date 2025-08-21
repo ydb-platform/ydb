@@ -40,28 +40,11 @@ An ordered sequence of backups starting with a full backup followed by zero or m
 ### Storage options
 
 - **Cluster storage**: Backups stored within the {{ ydb-short-name }} cluster (current default).
-- **External storage**: Manual export to filesystem or S3 using CLI tools for long-term archival (automatic external storage support may be added in future versions).
+- **External storage**: Manual export to filesystem or S3 using [CLI tools](../../reference/ydb-cli/export-import/index.md) for long-term archival (automatic external storage support may be added in future versions).
 
 ### Background operations
 
 All backup and restore operations run asynchronously in the background, allowing you to monitor progress through the long operations API without blocking other database activities.
-
-## When to use backup collections
-
-**Ideal scenarios:**
-
-- Production environments requiring regular backups
-- Large datasets where incremental changes are much smaller than full data size
-- Point-in-time recovery requirements
-- Disaster recovery planning with RTO/RPO constraints
-
-**Consider traditional export/import and backup/restore for:**
-
-- Small databases or single tables
-- Databases with high change velocity relative to stored data volume
-- One-time data migration tasks
-- Development/testing environments
-- Simple backup scenarios without incremental needs
 
 ## Quick start
 

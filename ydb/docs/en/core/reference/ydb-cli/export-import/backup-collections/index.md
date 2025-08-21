@@ -28,3 +28,5 @@ BACKUP `my_backups` INCREMENTAL;
 - [Concepts](concepts.md) — Architecture, backup types, and storage backends
 - [Operations](operations.md) — Complete guide to creating, managing, and restoring
 - [SQL API](sql-api.md) — SQL command reference
+- [YQL Syntax Reference](../../../yql/reference/syntax/backup-collections.md) — Complete SQL syntax documentation
+- [Operation Monitoring](../../operation-list.md) — Monitor backup operations progress

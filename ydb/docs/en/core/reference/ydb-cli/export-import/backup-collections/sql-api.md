@@ -1,6 +1,6 @@
 # SQL API: Backup collections
 
-This section provides guidance for using SQL commands with backup collections. For complete syntax reference, see [Backup collection commands](../../../yql/reference/syntax/backup-collections.md) in the YQL reference.
+This section provides guidance for using SQL commands with [backup collections](concepts.md). For complete syntax reference, see [Backup collection commands](../../../yql/reference/syntax/backup-collections.md) in the YQL reference.
 
 ## Quick reference
 
@@ -37,6 +37,13 @@ ydb scheme ls .backups/collections/
 
 # View specific collection structure  
 ydb scheme ls .backups/collections/shop_backups/
+```
+
+For monitoring backup operations, use the [operation list](../../operation-list.md) command:
+
+```bash
+# Monitor backup operations
+ydb operation list incbackup
 ```
 
 ## Next steps

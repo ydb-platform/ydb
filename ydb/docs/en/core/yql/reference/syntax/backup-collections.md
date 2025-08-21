@@ -1,6 +1,8 @@
 # Backup collection commands
 
-YQL supports SQL commands for managing backup collections. These commands allow you to create, manage, and take backups of database tables using a declarative SQL syntax.
+YQL supports SQL commands for managing [backup collections](../../../concepts/backup/collections.md). These commands allow you to create, manage, and take backups of database tables using a declarative SQL syntax.
+
+For practical usage examples and operational guidance, see the [backup collections operations guide](../../../reference/ydb-cli/export-import/backup-collections/operations.md).
 
 ## CREATE BACKUP COLLECTION
 

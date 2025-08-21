@@ -25,11 +25,11 @@ Process Memory,Cache Components,60
 Process Memory,Activity Components, 30
 Process Memory,Other,10
 
-Cache Components,Shared Cache, 30
+Cache Components,Shared cache, 30
 Cache Components,MemTable, 10
-Cache Components,Allocator Caches, 20
+Cache Components,Allocator caches, 20
 
-Activity Components,"KQP (query execution)", 15
+Activity Components,"KQP", 15
 Activity Components,Compaction, 15
 ```
 

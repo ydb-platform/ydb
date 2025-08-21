@@ -2,7 +2,7 @@
 
 The {{ ydb-short-name }} CLI contains a set of commands designed to export and import data and descriptions of data schema objects. Data can be exported to create backups for subsequent recovery and for other purposes.
 
-## Backup collections (New)
+## Backup collections
 
 YDB now supports backup collections with incremental backup capabilities. This provides:
 - Efficient storage with full and incremental backups

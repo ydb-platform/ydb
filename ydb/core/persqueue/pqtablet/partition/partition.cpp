@@ -1974,12 +1974,12 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
 
     ui64 timeLag = WriteLagMs.GetValue();
+    if (WriteTimeLagMsByLastWrite) {
+        WriteTimeLagMsByLastWrite->Set(timeLag);
+    }
     if (PartitionCountersLabeled->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Get() != timeLag) {
         haveChanges = true;
         PartitionCountersLabeled->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Set(timeLag);
-        if (DynamicCounters && WriteTimeLagMsByLastWrite) {
-            WriteTimeLagMsByLastWrite->Set(timeLag);
-        }
     }
 
     if (PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Get()) {
@@ -3171,6 +3171,12 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         Send(OffloadActor, new TEvents::TEvPoisonPill());
         OffloadActor = {};
     }
+
+    if (Config.GetEnablePerPartitionCounters()) {
+        SetupPerPartitionCounters(ctx);
+    } else {
+        ResetPerPartitionCounters();
+    }
 }
 
 
@@ -4263,11 +4269,56 @@ bool TPartition::OnUnhandledException(const std::exception& exc) {
 IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
     const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace,
-               ui32 numChannels, const TActorId& writeQuoterActorId, 
+               ui32 numChannels, const TActorId& writeQuoterActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition) {
 
     return new TPartition(tabletId, partition, tablet, tabletGeneration, blobCache, topicConverter, dcId, isServerless,
         config, counters, SubDomainOutOfSpace, numChannels, writeQuoterActorId, samplingControl,
         newPartition);
 }
+
+void TPartition::SetupPerPartitionCounters(const TActorContext& ctx) {
+    bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
+    auto subgroup = [&]() {
+        if (fcc) {
+            bool isServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); // TODO: find out it via describe
+            return AppData(ctx)->Counters
+                ->GetSubgroup("counters", isServerless ? "topics_per_partition_serverless" : "topics_per_partition")
+                ->GetSubgroup("host", "")
+                ->GetSubgroup("database", Config.GetYdbDatabasePath())
+                ->GetSubgroup("cloud_id", CloudId)
+                ->GetSubgroup("folder_id", FolderId)
+                ->GetSubgroup("database_id", DbId)
+                ->GetSubgroup("topic", EscapeBadChars(TopicName()))
+                ->GetSubgroup("partition_id", ToString(Partition.InternalPartitionId));
+        } else {
+            return AppData(ctx)->Counters
+                ->GetSubgroup("counters", "topics_per_partition")
+                ->GetSubgroup("host", "cluster")
+                ->GetSubgroup("Account", TopicConverter->GetAccount())
+                ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
+                ->GetSubgroup("OriginDC", TopicConverter->GetCluster())
+                ->GetSubgroup("Partition", ToString(Partition.InternalPartitionId));
+        }
+    }();
+    auto getCounter = [&](const TString& forFCC, const TString& forFederation) {
+        return subgroup->GetExpiringNamedCounter(
+            fcc ? "name" : "sensor",
+            fcc ? forFCC : forFederation,
+            false);
+    };
+
+    WriteTimeLagMsByLastWrite = getCounter("topic.partition.write.lag_milliseconds", "WriteTimeLagMsByLastWrite");
+    SourceIdCount = getCounter("topic.producers_count", "SourceIdCount");
+    TimeSinceLastWriteMs = getCounter("topic.partition.write.idle_milliseconds", "TimeSinceLastWriteMs");
+    PartitionWriteQuotaUsage = getCounter("topic.partition.write.throttled_microseconds", "PartitionWriteQuotaUsage");
+}
+
+void TPartition::ResetPerPartitionCounters() {
+    WriteTimeLagMsByLastWrite.Reset();
+    SourceIdCount.Reset();
+    TimeSinceLastWriteMs.Reset();
+    PartitionWriteQuotaUsage.Reset();
+}
+
 } // namespace NKikimr::NPQ

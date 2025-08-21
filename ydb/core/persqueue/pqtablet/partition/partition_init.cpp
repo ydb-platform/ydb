@@ -995,32 +995,16 @@ void TPartition::Initialize(const TActorContext& ctx) {
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {
+        if (Config.GetEnablePerPartitionCounters()) {
+            SetupPerPartitionCounters(ctx);
+        }
+
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
                                                                          Partition.InternalPartitionId,
                                                                          Config.GetYdbDatabasePath()));
-
-            bool isServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
-            DynamicCounters = AppData(ctx)->Counters
-                ->GetSubgroup("counters", isServerless ? "topics_serverless" : "topics")
-                ->GetSubgroup("host", "")
-                ->GetSubgroup("database", Config.GetYdbDatabasePath())
-                ->GetSubgroup("cloud_id", CloudId)
-                ->GetSubgroup("folder_id", FolderId)
-                ->GetSubgroup("database_id", DbId)
-                ->GetSubgroup("topic", EscapeBadChars(TopicName()));
-
-            WriteTimeLagMsByLastWrite = DynamicCounters->GetExpiringNamedCounter("name", "topic.partition.write.lag_milliseconds", false);
         } else {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
-
-            DynamicCounters = AppData(ctx)->Counters
-                ->GetSubgroup("counters", "pqpartitions")
-                ->GetSubgroup("host", "")
-                ->GetSubgroup("Account", "TODO")
-                ->GetSubgroup("Topic", TopicName());
-
-            WriteTimeLagMsByLastWrite = DynamicCounters->GetExpiringNamedCounter("name", "WriteTimeLagMsByLastWrite", false);
         }
     }
 

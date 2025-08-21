@@ -16,6 +16,8 @@ namespace NKikimr::NPQ {
 
 namespace {
 
+static constexpr const char* EMPTY_COUNTERS = "<pre></pre>";
+
 TVector<std::pair<ui64, TString>> TestData() {
     TVector<std::pair<ui64, TString>> data;
     TString s{32, 'c'};
@@ -84,7 +86,7 @@ Y_UNIT_TEST(Partition) {
     tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
     tc.Runtime->SetScheduledLimit(100);
 
-    PQTabletPrepare({}, {}, tc);
+    PQTabletPrepare({ .enablePerPartitionCounters = true }, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
@@ -108,10 +110,63 @@ Y_UNIT_TEST(Partition) {
         auto dbGroup = GetServiceCounters(counters, "datastreams");
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
-        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str(), "<pre></pre>");
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str(), EMPTY_COUNTERS);
     }
 }
 
+
+Y_UNIT_TEST(PerPartition) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone{false};
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
+    tc.Runtime->SetScheduledLimit(100);
+
+    PQTabletPrepare({ .enablePerPartitionCounters = false }, {}, tc);
+    CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
+    CmdWrite(0, "sourceid1", TestData(), tc, false);
+    CmdWrite(0, "sourceid2", TestData(), tc, false);
+    CmdWrite(0, "sourceid1", TestData(), tc, false);
+    CmdWrite(0, "sourceid2", TestData(), tc, false);
+    PQGetPartInfo(0, 30, tc);
+
+    auto getCountersHtml = [&tc](const TString& group = "topics_per_partition") {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, group);
+        TStringStream countersStr;
+        dbGroup->OutputHtml(countersStr);
+        return countersStr.Str();
+    };
+
+    // With EnablePerPartitionCounters = false the response should be empty.
+    UNIT_ASSERT_VALUES_EQUAL(getCountersHtml(), "<pre></pre>");
+
+    {
+        // Turn on per partition counters, write data, check counters.
+
+        PQTabletPrepare({ .enablePerPartitionCounters = true }, {}, tc);
+
+        CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
+        CmdWrite(0, "sourceid1", TestData(), tc, false);
+        CmdWrite(0, "sourceid2", TestData(), tc, false);
+        CmdWrite(1, "sourceid1", TestData(), tc, false);
+        CmdWrite(1, "sourceid2", TestData(), tc, false);
+
+        TString counters = getCountersHtml();
+        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition.html"));
+        UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
+    }
+
+    {
+        // Disable per partition counters, the counters should be empty.
+
+        PQTabletPrepare({ .enablePerPartitionCounters = false }, {}, tc);
+
+        TString counters = getCountersHtml();
+        TString referenceCounters = NResource::Find(TStringBuf("counters_per_partition_turned_off.html"));
+        UNIT_ASSERT_VALUES_EQUAL(counters + "\n", referenceCounters);
+    }
+}
 
 Y_UNIT_TEST(PartitionWriteQuota) {
     TTestContext tc;

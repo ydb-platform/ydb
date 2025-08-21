@@ -986,12 +986,38 @@ private:
         return done;
     }
 
-    bool FillSecondaryUniqueIndex(TIndexBuildInfo& buildInfo) {
+    bool FillSecondaryUniqueIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         switch (buildInfo.SubState) {
-        case TIndexBuildInfo::ESubState::None:
-            return FillSecondaryIndex(buildInfo);
-        case TIndexBuildInfo::ESubState::UniqIndexValidation:
-            return ValidateSecondaryUniqueIndex(buildInfo);
+        case TIndexBuildInfo::ESubState::None: {
+            if (FillSecondaryIndex(buildInfo)) {
+                ClearAfterFill(TActivationContext::AsActorContext(), buildInfo);
+                // After filling unique index we need to validate it.
+                // This includes:
+                // - Locking index shards
+                // - Validating each index shard for index keys uniqueness
+                // - Applying cross-shard validation
+                buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
+                NIceDb::TNiceDb db{txc.DB};
+                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+                ChangeState(BuildId, TIndexBuildInfo::EState::LockBuild);
+                Progress(BuildId);
+            }
+            return false;
+        }
+        case TIndexBuildInfo::ESubState::UniqIndexValidation: {
+            const bool done = ValidateSecondaryUniqueIndex(buildInfo);
+            if (done) {
+                TString errorDesc;
+                if (!PerformCrossShardUniqIndexValidation(buildInfo, errorDesc)) {
+                    NIceDb::TNiceDb db(txc.DB);
+                    Self->PersistBuildIndexAddIssue(db, buildInfo, errorDesc);
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Applying);
+                    Progress(BuildId);
+                    return false;
+                }
+            }
+            return done;
+        }
         }
     }
 
@@ -1284,7 +1310,7 @@ private:
             case TIndexBuildInfo::EBuildKind::BuildColumns:
                 return FillSecondaryIndex(buildInfo);
             case TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex:
-                return FillSecondaryUniqueIndex(buildInfo);
+                return FillSecondaryUniqueIndex(txc, buildInfo);
             case TIndexBuildInfo::EBuildKind::BuildVectorIndex:
                 return FillVectorIndex(txc, buildInfo);
             case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:
@@ -1407,38 +1433,18 @@ public:
             break;
         case TIndexBuildInfo::EState::Filling: {
             if (buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
-                ClearAfterFill(ctx, buildInfo);
-                TIndexBuildInfo::EState nextState = TIndexBuildInfo::EState::Applying;
-                bool finalState = true;
-                if (buildInfo.IsCancellationRequested()) {
-                    nextState = buildInfo.IsBuildColumns() ? TIndexBuildInfo::EState::Cancellation_DroppingColumns : TIndexBuildInfo::EState::Cancellation_Applying;
-                } else if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalUnique && !buildInfo.IsValidatingUniqueIndex()) {
-                    // After filling unique index we need to validate it.
-                    // This includes:
-                    // - Locking index shards
-                    // - Validating each index shard for index keys uniqueness
-                    // - Applying cross-shard validation
-                    buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
-                    nextState = TIndexBuildInfo::EState::LockBuild;
-                    NIceDb::TNiceDb db{txc.DB};
-                    Self->PersistBuildIndexShardStatusReset(db, buildInfo);
-                    finalState = false;
-                } else if (buildInfo.IsValidatingUniqueIndex()) {
-                    TString errorDesc;
-                    if (!PerformCrossShardUniqIndexValidation(buildInfo, errorDesc)) {
-                        NIceDb::TNiceDb db(txc.DB);
-                        Self->PersistBuildIndexAddIssue(db, buildInfo, errorDesc);
-                        nextState = TIndexBuildInfo::EState::Rejection_Applying;
-                    }
-                }
+                auto cancelState = buildInfo.IsBuildColumns()
+                    ? TIndexBuildInfo::EState::Cancellation_DroppingColumns
+                    : TIndexBuildInfo::EState::Cancellation_Applying;
 
-                ChangeState(BuildId, nextState);
+                ClearAfterFill(ctx, buildInfo);
+                ChangeState(BuildId, buildInfo.IsCancellationRequested()
+                                         ? cancelState
+                                         : TIndexBuildInfo::EState::Applying);
                 Progress(BuildId);
 
-                if (finalState) {
-                    // make final bill
-                    Bill(buildInfo);
-                }
+                // make final bill
+                Bill(buildInfo);
             } else {
                 AskToScheduleBilling(buildInfo);
             }

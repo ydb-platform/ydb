@@ -444,7 +444,9 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const std::vector
 
     std::optional<TContainerType> content;
     for (size_t i = 0U; i < constraints.size(); ++i) {
-        if (const auto sort = constraints[i]->GetConstraint<TSortedConstraintNode>()) {
+        if (constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
+            ; // just ignore this input with any other constraints
+        } else if (const auto sort = constraints[i]->GetConstraint<TSortedConstraintNode>()) {
             const auto& nextContent = sort->GetContent();
             if (content) {
                 const auto size = std::min(content->size(), nextContent.size());
@@ -466,7 +468,7 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const std::vector
             } else {
                 content = nextContent;
             }
-        } else if (!constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
+        } else {
             content.reset();
             break;
         }

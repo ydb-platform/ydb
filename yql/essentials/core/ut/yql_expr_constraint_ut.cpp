@@ -674,6 +674,33 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "UnionMerge", "Sorted(key[desc])");
     }
 
+    Y_UNIT_TEST(UnionMergeWithEmptyDiffSort) {
+        const auto s = R"((
+            (let res (DataSink 'result))
+            (let list1 (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+            ))
+            (let list2 (AsList
+                (AsStruct '('key (String '4)) '('subkey (Utf8 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (Utf8 'd)) '('value (String 'v)))
+                (AsStruct '('key (String '3)) '('subkey (Utf8 'b)) '('value (String 'v)))
+            ))
+            (let sorted1 (Sort list1 (Bool 'True) (lambda '(item) (Member item 'key))))
+            (let sorted2 (Sort list2 (Bool 'True) (lambda '(item) (Member item 'value))))
+            (let sorted2 (Take sorted2 (Uint64 '0)))
+            (let merged (UnionMerge sorted1 sorted2))
+            (let world (Write! world res (Key) merged '()))
+            (let world (Commit! world res))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "UnionMerge", "Sorted(key[asc])");
+    }
+
     Y_UNIT_TEST(ExtractMembersKey) {
         const auto s = R"((
             (let res (DataSink 'result))

@@ -39,13 +39,13 @@ ydb admin cluster bridge failover --help
 
 ```bash
 ydb admin cluster bridge failover --pile pile-a
-``` 
+```
 
 Выполнение аварийного отключения для недоступного `PRIMARY`-pile и назначение новым `PRIMARY` синхронизированного pile:
 
 ```bash
 ydb admin cluster bridge failover --pile pile-a --new-primary pile-b
-``` 
+```
 
 ### Проверка результата {#verify}
 

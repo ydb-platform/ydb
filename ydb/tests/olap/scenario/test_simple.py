@@ -115,6 +115,7 @@ class TestSimple(BaseTestSet):
         altered_schema = (
             ScenarioTestHelper.Schema()
             .with_column(name='id', type=PrimitiveType.Int32, not_null=True)
+            .with_column(name='level', type=PrimitiveType.Uint32)
             .with_column(name='not_level', type=PrimitiveType.Uint32)
             .with_key_columns('id')
         )

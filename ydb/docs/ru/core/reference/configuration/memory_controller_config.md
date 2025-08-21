@@ -20,16 +20,18 @@ config:
 ---
 sankey-beta
 
-Hard memory limit,Soft memory limit,90
-Hard memory limit,"Other active processes",10
+Жёсткий лимит памяти,Мягкий лимит памяти,90
+Жёсткий лимит памяти,"Другие активные процессы",10
 
-Soft memory limit,Shared Cache, 30
-Soft memory limit,Mem Table, 30
-Soft memory limit,Activities, 30
+Мягкий лимит памяти,Кеш-компоненты, 60
+Мягкий лимит памяти,Компоненты-активности, 30
 
-Activities,"KQP (query
-execution)", 15
-Activities,Compaction, 15
+Кеш-компоненты,Общий кеш, 50
+Кеш-компоненты,MemTable, 10
+
+Компоненты-Активности,"KQP (выполение
+запросов)", 15
+Компоненты-Активности,Компактизация, 15
 ```
 
 ## Жёсткий лимит памяти {#hard-memory-limit}

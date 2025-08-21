@@ -12,6 +12,7 @@ Examples of components managed by the memory controller:
 Memory limits can be configured to control overall memory usage, ensuring the database operates efficiently within the available resources.
 
 Memory consumption overview:
+
 ```mermaid
 ---
 config:
@@ -24,7 +25,7 @@ Hard memory limit,Soft memory limit,90
 Hard memory limit,"Other active processes",10
 
 Soft memory limit,Shared Cache, 30
-Soft memory limit,Mem Table, 30
+Soft memory limit,MemTable, 30
 Soft memory limit,Activities, 30
 
 Activities,"KQP (query

@@ -65,7 +65,25 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         UNIT_ASSERT(ok);
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), ++txId);
+        {
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTabe.Schema), testTabe.Schema, true, &writeIds);
+            UNIT_ASSERT(!ok);
+        }
         PlanSchemaTx(runtime, sender, {planStep, txId});
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTabe.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+        }
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTabe.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+        }
+
     }
 
     Y_UNIT_TEST_DUO(WithData, Reboot) {

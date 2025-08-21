@@ -11,9 +11,10 @@
 ## GetStateStorageConfig
 
 Возвращает текущую конфигурацию для StateStorage, Board, SchemeBoard
-	Recommended: true вернет рекоммендуемую конфигурацию для этого кластера - можно сравнить с текущей для принятия решения о необходимости ее применения
-	PileupReplicas - создавать рекоммендуемую конфигурацию с учетом возможности отката конфига на V1
+    Recommended: true вернет рекоммендуемую конфигурацию для этого кластера - можно сравнить с текущей для принятия решения о необходимости ее применения
+    PileupReplicas - создавать рекоммендуемую конфигурацию с учетом возможности отката конфига на V1
 Пример запроса
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '{"GetStateStorageConfig": {"Recommended": true}}' | jq
 ```
@@ -22,12 +23,13 @@ curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Con
 
 Команда начать перевод конфигурации к рекоммендуемой. Выполняется в 4 шага, между шагами делается пауза WaitForConfigStep, чтобы новая конфигураия успела распространиться на узлы, примениться, новые реплики создались и наполнились данными.
 Пример:
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
-	"SelfHealStateStorage": {
-		"ForceHeal": true
-	}
+    "SelfHealStateStorage": {
+        "ForceHeal": true
+    }
 }' | jq
 ```
 
@@ -46,63 +48,67 @@ curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Con
 
 **Шаг 1**
 На первом шаге первая группа колец должна соответствовать текущей. Добавляем новую группу колец, которая соответствует целевой конфигурации и помечаем ее WriteOnly: true.
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
-	ReconfigStateStorage: {
-		SchemeBoardConfig: {
-			RingGroups: [
-				{ NToSelect: 5, Node: [1,2,3,4,5,6,7,8] },
-				{ NToSelect: 5, Node: [10,20,30,40,5,6,7,8], WriteOnly: true }
-			]
-		}
-	}
+    ReconfigStateStorage: {
+        SchemeBoardConfig: {
+            RingGroups: [
+                { NToSelect: 5, Node: [1,2,3,4,5,6,7,8] },
+                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8], WriteOnly: true }
+            ]
+        }
+    }
 }
 ```
 
 **Шаг 2**
 Снимаем флаг WriteOnly.
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
-	ReconfigStateStorage: {
-		SchemeBoardConfig: {
-			RingGroups: [
-				{ NToSelect: 5, Node: [1,2,3,4,5,6,7,8] },
-				{ NToSelect: 5, Node: [10,20,30,40,5,6,7,8] }
-			]
-		}
-	}
+    ReconfigStateStorage: {
+        SchemeBoardConfig: {
+            RingGroups: [
+                { NToSelect: 5, Node: [1,2,3,4,5,6,7,8] },
+                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8] }
+            ]
+        }
+    }
 }
 ```
 
 **Шаг 3**
 Делаем новую группу колец основной. Старую конфигурацию готовим к удалению выставляя флаг WriteOnly: true
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
-	ReconfigStateStorage: {
-		SchemeBoardConfig: {
-			RingGroups: [
-				{ NToSelect: 5, Node: [10,20,30,40,5,6,7,8] },
-				{ NToSelect: 5, Node: [1,2,3,4,5,6,7,8], WriteOnly: true }
-			]
-		}
-	}
+    ReconfigStateStorage: {
+        SchemeBoardConfig: {
+            RingGroups: [
+                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8] },
+                { NToSelect: 5, Node: [1,2,3,4,5,6,7,8], WriteOnly: true }
+            ]
+        }
+    }
 }
 ```
 
 **Шаг 4**
 Остается одна новая конфигурация.
+
 ```shell
 curl -ks http://{host_name}:8765/actors/nodewarden?page=distconf -X POST -H 'Content-Type: application/json' -d '
 {
-	ReconfigStateStorage: {
-		SchemeBoardConfig: {
-			RingGroups: [
-				{ NToSelect: 5, Node: [10,20,30,40,5,6,7,8] }
-			]
-		}
-	}
+    ReconfigStateStorage: {
+        SchemeBoardConfig: {
+            RingGroups: [
+                { NToSelect: 5, Node: [10,20,30,40,5,6,7,8] }
+            ]
+        }
+    }
 }
 ```

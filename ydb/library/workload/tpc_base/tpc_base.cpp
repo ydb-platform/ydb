@@ -57,7 +57,7 @@ TTpcBaseWorkloadParams::EFloatMode TTpcBaseWorkloadGenerator::DetectFloatMode() 
                 return TTpcBaseWorkloadParams::EFloatMode::FLOAT;
             }
         default:
-            ythrow yexception() << "Invalid column" << column << " type: " << col.Type.ToString();
+            ythrow yexception() << "Invalid column " << column << " type: " << col.Type.ToString();
         }
     }
     ythrow yexception() << "There is no column " << column << " in table " << table;

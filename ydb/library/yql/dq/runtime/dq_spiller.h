@@ -14,11 +14,11 @@ struct IDqSpiller {
     ///\return
     ///  nullopt for absent keys
     ///  TFuture
-    virtual NThreading::TFuture<std::optional<TBuffer>> Get(TKey key) = 0;
+    virtual NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Get(TKey key) = 0;
     virtual NThreading::TFuture<void> Delete(TKey) = 0;
     ///Get + Delete
     ///Stored value may be moved to future
-    virtual NThreading::TFuture<std::optional<TBuffer>> Extract(TKey key) = 0;
+    virtual NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Extract(TKey key) = 0;
 };
 
 } // namespace NYql::NDq

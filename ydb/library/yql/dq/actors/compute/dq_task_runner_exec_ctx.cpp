@@ -1,6 +1,7 @@
 #include "dq_task_runner_exec_ctx.h"
 
 #include <ydb/library/yql/dq/actors/spilling/channel_storage.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_spiller_adapter.h>
 
 
 namespace NYql {
@@ -21,6 +22,14 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
 IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling,  NActors::TActorSystem* actorSystem) const {
     if (withSpilling) {
         return CreateDqChannelStorage(TxId_, channelId, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, actorSystem);
+    } else {
+        return nullptr;
+    }
+}
+
+IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling, std::shared_ptr<IDqSpiller> spiller) const {
+    if (withSpilling && spiller) {
+        return CreateDqChannelSpillerAdapter(spiller);
     } else {
         return nullptr;
     }

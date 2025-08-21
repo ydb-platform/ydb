@@ -2,6 +2,7 @@
 #include "dq_tasks_counters.h"
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
+#include <ydb/library/yql/dq/runtime/dq_spiller.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -644,6 +645,13 @@ public:
             }
         }
 
+        // Создаем один спиллер для всех каналов этого task_runner
+        std::shared_ptr<IDqSpiller> taskSpiller;
+        if (SpillerFactory) {
+            auto spillerPtr = SpillerFactory->CreateSpiller();
+            taskSpiller = std::dynamic_pointer_cast<IDqSpiller>(spillerPtr);
+        }
+
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
         for (ui32 i = 0; i < task.OutputsSize(); ++i) {
             const auto& outputDesc = task.GetOutputs(i);
@@ -679,7 +687,6 @@ public:
 
                 taskOutputType = &transform->TransformOutputType;
             }
-            auto channelSpiller = SpillerFactory->CreateSpiller();
             if (outputDesc.HasSink()) {
                 auto sink = CreateDqAsyncOutputBuffer(i, outputDesc.GetSink().GetType(), *taskOutputType, memoryLimits.ChannelBufferSize,
                     StatsModeToCollectStatsLevel(Settings.StatsMode));
@@ -700,7 +707,11 @@ public:
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 
                     if (!outputChannelDesc.GetInMemory()) {
-                        settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                        if (taskSpiller) {
+                            settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling(), taskSpiller);
+                        } else {
+                            settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                        }
                     }
 
                     if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {

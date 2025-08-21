@@ -33,6 +33,9 @@ namespace NActors {
 
 namespace NYql::NDq {
 
+class IDqChannelStorage;
+struct IDqSpiller;
+
 // TBD: Add Running status and return PendingInput iff no data was consumed from inputs
 //      CA and KQP relies on PendingInput and require careful modifications
 enum class ERunStatus : ui32 {
@@ -161,6 +164,7 @@ public:
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, std::shared_ptr<IDqSpiller> spiller) const = 0;
 
     virtual TWakeUpCallback GetWakeupCallback() const = 0;
     virtual TErrorCallback GetErrorCallback() const = 0;
@@ -184,6 +188,10 @@ public:
     };
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/) const override {
+        return {};
+    };
+
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, std::shared_ptr<IDqSpiller> /*spiller*/) const override {
         return {};
     };
 

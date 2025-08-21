@@ -1,22 +1,20 @@
+#pragma once
+
 #include "dq_spiller.h"
-
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log.h>
+#include "dq_channel_storage.h"
 
 #include <util/generic/buffer.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
+#include <util/generic/queue.h>
+#include <unordered_map>
 
 namespace NYql::NDq {
-
-namespace {
 
 constexpr ui32 MAX_INFLIGHT_BLOBS_COUNT = 10;
 constexpr ui64 MAX_INFLIGHT_BLOBS_SIZE = 50_MB;
 
-class TDqChannelSpillerAdapter {
+class TDqChannelSpillerAdapter : public IDqChannelStorage {
     struct TWritingBlobInfo {
         ui64 BlobSize_;
         NThreading::TFuture<IDqSpiller::TKey> KeyFuture_;
@@ -25,30 +23,32 @@ public:
     TDqChannelSpillerAdapter(IDqSpiller::TPtr spiller)
     : Spiller_(spiller) { }
 
-    bool IsEmpty() {
+    bool IsEmpty() override {
         UpdateWriteStatus();
 
         return WritingBlobs_.empty() && StoredBlobsCount_ == 0 && !LoadingBlob_.has_value();
     }
 
-    bool IsFull() {
+    bool IsFull() override {
         UpdateWriteStatus();
 
         return WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
     }
 
-    void Push(TChunkedBuffer&& blob) {
+    void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 cookie = 0) override {
         UpdateWriteStatus();
 
         ui64 blobSize = blob.Size();
         auto keyFuture = Spiller_->Put(std::move(blob));
-        ui64 blobId = BlobId_++;
 
         WritingBlobs_.emplace(blobId, TWritingBlobInfo{blobSize, std::move(keyFuture)});
         WritingBlobsTotalSize_ += blobSize;
+        
+        // Добавляем blobId в очередь для FIFO порядка
+        BlobIdQueue_.push(blobId);
     }
 
-    bool Pop(TBuffer& blob) {
+    bool Get(ui64 blobId, TBuffer& blob, ui64 cookie = 0) override {
         UpdateWriteStatus();
 
         if (LoadingBlob_.has_value()) {
@@ -56,18 +56,42 @@ public:
                 return false;
             }
 
-            blob = std::move(*LoadingBlob_->ExtractValue());
-            --StoredBlobsCount_;
-            LoadingBlob_ = std::nullopt;
-            return true;
+            auto optionalChunkedBuffer = LoadingBlob_->ExtractValue();
+            if (optionalChunkedBuffer.has_value()) {
+                // Конвертируем TChunkedBuffer в TBuffer
+                const auto& chunkedBuffer = *optionalChunkedBuffer;
+                blob.Resize(chunkedBuffer.Size());
+                chunkedBuffer.FillBuffer(blob.Data());
+                --StoredBlobsCount_;
+                LoadingBlob_ = std::nullopt;
+                return true;
+            } else {
+                LoadingBlob_ = std::nullopt;
+                return false;
+            }
         }
 
-        Y_ENSURE(StoredBlobsCount_ > 0, "Internal Logic Error");
-        Y_ENSURE(StoredBlobs_.size() > 0, "Internal Logic Error");
+        // Проверяем есть ли готовые блобы в FIFO порядке
+        if (StoredBlobsCount_ == 0 || StoredBlobs_.empty()) {
+            return false;
+        }
 
-        LoadingBlob_ = Spiller_->Extract(StoredBlobs_.begin()->second);
+        // Берем первый блоб из очереди (FIFO)
+        if (BlobIdQueue_.empty()) {
+            return false;
+        }
 
-        return false;
+        ui64 nextBlobId = BlobIdQueue_.front();
+        auto it = StoredBlobs_.find(nextBlobId);
+        if (it == StoredBlobs_.end()) {
+            return false;
+        }
+
+        BlobIdQueue_.pop();
+        LoadingBlob_ = Spiller_->Extract(it->second);
+        StoredBlobs_.erase(it);
+
+        return false; // Данные еще не готовы, нужно будет вызвать Get снова
     }
 
 private:
@@ -87,18 +111,19 @@ private:
 private:
     IDqSpiller::TPtr Spiller_;
 
-    std::optional<NThreading::TFuture<std::optional<TBuffer>>> LoadingBlob_ = std::nullopt;
+    std::optional<NThreading::TFuture<std::optional<TChunkedBuffer>>> LoadingBlob_ = std::nullopt;
     // BlobId -> future with some additional info
     std::unordered_map<ui64, TWritingBlobInfo> WritingBlobs_;
     ui64 WritingBlobsTotalSize_ = 0;
 
-    ui64 BlobId_ = 0;
     ui64 StoredBlobsCount_ = 0;
 
-    std::map<ui64, IDqSpiller::TKey> StoredBlobs_;
+    std::unordered_map<ui64, IDqSpiller::TKey> StoredBlobs_;
+    TQueue<ui64> BlobIdQueue_; // Очередь для FIFO порядка
 
 };
 
-} // anonymous namespace
+// Фабричная функция для создания адаптера
+IDqChannelStorage::TPtr CreateDqChannelSpillerAdapter(IDqSpiller::TPtr spiller);
 
 } // namespace NYql::NDq

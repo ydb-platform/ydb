@@ -969,6 +969,10 @@ public:
         return {};
     }
 
+    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */, std::shared_ptr<NDq::IDqSpiller> /* spiller */) const override {
+        return {};
+    }
+
     NDq::TWakeUpCallback GetWakeupCallback() const override {
         return {};
     }

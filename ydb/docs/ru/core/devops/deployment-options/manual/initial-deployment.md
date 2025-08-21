@@ -187,19 +187,19 @@ vdb    252:16   0   186G  0 disk
     hosts:
     - host: node1.ydb.tech
       host_config_id: 1
-      walle_location:
+      location:
         body: 1
         data_center: 'zone-a'
         rack: '1'
     - host: node2.ydb.tech
       host_config_id: 1
-      walle_location:
+      location:
         body: 2
         data_center: 'zone-b'
         rack: '1'
     - host: node3.ydb.tech
       host_config_id: 1
-      walle_location:
+      location:
         body: 3
         data_center: 'zone-c'
         rack: '1'
@@ -461,7 +461,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
 - С использованием systemd
 
-  Создайте конфигурационный файл systemd `/etc/systemd/system/ydbd-testdb.service` по приведенному ниже образцу. Образец файла также можно [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service).
+  Создайте конфигурационный файл systemd `/etc/systemd/system/ydbd-testdb.service` по приведенному ниже образцу. Образец файла также можно [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service). 
 
   ```ini
   [Unit]
@@ -501,6 +501,12 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
   В примере файла выше `<ydbN>` - FQDN трех любых серверов, на которых запущены статические узлы кластера.
 
+  {% note info %}
+
+  При использовании режима bridge добавьте параметр `--bridge-pile-name <pile_name>` в команду запуска.
+
+  {% endnote %}
+  
   Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`:
 
   ```bash

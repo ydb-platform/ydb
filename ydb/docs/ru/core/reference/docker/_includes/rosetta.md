@@ -6,4 +6,5 @@
 - [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) с установленной и включённой Rosetta 2.
 
 Если не включена Rosetta 2, в команду запуска Docker-контейнера необходимо добавить параметр `-e YDB_USE_IN_MEMORY_PDISKS=true`. См. [{#T}](../configuration.md).
+
 {% endnote %}

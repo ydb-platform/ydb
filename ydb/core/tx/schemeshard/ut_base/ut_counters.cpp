@@ -16,20 +16,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardCountersTest) {
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
         TTestEnv env(runtime, opts, ssFactory);
-        runtime.GetAppData().FeatureFlags.SetEnableAlterDatabase(true);
         ui64 txId = 100;
 
-        TestAlterSubDomain(runtime, ++txId, "/", R"(
-            Name: "MyRoot"
-            SchemeLimits {
-                MaxPaths: 1
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
+        TSchemeLimits limits;
+        limits.MaxPaths = 1;
+        SetSchemeshardSchemaLimits(runtime, limits);
 
-        TSchemeLimits defaultLimits;
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-            NLs::DomainLimitsIs(1, defaultLimits.MaxShards),
+            NLs::DomainLimitsIs(1, limits.MaxShards),
             NLs::PathsInsideDomain(0)
         });
 

@@ -27,7 +27,13 @@ void TStreamingQueryInitializer::DoPrepare(NMetadata::NInitializer::IInitializer
         AddColumn(request, TStreamingQueryConfig::TColumns::State, Ydb::Type::JSON_DOCUMENT);
         result.emplace_back(std::make_shared<NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>>(request, "create"));
     }
-    result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetNoAccessModifier(TStreamingQueryConfig::GetBehaviour()->GetStorageTablePath(), "acl"));
+
+    if (AppData()->QueryServiceConfig.GetStreamingQueries().GetPrivateSystemTables()) {
+        result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetNoAccessModifier(TStreamingQueryConfig::GetBehaviour()->GetStorageTablePath(), "acl"));
+    } else {
+        result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(TStreamingQueryConfig::GetBehaviour()->GetStorageTablePath(), "acl"));
+    }
+
     controller->OnPreparationFinished(result);
 }
 

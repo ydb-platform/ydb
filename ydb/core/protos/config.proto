@@ -1146,6 +1146,7 @@ message TFinalizeScriptServiceConfig {
 
 message TStreamingQueriesConfig {
     optional uint64 MaxQueryExecutions = 1 [default = 30];
+    optional bool PrivateSystemTables = 2 [default = true];
 }
 
 message TQueryServiceConfig {

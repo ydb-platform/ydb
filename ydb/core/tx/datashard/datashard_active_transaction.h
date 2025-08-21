@@ -124,7 +124,8 @@ public:
                      const TStepOrder &stepTxId,
                      TInstant receivedAt,
                      const TString &txBody,
-                     bool usesMvccSnapshot);
+                     bool usesMvccSnapshot,
+                     bool isPropose = false);
 
     ~TValidatedDataTx();
 
@@ -428,7 +429,7 @@ public:
     const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; }
     TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
                                        TTransactionContext &txc,
-                                       const TActorContext &ctx);
+                                       const TActorContext &ctx, bool isPropose = false);
     void ClearDataTx() { DataTx = nullptr; }
 
     const NKikimrTxDataShard::TFlatSchemeTransaction &GetSchemeTx() const

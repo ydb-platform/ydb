@@ -104,7 +104,7 @@ ydb scheme ls .backups/collections/shop_backups/ | sort
 ydb scheme ls .backups/collections/shop_backups/
 
 # Удалите конкретные директории резервных копий с помощью rmdir
-ydb scheme rmdir .backups/collections/shop_backups/backup_20240315/
+ydb scheme rmdir -r .backups/collections/shop_backups/backup_20240315/
 
 # Для очистки на основе таблиц используйте DROP TABLE
 ydb scheme describe .backups/collections/shop_backups/backup_20240315/

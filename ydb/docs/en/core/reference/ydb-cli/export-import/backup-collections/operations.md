@@ -104,7 +104,7 @@ Clean up old backups while maintaining chain validity using SQL commands:
 ydb scheme ls .backups/collections/shop_backups/
 
 # Remove specific backup directories using rmdir
-ydb scheme rmdir .backups/collections/shop_backups/backup_20240315/
+ydb scheme rmdir -r .backups/collections/shop_backups/backup_20240315/
 
 # Examine backup structure before cleanup
 ydb scheme describe .backups/collections/shop_backups/backup_20240315/

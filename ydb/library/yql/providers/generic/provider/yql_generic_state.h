@@ -41,8 +41,18 @@ namespace NYql {
             NYql::TGenericDataSourceInstance DataSourceInstance;
             // External table schema
             NYql::NConnector::NApi::TSchema Schema;
+            // Deprecated
             // Contains some binary description of table splits (partitions) produced by Connector
             std::vector<NYql::NConnector::NApi::TSplit> Splits;
+            // Contains splits for a particular select
+            std::unordered_map<TString, std::vector<NYql::NConnector::NApi::TSplit>> SelectSplits;
+
+            bool HasSplitsForSelect(const NConnector::NApi::TSelect& select) const;
+
+            void AttachSplitsForSelect(const NConnector::NApi::TSelect& select,
+                                       std::vector<NYql::NConnector::NApi::TSplit>& splits);
+
+            const std::vector<NYql::NConnector::NApi::TSplit>& GetSplitsForSelect(const NConnector::NApi::TSelect& select) const;
         };
 
         using TGetTableResult = std::pair<const TTableMeta*, TIssues>;
@@ -66,8 +76,11 @@ namespace NYql {
             Configuration->Init(gatewayConfig, databaseResolver, DatabaseAuth, types->Credentials);
         }
 
+        bool HasTable(const TTableAddress& tableAddress);
         void AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta);
-        bool AttachSplitsToTable(const TTableAddress& tableAddress, std::vector<NYql::NConnector::NApi::TSplit>& splits);
+        bool AttachSplitsToTable(const TTableAddress& tableAddress,
+                                 const NConnector::NApi::TSelect& select,
+                                 std::vector<NYql::NConnector::NApi::TSplit>& splits);
         TGetTableResult GetTable(const TTableAddress& tableAddress) const;
 
         TTypeAnnotationContext* Types;
@@ -89,4 +102,10 @@ namespace NYql {
     private:
         THashMap<TTableAddress, TTableMeta> Tables_;
     };
+
+    ///
+    /// Get unique key for a select request
+    ///
+    TString GetSelectKey(const NConnector::NApi::TSelect& select);
+
 } // namespace NYql

@@ -214,7 +214,7 @@ namespace NYql {
         public:
             explicit TGenericPhysicalOptProposalWithListTransformer(TGenericState::TPtr state)
                 : PhysicalOptTransformer_(new TGenericPhysicalOptProposalTransformer(state))
-                , ListTransformer_(new TGenericListTransformer(state))
+                , ListTransformer_(new TGenericListSplitTransformer(state))
                 , AllowAsync_(false)
             { }
 
@@ -254,7 +254,7 @@ namespace NYql {
 
         private:
             const TAutoPtr<TGenericPhysicalOptProposalTransformer> PhysicalOptTransformer_;
-            const TAutoPtr<TGenericListTransformer> ListTransformer_;
+            const TAutoPtr<TGenericListSplitTransformer> ListTransformer_;
             bool AllowAsync_;
         };
     } // namespace

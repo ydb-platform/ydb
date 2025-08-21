@@ -6,9 +6,9 @@ Backup collections provide an advanced backup solution for {{ ydb-short-name }} 
 
 Backup collections solve several challenges with traditional export/import approaches:
 
-- **Efficiency**: Incremental backups capture only changes since the previous backup
-- **Organization**: Related backups are grouped into logical collections
-- **Recovery flexibility**: Enables point-in-time recovery to any backup in the chain
+- **Efficiency**: Incremental backups capture only changes since the previous backup.
+- **Organization**: Related backups are grouped into logical collections.
+- **Recovery flexibility**: Enables point-in-time recovery to any backup in the chain.
 
 ## Core concepts
 
@@ -39,8 +39,8 @@ An ordered sequence of backups starting with a full backup followed by zero or m
 
 ### Storage options
 
-- **Cluster storage**: Backups stored within the {{ ydb-short-name }} cluster (current default)
-- **External storage**: Manual export to filesystem or S3 using CLI tools for long-term archival (automatic external storage support may be added in future versions)
+- **Cluster storage**: Backups stored within the {{ ydb-short-name }} cluster (current default).
+- **External storage**: Manual export to filesystem or S3 using CLI tools for long-term archival (automatic external storage support may be added in future versions).
 
 ### Background operations
 

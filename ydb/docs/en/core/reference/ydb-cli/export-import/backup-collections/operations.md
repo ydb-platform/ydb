@@ -106,7 +106,7 @@ ydb scheme ls .backups/collections/shop_backups/
 # Remove specific backup directories using rmdir
 ydb scheme rmdir .backups/collections/shop_backups/backup_20240315/
 
-# For table-based cleanup, use DROP TABLE
+# Examine backup structure before cleanup
 ydb scheme describe .backups/collections/shop_backups/backup_20240315/
 ```
 

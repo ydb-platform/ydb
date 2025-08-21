@@ -21,20 +21,20 @@ State storage SelfHeal включен по умолчанию.
 
 ```yaml
 config:
-  	self_management_config:
-    	enabled: true # Включение distconf, он генерирует новую конфигурацию и рассылает узлам
-  	cms_config:
-		sentinel_config:
-			enable: true # Включение Sentinel, он отслеживает доступность узлов и отдает команду self-heal в distconf
-			update_state_interval: 60000000 # Периодичность опроса состояния нод. По умолчанию 1 минута
-			state_storage_self_heal_config:
-				enable: true # Включение self-heal state storage
-				node_good_state_limit: 10 # Количество опросов в течении которых узел должен быть в хорошем состоянии (быть  доступен), чтобы использовать его в конфигурации
-				node_pretty_good_state_limit: 7 # Количество опросов в течении которых узел должен быть в хорошем состоянии, чтобы использовать его в конфигурации, но при этом команда SelfHeal в distconf не отдается
-				node_bad_state_limit: 10 # Количество циклов в течении которых узел должен быть недоступен, чтобы отдать команду self-heal в distconf
-				wait_for_config_step: 60000000 # Период между шагами изменения конфигурации. По умолчанию 1 минута.
+    self_management_config:
+        enabled: true # Включение distconf, он генерирует новую конфигурацию и рассылает узлам
+    cms_config:
+        sentinel_config:
+            enable: true # Включение Sentinel, он отслеживает доступность узлов и отдает команду self-heal в distconf
+            update_state_interval: 60000000 # Периодичность опроса состояния нод. По умолчанию 1 минута
+            state_storage_self_heal_config:
+                enable: true # Включение self-heal state storage
+                node_good_state_limit: 10 # Количество опросов в течении которых узел должен быть в хорошем состоянии (быть  доступен), чтобы использовать его в конфигурации
+                node_pretty_good_state_limit: 7 # Количество опросов в течении которых узел должен быть в хорошем состоянии, чтобы использовать его в конфигурации, но при этом команда SelfHeal в distconf не отдается
+                node_bad_state_limit: 10 # Количество циклов в течении которых узел должен быть недоступен, чтобы отдать команду self-heal в distconf
+                wait_for_config_step: 60000000 # Период между шагами изменения конфигурации. По умолчанию 1 минута.
                 relax_time: 360000000 # Минимальный период между командами SelfHeal. По умолчанию 10 минут
-				pileup_replicas: false # StateStorage, Board, SchemeBoard реплики располагать на одном узле. Если возможен откат кластера на старую верси конфига V1, это позволит привести к совместимому состоянию
+                pileup_replicas: false # StateStorage, Board, SchemeBoard реплики располагать на одном узле. Если возможен откат кластера на старую верси конфига V1, это позволит привести к совместимому состоянию
 
 ```
 

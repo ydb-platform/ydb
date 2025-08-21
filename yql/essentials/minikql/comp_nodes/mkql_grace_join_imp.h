@@ -411,11 +411,6 @@ public:
     // Returns next jointed tuple data. Returs true if there are more tuples
     bool NextJoinedData(TupleData& td1, TupleData& td2);
 
-    // Returns currently joined bucket (or NumberOfBuckets if there are none)
-    ui32 GetCurrentBucket() const {
-        return CurrIterBucket;
-    }
-
     // Creates buckets that support spilling.
     void InitializeBucketSpillers(ISpiller::TPtr spiller);
 

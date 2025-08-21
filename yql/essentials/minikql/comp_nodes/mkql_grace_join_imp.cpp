@@ -167,6 +167,7 @@ TTable::EAddTupleResult TTable::AddTuple(ui64* intColumns, char** stringColumns,
 
 void TTable::ResetIterator() {
     CurrIterIndex = 0;
+    CurrIterBucket = 0;
     if (IsTableJoined) {
         JoinTable1->ResetIterator();
         JoinTable2->ResetIterator();
@@ -869,6 +870,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys, NYql::NUdf:
 
 
 bool TTable::NextJoinedData(TupleData& td1, TupleData& td2) {
+    Y_DEBUG_ABORT_UNLESS(IsTableJoined);
         if (auto& joinIds = JoinIds; CurrIterIndex != joinIds.size()) {
             Y_DEBUG_ABORT_UNLESS(JoinKind == EJoinKind::Inner || JoinKind == EJoinKind::Left || JoinKind == EJoinKind::Right || JoinKind == EJoinKind::Full);
             auto ids = joinIds[CurrIterIndex++];
@@ -914,23 +916,17 @@ void TTable::Clear() {
 void TTable::ClearResults() {
     JoinIds.clear();
     LeftIds.clear();
-    if (JoinTable1) {
+    if (IsTableJoined) {
         JoinTable1->ClearResults();
-    }
-    if (JoinTable2) {
         JoinTable2->ClearResults();
     }
-    ResetIterator();
-    CurrIterBucket = NumberOfBuckets;
 }
 
 void TTable::ShrinkResults() {
     JoinIds.shrink_to_fit();
     LeftIds.shrink_to_fit();
-    if (JoinTable1) {
+    if (IsTableJoined) {
         JoinTable1->ShrinkResults();
-    }
-    if (JoinTable2) {
         JoinTable2->ShrinkResults();
     }
 }

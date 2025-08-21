@@ -1,3 +1,4 @@
+* Removed the `--float-mode` option from the `ydb workload tpch run` and `ydb workload tpcds run` commands. Float mode is now inferred automatically from the table schema created during the `init` phase.
 * Added final execute statistics to `ydb workload * run` commands.
 * Fixed a bug where the `ydb import file csv command` with the `--newline-delimited` option could get stuck if the input had incorrect data.
 * Fixed a bug with the progress bar display in the `ydb workload clickbench import files` command — incorrect percentage value and excessive line breaks causing duplicated progress lines.

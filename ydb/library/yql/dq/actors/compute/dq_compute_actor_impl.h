@@ -821,7 +821,7 @@ protected:
         }
     }
 
-    void Start() override final {
+    void Start() override {
         Running = true;
         State = NDqProto::COMPUTE_STATE_EXECUTING;
         ContinueExecute(EResumeSource::CAStart);

@@ -96,6 +96,15 @@ void TSubDomainInfo::ApplyAuditSettings(const TSubDomainInfo::TMaybeAuditSetting
     }
 }
 
+void TSubDomainInfo::UpdateCounters(IQuotaCounters* counters) {
+    counters->SetPathCount(GetPathsInside());
+
+    const auto shardsTotal = GetShardsInside();
+    const auto backupShards = GetBackupShards();
+    Y_ABORT_UNLESS(shardsTotal >= backupShards);
+    counters->SetShardCount(shardsTotal - backupShards);
+}
+
 TDiskSpaceQuotas TSubDomainInfo::GetDiskSpaceQuotas() const {
     if (!DatabaseQuotas) {
         return {};

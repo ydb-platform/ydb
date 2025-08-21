@@ -120,14 +120,14 @@ DROP TABLE `.backups/collections/shop_backups/backup_20240315/table_name`;
 
 ### CLI operations for backups
 
-Use YDB operations commands where available:
+Use YDB operation commands where available:
 
 ```bash
 # List operations (may include backup operations)
-ydb operations list
+ydb operation list incbackup
 
 # Check specific operation status
-ydb operations get <operation-id>
+ydb operation get <operation-id>
 ```
 
 **Important retention considerations:**
@@ -146,17 +146,17 @@ For chain validity rules and critical deletion warnings, see [Chain validity rul
 
 ### Verify using CLI operations
 
-Use YDB operations commands to check backup status:
+Use YDB operation commands to check backup status:
 
 ```bash
 # List all operations (including backup operations)
-ydb operations list
+ydb operation list incbackup
 
 # Check specific backup operation status
-ydb operations get <operation-id>
+ydb operation get <operation-id>
 
-# List operations with filter
-ydb operations list --filter incbackup
+# List restore operations
+ydb operation list restore
 ```
 
 ### Schema-based validation

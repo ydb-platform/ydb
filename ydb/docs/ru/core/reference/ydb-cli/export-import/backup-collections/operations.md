@@ -124,10 +124,10 @@ DROP TABLE `.backups/collections/shop_backups/backup_20240315/table_name`;
 
 ```bash
 # Список операций (может включать операции резервного копирования)
-ydb operations list
+ydb operation list incbackup
 
 # Проверка статуса конкретной операции
-ydb operations get <operation-id>
+ydb operation get <operation-id>
 ```
 
 **Важные соображения по хранению:**
@@ -150,13 +150,13 @@ ydb operations get <operation-id>
 
 ```bash
 # Список всех операций (включая операции резервного копирования)
-ydb operations list
+ydb operation list incbackup
 
 # Проверка статуса конкретной операции резервного копирования
-ydb operations get <operation-id>
+ydb operation get <operation-id>
 
-# Список операций с фильтром
-ydb operations list --filter incbackup
+# Список операций восстановления
+ydb operation list restore
 ```
 
 ### Валидация на основе схемы

@@ -21,13 +21,13 @@ config:
 ---
 sankey-beta
 
-Process Memory,Cache Components,60
+Process Memory,Cache Components,50
 Process Memory,Activity Components, 30
+Process Memory,Allocator caches, 10
 Process Memory,Other,10
 
-Cache Components,Shared cache, 30
+Cache Components,Shared cache, 40
 Cache Components,MemTable, 10
-Cache Components,Allocator caches, 20
 
 Activity Components,"KQP", 15
 Activity Components,Compaction, 15

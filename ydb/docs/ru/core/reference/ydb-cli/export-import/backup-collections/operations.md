@@ -2,7 +2,7 @@
 
 В этом разделе рассматриваются все операции по созданию, управлению и восстановлению из [коллекций резервных копий](../../../concepts/backup/collections.md). Полный справочник по синтаксису команд см. в [Синтаксис коллекций резервных копий YQL](../../../yql/reference/syntax/backup-collections.md).
 
-## Создание коллекций
+## Создание коллекций {#creating-collections}
 
 ### Создание коллекции с помощью SQL
 
@@ -16,7 +16,7 @@ CREATE BACKUP COLLECTION `shop_backups`
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 ```
 
-## Создание резервных копий
+## Создание резервных копий {#taking-backups}
 
 ### Начальная полная резервная копия
 
@@ -44,7 +44,7 @@ BACKUP `shop_backups` INCREMENTAL;
 
 Подробные рекомендации и управление цепочками см. в [Правилах целостности цепочки](concepts.md#chain-validity-rules).
 
-## Мониторинг операций
+## Мониторинг операций {#monitoring-operations}
 
 Все операции резервного копирования выполняются в фоновом режиме и могут отслеживаться с помощью команды [operation list](../../operation-list.md):
 
@@ -67,7 +67,7 @@ BACKUP `shop_backups`;
 BACKUP `shop_backups` INCREMENTAL;
 ```
 
-## Управление коллекциями
+## Управление коллекциями {#managing-collections}
 
 ### Просмотр коллекций в схеме
 
@@ -103,7 +103,7 @@ ydb scheme ls .backups/collections/shop_backups/
 ydb scheme ls .backups/collections/shop_backups/ | sort
 ```
 
-## Хранение и очистка
+## Хранение и очистка {#retention-cleanup}
 
 ### Ручная очистка с помощью SQL
 
@@ -152,7 +152,7 @@ ydb operation get <operation-id>
 - Используйте просмотр схемы для понимания структуры резервных копий
 - Тестируйте процедуры очистки в непроизводственных средах
 
-## Проверка и валидация
+## Проверка и валидация {#verification-validation}
 
 ### Проверка с помощью CLI операций
 
@@ -192,7 +192,7 @@ ydb scheme ls .backups/collections/shop_backups/ | sort
 2. **Готовность целевой среды**
 3. **Необходимые разрешения и доступ**
 
-## Операции восстановления
+## Операции восстановления {#restore-operations}
 
 ### Экспорт и импорт резервных копий
 

@@ -4,7 +4,7 @@ This section covers backup concepts and technologies available in {{ ydb-short-n
 
 {{ ydb-short-name }} provides several approaches for creating backups, each designed for different use cases and requirements:
 
-## Export/import
+## Export/import {#export-import}
 
 For large-scale data migration and portability scenarios:
 
@@ -12,7 +12,7 @@ For large-scale data migration and portability scenarios:
 - **Characteristics**: Point-in-time snapshots with flexible format options, optimized for large datasets.
 - **Storage**: S3-compatible storage.
 
-## Backup/restore
+## Backup/restore {#backup-restore}
 
 For local database backups and development workflows:
 
@@ -20,7 +20,7 @@ For local database backups and development workflows:
 - **Characteristics**: Designed for local filesystem operations with moderate data volumes.
 - **Storage**: Filesystem.
 
-## Backup collections
+## Backup collections {#backup-collections}
 
 For production workloads requiring incremental backups:
 
@@ -35,7 +35,7 @@ Learn more:
 - [Backup collections](backup/collections.md) - Concepts, architecture, and when to use
 - [CLI tools](../reference/ydb-cli/export-import/backup-collections/index.md) - Command-line tools and detailed usage guide
 
-## Choosing the right approach
+## Choosing the right approach {#choosing-approach}
 
 | Approach | Best for | Key advantages | Considerations |
 |----------|----------|----------------|----------------|

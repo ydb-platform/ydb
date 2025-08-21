@@ -2,7 +2,7 @@
 
 This section covers all operations for creating, managing, and restoring from [backup collections](../../../concepts/backup/collections.md). For complete command syntax reference, see the [YQL backup collections syntax](../../../yql/reference/syntax/backup-collections.md).
 
-## Creating collections
+## Creating collections {#creating-collections}
 
 ### Create a collection with SQL
 
@@ -16,7 +16,7 @@ CREATE BACKUP COLLECTION `shop_backups`
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 ```
 
-## Taking backups
+## Taking backups {#taking-backups}
 
 ### Initial full backup
 
@@ -44,7 +44,7 @@ BACKUP `shop_backups` INCREMENTAL;
 
 For detailed guidelines and chain management, see [Chain validity rules](concepts.md#chain-validity-rules).
 
-## Monitoring operations
+## Monitoring operations {#monitoring-operations}
 
 All backup operations run in the background and can be monitored using the [operation list](../../operation-list.md) command:
 
@@ -67,7 +67,7 @@ BACKUP `shop_backups`;
 BACKUP `shop_backups` INCREMENTAL;
 ```
 
-## Managing collections
+## Managing collections {#managing-collections}
 
 ### List collections in schema
 
@@ -103,7 +103,7 @@ ydb scheme ls .backups/collections/shop_backups/
 ydb scheme ls .backups/collections/shop_backups/ | sort
 ```
 
-## Retention and cleanup
+## Retention and cleanup {#retention-cleanup}
 
 ### Manual cleanup with SQL
 
@@ -152,7 +152,7 @@ For chain validity rules and critical deletion warnings, see [Chain validity rul
 - Use schema browsing to understand backup structure
 - Test cleanup procedures in non-production environments first
 
-## Verification and validation
+## Verification and validation {#verification-validation}
 
 ### Verify using CLI operations
 
@@ -192,7 +192,7 @@ Before critical restores, always verify:
 3. **Target environment readiness**
 4. **Required permissions and access**
 
-## Restore operations
+## Restore operations {#restore-operations}
 
 ### Export and import backups
 

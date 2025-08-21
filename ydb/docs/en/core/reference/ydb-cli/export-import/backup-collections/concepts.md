@@ -2,7 +2,7 @@
 
 This section explains how backup collections work, the types of backups available, and the storage backends you can use.
 
-## How backup collections work
+## How backup collections work {#how-backup-collections-work}
 
 A backup collection is a named set of backups for selected tables that maintains a chronological chain of data snapshots. Each collection contains:
 
@@ -12,7 +12,7 @@ A backup collection is a named set of backups for selected tables that maintains
 
 The backup chain allows you to restore your data to any point in time by applying the full backup and subsequent incremental backups up to your desired restore point.
 
-## Types of backups
+## Types of backups {#types-of-backups}
 
 ### Full backups
 
@@ -47,7 +47,7 @@ Incremental backups capture only the changes made since the previous backup in t
 
 See [Operations guide](operations.md#taking-backups) for detailed guidelines.
 
-## Storage backends
+## Storage backends {#storage-backends}
 
 ### Cluster storage
 
@@ -59,7 +59,7 @@ WITH ( STORAGE = 'cluster' )
 
 For external storage (filesystem, S3), use [export/import operations](operations.md#restore-operations).
 
-## Backup chains and integrity
+## Backup chains and integrity {#backup-chains-integrity}
 
 ### Chain structure
 
@@ -68,7 +68,7 @@ A backup chain consists of:
 1. **One full backup** (the chain foundation)
 2. **Zero or more incremental backups** (applied in chronological order)
 
-### Chain validity rules
+### Chain validity rules {#chain-validity-rules}
 
 {% note alert %}
 
@@ -88,7 +88,7 @@ Never delete full backups that have dependent incremental backups. Deleting a fu
 - **Hourly incrementals**: Limit chains to 24-48 incremental backups
 - **High-frequency backups**: Consider synthetic full backups to reset chains
 
-## Limitations and requirements
+## Limitations and requirements {#limitations-requirements}
 
 ### Current limitations
 

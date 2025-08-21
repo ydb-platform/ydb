@@ -2,7 +2,7 @@
 
 Backup collections provide an advanced backup solution for {{ ydb-short-name }} that organizes full and incremental backups into managed collections. This approach is designed for production workloads requiring efficient disaster recovery and point-in-time recovery capabilities.
 
-## Overview
+## Overview {#overview}
 
 Backup collections solve several challenges with traditional export/import approaches:
 
@@ -10,7 +10,7 @@ Backup collections solve several challenges with traditional export/import appro
 - **Organization**: Related backups are grouped into logical collections.
 - **Recovery flexibility**: Enables point-in-time recovery to any backup in the chain.
 
-## Core concepts
+## Core concepts {#core-concepts}
 
 ### Backup collection
 
@@ -28,25 +28,25 @@ Captures only the changes (inserts, updates, deletes) since the previous backup 
 
 An ordered sequence of backups starting with a full backup followed by zero or more incremental backups. Each incremental backup depends on all previous backups in the chain.
 
-## Architecture
+## Architecture {#architecture}
 
-### Backup flow
+### Backup flow {#backup-flow}
 
 1. **Create collection**: Define which tables to include
 2. **Initial full backup**: Create baseline snapshot
 3. **Regular incremental backups**: Capture ongoing changes
 4. **Retention management**: Remove old backups while preserving chain integrity
 
-### Storage options
+### Storage options {#storage-options}
 
 - **Cluster storage**: Backups stored within the {{ ydb-short-name }} cluster (current default).
 - **External storage**: Manual export to filesystem or S3 using [CLI tools](../../reference/ydb-cli/export-import/index.md) for long-term archival (automatic external storage support may be added in future versions).
 
-### Background operations
+### Background operations {#background-operations}
 
 All backup and restore operations run asynchronously in the background, allowing you to monitor progress through the long operations API without blocking other database activities.
 
-## Quick start
+## Quick start {#quick-start}
 
 To get started with backup collections:
 

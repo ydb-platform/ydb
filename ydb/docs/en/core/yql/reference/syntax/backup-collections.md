@@ -4,7 +4,7 @@ YQL supports SQL commands for managing [backup collections](../../../concepts/ba
 
 For practical usage examples and operational guidance, see the [backup collections operations guide](../../../reference/ydb-cli/export-import/backup-collections/operations.md).
 
-## CREATE BACKUP COLLECTION
+## CREATE BACKUP COLLECTION {#create-backup-collection}
 
 Creates a new backup collection with specified tables and configuration.
 
@@ -43,7 +43,7 @@ CREATE BACKUP COLLECTION `shop_backups`
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 ```
 
-## BACKUP
+## BACKUP {#backup}
 
 Creates a backup within an existing collection. The first backup is always a full backup; subsequent backups can be incremental.
 
@@ -87,7 +87,7 @@ BACKUP `sales_data`;
 BACKUP `sales_data` INCREMENTAL;
 ```
 
-## DROP BACKUP COLLECTION
+## DROP BACKUP COLLECTION {#drop-backup-collection}
 
 Removes a backup collection and all its associated backups.
 
@@ -103,7 +103,7 @@ This operation is irreversible and will delete all backups in the collection. En
 
 {% endnote %}
 
-## Limitations and considerations
+## Limitations and considerations {#limitations}
 
 ### Current limitations
 

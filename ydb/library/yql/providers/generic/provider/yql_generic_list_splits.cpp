@@ -163,7 +163,7 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoTransform(TExprNode::
     ListResponses_.reserve(pendingRequests.size());
 
     for (auto& k : pendingRequests) {
-        auto tIssues = ListTableFromConnector(k.second, handles);
+        auto tIssues = ListSplitsFromConnector(k.second, handles);
         if (!tIssues.Empty()) {
             ctx.AddError(TIssue(tIssues.ToString()));
             return TStatus::Error;
@@ -178,8 +178,8 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoTransform(TExprNode::
     return TStatus::Async;
 }
 
-TIssues TGenericListSplitTransformer::ListTableFromConnector(const TListSplitRequestData& data,
-                                                             std::vector<NThreading::TFuture<void>>& handles) {
+TIssues TGenericListSplitTransformer::ListSplitsFromConnector(const TListSplitRequestData& data,
+                                                              std::vector<NThreading::TFuture<void>>& handles) {
     auto table = State_->GetTable(data.TableAddress);
 
     if (!table.first) {
@@ -300,10 +300,11 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
         auto iter = ListResponses_.find(MakeKeyFor(tableAddress, select));
 
         if (iter == ListResponses_.end()) {
-            ctx.AddError(TIssue(ctx.GetPosition(genRead.Pos()), TStringBuilder()
-                                                                    << "Connector response not found for table "
-                                                                    << tableAddress.ToString()));
+            auto msg = TStringBuilder()
+                << "Connector response not found for table: " << tableAddress.ToString()
+                << " and select: " << select.DebugString();
 
+            ctx.AddError(TIssue(ctx.GetPosition(genRead.Pos()), msg));
             return TStatus::Error;
         }
 
@@ -320,8 +321,8 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
 
         Y_ENSURE(result->Splits.size() > 0);
 
-        if (!State_->AttachSplitsToTable(tableAddress, select, result->Splits)) {
-            ctx.AddError(TIssue("Failed to attach splits to a table metadata"));
+        if (auto issue = State_->AttachSplitsToTable(tableAddress, select, result->Splits); issue) {
+            ctx.AddError(*issue);
             return TStatus::Error;
         }
     }

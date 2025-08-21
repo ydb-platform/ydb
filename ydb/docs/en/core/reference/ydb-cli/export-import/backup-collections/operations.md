@@ -1,6 +1,6 @@
 # Backup collections operations
 
-This section covers all operations for creating, managing, and restoring from [backup collections](../../../concepts/backup/collections.md). For complete command syntax reference, see the [YQL backup collections syntax](../../../yql/reference/syntax/backup-collections.md).
+This section covers all operations for creating, managing, and restoring from [backup collections](en/core/concepts/backup/collections.md). For complete command syntax reference, see the [YQL backup collections syntax](en/core/yql/reference/syntax/backup-collections.md).
 
 ## Creating collections {#creating-collections}
 

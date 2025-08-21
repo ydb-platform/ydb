@@ -1,6 +1,6 @@
 # SQL API: Backup collections
 
-This section provides guidance for using SQL commands with [backup collections](concepts.md). For complete syntax reference, see [Backup collection commands](../../../yql/reference/syntax/backup-collections.md) in the YQL reference.
+This section provides guidance for using SQL commands with [backup collections](concepts.md). For complete syntax reference, see [Backup collection commands](en/core/yql/reference/syntax/backup-collections.md) in the YQL reference.
 
 ## Quick reference
 
@@ -10,7 +10,7 @@ The main SQL commands for backup collections are:
 - `BACKUP` - Creates a backup (full or incremental).  
 - `DROP BACKUP COLLECTION` - Removes a collection and all backups.
 
-For detailed syntax, parameters, and examples, refer to the [YQL syntax reference](../../../yql/reference/syntax/backup-collections.md).
+For detailed syntax, parameters, and examples, refer to the [YQL syntax reference](en/core/yql/reference/syntax/backup-collections.md).
 
 ## Basic workflow
 
@@ -48,6 +48,6 @@ ydb operation list incbackup
 
 ## Next steps
 
-- [Complete YQL syntax reference for backup collections](../../../yql/reference/syntax/backup-collections.md).
+- [Complete YQL syntax reference for backup collections](en/core/yql/reference/syntax/backup-collections.md).
 - [Learn about backup collection concepts](concepts.md).
 - [Explore all operations and management tasks](operations.md).

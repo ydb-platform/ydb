@@ -991,13 +991,15 @@ private:
         case TIndexBuildInfo::ESubState::None: {
             if (FillSecondaryIndex(buildInfo)) {
                 ClearAfterFill(TActivationContext::AsActorContext(), buildInfo);
+
                 // After filling unique index we need to validate it.
                 // This includes:
                 // - Locking index shards
                 // - Validating each index shard for index keys uniqueness
                 // - Applying cross-shard validation
-                buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
                 NIceDb::TNiceDb db{txc.DB};
+                buildInfo.SubState = TIndexBuildInfo::ESubState::UniqIndexValidation;
+                Self->PersistBuildIndexState(db, buildInfo);
                 Self->PersistBuildIndexShardStatusReset(db, buildInfo);
                 ChangeState(BuildId, TIndexBuildInfo::EState::LockBuild);
                 Progress(BuildId);

@@ -41,6 +41,40 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
     Y_ENSURE(PartitionKey.size() <= 256);
 }
 
+ui32 TClientBlob::GetPartDataSize() const {
+    if (PartData) {
+        return 1 + sizeof(ui16) + sizeof(ui16) + sizeof(ui32);
+    }
+    return 1;
+}
+
+ui32 TClientBlob::GetKinesisSize() const {
+    if (PartitionKey.size() > 0) {
+        return 2 + PartitionKey.size() + ExplicitHashKey.size();
+    }
+    return 0;
+}
+
+ui32 TClientBlob::GetBlobSize() const {
+    return GetPartDataSize() + OVERHEAD + SourceId.size() + Data.size() + (UncompressedSize == 0 ? 0 : sizeof(ui32)) + GetKinesisSize();
+}
+
+ui16 TClientBlob::GetPartNo() const {
+    return PartData ? PartData->PartNo : 0;
+}
+
+ui16 TClientBlob::GetTotalParts() const {
+    return PartData ? PartData->TotalParts : 1;
+}
+
+ui16 TClientBlob::GetTotalSize() const {
+    return PartData ? PartData->TotalSize : UncompressedSize;
+}
+
+bool TClientBlob::IsLastPart() const {
+    return !PartData || PartData->IsLastPart();
+}
+
 
 TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
     : Key(key)

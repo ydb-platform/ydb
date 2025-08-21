@@ -47,39 +47,13 @@ struct TClientBlob {
         const TInstant writeTimestamp, const TInstant createTimestamp,
         const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey);
 
-    ui32 GetPartDataSize() const {
-        if (PartData) {
-            return 1 + sizeof(ui16) + sizeof(ui16) + sizeof(ui32);
-        }
-        return 1;
-    }
-
-    ui32 GetKinesisSize() const {
-        if (PartitionKey.size() > 0) {
-            return 2 + PartitionKey.size() + ExplicitHashKey.size();
-        }
-        return 0;
-    }
-
-    ui32 GetBlobSize() const {
-        return GetPartDataSize() + OVERHEAD + SourceId.size() + Data.size() + (UncompressedSize == 0 ? 0 : sizeof(ui32)) + GetKinesisSize();
-    }
-
-    ui16 GetPartNo() const {
-        return PartData ? PartData->PartNo : 0;
-    }
-
-    ui16 GetTotalParts() const {
-        return PartData ? PartData->TotalParts : 1;
-    }
-
-    ui16 GetTotalSize() const {
-        return PartData ? PartData->TotalSize : UncompressedSize;
-    }
-
-    bool IsLastPart() const {
-        return !PartData || PartData->IsLastPart();
-    }
+    ui32 GetPartDataSize() const;
+    ui32 GetKinesisSize() const;
+    ui32 GetBlobSize() const;
+    ui16 GetPartNo() const;
+    ui16 GetTotalParts() const;
+    ui16 GetTotalSize() const;
+    bool IsLastPart() const;
 
     void SerializeTo(TBuffer& buffer) const;
     static TClientBlob Deserialize(const char *data, ui32 size);

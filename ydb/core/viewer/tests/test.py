@@ -1048,7 +1048,7 @@ def test_async_replication_describe():
 def test_transfer_describe():
     topic_result = call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': 'CREATE TOPIC TestTransferSourceTopic',
+        'query': 'CREATE TOPIC TestTransferSourceTopic (CONSUMER OurConsumer)',
         'schema': 'multi'
     })
 

@@ -1,8 +1,3 @@
-#include "token_manager.h"
-#include "token_manager_log.h"
-#include "private_events.h"
-#include "token_provider.h"
-
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 
@@ -11,6 +6,10 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/security/token_manager/token_manager.h>
+#include <ydb/core/security/token_manager/token_manager_log.h>
+#include <ydb/core/security/token_manager/private_events.h>
+#include <ydb/core/security/token_manager/token_provider.h>
 
 namespace NKikimr {
 
@@ -46,7 +45,10 @@ void TTokenManager::BootstrapTokenProviders() {
         };
         for (const auto& vmMetadataInfo : vmMetadataProvider.GetProvidersInfo()) {
             BLOG_TRACE("Initialize token provider# " << vmMetadataInfo.GetId());
-            TokenProviders[vmMetadataInfo.GetId()] = std::make_shared<NTokenManager::TVmMetadataTokenProvider>(this->SelfId(), VmMetadataProviderSettings, httpProxyId, vmMetadataInfo);
+            TokenProviders[vmMetadataInfo.GetId()] = std::make_shared<NTokenManager::TVmMetadataTokenProvider>(this->SelfId(),
+                                                        VmMetadataProviderSettings,
+                                                        httpProxyId,
+                                                        vmMetadataInfo);
         }
     }
 }

@@ -2207,7 +2207,7 @@ protected:
         TBase::PassAway();
     }
 
-    void CreateServiceTokens();
+    void CreateServiceTokens() const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::TICKET_PARSER_ACTOR; }
@@ -2270,7 +2270,7 @@ public:
 };
 
 template <typename TDerived>
-void TTicketParserImpl<TDerived>::CreateServiceTokens() {
+void TTicketParserImpl<TDerived>::CreateServiceTokens() const {
     if (Config.HasAccessServiceTokenName() && Config.GetTokenManager().GetEnable()) {
         BLOG_TRACE("Send EvSubscribeUpdateToken to service token manager");
         Send(MakeTokenManagerID(), new TEvTokenManager::TEvSubscribeUpdateToken(Config.GetAccessServiceTokenName()));
@@ -2279,7 +2279,7 @@ void TTicketParserImpl<TDerived>::CreateServiceTokens() {
 
 template <typename TDerived>
 void TTicketParserImpl<TDerived>::Handle(TEvTokenManager::TEvUpdateToken::TPtr& ev) {
-    static auto convertStatusCode = [] (const TEvTokenManager::TStatus::ECode& code) {
+    constexpr auto convertStatusCode = [] (const TEvTokenManager::TStatus::ECode& code) {
         switch (code) {
         case TEvTokenManager::TStatus::ECode::SUCCESS: return "Success";
         case TEvTokenManager::TStatus::ECode::NOT_READY: return "Not ready";
@@ -2288,9 +2288,9 @@ void TTicketParserImpl<TDerived>::Handle(TEvTokenManager::TEvUpdateToken::TPtr& 
     };
 
     BLOG_TRACE("Handle TEvTokenManager::TEvUpdateToken: id# " << ev->Get()->Id
-                                                        << ", Status.code# " << convertStatusCode(ev->Get()->Status.Code)
-                                                        << ", Status.Msg# " << ev->Get()->Status.Message
-                                                        << ", Token# " << MaskTicket(ev->Get()->Token));
+        << ", Status.code# " << convertStatusCode(ev->Get()->Status.Code)
+        << ", Status.Msg# " << ev->Get()->Status.Message
+        << ", Token# " << MaskTicket(ev->Get()->Token));
     if (ev->Get()->Status.Code == TEvTokenManager::TStatus::ECode::SUCCESS) {
         ServiceTokens[ev->Get()->Id] = ev->Get()->Token;
     }

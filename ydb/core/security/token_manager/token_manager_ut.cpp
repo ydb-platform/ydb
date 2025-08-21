@@ -1,9 +1,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include "token_manager.h"
 
 #include <vector>
 

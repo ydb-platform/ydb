@@ -1,11 +1,10 @@
 #pragma once
 
-#include "token_manager.h"
-
 #include <util/datetime/base.h>
 #include <ydb/library/actors/core/actorid.h>
 
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/security/token_manager/token_manager.h>
 
 namespace NKikimr::NTokenManager {
 
@@ -43,9 +42,9 @@ struct TVmMetadataTokenProvider : public TTokenProvider {
     const NKikimrProto::TTokenManager::TVmMetadataProvider::TVmMetadataInfo& ProviderInfo;
 
     TVmMetadataTokenProvider(const NActors::TActorId& tokenManagerId,
-                            const NTokenManager::TTokenProviderSettings& settings,
-                            const NActors::TActorId& httpProxyId,
-                            const NKikimrProto::TTokenManager::TVmMetadataProvider::TVmMetadataInfo& providerInfo);
+        const NTokenManager::TTokenProviderSettings& settings,
+        const NActors::TActorId& httpProxyId,
+        const NKikimrProto::TTokenManager::TVmMetadataProvider::TVmMetadataInfo& providerInfo);
 
     NActors::IActor* CreateTokenProviderHandler() override;
     TString GetId() const override;

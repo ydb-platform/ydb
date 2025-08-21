@@ -1,20 +1,20 @@
-#include "vm_metadata_token_provider_handler.h"
-#include "token_provider_settings.h"
-#include "private_events.h"
-#include "token_manager_log.h"
-
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
 
+#include <ydb/core/security/token_manager/vm_metadata_token_provider_handler.h>
+#include <ydb/core/security/token_manager/token_provider_settings.h>
+#include <ydb/core/security/token_manager/private_events.h>
+#include <ydb/core/security/token_manager/token_manager_log.h>
+
 namespace NKikimr::NTokenManager {
 
 TVmMetadataTokenProviderHandler::TVmMetadataTokenProviderHandler(const NActors::TActorId& sender,
-                                            const NActors::TActorId& httpProxyId,
-                                            const NKikimrProto::TTokenManager::TVmMetadataProvider::TVmMetadataInfo& providerInfo,
-                                            const NTokenManager::TTokenProviderSettings& settings)
+    const NActors::TActorId& httpProxyId,
+    const NKikimrProto::TTokenManager::TVmMetadataProvider::TVmMetadataInfo& providerInfo,
+    const NTokenManager::TTokenProviderSettings& settings)
     : Sender(sender)
     , HttpProxyId(httpProxyId)
     , ProviderInfo(providerInfo)

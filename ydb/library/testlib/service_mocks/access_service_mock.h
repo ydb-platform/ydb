@@ -14,7 +14,7 @@ bool IsServiceAuthenticated(const THashSet<TString>& allowedServiceAuthTokens, g
         return true;
     }
     const auto& meta = ctx->client_metadata();
-    auto authorizationHeaderRange = meta.equal_range("authorization");
+    const auto authorizationHeaderRange = meta.equal_range("authorization");
     bool isServiceAuthenticated = false;
     for (auto it = authorizationHeaderRange.first; it != authorizationHeaderRange.second; ++it) {
         if (allowedServiceAuthTokens.contains(TString(it->second.cbegin(), it->second.cend()))) {

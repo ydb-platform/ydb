@@ -8,8 +8,8 @@
 
 #include <util/generic/queue.h>
 
-#include "token_manager_settings.h"
-#include "token_provider_settings.h"
+#include <ydb/core/security/token_manager/token_manager_settings.h>
+#include <ydb/core/security/token_manager/token_provider_settings.h>
 
 namespace NKikimrProto {
 
@@ -93,7 +93,7 @@ private:
     std::optional<NActors::TActorId> HttpProxyId;
     THashMap<TString, THashSet<NActors::TActorId>> Subscribers;
 
-    protected:
+protected:
     NKikimrProto::TTokenManager Config;
     THashMap<TString, std::shared_ptr<NTokenManager::TTokenProvider>> TokenProviders;
 
@@ -118,7 +118,7 @@ private:
 
 
 inline NActors::TActorId MakeTokenManagerID() {
-    static const char name[12] = "srvtokmngr";
+    constexpr const char name[12] = "srvtokmngr";
     return NActors::TActorId(0, TStringBuf(name, 12));
 }
 

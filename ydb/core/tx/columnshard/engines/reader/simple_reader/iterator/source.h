@@ -197,8 +197,13 @@ public:
     }
 
     void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
+        auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
+        // It means that the scan was aborted. In this case, context called UnregisterActors.
+        if (!context->IsActive()) {
+            return;
+        }
         NActors::TActivationContext::AsActorContext().Send(
-            std::static_pointer_cast<TSpecialReadContext>(GetContext())->GetDuplicatesManagerVerified(),
+            context->GetDuplicatesManagerVerified(),
             new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
     }
 

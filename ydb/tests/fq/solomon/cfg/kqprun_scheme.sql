@@ -2,5 +2,5 @@ CREATE EXTERNAL DATA SOURCE local_solomon WITH (
     SOURCE_TYPE="Solomon",
     LOCATION="${SOLOMON_ENDPOINT}",
     AUTH_METHOD="NONE",
-    USE_SSL="false"
+    USE_TLS="false"
 );

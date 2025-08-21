@@ -24,7 +24,7 @@ std::pair<TString, TString> TTpchWorkloadGenerator::GetTableAndColumnForDetectFl
 TWorkloadGeneratorBase::TSpecialDataTypes TTpchWorkloadGenerator::GetSpecialDataTypes() const {
     switch (FloatMode) {
     case TTpcBaseWorkloadParams::EFloatMode::AUTO:
-        ythrow yexception() << "Invalid bechavier";
+        ythrow yexception() << "Internal error. Invalid float mode 'auto' in this context.";
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         return {{"float_type", "Double"}};
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:

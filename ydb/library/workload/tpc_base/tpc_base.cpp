@@ -131,7 +131,7 @@ void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf h
     scaleFactor << "$scale_factor = ";
     switch(FloatMode) {
     case TTpcBaseWorkloadParams::EFloatMode::AUTO:
-        ythrow yexception() << "Invalid bechavier";
+        ythrow yexception() << "Internal error. Invalid float mode 'auto' in this context.";
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         scaleFactor << Params.GetScale();
 	break;
@@ -169,7 +169,7 @@ TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
     }
     switch (FloatMode) {
     case TTpcBaseWorkloadParams::EFloatMode::AUTO:
-        ythrow yexception() << "Invalid bechavier";
+        ythrow yexception() << "Internal error. Invalid float mode 'auto' in this context.";
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         FilterHeader(header.Out, NResource::Find("consts.yql"), query);
         break;
@@ -208,11 +208,11 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
             .StoreResult(&Syntax).DefaultValue(Syntax);
         opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
             .DefaultValue(Scale).StoreResult(&Scale);
-        opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
+        opts.AddLongOption("float-mode", "Float mode. Can be auto, float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9). In 'auto' case float mode will be detected by tables scheme.")
             .StoreResult(&FloatMode).DefaultValue(EFloatMode::AUTO);
         break;
     case TWorkloadParams::ECommandType::Init:
-        opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
+        opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9).")
             .StoreResult(&FloatMode).DefaultValue(FloatMode);
         opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
             .DefaultValue(Scale).StoreResult(&Scale);

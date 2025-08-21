@@ -11963,8 +11963,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
         {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            TVector<TTestHelper::TColumnSchema> newSchema = schema;
+            newSchema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(newSchema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull().AddNull();
             testHelper.BulkUpsert(testTable, tableInserter);
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
@@ -12576,7 +12578,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        // runnerSettings.AppConfig.MutableFeatureFlags()->SetDisableCSBulkUpsertRequireAllColumns(true);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

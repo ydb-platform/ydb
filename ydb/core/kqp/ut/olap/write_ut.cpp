@@ -415,13 +415,13 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
-        TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
+        TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
         helper.SetForcedCompaction();
         auto writeGuard = helper.StartWriting("/Root/olapStore/olapTable");
         writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
         Sleep(TDuration::Seconds(1));
-        writeGuard.FillTable("field1", NArrow::NConstruction::TStringPoolFiller(1, 1, "bbb", 1), 0.5, 800000);
+        writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "bbb", 1), 0.5, 800000);
         Sleep(TDuration::Seconds(1));
         writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "ccc", 1), 0.75, 800000);
         Sleep(TDuration::Seconds(1));
@@ -438,10 +438,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
             auto tableClient = kikimr.GetTableClient();
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 200000);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("field")), "");
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("count")), 400000);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("field")), "aaa");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("count")), 400000);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("field")), "aaa");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("count")), 200000);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("field")), "bbb");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("count")), 800000);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("field")), "ccc");
         }

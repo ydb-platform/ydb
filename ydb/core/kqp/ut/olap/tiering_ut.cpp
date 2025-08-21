@@ -177,14 +177,15 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         olapHelper.CreateTestOlapStandaloneTable();
         testHelper.CreateTier(DEFAULT_TIER_NAME);
         testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        tieringHelper.WriteSampleData();
+
         {
             const TString query = R"(ALTER TABLE `/Root/olapTable` ADD COLUMN f Int32)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
-        testHelper.RebootTablets("/Root/olapTable");
 
-        tieringHelper.WriteSampleData();
+        testHelper.RebootTablets("/Root/olapTable");
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);

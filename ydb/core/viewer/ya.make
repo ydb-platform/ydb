@@ -135,11 +135,11 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/css/48593.7fdf5ffc.chunk.css monitoring/static/css/48593.7fdf5ffc.chunk.css
         monitoring/static/css/51819.b1faff6b.chunk.css monitoring/static/css/51819.b1faff6b.chunk.css
         monitoring/static/css/62377.1d68f96c.chunk.css monitoring/static/css/62377.1d68f96c.chunk.css
+        monitoring/static/css/77752.9353472b.chunk.css monitoring/static/css/77752.9353472b.chunk.css
         monitoring/static/css/82960.6657c65a.chunk.css monitoring/static/css/82960.6657c65a.chunk.css
-        monitoring/static/css/85315.9353472b.chunk.css monitoring/static/css/85315.9353472b.chunk.css
         monitoring/static/css/86299.7cffb936.chunk.css monitoring/static/css/86299.7cffb936.chunk.css
         monitoring/static/css/94695.b2628977.chunk.css monitoring/static/css/94695.b2628977.chunk.css
-        monitoring/static/css/main.9e1c1712.css monitoring/static/css/main.9e1c1712.css
+        monitoring/static/css/main.c0a8679a.css monitoring/static/css/main.c0a8679a.css
         monitoring/static/favicon.png monitoring/static/favicon.png
         monitoring/static/js/10064.5442bcf6.chunk.js monitoring/static/js/10064.5442bcf6.chunk.js
         monitoring/static/js/10132.c1a19fa8.chunk.js monitoring/static/js/10132.c1a19fa8.chunk.js
@@ -253,7 +253,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/27950.acee5eec.chunk.js monitoring/static/js/27950.acee5eec.chunk.js
         monitoring/static/js/28125.0776827a.chunk.js monitoring/static/js/28125.0776827a.chunk.js
         monitoring/static/js/28256.20804e43.chunk.js monitoring/static/js/28256.20804e43.chunk.js
-        monitoring/static/js/28520.b03337b5.chunk.js monitoring/static/js/28520.b03337b5.chunk.js
+        monitoring/static/js/28520.8bcb3583.chunk.js monitoring/static/js/28520.8bcb3583.chunk.js
         monitoring/static/js/28868.3c0ecf71.chunk.js monitoring/static/js/28868.3c0ecf71.chunk.js
         monitoring/static/js/29043.f0a51584.chunk.js monitoring/static/js/29043.f0a51584.chunk.js
         monitoring/static/js/29193.43e37031.chunk.js monitoring/static/js/29193.43e37031.chunk.js
@@ -597,6 +597,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/77718.38572b28.chunk.js monitoring/static/js/77718.38572b28.chunk.js
         monitoring/static/js/77718.38572b28.chunk.js.LICENSE.txt monitoring/static/js/77718.38572b28.chunk.js.LICENSE.txt
         monitoring/static/js/7773.b2d5a51a.chunk.js monitoring/static/js/7773.b2d5a51a.chunk.js
+        monitoring/static/js/77752.a09576fb.chunk.js monitoring/static/js/77752.a09576fb.chunk.js
         monitoring/static/js/78053.1b2b1602.chunk.js monitoring/static/js/78053.1b2b1602.chunk.js
         monitoring/static/js/78112.671df87e.chunk.js monitoring/static/js/78112.671df87e.chunk.js
         monitoring/static/js/78517.bd6413c4.chunk.js monitoring/static/js/78517.bd6413c4.chunk.js
@@ -657,7 +658,6 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/84960.05121e37.chunk.js monitoring/static/js/84960.05121e37.chunk.js
         monitoring/static/js/85027.462a7fdc.chunk.js monitoring/static/js/85027.462a7fdc.chunk.js
         monitoring/static/js/85047.23b0ab8e.chunk.js monitoring/static/js/85047.23b0ab8e.chunk.js
-        monitoring/static/js/85315.066c3750.chunk.js monitoring/static/js/85315.066c3750.chunk.js
         monitoring/static/js/8534.f7aec532.chunk.js monitoring/static/js/8534.f7aec532.chunk.js
         monitoring/static/js/85393.341703ec.chunk.js monitoring/static/js/85393.341703ec.chunk.js
         monitoring/static/js/85406.ba8965be.chunk.js monitoring/static/js/85406.ba8965be.chunk.js
@@ -770,8 +770,8 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/99753.25160545.chunk.js monitoring/static/js/99753.25160545.chunk.js
         monitoring/static/js/99872.c308e65f.chunk.js monitoring/static/js/99872.c308e65f.chunk.js
         monitoring/static/js/99872.c308e65f.chunk.js.LICENSE.txt monitoring/static/js/99872.c308e65f.chunk.js.LICENSE.txt
-        monitoring/static/js/main.b59c0f06.js monitoring/static/js/main.b59c0f06.js
-        monitoring/static/js/main.b59c0f06.js.LICENSE.txt monitoring/static/js/main.b59c0f06.js.LICENSE.txt
+        monitoring/static/js/main.00c02960.js monitoring/static/js/main.00c02960.js
+        monitoring/static/js/main.00c02960.js.LICENSE.txt monitoring/static/js/main.00c02960.js.LICENSE.txt
         monitoring/static/media/403.271ae19f0d1101a2c67a904146bbd4d3.svg monitoring/static/media/403.271ae19f0d1101a2c67a904146bbd4d3.svg
         monitoring/static/media/403.6367e52f9464706633f52a2488a41958.svg monitoring/static/media/403.6367e52f9464706633f52a2488a41958.svg
         monitoring/static/media/codicon.f6283f7ccaed1249d9eb.ttf monitoring/static/media/codicon.f6283f7ccaed1249d9eb.ttf

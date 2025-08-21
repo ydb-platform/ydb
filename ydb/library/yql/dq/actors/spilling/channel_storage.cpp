@@ -1,5 +1,6 @@
 #include "channel_storage.h"
 
+#include <util/stream/mem.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -65,7 +66,8 @@ public:
                 // Конвертируем TChunkedBuffer в TBuffer
                 const auto& chunkedBuffer = *optionalChunkedBuffer;
                 blob.Resize(chunkedBuffer.Size());
-                chunkedBuffer.FillBuffer(blob.Data());
+                TMemoryOutput output(blob.Data(), blob.Size());
+                chunkedBuffer.CopyTo(output);
                 --StoredBlobsCount_;
                 LoadingBlob_ = std::nullopt;
                 return true;

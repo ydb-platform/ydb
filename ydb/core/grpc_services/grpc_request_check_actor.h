@@ -148,6 +148,17 @@ public:
         if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
             TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> authCheckRequestEntries = GetEntriesForAuthAndCheckRequest(Request_);
             entries.insert(entries.end(), authCheckRequestEntries.begin(), authCheckRequestEntries.end());
+
+            auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(Attributes_);
+            if (cloud_id) {
+                Request_->Get()->AddAuditLogPart("cloud_id", cloud_id);
+            }
+            if (folder_id) {
+                Request_->Get()->AddAuditLogPart("folder_id", folder_id);
+            }
+            if (database_id) {
+                Request_->Get()->AddAuditLogPart("resource_id", database_id);
+            }
         }
 
         TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> clusterAccessCheckEntries = GetEntriesForClusterAccessCheck(rootAttributes);
@@ -494,7 +505,6 @@ private:
                 });
             }
         }
-        AuditSharedContext(requestBaseCtx, Attributes_);
     }
 
 private:

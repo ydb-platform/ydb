@@ -289,10 +289,6 @@ public:
     const NGRpcService::TAuditLogParts& GetAuditLogParts() const override {
         Y_ABORT("unimplemented for local rpc");
     }
-    void AddSharedAuditLogPart(const TStringBuf&, const TString&) override {}
-    const NGRpcService::TAuditLogParts& GetSharedAuditLogParts() const override {
-        Y_ABORT("unimplemented for local rpc");
-    }
 
 private:
     void Reply(NProtoBuf::Message *r, ui32) override {

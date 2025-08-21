@@ -439,6 +439,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
     if (!internalPathId) {
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false, operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "unknown table");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "unknown_table")("path_id", schemeShardLocalPathId);
         sendError("unknown table", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         return;
     }

@@ -37,7 +37,7 @@ public:
     void Rewind() final;
 
 private:
-    TIssues ListTableFromConnector(const TListSplitRequestData& data, std::vector<NThreading::TFuture<void>>& handles);
+    TIssues ListSplitsFromConnector(const TListSplitRequestData& data, std::vector<NThreading::TFuture<void>>& handles);
 
 private: 
     const TGenericState::TPtr State_;

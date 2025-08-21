@@ -5,7 +5,7 @@
 
 namespace NYql {
 
-class TGenericDescribeTransformer : public TGraphTransformerBase {
+class TGenericDescribeTableTransformer : public TGraphTransformerBase {
     struct TTableDescription {
         using TPtr = std::shared_ptr<TTableDescription>;
 
@@ -19,7 +19,7 @@ class TGenericDescribeTransformer : public TGraphTransformerBase {
         std::unordered_map<TGenericState::TTableAddress, TTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
 
 public:
-    explicit TGenericDescribeTransformer(TGenericState::TPtr state);
+    explicit TGenericDescribeTableTransformer(TGenericState::TPtr state);
 
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;

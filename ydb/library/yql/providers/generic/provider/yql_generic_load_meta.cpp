@@ -637,7 +637,7 @@ namespace NYql {
     };
 
     THolder<IGraphTransformer> CreateGenericLoadTableMetadataTransformer(TGenericState::TPtr state) {
-        return MakeHolder<TGenericDescribeTransformer>(std::move(state));
+        return MakeHolder<TGenericDescribeTableTransformer>(std::move(state));
     }
 
 } // namespace NYql

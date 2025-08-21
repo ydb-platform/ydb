@@ -29,12 +29,12 @@ using namespace NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-TGenericDescribeTransformer::TGenericDescribeTransformer(TGenericState::TPtr state) 
+TGenericDescribeTableTransformer::TGenericDescribeTableTransformer(TGenericState::TPtr state)
     : State_(std::move(state))
 { }
 
-void TGenericDescribeTransformer::FillCredentials(NConnector::NApi::TDescribeTableRequest& request,
-                     const TGenericClusterConfig& clusterConfig) {
+void TGenericDescribeTableTransformer::FillCredentials(NConnector::NApi::TDescribeTableRequest& request,
+                                                       const TGenericClusterConfig& clusterConfig) {
     auto dsi = request.mutable_data_source_instance();
 
     // If login/password is provided, just copy them into request:
@@ -192,7 +192,7 @@ TIssues SetMongoDBOptions(NYql::TMongoDbDataSourceOptions& options, const TGener
 }
 
 TIssues FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request,
-                           const TGenericClusterConfig& clusterConfig) {
+                              const TGenericClusterConfig& clusterConfig) {
     const auto dataSourceKind = clusterConfig.GetKind();
 
     switch (dataSourceKind) {
@@ -248,7 +248,7 @@ void FillTablePath(NConnector::NApi::TDescribeTableRequest& request, const TGene
     request.set_table(tablePath);
 }
 
-void TGenericDescribeTransformer::FillTypeMappingSettings(NConnector::NApi::TDescribeTableRequest& request) {
+void TGenericDescribeTableTransformer::FillTypeMappingSettings(NConnector::NApi::TDescribeTableRequest& request) {
     const TString dateTimeFormat =
         State_->Configuration->DateTimeFormat.Get().GetOrElse(TGenericSettings::TDefault::DateTimeFormat);
 
@@ -261,9 +261,9 @@ void TGenericDescribeTransformer::FillTypeMappingSettings(NConnector::NApi::TDes
     }
 }
 
-IGraphTransformer::TStatus TGenericDescribeTransformer::DoTransform(TExprNode::TPtr input,
-                                                                    TExprNode::TPtr& output,
-                                                                    TExprContext& ctx) {
+IGraphTransformer::TStatus TGenericDescribeTableTransformer::DoTransform(TExprNode::TPtr input,
+                                                                         TExprNode::TPtr& output,
+                                                                         TExprContext& ctx) {
     output = input;
 
     if (ctx.Step.IsDone(TExprStep::LoadTablesMetadata)) {
@@ -347,8 +347,8 @@ IGraphTransformer::TStatus TGenericDescribeTransformer::DoTransform(TExprNode::T
     return TStatus::Async;
 }
 
-TIssues TGenericDescribeTransformer::DescribeTableFromConnector(const TGenericState::TTableAddress& tableAddress,
-                                                                std::vector<NThreading::TFuture<void>>& handles) {
+TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGenericState::TTableAddress& tableAddress,
+                                                                     std::vector<NThreading::TFuture<void>>& handles) {
     const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(tableAddress.ClusterName);
 
     YQL_ENSURE(
@@ -403,8 +403,9 @@ TIssues TGenericDescribeTransformer::DescribeTableFromConnector(const TGenericSt
     return {};
 }
 
-TIssues TGenericDescribeTransformer::FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request,
-                              const TGenericClusterConfig& clusterConfig, const TString& tablePath) {
+TIssues TGenericDescribeTableTransformer::FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request,
+                                                                   const TGenericClusterConfig& clusterConfig,
+                                                                   const TString& tablePath) {
     const auto dataSourceKind = clusterConfig.GetKind();
     auto dsi = request.mutable_data_source_instance();
 
@@ -491,9 +492,9 @@ TExprNode::TPtr MakeTableMetaNode(
     // clang-format on
 }
 
-IGraphTransformer::TStatus TGenericDescribeTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, 
-                                                                            TExprNode::TPtr& output, 
-                                                                            TExprContext& ctx) {
+IGraphTransformer::TStatus TGenericDescribeTableTransformer::DoApplyAsyncChanges(TExprNode::TPtr input,
+                                                                                 TExprNode::TPtr& output,
+                                                                                 TExprContext& ctx) {
     AsyncFuture_.GetValue();
 
     const auto& reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
@@ -561,7 +562,7 @@ IGraphTransformer::TStatus TGenericDescribeTransformer::DoApplyAsyncChanges(TExp
     return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
 }
 
-void TGenericDescribeTransformer::Rewind() {
+void TGenericDescribeTableTransformer::Rewind() {
     TableDescriptions_.clear();
     AsyncFuture_ = {};
 }

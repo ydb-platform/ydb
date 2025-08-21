@@ -262,7 +262,7 @@ namespace NYql {
                 // TODO: remove this block as soon as the first part YQ-4730 is deployed
                 //
                 // Iceberg/Managed YDB (including YDB underlying Logging) supports access via IAM token.
-                // If exist, copy service account creds to obtain tokens during request execution phase.
+                // If exists, copy service account creds to obtain tokens during request execution phase.
                 // If exists, copy previously created token.
                 if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING, NYql::EGenericDataSourceKind::ICEBERG}, clusterConfig.kind())) {
                     source.SetServiceAccountId(clusterConfig.GetServiceAccountId());

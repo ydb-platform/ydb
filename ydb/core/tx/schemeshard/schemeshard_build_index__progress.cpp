@@ -1678,11 +1678,9 @@ public:
         Y_ENSURE(buildInfo.DoneShards.empty());
 
         TTableInfo::TPtr table;
-        bool initRange = true;
         if (buildInfo.IsValidatingUniqueIndex()) {
             auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
             table = Self->Tables.at(path->PathId);
-            initRange = false; // The real range will arrive after index validation for each shard: it will describe the first and the last index keys for further validation
         } else if (buildInfo.KMeans.Level == 1) {
             table = Self->Tables.at(buildInfo.TablePathId);
         } else {
@@ -1697,14 +1695,16 @@ public:
             Y_ENSURE(path.LockedBy() == buildInfo.LockTxId);
         }
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
-        TSerializedTableRange shardRange = initRange ? InfiniteRange(tableColumns.Keys.size()) : TSerializedTableRange{};
+        // In case of unique index validation the real range will arrive after index validation for each shard:
+        // it will describe the first and the last index keys for further validation.
+        TSerializedTableRange shardRange = buildInfo.IsValidatingUniqueIndex() ? TSerializedTableRange{} : InfiniteRange(tableColumns.Keys.size());
         static constexpr std::string_view LogPrefix = "";
 
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
             Y_ENSURE(Self->ShardInfos.contains(x.ShardIdx));
             TSerializedCellVec bound{x.EndOfRange};
-            if (initRange) {
+            if (!buildInfo.IsValidatingUniqueIndex()) {
                 shardRange.To = bound;
             }
             if (buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex) {
@@ -1713,7 +1713,7 @@ public:
             }
             auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
-            if (initRange) {
+            if (!buildInfo.IsValidatingUniqueIndex()) {
                 shardRange.From = std::move(bound);
             }
 

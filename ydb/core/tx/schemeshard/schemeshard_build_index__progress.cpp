@@ -969,11 +969,7 @@ private:
         return done;
     }
 
-    bool FillSecondaryUniqueIndex(TIndexBuildInfo& buildInfo) {
-        if (!buildInfo.IsValidatingUniqueIndex()) { // The first stage is equal to the first stage of building usual secondary index
-            return FillSecondaryIndex(buildInfo);
-        }
-
+    bool ValidateSecondaryUniqueIndex(TIndexBuildInfo& buildInfo) {
         LOG_D("ValidateSecondaryUniqueIndex Start");
 
         if (NoShardsAdded(buildInfo)) {
@@ -988,6 +984,15 @@ private:
         }
 
         return done;
+    }
+
+    bool FillSecondaryUniqueIndex(TIndexBuildInfo& buildInfo) {
+        switch (buildInfo.SubState) {
+        case TIndexBuildInfo::ESubState::None:
+            return FillSecondaryIndex(buildInfo);
+        case TIndexBuildInfo::ESubState::UniqIndexValidation:
+            return ValidateSecondaryUniqueIndex(buildInfo);
+        }
     }
 
     bool FillPrefixKMeans(TIndexBuildInfo& buildInfo) {

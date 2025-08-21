@@ -38,6 +38,7 @@ namespace NYql {
 
     TGenericState::TGetTableResult TGenericState::GetTable(const TTableAddress& tableAddress) const {
         auto result = Tables_.FindPtr(tableAddress);
+
         if (result) {
             return std::make_pair(result, TIssues{});
         }
@@ -48,17 +49,17 @@ namespace NYql {
         return std::make_pair<TTableMeta*, TIssues>(nullptr, std::move(issues));
     }
 
-    bool TGenericState::AttachSplitsToTable(const TTableAddress& tableAddress,
-                                            const NConnector::NApi::TSelect& select,
-                                            std::vector<NYql::NConnector::NApi::TSplit>& splits) {
+    std::optional<TIssue> TGenericState::AttachSplitsToTable(const TTableAddress& tableAddress,
+                                                             const NConnector::NApi::TSelect& select,
+                                                             std::vector<NYql::NConnector::NApi::TSplit>& splits) {
         auto result = Tables_.FindPtr(tableAddress);
 
         if (!result) {
-            return false;
+            return {TIssue(TStringBuilder() << "no metadata for table " << tableAddress.ToString())};
         }
 
         result->AttachSplitsForSelect(select, splits);
-        return true;
+        return std::nullopt;
     }
 
     TString GetWhereKey(const NConnector::NApi::TSelect& select) {

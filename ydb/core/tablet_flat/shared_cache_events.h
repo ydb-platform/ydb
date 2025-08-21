@@ -50,11 +50,13 @@ namespace NKikimr::NSharedCache {
         {}
     };
 
-    struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> {
-        THashMap<TLogoBlobID, THashSet<TPageId>> Touched;
+    // notifies Shared Cache about Private Cache owned shared bodies
+    // so it can send back dropped pages
+    struct TEvSync : public TEventLocal<TEvSync, EvTouch> {
+        THashMap<TLogoBlobID, THashSet<TPageId>> Pages;
 
-        TEvTouch(THashMap<TLogoBlobID, THashSet<TPageId>> &&touched)
-            : Touched(std::move(touched))
+        TEvSync(THashMap<TLogoBlobID, THashSet<TPageId>> &&pages)
+            : Pages(std::move(pages))
         {}
     };
 

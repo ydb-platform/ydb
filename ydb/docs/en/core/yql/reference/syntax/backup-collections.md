@@ -113,5 +113,5 @@ This operation is irreversible and will delete all backups in the collection. En
 
 ## See also
 
-- [Backup collections concepts](../../concepts/backup/collections.md).
-- [Backup collections operations guide](../../reference/ydb-cli/export-import/backup-collections/operations.md).
+- [Backup collections concepts](../../../concepts/backup/collections.md).
+- [Backup collections operations guide](../../../reference/ydb-cli/export-import/backup-collections/operations.md).

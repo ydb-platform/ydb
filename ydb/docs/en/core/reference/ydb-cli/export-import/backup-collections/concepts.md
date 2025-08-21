@@ -1,51 +1,22 @@
 # Backup collections concepts
 
-This section explains how backup collections work, the types of backups available, and the storage backends you can use.
+This section explains operational details about backup collections, storage backends, and chain management. For architectural overview and core concepts, see [Backup collections](../../../../concepts/backup/collections.md).
 
-## How backup collections work {#how-backup-collections-work}
+## Backup chain validation and integrity {#backup-chains-integrity}
 
-A backup collection is a named set of backups for selected tables that maintains a chronological chain of data snapshots. Each collection contains:
+When working with backup collections, understanding chain dependencies is critical for successful operations:
 
-- **A chain of backups**: One full backup followed by zero or more incremental backups.
-- **Storage settings**: Configuration options that define backup storage backend.
-- **Table mapping**: Definitions that specify which tables belong to the collection.
+### Chain validity rules {#chain-validity-rules}
 
-The backup chain allows you to restore your data to any point in time by applying the full backup and subsequent incremental backups up to your desired restore point.
+- **Sequential dependency**: Each incremental backup depends on all previous backups in the chain.
+- **Deletion constraints**: Removing any backup in the middle of a chain breaks the chain for subsequent backups.
+- **Restoration requirements**: To restore from an incremental backup, you need the full backup plus all preceding incremental backups.
 
-## Types of backups {#types-of-backups}
+### Chain management best practices
 
-### Full backups
-
-A full backup contains a complete snapshot of all data in the collection at a specific point in time. Key characteristics:
-
-- **Complete data capture**: Contains all rows from all tables in the collection.
-- **Self-contained**: Can be restored independently without other backups.
-- **Foundation for chains**: Serves as the base for subsequent incremental backups.
-- **Storage intensive**: Requires more storage space but faster to restore.
-
-**When to use full backups:**
-
-- Initial backup creation.
-- After significant data changes.
-- To reset backup chains and reduce restore time.
-- For critical checkpoint creation.
-
-### Incremental backups
-
-Incremental backups capture only the changes made since the previous backup in the chain. Key characteristics:
-
-- **Change-based**: Records insertions, updates, and deletions since the last backup.
-- **Storage efficient**: Requires minimal storage space for typical workloads.
-- **Chain dependent**: Requires the full backup and all preceding incremental backups for restore.
-- **Fast execution**: Completes quickly for typical change volumes.
-
-**When to use incremental backups:**
-
-- For regular scheduled backups (daily, hourly).
-- When storage efficiency is important.
-- To capture frequent changes with minimal overhead.
-
-See [Operations guide](operations.md#taking-backups) for detailed guidelines.
+- **Monitor chain length**: Keep backup chains reasonably short (7-14 incremental backups recommended).
+- **Plan retention carefully**: Always consider chain dependencies when cleaning up old backups.
+- **Verify before deletion**: Use schema browsing to understand backup structure before removing backups.
 
 ## Storage backends {#storage-backends}
 

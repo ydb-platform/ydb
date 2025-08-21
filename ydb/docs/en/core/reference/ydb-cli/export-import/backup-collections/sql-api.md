@@ -1,6 +1,6 @@
 # SQL API: Backup collections
 
-This section provides guidance for using SQL commands with [backup collections](concepts.md). For complete syntax reference, see [Backup collection commands](en/core/yql/reference/syntax/backup-collections.md) in the YQL reference.
+This section provides guidance for using SQL commands with [backup collections](concepts.md). For complete syntax reference, see [Backup collection commands](../../../../yql/reference/syntax/backup-collections.md) in the YQL reference.
 
 ## Quick reference
 
@@ -10,22 +10,24 @@ The main SQL commands for backup collections are:
 - `BACKUP` - Creates a backup (full or incremental).  
 - `DROP BACKUP COLLECTION` - Removes a collection and all backups.
 
-For detailed syntax, parameters, and examples, refer to the [YQL syntax reference](en/core/yql/reference/syntax/backup-collections.md).
+For detailed syntax, parameters, and examples, refer to the [YQL syntax reference](../../../../yql/reference/syntax/backup-collections.md).
 
-## Basic workflow
+## Using SQL commands with backup collections
 
-```sql
--- 1. Create collection
-CREATE BACKUP COLLECTION `shop_backups`
-    ( TABLE `/Root/shop/orders`, TABLE `/Root/shop/products` )
-WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
+### Connection and execution
 
--- 2. Take initial full backup
-BACKUP `shop_backups`;
+Execute backup collection commands through any SQL interface that supports YQL:
 
--- 3. Take incremental backups
-BACKUP `shop_backups` INCREMENTAL;
-```
+- **YDB CLI**: Use `ydb yql` command
+- **SDK connections**: Execute as standard SQL queries
+- **Web UI**: Run commands in the query editor
+
+### Best practices for SQL operations
+
+- **Use quoted identifiers**: Always quote collection names with backticks
+- **Specify absolute paths**: Use full table paths starting with `/Root/`
+- **Monitor operations**: Check operation status using [operation list](../../operation-list.md) commands
+- **Plan retention**: Consider backup chain dependencies before deletion
 
 ## Query backup information
 
@@ -48,6 +50,6 @@ ydb operation list incbackup
 
 ## Next steps
 
-- [Complete YQL syntax reference for backup collections](en/core/yql/reference/syntax/backup-collections.md).
+- [Complete YQL syntax reference for backup collections](../../../../yql/reference/syntax/backup-collections.md).
 - [Learn about backup collection concepts](concepts.md).
 - [Explore all operations and management tasks](operations.md).

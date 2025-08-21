@@ -28,5 +28,5 @@ BACKUP `my_backups` INCREMENTAL;
 - [Концепции](concepts.md) — Архитектура, типы резервных копий и варианты хранения.
 - [Операции](operations.md) — Полное руководство по созданию, управлению и восстановлению.
 - [SQL API](sql-api.md) — Справочник SQL команд.
-- [Справочник синтаксиса YQL](ru/core/yql/reference/syntax/backup-collections.md) — Полная документация SQL синтаксиса.
+- [Справочник синтаксиса YQL](../../../../yql/reference/syntax/backup-collections.md) — Полная документация SQL синтаксиса.
 - [Мониторинг операций](../../operation-list.md) — Отслеживание прогресса операций резервного копирования.

@@ -113,5 +113,5 @@ DROP BACKUP COLLECTION <collection_name>;
 
 ## См. также
 
-- [Концепции коллекций резервных копий](../../concepts/backup/collections.md).
-- [Руководство по операциям коллекций резервных копий](../../reference/ydb-cli/export-import/backup-collections/operations.md).
+- [Концепции коллекций резервных копий](../../../concepts/backup/collections.md).
+- [Руководство по операциям коллекций резервных копий](../../../reference/ydb-cli/export-import/backup-collections/operations.md).

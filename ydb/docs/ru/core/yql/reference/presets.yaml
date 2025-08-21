@@ -27,6 +27,7 @@ ydb:
   feature_map_tables: true
   feature_group_by_rollup_cube: true
   feature_window_functions: true
+  feature_backup_collections: true
   feature_bulk_tables: false
 
 yt:

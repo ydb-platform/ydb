@@ -65,7 +65,7 @@ private:
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
     TAtomic StartInstant;
     TAtomic FinishInstant;
-    TAtomic Started = 0;
+    bool Started = 0;
 
 public:
     TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps)
@@ -79,9 +79,8 @@ public:
     }
 
     void OnExecute() {
-        if (!AtomicGet(Started)) {
+        if (AtomicCas(&Started, 0, 1)) {
             AtomicSet(StartInstant, TMonotonic::Now().MicroSeconds());
-            AtomicSet(Started, 1);
         }
     }
 

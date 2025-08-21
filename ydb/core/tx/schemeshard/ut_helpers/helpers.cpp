@@ -1721,6 +1721,12 @@ namespace NSchemeShardUT_Private {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
+            auto& settings = *index.mutable_global_unique_index()->mutable_settings();
+            if (cfg.GlobalIndexSettings) {
+                cfg.GlobalIndexSettings[0].SerializeTo(settings);
+            }
+        } break;
         case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
             auto& settings = *index.mutable_global_async_index()->mutable_settings();
             if (cfg.GlobalIndexSettings) {
@@ -1795,6 +1801,14 @@ namespace NSchemeShardUT_Private {
         });
     }
 
+    void AsyncBuildUniqIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                       const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
+    {
+        AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
+            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, dataColumns
+        });
+    }
+
     void AsyncBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
                               const TString &src, const TString &name, TString column, TVector<TString> dataColumns)
     {
@@ -1843,6 +1857,15 @@ namespace NSchemeShardUT_Private {
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}
+        }, expectedStatus);
+    }
+
+    void TestBuildUniqIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                           const TString &src, const TString &name, TVector<TString> columns,
+                           Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
+            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, {}
         }, expectedStatus);
     }
 

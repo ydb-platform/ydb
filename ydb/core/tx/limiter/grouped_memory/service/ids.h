@@ -8,9 +8,50 @@
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
+class TExternalIdsControl {
+private:
+    std::set<ui64> ExternalIds;
+
+public:
+    void Clear() {
+        ExternalIds.clear();
+    }
+
+    bool HasExternalId(const ui64 idExt) const {
+        return ExternalIds.contains(idExt);
+    }
+
+    ui64 GetSize() const {
+        return ExternalIds.size();
+    }
+
+    const std::set<ui64> GetExternalIds() const {
+        return ExternalIds;
+    }
+
+    std::optional<ui64> GetMinExternalIdOptional() const {
+        if (ExternalIds.empty()) {
+            return std::nullopt;
+        }
+        return *ExternalIds.begin();
+    }
+
+    ui64 GetMinExternalIdVerified() const;
+
+    ui64 GetMinExternalIdDef(const ui64 val) const {
+        return GetMinExternalIdOptional().value_or(val);
+    }
+
+    void RegisterExternalId(const ui64 id);
+
+    [[nodiscard]] bool UnregisterExternalId(const ui64 id) {
+        return ExternalIds.erase(id);
+    }
+};
+
 class TIdsControl {
 private:
-    THashMap<ui64, ui64> ExternalIdIntoInternalId;
+    std::map<ui64, ui64> ExternalIdIntoInternalId;
     std::map<ui64, ui64> InternalIdIntoExternalId;
     ui64 CurrentInternalId = 0;
 
@@ -20,8 +61,16 @@ public:
         InternalIdIntoExternalId.clear();
     }
 
+    bool HasExternalId(const ui64 idExt) const {
+        return ExternalIdIntoInternalId.contains(idExt);
+    }
+
     const std::map<ui64, ui64>& GetInternalIdToExternalIds() const {
         return InternalIdIntoExternalId;
+    }
+
+    const std::map<ui64, ui64>& GetExternalIdToInternalIds() const {
+        return ExternalIdIntoInternalId;
     }
 
     ui64 GetSize() const {
@@ -32,6 +81,7 @@ public:
     [[nodiscard]] std::optional<ui64> ExtractInternalIdOptional(const ui64 externalId);
 
     ui64 GetMinInternalIdVerified() const;
+    ui64 GetMinExternalIdVerified() const;
     ui64 GetExternalIdVerified(const ui64 internalId) const;
 
     std::optional<ui64> GetInternalIdOptional(const ui64 externalId) const;
@@ -62,6 +112,14 @@ public:
     ui64 GetMinInternalIdDef(const ui64 def) const {
         if (InternalIdIntoExternalId.size()) {
             return InternalIdIntoExternalId.begin()->first;
+        } else {
+            return def;
+        }
+    }
+
+    ui64 GetMinExternalIdDef(const ui64 def) const {
+        if (ExternalIdIntoInternalId.size()) {
+            return ExternalIdIntoInternalId.begin()->first;
         } else {
             return def;
         }

@@ -4519,15 +4519,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     class TTableDataModificationTester {
     protected:
-        NKikimrConfig::TAppConfig AppConfig;
         std::unique_ptr<TKikimrRunner> Kikimr;
         YDB_ACCESSOR(bool, IsOlap, false);
         virtual void DoExecute() = 0;
     public:
         void Execute() {
-            AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
-            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!IsOlap);
-            auto settings = TKikimrSettings().SetAppConfig(AppConfig).SetWithSampleTables(false);
+            auto settings = TKikimrSettings().SetWithSampleTables(false);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!IsOlap);
 
             Kikimr = std::make_unique<TKikimrRunner>(settings);
             Tests::NCommon::TLoggerInit(*Kikimr).Initialize();
@@ -6199,7 +6198,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        
+
         {
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
@@ -6249,16 +6248,16 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                         Key: Uint64,
                         Value: String
                     >>;
-                    
+
                     UPSERT INTO `/Root/DataShard`
                     SELECT * FROM AS_TABLE($rows);
                 )";
-                
+
                 auto result = session.ExecuteQuery(query, TTxControl::Tx(tx.GetId()), params.Build()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 Sleep(TDuration::MilliSeconds(500));
             }
-            
+
             auto commitResult = tx.Commit().GetValueSync();
             UNIT_ASSERT_C(commitResult.IsSuccess(), commitResult.GetIssues().ToString());
         }

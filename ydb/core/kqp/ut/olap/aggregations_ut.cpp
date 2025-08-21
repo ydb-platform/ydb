@@ -12,8 +12,7 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     Y_UNIT_TEST(Aggregation) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -151,8 +150,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -478,7 +476,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 LIMIT 2
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
-            .MutableLimitChecker().SetExpectedLimit(2);
+            .MutableLimitChecker().SetExpectedLimit(2)
+            .SetExpectedResultCount(400); // FIXME (delete this line)
         TestAggregations({ testCase });
     }
 
@@ -493,8 +492,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 LIMIT 2
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
-            .MutableLimitChecker().SetExpectedLimit(2);
-
+            .MutableLimitChecker().SetExpectedLimit(2)
+            .SetExpectedResultCount(400); // FIXME (delete this line)
         TestAggregations({ testCase });
     }
 
@@ -509,8 +508,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
             .AddExpectedPlanOptions("KqpOlapExtractMembers")
-            .MutableLimitChecker().SetExpectedLimit(2);
-
+            .MutableLimitChecker().SetExpectedLimit(2)
+            .SetExpectedResultCount(400); // FIXME (delete this line)
         TestAggregations({ testCase });
     }
 
@@ -526,8 +525,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
             .AddExpectedPlanOptions("KqpOlapExtractMembers")
-            .MutableLimitChecker().SetExpectedLimit(2);
-
+            .MutableLimitChecker().SetExpectedLimit(2)
+            .SetExpectedResultCount(400); // FIXME (delete this line)
         TestAggregations({ testCase });
     }
 
@@ -1377,11 +1376,8 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     Y_UNIT_TEST(FloatSum) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
 
         auto queryClient = kikimr.GetQueryClient();

@@ -34,7 +34,7 @@ static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode =
 void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie, ui64 seqNo, NWilson::TSpan& span) {
     PQ_LOG_D("TPartition::ReplyOwnerOk. Partition: " << Partition);
 
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -60,7 +60,7 @@ void TPartition::ReplyWrite(
     Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
     Y_ABORT_UNLESS(seqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, seqNo);
 
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -974,7 +974,7 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
                                        const TWriteMsg& p,
                                        NPersQueue::NErrorCode::EErrorCode errorCode)
 {
-    ScheduleReplyError(p.Cookie, errorCode, errorStr);
+    ScheduleReplyError(p.Cookie, false, errorCode, errorStr);
     for (auto it = Owners.begin(); it != Owners.end();) {
         it = DropOwner(it, ctx);
     }
@@ -983,12 +983,12 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg) {
     if (!CanWrite()) {
-        ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
+        ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
-        ScheduleReplyError(msg.Cookie,
+        ScheduleReplyError(msg.Cookie, false,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
                            "Disk is full");
         return EProcessResult::ContinueDrop;
@@ -1015,13 +1015,12 @@ void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& p
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg) {
     if (!CanWrite()) {
-        ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
+        ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
-        ScheduleReplyError(msg.Cookie,
-                           NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
+        ScheduleReplyError(msg.Cookie, false, NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
                            "Disk is full");
         return EProcessResult::ContinueDrop;
     }
@@ -1039,12 +1038,12 @@ void TPartition::ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters&
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg) {
     if (!CanWrite()) {
-        ScheduleReplyError(msg.Cookie, InactivePartitionErrorCode,
+        ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
     if (DiskIsFull) {
-        ScheduleReplyError(msg.Cookie,
+        ScheduleReplyError(msg.Cookie, false,
                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
                            "Disk is full");
         return EProcessResult::ContinueDrop;
@@ -1084,15 +1083,15 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     if (!CanWrite()) {
-        ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
+        ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
+                           TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
 
     if (DiskIsFull) {
-        ScheduleReplyError(p.Cookie,
-                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
-                            "Disk is full");
+        ScheduleReplyError(p.Cookie, false,
+                           NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
+                           "Disk is full");
         return EProcessResult::ContinueDrop;
     }
     if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {
@@ -1111,7 +1110,8 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
 
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
-                             const TActorContext& ctx)
+                             const TActorContext& ctx,
+                             bool includeToWriteCycle)
 {
     auto write = request->Record.AddCmdWrite();
     write->SetKey(newWrite->Key.ToString());
@@ -1123,7 +1123,8 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
 
     TKey resKey = newWrite->Key;
     resKey.SetType(TKeyPrefix::TypeData);
-    WriteCycleSize += newWrite->Value.size();
+    if (includeToWriteCycle)
+        WriteCycleSize += newWrite->Value.size();
 }
 
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
@@ -1181,14 +1182,14 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
     if (!CanWrite()) {
-        ScheduleReplyError(p.Cookie, InactivePartitionErrorCode,
-            TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
+        ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
+                           TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return false;
     }
     if (DiskIsFull) {
-        ScheduleReplyError(p.Cookie,
-                            NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
-                            "Disk is full");
+        ScheduleReplyError(p.Cookie, false,
+                           NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
+                           "Disk is full");
         return false;
     }
     const auto& ctx = ActorContext();

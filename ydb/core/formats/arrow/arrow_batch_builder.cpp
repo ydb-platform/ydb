@@ -11,31 +11,35 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
+
     return builder.Append(cell.AsValue<typename T::c_type>());
 }
 
-arrow::Status AppendCell(arrow::BooleanBuilder& builder, const TCell& cell) {
+[[maybe_unused]] arrow::Status AppendCell(arrow::BooleanBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
+
     return builder.Append(cell.AsValue<ui8>());
 }
 
-arrow::Status AppendCell(arrow::BinaryBuilder& builder, const TCell& cell) {
+[[maybe_unused]] arrow::Status AppendCell(arrow::BinaryBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
+
     return builder.Append(cell.Data(), cell.Size());
 }
 
-arrow::Status AppendCell(arrow::StringBuilder& builder, const TCell& cell) {
+[[maybe_unused]] arrow::Status AppendCell(arrow::StringBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
+
     return builder.Append(cell.Data(), cell.Size());
 }
 
-arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
+[[maybe_unused]] arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -43,6 +47,14 @@ arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
     /// @warning There's no conversion for special YQL Decimal valies here,
     /// so we could convert them to Arrow and back but cannot calculate anything on them.
     /// We need separate Arrow.Decimal, YQL.Decimal, CH.Decimal and YDB.Decimal in future.
+    return builder.Append(cell.Data());
+}
+
+[[maybe_unused]] arrow::Status AppendCell(arrow::FixedSizeBinaryBuilder& builder, const TCell& cell) {
+    if (cell.IsNull()) {
+        return builder.AppendNull();
+    }
+
     return builder.Append(cell.Data());
 }
 
@@ -147,7 +159,7 @@ NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::InitColumns(c
     return *this;
 }
 
-NKikimr::NArrow::TRecordBatchReader TRecordBatchConstructor::Finish() {
+TRecordBatchReader TRecordBatchConstructor::Finish() {
     Y_ABORT_UNLESS(!InConstruction);
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(Builders.size());

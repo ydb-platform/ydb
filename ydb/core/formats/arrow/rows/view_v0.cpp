@@ -318,9 +318,9 @@ TConclusionStatus TSimpleRowViewV0::TIterator::InitCurrentData() {
             return false;
         }
         if constexpr (std::is_base_of<arrow::FixedSizeBinaryType, typename TWrap::T>()) {
-            const ui32 size = static_cast<const arrow::FixedSizeBinaryType*>(Schema->field(FieldIndex)->type().get())->byte_width();
+            const ui32 size = static_cast<const arrow::FixedSizeBinaryType*>(Schema[FieldIndex]->type().get())->byte_width();
             if (size > Values.size()) {
-                errorMessage = "cannot read fix_size_binary size for " + Schema->field(FieldIndex)->name();
+                errorMessage = "cannot read fix_size_binary size for " + Schema[FieldIndex]->name();
                 return false;
             }
             CurrentValue = std::string_view(Values.data(), size);
@@ -328,13 +328,13 @@ TConclusionStatus TSimpleRowViewV0::TIterator::InitCurrentData() {
         }
         if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             if (sizeof(ui32) > Values.size()) {
-                errorMessage = "cannot read string size for " + Schema->field(FieldIndex)->name();
+                errorMessage = "cannot read string size for " + Schema[FieldIndex]->name();
                 return false;
             }
             const ui32 size = *(ui32*)(Values.data());
             Values.Skip(sizeof(ui32));
             if (size > Values.size()) {
-                errorMessage = "cannot read string for " + Schema->field(FieldIndex)->name();
+                errorMessage = "cannot read string for " + Schema[FieldIndex]->name();
                 return false;
             }
             CurrentValue = std::string_view(Values.data(), size);
@@ -344,7 +344,7 @@ TConclusionStatus TSimpleRowViewV0::TIterator::InitCurrentData() {
             using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
             const ui32 size = sizeof(CType);
             if (size > Values.size()) {
-                errorMessage = "cannot read ctype size for " + Schema->field(FieldIndex)->name();
+                errorMessage = "cannot read ctype size for " + Schema[FieldIndex]->name();
                 return false;
             }
             CurrentValue = std::string_view(Values.data(), size);
@@ -354,7 +354,7 @@ TConclusionStatus TSimpleRowViewV0::TIterator::InitCurrentData() {
         return false;
     };
 
-    NArrow::SwitchType(Schema->field(FieldIndex)->type()->id(), predScan);
+    NArrow::SwitchType(Schema[FieldIndex]->type()->id(), predScan);
     if (errorMessage) {
         IsFinishedFlag = true;
         return TConclusionStatus::Fail(errorMessage);

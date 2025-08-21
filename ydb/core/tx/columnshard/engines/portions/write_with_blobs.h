@@ -147,7 +147,7 @@ public:
 
 private:
     std::optional<TPortionAccessorConstructor> PortionConstructor;
-    std::optional<TPortionDataAccessor> PortionResult;
+    std::optional<std::shared_ptr<TPortionDataAccessor>> PortionResult;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 
     TString GetBlobByAddressVerified(const ui32 entityId, const ui32 chunkIdx) const {
@@ -204,9 +204,17 @@ public:
 
     }
 
-    void FinalizePortionConstructor() {
+    void FinalizePortionConstructor(const TSnapshot& finalizationSnapshot) {
         AFL_VERIFY(!!PortionConstructor);
         AFL_VERIFY(!PortionResult);
+        if (PortionConstructor->MutablePortionConstructor().GetType() == EPortionType::Compacted) {
+            auto* cPortion = static_cast<TCompactedPortionInfoConstructor*>(&PortionConstructor->MutablePortionConstructor());
+            if (!cPortion->GetAppearanceSnapshot()) {
+                cPortion->SetAppearanceSnapshot(finalizationSnapshot);
+            } else {
+                AFL_VERIFY(cPortion->GetAppearanceSnapshot()->Valid());
+            }
+        }
         PortionResult = PortionConstructor->Build(true);
         PortionConstructor.reset();
     }
@@ -214,6 +222,14 @@ public:
     const TPortionDataAccessor& GetPortionResult() const {
         AFL_VERIFY(!PortionConstructor);
         AFL_VERIFY(!!PortionResult);
+        AFL_VERIFY(!!*PortionResult);
+        return **PortionResult;
+    }
+
+    const std::shared_ptr<TPortionDataAccessor>& GetPortionResultPtr() const {
+        AFL_VERIFY(!PortionConstructor);
+        AFL_VERIFY(!!PortionResult);
+        AFL_VERIFY(!!*PortionResult);
         return *PortionResult;
     }
 

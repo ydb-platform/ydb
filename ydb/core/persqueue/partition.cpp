@@ -3,6 +3,7 @@
 #include "offload_actor.h"
 #include "partition_util.h"
 #include "partition_common.h"
+#include "partition_compactification.h"
 #include "partition_log.h"
 #include "tracing_support.h"
 
@@ -224,10 +225,10 @@ ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp
     }
 }
 
-void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error) {
+void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool isInternal) {
     ReplyPersQueueError(
         dst == 0 ? ctx.SelfID : Tablet, ctx, TabletID, TopicName(), Partition,
-        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true
+        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, isInternal
     );
 }
 
@@ -249,7 +250,7 @@ void TPartition::ReplyPropose(const TActorContext& ctx,
 }
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst) {
-    ctx.Send(Tablet, MakeReplyOk(dst).Release());
+    ctx.Send(Tablet, MakeReplyOk(dst, false).Release());
 }
 
 void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpan& span) {
@@ -277,8 +278,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        const TActorId& writeQuoterActorId,
-                       TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
-                       bool newPartition)
+                       TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition)
     : Initializer(this)
     , TabletID(tabletId)
     , TabletGeneration(tabletGeneration)
@@ -320,8 +320,8 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
-    , SamplingControl(samplingControl)
-{
+    , SamplingControl(samplingControl) {
+
     TabletCounters.Populate(Counters);
 }
 
@@ -672,6 +672,8 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     InitDuration = ctx.Now() - CreationTime;
     InitDone = true;
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_INIT].IncrementFor(InitDuration.MilliSeconds());
+
+    CreateCompacter();
 
     FillReadFromTimestamps(ctx);
     ProcessPendingEvents(ctx);
@@ -1511,7 +1513,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie);
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -1577,11 +1579,17 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_OK].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
-    ctx.Send(info.Destination != 0 ? Tablet : ctx.SelfID, answer.Event.Release());
+    ctx.Send(info.Destination != 0 && !info.IsInternal ? Tablet : ctx.SelfID, answer.Event.Release());
     OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
 }
 
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Get()->IsInternal) {
+        CompacterPartitionRequestInflight = false;
+        if (Compacter) {
+            Compacter->ProcessResponse(ev);
+        }
+    }
     ReadingTimestamp = false;
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
@@ -1913,6 +1921,18 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     auto& response = ev->Get()->Record;
+
+    if (response.HasCookie() && (response.GetCookie() == static_cast<ui64>(ERequestCookie::CompactificationWrite))) {
+        Y_ABORT_UNLESS(CompacterKvRequestInflight);
+        CompacterKvRequestInflight = false;
+        PQ_LOG_D("Topic '" << TopicConverter->GetClientsideName() << "'" << " partition " << Partition
+                 << ": Got compacter KV response, release RW lock");
+        Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
+        if (Compacter) {
+            Compacter->ProcessResponse(ev);
+        }
+        return;
+    }
 
     //check correctness of response
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
@@ -2247,6 +2267,9 @@ void TPartition::RunPersist() {
         AddCmdWriteTxMeta(PersistRequest->Record);
         AddCmdWriteUserInfos(PersistRequest->Record);
         AddCmdWriteConfig(PersistRequest->Record);
+    }
+    if (Compacter) {
+        Compacter->TryCompactionIfPossible();
     }
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
         // Apply counters
@@ -2986,6 +3009,8 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
+    CreateCompacter();
+
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         if (Mirrorer) {
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
@@ -3250,7 +3275,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         case TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE:
             return;
         default:
-            ScheduleReplyError(act.Cookie,
+            ScheduleReplyError(act.Cookie, act.IsInternal,
                                NPersQueue::NErrorCode::WRONG_COOKIE,
                                "request to deleted read rule");
             return;
@@ -3291,7 +3316,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
                  && (act.Generation < userInfo.Generation || act.Generation == userInfo.Generation && act.Step <= userInfo.Step))) { //old generation request
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
 
-        ScheduleReplyError(act.Cookie,
+        ScheduleReplyError(act.Cookie, act.IsInternal,
                            NPersQueue::NErrorCode::WRONG_COOKIE,
                            TStringBuilder() << "set offset in already dead session " << act.SessionId << " actual is " << userInfo.Session);
 
@@ -3299,14 +3324,14 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     }
 
     if (!act.SessionId.empty() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && (i64)act.Offset <= userInfo.Offset) { //this is stale request, answer ok for it
-        ScheduleReplyOk(act.Cookie);
+        ScheduleReplyOk(act.Cookie, act.IsInternal);
         return;
     }
 
     if (strictCommitOffset && act.Offset < StartOffset) {
         // strict commit to past, reply error
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-        ScheduleReplyError(act.Cookie,
+        ScheduleReplyError(act.Cookie, act.IsInternal,
                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
                            TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << StartOffset);
 
@@ -3331,7 +3356,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     if (offset > EndOffset) {
         if (strictCommitOffset) {
             TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-            ScheduleReplyError(act.Cookie,
+            ScheduleReplyError(act.Cookie, act.IsInternal,
                             NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
                             TStringBuilder() << "strict commit can't set offset " <<  act.Offset << " to future, consumer " << act.ClientId << ", actual end offset is " << EndOffset);
 
@@ -3353,7 +3378,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
 
     if (!IsActive() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && static_cast<i64>(EndOffset) == userInfo.Offset && offset < EndOffset) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-        ScheduleReplyError(act.Cookie,
+        ScheduleReplyError(act.Cookie, act.IsInternal,
                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
                            TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " for inactive partition");
 
@@ -3416,7 +3441,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
                                            offset,
                                            ts.first, ts.second, ui ? ui->AnyCommits : false);
         } else {
-            ScheduleReplyOk(act.Cookie);
+            ScheduleReplyOk(act.Cookie, act.IsInternal);
         }
 
         if (createSession) {
@@ -3452,10 +3477,10 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
     }
 }
 
-void TPartition::ScheduleReplyOk(const ui64 dst)
+void TPartition::ScheduleReplyOk(const ui64 dst, bool internal)
 {
-    Replies.emplace_back(Tablet,
-                         MakeReplyOk(dst).Release());
+    Replies.emplace_back(internal ? SelfId() : Tablet,
+                         MakeReplyOk(dst, internal).Release());
 }
 
 void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
@@ -3474,12 +3499,12 @@ void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
 
 }
 
-void TPartition::ScheduleReplyError(const ui64 dst,
+void TPartition::ScheduleReplyError(const ui64 dst, bool internal,
                                     NPersQueue::NErrorCode::EErrorCode errorCode,
                                     const TString& error)
 {
     PQ_LOG_ERROR("Got error: " << error);
-    Replies.emplace_back(Tablet,
+    Replies.emplace_back(internal ? SelfId() : Tablet,
                          MakeReplyError(dst,
                                         errorCode,
                                         error).Release());
@@ -3695,9 +3720,9 @@ TUserInfoBase* TPartition::GetPendingUserIfExists(const TString& user)
     return nullptr;
 }
 
-THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst)
+THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst, bool internal)
 {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, internal);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -3713,7 +3738,7 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
                                                                         bool consumerHasAnyCommits,
                                                                         const std::optional<TString>& committedMetadata)
 {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -3744,12 +3769,13 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
 }
 THolder<TEvPQ::TEvError> TPartition::MakeReplyError(const ui64 dst,
                                                     NPersQueue::NErrorCode::EErrorCode errorCode,
-                                                    const TString& error)
+                                                    const TString& error,
+                                                    bool internal)
 {
     //
     // FIXME(abcdef): в ReplyPersQueueError есть дополнительные действия
     //
-    return MakeHolder<TEvPQ::TEvError>(errorCode, error, dst);
+    return MakeHolder<TEvPQ::TEvError>(errorCode, error, dst, internal);
 }
 
 THolder<TEvPersQueue::TEvProposeTransactionResult> TPartition::MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
@@ -4019,7 +4045,7 @@ void TPartition::ScheduleNegativeReply(const TTransaction&)
 
 void TPartition::ScheduleNegativeReply(const TMessage& msg)
 {
-    ScheduleReplyError(msg.GetCookie(), NPersQueue::NErrorCode::ERROR, "The transaction is completed");
+    ScheduleReplyError(msg.GetCookie(), false, NPersQueue::NErrorCode::ERROR, "The transaction is completed");
 }
 
 void TPartition::ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx)
@@ -4073,4 +4099,19 @@ void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
     }
 }
 
+void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request) {
+    Y_ENSURE(!CompacterKvRequestInflight);
+    Y_ENSURE(!CompacterKvRequest);
+    PQ_LOG_D("Topic '" << TopicConverter->GetClientsideName() << "'" << " partition " << Partition
+                       << ": Acquire RW Lock");
+    Send(ReadQuotaTrackerActor, new TEvPQ::TEvAcquireExclusiveLock());
+    CompacterKvRequestInflight = true;
+    CompacterKvRequest = std::move(request);
+}
+
+void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
+    PQ_LOG_D("Topic '" << TopicConverter->GetClientsideName() << "'" << " partition " << Partition
+                       << ": Acquired RW Lock, send compacter KV request    ");
+    Send(BlobCache, CompacterKvRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
+}
 } // namespace NKikimr::NPQ

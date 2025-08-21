@@ -37,14 +37,14 @@ For profiling memory allocations build kqprun with ya make flag `-D PROFILE_MEMO
 
 ### Cluster
 
-* Embedded UI:
+* Embedded UI, flag `-M` means the beginning of the range of ports used for different nodes:
     ```(bash)
     ./kqprun -M 32000
     ```
 
     Monitoring endpoint: http://localhost:32000
 
-* gRPC endpoint:
+* gRPC endpoint, flag `-G` means the beginning of the range of ports used for different tenants:
     ```(bash)
     ./kqprun -G 32000
     ```

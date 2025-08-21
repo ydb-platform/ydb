@@ -1,4 +1,5 @@
 #include "blob.h"
+#include "blob_int.h"
 #include "type_codecs.h"
 
 #include <util/string/builder.h>
@@ -7,75 +8,6 @@
 
 namespace NKikimr {
 namespace NPQ {
-
-namespace {
-
-struct TMessageFlags {
-
-    using TValue = ui8;
-
-    static constexpr TValue PartDataMask = 1;
-    static constexpr TValue WriteTimestampMask = 1 << 1;
-    static constexpr TValue CreateTimestampMask = 1 << 2;
-    static constexpr TValue UncompressedSizeMask = 1 << 3;
-    static constexpr TValue KinesisDataMask = 1 << 4;
-
-    TMessageFlags(TValue value = 0)
-        : Value(value) {
-    }
-
-    TValue Value;
-
-    bool HasPartData() const {
-        return Value & PartDataMask;
-    }
-
-    bool HasWriteTimestamp() {
-        return Value & WriteTimestampMask;
-    }
-
-    bool HasCreateTimestamp() {
-        return Value & CreateTimestampMask;
-    }
-
-    bool HasUncompressedSize() {
-        return Value & UncompressedSizeMask;
-    }
-
-    bool HasKinesisData() {
-        return Value & KinesisDataMask;
-    }
-
-    void HasPartData(bool value) {
-        SetFlag(value, PartDataMask);
-    }
-
-    void HasWriteTimestamp(bool value) {
-        SetFlag(value, WriteTimestampMask);
-    }
-
-    void HasCreateTimestamp(bool value) {
-        SetFlag(value, CreateTimestampMask);
-    }
-
-    void HasUncompressedSize(bool value) {
-        SetFlag(value, UncompressedSizeMask);
-    }
-
-    void HasKinesisData(bool value) {
-        SetFlag(value, KinesisDataMask);
-    }
-
-    void SetFlag(bool value, TValue mask) {
-        if (value) {
-            Value |= mask;
-        } else {
-            Value &= Max<TValue>() - mask;
-        }
-    }
-};
-
-}
 
 TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
     : Key(key)
@@ -164,20 +96,22 @@ void TClientBlob::SerializeTo(TBuffer& res) const
     res.Append((const char*)&totalSize, sizeof(ui32));
     res.Append((const char*)&SeqNo, sizeof(ui64));
 
-    TMessageFlags flags(TMessageFlags::CreateTimestampMask | TMessageFlags::WriteTimestampMask);
-    flags.HasPartData(!PartData.Empty());
-    flags.HasUncompressedSize(UncompressedSize);
-    flags.HasKinesisData(PartitionKey.size());
+    TMessageFlags flags;
+    flags.F.HasCreateTimestamp = 1;
+    flags.F.HasWriteTimestamp = 1;
+    flags.F.HasPartData = !PartData.Empty();
+    flags.F.HasUncompressedSize = UncompressedSize != 0;
+    flags.F.HasKinesisData = !PartitionKey.empty();
 
-    res.Append((const char*)&flags.Value, sizeof(char));
+    res.Append((const char*)&flags.V, sizeof(char));
 
-    if (flags.HasPartData()) {
+    if (flags.F.HasPartData) {
         res.Append((const char*)&(PartData->PartNo), sizeof(ui16));
         res.Append((const char*)&(PartData->TotalParts), sizeof(ui16));
         res.Append((const char*)&(PartData->TotalSize), sizeof(ui32));
     }
 
-    if (flags.HasKinesisData()) {
+    if (flags.F.HasKinesisData) {
         ui8 partitionKeySize = PartitionKey.size();
         res.Append((const char*)&(partitionKeySize), sizeof(ui8));
         res.Append(PartitionKey.data(), PartitionKey.size());
@@ -193,7 +127,7 @@ void TClientBlob::SerializeTo(TBuffer& res) const
     ui64 createTimestampMs = CreateTimestamp.MilliSeconds();
     res.Append((const char*)&createTimestampMs, sizeof(ui64));
 
-    if (flags.HasUncompressedSize()) {
+    if (flags.F.HasUncompressedSize) {
         res.Append((const char*)&(UncompressedSize), sizeof(ui32));
     }
 
@@ -216,11 +150,12 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     ui64 seqNo = ReadUnaligned<ui64>(data);
     data += sizeof(ui64);
 
-    TMessageFlags flags = ReadUnaligned<ui8>(data);
+    TMessageFlags flags;
+    flags.V = ReadUnaligned<ui8>(data);
     ++data;
 
     TMaybe<TPartData> partData;
-    if (flags.HasPartData()) {
+    if (flags.F.HasPartData) {
         ui16 partNo = ReadUnaligned<ui16>(data);
         data += sizeof(ui16);
         ui16 totalParts = ReadUnaligned<ui16>(data);
@@ -232,7 +167,7 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
 
     TString partitionKey;
     TString explicitHashKey;
-    if (flags.HasKinesisData()) {
+    if (flags.F.HasKinesisData) {
         ui8 keySize = ReadUnaligned<ui8>(data);
         data += sizeof(ui8);
         partitionKey = TString(data, keySize == 0 ? 256 : keySize);
@@ -244,17 +179,17 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     }
 
     TInstant writeTimestamp;
-    if (flags.HasWriteTimestamp()) {
+    if (flags.F.HasWriteTimestamp) {
         writeTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
         data += sizeof(ui64);
     }
     TInstant createTimestamp;
-    if (flags.HasCreateTimestamp()) {
+    if (flags.F.HasCreateTimestamp) {
         createTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
         data += sizeof(ui64);
     }
     ui32 uncompressedSize = 0;
-    if (flags.HasUncompressedSize()) {
+    if (flags.F.HasUncompressedSize) {
         uncompressedSize = ReadUnaligned<ui32>(data);
         data += sizeof(ui32);
     }

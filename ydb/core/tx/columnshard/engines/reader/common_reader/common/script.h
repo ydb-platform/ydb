@@ -65,7 +65,7 @@ private:
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
     TAtomic StartInstant;
     TAtomic FinishInstant;
-    bool Started = 0;
+    TAtomic Started = 0;
 
 public:
     TFetchingScript(const TString& branchName, std::vector<std::shared_ptr<IFetchingStep>>&& steps)

@@ -17,7 +17,7 @@ struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterSt
 enum class EPileState {
     UNSPECIFIED = 0,
     PRIMARY = 1,
-    PROMOTE = 2,
+    PROMOTED = 2,
     SYNCHRONIZED = 3,
     NOT_SYNCHRONIZED = 4,
     SUSPENDED = 5,

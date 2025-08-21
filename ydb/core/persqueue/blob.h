@@ -157,17 +157,10 @@ private:
         TBatch& Batch;
 
     public:
-        explicit TBatchAccessor(TBatch& batch)
-            : Batch(batch)
-        {}
+        explicit TBatchAccessor(TBatch& batch);
 
-        void Pack() {
-            Batch.Pack();
-        }
-
-        void Unpack() {
-            Batch.Unpack();
-        }
+        void Pack();
+        void Unpack();
     };
 
 public:
@@ -228,14 +221,12 @@ public:
     std::optional<TFormedBlobInfo> Add(TClientBlob&& blob);
     std::optional<TFormedBlobInfo> Add(const TKey& key, ui32 size);
 
-    bool IsInited() const { return TotalParts > 0; }
-
+    bool IsInited() const;
     bool IsComplete() const;
+    bool HasFormedBlobs() const;
 
-    bool HasFormedBlobs() const { return !FormedBlobs.empty(); }
-
-    ui64 GetOffset() const { return Offset; }
-    ui16 GetHeadPartNo() const { return HeadPartNo; }
+    ui64 GetOffset() const;
+    ui16 GetHeadPartNo() const;
 
     bool IsNextPart(const TString& sourceId, const ui64 seqNo, const ui16 partNo, TString *reason) const;
 

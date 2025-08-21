@@ -10,6 +10,46 @@
 namespace NKikimr {
 namespace NPQ {
 
+namespace {
+
+template <typename TCodec>
+TAutoPtr<NScheme::IChunkCoder> MakeChunk(TBuffer& output)
+{
+    TCodec codec;
+    return codec.MakeChunk(output);
+}
+
+const ui32 CHUNK_SIZE_PLACEMENT = 0xCCCCCCCC;
+ui32 WriteTemporaryChunkSize(TBuffer & output)
+{
+    ui32 sizeOffset = output.Size();
+
+    ui32 sizePlacement = CHUNK_SIZE_PLACEMENT;
+    output.Append((const char*)&sizePlacement, sizeof(ui32));
+
+    return sizeOffset;
+}
+
+void WriteActualChunkSize(TBuffer& output, ui32 sizeOffset)
+{
+    ui32 currSize = output.size();
+    Y_ABORT_UNLESS(currSize >= sizeOffset + sizeof(ui32));
+    ui32 size = currSize - sizeOffset - sizeof(ui32);
+
+    Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui32>(output.data() + sizeOffset) == CHUNK_SIZE_PLACEMENT);
+    WriteUnaligned<ui32>(output.data() + sizeOffset, size);
+}
+
+NScheme::TDataRef GetChunk(const char*& data, const char *end)
+{
+    ui32 size = ReadUnaligned<ui32>(data);
+    data += sizeof(ui32) + size;
+    Y_ABORT_UNLESS(data <= end);
+    return NScheme::TDataRef(data - size, size);
+}
+
+}
+
 //
 // TPartData
 //
@@ -81,155 +121,6 @@ ui16 TClientBlob::GetTotalSize() const {
 
 bool TClientBlob::IsLastPart() const {
     return !PartData || PartData->IsLastPart();
-}
-
-
-//
-// TBatch
-//
-
-TBatch::TBatch()
-    : Packed(false)
-{
-    PackedData.Reserve(8_MB);
-}
-
-TBatch::TBatch(const ui64 offset, const ui16 partNo)
-    : TBatch()
-{
-    Header.SetOffset(offset);
-    Header.SetPartNo(partNo);
-    Header.SetUnpackedSize(0);
-    Header.SetCount(0);
-    Header.SetInternalPartsCount(0);
-}
-
-TBatch::TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
-    : Packed(true)
-    , Header(header)
-    , PackedData(data, header.GetPayloadSize())
-{
-}
-
-TBatch TBatch::FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
-    Y_ABORT_UNLESS(!blobs.empty());
-    TBatch batch(offset, blobs.front().GetPartNo());
-    for (auto& b : blobs) {
-        batch.AddBlob(b);
-    }
-    return batch;
-}
-
-void TBatch::AddBlob(const TClientBlob &b) {
-    ui32 count = GetCount();
-    ui32 unpackedSize = GetUnpackedSize();
-    ui32 i = Blobs.size();
-    Blobs.push_back(b);
-    unpackedSize += b.GetBlobSize();
-    if (b.IsLastPart())
-        ++count;
-    else {
-        InternalPartsPos.push_back(i);
-    }
-
-    Header.SetUnpackedSize(unpackedSize);
-    Header.SetCount(count);
-    Header.SetInternalPartsCount(InternalPartsPos.size());
-
-    EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
-}
-
-ui64 TBatch::GetOffset() const {
-    return Header.GetOffset();
-}
-
-ui16 TBatch::GetPartNo() const {
-    return Header.GetPartNo();
-}
-
-ui32 TBatch::GetUnpackedSize() const {
-    return Header.GetUnpackedSize();
-}
-
-ui32 TBatch::GetCount() const {
-    return Header.GetCount();
-}
-
-ui16 TBatch::GetInternalPartsCount() const {
-    return Header.GetInternalPartsCount();
-}
-
-bool TBatch::IsGreaterThan(ui64 offset, ui16 partNo) const {
-    return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
-}
-
-bool TBatch::Empty() const {
-    return Blobs.empty();
-}
-
-TInstant TBatch::GetEndWriteTimestamp() const {
-    return EndWriteTimestamp;
-}
-
-ui32 TBatch::GetPackedSize() const {
-    Y_ABORT_UNLESS(Packed);
-    return sizeof(ui16) + PackedData.size() + Header.ByteSize();
-}
-
-//
-// TBlobIterator
-//
-
-
-TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
-    : Key(key)
-    , Data(blob.c_str())
-    , End(Data + blob.size())
-    , Offset(key.GetOffset())
-    , Count(0)
-    , InternalPartsCount(0)
-{
-    Y_ABORT_UNLESS(Data != End,
-                   "Key=%s, blob.size=%" PRISZT,
-                   Key.ToString().data(), blob.size());
-    ParseBatch();
-    Y_ABORT_UNLESS(Header.GetPartNo() == Key.GetPartNo());
-}
-
-void TBlobIterator::ParseBatch() {
-    Y_ABORT_UNLESS(Data < End);
-    Header = ExtractHeader(Data, End - Data);
-    //Y_ABORT_UNLESS(Header.GetOffset() == Offset);
-    Count += Header.GetCount();
-    Offset += Header.GetCount();
-    InternalPartsCount += Header.GetInternalPartsCount();
-    Y_ABORT_UNLESS(Count <= Key.GetCount());
-    Y_ABORT_UNLESS(InternalPartsCount <= Key.GetInternalPartsCount());
-}
-
-bool TBlobIterator::IsValid()
-{
-    return Data != End;
-}
-
-bool TBlobIterator::Next()
-{
-    Y_ABORT_UNLESS(IsValid());
-    Data += Header.GetPayloadSize() + sizeof(ui16) + Header.ByteSize();
-    if (Data == End) { //this was last batch
-        Y_ABORT_UNLESS(Count == Key.GetCount());
-        Y_ABORT_UNLESS(InternalPartsCount == Key.GetInternalPartsCount());
-        return false;
-    }
-    ParseBatch();
-    return true;
-}
-
-TBatch TBlobIterator::GetBatch()
-{
-    Y_ABORT_UNLESS(IsValid());
-
-    return TBatch(Header, Data + sizeof(ui16) + Header.ByteSize());
 }
 
 void TClientBlob::CheckBlob(const TKey& key, const TString& blob)
@@ -380,6 +271,99 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData, writeTimestamp, createTimestamp, uncompressedSize, std::move(partitionKey), std::move(explicitHashKey));
 }
 
+
+//
+// TBatch
+//
+
+TBatch::TBatch()
+    : Packed(false)
+{
+    PackedData.Reserve(8_MB);
+}
+
+TBatch::TBatch(const ui64 offset, const ui16 partNo)
+    : TBatch()
+{
+    Header.SetOffset(offset);
+    Header.SetPartNo(partNo);
+    Header.SetUnpackedSize(0);
+    Header.SetCount(0);
+    Header.SetInternalPartsCount(0);
+}
+
+TBatch::TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
+    : Packed(true)
+    , Header(header)
+    , PackedData(data, header.GetPayloadSize())
+{
+}
+
+TBatch TBatch::FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
+    Y_ABORT_UNLESS(!blobs.empty());
+    TBatch batch(offset, blobs.front().GetPartNo());
+    for (auto& b : blobs) {
+        batch.AddBlob(b);
+    }
+    return batch;
+}
+
+void TBatch::AddBlob(const TClientBlob &b) {
+    ui32 count = GetCount();
+    ui32 unpackedSize = GetUnpackedSize();
+    ui32 i = Blobs.size();
+    Blobs.push_back(b);
+    unpackedSize += b.GetBlobSize();
+    if (b.IsLastPart())
+        ++count;
+    else {
+        InternalPartsPos.push_back(i);
+    }
+
+    Header.SetUnpackedSize(unpackedSize);
+    Header.SetCount(count);
+    Header.SetInternalPartsCount(InternalPartsPos.size());
+
+    EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
+}
+
+ui64 TBatch::GetOffset() const {
+    return Header.GetOffset();
+}
+
+ui16 TBatch::GetPartNo() const {
+    return Header.GetPartNo();
+}
+
+ui32 TBatch::GetUnpackedSize() const {
+    return Header.GetUnpackedSize();
+}
+
+ui32 TBatch::GetCount() const {
+    return Header.GetCount();
+}
+
+ui16 TBatch::GetInternalPartsCount() const {
+    return Header.GetInternalPartsCount();
+}
+
+bool TBatch::IsGreaterThan(ui64 offset, ui16 partNo) const {
+    return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
+}
+
+bool TBatch::Empty() const {
+    return Blobs.empty();
+}
+
+TInstant TBatch::GetEndWriteTimestamp() const {
+    return EndWriteTimestamp;
+}
+
+ui32 TBatch::GetPackedSize() const {
+    Y_ABORT_UNLESS(Packed);
+    return sizeof(ui16) + PackedData.size() + Header.ByteSize();
+}
+
 void TBatch::SerializeTo(TString& res) const{
     Y_ABORT_UNLESS(Packed);
 
@@ -390,34 +374,6 @@ void TBatch::SerializeTo(TString& res) const{
     Y_ABORT_UNLESS(rs);
 
     res.append(PackedData.data(), PackedData.size());
-}
-
-template <typename TCodec>
-TAutoPtr<NScheme::IChunkCoder> MakeChunk(TBuffer& output)
-{
-    TCodec codec;
-    return codec.MakeChunk(output);
-}
-
-const ui32 CHUNK_SIZE_PLACEMENT = 0xCCCCCCCC;
-ui32 WriteTemporaryChunkSize(TBuffer & output)
-{
-    ui32 sizeOffset = output.Size();
-
-    ui32 sizePlacement = CHUNK_SIZE_PLACEMENT;
-    output.Append((const char*)&sizePlacement, sizeof(ui32));
-
-    return sizeOffset;
-}
-
-void WriteActualChunkSize(TBuffer& output, ui32 sizeOffset)
-{
-    ui32 currSize = output.size();
-    Y_ABORT_UNLESS(currSize >= sizeOffset + sizeof(ui32));
-    ui32 size = currSize - sizeOffset - sizeof(ui32);
-
-    Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui32>(output.data() + sizeOffset) == CHUNK_SIZE_PLACEMENT);
-    WriteUnaligned<ui32>(output.data() + sizeOffset, size);
 }
 
 void TBatch::Pack() {
@@ -649,14 +605,6 @@ void TBatch::UnpackTo(TVector<TClientBlob> *blobs) const
     };
 }
 
-NScheme::TDataRef GetChunk(const char*& data, const char *end)
-{
-    ui32 size = ReadUnaligned<ui32>(data);
-    data += sizeof(ui32) + size;
-    Y_ABORT_UNLESS(data <= end);
-    return NScheme::TDataRef(data - size, size);
-}
-
 void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) const {
     Y_ABORT_UNLESS(Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     Y_ABORT_UNLESS(PackedData.size());
@@ -866,34 +814,11 @@ ui32 TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
 }
 
 
-void THead::Clear()
-{
-    Offset = PartNo = PackedSize = 0;
-    ClearBatches();
-}
 
-ui64 THead::GetNextOffset() const
-{
-    return Offset + GetCount();
-}
 
-ui16 THead::GetInternalPartsCount() const
-{
-    return InternalPartsCount;
-}
-
-ui32 THead::GetCount() const
-{
-    if (Batches.empty())
-        return 0;
-
-    //how much offsets before last batch and how much offsets in last batch
-    Y_ABORT_UNLESS(Batches.front().GetOffset() == Offset,
-                   "front.Offset=%" PRIu64 ", offset=%" PRIu64,
-                   Batches.front().GetOffset(), Offset);
-
-    return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
-}
+//
+// THead
+//
 
 IOutputStream& operator <<(IOutputStream& out, const THead& value)
 {
@@ -954,6 +879,48 @@ TBatch THead::ExtractFirstBatch() {
     return batch;
 }
 
+void THead::AddBlob(const TClientBlob& blob) {
+    Y_ABORT_UNLESS(!Batches.empty());
+    auto& batch = Batches.back();
+    InternalPartsCount -= batch.GetInternalPartsCount();
+    batch.AddBlob(blob);
+    InternalPartsCount += batch.GetInternalPartsCount();
+}
+
+void THead::Clear()
+{
+    Offset = PartNo = PackedSize = 0;
+    ClearBatches();
+}
+
+ui64 THead::GetNextOffset() const
+{
+    return Offset + GetCount();
+}
+
+ui16 THead::GetInternalPartsCount() const
+{
+    return InternalPartsCount;
+}
+
+ui32 THead::GetCount() const
+{
+    if (Batches.empty())
+        return 0;
+
+    //how much offsets before last batch and how much offsets in last batch
+    Y_ABORT_UNLESS(Batches.front().GetOffset() == Offset,
+                   "front.Offset=%" PRIu64 ", offset=%" PRIu64,
+                   Batches.front().GetOffset(), Offset);
+
+    return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
+}
+
+
+//
+// THead::TBatchAccessor 
+//
+
 THead::TBatchAccessor THead::MutableBatch(ui32 idx) {
     Y_ABORT_UNLESS(idx < Batches.size());
     return TBatchAccessor(Batches[idx]);
@@ -964,12 +931,37 @@ THead::TBatchAccessor THead::MutableLastBatch() {
     return TBatchAccessor(Batches.back());
 }
 
-void THead::AddBlob(const TClientBlob& blob) {
-    Y_ABORT_UNLESS(!Batches.empty());
-    auto& batch = Batches.back();
-    InternalPartsCount -= batch.GetInternalPartsCount();
-    batch.AddBlob(blob);
-    InternalPartsCount += batch.GetInternalPartsCount();
+THead::TBatchAccessor::TBatchAccessor(TBatch& batch)
+    : Batch(batch)
+{}
+
+void THead::TBatchAccessor::Pack() {
+    Batch.Pack();
+}
+
+void THead::TBatchAccessor::Unpack() {
+    Batch.Unpack();
+}
+
+
+//
+// TPartitionedBlob
+//
+
+bool TPartitionedBlob::IsInited() const {
+    return TotalParts > 0;
+}
+
+bool TPartitionedBlob::HasFormedBlobs() const {
+    return !FormedBlobs.empty();
+}
+
+ui64 TPartitionedBlob::GetOffset() const {
+    return Offset;
+}
+
+ui16 TPartitionedBlob::GetHeadPartNo() const {
+    return HeadPartNo;
 }
 
 TPartitionedBlob::TRenameFormedBlobInfo::TRenameFormedBlobInfo(const TKey& oldKey, const TKey& newKey, ui32 size) :
@@ -1221,6 +1213,62 @@ bool TPartitionedBlob::IsNextPart(const TString& sourceId, const ui64 seqNo, con
     return true;
 }
 
+
+//
+// TBlobIterator
+//
+
+
+TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
+    : Key(key)
+    , Data(blob.c_str())
+    , End(Data + blob.size())
+    , Offset(key.GetOffset())
+    , Count(0)
+    , InternalPartsCount(0)
+{
+    Y_ABORT_UNLESS(Data != End,
+                   "Key=%s, blob.size=%" PRISZT,
+                   Key.ToString().data(), blob.size());
+    ParseBatch();
+    Y_ABORT_UNLESS(Header.GetPartNo() == Key.GetPartNo());
+}
+
+void TBlobIterator::ParseBatch() {
+    Y_ABORT_UNLESS(Data < End);
+    Header = ExtractHeader(Data, End - Data);
+    //Y_ABORT_UNLESS(Header.GetOffset() == Offset);
+    Count += Header.GetCount();
+    Offset += Header.GetCount();
+    InternalPartsCount += Header.GetInternalPartsCount();
+    Y_ABORT_UNLESS(Count <= Key.GetCount());
+    Y_ABORT_UNLESS(InternalPartsCount <= Key.GetInternalPartsCount());
+}
+
+bool TBlobIterator::IsValid()
+{
+    return Data != End;
+}
+
+bool TBlobIterator::Next()
+{
+    Y_ABORT_UNLESS(IsValid());
+    Data += Header.GetPayloadSize() + sizeof(ui16) + Header.ByteSize();
+    if (Data == End) { //this was last batch
+        Y_ABORT_UNLESS(Count == Key.GetCount());
+        Y_ABORT_UNLESS(InternalPartsCount == Key.GetInternalPartsCount());
+        return false;
+    }
+    ParseBatch();
+    return true;
+}
+
+TBatch TBlobIterator::GetBatch()
+{
+    Y_ABORT_UNLESS(IsValid());
+
+    return TBatch(Header, Data + sizeof(ui16) + Header.ByteSize());
+}
 
 }// NPQ
 }// NKikimr

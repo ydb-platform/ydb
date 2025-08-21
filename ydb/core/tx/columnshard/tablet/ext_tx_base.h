@@ -19,7 +19,7 @@ public:
     virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override final;
     virtual void Complete(const NActors::TActorContext& ctx) override final;
 
-    TExtendedTransactionBase(TColumnShard* self, const TString& txInfo = Default<TString>());
+    TExtendedTransactionBase(TColumnShard* self, const TString& txInfo);
 };
 
 } //namespace NKikimr::NColumnShard

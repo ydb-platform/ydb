@@ -19,9 +19,7 @@ public:
 protected:
     TString GetTablesYaml() const override;
     TWorkloadGeneratorBase::TSpecialDataTypes GetSpecialDataTypes() const override;
-
-private:
-    const TTpcdsWorkloadParams& Params;
+    std::pair<TString, TString> GetTableAndColumnForDetectFloatMode() const override;
 };
 
 } // namespace NYdbWorkload

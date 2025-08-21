@@ -399,6 +399,7 @@ int TWorkloadCommandBase::Run(TConfig& config) {
     Params.DbPath = config.Database;
     Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
+    workloadGen->Init();
     auto result = DoRun(*workloadGen, config);
     if (!DryRun) {
         Params.SetClients(nullptr, nullptr, nullptr, nullptr);

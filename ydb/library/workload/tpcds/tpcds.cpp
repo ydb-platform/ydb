@@ -10,16 +10,21 @@ namespace NYdbWorkload {
 
 TTpcdsWorkloadGenerator::TTpcdsWorkloadGenerator(const TTpcdsWorkloadParams& params)
     : TTpcBaseWorkloadGenerator(params)
-    , Params(params)
 {}
 
 TString TTpcdsWorkloadGenerator::GetTablesYaml() const {
     return NResource::Find("tpcds_schema.yaml");
 }
 
+std::pair<TString, TString> TTpcdsWorkloadGenerator::GetTableAndColumnForDetectFloatMode() const {
+    return std::make_pair("call_center", "cc_gmt_offset");
+}
+
 TWorkloadGeneratorBase::TSpecialDataTypes TTpcdsWorkloadGenerator::GetSpecialDataTypes() const {
     TString decimalType_5_2, decimalType_7_2, decimalType_15_2;
-    switch (Params.GetFloatMode()) {
+    switch (FloatMode) {
+    case TTpcBaseWorkloadParams::EFloatMode::AUTO:
+        ythrow yexception() << "Invalid bechavier";
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         decimalType_5_2 = decimalType_7_2 = decimalType_15_2 = "Double";
         break;

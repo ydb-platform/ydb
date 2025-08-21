@@ -13,8 +13,55 @@ namespace NYdbWorkload {
 
 TTpcBaseWorkloadGenerator::TTpcBaseWorkloadGenerator(const TTpcBaseWorkloadParams& params)
     : TWorkloadGeneratorBase(params)
+    , FloatMode(params.GetFloatMode())
     , Params(params)
 {}
+
+void TTpcBaseWorkloadGenerator::Init() {
+    TWorkloadGeneratorBase::Init();
+    FloatMode = DetectFloatMode();
+}
+
+TTpcBaseWorkloadParams::EFloatMode TTpcBaseWorkloadGenerator::DetectFloatMode() const {
+    if (FloatMode != TTpcBaseWorkloadParams::EFloatMode::AUTO) {
+        return FloatMode;
+    }
+    if (!Params.TableClient) { //dry run case
+        return TTpcBaseWorkloadParams::EFloatMode::FLOAT;
+    }
+    const auto [table, column] = GetTableAndColumnForDetectFloatMode();
+    auto session = Params.TableClient->GetSession(NYdb::NTable::TCreateSessionSettings()).ExtractValueSync();
+    if (!session.IsSuccess()) {
+        ythrow yexception() << "Cannot create session: " << session.GetIssues().ToString() << Endl;
+    }
+    const auto tableDescr = session.GetSession().DescribeTable(Params.GetFullTableName(table.c_str())).ExtractValueSync();
+    if (!tableDescr.IsSuccess()) {
+        auto issues = tableDescr.GetIssues();
+        ythrow yexception() << "Cannot descibe table " << table << ": " << tableDescr.GetIssues().ToString() << Endl;
+    }
+    for (const auto& col:tableDescr.GetTableDescription().GetTableColumns()) {
+        if (col.Name != column) {
+            continue;
+        }
+        NYdb::TTypeParser type(col.Type);
+        if (type.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+            type.OpenOptional();
+        }
+        switch (type.GetKind()) {
+        case NYdb::TTypeParser::ETypeKind::Decimal: {
+            const auto decimal = type.GetDecimal();
+            return (decimal.Precision == 22 && decimal.Scale == 9) ? TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB : TTpcBaseWorkloadParams::EFloatMode::DECIMAL;
+        }
+        case NYdb::TTypeParser::ETypeKind::Primitive:
+            if (type.GetPrimitive() == NYdb::EPrimitiveType::Double || type.GetPrimitive() == NYdb::EPrimitiveType::Float) {
+                return TTpcBaseWorkloadParams::EFloatMode::FLOAT;
+            }
+        default:
+            ythrow yexception() << "Invalid column" << column << " type: " << col.Type.ToString();
+        }
+    }
+    ythrow yexception() << "There is no column " << column << " in table " << table;
+}
 
 TQueryInfoList TTpcBaseWorkloadGenerator::GetInitialData() {
     return {};
@@ -82,7 +129,9 @@ void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
 void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf header, const TString& query) const {
     TStringBuilder scaleFactor;
     scaleFactor << "$scale_factor = ";
-    switch(Params.GetFloatMode()) {
+    switch(FloatMode) {
+    case TTpcBaseWorkloadParams::EFloatMode::AUTO:
+        ythrow yexception() << "Invalid bechavier";
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         scaleFactor << Params.GetScale();
 	break;
@@ -118,7 +167,9 @@ TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
     if (Params.GetSyntax() == TWorkloadBaseParams::EQuerySyntax::PG) {
         header << "--!syntax_pg" << Endl;
     }
-    switch (Params.GetFloatMode()) {
+    switch (FloatMode) {
+    case TTpcBaseWorkloadParams::EFloatMode::AUTO:
+        ythrow yexception() << "Invalid bechavier";
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         FilterHeader(header.Out, NResource::Find("consts.yql"), query);
         break;
@@ -158,7 +209,7 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
         opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
             .DefaultValue(Scale).StoreResult(&Scale);
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
-            .StoreResult(&FloatMode).DefaultValue(FloatMode);
+            .StoreResult(&FloatMode).DefaultValue(EFloatMode::AUTO);
         break;
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")

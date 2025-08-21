@@ -4,8 +4,6 @@
 
 {% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
-
 {% endif %}
 
 ## Добавление индекса {#add-index}
@@ -51,7 +49,7 @@ ALTER TABLE `series`
 
 ```yql
 ALTER TABLE `series`
-  INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
+  ADD INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
   ON (embedding) COVER (title)
   WITH (
     distance="cosine",

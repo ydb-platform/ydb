@@ -1,7 +1,5 @@
 # Vector Indexes
 
-{% include [limitations](../_includes/vector_index_limitations.md) %}
-
 [Vector indexes](../concepts/glossary.md#vector-index) are specialized data structures that enable efficient [vector search](../concepts/vector_search.md) in multidimensional spaces. Unlike [secondary indexes](../concepts/glossary.md#secondary-index), which optimize searching by equality or range, vector indexes allow similarity searching based on [similarity or distance functions](../yql/reference/udf/list/knn.md#functions).
 
 Data in a {{ ydb-short-name }} table is stored and sorted by the primary key, ensuring efficient searching by exact match and range scanning. Vector indexes provide similar efficiency for nearest neighbor searches in vector spaces.
@@ -134,3 +132,12 @@ It is recommended to check the optimality of the written query using [query stat
 
 {% endnote %}
 
+## Updating Vector Indexes {#update}
+
+The tree of clusters (groups of similar records) is not recalculated when a table with a vector index is updated. The new records are only reclassified according to the existing tree. So indexed vector search performance or quality may decrease after changing a very large amount of data in the table - such amount that may significantly affect the distribution of clusters in the dataset.
+
+This degradation is highly affected by the exact data being updated. For example, if you just randomly split the data set into two equal parts, build an index on the first 50 % of data and then add the remaining 50 % - the index highly likely won't degrade at all. However, the degradation may become noticeable if you initially exclude some clusters in a whole.
+
+The corner case is a vector index created on an empty table - in this case it will only contain 1 cluster, all new records will be added into that single cluster, and search requests will work as full scans.
+
+At the moment, in such cases it's recommended to [build a new index](../yql/reference/syntax/alter_table/indexes.md) and [atomically replace](../reference/ydb-cli/commands/secondary_index.md?version=main#rename) the old index with the new one after updating a large amount of data.

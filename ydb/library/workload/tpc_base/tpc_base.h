@@ -8,7 +8,6 @@ namespace NYdbWorkload {
 class TTpcBaseWorkloadParams: public TWorkloadBaseParams {
 public:
     enum class EFloatMode {
-        AUTO /* "auto" */,
         FLOAT /* "float" */,
         DECIMAL /* "decimal" */,
         DECIMAL_YDB /* "decimal_ydb" */
@@ -28,7 +27,6 @@ public:
     TQueryInfoList GetWorkload(int type) override final;
     TQueryInfoList GetInitialData() override final;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override final;
-    void Init() override;
 
 protected:
     virtual std::pair<TString, TString> GetTableAndColumnForDetectFloatMode() const = 0;

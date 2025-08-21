@@ -23,8 +23,6 @@ std::pair<TString, TString> TTpcdsWorkloadGenerator::GetTableAndColumnForDetectF
 TWorkloadGeneratorBase::TSpecialDataTypes TTpcdsWorkloadGenerator::GetSpecialDataTypes() const {
     TString decimalType_5_2, decimalType_7_2, decimalType_15_2;
     switch (FloatMode) {
-    case TTpcBaseWorkloadParams::EFloatMode::AUTO:
-        ythrow yexception() << "Invalid bechavier";
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         decimalType_5_2 = decimalType_7_2 = decimalType_15_2 = "Double";
         break;

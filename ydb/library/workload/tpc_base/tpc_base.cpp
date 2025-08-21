@@ -5,6 +5,7 @@
 
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/streams/factory/open_by_signature/factory.h>
+#include <library/cpp/colorizer/colors.h>
 #include <util/stream/file.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -17,15 +18,7 @@ TTpcBaseWorkloadGenerator::TTpcBaseWorkloadGenerator(const TTpcBaseWorkloadParam
     , Params(params)
 {}
 
-void TTpcBaseWorkloadGenerator::Init() {
-    TWorkloadGeneratorBase::Init();
-    FloatMode = DetectFloatMode();
-}
-
 TTpcBaseWorkloadParams::EFloatMode TTpcBaseWorkloadGenerator::DetectFloatMode() const {
-    if (FloatMode != TTpcBaseWorkloadParams::EFloatMode::AUTO) {
-        return FloatMode;
-    }
     if (!Params.TableClient) { //dry run case
         return TTpcBaseWorkloadParams::EFloatMode::FLOAT;
     }
@@ -76,6 +69,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
     if (type) {
         return result;
     }
+    FloatMode = DetectFloatMode();
     auto resourcePrefix = "resfs/file/" + Params.GetWorkloadName() + "/";
     SubstGlobal(resourcePrefix, "-", "");
     resourcePrefix.to_lower();
@@ -130,8 +124,6 @@ void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf h
     TStringBuilder scaleFactor;
     scaleFactor << "$scale_factor = ";
     switch(FloatMode) {
-    case TTpcBaseWorkloadParams::EFloatMode::AUTO:
-        ythrow yexception() << "Internal error. Invalid float mode 'auto' in this context.";
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         scaleFactor << Params.GetScale();
 	break;
@@ -168,8 +160,6 @@ TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
         header << "--!syntax_pg" << Endl;
     }
     switch (FloatMode) {
-    case TTpcBaseWorkloadParams::EFloatMode::AUTO:
-        ythrow yexception() << "Internal error. Invalid float mode 'auto' in this context.";
     case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
         FilterHeader(header.Out, NResource::Find("consts.yql"), query);
         break;
@@ -202,17 +192,24 @@ TString TTpcBaseWorkloadGenerator::GetHeader(const TString& query) const {
 
 void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
+    TStringBuilder floatDescr;
+    auto colors = NColorizer::AutoColors(Cout);
+    floatDescr << "Float mode. Defines the type to be used for floating-point values. Available options:" << Endl
+        << "  " << colors.BoldColor() << EFloatMode::FLOAT << colors.OldColor() << Endl
+        << "    Use native Float type for floating-point values." << Endl
+        << "  " << colors.BoldColor() << EFloatMode::DECIMAL << colors.OldColor() << Endl
+        << "    Use Decimal type with canonical precision and scale." << Endl
+        << "  " << colors.BoldColor() << EFloatMode::DECIMAL_YDB << colors.OldColor() << Endl
+        << "    Use Decimal(22,9)." << Endl;
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption( "syntax", "Query syntax [" + GetEnumAllNames<EQuerySyntax>() + "].")
             .StoreResult(&Syntax).DefaultValue(Syntax);
         opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
             .DefaultValue(Scale).StoreResult(&Scale);
-        opts.AddLongOption("float-mode", "Float mode. Can be auto, float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9). In 'auto' case float mode will be detected by tables scheme.")
-            .StoreResult(&FloatMode).DefaultValue(EFloatMode::AUTO);
         break;
     case TWorkloadParams::ECommandType::Init:
-        opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9).")
+        opts.AddLongOption("float-mode", floatDescr)
             .StoreResult(&FloatMode).DefaultValue(FloatMode);
         opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
             .DefaultValue(Scale).StoreResult(&Scale);

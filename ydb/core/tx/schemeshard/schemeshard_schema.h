@@ -1330,6 +1330,7 @@ struct Schema : NIceDb::Schema {
         struct IndexType : Column<8, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; };
 
         struct State : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct SubState : Column<49, NScheme::NTypeIds::Uint32> {};
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
 
         struct InitiateTxId : Column<11, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1425,7 +1426,8 @@ struct Schema : NIceDb::Schema {
             ReadBytesProcessed,
             StartTime,
             EndTime,
-            UserSID
+            UserSID,
+            SubState
         >;
     };
 

@@ -170,6 +170,7 @@ public:
     virtual TErrorCallback GetErrorCallback() const = 0;
     virtual TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const = 0;
     virtual TTxId GetTxId() const = 0;
+    virtual std::shared_ptr<IDqSpiller> GetSpiller() const = 0;
 };
 
 class TDqTaskRunnerExecutionContextBase : public IDqTaskRunnerExecutionContext {
@@ -208,6 +209,10 @@ public:
     }
 
     TTxId GetTxId() const override {
+        return {};
+    }
+
+    std::shared_ptr<IDqSpiller> GetSpiller() const override {
         return {};
     }
 

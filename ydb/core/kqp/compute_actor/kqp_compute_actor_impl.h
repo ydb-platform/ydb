@@ -33,6 +33,18 @@ public:
         return TDqTaskRunnerExecutionContext::CreateChannelStorage(channelId, WithSpilling_ || withSpilling);
     }
 
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const override {
+        return TDqTaskRunnerExecutionContext::CreateChannelStorage(channelId, WithSpilling_ || withSpilling, actorSystem);
+    }
+
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, std::shared_ptr<IDqSpiller> spiller) const override {
+        return TDqTaskRunnerExecutionContext::CreateChannelStorage(channelId, WithSpilling_ || withSpilling, spiller);
+    }
+
+    std::shared_ptr<IDqSpiller> GetSpiller() const override {
+        return TDqTaskRunnerExecutionContext::GetSpiller();
+    }
+
 private:
     const bool WithSpilling_;
     const TMaybe<ui8> MinFillPercentage_;

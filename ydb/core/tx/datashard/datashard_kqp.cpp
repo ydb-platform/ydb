@@ -985,7 +985,11 @@ public:
         return {};
     }
 
-    NDq::TTxId GetTxId() const override {
+    NDq::    TTxId GetTxId() const override {
+        return {};
+    }
+
+    std::shared_ptr<NDq::IDqSpiller> GetSpiller() const override {
         return {};
     }
 };

@@ -12,6 +12,16 @@ TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, TWakeUp
     , WakeUpCallback_(std::move(wakeUpCallback))
     , ErrorCallback_(std::move(errorCallback))
     , SpillingTaskCounters_(MakeIntrusive<TSpillingTaskCounters>())
+    , Spiller_(nullptr)
+{
+}
+
+TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback, std::shared_ptr<IDqSpiller> spiller)
+    : TxId_(txId)
+    , WakeUpCallback_(std::move(wakeUpCallback))
+    , ErrorCallback_(std::move(errorCallback))
+    , SpillingTaskCounters_(MakeIntrusive<TSpillingTaskCounters>())
+    , Spiller_(std::move(spiller))
 {
 }
 
@@ -49,6 +59,14 @@ TIntrusivePtr<TSpillingTaskCounters> TDqTaskRunnerExecutionContext::GetSpillingT
 
 TTxId TDqTaskRunnerExecutionContext::GetTxId() const {
     return TxId_;
+}
+
+std::shared_ptr<IDqSpiller> TDqTaskRunnerExecutionContext::GetSpiller() const {
+    return Spiller_;
+}
+
+void TDqTaskRunnerExecutionContext::SetSpiller(std::shared_ptr<IDqSpiller> spiller) {
+    Spiller_ = std::move(spiller);
 }
 
 } // namespace NDq

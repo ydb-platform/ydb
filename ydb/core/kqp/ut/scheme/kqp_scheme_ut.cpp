@@ -2612,7 +2612,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const auto subtypeStr = (type == EIndexTypeSql::GlobalVectorKMeansTree
             ? "USING vector_kmeans_tree" : "");
         const auto withStr = (type == EIndexTypeSql::GlobalVectorKMeansTree
-            ? "WITH (similarity=inner_product, vector_type=uint8, vector_dimension=3)" : "");
+            ? "WITH (similarity=inner_product, vector_type=uint8, vector_dimension=3, levels=1, clusters=2)" : "");
 
         // Non-covered index, single column
         {
@@ -2908,7 +2908,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 INDEX vector_idx
                     GLOBAL USING vector_kmeans_tree
                     ON (Embedding)
-                    WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2)
             );
         )";
         auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
@@ -3606,7 +3606,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                         GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         COVER (Covered)
-                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
+                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2)
                 );
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
@@ -3650,7 +3650,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     INDEX vector_idx
                         GLOBAL USING vector_KMEANS_tree
                         ON (Embedding)
-                        WITH (similarity=COSINE, VECTOR_TYPE=float, vector_DIMENSION=1024)
+                        WITH (similarity=COSINE, VECTOR_TYPE=float, vector_DIMENSION=1024, levels=1, clusters=2)
                 );
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
@@ -3676,7 +3676,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     INDEX vector_idx
                         GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
-                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
+                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2)
                 );
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();

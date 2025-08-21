@@ -91,6 +91,9 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             if (parameters.enableCompactificationByKey) {
                 tabletConfig->SetEnableCompactification(true);
             }
+
+            tabletConfig->SetEnablePerPartitionCounters(parameters.enablePerPartitionCounters);
+
             for (auto& u : users) {
                 if (u.second)
                     partitionConfig->AddImportantClientId(u.first);

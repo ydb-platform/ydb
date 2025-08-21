@@ -95,8 +95,19 @@ struct TDictAndKeysResult {
 TDictAndKeysResult PrecomputeDictAndKeys(const TCondenseInputResult& condenseResult, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx);
 
-NYql::NNodes::TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const NYql::TKikimrTableDescription & table,  NYql::NNodes::TDqPhyPrecompute& precompute,
+NYql::NNodes::TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const NYql::TKikimrTableDescription & table, NYql::NNodes::TDqPhyPrecompute& precompute,
     NYql::NNodes::TExprBase input,
     const NYql::NNodes::TKqpTable& kqpTableNode, const NYql::TPositionHandle& pos, NYql::TExprContext& ctx, const TVector<TString>& extraColumnsToRead = {});
+
+NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDescription& table,
+    const NYql::NNodes::TKqpTable& tableNode,
+    const TString& indexName,
+    const TVector<TStringBuf>& indexTableColumns,
+    const NYql::NNodes::TExprBase& inputRows,
+    bool withData,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+TVector<TStringBuf> BuildVectorIndexPostingColumns(const NYql::TKikimrTableDescription& table,
+    const NYql::TIndexDescription* indexDesc);
 
 } // NKikimr::NKqp::NOpt

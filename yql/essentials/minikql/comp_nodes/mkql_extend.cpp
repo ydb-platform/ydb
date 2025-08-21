@@ -15,26 +15,44 @@ namespace {
 
 class TState : public TComputationValue<TState> {
 public:
-    ssize_t Index;
-    std::queue<ssize_t> Queue;
+    ssize_t Index;              // Index of current Flow (Input), binds to LLVM, should be 1st member in this class
+    std::vector<ssize_t> Queue; // Custom Queue of indices in range [0, non-finished-flow-count), empty when all are Finish-ed
+    size_t QueueIndex = 0;      // Position in Queue, used to update Index and helps to iterate over Yield-ed Flows
 
     TState(TMemoryUsageInfo* memInfo, ssize_t count)
         : TComputationValue<TState>(memInfo)
     {
+        Queue.reserve(count);
         while (count)
-            Queue.push(--count);
-        Index = Queue.front();
+            Queue.push_back(--count);
+        Index = Queue[QueueIndex];
     }
 
-    void NextFlow() {
-        Queue.push(Queue.front());
-        Queue.pop();
-        Index = Queue.front();
+    void SelectCurrentFlow() {
+        if (QueueIndex) {
+            Queue[QueueIndex] = Queue[0];
+            Queue[0] = Index;
+            QueueIndex = 0;
+        }
+    }
+
+    bool NextFlow() {
+        if (++QueueIndex >= Queue.size()) {
+            Index = Queue[QueueIndex = 0];
+            return false;
+        }
+        Index = Queue[QueueIndex];
+        return true;
     }
 
     void FlowOver() {
-        Queue.pop();
-        Index = Queue.empty() ? -1LL : Queue.front();
+        if (QueueIndex + 1 < Queue.size()) {
+            Queue[QueueIndex] = Queue[Queue.size() - 1];
+        } else {
+            QueueIndex = 0;
+        }
+        Queue.resize(Queue.size() - 1);
+        Index = Queue.empty() ? -1LL : Queue[QueueIndex];
     }
 };
 #ifndef MKQL_DISABLE_CODEGEN
@@ -78,10 +96,13 @@ public:
         while (s.Index >= 0) {
             switch (Flows_[s.Index]->FetchValues(ctx, output)) {
                 case EFetchResult::One:
+                    s.SelectCurrentFlow();
                     return EFetchResult::One;
                 case EFetchResult::Yield:
-                    s.NextFlow();
-                    return EFetchResult::Yield;
+                    if (!s.NextFlow()) {
+                        return EFetchResult::Yield;
+                    }
+                    break;
                 case EFetchResult::Finish:
                     s.FlowOver();
                     break;
@@ -105,6 +126,7 @@ public:
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
         const auto funcType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
+        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
@@ -165,17 +187,22 @@ public:
             new StoreInst(values, arrayPtr, block);
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
+
+            const auto selcFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::SelectCurrentFlow>());
+            const auto selcPtr = CastInst::Create(Instruction::IntToPtr, selcFunc, PointerType::getUnqual(funcType), "select_ptr", block);
+            CallInst::Create(funcType, selcPtr, {stateArg}, "", block);
+
             BranchInst::Create(done, block);
         }
 
         block = next;
 
         const auto nextFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::NextFlow>());
-        const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(funcType), "next_ptr", block);
-        CallInst::Create(funcType, nextPtr, {stateArg}, "", block);
+        const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(boolFuncType), "next_ptr", block);
+        const auto nextContinue = CallInst::Create(boolFuncType, nextPtr, {stateArg}, "", block);
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
-        BranchInst::Create(done, block);
+        BranchInst::Create(loop, done, nextContinue, block);
 
         block = over;
 
@@ -230,12 +257,16 @@ public:
         auto& s = GetState(state, ctx);
         while (s.Index >= 0) {
             auto item = Flows[s.Index]->GetValue(ctx);
-            if (item.IsYield())
-                s.NextFlow();
-            if (item.IsFinish())
+            if (item.IsYield()) {
+                if (!s.NextFlow()) {
+                    return item.Release();
+                }
+            } else if (item.IsFinish()) {
                 s.FlowOver();
-            else
+            } else {
+                s.SelectCurrentFlow();
                 return item.Release();
+            }
         }
         return NUdf::TUnboxedValuePod::MakeFinish();
     }
@@ -251,12 +282,14 @@ public:
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
         const auto funcType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
+        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {statePtrType}, false);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
+        const auto selc = BasicBlock::Create(context, "selc", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
         BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
@@ -283,19 +316,21 @@ public:
 
         const auto index = new LoadInst(indexType, indexPtr, "index", block);
 
-        const auto result = PHINode::Create(valueType, Flows.size() + 2U, "result", done);
+        const auto result = PHINode::Create(valueType, 3U, "result", done);
+        const auto selectFlow = PHINode::Create(valueType, Flows.size(), "select", selc);
 
         const auto select = SwitchInst::Create(index, done, Flows.size(), block);
         result->addIncoming(GetFinish(context), block);
 
         for (auto i = 0U; i < Flows.size(); ++i) {
             const auto flow = BasicBlock::Create(context, (TString("flow_") += ToString(i)).c_str(), ctx.Func);
+
             select->addCase(ConstantInt::get(indexType, i), flow);
 
             block = flow;
             const auto item = GetNodeValue(Flows[i], ctx, block);
-            result->addIncoming(item, block);
-            const auto way = SwitchInst::Create(item, done, 2U, block);
+            selectFlow->addIncoming(item, block);
+            const auto way = SwitchInst::Create(item, selc, 2U, block);
             way->addCase(GetFinish(context), over);
             way->addCase(GetYield(context), next);
         }
@@ -303,11 +338,11 @@ public:
         block = next;
 
         const auto nextFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::NextFlow>());
-        const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(funcType), "next_ptr", block);
-        CallInst::Create(funcType, nextPtr, {stateArg}, "", block);
+        const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(boolFuncType), "next_ptr", block);
+        const auto nextContinue = CallInst::Create(boolFuncType, nextPtr, {stateArg}, "", block);
         result->addIncoming(GetYield(context), block);
 
-        BranchInst::Create(done, block);
+        BranchInst::Create(loop, done, nextContinue, block);
 
         block = over;
 
@@ -316,6 +351,16 @@ public:
         CallInst::Create(funcType, overPtr, {stateArg}, "", block);
 
         BranchInst::Create(loop, block);
+
+        block = selc;
+
+        result->addIncoming(selectFlow, block);
+
+        const auto selcFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::SelectCurrentFlow>());
+        const auto selcPtr = CastInst::Create(Instruction::IntToPtr, selcFunc, PointerType::getUnqual(funcType), "select_ptr", block);
+        CallInst::Create(funcType, selcPtr, {stateArg}, "", block);
+
+        BranchInst::Create(done, block);
 
         block = done;
         return result;

@@ -88,6 +88,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideNodesTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
+    Y_UNIT_TEST_LLVM(TestSkipAndTakeSingular) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+        constexpr ui64 limit = 100;
+        constexpr ui64 offset = 100;
+
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.Take(pb.Skip(pb.Source(),
+            pb.NewDataLiteral<ui64>(offset)), pb.NewDataLiteral<ui64>(limit)),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }
+        ));
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto length = graph->GetValue().GetListLength();
+        UNIT_ASSERT_VALUES_EQUAL(limit, length);
+    }
+
     Y_UNIT_TEST_LLVM(TestDoNotCalculateSkipped) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;

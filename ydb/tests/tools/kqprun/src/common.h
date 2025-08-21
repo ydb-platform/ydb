@@ -13,7 +13,6 @@
 
 namespace NKqpRun {
 
-constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 constexpr ui64 DEFAULT_STORAGE_SIZE = 32_GB;
 constexpr TDuration TENANT_CREATION_TIMEOUT = TDuration::Seconds(30);
 

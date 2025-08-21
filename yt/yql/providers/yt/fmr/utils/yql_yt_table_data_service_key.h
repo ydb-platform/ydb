@@ -4,8 +4,8 @@
 
 namespace NYql::NFmr {
 
-TString GetTableDataServiceKey(const TString& tableId, const TString& partId, ui64 chunk);
+TString GetTableDataServiceGroup(const TString& tableId, const TString& partId);
 
-std::pair<TString, ui64> GetTableDataServiceGroupAndChunk(const TString& fullKey);
+TString GetTableDataServiceChunkId(ui64 chunkNum, const TString& columnGroupName);
 
 } // namespace NYql::NFmr

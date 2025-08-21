@@ -175,4 +175,13 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> TMainBase::CreateFunc
     return functionRegistry;
 }
 
+void TMainBase::ReplaceYqlTokenTemplate(TString& text) const {
+    const TString tokenVariableName = TStringBuilder() << "${" << YQL_TOKEN_VARIABLE << "}";
+    if (YqlToken) {
+        SubstGlobal(text, tokenVariableName, YqlToken);
+    } else if (text.Contains(tokenVariableName)) {
+        ythrow yexception() << "Failed to replace ${" << YQL_TOKEN_VARIABLE << "} template, please specify " << YQL_TOKEN_VARIABLE << " environment variable";
+    }
+}
+
 }  // namespace NKikimrRun

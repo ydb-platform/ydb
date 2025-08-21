@@ -322,10 +322,6 @@ public:
         return TBlobRange();
     }
 
-    virtual std::optional<TSnapshot> GetDataSnapshot() const {
-        return std::nullopt;
-    }
-
     IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)

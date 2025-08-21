@@ -14,6 +14,7 @@ SRCS(
     kqp_sequencer_actor.cpp
     kqp_sequencer_factory.cpp
     kqp_scan_data_meta.cpp
+    kqp_stream_lookup_join_helpers.cpp
     kqp_stream_lookup_actor.cpp
     kqp_stream_lookup_actor.h
     kqp_stream_lookup_factory.cpp
@@ -22,15 +23,16 @@ SRCS(
     kqp_stream_lookup_worker.h
     kqp_tasks_runner.cpp
     kqp_transport.cpp
+    kqp_vector_actor.cpp
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
     kqp_write_table.cpp
 
-    scheduler/new/kqp_compute_scheduler_service.cpp
-    scheduler/new/kqp_schedulable_actor.cpp
-    scheduler/new/tree/dynamic.cpp
-    scheduler/new/tree/snapshot.cpp
-    scheduler/old/kqp_compute_scheduler.cpp
+    scheduler/kqp_compute_scheduler_service.cpp
+    scheduler/kqp_schedulable_actor.cpp
+    scheduler/kqp_schedulable_task.cpp
+    scheduler/tree/dynamic.cpp
+    scheduler/tree/snapshot.cpp
 )
 
 PEERDIR(

@@ -195,6 +195,8 @@ void TTargetBase::Progress(const TActorContext& ctx) {
     case EDstState::Alter:
         if (Workers) {
             RemoveWorkers(ctx);
+        } else if (!DstCreator && !DstPathId) {
+            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         } else if (!DstAlterer) {
             DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }

@@ -323,13 +323,9 @@ void TestOverflow(TTestContext& ctx) {
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
     UNIT_ASSERT_VALUES_EQUAL(HardLimit, ch->UpdateFillLevel());
-    try {
-        auto row = ctx.CreateRow(100'500);
-        PushRow(ctx, std::move(row), ch);
-        UNIT_FAIL("");
-    } catch (yexception& e) {
-        UNIT_ASSERT(TString(e.what()).Contains("requirement GetFillLevel() != HardLimit failed"));
-    }
+    auto row = ctx.CreateRow(100'500);
+    PushRow(ctx, std::move(row), ch);
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, ch->UpdateFillLevel());
 }
 
 void TestPopAll(TTestContext& ctx) {

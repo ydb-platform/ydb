@@ -2152,17 +2152,12 @@ private:
     TNodePtr Node_;
 };
 
-THoppingWindow::THoppingWindow(TPosition pos, const TVector<TNodePtr>& args)
+THoppingWindow::THoppingWindow(TPosition pos, TVector<TNodePtr> args)
     : INode(pos)
-    , Args_(args)
+    , Args_(std::move(args))
     , FakeSource_(BuildFakeSource(pos))
     , Valid_(false)
 {}
-
-void THoppingWindow::MarkValid() {
-    YQL_ENSURE(!HasState(ENodeState::Initialized));
-    Valid_ = true;
-}
 
 TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
     YQL_ENSURE(HasState(ENodeState::Initialized));
@@ -2170,12 +2165,22 @@ TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
     return Y(
         "HoppingTraits",
         Y("ListItemType", Y("TypeOf", label)),
-        BuildLambda(Pos_, Y("row"), Y("Just", Y("SystemMetadata", Y("String", Q("write_time")), Y("DependsOn", "row")))),
-        Hop,
-        Interval,
-        Interval,
-        Q("true"),
-        Q("v2"));
+        BuildLambda(Pos_, Y("row"), TimeExtractor_),
+        Hop_,
+        Interval_,
+        Delay_,
+        Q(DataWatermarks_),
+        Q("v2")
+    );
+}
+
+TNodePtr THoppingWindow::GetInterval() const {
+    return Interval_;
+}
+
+void THoppingWindow::MarkValid() {
+    YQL_ENSURE(!HasState(ENodeState::Initialized));
+    Valid_ = true;
 }
 
 bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {
@@ -2184,8 +2189,8 @@ bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    if (!(Args_.size() == 2)) {
-        ctx.Error(Pos_) << "HoppingWindow requires two arguments";
+    if (Args_.size() != 3) {
+        ctx.Error(Pos_) << "HoppingWindow requires three arguments";
         return false;
     }
 
@@ -2194,14 +2199,19 @@ bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    auto hopExpr = Args_[0];
-    auto intervalExpr = Args_[1];
-    if (!(hopExpr->Init(ctx, FakeSource_.Get()) && intervalExpr->Init(ctx, FakeSource_.Get()))) {
+    auto timeExtractor = Args_[0];
+    auto hopExpr = Args_[1];
+    auto intervalExpr = Args_[2];
+
+    if (!timeExtractor->Init(ctx, src) ||
+        !hopExpr->Init(ctx, FakeSource_.Get()) ||
+        !intervalExpr->Init(ctx, FakeSource_.Get())) {
         return false;
     }
 
-    Hop = ProcessIntervalParam(hopExpr);
-    Interval = ProcessIntervalParam(intervalExpr);
+    TimeExtractor_ = timeExtractor;
+    Hop_ = ProcessIntervalParam(hopExpr);
+    Interval_ = ProcessIntervalParam(intervalExpr);
 
     return true;
 }
@@ -2287,7 +2297,7 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
 
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,
     TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, const TDeferredAtom& typeConfig, TNodePtr runConfig,
-    TNodePtr options)
+    TNodePtr options, const TVector<TNodePtr>& depends)
 {
     const TString fullName = module + "." + name;
     TNodePtr callable;
@@ -2319,24 +2329,30 @@ TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const
     // optional arguments
     if (customUserType) {
         sqlCallArgs.push_back(customUserType);
-    } else if (!typeConfig.Empty() || runConfig || options) {
+    } else if (!typeConfig.Empty() || runConfig || options || !depends.empty()) {
         sqlCallArgs.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
 
     if (!typeConfig.Empty()) {
         sqlCallArgs.push_back(typeConfig.Build());
-    } else if (runConfig || options) {
+    } else if (runConfig || options || !depends.empty()) {
         sqlCallArgs.push_back(BuildQuotedAtom(pos, ""));
     }
 
     if (runConfig) {
         sqlCallArgs.push_back(runConfig);
-    } else if (options) {
+    } else if (options || !depends.empty()) {
         sqlCallArgs.push_back(new TCallNodeImpl(pos, "Void", {}));
     }
 
     if (options) {
         sqlCallArgs.push_back(options);
+    } else if (!depends.empty()) {
+        sqlCallArgs.push_back(BuildQuote(pos, BuildList(pos)));
+    }
+
+    for (const auto& d : depends) {
+        sqlCallArgs.push_back(new TCallNodeImpl(pos, "DependsOn", { d }));
     }
 
     return new TCallNodeImpl(pos, "SqlCall", sqlCallArgs);
@@ -2607,54 +2623,71 @@ private:
     TString Mode_;
 };
 
-template <bool IsStart>
-class THoppingTime final: public TAstListNode {
+template<bool IsStart>
+class THoppingTime final : public TAstListNode {
 public:
-    THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {})
+    THoppingTime(TPosition pos, TVector<TNodePtr> args)
         : TAstListNode(pos)
-    {
-        Y_UNUSED(args);
-    }
+        , Args_(std::move(args))
+    {}
 
 private:
-    TNodePtr DoClone() const override {
-        return new THoppingTime(GetPos());
-    }
-
     bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(ctx);
+        if (!src || src->IsFake()) {
+            ctx.Error(Pos_) << GetOpName() << " requires data source";
+            return false;
+        }
+
+        if (Args_.size() > 0) {
+            ctx.Error(Pos_) << GetOpName() << " requires exactly 0 arguments";
+            return false;
+        }
 
         auto legacySpec = src->GetLegacyHoppingWindowSpec();
         auto spec = src->GetHoppingWindowSpec();
         if (!legacySpec && !spec) {
-            ctx.Error(Pos_) << "No hopping window parameters in aggregation";
+            if (src->HasAggregations()) {
+                ctx.Error(Pos_) << GetOpName() << " can not be used here: HoppingWindow specification is missing in GROUP BY";
+            } else {
+                ctx.Error(Pos_) << GetOpName() << " can not be used without aggregation by HoppingWindow";
+            }
             return false;
         }
-
-        Nodes_.clear();
 
         const auto fieldName = legacySpec
             ? "_yql_time"
             : spec->GetLabel();
 
-        const auto interval = legacySpec
+        if constexpr (IsStart) {
+            const auto interval = legacySpec
             ? legacySpec->Interval
-            : dynamic_cast<THoppingWindow*>(spec.Get())->Interval;
+            : dynamic_cast<THoppingWindow*>(spec.Get())->GetInterval();
 
-        if (!IsStart) {
+            Add("Sub",
+                Y("Member", "row", Q(fieldName)),
+                interval
+            );
+        } else {
             Add("Member", "row", Q(fieldName));
-            return true;
         }
 
-        Add("Sub",
-            Y("Member", "row", Q(fieldName)),
-            interval);
         return true;
     }
 
     void DoUpdateState() const override {
         State_.Set(ENodeState::Aggregated, true);
     }
+
+    TNodePtr DoClone() const override {
+        return new THoppingTime<IsStart>(Pos_, CloneContainer(Args_));
+    }
+
+    TString GetOpName() const override {
+        return IsStart ? "HopStart" : "HopEnd";
+    }
+
+private:
+    TVector<TNodePtr> Args_;
 };
 
 class TInvalidBuiltin final: public INode {
@@ -3470,7 +3503,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             };
             auto fullName = moduleName + "." + name;
             return new TYqlTypeConfigUdf(pos, fullName, multiArgs, multiArgs.size() + 1);
-        } else if (!(ns.StartsWith("re2") && lowerName == "options")) {
+        } else if (!(ns.StartsWith("re2") && (lowerName == "options" || lowerName == "isvalidregexp"))) {
             auto newArgs = args;
             if (ns.StartsWith("re2")) {
                 // convert run config is tuple of string and optional options
@@ -3931,7 +3964,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     TNodePtr typeConfig = MakeTypeConfig(pos, ns, usedArgs);
     return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType,
-        TDeferredAtom(typeConfig, ctx), nullptr, nullptr);
+        TDeferredAtom(typeConfig, ctx), nullptr, nullptr, {});
 }
 
 void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind)>& callback) {

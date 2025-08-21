@@ -9,7 +9,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TTzHelpers, Unsigned)
+TEST(TTzHelpersTest, Unsigned)
 {
     ui32 timestamp = 42;
     auto presortedString = MakeTzString<ui32>(timestamp, "Europe/Moscow");
@@ -19,7 +19,7 @@ TEST(TTzHelpers, Unsigned)
     ASSERT_EQ(res.second, "Europe/Moscow");
 }
 
-TEST(TTzHelpers, Signed)
+TEST(TTzHelpersTest, Signed)
 {
     i32 timestamp = -42;
     auto presortedString  = MakeTzString<i32>(timestamp, "Europe/Moscow");
@@ -29,14 +29,14 @@ TEST(TTzHelpers, Signed)
     ASSERT_EQ(res.second, "Europe/Moscow");
 }
 
-TEST(TTzHelpers, TzName)
+TEST(TTzHelpersTest, TzName)
 {
     for (int i = 0; i < 5; i++) {
         ASSERT_EQ(GetTzIndex(GetTzName(i)), i);
     }
 }
 
-TEST(TTzHelpers, CorrectSort)
+TEST(TTzHelpersTest, CorrectSort)
 {
     // Make sure that our string representations are sorted correctly.
     std::vector<i32> timestamps = {0, -1, -10, 4322, 12};

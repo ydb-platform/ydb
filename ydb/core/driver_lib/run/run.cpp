@@ -754,7 +754,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasLegacy) {
             // start legacy service
-            auto grpcService = new NGRpcProxy::TGRpcService();
+            auto grpcService = new NGRpcProxy::TGRpcService(grpcRequestProxies[0]);
             auto future = grpcService->Prepare(ActorSystem.Get(), NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NMsgBusProxy::CreateMsgBusProxyId(), Counters);
             auto startCb = [grpcService](NThreading::TFuture<void> result) {
                 if (result.HasException()) {
@@ -1299,6 +1299,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->BridgeModeEnabled = true;
     }
 
+    if (runConfig.AppConfig.HasStatisticsConfig()) {
+        AppData->StatisticsConfig = runConfig.AppConfig.GetStatisticsConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1741,6 +1745,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableGroupedMemoryLimiter) {
         sil->AddServiceInitializer(new TScanGroupedMemoryLimiterInitializer(runConfig));
         sil->AddServiceInitializer(new TCompGroupedMemoryLimiterInitializer(runConfig));
+        sil->AddServiceInitializer(new TDeduplicationGroupedMemoryLimiterInitializer(runConfig));
     }
 
     if (serviceMask.EnableCompPriorities) {

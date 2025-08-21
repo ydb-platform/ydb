@@ -302,9 +302,9 @@
     ],
     "test.test[blocks-agg_by_key-default.txt-Peephole]": [
         {
-            "checksum": "dad5945424bc4c6ce2b36208dafca12f",
-            "size": 1400,
-            "uri": "https://{canondata_backend}/1809005/8279b674a9a28181ade233ada2f27748f8cb3017/resource.tar.gz#test.test_blocks-agg_by_key-default.txt-Peephole_/opt.yql"
+            "checksum": "19c61f050b3cd4fad9680fb98ca719ec",
+            "size": 1388,
+            "uri": "https://{canondata_backend}/995452/d35a03ad50f8708e896cf3d4b911f6537e0c7313/resource.tar.gz#test.test_blocks-agg_by_key-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-agg_by_key-default.txt-Results]": [
@@ -323,9 +323,9 @@
     ],
     "test.test[blocks-agg_with_long_keys-default.txt-Peephole]": [
         {
-            "checksum": "c8f494b293f588852db9bb9a43439a45",
-            "size": 1738,
-            "uri": "https://{canondata_backend}/1942173/aec80438f8fc63ab8d93cee4a56261df6843c1f3/resource.tar.gz#test.test_blocks-agg_with_long_keys-default.txt-Peephole_/opt.yql"
+            "checksum": "6d98c3b9726d96ccf911b802534df4cc",
+            "size": 1726,
+            "uri": "https://{canondata_backend}/995452/d35a03ad50f8708e896cf3d4b911f6537e0c7313/resource.tar.gz#test.test_blocks-agg_with_long_keys-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-agg_with_long_keys-default.txt-Results]": [
@@ -344,9 +344,9 @@
     ],
     "test.test[blocks-or_opt_scalar-default.txt-Peephole]": [
         {
-            "checksum": "d4f552f4259424a5c8d52d472c39ddcb",
-            "size": 1848,
-            "uri": "https://{canondata_backend}/1809005/8279b674a9a28181ade233ada2f27748f8cb3017/resource.tar.gz#test.test_blocks-or_opt_scalar-default.txt-Peephole_/opt.yql"
+            "checksum": "4c531c1f99c207fbb9dec11de905274e",
+            "size": 1808,
+            "uri": "https://{canondata_backend}/995452/d35a03ad50f8708e896cf3d4b911f6537e0c7313/resource.tar.gz#test.test_blocks-or_opt_scalar-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-or_opt_scalar-default.txt-Results]": [

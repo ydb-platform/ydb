@@ -292,6 +292,10 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
     }
 
+    if (const auto count = metadata->TableSettings.ExternalDataChannelsCount) {
+        proto.mutable_storage_settings()->set_external_data_channels_count(*count);
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;
@@ -1401,15 +1405,20 @@ public:
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(GetDatabase() ? GetDatabase() : NSchemeHelpers::GetDomainDatabase(AppData(ActorSystem)));
             if (settings.Cascade) {
                 return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
             } else {
                 tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropBackupCollection);
             }
 
+            TString database = GetDatabase() ? GetDatabase() : NSchemeHelpers::GetDomainDatabase(AppData(ActorSystem));
+            tx.SetWorkingDir(JoinPath({database, ".backups", "collections"}));
+
             auto& op = *tx.MutableDrop();
-            op.SetName(pathPair.second);
+            op.SetName(settings.Name);
+            
+            auto& dropBackupOp = *tx.MutableDropBackupCollection();
+            dropBackupOp.SetName(settings.Name);
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

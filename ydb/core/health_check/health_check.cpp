@@ -59,6 +59,7 @@ struct std::hash<NKikimrBlobStorage::TVSlotId> {
 
 #define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 #define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
+#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 
 namespace NKikimr::NHealthCheck {
 
@@ -276,7 +277,7 @@ public:
         ui32 Generation;
         bool LayoutCorrect = true;
         std::vector<TGroupState*> BridgeGroups;
-        std::optional<TBridgePileId> BridgePileId;
+        TBridgePileId BridgePileId;
     };
 
     struct TSelfCheckResult {
@@ -378,7 +379,7 @@ public:
                 }
                 std::sort(reason.begin(), reason.end());
                 reason.erase(std::unique(reason.begin(), reason.end()), reason.end());
-                TIssueRecord& issueRecord(*IssueRecords.emplace(IssueRecords.begin()));
+                TIssueRecord& issueRecord(*IssueRecords.emplace(IssueRecords.end()));
                 Ydb::Monitoring::IssueLog& issueLog(issueRecord.IssueLog);
                 issueLog.set_status(status);
                 issueLog.set_message(message);
@@ -490,22 +491,23 @@ public:
         TRequestResponse& operator =(const TRequestResponse&) = delete;
         TRequestResponse& operator =(TRequestResponse&&) = default;
 
-        void Set(std::unique_ptr<T>&& response) {
+        bool Set(std::unique_ptr<T>&& response) {
+            if (IsDone()) {
+                return false;
+            }
             constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {TSelfCheckRequest::IsSuccess(r);};
             if constexpr (hasErrorCheck) {
                 if (!TSelfCheckRequest::IsSuccess(response)) {
-                    Error(TSelfCheckRequest::GetError(response));
-                    return;
+                    return Error(TSelfCheckRequest::GetError(response));
                 }
             }
-            if (!IsDone()) {
-                Span.EndOk();
-            }
+            Span.EndOk();
             Response = std::move(response);
+            return true;
         }
 
-        void Set(TAutoPtr<TEventHandle<T>>&& response) {
-            Set(std::unique_ptr<T>(response->Release().Release()));
+        bool Set(TAutoPtr<TEventHandle<T>>&& response) {
+            return Set(std::unique_ptr<T>(response->Release().Release()));
         }
 
         bool Error(const TString& error) {
@@ -847,7 +849,9 @@ public:
     }
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
-        NodeWardenStorageConfig->Set(std::move(ev));
+        if (!NodeWardenStorageConfig->Set(std::move(ev))) {
+            return;
+        }
         const NKikimrBlobStorage::TStorageConfig& config = *NodeWardenStorageConfig->Get()->Config;
         RequestDone("TEvNodeWardenStorageConfig");
         if (config.GetSelfManagementConfig().GetEnabled() && config.GetGeneration() == 0) {
@@ -940,6 +944,7 @@ public:
 
     void RequestDone(const char* name) {
         --Requests;
+        BLOG_TRACE("RequestDone(" << name << "): remaining " << Requests);
         if (Requests == 0) {
             ReplyAndPassAway();
         }
@@ -1159,7 +1164,9 @@ public:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        DatabaseBoardInfo->Set(std::move(ev));
+        if (!DatabaseBoardInfo->Set(std::move(ev))) {
+            return;
+        }
         if (DatabaseBoardInfo->IsOk()) {
             TDatabaseState& database = DatabaseState[FilterDatabase];
             for (const auto& entry : DatabaseBoardInfo->Get()->InfoEntries) {
@@ -1177,18 +1184,34 @@ public:
         auto eventId = ev->Get()->EventId;
         auto nodeId = ev->Get()->NodeId;
         switch (eventId) {
-            case TEvWhiteboard::EvSystemStateRequest:
-                NodeSystemState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1});
+            case TEvWhiteboard::EvSystemStateRequest: {
+                auto& request = NodeSystemState[nodeId];
+                if (!request.IsOk()) {
+                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1});
+                }
                 break;
-            case TEvWhiteboard::EvVDiskStateRequest:
-                NodeVDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+            }
+            case TEvWhiteboard::EvVDiskStateRequest: {
+                auto& request = NodeVDiskState[nodeId];
+                if (!request.IsOk()) {
+                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+                }
                 break;
-            case TEvWhiteboard::EvPDiskStateRequest:
-                NodePDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+            }
+            case TEvWhiteboard::EvPDiskStateRequest: {
+                auto& request = NodePDiskState[nodeId];
+                if (!request.IsOk()) {
+                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+                }
                 break;
-            case TEvWhiteboard::EvBSGroupStateRequest:
-                NodeBSGroupState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+            }
+            case TEvWhiteboard::EvBSGroupStateRequest: {
+                auto& request = NodeBSGroupState[nodeId];
+                if (!request.IsOk()) {
+                    request = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+                }
                 break;
+            }
             default:
                 RequestDone("unsupported event scheduled");
                 break;
@@ -1383,7 +1406,9 @@ public:
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         bool needComputeFromStaticNodes = !IsSpecificDatabaseFilter();
-        NodesInfo->Set(std::move(ev));
+        if (!NodesInfo->Set(std::move(ev))) {
+            return;
+        }
         for (const auto& ni : NodesInfo->Get()->Nodes) {
             MergedNodeInfo[ni.NodeId] = &ni;
             if (IsStaticNode(ni.NodeId) && needComputeFromStaticNodes) {
@@ -1404,28 +1429,36 @@ public:
 
     void Handle(TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestStoragePools);
-        StoragePools->Set(std::move(ev));
+        if (!StoragePools->Set(std::move(ev))) {
+            return;
+        }
         AggregateBSControllerState();
         RequestDone("TEvGetStoragePoolsRequest");
     }
 
     void Handle(TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestGroups);
-        Groups->Set(std::move(ev));
+        if (!Groups->Set(std::move(ev))) {
+            return;
+        }
         AggregateBSControllerState();
         RequestDone("TEvGetGroupsRequest");
     }
 
     void Handle(TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestVSlots);
-        VSlots->Set(std::move(ev));
+        if (!VSlots->Set(std::move(ev))) {
+            return;
+        }
         AggregateBSControllerState();
         RequestDone("TEvGetVSlotsRequest");
     }
 
     void Handle(TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(TTabletRequestsState::RequestPDisks);
-        PDisks->Set(std::move(ev));
+        if (!PDisks->Set(std::move(ev))) {
+            return;
+        }
         AggregateBSControllerState();
         RequestDone("TEvGetPDisksRequest");
     }
@@ -1435,7 +1468,9 @@ public:
         TTabletId schemeShardId = TabletRequests.CompleteRequest(TTabletRequestsState::RequestGetPartitionStats);
         if (schemeShardId) {
             auto& partitionStatsResult(GetPartitionStatsResult[schemeShardId]);
-            partitionStatsResult.Set(std::move(ev));
+            if (!partitionStatsResult.Set(std::move(ev))) {
+                return;
+            }
             if (partitionStatsResult.IsOk()) {
                 std::map<double, std::pair<const NKikimrSysView::TPartitionStatsResult*, const NKikimrSysView::TPartitionStats*>> overloadedPaths;
                 for (const NKikimrSysView::TPartitionStatsResult& statsPath : partitionStatsResult.Get()->Record.GetStats()) {
@@ -1502,7 +1537,9 @@ public:
         TabletRequests.CompleteRequest(ev->Cookie);
         TString path = ev->Get()->GetRecord().path();
         auto& response = DescribeByPath[path];
-        response.Set(std::move(ev));
+        if (!response.Set(std::move(ev))) {
+            return;
+        }
         if (response.IsOk()) {
             auto itOverloadedShardHint = OverloadedShardHints.find(path);
             if (itOverloadedShardHint != OverloadedShardHints.end()) {
@@ -1547,7 +1584,9 @@ public:
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& response = NavigateKeySet[ev->Get()->Request->Cookie];
-        response.Set(std::move(ev));
+        if (!response.Set(std::move(ev))) {
+            return;
+        }
         if (response.IsOk()) {
             auto domainInfo = response.Get()->Request->ResultSet.begin()->DomainInfo;
             TString path = CanonizePath(response.Get()->Request->ResultSet.begin()->Path);
@@ -1612,7 +1651,9 @@ public:
         TInstant aliveBarrier = TInstant::Now() - TDuration::Minutes(5);
         {
             auto& response = HiveNodeStats[hiveId];
-            response.Set(std::move(ev));
+            if (!response.Set(std::move(ev))) {
+                return;
+            }
             if (hiveId != RootHiveId) {
                 for (const NKikimrHive::THiveNodeStats& hiveStat : response.Get()->Record.GetNodeStats()) {
                     if (hiveStat.HasNodeDomain()) {
@@ -1649,13 +1690,17 @@ public:
 
     void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
         TTabletId hiveId = TabletRequests.CompleteRequest(ev->Cookie);
-        HiveInfo[hiveId].Set(std::move(ev));
+        if (!HiveInfo[hiveId].Set(std::move(ev))) {
+            return;
+        }
         RequestDone("TEvResponseHiveInfo");
     }
 
     void Handle(TEvConsole::TEvListTenantsResponse::TPtr& ev) {
         TabletRequests.CompleteRequest(ev->Cookie);
-        ListTenants->Set(std::move(ev));
+        if (!ListTenants->Set(std::move(ev))) {
+            return;
+        }
         RequestSchemeCacheNavigate(DomainPath);
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ListTenants->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
@@ -1669,7 +1714,9 @@ public:
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
         auto& nodeSystemState(NodeSystemState[nodeId]);
-        nodeSystemState.Set(std::move(ev));
+        if (!nodeSystemState.Set(std::move(ev))) {
+            return;
+      }
         RequestDone("TEvSystemStateResponse");
     }
 
@@ -1756,9 +1803,7 @@ public:
             groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
             groupState.Generation = group.GetInfo().GetGeneration();
             groupState.LayoutCorrect = group.GetInfo().GetLayoutCorrect();
-            if (group.GetInfo().HasBridgePileId()) {
-                groupState.BridgePileId = TBridgePileId::FromValue(group.GetInfo().GetBridgePileId());
-            }
+            groupState.BridgePileId = TBridgePileId::FromProto(&group.GetInfo(), &NKikimrSysView::TGroupInfo::GetBridgePileId);
             if (group.GetInfo().HasProxyGroupId()) {
                 GroupState[group.GetInfo().GetProxyGroupId()].BridgeGroups.push_back(&groupState);
             } else {
@@ -2472,21 +2517,27 @@ public:
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
         auto& nodeVDiskState(NodeVDiskState[nodeId]);
-        nodeVDiskState.Set(std::move(ev));
+        if (!nodeVDiskState.Set(std::move(ev))) {
+            return;
+        }
         RequestDone("TEvVDiskStateResponse");
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
         auto& nodePDiskState(NodePDiskState[nodeId]);
-        nodePDiskState.Set(std::move(ev));
+        if (!nodePDiskState.Set(std::move(ev))) {
+            return;
+        }
         RequestDone("TEvPDiskStateResponse");
     }
 
     void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         auto& nodeBSGroupState(NodeBSGroupState[nodeId]);
-        nodeBSGroupState.Set(std::move(ev));
+        if (!nodeBSGroupState.Set(std::move(ev))) {
+            return;
+        }
         RequestDone("TEvBSGroupStateResponse");
     }
 
@@ -2708,6 +2759,11 @@ public:
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
         }
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(groupId));
+        if (groupInfo.HasBridgePileId() && NodeWardenStorageConfig && NodeWardenStorageConfig->Get()->BridgeInfo) {
+            const auto& pileId = TBridgePileId::FromProto(&groupInfo, &NKikimrWhiteboard::TBSGroupStateInfo::GetBridgePileId);
+            const auto& pile = NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(pileId)->Name;
+            context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pile);
+        }
         storageGroupStatus.set_id(ToString(groupId));
         TGroupChecker checker(groupInfo.erasurespecies());
         for (const auto& protoVDiskId : groupInfo.vdiskids()) {
@@ -2752,10 +2808,12 @@ public:
     struct TMergeIssuesContext {
         std::unordered_map<ETags, TList<TSelfCheckContext::TIssueRecord>> recordsMap;
         std::unordered_set<TString> removeIssuesIds;
+        std::unordered_map<TString, TSelfCheckContext::TIssueRecord*> issueById;
 
         TMergeIssuesContext(TList<TSelfCheckContext::TIssueRecord>& records) {
             for (auto it = records.begin(); it != records.end(); ) {
                 auto move = it++;
+                issueById.emplace(move->IssueLog.id(), &(*move));
                 recordsMap[move->Tag].splice(recordsMap[move->Tag].end(), records, move);
             }
         }
@@ -2807,10 +2865,11 @@ public:
         }
 
         void RenameMergingIssues(TList<TSelfCheckContext::TIssueRecord>& records) {
-            for (auto it = records.begin(); it != records.end(); it++) {
+            for (auto it = records.rbegin(); it != records.rend(); it++) {
+                auto message = it->IssueLog.message();
                 if (it->IssueLog.count() > 0) {
-                    TString message = it->IssueLog.message();
                     switch (it->Tag) {
+                        case ETags::BridgeGroupState:
                         case ETags::GroupState: {
                             message = std::regex_replace(message.c_str(), std::regex("^Group has "), "Groups have ");
                             message = std::regex_replace(message.c_str(), std::regex("^Group is "), "Groups are ");
@@ -2832,8 +2891,28 @@ public:
                         default:
                             break;
                     }
-                    it->IssueLog.set_message(message);
                 }
+                if (IsBridgeMode(TActivationContext::AsActorContext()) && it->Tag == ETags::GroupState) {
+                    if (it->IssueLog.reason_size() == 1) {
+                        const auto& reason = issueById[it->IssueLog.reason(0)]->IssueLog;
+                        if (message.find("in pile") == std::string::npos) {
+                            message = TStringBuilder() << reason.message() <<  " in pile " << reason.location().storage().pool().group().pile().name();
+                        }
+                        it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->CopyFrom(reason.location().storage().pool().group().pile());
+                    }
+                }
+                if (IsBridgeMode(TActivationContext::AsActorContext()) && (it->Tag == ETags::PoolState || it->Tag == ETags::StorageState)) {
+                    auto reasonPiles = it->IssueLog.reason() | std::views::transform([this](auto&& reason) {return issueById[reason]->IssueLog.location().storage().pool().group().pile().name();});
+                    std::unordered_set<TString> piles(reasonPiles.begin(), reasonPiles.end());;
+                    if (piles.size() == 1 && !piles.begin()->empty()) {
+                        TString pile = *piles.begin();
+                        if (message.find("in pile") == std::string::npos) {
+                            message = TStringBuilder() << message << " in pile " << pile;
+                        }
+                        it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pile);
+                    }
+                }
+                it->IssueLog.set_message(message);
             }
         }
 
@@ -3043,11 +3122,11 @@ public:
             auto getStatus = [&](const TGroupState* group) {
                 TGroupChecker checker(group->ErasureSpecies, group->LayoutCorrect, ETags::BridgeGroupState);
                 TSelfCheckContext pileContext(&context, "BRIDGE_GROUP");
-                if (group->BridgePileId->GetRawId() < AppData()->BridgeConfig.PilesSize()) {
-                    const auto& pileName = AppData()->BridgeConfig.GetPiles(group->BridgePileId->GetRawId()).GetName();
+                if (group->BridgePileId.GetPileIndex() < AppData()->BridgeConfig.PilesSize()) {
+                    const auto& pileName = AppData()->BridgeConfig.GetPiles(group->BridgePileId.GetPileIndex()).GetName();
                     pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pileName);
                 } else { // this fallback should not ever happen - but is used in tests
-                    pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(group->BridgePileId->ToString());
+                    pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(group->BridgePileId.ToString());
                 }
                 pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->set_id(0, ToString(group->Id));
                 CheckGroupVSlots(checker, group->VSlots, storageGroupStatus, pileContext);
@@ -3058,7 +3137,7 @@ public:
                 if (!group->BridgePileId) {
                     return true;
                 }
-                return NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(*group->BridgePileId)->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
+                return NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(group->BridgePileId)->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
             };
             auto [minStatus, maxStatus] = std::ranges::minmax(itGroup->second.BridgeGroups | std::views::filter(isSyncPile) | std::views::transform(getStatus));
             Ydb::Monitoring::StatusFlag::Status status = maxStatus;
@@ -3123,8 +3202,6 @@ public:
                 }
             }
         }
-
-        MergeRecords(context.IssueRecords);
 
         switch (context.GetOverallStatus()) {
             case Ydb::Monitoring::StatusFlag::BLUE:
@@ -3195,6 +3272,7 @@ public:
             }
         }
         storageStatus.set_overall(context.GetOverallStatus());
+        MergeRecords(context.IssueRecords);
     }
 
     struct TOverallStateContext {
@@ -3385,6 +3463,10 @@ public:
         Ydb::Monitoring::SelfCheckResult& result = response->Result;
 
         FillNodeInfo(SelfId().NodeId(), result.mutable_location());
+        if (NodeWardenStorageConfig && NodeWardenStorageConfig->Get()->BridgeInfo) {
+            const auto& selfPileName = NodeWardenStorageConfig->Get()->BridgeInfo->SelfNodePile->Name;
+            result.mutable_location()->mutable_pile()->set_name(selfPileName);
+        }
 
         auto byteSize = result.ByteSizeLong();
         auto byteLimit = 50_MB - 1_KB; // 1_KB - for HEALTHCHECK STATUS issue going last

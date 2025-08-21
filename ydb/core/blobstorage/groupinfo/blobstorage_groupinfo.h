@@ -337,6 +337,8 @@ public:
 
     const std::vector<TGroupId>& GetBridgeGroupIds() const { return BridgeGroupIds; }
     bool IsBridged() const { return !BridgeGroupIds.empty(); }
+    std::optional<TGroupId> GetBridgeProxyGroupId() const { return BridgeProxyGroupId; }
+    TBridgePileId GetBridgePileId() const { return BridgePileId; }
 
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
@@ -482,6 +484,8 @@ private:
     NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
     // bridge mode fields
     std::vector<TGroupId> BridgeGroupIds;
+    std::optional<TGroupId> BridgeProxyGroupId;
+    TBridgePileId BridgePileId;
 };
 
 // physical fail domain description

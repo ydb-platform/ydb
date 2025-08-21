@@ -97,6 +97,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
 
+    REGISTER_SETTING(*this, UseDqHashCombine);
+
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, EnableSpillingNodes)
@@ -176,7 +178,7 @@ bool TKikimrSettings::HasOptEnableOlapPushdown() const {
 }
 
 bool TKikimrSettings::HasOptEnableOlapPushdownAggregate() const {
-    return GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) != EOptionalFlag::Disabled;
+    return GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {

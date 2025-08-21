@@ -1,6 +1,7 @@
 #include "yql_opt_utils.h"
 #include "yql_expr_optimize.h"
 #include "yql_expr_type_annotation.h"
+#include "yql_join.h"
 #include "yql_type_annotation.h"
 #include "yql_type_helpers.h"
 
@@ -475,7 +476,7 @@ bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TField
                 usedFields.emplace(parent->Tail().Content());
             else
                 usedFields.emplace(parent->Tail().Content(), parent->TailPtr());
-        } else if (allowDependsOn && TCoDependsOnBase::Match(parent)) {
+        } else if (allowDependsOn && IsDependsOnUsage(*parent, parentsMap)) {
             continue;
         } else {
             // unknown node
@@ -1752,8 +1753,24 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
     auto placeHolder = ctx.NewArgument(lambda->Pos(), "placeholder");
 
     auto status = OptimizeExpr(lambda, lambda, [&placeHolder, arg = &lambda->Head().Head()](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        if (TCoDependsOnBase::Match(node.Get()) && &node->Head() == arg) {
-            return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
+        if (TCoDependsOnBase::Match(node.Get())) {
+            if (node->Head().IsList()) {
+                auto dependsOnArgs = node->Head().ChildrenList();
+                bool changed = false;
+                for (size_t i = 0; i < dependsOnArgs.size(); i++) {
+                    if (dependsOnArgs[i].Get() == arg) {
+                        dependsOnArgs[i] = placeHolder;
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    return ctx.ChangeChild(*node, 0, ctx.NewList(node->Pos(), std::move(dependsOnArgs)));
+                }
+            } else {
+                if (&node->Head() == arg) {
+                    return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
+                }
+            }
         }
         return node;
     }, ctx, TOptimizeExprSettings{typeCtx});
@@ -2377,7 +2394,12 @@ template TPartOfConstraintBase::TSetType GetPathsToKeys<true>(const TExprNode& b
 template TPartOfConstraintBase::TSetType GetPathsToKeys<false>(const TExprNode& body, const TExprNode& arg);
 
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count) {
-    YQL_ENSURE(prefix.StartsWith("_yql"));
+    if (!prefix.StartsWith("_yql")) {
+        YQL_ENSURE(prefix.Contains('.'));
+        TStringBuf table, column;
+        SplitTableName(prefix, table, column);
+        YQL_ENSURE(column.StartsWith("_yql"));
+    }
     TSet<size_t> existing;
     for (auto& item : source.GetItems()) {
         TStringBuf column = item->GetName();

@@ -45,12 +45,11 @@ std::vector<NYT::TRawTableReaderPtr> GetTableInputStreams(
 ) {
     auto ytTableTaskRef = std::get_if<TYtTableTaskRef>(&tableRef);
     auto fmrTable = std::get_if<TFmrTableInputRef>(&tableRef);
+
     if (ytTableTaskRef) {
         return GetYtTableReaders(jobService, *ytTableTaskRef, clusterConnections);
-    } else if (fmrTable) {
-        return {MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, tableDataService)}; // TODO - fmr reader settings
     } else {
-        ythrow yexception() << "Unsupported table type";
+        return {MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, tableDataService, fmrTable->Columns, fmrTable->SerializedColumnGroups)}; // TODO - fmr reader settings
     }
 }
 

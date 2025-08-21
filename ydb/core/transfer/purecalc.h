@@ -3,6 +3,7 @@
 #include "scheme.h"
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -13,12 +14,8 @@ using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
 
 struct TMessage {
-    TString Data;
-    TString MessageGroupId;
-    ui64 Offset = 0;
-    ui32 Partition = 0;
-    TString ProducerId;
-    ui64 SeqNo = 0;
+    const ui32 PartitionId;
+    const NKikimr::NReplication::TTopicMessage& Message;
 };
 
 class TMessageInputSpec: public TInputSpecBase {
@@ -37,6 +34,7 @@ struct TOutputMessage {
     std::optional<TString> Table;
     NYql::NUdf::TUnboxedValue Value;
     NKikimr::NMiniKQL::TUnboxedValueBatch Data;
+    size_t EstimateSize = 0;
 };
 
 class TMessageOutputSpec : public NYql::NPureCalc::TOutputSpecBase {

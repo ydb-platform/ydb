@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import subprocess
+import platform
 
 
 def mkdir_p(path):
@@ -113,9 +114,8 @@ def main(
 
 
 if __name__ == '__main__':
-    if 'LC_ALL' in os.environ:
-        if os.environ['LC_ALL'] == 'C':
-            os.environ['LC_ALL'] = 'en_GB.UTF-8'
+    if platform.system() == 'Linux' and os.getenv('LC_ALL', 'C') == 'C':
+        os.environ['LC_ALL'] = 'C.UTF-8'
 
     parser = argparse.ArgumentParser()
 

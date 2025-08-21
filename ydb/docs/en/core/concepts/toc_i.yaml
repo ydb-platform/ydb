@@ -1,6 +1,8 @@
 items:
 - name: Glossary
   href: glossary.md
+- name: Architecture
+  href: architecture.md
 - name: Connecting to a database
   href: connect.md
 - name: Cluster structure

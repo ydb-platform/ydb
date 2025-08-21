@@ -38,7 +38,7 @@ public:
     void Bootstrap();
 
 protected:
-    void DoDescribe();
+    void DoDescribe(const TString& topicPath);
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleOnDescribe(TEvents::TEvWakeup::TPtr& ev);

@@ -17,12 +17,19 @@ public:
 
     virtual ~ITableKindState() = default;
 
-    void AddData(TString&& table, const NMiniKQL::TUnboxedValueBatch& data) {
+    [[nodiscard]] bool AddData(TString&& table, const NMiniKQL::TUnboxedValueBatch& data, size_t estimateSize) {
         auto& batcher = Batchers[std::move(table)];
         if (!batcher) {
             batcher = CreateDataBatcher();
         }
+
+        static constexpr size_t MaxBatchSize = 512_MB; // error on 2147483646
+
+        if (batcher->GetMemory() + estimateSize > MaxBatchSize) {
+            return false;
+        }
         batcher->AddData(data);
+        return true;
     }
 
     ui64 BatchSize() const {
@@ -40,11 +47,18 @@ public:
         return Scheme;
     }
 
+    void PassAway() {
+        if (UploaderActorId) {
+            TActivationContext::AsActorContext().Send(UploaderActorId, new TEvents::TEvPoison());
+        }
+    }
+
 protected:
     const TActorId SelfId;
     const TScheme::TPtr Scheme;
 
     std::map<TString, NKqp::IDataBatcherPtr> Batchers;
+    TActorId UploaderActorId;
 };
 
 

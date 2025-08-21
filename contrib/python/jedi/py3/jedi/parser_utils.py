@@ -257,4 +257,7 @@ def get_cached_code_lines(grammar, path):
     Basically access the cached code lines in parso. This is not the nicest way
     to do this, but we avoid splitting all the lines again.
     """
-    return parser_cache[grammar._hashed][path].lines
+    try:
+        return parser_cache[grammar._hashed][path].lines
+    except:
+        return None

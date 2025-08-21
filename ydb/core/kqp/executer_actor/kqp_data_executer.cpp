@@ -95,8 +95,8 @@ public:
 
     TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpRequestCounters::TPtr counters, bool streamResult,
-        const TExecuterConfig& executerConfig,
+        TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
+        bool streamResult, const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
@@ -105,9 +105,10 @@ public:
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId bufferActorId,
-        TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing())
+        TMaybe<NBatchOperations::TSettings> batchOperationSettings)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
-            database, userToken, counters, executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
+            database, userToken, std::move(resultSetFormatSettings), counters,
+            executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", streamResult, bufferActorId, txManager, std::move(batchOperationSettings))
         , ShardIdToTableInfo(shardIdToTableInfo)
         , AllowOlapDataQuery(executerConfig.TableServiceConfig.GetAllowOlapDataQuery())
@@ -3095,7 +3096,7 @@ private:
 } // namespace
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    TKqpRequestCounters::TPtr counters, bool streamResult, const TExecuterConfig& executerConfig,
+    TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters, bool streamResult, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
@@ -3103,7 +3104,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings)
 {
-    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerConfig,
+    return new TKqpDataExecuter(std::move(request), database, userToken, std::move(resultSetFormatSettings), counters, streamResult, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
         std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings));
 }

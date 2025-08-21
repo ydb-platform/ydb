@@ -116,6 +116,7 @@ public:
             request->Record.SetStatus(NKikimrPQ::TEvOffloadStatus::DONE);
             request->Record.SetTabletId(TabletID);
             request->Record.SetPartitionId(Partition);
+            request->Record.SetTxId(Config.GetIncrementalBackup().GetTxId());
 
             NTabletPipe::SendData(SelfId(), SchemeShardPipe, request.release());
         }

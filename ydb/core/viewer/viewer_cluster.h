@@ -4,6 +4,7 @@
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
+#include <ydb/public/api/protos/ydb_bridge_common.pb.h>
 
 namespace NKikimr::NViewer {
 
@@ -14,6 +15,8 @@ class TJsonCluster : public TViewerPipeClient {
     using TThis = TJsonCluster;
     using TBase = TViewerPipeClient;
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
+    std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfigResponse;
+    bool NodeWardenStorageConfigResponseProcessed = false;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ListTenantsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse>> PDisksResponse;
@@ -32,6 +35,7 @@ class TJsonCluster : public TViewerPipeClient {
         TNodeId NodeId;
         TString DataCenter;
         TSubDomainKey SubDomainKey;
+        std::optional<ui32> PileNum;
         bool Static = false;
         bool Connected = false;
         bool Disconnected = false;
@@ -105,6 +109,10 @@ public:
 
     void Bootstrap() override {
         NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+        if (AppData()->BridgeModeEnabled) {
+            NodeWardenStorageConfigResponse = MakeRequest<TEvNodeWardenStorageConfig>(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ false));
+        }
         NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
         PDisksResponse = MakeCachedRequestBSControllerPDisks();
         StorageStatsResponse = MakeCachedRequestBSControllerStorageStats();
@@ -236,6 +244,26 @@ private:
         return true;
     }
 
+    static Ydb::Bridge::PileState::State GetPileStateFromPile(const TBridgeInfo::TPile& pile) {
+        if (pile.IsPrimary) {
+            return Ydb::Bridge::PileState::PRIMARY;
+        } else if (pile.IsBeingPromoted) {
+            return Ydb::Bridge::PileState::PROMOTE;
+        } else {
+            switch (pile.State) {
+                case NKikimrBridge::TClusterState::DISCONNECTED:
+                    return Ydb::Bridge::PileState::DISCONNECTED;
+                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
+                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
+                    return Ydb::Bridge::PileState::NOT_SYNCHRONIZED;
+                case NKikimrBridge::TClusterState::SYNCHRONIZED:
+                    return Ydb::Bridge::PileState::SYNCHRONIZED;
+                default:
+                    return Ydb::Bridge::PileState::UNSPECIFIED;
+            }
+        }
+    }
+
     void ProcessResponses() {
         if (NodesInfoResponse && NodesInfoResponse->IsDone()) {
             if (NodesInfoResponse->IsOk()) {
@@ -250,6 +278,17 @@ private:
                 }
                 for (TNode& node : NodeData) {
                     NodeCache.emplace(node.NodeInfo.NodeId, &node);
+                }
+                if (NodesInfoResponse->Get()->PileMap) {
+                    for (ui32 pileNum = 0; pileNum < NodesInfoResponse->Get()->PileMap->size(); ++pileNum) {
+                        for (ui32 nodeId : (*NodesInfoResponse->Get()->PileMap)[pileNum]) {
+                            auto itNode = NodeCache.find(nodeId);
+                            if (itNode == NodeCache.end()) {
+                                continue;
+                            }
+                            itNode->second->PileNum = pileNum;
+                        }
+                    }
                 }
                 ClusterInfo.SetNodesTotal(NodesInfoResponse->Get()->Nodes.size());
                 ClusterInfo.SetHosts(hosts.size());
@@ -331,6 +370,40 @@ private:
                 AddProblem("no-storage-stats");
             }
             StorageStatsResponse.reset();
+        }
+
+        if (NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsDone() && !NodeWardenStorageConfigResponseProcessed) {
+            if (NodeWardenStorageConfigResponse->IsOk()) {
+                if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
+                    const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
+                    auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
+                    std::unordered_map<ui32, ui32> pileNodes;
+                    for (const auto& pile : srcBridgeInfo.Piles) {
+                        auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
+                        pile.BridgePileId.CopyToProto(&pbBridgePileInfo, &std::decay_t<decltype(pbBridgePileInfo)>::SetPileId);
+                        pbBridgePileInfo.SetName(pile.Name);
+                        pbBridgePileInfo.SetState(GetPileStateFromPile(pile));
+                    }
+                    for (const auto& node : NodeData) {
+                        if (node.PileNum) {
+                            pileNodes[*node.PileNum]++;
+                        }
+                    }
+                    ui32 pileNum = 0;
+                    for (auto& pile : *pbBridgeInfo.MutablePiles()) {
+                        auto it = pileNodes.find(pileNum);
+                        if (it != pileNodes.end()) {
+                            pile.SetNodes(it->second);
+                        }
+                        ++pileNum;
+                    }
+                } else {
+                    AddProblem("empty-node-warden-bridge-info");
+                }
+            } else {
+                AddProblem("no-node-warden-storage-config");
+            }
+            NodeWardenStorageConfigResponseProcessed = true;
         }
 
         if (TimeToAskWhiteboard()) {
@@ -634,6 +707,13 @@ private:
         }
     }
 
+    void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
+        if (NodeWardenStorageConfigResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
+    }
+
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         switch (ev->Get()->Record.Response_case()) {
@@ -802,6 +882,7 @@ private:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
             hFunc(TEvWhiteboard::TEvNodeStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);

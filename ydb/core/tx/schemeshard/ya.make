@@ -155,6 +155,7 @@ SRCS(
     schemeshard__operation_create_resource_pool.cpp
     schemeshard__operation_create_restore.cpp
     schemeshard__operation_create_restore_incremental_backup.cpp
+    schemeshard__operation_incremental_restore_finalize.cpp
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
     schemeshard__operation_create_solomon.cpp
@@ -220,6 +221,10 @@ SRCS(
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
+    schemeshard_backup_incremental__forget.cpp
+    schemeshard_backup_incremental__get.cpp
+    schemeshard_backup_incremental__list.cpp
+    schemeshard_backup_incremental__progress.cpp
     schemeshard_bg_tasks__list.cpp
     schemeshard_billing_helpers.cpp
     schemeshard_build_index.cpp
@@ -270,11 +275,16 @@ SRCS(
     schemeshard_self_pinger.h
     schemeshard_shard_deleter.cpp
     schemeshard_shard_deleter.h
+    schemeshard_subop_state_types.cpp
+    schemeshard_subop_state_types.h
+    schemeshard_subop_types.cpp
+    schemeshard_subop_types.h
     schemeshard_svp_migration.cpp
     schemeshard_svp_migration.h
     schemeshard_system_names.cpp
     schemeshard_system_names.h
     schemeshard_sysviews_update.cpp
+    schemeshard_tx_infly.cpp
     schemeshard_tx_infly.h
     schemeshard_types.cpp
     schemeshard_types.h
@@ -285,6 +295,8 @@ SRCS(
     schemeshard_xxport__helpers.cpp
     user_attributes.cpp
 )
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
 

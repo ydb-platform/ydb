@@ -423,7 +423,7 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &
                                    pr.second.Port, pr.second.Location, true);
             if (newPileMap && BridgeInfo) {
                 if (const auto *pile = BridgeInfo->GetPileForNode(pr.first)) {
-                    newPileMap->at(pile->BridgePileId.GetRawId()).push_back(pr.first);
+                    newPileMap->at(pile->BridgePileId.GetPileIndex()).push_back(pr.first);
                 }
             }
         }

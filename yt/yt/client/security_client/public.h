@@ -100,7 +100,11 @@ DEFINE_ENUM(EAccessControlObject,
     (CollectCoverage)
 );
 
+DEFINE_ENUM(EInapplicableExpressionMode,
+    (Deny)
+    (Ignore)
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NSecurityClient
-

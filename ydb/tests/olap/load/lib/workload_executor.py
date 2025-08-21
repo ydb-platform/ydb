@@ -531,7 +531,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # Копируем cluster.yaml (если указан cluster_path)
         cluster_result = cls._copy_single_config(
-            host, cls.cluster_path, "/Berkanavt/kikimr/cfg/cluster.yaml",
+            host, cls.cluster_path, "/Berkanavt/kikimr/cfg/config.yaml",
             "cluster config", None, host_log
         )
         if not cluster_result["success"]:
@@ -1382,6 +1382,12 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Получаем бинарный файл
             with allure.step("Get workload binary"):
+                allure.attach(
+                    f"Environment variable: {self.workload_env_var}",
+                    "Binary Configuration",
+                    attachment_type=allure.attachment_type.TEXT,
+                )
+                logging.info(f"Binary path from env: {os.getenv(self.workload_env_var)}")
                 binary_files = [
                     yatest.common.binary_path(
                         os.getenv(
@@ -1393,11 +1399,6 @@ class WorkloadTestBase(LoadSuiteBase):
                         )
                     )
                 ]
-                allure.attach(
-                    f"Environment variable: {self.workload_env_var}",
-                    "Binary Configuration",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
                 allure.attach(
                     f"Binary path: {binary_files[0]}",
                     "Binary Path",

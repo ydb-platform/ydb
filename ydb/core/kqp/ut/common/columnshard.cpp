@@ -85,15 +85,14 @@ namespace NKqp {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
-        Y_UNUSED(opStatus);
+    void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates,
+        const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/, const TString& expectedIssuePrefix /*= ""*/) {
         NKikimr::Tests::NCS::THelper helper(GetKikimr().GetTestServer());
         auto batch = updates.BuildArrow();
-        helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
+        helper.SendDataViaActorSystem(table.GetName(), batch, opStatus, expectedIssuePrefix);
     }
 
     void TTestHelper::BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
-        Y_UNUSED(opStatus);
         NKikimr::Tests::NCS::THelper helper(GetKikimr().GetTestServer());
         helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
     }
@@ -391,7 +390,7 @@ namespace NKqp {
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
         case NScheme::NTypeIds::Decimal:
-            return arrow::field(name, arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale()), nullable);
+            return arrow::field(name, std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE), nullable);
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:

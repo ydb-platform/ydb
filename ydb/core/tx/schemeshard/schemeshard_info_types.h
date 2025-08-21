@@ -825,6 +825,11 @@ public:
     }
 
     bool ShouldSplitBySize(ui64 dataSize, const TForceShardSplitSettings& params, TString& reason) const {
+        // Don't split/merge backup tables
+        if (IsBackup) {
+            return false;
+        }
+
         if (!IsSplitBySizeEnabled(params)) {
             return false;
         }
@@ -1401,8 +1406,10 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
     virtual void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) = 0;
     virtual void ChangePathCount(i64 delta) = 0;
+    virtual void SetPathCount(ui64 value) = 0;
     virtual void SetPathsQuota(ui64 value) = 0;
     virtual void ChangeShardCount(i64 delta) = 0;
+    virtual void SetShardCount(ui64 value) = 0;
     virtual void SetShardsQuota(ui64 value) = 0;
 };
 
@@ -1700,6 +1707,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     ui64 GetBackupShards() const {
         return BackupShards.size();
     }
+
+    void UpdateCounters(IQuotaCounters* counters);
 
     void ActualizeAlterData(const THashMap<TShardIdx, TShardInfo>& allShards, TInstant now, bool isExternal, IQuotaCounters* counters) {
         Y_ENSURE(AlterData);
@@ -3044,10 +3053,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         Cancellation_Applying = 350,
         Cancellation_Unlocking = 360,
+        Cancellation_DroppingColumns = 370,
         Cancelled = 400,
 
         Rejection_Applying = 500,
         Rejection_Unlocking = 510,
+        Rejection_DroppingColumns = 520,
         Rejected = 550
     };
 
@@ -3193,6 +3204,7 @@ public:
     bool InitiateTxDone = false;
     bool ApplyTxDone = false;
     bool UnlockTxDone = false;
+    bool DropColumnsTxDone = false;
 
     bool BillingEventIsScheduled = false;
 
@@ -3201,12 +3213,14 @@ public:
     TTxId InitiateTxId = TTxId();
     TTxId ApplyTxId = TTxId();
     TTxId UnlockTxId = TTxId();
+    TTxId DropColumnsTxId = TTxId();
 
     NKikimrScheme::EStatus AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus LockTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus InitiateTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus ApplyTxStatus = NKikimrScheme::StatusSuccess;
     NKikimrScheme::EStatus UnlockTxStatus = NKikimrScheme::StatusSuccess;
+    NKikimrScheme::EStatus DropColumnsTxStatus = NKikimrScheme::StatusSuccess;
 
     TStepId SnapshotStep;
     TTxId SnapshotTxId;
@@ -3285,7 +3299,7 @@ public:
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ " 
+                << "{ "
                 << "State = " << State
                 << ", Rows = " << Rows.size()
                 << ", MaxProbability = " << MaxProbability
@@ -3509,6 +3523,16 @@ public:
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(
                 indexInfo->AlterMainTableTxDone);
 
+        indexInfo->DropColumnsTxId =
+            row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxId>(
+                indexInfo->DropColumnsTxId);
+        indexInfo->DropColumnsTxStatus =
+            row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxStatus>(
+                indexInfo->DropColumnsTxStatus);
+        indexInfo->DropColumnsTxDone =
+            row.template GetValueOrDefault<Schema::IndexBuild::DropColumnsTxDone>(
+                indexInfo->DropColumnsTxDone);
+
         indexInfo->Billed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0));
         indexInfo->Billed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0));
         indexInfo->Billed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0));
@@ -3709,14 +3733,16 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
     NKikimrSchemeOp::TExternalTableReferences ExternalTableReferences;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
 
-    void FillProto(NKikimrSchemeOp::TExternalDataSourceDescription& proto) const {
+    void FillProto(NKikimrSchemeOp::TExternalDataSourceDescription& proto, bool withReferences = true) const {
         proto.SetVersion(AlterVersion);
         proto.SetSourceType(SourceType);
         proto.SetLocation(Location);
         proto.SetInstallation(Installation);
         proto.MutableAuth()->CopyFrom(Auth);
         proto.MutableProperties()->CopyFrom(Properties);
-        proto.MutableReferences()->CopyFrom(ExternalTableReferences);
+        if (withReferences) {
+            proto.MutableReferences()->CopyFrom(ExternalTableReferences);
+        }
     }
 };
 
@@ -3788,7 +3814,7 @@ struct TIncrementalRestoreState {
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 
         bool AllShardsComplete() const {
-            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() && 
+            return CompletedShards.size() + FailedShards.size() == ExpectedShards.size() &&
                     !ExpectedShards.empty();
         }
 
@@ -3813,11 +3839,18 @@ struct TIncrementalRestoreState {
     }
 
     bool IsCurrentIncrementalComplete() const {
-        return CurrentIncrementalIdx < IncrementalBackups.size() && 
+        return CurrentIncrementalIdx < IncrementalBackups.size() &&
                 IncrementalBackups[CurrentIncrementalIdx].Completed;
     }
 
     bool AreAllCurrentOperationsComplete() const {
+        // If we started processing the current incremental but there are no operations at all,
+        // it means no table backups were found in this incremental backup, so consider it complete
+        // TODO: probably have to ensure that empty backups are impossible
+        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()) {
+            return true;
+        }
+        // Normal case: all operations have moved from InProgress to Completed
         return InProgressOperations.empty() && !CompletedOperations.empty();
     }
 
@@ -3851,7 +3884,7 @@ struct TIncrementalRestoreState {
         IncrementalBackups.emplace_back(pathId, path, timestamp);
 
         // Sort by timestamp to ensure chronological order
-        std::sort(IncrementalBackups.begin(), IncrementalBackups.end(), 
+        std::sort(IncrementalBackups.begin(), IncrementalBackups.end(),
                     [](const TIncrementalBackup& a, const TIncrementalBackup& b) {
                         return a.Timestamp < b.Timestamp;
                     });
@@ -3868,6 +3901,74 @@ struct TIncrementalRestoreState {
 
     bool AllCurrentIncrementalOperationsComplete() const {
         return InProgressOperations.empty() && !CompletedOperations.empty();
+    }
+};
+
+struct TIncrementalBackupInfo : public TSimpleRefCount<TIncrementalBackupInfo> {
+    using TPtr = TIntrusivePtr<TIncrementalBackupInfo>;
+
+    enum class EState: ui8 {
+        Invalid = 0,
+        Transferring = 1,
+        Done = 240,
+        Cancellation = 250,
+        Cancelled = 251,
+    };
+
+    struct TItem {
+        enum class EState: ui8 {
+            Invalid = 0,
+            Transferring = 1,
+            Dropping = 230,
+            Done = 240,
+            Cancellation = 250,
+            Cancelled = 251,
+        };
+
+        TPathId PathId;
+        EState State;
+
+        bool IsDone() const {
+            return State == EState::Done;
+        }
+    };
+
+    ui64 Id;
+    EState State;
+    TPathId DomainPathId;
+
+    THashMap<TPathId, TItem> Items;
+
+    TMaybe<TString> UserSID;
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
+    explicit TIncrementalBackupInfo(
+            const ui64 id,
+            const TPathId domainPathId)
+        : Id(id)
+        , DomainPathId(domainPathId)
+    {}
+
+    bool IsDone() const {
+        return State == EState::Done;
+    }
+
+    bool IsCancelled() const {
+        return State == EState::Cancelled;
+    }
+
+    bool IsFinished() const {
+        return IsDone() || IsCancelled();
+    }
+
+    bool IsAllItemsDone() const {
+        for (const auto& item : Items) {
+            if (!item.second.IsDone()) {
+                return false;
+            }
+        }
+        return true;
     }
 };
 
@@ -3937,6 +4038,10 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
     o << ", ApplyTxId: " << info.ApplyTxId;
     o << ", ApplyTxStatus: " << NKikimrScheme::EStatus_Name(info.ApplyTxStatus);
     o << ", ApplyTxDone: " << info.ApplyTxDone;
+
+    o << ", DropColumnsTxId: " << info.DropColumnsTxId;
+    o << ", DropColumnsTxStatus: " << NKikimrScheme::EStatus_Name(info.DropColumnsTxStatus);
+    o << ", DropColumnsTxDone: " << info.DropColumnsTxDone;
 
     o << ", UnlockTxId: " << info.UnlockTxId;
     o << ", UnlockTxStatus: " << NKikimrScheme::EStatus_Name(info.UnlockTxStatus);

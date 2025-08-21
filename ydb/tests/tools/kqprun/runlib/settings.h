@@ -11,6 +11,8 @@
 
 namespace NKikimrRun {
 
+constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
+
 struct TAsyncQueriesSettings {
     enum class EVerbose {
         EachQuery,

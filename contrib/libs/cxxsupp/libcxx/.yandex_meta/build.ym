@@ -91,7 +91,6 @@ VERSION({{self.date().strip()}})
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/{{self.version().strip()}}.tar.gz)
 
 SUBSCRIBER(
-    g:cpp-committee
     g:cpp-contrib
     g:cxxsupp-contrib
 )

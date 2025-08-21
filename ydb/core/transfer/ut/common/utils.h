@@ -77,16 +77,46 @@ struct Timestamp64Checker : public Checker<TInstant> {
     void Assert(const std::string& msg, const ::Ydb::Value& value) override {
         auto v = Get(value);
         if (Expected - Precision > v || Expected + Precision < v) {
-            UNIT_ASSERT_VALUES_EQUAL_C(Get(value), Expected, msg);
+            UNIT_ASSERT_VALUES_EQUAL_C(v, Expected, msg);
         }
     }
 
     TDuration Precision;
 };
 
+struct NullChecker : public IChecker {
+    bool Get(const ::Ydb::Value& value) {
+        return value.has_null_flag_value();
+    }
+
+    void Assert(const std::string& msg, const ::Ydb::Value& value) override {
+        UNIT_ASSERT_VALUES_EQUAL_C(Get(value), true, msg);
+    }
+};
+
 template<>
 inline bool Checker<bool>::Get(const ::Ydb::Value& value) {
     return value.bool_value();
+}
+
+template<>
+inline i8 Checker<i8>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i16 Checker<i16>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i32 Checker<i32>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i64 Checker<i64>::Get(const ::Ydb::Value& value) {
+    return value.int64_value();
 }
 
 template<>
@@ -142,6 +172,7 @@ struct TMessage {
     std::optional<std::string> MessageGroupId = std::nullopt;
     std::optional<ui64> SeqNo = std::nullopt;
     std::optional<TInstant> CreateTimestamp = std::nullopt;
+    std::map<std::string, std::string> Attributes = {};
 };
 
 inline TMessage _withSeqNo(ui64 seqNo) {
@@ -181,7 +212,19 @@ inline TMessage _withCreateTimestamp(const TInstant& timestamp) {
         .ProducerId = std::nullopt,
         .MessageGroupId = std::nullopt,
         .SeqNo = std::nullopt,
-        .CreateTimestamp = timestamp,
+        .CreateTimestamp = timestamp
+    };
+}
+
+inline TMessage _withAttributes(std::map<std::string, std::string>&& attributes) {
+    return {
+        .Message = TStringBuilder() << "Message",
+        .Partition = 0,
+        .ProducerId = std::nullopt,
+        .MessageGroupId = std::nullopt,
+        .SeqNo = std::nullopt,
+        .CreateTimestamp = std::nullopt,
+        .Attributes = std::move(attributes)
     };
 }
 
@@ -206,7 +249,7 @@ struct MainTestCase {
         return config;
     }
 
-    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "COLUMN")
+    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "ROW")
         : TableType(std::move(tableType))
         , Id(RandomNumber<size_t>())
         , ConnectionString(GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE"))
@@ -643,13 +686,17 @@ struct MainTestCase {
         ExecuteDDL(Sprintf("DROP ASYNC REPLICATION `%s`;", ReplicationName.data()));
     }
 
-    auto DescribeReplication() {
+    auto DescribeReplication(const std::string& name) {
         TReplicationClient client(Driver);
 
         TDescribeReplicationSettings settings;
         settings.IncludeStats(true);
 
-        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + ReplicationName, settings).ExtractValueSync();
+        return client.DescribeReplication(TString("/") + GetEnv("YDB_DATABASE") + "/" + name, settings).ExtractValueSync();
+    }
+
+    auto DescribeReplication() {
+        return DescribeReplication(ReplicationName);
     }
 
     TReplicationDescription CheckReplicationState(TReplicationDescription::EState expected) {
@@ -721,7 +768,19 @@ struct MainTestCase {
         }
         auto writeSession = TopicClient.CreateSimpleBlockingWriteSession(writeSettings);
 
-        UNIT_ASSERT(writeSession->Write(message.Message, message.SeqNo, message.CreateTimestamp));
+        TWriteMessage msg(message.Message);
+        msg.SeqNo(message.SeqNo);
+        msg.CreateTimestamp(message.CreateTimestamp);
+
+        if (!message.Attributes.empty()) {
+            TWriteMessage::TMessageMeta meta;
+            for (auto& [k, v] : message.Attributes) {
+                meta.push_back({k , v});
+            }
+            msg.MessageMeta(meta);
+        }
+
+        UNIT_ASSERT(writeSession->Write(std::move(msg)));
         writeSession->Close(TDuration::Seconds(1));
     }
 
@@ -807,7 +866,7 @@ struct MainTestCase {
         UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
     }
 
-    void Run(const TConfig& config) {
+    void Run(const TConfig& config, const CreateTransferSettings settings = {}) {
 
         CreateTable(config.TableDDL);
         CreateTopic();
@@ -819,7 +878,7 @@ struct MainTestCase {
         for (size_t i = 0; i < lambdas.size(); ++i) {
             auto lambda = lambdas[i];
             if (!i) {
-                CreateTransfer(lambda);
+                CreateTransfer(lambda, settings);
             } else {
                 Sleep(TDuration::Seconds(1));
 

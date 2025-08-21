@@ -3,6 +3,7 @@
 #include "scheme.h"
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -13,14 +14,8 @@ using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
 
 struct TMessage {
-    TInstant CreateTimestamp;
-    TString Data;
-    TString MessageGroupId;
-    ui64 Offset = 0;
-    ui32 Partition = 0;
-    TString ProducerId;
-    ui64 SeqNo = 0;
-    TInstant WriteTimestamp;
+    const ui32 PartitionId;
+    const NKikimr::NReplication::TTopicMessage& Message;
 };
 
 class TMessageInputSpec: public TInputSpecBase {

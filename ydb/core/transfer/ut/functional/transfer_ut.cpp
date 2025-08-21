@@ -707,6 +707,60 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    void CustomConsumer_NotExists(bool local)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        testCase.CreateTopic(1);
+
+        auto settings = MainTestCase::CreateTransferSettings::WithConsumerName("PredefinedConsumer");
+        settings.LocalTopic = local;
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", settings);
+
+        testCase.Write({"Message-1"});
+
+        Sleep(TDuration::Seconds(3));
+
+        { // Check that consumer was not created
+            auto result = testCase.DescribeTopic();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            auto& consumers = result.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_VALUES_EQUAL(0, consumers.size());
+        }
+
+        testCase.CheckTransferStateError("consumer 'PredefinedConsumer' does not exist");
+
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(CustomConsumer_NotExists_Remote) {
+        CustomConsumer_NotExists(false);
+    }
+
+    Y_UNIT_TEST(CustomConsumer_NotExists_Local) {
+        CustomConsumer_NotExists(true);
+    }
+
     Y_UNIT_TEST(CustomFlushInterval)
     {
         TDuration flushInterval = TDuration::Seconds(5);
@@ -1524,7 +1578,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>,
                         <|
                             Offset:CAST($x._offset AS Uint64),
-                            Value:Unwrap(CAST($x._data AS Utf8))
+                            Value:Unwrap(CAST($x._key AS Utf8))
                         |>
                     ];
                 };
@@ -1534,5 +1588,160 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.CheckTransferStateError("unwrap error");
     }
+
+    Y_UNIT_TEST(MessageField_Key) {
+        MainTestCase(std::nullopt).Run({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:CAST($x._key AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withAttributes({ {"__key", "key_value"} })},
+
+            .Expectations = {{
+                _C("Value", TString("key_value")),
+            }}
+        });
+    }
+
+    Y_UNIT_TEST(MessageField_Key_Empty) {
+        MainTestCase(std::nullopt).Run({
+            .TableDDL = R"(
+                CREATE TABLE `%s` (
+                    Offset Uint64 NOT NULL,
+                    Value Utf8,
+                    PRIMARY KEY (Offset)
+                )  WITH (
+                    STORE = %s
+                );
+            )",
+
+            .Lambda = R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Offset:CAST($x._offset AS Uint64),
+                            Value:CAST($x._key AS Utf8)
+                        |>
+                    ];
+                };
+            )",
+
+            .Messages = {_withAttributes({ {"__not_key", "key_value"} })},
+
+            .Expectations = {{
+                _T<NullChecker>("Value"),
+            }}
+        });
+    }
+
+    void ReadFromCDC(bool localTopic)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+
+        std::string cdcTableName = Sprintf("%s_in", testCase.TableName.data());
+
+        testCase.ExecuteDDL(Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", cdcTableName.data()));
+
+        testCase.ExecuteDDL(Sprintf(R"(
+            ALTER TABLE `%s`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON'
+                );
+            )", cdcTableName.data()));
+
+        auto settings = MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic);
+        settings.TopicName = Sprintf("%s/feed", cdcTableName.data());
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:Unwrap(CAST($x._offset AS Uint64)),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", settings);
+
+        testCase.ExecuteQuery(Sprintf("INSERT INTO `%s` (Key, Message) VALUES ( 7, '13' )", cdcTableName.data()));
+
+        testCase.CheckResult({{
+            _C("Message", TString("{\"update\":{\"Message\":\"13\"},\"key\":[7]}"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(ReadFromCDC_Remote) {
+        ReadFromCDC(false);
+    }
+
+    Y_UNIT_TEST(ReadFromCDC_Local) {
+        ReadFromCDC(true);
+    }
+
+    Y_UNIT_TEST(MessageField_CreateTimestamp_Remote) {
+        MessageField_CreateTimestamp("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_CreateTimestamp_Local) {
+        MessageField_CreateTimestamp("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_WriteTimestamp_Remote) {
+        MessageField_WriteTimestamp("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_WriteTimestamp_Local) {
+        MessageField_WriteTimestamp("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_Attributes_Remote) {
+        MessageField_Attributes("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_Attributes_Local) {
+        MessageField_Attributes("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_Partition_Remote) {
+        MessageField_Partition("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_Partition_Local) {
+        MessageField_Partition("ROW", true);
+    }
+
 }
 

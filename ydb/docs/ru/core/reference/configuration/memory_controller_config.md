@@ -21,16 +21,16 @@ config:
 ---
 sankey-beta
 
-"Память процесса","Кеш-компоненты",60
-"Память процесса","Компоненты-активности", 30
-"Память процесса","Прочее",10
+Process Memory,Cache Components,60
+Process Memory,Activity Components, 30
+Process Memory,Other,10
 
-"Кеш-компоненты","Общий кеш", 30
-"Кеш-компоненты","MemTable", 10
-"Кеш-компоненты","Кеши Аллокатора", 20
+Cache Components,Shared Cache, 30
+Cache Components,MemTable, 10
+Cache Components,Allocator Caches, 20
 
-"Компоненты-активности","KQP (выполнение запросов)", 15
-"Компоненты-активности","Компактизация", 15
+Activity Components,"KQP (query execution)", 15
+Activity Components,Compaction, 15
 ```
 
 ## Жёсткий лимит памяти {#hard-memory-limit}

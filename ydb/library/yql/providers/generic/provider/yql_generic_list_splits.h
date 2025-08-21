@@ -5,7 +5,13 @@
 
 namespace NYql {
 
-class TGenericListTransformer : public TGraphTransformerBase {
+class TGenericListSplitTransformer : public TGraphTransformerBase {
+    struct TListSplitRequestData {
+        TString Key;
+        NConnector::NApi::TSelect Select;
+        TGenericState::TTableAddress TableAddress;
+    };
+
     struct TListResponse {
         using TPtr = std::shared_ptr<TListResponse>;
 
@@ -14,10 +20,10 @@ class TGenericListTransformer : public TGraphTransformerBase {
     };
 
     using TListResponseMap =
-        std::unordered_map<TGenericState::TTableAddress, TListResponse::TPtr, THash<TGenericState::TTableAddress>>;
+        std::unordered_map<TString, TListResponse::TPtr>;
 
 public:
-    explicit TGenericListTransformer(TGenericState::TPtr state);
+    explicit TGenericListSplitTransformer(TGenericState::TPtr state);
 
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -31,9 +37,7 @@ public:
     void Rewind() final;
 
 private:
-    TIssues ListTableFromConnector(const TGenericState::TTableAddress& tableAddress,
-                                   NConnector::NApi::TSelect select,
-                                   std::vector<NThreading::TFuture<void>>& handles);
+    TIssues ListTableFromConnector(const TListSplitRequestData& data, std::vector<NThreading::TFuture<void>>& handles);
 
 private: 
     const TGenericState::TPtr State_;

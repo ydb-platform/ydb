@@ -70,9 +70,9 @@ A backup chain consists of:
 
 ### Chain validity rules
 
-{% note warning %}
+{% note alert %}
 
-**Critical:** Never delete full backups that have dependent incremental backups. Deleting a full backup breaks the entire chain, making all subsequent incrementals unrestorable.
+Never delete full backups that have dependent incremental backups. Deleting a full backup breaks the entire chain, making all subsequent incrementals unrestorable.
 
 {% endnote %}
 

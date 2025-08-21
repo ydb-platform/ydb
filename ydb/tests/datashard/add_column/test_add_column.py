@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-from ydb.tests.sql.lib.test_base import TestBase
+from ydb.tests.datashard.lib.add_column_base import AddColumnBase
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, format_sql_value
 
 
-class TestYdbAddColumnWorkload(TestBase):
+class TestYdbAddColumnWorkload(AddColumnBase):
     # Python SDK returns
     # - decimal.Decimal objects as Decimal(15,0), Decimal(22,9), Decimal(35,10)
     # - uuid.UUID objects as UUID

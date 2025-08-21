@@ -90,7 +90,7 @@ private:
     TDuration RefreshCheckPeriod = TDuration::Seconds(30);
     NTokenManager::TTokenProviderSettings VmMetadataProviderSettings;
     TPriorityQueue<TRefreshRecord> RefreshQueue;
-    NActors::TActorId HttpProxyId;
+    std::optional<NActors::TActorId> HttpProxyId;
     THashMap<TString, THashSet<NActors::TActorId>> Subscribers;
 
     protected:

@@ -15,14 +15,9 @@
 namespace NKikimr {
 
 TTokenManager::TTokenManager(const TTokenManagerSettings& settings)
-    : Config(settings.Config)
-{
-    if (settings.HttpProxyId.has_value()) {
-        HttpProxyId = settings.HttpProxyId.value();
-    } else {
-        HttpProxyId = Register(NHttp::CreateHttpProxy());
-    }
-}
+    : HttpProxyId(settings.HttpProxyId)
+    , Config(settings.Config)
+{}
 
 void TTokenManager::Bootstrap() {
     RefreshCheckPeriod = TDuration::Parse(Config.GetRefreshCheckPeriod());
@@ -34,6 +29,13 @@ void TTokenManager::Bootstrap() {
 
 void TTokenManager::BootstrapTokenProviders() {
     if (Config.HasVmMetadataProvider()) {
+        NActors::TActorId httpProxyId;
+        if (HttpProxyId.has_value()) {
+            httpProxyId = HttpProxyId.value();
+        } else {
+            httpProxyId = Register(NHttp::CreateHttpProxy());
+        }
+
         const auto& vmMetadataProvider = Config.GetVmMetadataProvider();
         const auto& tokenProviderSettings = vmMetadataProvider.GetSettings();
         VmMetadataProviderSettings =  {
@@ -44,7 +46,7 @@ void TTokenManager::BootstrapTokenProviders() {
         };
         for (const auto& vmMetadataInfo : vmMetadataProvider.GetProvidersInfo()) {
             BLOG_TRACE("Initialize token provider# " << vmMetadataInfo.GetId());
-            TokenProviders[vmMetadataInfo.GetId()] = std::make_shared<NTokenManager::TVmMetadataTokenProvider>(this->SelfId(), VmMetadataProviderSettings, HttpProxyId, vmMetadataInfo);
+            TokenProviders[vmMetadataInfo.GetId()] = std::make_shared<NTokenManager::TVmMetadataTokenProvider>(this->SelfId(), VmMetadataProviderSettings, httpProxyId, vmMetadataInfo);
         }
     }
 }

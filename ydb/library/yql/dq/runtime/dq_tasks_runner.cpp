@@ -2,7 +2,7 @@
 #include "dq_tasks_counters.h"
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
-#include <ydb/library/yql/dq/runtime/dq_spiller.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_spiller_adapter.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -704,9 +704,9 @@ public:
 
                     if (!outputChannelDesc.GetInMemory()) {
                         if (spiller && outputChannelDesc.GetEnableSpilling()) {
-                            settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, spiller);
+                            settings.ChannelStorage = CreateDqChannelSpillerAdapter(spiller);
                         } else {
-                            settings.ChannelStorage = execCtx.CreateChannelStorage(channelId);
+                            settings.ChannelStorage = nullptr;
                         }
                     }
 

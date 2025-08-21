@@ -961,18 +961,6 @@ public:
         return NKqp::KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs), {});
     }
 
-    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */) const override {
-        return {};
-    }
-
-    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */, TActorSystem* /* actorSystem */) const override {
-        return {};
-    }
-
-    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, bool /* withSpilling */, std::shared_ptr<NDq::IDqSpiller> /* spiller */) const override {
-        return {};
-    }
-
     NDq::TWakeUpCallback GetWakeupCallback() const override {
         return {};
     }
@@ -985,11 +973,7 @@ public:
         return {};
     }
 
-    NDq::    TTxId GetTxId() const override {
-        return {};
-    }
-
-    std::shared_ptr<NDq::IDqSpiller> GetSpiller() const override {
+    NDq::TTxId GetTxId() const override {
         return {};
     }
 };

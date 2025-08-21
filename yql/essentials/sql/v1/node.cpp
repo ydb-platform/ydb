@@ -3597,11 +3597,11 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
             return false;
         }
 
-        if (minValue <= value && value <= maxValue) {
+        if (minValue <= *value && *value <= maxValue) {
             return true;
         }
 
-        ctx.Error() << "Invalid " << name << ": " << value << " should be between " << minValue << " and " << maxValue;
+        ctx.Error() << "Invalid " << name << ": " << *value << " should be between " << minValue << " and " << maxValue;
         return false;
     };
 
@@ -3628,14 +3628,17 @@ bool TVectorIndexSettings::Validate(TContext& ctx) const {
         return false;
     }
 
-    if (std::pow(static_cast<double>(*Clusters), static_cast<double>(*Levels)) > static_cast<double>(MaxClustersPowLevels)
-            || std::pow(*Clusters, *Levels) > MaxClustersPowLevels) {
-        ctx.Error() << "Invalid clusters^levels: " << *Clusters << "^" << *Levels << " should be less than " << MaxClustersPowLevels;
-        return false;
+    ui64 clustersPowLevels = 1;
+    for (ui64 i = 0; i < *Levels; ++i) {
+        clustersPowLevels *= *Clusters;
+        if (clustersPowLevels > MaxClustersPowLevels) {
+            ctx.Error() << "Invalid clusters^levels: " << *Clusters << "^" << *Levels << " should be less than " << MaxClustersPowLevels;
+            return false;
+        }
     }
 
     if (*VectorDimension * *Clusters > MaxVectorDimensionMultiplyClusters) {
-        ctx.Error() << "Invalid vector_dimension*clusters: " << *VectorDimension << "^" << *Clusters << " should be less than " << MaxVectorDimensionMultiplyClusters;
+        ctx.Error() << "Invalid vector_dimension*clusters: " << *VectorDimension << "*" << *Clusters << " should be less than " << MaxVectorDimensionMultiplyClusters;
         return false;
     }
 

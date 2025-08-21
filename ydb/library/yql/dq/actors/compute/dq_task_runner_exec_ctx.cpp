@@ -1,8 +1,6 @@
 #include "dq_task_runner_exec_ctx.h"
 
 #include <ydb/library/yql/dq/actors/spilling/channel_storage.h>
-#include <ydb/library/yql/dq/runtime/dq_channel_spiller_adapter.h>
-
 
 namespace NYql {
 namespace NDq {

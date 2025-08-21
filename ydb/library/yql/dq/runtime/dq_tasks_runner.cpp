@@ -2,7 +2,6 @@
 #include "dq_tasks_counters.h"
 
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
-#include <ydb/library/yql/dq/runtime/dq_channel_spiller_adapter.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -28,6 +27,7 @@
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <ydb/library/yql/dq/actors/spilling/channel_storage.h>
 
 #include <util/generic/scope.h>
 

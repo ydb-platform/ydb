@@ -14,7 +14,7 @@ namespace NYql::NDq {
 constexpr ui32 MAX_INFLIGHT_BLOBS_COUNT = 10;
 constexpr ui64 MAX_INFLIGHT_BLOBS_SIZE = 50_MB;
 
-class TDqChannelSpillerAdapter : public IDqChannelStorage {
+class TDqChannelSpillerAdapter {
     struct TWritingBlobInfo {
         ui64 BlobSize_;
         NThreading::TFuture<IDqSpiller::TKey> KeyFuture_;
@@ -23,19 +23,19 @@ public:
     TDqChannelSpillerAdapter(IDqSpiller::TPtr spiller)
     : Spiller_(spiller) { }
 
-    bool IsEmpty() override {
+    bool IsEmpty() {
         UpdateWriteStatus();
 
         return WritingBlobs_.empty() && StoredBlobsCount_ == 0 && !LoadingBlob_.has_value();
     }
 
-    bool IsFull() override {
+    bool IsFull() {
         UpdateWriteStatus();
 
         return WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
     }
 
-    void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 cookie = 0) override {
+    void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 cookie = 0) {
         UpdateWriteStatus();
 
         ui64 blobSize = blob.Size();
@@ -48,7 +48,7 @@ public:
         BlobIdQueue_.push(blobId);
     }
 
-    bool Get(ui64 blobId, TBuffer& blob, ui64 cookie = 0) override {
+    bool Get(ui64 blobId, TBuffer& blob, ui64 cookie = 0) {
         UpdateWriteStatus();
 
         if (LoadingBlob_.has_value()) {

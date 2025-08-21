@@ -1,6 +1,6 @@
 #pragma once
 
-#include "spilling_counters.h"
+#include "dq_spiller.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_storage.h>
@@ -12,10 +12,6 @@ namespace NActors {
 
 namespace NYql::NDq {
 
-IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
-    TWakeUpCallback wakeUpCallback,
-    TErrorCallback errorCallback,
-    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters,
-    NActors::TActorSystem* actorSystem);
+IDqChannelStorage::TPtr CreateDqChannelStorage(IDqSpiller::TPtr spiller);
 
 } // namespace NYql::NDq

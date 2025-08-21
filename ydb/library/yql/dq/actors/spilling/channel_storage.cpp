@@ -1,7 +1,5 @@
 #include "channel_storage.h"
 
-#include "channel_storage_actor.h"
-
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -12,14 +10,10 @@
 #include <util/generic/buffer.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
+#include <util/generic/queue.h>
 
 
 namespace NYql::NDq {
-
-using namespace NActors;
-
-namespace {
-
 
 constexpr ui32 MAX_INFLIGHT_BLOBS_COUNT = 10;
 constexpr ui64 MAX_INFLIGHT_BLOBS_SIZE = 50_MB;
@@ -27,25 +21,16 @@ constexpr ui64 MAX_INFLIGHT_BLOBS_SIZE = 50_MB;
 class TDqChannelStorage : public IDqChannelStorage {
     struct TWritingBlobInfo {
         ui64 BlobSize_;
-        NThreading::TFuture<void> IsBlobWrittenFuture_;
+        NThreading::TFuture<IDqSpiller::TKey> KeyFuture_;
     };
 public:
-    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback, 
-        TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters, TActorSystem* actorSystem)
-    : ActorSystem_(actorSystem)
-    {
-        ChannelStorageActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), spillingTaskCounters, actorSystem);
-        ChannelStorageActorId_ = ActorSystem_->Register(ChannelStorageActor_->GetActor());
-    }
-
-    ~TDqChannelStorage() {
-        ActorSystem_->Send(ChannelStorageActorId_, new TEvents::TEvPoison);
-    }
+    TDqChannelStorage(IDqSpiller::TPtr spiller)
+    : Spiller_(spiller) { }
 
     bool IsEmpty() override {
         UpdateWriteStatus();
 
-        return WritingBlobs_.empty() && StoredBlobsCount_ == 0 && LoadingBlobs_.empty();
+        return WritingBlobs_.empty() && StoredBlobsCount_ == 0 && !LoadingBlob_.has_value();
     }
 
     bool IsFull() override {
@@ -54,47 +39,70 @@ public:
         return WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsTotalSize_ > MAX_INFLIGHT_BLOBS_SIZE;
     }
 
-    void Put(ui64 blobId, TChunkedBuffer&& blob, ui64 cookie = 0) override {
+    void Push(TChunkedBuffer&& blob) override {
         UpdateWriteStatus();
-
-        auto promise = NThreading::NewPromise<void>();
-        auto future = promise.GetFuture();
 
         ui64 blobSize = blob.Size();
+        auto keyFuture = Spiller_->Put(std::move(blob));
 
-        ActorSystem_->Send(ChannelStorageActorId_, new TEvDqChannelSpilling::TEvPut(blobId, std::move(blob), std::move(promise)), /*flags*/0, cookie);
-
-        WritingBlobs_.emplace(blobId, TWritingBlobInfo{blobSize, std::move(future)});
+        ui64 blobId = BlobId_++;
+        WritingBlobs_.emplace(blobId, TWritingBlobInfo{blobSize, std::move(keyFuture)});
         WritingBlobsTotalSize_ += blobSize;
+        
+        BlobIdQueue_.push(blobId);
     }
 
-    bool Get(ui64 blobId, TBuffer& blob, ui64 cookie = 0) override {
+    bool Pop(TBuffer& blob) override {
         UpdateWriteStatus();
 
-        const auto it = LoadingBlobs_.find(blobId);
-        // If we didn't request loading blob from spilling -> request it
-        if (it == LoadingBlobs_.end()) {
-            auto promise = NThreading::NewPromise<TBuffer>();
-            auto future = promise.GetFuture();
-            ActorSystem_->Send(ChannelStorageActorId_, new TEvDqChannelSpilling::TEvGet(blobId, std::move(promise)), /*flags*/0, cookie);
+        if (LoadingBlob_.has_value()) {
+            if (!LoadingBlob_->HasValue()) {
+                return false;
+            }
 
-            LoadingBlobs_.emplace(blobId, std::move(future));
+            auto optionalChunkedBuffer = LoadingBlob_->ExtractValue();
+            if (optionalChunkedBuffer.has_value()) {
+                // Конвертируем TChunkedBuffer в TBuffer
+                const auto& chunkedBuffer = *optionalChunkedBuffer;
+                blob.Resize(chunkedBuffer.Size());
+                chunkedBuffer.FillBuffer(blob.Data());
+                --StoredBlobsCount_;
+                LoadingBlob_ = std::nullopt;
+                return true;
+            } else {
+                LoadingBlob_ = std::nullopt;
+                return false;
+            }
+        }
+
+        // Проверяем есть ли готовые блобы в FIFO порядке
+        if (StoredBlobsCount_ == 0 || StoredBlobs_.empty()) {
             return false;
         }
-        // If we requested loading blob, but it's not loaded -> wait
-        if (!it->second.HasValue()) return false;
 
-        blob = std::move(it->second.ExtractValue());
-        LoadingBlobs_.erase(it);
-        --StoredBlobsCount_;
+        // Берем первый блоб из очереди (FIFO)
+        if (BlobIdQueue_.empty()) {
+            return false;
+        }
 
-        return true;
+        ui64 nextBlobId = BlobIdQueue_.front();
+        auto it = StoredBlobs_.find(nextBlobId);
+        if (it == StoredBlobs_.end()) {
+            return false;
+        }
+
+        BlobIdQueue_.pop();
+        LoadingBlob_ = Spiller_->Extract(it->second);
+        StoredBlobs_.erase(it);
+
+        return false; // Данные еще не готовы, нужно будет вызвать Get снова
     }
 
 private:
     void UpdateWriteStatus() {
         for (auto it = WritingBlobs_.begin(); it != WritingBlobs_.end();) {
-            if (it->second.IsBlobWrittenFuture_.HasValue()) {
+            if (it->second.KeyFuture_.HasValue()) {
+                StoredBlobs_[it->first] = it->second.KeyFuture_.GetValue();
                 WritingBlobsTotalSize_ -= it->second.BlobSize_;
                 ++StoredBlobsCount_;
                 it = WritingBlobs_.erase(it);
@@ -105,29 +113,23 @@ private:
     }
 
 private:
-    IDqChannelStorageActor* ChannelStorageActor_;
-    TActorId ChannelStorageActorId_;
-    TActorSystem *ActorSystem_;
+    IDqSpiller::TPtr Spiller_;
 
-    // BlobId -> future with requested blob
-    std::unordered_map<ui64, NThreading::TFuture<TBuffer>> LoadingBlobs_;
+    std::optional<NThreading::TFuture<std::optional<TChunkedBuffer>>> LoadingBlob_ = std::nullopt;
     // BlobId -> future with some additional info
     std::unordered_map<ui64, TWritingBlobInfo> WritingBlobs_;
     ui64 WritingBlobsTotalSize_ = 0;
 
     ui64 StoredBlobsCount_ = 0;
+
+    std::unordered_map<ui64, IDqSpiller::TKey> StoredBlobs_;
+    TQueue<ui64> BlobIdQueue_; // Очередь для FIFO порядка
+    ui64 BlobId_ = 0;
+
 };
 
-} // anonymous namespace
+// Фабричная функция для создания адаптера
+IDqChannelStorage::TPtr CreateDqChannelSpillerAdapter(IDqSpiller::TPtr spiller);
 
-
-IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
-    TWakeUpCallback wakeUpCallback,
-    TErrorCallback errorCallback,
-    TIntrusivePtr<TSpillingTaskCounters> spillingTaskCounters,
-    TActorSystem* actorSystem)
-{
-    return new TDqChannelStorage(txId, channelId, std::move(wakeUpCallback), std::move(errorCallback), spillingTaskCounters, actorSystem);
-}
 
 } // namespace NYql::NDq

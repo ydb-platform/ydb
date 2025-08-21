@@ -12,37 +12,7 @@ TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, TWakeUp
     , WakeUpCallback_(std::move(wakeUpCallback))
     , ErrorCallback_(std::move(errorCallback))
     , SpillingTaskCounters_(MakeIntrusive<TSpillingTaskCounters>())
-    , Spiller_(nullptr)
 {
-}
-
-TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback, std::shared_ptr<IDqSpiller> spiller)
-    : TxId_(txId)
-    , WakeUpCallback_(std::move(wakeUpCallback))
-    , ErrorCallback_(std::move(errorCallback))
-    , SpillingTaskCounters_(MakeIntrusive<TSpillingTaskCounters>())
-    , Spiller_(std::move(spiller))
-{
-}
-
-IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling) const {
-    return CreateChannelStorage(channelId, withSpilling, NActors::TlsActivationContext->ActorSystem());
-}
-
-IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling,  NActors::TActorSystem* actorSystem) const {
-    if (withSpilling) {
-        return CreateDqChannelStorage(TxId_, channelId, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, actorSystem);
-    } else {
-        return nullptr;
-    }
-}
-
-IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling, std::shared_ptr<IDqSpiller> spiller) const {
-    if (withSpilling && spiller) {
-        return CreateDqChannelSpillerAdapter(spiller);
-    } else {
-        return nullptr;
-    }
 }
 
 TWakeUpCallback TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
@@ -59,14 +29,6 @@ TIntrusivePtr<TSpillingTaskCounters> TDqTaskRunnerExecutionContext::GetSpillingT
 
 TTxId TDqTaskRunnerExecutionContext::GetTxId() const {
     return TxId_;
-}
-
-std::shared_ptr<IDqSpiller> TDqTaskRunnerExecutionContext::GetSpiller() const {
-    return Spiller_;
-}
-
-void TDqTaskRunnerExecutionContext::SetSpiller(std::shared_ptr<IDqSpiller> spiller) {
-    Spiller_ = std::move(spiller);
 }
 
 } // namespace NDq

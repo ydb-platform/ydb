@@ -736,18 +736,7 @@ private:
 
     void CreateSpillingStorage(ui64 channelId, TActorSystem* actorSystem, bool enableSpilling) {
         TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
-        
-        // Пробуем получить спиллер из ExecCtx (если TaskRunner его создал)
-        auto spiller = ExecCtx->GetSpiller();
-        IDqChannelStorage::TPtr channelStorage;
-        
-        if (spiller) {
-            // Используем спиллер из TaskRunner
-            channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, spiller);
-        } else {
-            // Fallback на старый API
-            channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem);
-        }
+        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem);
 
         if (channelStorage) {
             auto spillingIt = SpillingStoragesInfos.find(channelId);

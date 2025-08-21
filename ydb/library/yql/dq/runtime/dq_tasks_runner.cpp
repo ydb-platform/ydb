@@ -27,6 +27,8 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
+#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+
 #include <util/generic/scope.h>
 
 
@@ -296,7 +298,7 @@ public:
         return TaskId;
     }
 
-    void SetSpillerFactory(std::shared_ptr<ISpillerFactory> spillerFactory) override {
+    void SetSpillerFactory(std::shared_ptr<TDqSpillerFactory> spillerFactory) override {
         SpillerFactory = spillerFactory;
     }
 
@@ -563,7 +565,7 @@ public:
         if (SpillerFactory) {
             SpillerFactory->SetTaskCounters(SpillingTaskCounters);
         }
-        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = SpillerFactory;
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
@@ -645,18 +647,7 @@ public:
             }
         }
 
-        // Создаем один спиллер для всех каналов этого task_runner
-        std::shared_ptr<IDqSpiller> taskSpiller;
-        if (SpillerFactory) {
-            auto spillerPtr = SpillerFactory->CreateSpiller();
-            taskSpiller = std::dynamic_pointer_cast<IDqSpiller>(spillerPtr);
-            
-            // Устанавливаем созданный спиллер в ExecCtx для использования в task_runner_actor
-            if (auto execCtxImpl = dynamic_cast<TDqTaskRunnerExecutionContext*>(&execCtx)) {
-                execCtxImpl->SetSpiller(taskSpiller);
-            }
-        }
-
+        auto spiller = SpillerFactory->CreateDqSpiller();
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
         for (ui32 i = 0; i < task.OutputsSize(); ++i) {
             const auto& outputDesc = task.GetOutputs(i);
@@ -712,10 +703,10 @@ public:
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 
                     if (!outputChannelDesc.GetInMemory()) {
-                        if (taskSpiller) {
-                            settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling(), taskSpiller);
+                        if (spiller && outputChannelDesc.GetEnableSpilling()) {
+                            settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, spiller);
                         } else {
-                            settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                            settings.ChannelStorage = execCtx.CreateChannelStorage(channelId);
                         }
                     }
 
@@ -1039,7 +1030,7 @@ private:
     }
 
 private:
-    std::shared_ptr<ISpillerFactory> SpillerFactory;
+    std::shared_ptr<TDqSpillerFactory> SpillerFactory;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
     NUdf::TUniquePtr<NUdf::ILogProvider> ComputationLogProvider;
 

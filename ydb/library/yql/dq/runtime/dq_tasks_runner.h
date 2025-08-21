@@ -12,6 +12,8 @@
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
+#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <ydb/library/yql/dq/actors/spilling/dq_spiller.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
@@ -162,10 +164,6 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const = 0;
 
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, std::shared_ptr<IDqSpiller> spiller) const = 0;
-
     virtual TWakeUpCallback GetWakeupCallback() const = 0;
     virtual TErrorCallback GetErrorCallback() const = 0;
     virtual TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const = 0;
@@ -184,18 +182,6 @@ public:
 
 class TDqTaskRunnerExecutionContextDefault : public TDqTaskRunnerExecutionContextBase {
 public:
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/) const override {
-        return {};
-    };
-
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/) const override {
-        return {};
-    };
-
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, std::shared_ptr<IDqSpiller> /*spiller*/) const override {
-        return {};
-    };
-
     TWakeUpCallback GetWakeupCallback() const override {
         return {};
     }
@@ -467,7 +453,7 @@ public:
     virtual void SetWatermarkIn(TInstant time) = 0;
     virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
 
-    virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
+    virtual void SetSpillerFactory(std::shared_ptr<TDqSpillerFactory> spillerFactory) = 0;
     virtual TString GetOutputDebugString() = 0;
 };
 

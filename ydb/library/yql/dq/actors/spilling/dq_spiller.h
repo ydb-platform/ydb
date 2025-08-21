@@ -1,3 +1,4 @@
+#pragma once
 #include <library/cpp/threading/future/core/future.h>
 #include <yql/essentials/utils/chunked_buffer.h>
 

@@ -56,6 +56,18 @@ bool CanOmitValue(const std::optional<T>* parameter, const std::optional<T>* def
     return false;
 }
 
+// TYsonString.
+inline bool CanOmitValue(const NYson::TYsonString* parameter, const NYson::TYsonString* defaultValue)
+{
+    if (!defaultValue) {
+        return !*parameter;
+    }
+    if (!*parameter && !*defaultValue) {
+        return true;
+    }
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>

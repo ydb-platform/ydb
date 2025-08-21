@@ -598,6 +598,15 @@ class Linter:
         return {cls.KEY: spec_args['LINTER'][0]}
 
 
+class LintWrapperScript:
+    KEY = 'LINT-WRAPPER-SCRIPT'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        if spec_args.get('WRAPPER_SCRIPT'):
+            return {cls.KEY: spec_args['WRAPPER_SCRIPT'][0]}
+
+
 class LintConfigs:
     KEY = 'LINT-CONFIGS'
 

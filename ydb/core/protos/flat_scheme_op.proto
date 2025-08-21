@@ -1840,7 +1840,7 @@ message TModifyScheme {
     optional TChangePathState ChangePathState = 82;
 
     optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
-    
+
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
     // Some entries are grouped by semantics, so are out of order

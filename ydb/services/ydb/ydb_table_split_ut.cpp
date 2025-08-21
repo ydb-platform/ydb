@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
         TControlBoard::SetValue(5, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
 //        TControlBoard::SetValue(1, icb.SchemeShardControls.SplitByLoadEnabled);
-        TControlBoard::SetValue(1, icb.DataShardControls.CpuUsageReportThreshlodPercent);
+        TControlBoard::SetValue(1, icb.DataShardControls.CpuUsageReportThresholdPercent);
         TControlBoard::SetValue(3, icb.DataShardControls.CpuUsageReportIntervalSeconds);
 
         TAtomic enough = 0;
@@ -273,9 +273,9 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         // Set low CPU usage threshold for robustness
         auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
-        TControlBoard::SetValue(5, icb.SchemeShardFastSplitCpuPercentageThreshold);
-        TControlBoard::SetValue(1, icb.DataShardControlsCpuUsageReportThreshlodPercent);
-        TControlBoard::SetValue(3, icb.DataShardControlsCpuUsageReportIntervalSeconds);
+        TControlBoard::SetValue(5, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
+        TControlBoard::SetValue(1, icb.DataShardControls.CpuUsageReportThreshlodPercent);
+        TControlBoard::SetValue(3, icb.DataShardControls.CpuUsageReportIntervalSeconds);
 
         size_t shardsBefore = oldClient.GetTablePartitions("/Root/Foo").size();
         Cerr << "Table has " << shardsBefore << " shards" << Endl;

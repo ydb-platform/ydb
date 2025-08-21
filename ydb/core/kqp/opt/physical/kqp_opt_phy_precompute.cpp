@@ -86,6 +86,13 @@ TExprBase KqpPropagatePrecomuteScalarRowset(TExprBase node, TExprContext& ctx, I
         return node;
     }
 
+    TExprNode::TPtr body = asList.Ptr();
+    const bool eliminatePrecompute = asList.Args().size() == 1;
+    if (eliminatePrecompute) {
+        body = asList.Arg(0).Ptr();
+    }
+
+    // clang-format off
     auto processLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"stream"})
         .Body<TCoMap>()
@@ -93,21 +100,39 @@ TExprBase KqpPropagatePrecomuteScalarRowset(TExprBase node, TExprContext& ctx, I
             .Lambda()
                 .Args({"stream_item"})
                 .Body<TExprApplier>()
-                    .Apply(asList)
+                    .Apply(TExprBase(body))
                     .With(precompute.Cast(), "stream_item")
-                    .Build()
                 .Build()
             .Build()
-        .Done();
+        .Build()
+    .Done();
+    // clang-format on
 
     auto result = DqPushLambdaToStageUnionAll(precompute.Cast().Connection(), processLambda, {}, ctx, optCtx);
     if (!result) {
         return node;
     }
 
+    if (eliminatePrecompute) {
+        TNodeOnNodeOwnedMap replaces;
+        auto connection = result.Cast();
+        // clang-format off
+        // Replace `DcCnValue` to `DqCnUnionAll`.
+        auto unionAllConnection = Build<TDqCnUnionAll>(ctx, node.Pos())
+            .Output()
+                .Stage(connection.Output().Stage())
+                .Index(connection.Output().Index())
+            .Build()
+        .Done();
+        // clang-format on
+
+        replaces[connection.Raw()] = unionAllConnection.Ptr();
+        return TExprBase(ctx.ReplaceNodes(connection.Ptr(), replaces));
+    }
+
     return Build<TDqPhyPrecompute>(ctx, node.Pos())
         .Connection(result.Cast())
-        .Done();
+    .Done();
 }
 
 TExprBase KqpBuildWriteConstraint(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,

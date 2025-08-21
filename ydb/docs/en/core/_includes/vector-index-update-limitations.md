@@ -1,0 +1,1 @@
+Indexed vector search quality or performance may decrease after changing a very large amount of data in a table with a vector index. For more details, see [Updating Vector Indexes](../dev/vector-indexes.md#update).

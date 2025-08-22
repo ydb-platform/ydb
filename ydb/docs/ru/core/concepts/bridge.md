@@ -19,7 +19,7 @@
 Pile не являются самостоятельными кластерами {{ ydb-short-name }}, а представляют собой части одного кластера со сложной топологией:
 
 - [таблетки](glossary.md#tablet) в режиме bridge запускаются в единственном экземпляре;
-- в каждом pile работает отдельная [статическая группа](glossary.md#static-group) и набор независимых групп хранения с обычными [VDisk](glossary.md#vdisk). Доступ к группам хранения осуществляется через dsproxy-proxy, который предоставляет таблеткам интерфейс [dsproxy](glossary.md#ds-proxy) и выполняет операции с использованием двух dsproxy — по одной для групп в каждом pile;
+- в каждом pile работает отдельная [статическая группа](glossary.md#static-group) и набор независимых групп хранения с обычными [VDisk](glossary.md#vdisk). Доступ к группам хранения осуществляется через DS-proxy-proxy, который предоставляет таблеткам интерфейс [DS-proxy](glossary.md#ds-proxy) и выполняет операции с использованием двух DS-proxy — по одной для групп в каждом pile;
 - в каждом pile работает свой набор реплик [StateStorage](glossary.md#state-storage), [SchemeBoard](glossary.md#scheme-board) и [Board](glossary.md#board). Доступ к StateStorage и SchemeBoard и Board осуществляется через аналогичные proxy-proxy.
 
 ## Состояния pile

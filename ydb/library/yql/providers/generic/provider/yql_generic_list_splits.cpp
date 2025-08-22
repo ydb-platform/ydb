@@ -207,8 +207,8 @@ TIssues TGenericListSplitTransformer::ListSplitsFromConnector(const TListSplitRe
         // Check transport error
         if (!streamIterResult.Status.Ok()) {
             desc->Issues.AddIssue(TStringBuilder()
-                << "Call ListSplits for table " << data.Key << ": "
-                << streamIterResult.Status.ToDebugString());
+                << "Call ListSplits for table: " << data.TableAddress.ToString()
+                << " with select: " << streamIterResult.Status.ToDebugString());
             promise.SetValue();
             return;
         }
@@ -226,7 +226,10 @@ TIssues TGenericListSplitTransformer::ListSplitsFromConnector(const TListSplitRe
 
             // check transport and logical errors
             if (drainerResult.Issues) {
-                TIssue dstIssue(TStringBuilder() << "Call ListSplits for table " << data.Key);
+                auto msg = TStringBuilder()
+                    << "Call ListSplits for table: " << data.TableAddress.ToString() << " with select";
+
+                TIssue dstIssue(msg);
 
                 for (const auto& srcIssue : drainerResult.Issues) {
                     dstIssue.AddSubIssue(MakeIntrusive<TIssue>(srcIssue));

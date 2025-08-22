@@ -1,6 +1,6 @@
 # admin cluster bridge switchover
 
-С помощью команды `admin cluster bridge switchover` можно выполнить плановую, плавную смену роли PRIMARY на указанный pile. Подробнее см. [описание сценария](../../../../concepts/bridge.md#switchover).
+С помощью команды `admin cluster bridge switchover` выполняется плавное, плановое переключение указанного pile в состояние `PRIMARY` через промежуточное состояние `PROMOTED`. Подробнее см. [описание сценария](../../../../concepts/bridge.md#switchover).
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -32,7 +32,7 @@ ydb admin cluster bridge switchover --help
 
 ## Примеры {#examples}
 
-Переключение роли `PRIMARY` на pile в состоянии `SYNCHRONIZED`:
+Переключение pile `pile-b` из состояния `SYNCHRONIZED` в состояние `PRIMARY` через промежуточное состояние `PROMOTED`:
 
 ```bash
 ydb admin cluster bridge switchover --new-primary pile-b
@@ -40,7 +40,7 @@ ydb admin cluster bridge switchover --new-primary pile-b
 
 ## Проверка результата {#verify}
 
-Убедитесь, что спустя некоторое время (в течение нескольких минут) роли pile изменились корректно, с помощью команды [list](list.md):
+Убедитесь, что спустя некоторое время (через несколько минут) состояния pile изменились корректно, с помощью команды [list](list.md):
 
 ```bash
 ydb admin cluster bridge list

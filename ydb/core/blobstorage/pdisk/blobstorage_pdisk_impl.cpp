@@ -348,6 +348,8 @@ void TPDisk::Stop() {
             JointChunkWrites.Dequeue(&req);
             Y_VERIFY_DEBUG_S(req->GetType() == ERequestType::RequestChunkWritePiece,
                     PCtx->PDiskLogPrefix << "Unexpected request type# " << TypeName(req));
+            //When control reaches this function, req->Completion is already freed by
+            //TCompletionChunkWritePiece::Release() calls
             TRequestBase::AbortDelete(req, PCtx->ActorSystem);
         }
     }
@@ -813,12 +815,6 @@ ui32 TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
 // Chunk writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-    // std::atomic<int> calls = 0;
-    // std::atomic<int> allocs = 0;
-    // std::atomic<int> releasecount = 0;
-}
-
 void TPDisk::ChunkWritePiecePlain(TChunkWritePiece *piece) {
     auto& evChunkWrite = piece->ChunkWrite;
     ui32 chunkIdx = evChunkWrite->ChunkIdx;
@@ -933,7 +929,7 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter& wri
             piece->PartOffset = 0;
         }
     }
-    
+
     ui32 chunkIdx = evChunkWrite->ChunkIdx;
     P_LOG(PRI_DEBUG, BPD79, "ChunkWrite",
             (ChunkIdx, chunkIdx),
@@ -960,8 +956,6 @@ void TPDisk::PushChunkWrite(TChunkWritePiece *piece) {
 }
 
 TChunkWriteResult TPDisk::ChunkWritePiece(TChunkWritePiece *piece) {
-    // Cerr << "TPDisk::ChunkWritePiece " << calls.fetch_add(1) << Endl;
-
     auto evChunkWrite = piece->ChunkWrite.Get();
     if (evChunkWrite->IsReplied) {
         return {nullptr, true};
@@ -973,7 +967,7 @@ TChunkWriteResult TPDisk::ChunkWritePiece(TChunkWritePiece *piece) {
     if (piece->ChunkWrite->Completion->AllPartsStarted()) {
         Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(HPNow()));
     }
-    
+
     Y_VERIFY_S(piece->PieceShift % Format.SectorPayloadSize() == 0, PCtx->PDiskLogPrefix);
     Y_VERIFY_S(piece->PieceSize % Format.SectorPayloadSize() == 0 || piece->PieceShift + piece->PieceSize == evChunkWrite->TotalSize,
         PCtx->PDiskLogPrefix << "pieceShift# " << piece->PieceShift << " pieceSize# " << piece->PieceSize
@@ -1010,8 +1004,7 @@ TChunkWriteResult TPDisk::ChunkWritePiece(TChunkWritePiece *piece) {
 
         piece->Span.Event("PDisk.ChunkWritePiece.EncryptionStart");
         bool end = ChunkWritePieceEncrypted(piece, writer.GetRef(), piece->PieceSize);
-        //TODO: fix data race
-        //LWTRACK(PDiskChunkWriteLastPieceSendToDevice, evChunkWrite->Orbit, PCtx->PDiskId, evChunkWrite->Owner, chunkIdx, piece->PieceShift, piece->PieceSize);
+        LWTRACK(PDiskChunkWriteLastPieceSendToDevice, piece->Orbit, PCtx->PDiskId, evChunkWrite->Owner, chunkIdx, piece->PieceShift, piece->PieceSize);
         return {std::move(writer), end};
     } else {
         ChunkWritePiecePlain(piece);
@@ -3519,9 +3512,7 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
             span.Attribute("small_job_idx", idx)
                 .Attribute("is_last_piece", idx == jobCount - 1);
             ui32 jobSize = Min(remainingSize, jobSizeLimit);
-            auto piece = new TChunkWritePiece(this, whole, idx * jobSizeLimit, jobSize, std::move(span)); 
-            piece->Completion = MakeHolder<TCompletionChunkWritePart>(piece, piece->ChunkWrite->Completion);
-            piece->GateId = whole->GateId;
+            auto piece = new TChunkWritePiece(this, whole, idx * jobSizeLimit, jobSize, std::move(span));
             piece->EstimateCost(DriveModel);
             remainingSize -= jobSize;
             chunkWritePieces[idx] = std::move(piece);

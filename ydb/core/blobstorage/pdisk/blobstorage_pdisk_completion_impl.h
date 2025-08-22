@@ -167,7 +167,7 @@ public:
         if (Mon) {
             Mon->GetWriteCounter(PriorityClass)->CountResponse();
         }
-        
+
         delete this;
     }
 
@@ -190,11 +190,9 @@ public:
     }
 
     void RemovePart(TActorSystem *actorSystem) {
-        PartsRemoved++;
-        int pieces = Pieces;
         int old = PartsRemoved.fetch_add(1, std::memory_order_seq_cst);
-        if (old + 1 == pieces) {
-            if (PartsWritten.load(std::memory_order_seq_cst) == pieces) {
+        if (old + 1 == Pieces) {
+            if (PartsWritten.load(std::memory_order_seq_cst) == Pieces) {
                 Exec(actorSystem);
             } else {
                 Release(actorSystem);
@@ -208,21 +206,20 @@ public:
     }
 };
 
-class TChunkWritePiece; 
+class TChunkWritePiece;
 
-class TCompletionChunkWritePart : public TCompletionAction {
+class TCompletionChunkWritePiece : public TCompletionAction {
     TPDisk *PDisk;
     ui32 PieceShift;
     ui32 PieceSize;
     TCompletionChunkWrite* CumulativeCompletion;
     TBuffer::TPtr Buffer;
     NWilson::TSpan Span;
-    
 public:
-    TCompletionChunkWritePart(NKikimr::NPDisk::TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion);
+    TCompletionChunkWritePiece(NKikimr::NPDisk::TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion);
     void Exec(TActorSystem *actorSystem) override;
     void Release(TActorSystem *actorSystem) override;
-    virtual ~TCompletionChunkWritePart();
+    virtual ~TCompletionChunkWritePiece();
 };
 
 class TCompletionLogWrite : public TCompletionAction {

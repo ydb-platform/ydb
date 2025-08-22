@@ -11,7 +11,6 @@
 
 namespace NFqRun {
 
-constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 constexpr i64 MAX_RESULT_SET_ROWS = 1000;
 
 struct TExternalDatabase {

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20250512.1)
+VERSION(20250814.0)
 
-ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20250512.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20250814.0.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -82,7 +82,6 @@ SRCS(
     absl/flags/usage_config.cc
     absl/hash/internal/city.cc
     absl/hash/internal/hash.cc
-    absl/hash/internal/low_level_hash.cc
     absl/log/die_if_null.cc
     absl/log/flags.cc
     absl/log/globals.cc
@@ -98,10 +97,13 @@ SRCS(
     absl/log/internal/proto.cc
     absl/log/internal/structured_proto.cc
     absl/log/internal/vlog_config.cc
+    absl/log/log_entry.cc
     absl/log/log_sink.cc
     absl/numeric/int128.cc
+    absl/profiling/hashtable.cc
     absl/profiling/internal/exponential_biased.cc
     absl/profiling/internal/periodic_sampler.cc
+    absl/profiling/internal/profile_builder.cc
     absl/random/discrete_distribution.cc
     absl/random/gaussian_distribution.cc
     absl/random/internal/chi_square.cc

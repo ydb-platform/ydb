@@ -28,11 +28,16 @@ public:
     TQueryInfoList GetInitialData() override final;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override final;
 
+protected:
+    virtual std::pair<TString, TString> GetTableAndColumnForDetectFloatMode() const = 0;
+    TTpcBaseWorkloadParams::EFloatMode FloatMode;
+
 private:
     const TTpcBaseWorkloadParams& Params;
     void PatchQuery(TString& query) const;
     void FilterHeader(IOutputStream& result, TStringBuf header, const TString& query) const;
     TString GetHeader(const TString& query) const;
+    TTpcBaseWorkloadParams::EFloatMode DetectFloatMode() const;
 };
 
 template<class T>

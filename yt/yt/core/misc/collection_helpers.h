@@ -129,6 +129,15 @@ typename TMap::mapped_type GetOrDefault(
     const typename TMap::mapped_type& defaultValue = {})
     requires (!TIsDefaultMap<TMap>::Value);
 
+//! Same as #GetOrDefault, but returns a const reference instead of a copied value.
+// TODO(eshcherbin): Should we remove #GetOrDefault in favour of #GetOrDefaultReference?
+template <class TMap, class TKey>
+const typename TMap::mapped_type& GetOrDefaultReference(
+    const TMap& map,
+    const TKey& key,
+    const typename TMap::mapped_type& defaultValue = {})
+    requires (!TIsDefaultMap<TMap>::Value);
+
 template <class TMap, class TKey, class TCtor>
 auto& GetOrInsert(TMap&& map, const TKey& key, TCtor&& ctor);
 

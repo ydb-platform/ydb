@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/query_data/kqp_request_predictor.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
@@ -1673,7 +1674,7 @@ private:
 
                     YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Tuple);
                     const auto resultTupleType = resultItemType->Cast<TTupleExprType>();
-                    YQL_ENSURE(resultTupleType->GetSize() == 2);
+                    YQL_ENSURE(resultTupleType->GetSize() == 3);
 
                     YQL_ENSURE(resultTupleType->GetItems()[1]->GetKind() == ETypeAnnotationKind::Optional);
                     auto rightRowOptionalType = resultTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
@@ -1691,6 +1692,110 @@ private:
                 }
                 default:
                     YQL_ENSURE(false, "Unexpected lookup strategy for stream lookup: " << settings.Strategy);
+            }
+
+
+            return;
+        }
+
+        if (auto maybeVectorResolve = connection.Maybe<TKqpCnVectorResolve>()) {
+            TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
+            auto& vectorResolveProto = *connectionProto.MutableVectorResolve();
+            auto vectorResolve = maybeVectorResolve.Cast();
+
+            auto tableMeta = TablesData->ExistingTable(Cluster, vectorResolve.Table().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            TIndexDescription *indexDesc = nullptr;
+            for (auto& index: tableMeta->Indexes) {
+                if (index.Name == vectorResolve.Index().Value()) {
+                    indexDesc = &index;
+                }
+            }
+            YQL_ENSURE(indexDesc);
+
+            // Index settings
+            auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
+            *vectorResolveProto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
+
+            // Main table
+            FillTablesMap(vectorResolve.Table(), tablesMap);
+            FillTableId(vectorResolve.Table(), *vectorResolveProto.MutableTable());
+
+            // Index level table
+            TString levelTablePath = TStringBuilder()
+                << vectorResolve.Table().Path().Value()
+                << "/" << vectorResolve.Index().Value()
+                << "/" << NTableIndex::NTableVectorKmeansTreeIndex::LevelTable;
+            auto levelTableMeta = TablesData->ExistingTable(Cluster, levelTablePath).Metadata;
+            YQL_ENSURE(levelTableMeta);
+
+            tablesMap.emplace(levelTablePath, THashSet<TStringBuf>{});
+            tablesMap[levelTablePath].emplace(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn);
+
+            vectorResolveProto.MutableLevelTable()->SetPath(levelTablePath);
+            vectorResolveProto.MutableLevelTable()->SetOwnerId(levelTableMeta->PathId.OwnerId());
+            vectorResolveProto.MutableLevelTable()->SetTableId(levelTableMeta->PathId.TableId());
+            vectorResolveProto.MutableLevelTable()->SetVersion(levelTableMeta->SchemaVersion);
+
+            // Input and output types
+
+            const auto inputType = vectorResolve.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            YQL_ENSURE(inputType, "Empty vector resolve input type");
+            YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::List, "Unexpected vector resolve input type");
+            const auto inputItemType = inputType->Cast<TListExprType>()->GetItemType();
+            vectorResolveProto.SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
+
+            const auto outputType = vectorResolve.Ref().GetTypeAnn();
+            YQL_ENSURE(outputType, "Empty vector resolve output type");
+            YQL_ENSURE(outputType->GetKind() == ETypeAnnotationKind::Stream, "Unexpected vector resolve output type");
+            const auto outputItemType = outputType->Cast<TStreamExprType>()->GetItemType();
+            vectorResolveProto.SetOutputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *outputItemType), TypeEnv));
+
+            // Input columns. Input is strictly mapped to main table's columns to ease passing their types through PhyCnVectorResolve
+
+            TMap<TString, ui32> columnIndexes;
+            YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Struct);
+            const auto& inputColumns = inputItemType->Cast<TStructExprType>()->GetItems();
+            ui32 n = 0;
+            for (const auto inputColumn : inputColumns) {
+                auto name = TString(inputColumn->GetName());
+                YQL_ENSURE(tableMeta->Columns.FindPtr(name), "Unknown column: " << name);
+                vectorResolveProto.AddColumns(name);
+                tablesMap[vectorResolve.Table().Path()].emplace(name);
+                columnIndexes[name] = n++;
+            }
+
+            // Copy columns & vector column index
+
+            auto vectorColumn = indexDesc->KeyColumns.back();
+            YQL_ENSURE(columnIndexes.contains(vectorColumn));
+            vectorResolveProto.SetVectorColumnIndex(columnIndexes.at(vectorColumn));
+
+            TSet<TString> copyColumns;
+            copyColumns.insert(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
+            for (const auto& keyColumn : tableMeta->KeyColumnNames) {
+                copyColumns.insert(keyColumn);
+            }
+            if (vectorResolve.WithData() == "true") {
+                for (const auto& dataColumn : indexDesc->DataColumns) {
+                    copyColumns.insert(dataColumn);
+                }
+            }
+
+            // Maintain alphabetical output column order
+
+            ui32 pos = 0;
+            for (const auto& copyCol : copyColumns) {
+                if (copyCol == NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn) {
+                    vectorResolveProto.SetClusterColumnOutPos(pos);
+                } else {
+                    YQL_ENSURE(columnIndexes.contains(copyCol));
+                    vectorResolveProto.AddCopyColumnIndexes(columnIndexes.at(copyCol));
+                    pos++;
+                }
             }
 
             return;

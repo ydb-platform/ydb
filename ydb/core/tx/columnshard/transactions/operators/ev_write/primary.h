@@ -150,7 +150,7 @@ private:
 
     public:
         TTxWriteReceivedResultAck(TColumnShard& owner, const ui64 txId, const ui64 tabletId)
-            : TBase(&owner)
+            : TBase(&owner, "write_received_result_ack")
             , TxId(txId)
             , TabletId(tabletId) {
         }
@@ -245,7 +245,7 @@ private:
 
     public:
         TTxStartPreparation(TColumnShard* owner, const ui64 txId)
-            : TBase(owner)
+            : TBase(owner, "start_preparation")
             , TxId(txId) {
         }
     };

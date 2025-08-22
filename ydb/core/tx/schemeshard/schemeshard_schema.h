@@ -1373,6 +1373,7 @@ struct Schema : NIceDb::Schema {
         struct IndexType : Column<8, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; };
 
         struct State : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct SubState : Column<49, NScheme::NTypeIds::Uint32> {};
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
 
         struct InitiateTxId : Column<11, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1429,6 +1430,10 @@ struct Schema : NIceDb::Schema {
         struct CpuTimeUsBilled : Column<44, NScheme::NTypeIds::Uint64> {};
         struct CpuTimeUsProcessed : Column<45, NScheme::NTypeIds::Uint64> {};
 
+        struct DropColumnsTxId : Column<46, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct DropColumnsTxStatus : Column<47, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
+        struct DropColumnsTxDone : Column<48, NScheme::NTypeIds::Bool> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1475,7 +1480,11 @@ struct Schema : NIceDb::Schema {
             EndTime,
             UserSID,
             CpuTimeUsBilled,
-            CpuTimeUsProcessed
+            CpuTimeUsProcessed,
+            DropColumnsTxId,
+            DropColumnsTxStatus,
+            DropColumnsTxDone,
+            SubState
         >;
     };
 
@@ -2145,9 +2154,10 @@ struct Schema : NIceDb::Schema {
         struct OperationId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct State : Column<2, NScheme::NTypeIds::Uint32> {};
         struct CurrentIncrementalIdx : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct SerializedData : Column<4, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OperationId>;
-        using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx>;
+        using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx, SerializedData>;
     };
 
     // Incremental restore shard progress tracking
@@ -2167,7 +2177,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<ShardIdx>;
         using TColumns = TableColumns<ShardIdx>;
     };
-  
+
     struct IncrementalBackups : Table<125> {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
         struct State : Column<2, NScheme::NTypeIds::Uint8> {};

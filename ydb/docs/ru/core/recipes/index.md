@@ -5,4 +5,3 @@
 * [{#T}](ydb-sdk/index.md)
 * [{#T}](ydb-cli/index.md)
 * [{#T}](../yql/reference/recipes/index.md)
-* [{#T}](../olap/index.md)

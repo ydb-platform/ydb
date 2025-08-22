@@ -41,6 +41,20 @@
             "uri": "https://{canondata_backend}/1784117/5df9cc4e4122d3265015e45ad32b122973f20538/resource.tar.gz#test.test_agg_phases-min_by_null-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-udaf-default.txt-Debug]": [
+        {
+            "checksum": "a4704868e9fd3e5cc9f162ca985e6c19",
+            "size": 4165,
+            "uri": "https://{canondata_backend}/1942278/80cb65ba04b6130284b1a8e2228ce982f5521967/resource.tar.gz#test.test_agg_phases-udaf-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-udaf-default.txt-Results]": [
+        {
+            "checksum": "ca3e847344217644033fac76135da5ed",
+            "size": 7130,
+            "uri": "https://{canondata_backend}/1871102/074dcc1227db01e84d5d9621dd09629ae5b6e6a9/resource.tar.gz#test.test_agg_phases-udaf-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases_agg_apply-count-default.txt-Debug]": [
         {
             "checksum": "fa96a758aba4f8b93a3d447b8249f931",
@@ -833,6 +847,20 @@
             "checksum": "206c052c946dbbcaa9a7fb357139610a",
             "size": 2220,
             "uri": "https://{canondata_backend}/1942415/88908f3f1c2c172f76ce2e0c2ad414ba2d95573e/resource.tar.gz#test.test_join-eq_over_join_same_keys-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[join-left_join_right_pushdown_skipnulls-default.txt-Debug]": [
+        {
+            "checksum": "904eade316dffd651d4968718eb4509a",
+            "size": 1359,
+            "uri": "https://{canondata_backend}/1931696/f0c68bacea8a8138ec8febaefafcda5c4134fc00/resource.tar.gz#test.test_join-left_join_right_pushdown_skipnulls-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-left_join_right_pushdown_skipnulls-default.txt-Results]": [
+        {
+            "checksum": "d140d71fd4a07691146ca01f9768e089",
+            "size": 1212,
+            "uri": "https://{canondata_backend}/1809005/b4bb54171399cd338ba315035bc180653da06b4c/resource.tar.gz#test.test_join-left_join_right_pushdown_skipnulls-default.txt-Results_/results.txt"
         }
     ],
     "test.test[join-left_join_with_self_aggr-default.txt-Debug]": [

@@ -8,6 +8,9 @@ ENV(YDB_FEATURE_FLAGS="enable_topic_transfer")
 ENV(YDB_GRPC_SERVICES="replication")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="PERSQUEUE:DEBUG")
 
+IF (SANITIZER_TYPE == "memory")
+    TAG(ya:not_autocheck)
+ENDIF()
 
 PEERDIR(
     ydb/core/transfer/ut/common

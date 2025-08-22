@@ -4338,7 +4338,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         for (auto& item : Self->TxInFlight) {
             const TTxState& txState = item.second;
 
-            ui32 inFlightCounter = TTxState::TxTypeInFlightCounter(txState.TxType);
+            ui32 inFlightCounter = TxTypeInFlightCounter(txState.TxType);
             Self->TabletCounters->Simple()[inFlightCounter].Add(1);
         }
 
@@ -5275,6 +5275,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 TOperationId opId(txId, 0);
                 Self->LongIncrementalRestoreOps[opId] = op;
+
+                // Load involved shards into IncrementalRestoreState if it exists
+                if (Self->IncrementalRestoreStates.contains(ui64(txId))) {
+                    auto& state = Self->IncrementalRestoreStates[ui64(txId)];
+                    for (const auto& shardIdValue : op.GetInvolvedShards()) {
+                        TShardIdx shardIdx = TShardIdx(Self->TabletID(), TLocalShardIdx(shardIdValue));
+                        state.InvolvedShards.insert(shardIdx);
+                    }
+                    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                                 "TTxInit loaded " << op.GetInvolvedShards().size() 
+                                 << " involved shards for incremental restore operation " << txId);
+                }
 
                 // Restore table path states based on the operation
                 if (op.HasBackupCollectionPathId()) {

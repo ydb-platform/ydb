@@ -40,6 +40,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
+#include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
@@ -52,6 +53,8 @@
 #include <util/generic/object_counter.h>
 
 namespace NKikimr::NColumnShard {
+
+LWTRACE_USING(YDB_CS);
 
 // NOTE: We really want to batch log records by default in columnshards!
 // But in unittests we want to test both scenarios
@@ -967,6 +970,7 @@ void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, co
 void TColumnShard::Die(const TActorContext& ctx) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "tablet_die");
     AFL_VERIFY(TabletActivityImpl->Dec() == 0);
+    OverloadSubscribers.NotifyAllOverloadSubscribers(SelfId(), TabletID());
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
@@ -1240,16 +1244,19 @@ private:
     THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer> PortionsByPath;
     std::vector<TPortionConstructorV2> FetchedAccessors;
     THashMap<NOlap::TPortionAddress, TPortionConstructorV2> Constructors;
+    TInstant StartTime;
 
 public:
     TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& fetchCallback,
         THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer>&& portions)
         : TBase(self)
         , FetchCallback(fetchCallback)
-        , PortionsByPath(std::move(portions)) {
+        , PortionsByPath(std::move(portions))
+        , StartTime(TInstant::Now()) {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+        TInstant startTransactionTime = TInstant::Now();
         NIceDb::TNiceDb db(txc.DB);
 
         TBlobGroupSelector selector(Self->Info());
@@ -1318,6 +1325,9 @@ public:
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
             std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)), 0);
+        TDuration transactionTime = TInstant::Now() - startTransactionTime;
+        TDuration totalTime = TInstant::Now() - StartTime;
+        LWPROBE(TxAskPortionChunks, Self->TabletID(), transactionTime, totalTime, PortionsByPath.size());
         return true;
     }
     void Complete(const TActorContext& /*ctx*/) override {
@@ -1480,7 +1490,7 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
 
 void TColumnShard::ActivateTiering(const TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {
     AFL_VERIFY(Tiers);
-    Tiers->ActivateTiers(usedTiers);
+    Tiers->ActivateTiers(usedTiers, true);
     OnTieringModified(pathId);
 }
 

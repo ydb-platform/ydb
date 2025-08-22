@@ -11,6 +11,8 @@
 
 #include <yt/yt/core/tracing/public.h>
 
+#include <yt/yt/library/formats/format.h>
+
 #include <util/generic/string.h>
 
 namespace NYT::NHttp {
@@ -65,10 +67,27 @@ inline const std::string XYTTraceIdHeaderName("X-YT-Trace-Id");
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FillYTErrorHeaders(const IResponseWriterPtr& rsp, const TError& error);
-void FillYTErrorTrailers(const IResponseWriterPtr& rsp, const TError& error);
+struct TJsonFactory
+    : public NFormats::IFormatFactory
+{
+    std::unique_ptr<NYson::IFlushableYsonConsumer> CreateConsumer(IZeroCopyOutput* output) override;
 
-TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers = false);
+    NYson::TYsonProducer CreateProducer(IInputStream* input) override;
+};
+
+void FillYTErrorHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error,
+    NFormats::IFormatFactoryPtr errorFormatFactory = New<TJsonFactory>());
+void FillYTErrorTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error,
+    NFormats::IFormatFactoryPtr errorFormatFactory = New<TJsonFactory>());
+
+TError ParseYTError(
+    const IResponsePtr& rsp,
+    bool fromTrailers = false,
+    NFormats::IFormatFactoryPtr errorFormatFactory = New<TJsonFactory>());
 
 //! Catches exception thrown from underlying handler body and
 //! translates it into HTTP error.

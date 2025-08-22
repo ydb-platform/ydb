@@ -222,6 +222,18 @@ TAlter& TAlter::SetFamilyCache(ui32 table, ui32 family, ECache cache) {
     return ApplyLastRecord();
 }
 
+TAlter& TAlter::SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec) { // legacy
+    TAlterRecord& delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetFamily);
+    delta.SetTableId(table);
+    delta.SetFamilyId(family);
+    delta.SetInMemory(cache == ECache::Ever);
+    delta.SetCodec(ui32(codec));
+    delta.SetCache(ui32(cache));
+
+    return ApplyLastRecord();
+}
+
 TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
 {
     TAlterRecord& delta = *Log.AddDelta();

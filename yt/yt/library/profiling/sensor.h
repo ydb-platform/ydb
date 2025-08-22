@@ -312,6 +312,8 @@ public:
         const IRegistryPtr& impl = nullptr,
         TSensorOptions options = {});
 
+    bool IsEnabled() const;
+
     TProfiler WithPrefix(const std::string& prefix) const;
 
     //! Tag settings control local aggregates.

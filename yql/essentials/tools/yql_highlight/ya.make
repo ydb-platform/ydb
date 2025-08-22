@@ -10,11 +10,13 @@ IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE OR OPENSOURCE_PROJECT != "yt")
     )
 
     SRCS(
+        generator_highlight_js.cpp
         generator_json.cpp
         generator_monarch.cpp
         generator_textmate.cpp
         generator_vim.cpp
         generator.cpp
+        highlighting.cpp
         json.cpp
         yql_highlight.cpp
         yqls_highlight.cpp

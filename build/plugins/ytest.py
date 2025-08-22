@@ -576,9 +576,16 @@ def check_resource(fields, unit, *args):
         df.KtlintBinary.value,
         df.UseKtlintOld.value,
         df.KtlintBaselineFile.value,
+        df.KtlintRuleset.value,
     )
 )
 def ktlint(fields, unit, *args):
+    ruleset_dict = df.KtlintRuleset.value(unit, [], [])
+    if ruleset_dict:
+        ruleset = ruleset_dict[df.KtlintRuleset.KEY]
+        unit.ondepends(ruleset)
+        args = (*args, "DEPENDS", ruleset)
+
     flat_args, spec_args = _common.sort_by_keywords(
         {
             "DEPENDS": -1,
@@ -1019,6 +1026,7 @@ def onsetup_run_python(unit):
     (
         df.TestFiles.cpp_linter_files,
         df.LintConfigs.cpp_configs,
+        df.LintWrapperScript.value,
     )
     + LINTER_FIELDS_BASE
 )
@@ -1034,6 +1042,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
     keywords = {
         "NAME": 1,
         "LINTER": 1,
+        "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,
         "GLOBAL_RESOURCES": unlimited,

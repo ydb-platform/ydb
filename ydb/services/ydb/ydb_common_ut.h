@@ -229,7 +229,9 @@ struct TTestOlap {
                 arrow::field("json_payload", arrow::binary()),
                 arrow::field("ingested_at", tsType),
                 arrow::field("saved_at", tsType),
-                arrow::field("request_id", arrow::utf8())
+                arrow::field("request_id", arrow::utf8()),
+                arrow::field("flt", arrow::float32()),
+                arrow::field("dbl", arrow::float64())
             });
     }
 
@@ -244,7 +246,9 @@ struct TTestOlap {
             { "json_payload", NYdb::EPrimitiveType::JsonDocument },
             { "ingested_at", NYdb::EPrimitiveType::Timestamp },
             { "saved_at", NYdb::EPrimitiveType::Timestamp },
-            { "request_id", NYdb::EPrimitiveType::Utf8 }
+            { "request_id", NYdb::EPrimitiveType::Utf8 },
+            { "flt", NYdb::EPrimitiveType::Float },
+            { "dbl", NYdb::EPrimitiveType::Double }
         };
 
         if (sort) {
@@ -275,6 +279,8 @@ struct TTestOlap {
                     Columns { Name: "ingested_at" Type: "Timestamp" }
                     Columns { Name: "saved_at" Type: "Timestamp" }
                     Columns { Name: "request_id" Type: "Utf8" }
+                    Columns { Name: "flt" Type: "Float" }
+                    Columns { Name: "dbl" Type: "Double" }
                     KeyColumnNames: "timestamp"
                     KeyColumnNames: "uid"
                 }
@@ -332,6 +338,8 @@ struct TTestOlap {
             Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[5], s + "str"));
             Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[6], "{ \"value\": " + s + " }"));
             Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[9], s + "str"));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::FloatType>(*builders[10], i * 1.5f));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::DoubleType>(*builders[11], i * 2.5));
         }
 
         return arrow::RecordBatch::Make(schema, rowsCount, NArrow::Finish(std::move(builders)));

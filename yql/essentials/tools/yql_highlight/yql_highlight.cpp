@@ -1,3 +1,4 @@
+#include "generator_highlight_js.h"
 #include "generator_json.h"
 #include "generator_monarch.h"
 #include "generator_textmate.h"
@@ -32,6 +33,7 @@ const TGeneratorMap generators = {
     {"tmlanguage", MakeTextMateJsonGenerator},
     {"tmbundle", MakeTextMateBundleGenerator},
     {"vim", MakeVimGenerator},
+    {"highlightjs", MakeHighlightJSGenerator},
 };
 
 template <class TMap>

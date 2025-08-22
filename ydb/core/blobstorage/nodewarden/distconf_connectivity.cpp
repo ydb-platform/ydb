@@ -268,8 +268,7 @@ namespace NKikimr::NStorage {
                 return TStringBuilder() << "peer cluster state history invalid: " << *error;
             } else if (auto error = ValidateClusterStateDetails(*StorageConfig)) {
                 return TStringBuilder() << "local cluster state history invalid: " << *error;
-            } else if (auto error = CheckHistoryCompatibility(StorageConfig->GetClusterStateDetails(),
-                    config.GetClusterStateDetails(), StorageConfig->GetClusterState(), config.GetClusterState())) {
+            } else if (auto error = CheckHistoryCompatibility(*StorageConfig, config)) {
                 // histories are incompatible, connection won't ever be possible
                 return error;
             }
@@ -353,19 +352,23 @@ namespace NKikimr::NStorage {
             return std::nullopt;
         }
 
-        std::optional<TString> CheckHistoryCompatibility(const NKikimrBridge::TClusterStateDetails& my,
-                const NKikimrBridge::TClusterStateDetails& peer, const NKikimrBridge::TClusterState& myState,
-                const NKikimrBridge::TClusterState& peerState) {
+        std::optional<TString> CheckHistoryCompatibility(const NKikimrBlobStorage::TStorageConfig& myConfig,
+                const NKikimrBlobStorage::TStorageConfig& peerConfig) {
+            const auto& myState = myConfig.GetClusterState();
+            const auto& peerState = peerConfig.GetClusterState();
             if (myState.GetGeneration() < peerState.GetGeneration()) {
+                if (myState.GetGeneration() == 0 && myConfig.GetGeneration() == 0) {
+                    return std::nullopt; // fresh cluster, may be just formatted
+                }
                 // we have to validate our state through peer's history that it reaches peer's state
-                const auto& history = peer.GetUnsyncedHistory();
+                const auto& history = peerConfig.GetClusterStateDetails().GetUnsyncedHistory();
                 const auto it = std::ranges::lower_bound(history, myState.GetGeneration(), std::less<ui64>(),
                     [](const auto& x) { return x.GetClusterState().GetGeneration(); });
                 if (it == history.end() || !NBridge::IsSameClusterState(it->GetClusterState(), myState)) {
                     return "cluster state history has been diverged";
                 }
             } else if (peerState.GetGeneration() < myState.GetGeneration()) { // just check in reverse
-                return CheckHistoryCompatibility(peer, my, peerState, myState);
+                return CheckHistoryCompatibility(peerConfig, myConfig);
             } else if (!NBridge::IsSameClusterState(myState, peerState)) {
                 return "cluster state history has been diverged";
             }

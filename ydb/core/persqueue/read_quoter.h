@@ -143,6 +143,8 @@ public:
     void HandleConfigUpdate(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     virtual void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) = 0;
     virtual void HandleUpdateAccountQuotaCounters(NAccountQuoterEvents::TEvCounters::TPtr& ev, const TActorContext& ctx) = 0;
+    void HandleAcquireExclusiveLock(TEvPQ::TEvAcquireExclusiveLock::TPtr& ev, const TActorContext& ctx);
+    void HandleReleaseExclusiveLock(TEvPQ::TEvReleaseExclusiveLock::TPtr& ev, const TActorContext& ctx);
 
 protected:
     virtual void HandleQuotaRequestImpl(TRequestContext& context) = 0;
@@ -177,7 +179,7 @@ private:
 
     void ScheduleWakeUp(const TActorContext& ctx);
 
-STFUNC(StateWork)
+    STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPQ::TEvRequestQuota, HandleQuotaRequest);
@@ -186,12 +188,16 @@ STFUNC(StateWork)
             HFunc(TEvPQ::TEvConsumed, HandleConsumed);
             HFunc(TEvPQ::TEvChangePartitionConfig, HandleConfigUpdate);
             HFunc(NAccountQuoterEvents::TEvCounters, HandleUpdateAccountQuotaCounters);
+            HFunc(TEvPQ::TEvAcquireExclusiveLock, HandleAcquireExclusiveLock);
+            HFunc(TEvPQ::TEvReleaseExclusiveLock, HandleReleaseExclusiveLock);
             HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
         default:
             ProcessEventImpl(ev);
             break;
         };
     }
+
+    void ReplyExclusiveLockAcquired(const TActorId& receiver);
 
 protected:
     std::deque<TRequestContext> WaitingInflightRequests;
@@ -205,6 +211,12 @@ protected:
     TTabletCountersBase Counters;
 
 private:
+    enum class EExclusiveLockState {
+        EReleased,
+        EAcquiring,
+        EAcquired,
+    };
+
     TActorId TabletActor;
     std::deque<TRequestContext> WaitingTotalPartitionQuotaRequests;
     THashMap<ui64, TRequestContext> PendingAccountQuotaRequests;
@@ -213,6 +225,8 @@ private:
     ui64 MaxInflightRequests;
     bool TotalPartitionQuotaEnabled;
     TVector<TEvPQ::TEvRequestQuota::TPtr> PendingQuotaRequests;
+    EExclusiveLockState ExclusiveLockState = EExclusiveLockState::EReleased;
+    TActorId ExclusiveLockRequester;
 };
 
 
@@ -222,7 +236,7 @@ const static ui64 DEFAULT_READ_SPEED_AND_BURST = 1'000'000'000;
 
 public:
     TReadQuoter(
-        const TActorContext& ctx,
+        const NKikimrPQ::TPQConfig& pqConfig,
         const NPersQueue::TTopicConverterPtr& topicConverter,
         const NKikimrPQ::TPQTabletConfig& config,
         const TPartitionId& partition,
@@ -233,7 +247,7 @@ public:
     )
         : TPartitionQuoterBase(
                 topicConverter, config, partition, tabletActor, true, tabletId, counters,
-                AppData(ctx)->PQConfig.GetMaxInflightReadRequestsPerPartition()
+                pqConfig.GetMaxInflightReadRequestsPerPartition()
         )
         , Parent(parent)
     {
@@ -277,8 +291,8 @@ private:
     void ApproveQuota(TAutoPtr<TEvPQ::TEvRead>&& ev, const TActorContext& ctx);
     void ProcessPerConsumerQuotaQueue(const TActorContext& ctx);
     TConsumerReadQuota* GetConsumerQuotaIfExists(const TString& consumerStr);
-    ui64 GetConsumerReadSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const;
-    ui64 GetConsumerReadBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const;
+    ui64 GetConsumerReadSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& consumerStr, const TActorContext& ctx) const;
+    ui64 GetConsumerReadBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& consumerStr, const TActorContext& ctx) const;
 
 private:
     THashMap<TString, TConsumerReadQuota> ConsumerQuotas;

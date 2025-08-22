@@ -41,21 +41,41 @@ class CherryPickSuggester:
 
     def should_suggest_cherry_pick(self):
         """Determine if we should suggest cherry-pick for this PR"""
-        # Skip if PR is labeled as not for cherry-pick
-        pr = self.repo.get_pull(self.pr_number)
-        labels = [label.name for label in pr.labels]
-        
-        skip_labels = ['not-for-cherry-pick', 'not-for-changelog', 'experimental-feature']
-        if any(label in labels for label in skip_labels):
-            self.logger.info(f"Skipping cherry-pick suggestion due to labels: {labels}")
-            return False
-        
-        # Skip if PR description contains skip markers
-        if pr.body and ('cherry-pick' in pr.body.lower() and 'skip' in pr.body.lower()):
-            self.logger.info("Skipping cherry-pick suggestion due to skip marker in description")
-            return False
+        try:
+            pr = self.repo.get_pull(self.pr_number)
+            labels = [label.name.lower() for label in pr.labels]
             
-        return True
+            # Skip if PR is labeled as not for cherry-pick
+            skip_labels = ['not-for-cherry-pick', 'not-for-changelog', 'experimental-feature', 'wip', 'work-in-progress']
+            if any(label in labels for label in skip_labels):
+                self.logger.info(f"Skipping cherry-pick suggestion due to labels: {labels}")
+                return False
+            
+            # Skip if PR description contains skip markers
+            if pr.body:
+                body_lower = pr.body.lower()
+                skip_phrases = ['no cherry-pick', 'skip cherry-pick', 'cherry-pick: none', 'cherry-pick: skip']
+                if any(phrase in body_lower for phrase in skip_phrases):
+                    self.logger.info("Skipping cherry-pick suggestion due to skip marker in description")
+                    return False
+            
+            # Skip if PR is too old (more than 30 days since merge)
+            import datetime
+            if pr.merged_at:
+                days_since_merge = (datetime.datetime.now(datetime.timezone.utc) - pr.merged_at).days
+                if days_since_merge > 30:
+                    self.logger.info(f"Skipping cherry-pick suggestion for old PR (merged {days_since_merge} days ago)")
+                    return False
+            
+            # Skip if it's a revert PR
+            if 'revert' in self.pr_title.lower():
+                self.logger.info("Skipping cherry-pick suggestion for revert PR")
+                return False
+                
+            return True
+        except Exception as e:
+            self.logger.error(f"Error checking if should suggest cherry-pick: {e}")
+            return False
 
     def post_suggestion_comment(self, stable_branches):
         """Post a comment suggesting cherry-pick to stable branches"""

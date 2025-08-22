@@ -29,15 +29,17 @@ class CherryPickCommandHandler:
 
     def parse_cherry_pick_command(self):
         """Parse cherry-pick command from comment body"""
-        # Look for /cherry-pick command followed by branch names
-        pattern = r'/cherry-pick\s+([\w\s\-\.]+)'
+        # Look for /cherry-pick command followed by text until end of line or sentence
+        pattern = r'/cherry-pick\s+([^\n\r,.!?]*)'
         match = re.search(pattern, self.comment_body, re.IGNORECASE)
         
         if not match:
             return []
         
-        # Split branch names by whitespace and filter empty strings
-        branches = [branch.strip() for branch in match.group(1).split() if branch.strip()]
+        # Split by whitespace and filter for stable branches only
+        all_words = match.group(1).split()
+        branches = [word.strip() for word in all_words 
+                   if word.strip() and re.match(r'^stable-[\w\-\.]+$', word.strip())]
         return branches
 
     def validate_branches(self, branches):
@@ -57,14 +59,18 @@ class CherryPickCommandHandler:
     def check_permissions(self):
         """Check if comment author has permissions to trigger cherry-pick"""
         try:
-            # Check if user is a collaborator or has write access
+            # First check if they are the PR author
+            pr = self.repo.get_pull(self.pr_number)
+            if pr.user.login == self.comment_author:
+                return True
+            
+            # Then check if user is a collaborator or has write access
             try:
                 permission = self.repo.get_collaborator_permission(self.comment_author)
-                return permission in ['admin', 'write']
+                return permission in ['admin', 'write', 'maintain']
             except GithubException:
-                # If not a collaborator, check if they are the PR author
-                pr = self.repo.get_pull(self.pr_number)
-                return pr.user.login == self.comment_author
+                # Not a collaborator, already checked if PR author above
+                return False
         except Exception as e:
             self.logger.error(f"Error checking permissions: {e}")
             return False
@@ -163,6 +169,14 @@ Cherry-pick requested by: @{self.comment_author}
                 if result['status'] == 'failed':
                     comment_body += f"- **{result['branch']}**: {result['error']}\n"
             comment_body += "\n"
+            
+            if failure_count > 0:
+                comment_body += "**Common reasons for failure:**\n"
+                comment_body += "- Merge conflicts requiring manual resolution\n"
+                comment_body += "- Missing dependencies or incompatible changes\n"
+                comment_body += "- Target branch protection rules\n\n"
+                comment_body += "For failed cherry-picks, you may need to create them manually. "
+                comment_body += "See the [documentation](https://github.com/ydb-platform/ydb/blob/main/ydb/docs/en/core/contributor/suggest-change.md#cherry_pick_stable) for guidance.\n\n"
         
         comment_body += f"---\n*In response to [comment]({pr.html_url}#issuecomment-{self.comment_id}) by @{self.comment_author}*"
         

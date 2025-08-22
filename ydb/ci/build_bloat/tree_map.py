@@ -34,6 +34,10 @@ def _children_to_list(tree):
         _children_to_list(child)
 
 def _propogate_size(tree):
+    # Ensure the tree has a size key, initialize to 0 if missing
+    if "size" not in tree:
+        tree["size"] = 0
+    
     for child in tree.get("children", []):
         tree["size"] += _propogate_size(child)
     return tree["size"]
@@ -65,7 +69,7 @@ def _enrich_names_with_units(tree, unit_name, factor):
     tree["name"] = tree["name"] + ", {:_} {}".format(int(tree["size"]*factor), unit_name)
 
 def _build_tree_map(paths_to_add, unit_name, factor, threshold, fix_size_threshold):
-    tree = {}
+    tree = {"size": 0, "children": {}, "name": "root"}  # Initialize tree with proper defaults
     for path in paths_to_add:
         _add_to_tree(tree, path)
     _children_to_list(tree)

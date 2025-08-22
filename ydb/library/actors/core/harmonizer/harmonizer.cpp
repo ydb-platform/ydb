@@ -329,7 +329,6 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
 
     float additionalThreadsFromLowerPriority = 0.0f;
     float loanedElapsedCpu = 0.0f;
-    //float coresWhichWereTakenAwayByLowerPriority = 0.0f;
     for (size_t poolIdx : PriorityOrder) {
         TPoolInfo& pool = *Pools[poolIdx];
 

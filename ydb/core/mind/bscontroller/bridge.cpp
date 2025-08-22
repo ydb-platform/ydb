@@ -487,4 +487,66 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateSyncerSta
     }
 }
 
+void TBlobStorageController::RenderBridge(IOutputStream& out) {
+    RenderHeader(out);
+
+    HTML(out) {
+        TAG(TH3) {
+            out << "Working syncers";
+        }
+
+        TABLE_CLASS("table") {
+            TABLEHEAD() {
+                TABLER() {
+                    TABLEH() { out << "Bridge proxy group id"; }
+                    TABLEH() { out << "Target group id"; }
+                    TABLEH() { out << "Source group id"; }
+                    TABLEH() { out << "State"; }
+                    TABLEH() { out << "Node id"; }
+                }
+            }
+            TABLEBODY() {
+                for (auto& [targetGroupId, nodeId, sourceGroupId] : SyncersTargetNodeSource) {
+                    TABLER() {
+                        TGroupId bridgeProxyGroupId;
+                        TString state;
+                        auto scanPiles = [&](auto& info) {
+                            if (!info) {
+                                return;
+                            }
+                            for (const auto& pile : info->GetBridgeGroupState().GetPile()) {
+                                if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == targetGroupId) {
+                                    state = NKikimrBridge::TGroupState::EStage_Name(pile.GetStage());
+                                    break;
+                                }
+                            }
+                        };
+                        if (const TGroupInfo *group = FindGroup(targetGroupId)) {
+                            if (group->BridgeProxyGroupId) {
+                                bridgeProxyGroupId = *group->BridgeProxyGroupId;
+                                if (const TGroupInfo *bridgeProxyGroup = FindGroup(bridgeProxyGroupId)) {
+                                    scanPiles(bridgeProxyGroup->BridgeGroupInfo);
+                                }
+                            }
+                        } else if (const auto it = StaticGroups.find(targetGroupId); it != StaticGroups.end()) {
+                            if (const auto& group = it->second.Info->Group) {
+                                bridgeProxyGroupId = TGroupId::FromProto(&group.value(),
+                                    &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId);
+                                scanPiles(group);
+                            }
+                        }
+                        TABLED() { out << bridgeProxyGroupId; }
+                        TABLED() { out << targetGroupId; }
+                        TABLED() { out << sourceGroupId; }
+                        TABLED() { out << state; }
+                        TABLED() {
+                            out << "<a href='/node/" << nodeId << "/actors/nodewarden#syncer-" << targetGroupId << "'>" << nodeId << "</a>";
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 } // NKikimr::NBsController

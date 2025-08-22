@@ -652,6 +652,11 @@ namespace NKikimr::NStorage {
             TActorId ActorId;
             bool Finished = false;
             std::optional<TString> ErrorReason;
+            ui32 NumStart = 0;
+            ui32 NumStop = 0;
+            ui32 NumFinishOK = 0;
+            ui32 NumFinishError = 0;
+            std::optional<TString> LastErrorReason;
 
             friend std::strong_ordering operator <=>(const TWorkingSyncer& x, const TWorkingSyncer& y) {
                 return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId) <=>

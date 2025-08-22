@@ -61,6 +61,7 @@ class TJsonQuery : public TViewerPipeClient {
     NHttp::THttpOutgoingResponsePtr HttpResponse;
     std::vector<bool> ResultSetHasColumns;
     bool ConcurrentResults = false;
+    bool InternalCall = false;
     TString ContentType;
 
 private:
@@ -324,6 +325,7 @@ public:
             OutputChunkMaxSize = std::clamp<ui64>(OutputChunkMaxSize, 1, 500000000); // from 1 to 50 MB
         }
         CollectDiagnostics = FromStringWithDefault<bool>(params.Get("collect_diagnostics"), CollectDiagnostics);
+        InternalCall = FromStringWithDefault<bool>(params.Get("internal_call"), InternalCall);
         if (params.Has("stats_period")) {
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
         }
@@ -607,6 +609,7 @@ public:
                 event->SetProgressStatsPeriod(StatsPeriod);
             }
         }
+        request.SetIsInternalCall(InternalCall);
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         return MakeRequest<TResponseType>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
     }

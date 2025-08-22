@@ -51,7 +51,7 @@ public:
         LOG_I("Create " << Debug());
     }
 
-    TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme> scheme) override {
+    TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
         Scheme = std::move(scheme);
         MakeTypeInfos();
 
@@ -59,14 +59,14 @@ public:
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64 seq) override {
+    EScan Seek(TLead& lead, ui64 seq) noexcept override {
         LOG_T("Seek " << seq << " " << Debug());
 
         lead.To(ScanTags, {}, NTable::ESeek::Lower);
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
         // LOG_T("Feed " << Debug());
 
         if (row.Size() != ScanTags.size()) {
@@ -74,7 +74,7 @@ public:
         }
 
         ++ReadRows;
-        ReadBytes += CountRowCellBytes(key, *row);
+        ReadBytes += CountBytes(key, row);
 
         TArrayRef<const TCell> rowCells = *row;
         if (!FirstIndexKey) {
@@ -90,15 +90,11 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(const std::exception& ex) override {
-        Issues.AddIssue(TStringBuilder() << "Scan failed: " << ex.what());
-        return Finish(EStatus::Exception);
-    }
-
-    TAutoPtr<IDestructable> Finish(EStatus status) override {
-        if (status == EStatus::Exception) {
+    TAutoPtr<IDestructable> Finish(EAbort status) noexcept override {
+        /*if (status == EAbort::Exception) {
             StatusCode = NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR;
-        } else if (status != EStatus::Done) {
+        } else */
+        if (status != EAbort::None) {
             StatusCode = NKikimrIndexBuilder::EBuildStatus::ABORTED;
         } else if (StatusCode == NKikimrIndexBuilder::EBuildStatus::INVALID) {
             StatusCode = NKikimrIndexBuilder::EBuildStatus::DONE;
@@ -130,13 +126,13 @@ public:
         return this;
     }
 
-    EScan Exhausted() override {
+    EScan Exhausted() noexcept override {
         LOG_T("Exhausted " << Debug());
 
         return EScan::Final;
     }
 
-    void Describe(IOutputStream& out) const override {
+    void Describe(IOutputStream& out) const noexcept override {
         out << "TValidateUniqueIndexScan Id: " << BuildIndexId
             << " Status: " << StatusCode << " Issues: " << Issues.ToOneLineString();
     }
@@ -172,7 +168,7 @@ private:
         IndexColumnTypeInfos.reserve(ScanTags.size());
         for (NTable::TTag tag : ScanTags) {
             const NTable::TColInfo* colInfo = Scheme->ColInfo(tag);
-            Y_ENSURE(colInfo, "Column info not found for tag " << tag);
+            Y_ABORT_UNLESS(colInfo);
             IndexColumnTypeInfos.emplace_back(colInfo->TypeInfo);
         }
     }

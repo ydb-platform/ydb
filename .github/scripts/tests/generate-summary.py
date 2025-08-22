@@ -22,16 +22,21 @@ def is_sanitizer_issue(error_text):
     if not error_text:
         return False
     
-    # Common sanitizer error patterns
+    # Sanitizer error patterns for comprehensive coverage
     sanitizer_patterns = [
-        r'ERROR: AddressSanitizer',
-        r'WARNING: MemorySanitizer',
-        r'WARNING: ThreadSanitizer',
-        r'runtime error:',  # UndefinedBehaviorSanitizer
-        r'==\d+==.*AddressSanitizer',  # With process ID
-        r'==\d+==.*MemorySanitizer',   # With process ID
-        r'==\d+==.*ThreadSanitizer',   # With process ID
-        r'==\d+==.*runtime error:',    # UBSan with process ID
+        # Main sanitizer patterns with severity levels (covers most cases)
+        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
+        
+        # Process ID prefixed patterns (format: ==PID==SEVERITY: SANITIZER)
+        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
+        
+        # UndefinedBehaviorSanitizer runtime errors
+        r'runtime error:',
+        r'==\d+==.*runtime error:',
+        
+        # Memory leak detection (specific LeakSanitizer output)
+        r'detected memory leaks',
+        r'==\d+==.*detected memory leaks',
     ]
     
     for pattern in sanitizer_patterns:

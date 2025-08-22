@@ -28,8 +28,6 @@ namespace NMiniKQL {
 
 namespace {
 
-const ui32 PartialJoinBatchSize = 100000; // Number of tuples for one join batch
-
 struct TColumnDataPackInfo {
     ui32 ColumnIdx = 0;                                 // Column index in tuple
     ui32 Bytes = 0;                                     // Size in bytes for fixed size values
@@ -50,7 +48,7 @@ struct TGraceJoinPacker {
     ui64 TuplesPacked = 0;                                        // Total number of packed tuples
     ui64 TuplesBatchPacked = 0;                                   // Number of tuples packed during current join batch
     ui64 TuplesUnpacked = 0;                                      // Total number of unpacked tuples
-    ui64 BatchSize = PartialJoinBatchSize;                        // Batch size for partial table packing and join
+    ui64 BatchSize = GraceJoin::PartialJoinBatchSize;             // Batch size for partial table packing and join
     std::chrono::time_point<std::chrono::system_clock> StartTime; // Start time of execution
     std::chrono::time_point<std::chrono::system_clock> EndTime;   // End time of execution
     std::vector<ui64> TupleIntVals;                               // Packed value of all fixed length values of table tuple.  Keys columns should be packed first.
@@ -885,6 +883,12 @@ private:
                 auto& leftTable = *LeftPacker->TablePtr;
                 auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
 
+                if (JoinedTablePtr->PartialJoinIncomplete()) {
+                    // Resume suspended join
+                    JoinedTablePtr->Join(NextBucketNumber - 1, leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                    continue;
+                }
+
                 if (!*HaveMoreRightRows) {
                     leftTable.ClearBucket(NextBucketNumber - 1); // Clear bucket content on batch side
                 }
@@ -1075,6 +1079,14 @@ private:
 
                     JoinedTablePtr->ClearResults();
                     JoinedTablePtr->ResetIterator();
+
+                    if (JoinedTablePtr->PartialJoinIncomplete()) {
+                        auto& leftTable = *LeftPacker->TablePtr;
+                        auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
+
+                        JoinedTablePtr->Join(nextBucketToJoin, leftTable, rightTable, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
+                        continue;
+                    }
 
                     LeftPacker->TuplesBatchPacked = 0;
                     LeftPacker->TablePtr->ClearBucket(nextBucketToJoin); // Clear content of returned bucket

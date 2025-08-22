@@ -6,6 +6,7 @@ PY3TEST()
     TEST_SRCS(
         order_by_with_limit.py
         test_quota_exhaustion.py
+        tablets_movement.py
         zip_bomb.py
     )
 

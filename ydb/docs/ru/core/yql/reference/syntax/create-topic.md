@@ -47,7 +47,7 @@ CREATE TOPIC topic_path (
 
 {% endif %}
 
-{% include [object naming rules](../../../concepts/datamodel/_includes/object-naming-rules.md#object-naming-rules) %}
+{% include [object naming rules](../../../concepts/datamodel/object-naming-rules.md) %}
 
 Следующая команда создаст топик без читателей с настройками по умолчанию:
 

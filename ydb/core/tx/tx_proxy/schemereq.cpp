@@ -1714,11 +1714,11 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     const TVector<TString>* workingDir = nullptr;
     bool lookupError = true;
     for (auto it = resultSet.rbegin(); it != resultSet.rend(); ++it) {
+        lookupError &= (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError);
         if (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             workingDir = &it->Path;
             break;
         }
-        lookupError &= (it->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError);
     }
 
     auto parts = GetFullPath(GetModifyScheme());

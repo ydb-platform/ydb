@@ -258,6 +258,11 @@ public:
                     taskSensorLabel->SetLabel(label);
                     taskSensorLabel->SetValue(value);
                 }
+
+                for (auto nodeId : State_->NodeIds) {
+                    srcDesc.AddNodeIds(nodeId);
+                }
+
                 protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));

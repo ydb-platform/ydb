@@ -2042,7 +2042,7 @@ private:
                 case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
                     break;
             }
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition), Params.TaskSensorLabels));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition), Params.TaskSensorLabels, Params.NodeIds));
         }
 
         {

@@ -402,5 +402,4 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
     Y_UNIT_TEST(block42) {
         ScrubTest(TBlobStorageGroupType::Erasure4Plus2Block);
     }
-
 }

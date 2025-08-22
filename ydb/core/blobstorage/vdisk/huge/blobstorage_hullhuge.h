@@ -188,12 +188,6 @@ namespace NKikimr {
     // TEvHugeLockChunksResult
     ////////////////////////////////////////////////////////////////////////////
     class TEvHugeLockChunksResult : public TEventLocal<TEvHugeLockChunksResult, TEvBlobStorage::EvHugeLockChunksResult> {
-    public:
-        TDefragChunks LockedChunks;
-
-        TEvHugeLockChunksResult(TDefragChunks lockedChunks)
-            : LockedChunks(std::move(lockedChunks))
-        {}
     };
 
     ////////////////////////////////////////////////////////////////////////////

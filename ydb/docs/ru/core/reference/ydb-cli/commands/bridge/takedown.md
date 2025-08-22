@@ -1,6 +1,6 @@
 # admin cluster bridge takedown
 
-С помощью команды `admin cluster bridge takedown` можно выполнить [плановое отключение](../../../../concepts/bridge.md#takedown) pile. Если отключается текущий `PRIMARY`, можно указать новый `PRIMARY`.
+С помощью команды `admin cluster bridge takedown` можно выполнить [плановое отключение](../../../../concepts/bridge.md#takedown) pile. Если отключается текущий `PRIMARY`, необходимо указать новый `PRIMARY`.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 
@@ -33,13 +33,13 @@ ydb admin cluster bridge takedown --help
 
 ## Примеры {#examples}
 
-Вывод `SYNCHRONIZED` pile из кластера:
+Вывод `SYNCHRONIZED` pile `pile-b` из кластера:
 
 ```bash
 ydb admin cluster bridge takedown --pile pile-b
 ```
 
-Вывод `PRIMARY` pile из кластера с переключением `PRIMARY` на `SYNCHRONIZED` pile:
+Вывод `PRIMARY` pile `pile-a` из кластера с переключением `PRIMARY` на `SYNCHRONIZED` pile `pile-b`:
 
 ```bash
 ydb admin cluster bridge takedown --pile pile-a --new-primary pile-b

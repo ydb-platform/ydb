@@ -119,7 +119,13 @@ message FulltextIndexSettings {
         FLAT = 1;
     }
 
+    enum Tokenizer {
+        TOKENIZER_UNSPECIFIED = 0;
+        WHITESPACE = 1;
+    }
+
     Layout layout = 1;
+    Tokenizer tokenizer = 2;
 }
 
 message GlobalFulltextIndex {

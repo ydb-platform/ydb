@@ -236,32 +236,68 @@ class LoadSuiteBase:
 
     @classmethod
     def check_nodes(cls, result: YdbCliHelper.WorkloadRunResult, end_time: float) -> list[NodeErrors]:
+        """
+        Проверяет состояние нод кластера после выполнения workload
+        
+        Сравнивает текущее состояние с состоянием до запуска workload и nemesis
+        """
         if cls.__nodes_state is None:
+            logging.warning("No initial nodes state available for comparison")
             return []
+        
         node_errors = []
         fail_hosts = set()
-        for node in YdbCluster.get_cluster_nodes(db_only=True):
-            saved_node = cls.__nodes_state.get(node.slot)
-            if saved_node is not None:
-                if node.start_time > saved_node.start_time:
-                    node_errors.append(NodeErrors(node, 'was restarted'))
-                    fail_hosts.add(node.host)
-                del cls.__nodes_state[node.slot]
-        for _, node in cls.__nodes_state.items():
-            node_errors.append(NodeErrors(node, 'is down'))
-            fail_hosts.add(node.host)
+        
+        # Получаем текущие ноды кластера
+        current_nodes = YdbCluster.get_cluster_nodes(db_only=True)
+        current_nodes_by_slot = {node.slot: node for node in current_nodes}
+        
+        # Проверяем каждую сохраненную ноду
+        for slot, saved_node in cls.__nodes_state.items():
+            current_node = current_nodes_by_slot.get(slot)
+            
+            if current_node is None:
+                # Нода не найдена - она down
+                node_errors.append(NodeErrors(saved_node, 'is down'))
+                fail_hosts.add(saved_node.host)
+                logging.warning(f"Node {slot} is down (not found in current cluster)")
+            elif current_node.start_time > saved_node.start_time:
+                # Нода была перезапущена
+                node_errors.append(NodeErrors(current_node, 'was restarted'))
+                fail_hosts.add(current_node.host)
+                logging.info(f"Node {slot} was restarted (start_time: {saved_node.start_time} -> {current_node.start_time})")
+            else:
+                # Нода в порядке
+                logging.debug(f"Node {slot} is healthy")
+        
+        # Очищаем состояние
         cls.__nodes_state = None
+        
         if len(node_errors) == 0:
+            logging.info("All nodes are healthy")
             return []
 
+        # Получаем cores и OOM для проблемных хостов
+        logging.info(f"Checking cores and OOM for {len(fail_hosts)} problematic hosts")
         core_hashes = cls.__get_core_hashes_by_pod(fail_hosts, result.start_time, end_time)
         ooms = cls.__get_hosts_with_omms(fail_hosts, result.start_time, end_time)
-        for node in node_errors:
-            node.core_hashes = core_hashes.get(f'{node.node.slot}', [])
-            node.was_oom = node.node.host in ooms
-
+        
+        # Обогащаем ошибки информацией о cores и OOM
+        for node_error in node_errors:
+            node_error.core_hashes = core_hashes.get(f'{node_error.node.slot}', [])
+            node_error.was_oom = node_error.node.host in ooms
+            
+            # Логируем детали проблемы
+            if node_error.core_hashes:
+                logging.error(f"Node {node_error.node.slot} has {len(node_error.core_hashes)} cores")
+            if node_error.was_oom:
+                logging.error(f"Node {node_error.node.slot} had OOM")
+        
+        # Добавляем ошибки в результат
         for err in node_errors:
             result.add_error(f'Node {err.node.slot} {err.message}')
+        
+        logging.info(f"Found {len(node_errors)} node issues: {[f'{err.node.slot}:{err.message}' for err in node_errors]}")
         return node_errors
 
     @classmethod

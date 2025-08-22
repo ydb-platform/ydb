@@ -386,23 +386,38 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
 
         # Проверяем основные проблемы (рестарт, падение)
         if node_error.message and node_error.message not in ['diagnostic info collected']:
-            issues.append(node_error.message.replace('was ', '').replace('is ', ''))
+            if 'is down' in node_error.message:
+                issues.append("node_down")
+            elif 'was restarted' in node_error.message:
+                issues.append("restarted")
+            else:
+                issues.append(node_error.message.replace('was ', '').replace('is ', ''))
+        
         # Добавляем cores если есть (критичная проблема)
         if node_error.core_hashes:
             issues.append(f"cores:{len(node_error.core_hashes)}")
+        
         # Добавляем oom если есть (критичная проблема)
         if node_error.was_oom:
             issues.append("oom")
+        
         has_critical_issues = node_error.was_oom or node_error.core_hashes
         has_issues = len(issues) > 0
 
         if has_issues:
             # Красный только для критичных проблем (cores/oom)
-            # Зеленый для обычных проблем (restarted/down)
-            color = "#ffcccc" if has_critical_issues else "#ccffcc"
+            # Желтый для node_down (нода не восстановилась)
+            # Зеленый для обычных проблем (restarted)
+            if has_critical_issues:
+                color = "#ffcccc"  # 🔴 Красный
+            elif "node_down" in issues:
+                color = "#ffffcc"  # 🟡 Желтый
+            else:
+                color = "#ccffcc"  # 🟢 Зеленый
+            
             value = ", ".join(issues) if issues else "issues"
         else:
-            color = "#ccffcc"  # Зеленый
+            color = "#ccffcc"  # 🟢 Зеленый
             value = "ok"
 
         return color, value, has_critical_issues

@@ -2,13 +2,13 @@ import argparse
 import codecs
 import errno
 import os
+import shutil
 import sys
 
 # Explicitly enable local imports
 # Don't forget to add imported scripts to inputs of the calling command!
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-import process_command_files as pcf
-import shutil
+import process_command_files as pcf  # noqa: E402
 
 
 def parse_args():
@@ -159,7 +159,7 @@ def main():
             if file_src.startswith(source_root):
                 rel_path = file_src[len(source_root) :]
                 if skip_namespace and rel_path.startswith(skip_namespace):
-                    rel_path = rel_path[len(skip_namespace):]
+                    rel_path = rel_path[len(skip_namespace) :]
                 orig_path = rel_path
             elif file_src.startswith(build_root):
                 rel_path = file_src[len(build_root) :]

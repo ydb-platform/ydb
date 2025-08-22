@@ -1323,7 +1323,7 @@ TEST_F(TLoggingTest, MessageLevelOverride)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TLoggingTagsTest
-    : public ::testing::TestWithParam<std::tuple<bool, bool, bool, TString>>
+    : public ::testing::TestWithParam<std::tuple<bool, bool, bool, bool, TString>>
 { };
 
 TEST_P(TLoggingTagsTest, All)
@@ -1331,7 +1331,8 @@ TEST_P(TLoggingTagsTest, All)
     auto hasMessageTag = std::get<0>(GetParam());
     auto hasLoggerTag = std::get<1>(GetParam());
     auto hasTraceContext = std::get<2>(GetParam());
-    auto expected = std::get<3>(GetParam());
+    auto hasThreadMessageTag = std::get<3>(GetParam());
+    auto expected = std::get<4>(GetParam());
 
     auto loggingContext = NLogging::GetLoggingContext();
     if (hasTraceContext) {
@@ -1342,6 +1343,10 @@ TEST_P(TLoggingTagsTest, All)
     if (hasLoggerTag) {
         logger = logger.WithTag("LoggerTag");
     }
+
+    auto threadLocalTagGuard = hasThreadMessageTag
+        ? std::optional(TFiberMessageTagGuard("ThreadLocalTag"))
+        : std::nullopt;
 
     if (hasMessageTag) {
         EXPECT_EQ(
@@ -1363,14 +1368,22 @@ TEST_P(TLoggingTagsTest, All)
 
 INSTANTIATE_TEST_SUITE_P(ValueParametrized, TLoggingTagsTest,
     ::testing::Values(
-        std::tuple(false, false, false, "Log message"),
-        std::tuple(false, false,  true, "Log message (TraceContextTag)"),
-        std::tuple(false,  true, false, "Log message (LoggerTag)"),
-        std::tuple(false,  true,  true, "Log message (LoggerTag, TraceContextTag)"),
-        std::tuple( true, false, false, "Log message (Value: 123)"),
-        std::tuple( true, false,  true, "Log message (Value: 123, TraceContextTag)"),
-        std::tuple( true,  true, false, "Log message (Value: 123, LoggerTag)"),
-        std::tuple( true,  true,  true, "Log message (Value: 123, LoggerTag, TraceContextTag)")));
+        std::tuple(false, false, false, false, "Log message"),
+        std::tuple(false, false, false,  true, "Log message (ThreadLocalTag)"),
+        std::tuple(false, false,  true, false, "Log message (TraceContextTag)"),
+        std::tuple(false, false,  true,  true, "Log message (TraceContextTag, ThreadLocalTag)"),
+        std::tuple(false,  true, false, false, "Log message (LoggerTag)"),
+        std::tuple(false,  true, false,  true, "Log message (LoggerTag, ThreadLocalTag)"),
+        std::tuple(false,  true,  true, false, "Log message (LoggerTag, TraceContextTag)"),
+        std::tuple(false,  true,  true,  true, "Log message (LoggerTag, TraceContextTag, ThreadLocalTag)"),
+        std::tuple( true, false, false, false, "Log message (Value: 123)"),
+        std::tuple( true, false, false,  true, "Log message (Value: 123, ThreadLocalTag)"),
+        std::tuple( true, false,  true, false, "Log message (Value: 123, TraceContextTag)"),
+        std::tuple( true, false,  true,  true, "Log message (Value: 123, TraceContextTag, ThreadLocalTag)"),
+        std::tuple( true,  true, false, false, "Log message (Value: 123, LoggerTag)"),
+        std::tuple( true,  true, false,  true, "Log message (Value: 123, LoggerTag, ThreadLocalTag)"),
+        std::tuple( true,  true,  true, false, "Log message (Value: 123, LoggerTag, TraceContextTag)"),
+        std::tuple( true,  true,  true,  true, "Log message (Value: 123, LoggerTag, TraceContextTag, ThreadLocalTag)")));
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -149,6 +149,20 @@ ELogLevel GetThreadMinLogLevel()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_THREAD_LOCAL(std::string, ThreadMessageTag);
+
+void SetThreadMessageTag(std::string messageTag)
+{
+    ThreadMessageTag() = std::move(messageTag);
+}
+
+std::string& GetThreadMessageTag()
+{
+    return ThreadMessageTag();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TLogger::TLogger(ILogManager* logManager, TStringBuf categoryName)
     : LogManager_(logManager)
     , Category_(LogManager_ ? LogManager_->GetCategory(categoryName) : nullptr)

@@ -624,7 +624,11 @@ class LintConfigs:
             raise DartValueError()
         if common_configs_dir := unit.get('MODULE_COMMON_CONFIGS_DIR'):
             config = os.path.join(common_configs_dir, config_type)
-            path = unit.resolve(config)
+            if config.startswith(SOURCE_ROOT_SHORT):
+                # TODO: (alevitskii) Delete when ymake starts cutting source root in devtools/ymake/makefile_loader.cpp
+                path = unit.resolve(config)
+            else:
+                path = unit.resolve(unit.resolve_arc_path(config))
             if os.path.exists(path):
                 return _common.strip_roots(config)
             message = "File not found: {}".format(path)

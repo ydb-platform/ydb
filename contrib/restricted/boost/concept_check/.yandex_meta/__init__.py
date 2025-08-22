@@ -9,7 +9,7 @@ def post_install(self):
 boost_concept_check = NixSourceProject(
     nixattr="boost_concept_check",
     arcdir=boost.make_arcdir("concept_check"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

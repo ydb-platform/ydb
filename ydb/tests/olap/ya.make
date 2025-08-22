@@ -5,14 +5,8 @@ PY3TEST()
 
     TEST_SRCS(
         order_by_with_limit.py
-<<<<<<< HEAD
         test_quota_exhaustion.py
-=======
         tablets_movement.py
-        test_cs_many_updates.py
-        test_log_scenario.py
-        upgrade_to_internal_path_id.py
->>>>>>> 8753f2b29a5 (tablets movement test has been added (#23054))
         zip_bomb.py
     )
 

@@ -25,6 +25,7 @@ public:
     {}
 
     void Bootstrap() {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Bootstrap");
         Become(&TScriptExecutionLeaseCheckActor::MainState);
 
         RefreshNodesInfo();
@@ -46,14 +47,18 @@ public:
                 ScheduleRefreshScriptExecutions();
                 break;
             case EWakeup::RefreshScriptExecutions:
-                Register(CreateRefreshScriptExecutionLeasesActor(SelfId(), QueryServiceConfig, Counters));
+                const auto& checkerId = Register(CreateRefreshScriptExecutionLeasesActor(SelfId(), QueryServiceConfig, Counters));
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Start lease checker: " << checkerId);
                 break;
         }
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        const auto nodesCount = ev->Get()->Nodes.size();
         WaitRefreshNodes = false;
-        RefreshLeasePeriod = std::max(ev->Get()->Nodes.size(), static_cast<size_t>(1)) * CHECK_PERIOD;
+        RefreshLeasePeriod = std::max(nodesCount, static_cast<size_t>(1)) * CHECK_PERIOD;
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Handle interconnect nodes info, number of nodes #" << nodesCount << ", new RefreshLeasePeriod: " << RefreshLeasePeriod);
     }
 
     void Handle(TEvRefreshScriptExecutionLeasesResponse::TPtr& ev) {
@@ -61,12 +66,13 @@ public:
         if (!ev->Get()->Success) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh failed with issues: " << ev->Get()->Issues.ToOneLineString());
         } else {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh successfully completed");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh successfully completed");
         }
     }
 
 private:
     void RefreshNodesInfo() {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Do RefreshNodesInfo (WaitRefreshNodes: " << WaitRefreshNodes << "), next refresh after " << REFRESH_NODES_PERIOD);
         Schedule(REFRESH_NODES_PERIOD, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RefreshNodesInfo)));
 
         if (!WaitRefreshNodes) {
@@ -76,6 +82,7 @@ private:
     }
 
     void ScheduleRefreshScriptExecutions() {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Do ScheduleRefreshScriptExecutions (WaitRefreshScriptExecutions: " << WaitRefreshScriptExecutions << "), next refresh after " << RefreshLeasePeriod);
         Schedule(RefreshLeasePeriod, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
 
         if (!WaitRefreshScriptExecutions) {
@@ -83,7 +90,9 @@ private:
 
             // Start background checks at random time during CHECK_PERIOD * (node count)
             // to reduce the number of tli
-            Schedule(RefreshLeasePeriod * RandomNumber<double>(), new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RefreshScriptExecutions)));
+            const auto leaseCheckTime = RefreshLeasePeriod * RandomNumber<double>();
+            Schedule(leaseCheckTime, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RefreshScriptExecutions)));
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Schedule lease check after " << leaseCheckTime);
         }
     }
 

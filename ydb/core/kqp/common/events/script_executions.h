@@ -445,17 +445,14 @@ struct TEvListExpiredLeasesResponse : public TEventLocal<TEvListExpiredLeasesRes
         TString ExecutionId;
     };
 
-    explicit TEvListExpiredLeasesResponse(std::vector<TLeaseInfo>&& leases)
-        : Leases(std::move(leases))
-    {}
-
-    TEvListExpiredLeasesResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+    TEvListExpiredLeasesResponse(Ydb::StatusIds::StatusCode status, std::vector<TLeaseInfo>&& leases, NYql::TIssues issues)
         : Status(status)
+        , Leases(std::move(leases))
         , Issues(std::move(issues))
     {}
 
+    Ydb::StatusIds::StatusCode Status;
     std::vector<TLeaseInfo> Leases;
-    std::optional<Ydb::StatusIds::StatusCode> Status;
     NYql::TIssues Issues;
 };
 

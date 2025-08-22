@@ -4358,9 +4358,8 @@ public:
             return;
         }
 
-        std::vector<TEvListExpiredLeasesResponse::TLeaseInfo> leases;
         const auto rowsCount = ResultSets[0].RowsCount();
-        leases.reserve(rowsCount);
+        Leases.reserve(rowsCount);
 
         NYdb::TResultSetParser result(ResultSets[0]);
         while (result.TryNextRow()) {
@@ -4376,25 +4375,20 @@ public:
                 continue;
             }
 
-            leases.push_back({*database, *executionId});
+            Leases.push_back({*database, *executionId});
         }
 
-        if (!leases.empty()) {
-            KQP_PROXY_LOG_D("Found " << leases.size() << " expired leases");
-            Send(Owner, new TEvListExpiredLeasesResponse(std::move(leases)));
-        } else if (rowsCount) {
-            KQP_PROXY_LOG_E("More than " << MAX_LISTED_LEASES << " expired leases is corrupted");
-        }
-
+        KQP_PROXY_LOG_D("Found " << Leases.size() << " expired leases (fetched rows " << rowsCount << ")");
         Finish();
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvListExpiredLeasesResponse(status, std::move(issues)));
+        Send(Owner, new TEvListExpiredLeasesResponse(status, std::move(Leases), std::move(issues)));
     }
 
 private:
     const TInstant LeaseDeadline;
+    std::vector<TEvListExpiredLeasesResponse::TLeaseInfo> Leases;
 };
 
 class TRefreshScriptExecutionLeasesActor : public TActorBootstrapped<TRefreshScriptExecutionLeasesActor> {
@@ -4427,22 +4421,20 @@ public:
             ++OperationsToCheck;
         }
 
-        if (const auto status = ev->Get()->Status) {
-            if (status != Ydb::StatusIds::SUCCESS) {
-                KQP_PROXY_LOG_W("List expired leases failed with status " << *status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+        if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
+            KQP_PROXY_LOG_W("List expired leases failed with status " << status << ", issues: " << ev->Get()->Issues.ToOneLineString());
 
-                Success = false;
-                Issues.AddIssues(AddRootIssue(
-                    TStringBuilder() << "Failed to list expired leases (" << *status << ")",
-                    ev->Get()->Issues,
-                    true
-                ));
-            } else {
-                KQP_PROXY_LOG_D("List expired leases successfully completed");
-            }
-
-            MaybeFinish();
+            Success = false;
+            Issues.AddIssues(AddRootIssue(
+                TStringBuilder() << "Failed to list expired leases (" << status << ")",
+                ev->Get()->Issues,
+                true
+            ));
+        } else {
+            KQP_PROXY_LOG_D("List expired leases successfully completed");
         }
+
+        MaybeFinish();
     }
 
     void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {

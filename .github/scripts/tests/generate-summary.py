@@ -22,7 +22,7 @@ def is_sanitizer_issue(error_text):
     if not error_text:
         return False
     
-    # Sanitizer error patterns - designed from scratch for comprehensive coverage
+    # Sanitizer error patterns for comprehensive coverage
     sanitizer_patterns = [
         # Main sanitizer patterns with severity levels (covers most cases)
         r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',

@@ -23,7 +23,6 @@ template<typename TRequest, typename TResponse, typename TService>
 class TGrpcIamCredentialsProvider : public ICredentialsProvider {
 protected:
     using TRequestFiller = std::function<void(TRequest&)>;
-    using TAsyncReaderWriterPtr = std::unique_ptr<grpc::ClientAsyncReaderWriter<TRequest, TResponse>>;
     using TAsyncInterface = typename TService::Stub::async_interface;
     using TAsyncRpc = void (TAsyncInterface::*)(grpc::ClientContext*, const TRequest*, TResponse*, std::function<void(grpc::Status)>);
 

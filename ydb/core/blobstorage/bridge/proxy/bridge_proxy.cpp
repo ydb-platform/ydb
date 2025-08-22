@@ -30,7 +30,7 @@ namespace NKikimr {
         struct TRequest
             : std::enable_shared_from_this<TRequest>
         {
-            ui64 RequestId = RandomNumber<ui64>();
+            TString RequestId = Sprintf("%016" PRIx64, RandomNumber<ui64>());
             TActorId Sender;
             ui64 Cookie;
             TIntrusivePtr<TBlobStorageGroupInfo> Info;
@@ -44,6 +44,8 @@ namespace NKikimr {
             THPTimer Timer;
             std::deque<std::tuple<TString, TDuration>> SubrequestTimings;
 
+            NWilson::TSpan Span;
+
             struct TDiscoverState {
                 TLogoBlobID Id;
                 TString Buffer;
@@ -55,8 +57,6 @@ namespace NKikimr {
             struct TGetState {
                 size_t NumResponses;
                 TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
-                bool IsIndexOnly;
-                bool MustRestoreFirst;
                 ui32 BlockedGeneration = 0;
             };
 
@@ -93,16 +93,18 @@ namespace NKikimr {
             THashMap<TLogoBlobID, size_t> RestoreQueueIndex;
             size_t RestoreIndex = Max<size_t>();
             bool IsRestoring = false;
+            bool MustRestoreFirst = false;
             NKikimrBlobStorage::EGetHandleClass GetHandleClass = NKikimrBlobStorage::FastRead;
 
             TDynBitMap Processed; // a set of piles we already got main reply from
 
             template<typename TEvRequest>
             TRequest(TActorId sender, ui64 cookie, std::unique_ptr<TEvRequest>&& request, TIntrusivePtr<TBlobStorageGroupInfo> info,
-                    TThis& self)
+                    TThis& self, ui32 requestType, NWilson::TTraceId&& traceId)
                 : Sender(sender)
                 , Cookie(cookie)
                 , Info(std::move(info))
+                , Span(TWilson::BlobStorage, std::forward<NWilson::TTraceId>(traceId), "BridgedRequest", NWilson::EFlags::AUTO_END)
             {
                 Y_ABORT_UNLESS(Info);
                 Y_ABORT_UNLESS(Info->Group);
@@ -113,10 +115,9 @@ namespace NKikimr {
 
                     State = TGetState{
                         .NumResponses = request->QuerySize,
-                        .IsIndexOnly = request->IsIndexOnly,
-                        .MustRestoreFirst = request->MustRestoreFirst,
                     };
 
+                    MustRestoreFirst = request->MustRestoreFirst,
                     GetHandleClass = request->GetHandleClass;
                     RestoreQueue.resize(request->QuerySize);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvRange>) {
@@ -124,6 +125,8 @@ namespace NKikimr {
                         .Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, request->From,
                             request->To, self.GroupId),
                     };
+
+                    MustRestoreFirst = request->MustRestoreFirst;
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvDiscover>) {
                     State = TDiscoverState{
                         .MinGeneration = request->MinGeneration,
@@ -136,6 +139,13 @@ namespace NKikimr {
                 }
 
                 OriginalRequest = std::move(request);
+
+                if (Span) {
+                    Span.Attribute("GroupId", Info->GroupID.GetRawId());
+                    Span.Attribute("database", AppData()->TenantName);
+                    Span.Attribute("storagePool", Info->GetStoragePoolName());
+                    Span.Attribute("RequestType", TEvBlobStorage::TEvRequestCommon::GetRequestName(requestType));
+                }
             }
 
             template<typename TEvent, typename... TArgs>
@@ -252,6 +262,15 @@ namespace NKikimr {
                 return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
+            bool DataIsTrustedInPile(const TBridgeInfo::TPile& pile) const {
+                if (!NBridge::PileStateTraits(pile.State).RequiresDataQuorum) {
+                    return false;
+                }
+                const auto& state = Info->Group->GetBridgeGroupState();
+                const auto& gp = state.GetPile(pile.BridgePileId.GetPileIndex());
+                return gp.GetStage() == NKikimrBridge::TGroupState::SYNCED;
+            }
+
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
                     const TBridgeInfo::TPile& pile, TRequestPayload& payload) {
                 if (ev->Status != NKikimrProto::OK) {
@@ -315,6 +334,10 @@ namespace NKikimr {
 
                 // ensure we got right number of responses
                 Y_ABORT_UNLESS(ev->ResponseSz == state.NumResponses);
+
+                if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
+                    return std::move(ev);
+                }
 
                 if (!state.Responses) {
                     // this is the first response, we just repeat what we got in response
@@ -499,6 +522,10 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(std::holds_alternative<TRangeState>(State));
                 auto& state = std::get<TRangeState>(State);
 
+                if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
+                    return std::move(ev);
+                }
+
                 auto getRestoreItem = [&](const auto& item) -> TRestoreItem& {
                     const auto [it, inserted] = RestoreQueueIndex.try_emplace(item.Id, RestoreQueue.size());
                     RestoreIndex = Min(RestoreIndex, it->second);
@@ -596,10 +623,6 @@ namespace NKikimr {
                 (void)self, (void)ev;
                 return nullptr;
             }
-
-            TString MakeRequestId() const {
-                return Sprintf("%016" PRIx64, RequestId);
-            }
         };
         struct TRequestInFlight {
             std::shared_ptr<TRequest> Request;
@@ -646,9 +669,10 @@ namespace NKikimr {
 
             std::unique_ptr<TEvent> evPtr(ev->Release().Release());
             const TEvent& originalRequest = *evPtr;
-            auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this);
+            auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this,
+                    ev->GetTypeRewrite(), std::move(ev->TraceId));
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->MakeRequestId()),
+            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
                 (GroupId, GroupId), (Request, originalRequest.ToString()));
 
             Y_ABORT_UNLESS(Info->Group);
@@ -689,7 +713,7 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(inserted1);
 
             // send event
-            SendToBSProxy(SelfId(), groupId, ev.release(), cookie);
+            SendToBSProxy(SelfId(), groupId, ev.release(), cookie, request->Span.GetTraceId());
             ++request->ResponsesPending;
         }
 
@@ -745,12 +769,10 @@ namespace NKikimr {
             auto& pile = *item.Pile;
             std::shared_ptr<TRequest> request = item.Request;
 
-            const bool isError = ev->Get()->Status != NKikimrProto::OK
-                && ev->Get()->Status != NKikimrProto::NODATA
-                && NBridge::PileStateTraits(item.Pile->State).RequiresDataQuorum;
+            const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
             STLOG(isError ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_BRIDGE, BPB02, "intermediate response",
-                (RequestId, request->MakeRequestId()),
+                (RequestId, request->RequestId),
                 (GroupId, item.GroupId),
                 (Status, ev->Get()->Status),
                 (PileState, pile.State),
@@ -792,6 +814,7 @@ namespace NKikimr {
                 } else {
                     std::unique_ptr<TEvent> ptr(ev->Release().Release());
                     request->SubrequestTimings.emplace_back(TypeName<TEvent>(), TDuration::Seconds(item.Timer.Passed()));
+
                     if (auto response = request->ProcessResponse(*this, std::move(ptr), pile, item.Payload)) {
                         auto *common = dynamic_cast<TEvBlobStorage::TEvResultCommon*>(response.get());
                         Y_ABORT_UNLESS(common);
@@ -804,11 +827,19 @@ namespace NKikimr {
                                 return TStringBuilder() << name << ':' << duration;
                             }));
                         };
+
                         STLOG(success ? PRI_INFO : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished",
-                            (RequestId, request->MakeRequestId()),
+                            (RequestId, request->RequestId),
                             (Response, response->ToString()),
                             (Passed, TDuration::Seconds(request->Timer.Passed())),
                             (SubrequestTimings, makeSubrequestTimings()));
+
+                        if (success) {
+                            request->Span.EndOk();
+                        } else if (request->Span) {
+                            request->Span.EndError(common->ErrorReason);
+                        }
+
                         Send(request->Sender, response.release(), 0, request->Cookie);
                         request->Finished = true;
                     }

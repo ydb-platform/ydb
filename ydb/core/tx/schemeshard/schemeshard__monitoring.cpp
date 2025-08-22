@@ -929,6 +929,7 @@ private:
                     << "CancelRequested: " << (info.CancelRequested ? "YES" : "NO") << Endl
 
                     << "State: " << info.State << Endl
+                    << "SubState: " << info.SubState << Endl
                     << "KMeans: " << info.KMeans.DebugString() << Endl
                     << "Sample: " << info.Sample.DebugString() << Endl
                     << "IsBroken: " << (info.IsBroken ? "YES" : "NO") << Endl

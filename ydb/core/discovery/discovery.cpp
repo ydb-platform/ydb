@@ -130,7 +130,7 @@ namespace NDiscovery {
         if (pile.IsPrimary) {
             pileInfo->set_state(Ydb::Bridge::PileState::PRIMARY);
         } else if (pile.IsBeingPromoted) {
-            pileInfo->set_state(Ydb::Bridge::PileState::PROMOTE);
+            pileInfo->set_state(Ydb::Bridge::PileState::PROMOTED);
         } else {
             switch (pile.State) {
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:

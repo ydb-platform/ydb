@@ -17,6 +17,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,
+    NActors::TActorId nodesManagerId,
     NActors::TMon* monitoring,
     ::NMonitoring::TDynamicCounterPtr countersRoot)
 {
@@ -30,6 +31,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
         counters,
         countersRoot,
         pqGateway,
+        nodesManagerId,
         monitoring);
 }
 

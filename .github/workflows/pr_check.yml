@@ -6,8 +6,8 @@ on:
       - 'stable-*'
       - 'prestable-*'
       - 'stream-nb-*'
-      - '*-stable-*'
       - 'dev-*'
+      - 'rc-*'
     types:
       - 'opened'
       - 'synchronize'

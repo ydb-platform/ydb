@@ -45,6 +45,7 @@ public:
     ui64 TableRowCount = 0;
     bool Recall = false;
     bool NonIndexedSearch = false;
+    bool StaleRO = false;
     bool KeyIsInt = false;
 };
 

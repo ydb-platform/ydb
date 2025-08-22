@@ -936,6 +936,16 @@ TFuture<TDistributedWriteSessionWithCookies> TTransaction::StartDistributedWrite
         PatchTransactionId(options));
 }
 
+TFuture<void> TTransaction::PingDistributedWriteSession(
+    TSignedDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionPingOptions& options)
+{
+    ValidateActive();
+    return Client_->PingDistributedWriteSession(
+        std::move(session),
+        options);
+}
+
 TFuture<void> TTransaction::FinishDistributedWriteSession(
     const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)

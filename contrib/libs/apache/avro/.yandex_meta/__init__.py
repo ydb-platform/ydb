@@ -15,7 +15,7 @@ def post_install(self):
 
 
 apache_avro = CMakeNinjaNixProject(
-    owners=["g:yql", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/apache/avro",
     nixattr="avro-cpp",
     ignore_commands=["tree2", "avrogencpp"],

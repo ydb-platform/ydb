@@ -91,8 +91,7 @@
                                                             }
                                                         ],
                                                         "Name": "Aggregate",
-                                                        "Phase": "Intermediate",
-                                                        "Pushdown": "True"
+                                                        "Phase": "Intermediate"
                                                     },
                                                     {
                                                         "Inputs": [],
@@ -109,45 +108,10 @@
                                                         "SsaProgram": {
                                                             "Command": [
                                                                 {
-                                                                    "GroupBy": {
-                                                                        "Aggregates": [
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 106
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Arguments": [
-                                                                                        {
-                                                                                            "Id": 6
-                                                                                        }
-                                                                                    ],
-                                                                                    "Id": 4
-                                                                                }
-                                                                            },
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 107
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Arguments": [
-                                                                                        {
-                                                                                            "Id": 6
-                                                                                        }
-                                                                                    ],
-                                                                                    "Id": 3
-                                                                                }
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                },
-                                                                {
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 106
-                                                                            },
-                                                                            {
-                                                                                "Id": 107
+                                                                                "Id": 6
                                                                             }
                                                                         ]
                                                                     }

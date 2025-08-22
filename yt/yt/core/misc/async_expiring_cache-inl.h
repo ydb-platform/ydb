@@ -418,7 +418,7 @@ void TAsyncExpiringCache<TKey, TValue>::ScheduleEntryRefresh(
             BIND_NO_PROPAGATE(
                 &TAsyncExpiringCache::InvokeGet,
                 MakeWeak(this),
-                entry,
+                MakeWeak(entry),
                 key),
             *refreshTime);
     }
@@ -519,20 +519,33 @@ void TAsyncExpiringCache<TKey, TValue>::SetResult(
 
 template <class TKey, class TValue>
 void TAsyncExpiringCache<TKey, TValue>::InvokeGet(
-    const TEntryPtr& entry,
+    TWeakPtr<TEntry> weakEntry,
     const TKey& key)
 {
-    if (TryEraseExpired(entry, key)) {
+    auto entry = weakEntry.Lock();
+    if (!entry || TryEraseExpired(entry, key)) {
         return;
     }
 
-    YT_VERIFY(entry->Future.IsSet());
-    const auto& oldValue = entry->Future.Get();
+    TFuture<TValue> future;
+    {
+        auto readerGuard = ReaderGuard(SpinLock_);
+        future = entry->Future;
+    }
+
+    YT_VERIFY(future.IsSet());
+    const auto& oldValue = future.Get();
 
     DoGet(key, &oldValue, EUpdateReason::PeriodicUpdate)
-        .Subscribe(BIND([=, weakEntry = MakeWeak(entry), this, this_ = MakeStrong(this)] (const TErrorOr<TValue>& valueOrError) {
-            SetResult(weakEntry, key, valueOrError, true);
-        }));
+        .Subscribe(BIND(
+            [
+                weakEntry = std::move(weakEntry),
+                key,
+                this,
+                this_ = MakeStrong(this)
+            ] (const TErrorOr<TValue>& valueOrError) {
+                SetResult(weakEntry, key, valueOrError, true);
+            }));
 }
 
 template <class TKey, class TValue>
@@ -571,7 +584,7 @@ void TAsyncExpiringCache<TKey, TValue>::Erase(THashMap<TKey, TEntryPtr>::iterato
 
 template <class TKey, class TValue>
 void TAsyncExpiringCache<TKey, TValue>::InvokeGetMany(
-    const std::vector<TWeakPtr<TEntry>>& entries,
+    const std::vector<TWeakPtr<TEntry>>& weakEntries,
     const std::vector<TKey>& keys,
     std::optional<TDuration> periodicRefreshTime)
 {
@@ -581,7 +594,7 @@ void TAsyncExpiringCache<TKey, TValue>::InvokeGetMany(
         .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<std::vector<TErrorOr<TValue>>>& valuesOrError) {
             for (size_t index = 0; index < keys.size(); ++index) {
                 SetResult(
-                    entries[index],
+                    weakEntries[index],
                     keys[index],
                     valuesOrError.IsOK() ? valuesOrError.Value()[index] : TErrorOr<TValue>(TError(valuesOrError)),
                     isPeriodicUpdate);

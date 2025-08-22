@@ -129,7 +129,6 @@ namespace NActors {
         std::unordered_map<ui16, TString> ChannelName;
         std::optional<ui32> OutgoingHandshakeInflightLimit;
         std::vector<TActorId> ConnectionCheckerActorIds; // a list of actors used for checking connection params
-        std::optional<TString> BridgePileName;
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

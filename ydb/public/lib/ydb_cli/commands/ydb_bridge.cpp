@@ -28,8 +28,8 @@ namespace {
         if (stateStrUpper == "SYNCHRONIZED") {
             return NYdb::NBridge::EPileState::SYNCHRONIZED;
         }
-        if (stateStrUpper == "PROMOTE") {
-            return NYdb::NBridge::EPileState::PROMOTE;
+        if (stateStrUpper == "PROMOTED") {
+            return NYdb::NBridge::EPileState::PROMOTED;
         }
         if (stateStrUpper == "PRIMARY") {
             return NYdb::NBridge::EPileState::PRIMARY;
@@ -38,7 +38,7 @@ namespace {
             return NYdb::NBridge::EPileState::SUSPENDED;
         }
         ythrow yexception() << "Invalid pile state: \"" << stateStr
-            << "\". Please use one of: DISCONNECTED, NOT_SYNCHRONIZED, SYNCHRONIZED, PROMOTE, PRIMARY, SUSPENDED.";
+            << "\". Please use one of: DISCONNECTED, NOT_SYNCHRONIZED, SYNCHRONIZED, PROMOTED, PRIMARY, SUSPENDED.";
     }
 
     TString PileStateToString(NYdb::NBridge::EPileState state) {
@@ -47,7 +47,7 @@ namespace {
             case NYdb::NBridge::EPileState::DISCONNECTED: return "DISCONNECTED";
             case NYdb::NBridge::EPileState::NOT_SYNCHRONIZED: return "NOT_SYNCHRONIZED";
             case NYdb::NBridge::EPileState::SYNCHRONIZED: return "SYNCHRONIZED";
-            case NYdb::NBridge::EPileState::PROMOTE: return "PROMOTE";
+            case NYdb::NBridge::EPileState::PROMOTED: return "PROMOTED";
             case NYdb::NBridge::EPileState::PRIMARY: return "PRIMARY";
             case NYdb::NBridge::EPileState::SUSPENDED: return "SUSPENDED";
         }
@@ -239,7 +239,7 @@ int TCommandBridgeSwitchover::Run(TConfig& config) {
     auto client = NYdb::NBridge::TBridgeClient(*driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
-    updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTE});
+    updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTED});
 
     auto result = client.UpdateClusterState(updates, {}).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -314,7 +314,7 @@ int TCommandBridgeTakedown::Run(TConfig& config) {
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({DownPile, NYdb::NBridge::EPileState::SUSPENDED});
     if (!NewPrimaryPile.empty()) {
-        updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTE});
+        updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTED});
     }
 
     auto result = client.UpdateClusterState(updates, {}).GetValueSync();

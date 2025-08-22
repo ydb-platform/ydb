@@ -144,7 +144,7 @@ public:
 
     std::vector<TSensorInfo> ListSensors() const;
 
-    const TTagRegistry& GetTags() const;
+    const TTagRegistry& GetTagRegistry() const;
 
     i64 GetNextIteration() const;
     int GetWindowSize() const;
@@ -172,7 +172,7 @@ private:
     template <class TFn>
     void DoRegister(TFn fn);
 
-    TTagRegistry Tags_;
+    TTagRegistry TagRegistry_;
     TProducerSet Producers_;
 
     THashMap<std::string, TSensorSet> Sensors_;

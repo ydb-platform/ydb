@@ -408,6 +408,7 @@ public:
         REGISTER    (TWriteShuffleDataCommand,             "write_shuffle_data",              Tabular,    Structured, false,  true, ApiVersion4);
 
         REGISTER    (TStartDistributedWriteSessionCommand, "start_distributed_write_session", Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPingDistributedWriteSessionCommand,  "ping_distributed_write_session",  Null,       Null,       true,  false, ApiVersion4);
         REGISTER    (TFinishDistributedWriteSessionCommand, "finish_distributed_write_session", Null,     Null,       true,  false, ApiVersion4);
         REGISTER    (TWriteTableFragmentCommand,           "write_table_fragment",            Tabular,    Structured, true,   true, ApiVersion4);
 

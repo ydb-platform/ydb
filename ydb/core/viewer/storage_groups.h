@@ -1059,7 +1059,8 @@ public:
                     (!FieldsRequired.test(+EGroupFields::GroupId) || FieldsAvailable.test(+EGroupFields::GroupId)) &&
                     (!FieldsRequired.test(+EGroupFields::PoolName) || FieldsAvailable.test(+EGroupFields::PoolName));
                 if (allFieldsPresent) {
-                    TVector<TString> filterWords = SplitString(Filter, " ");
+                    TVector<TString> filterWords;
+                    StringSplitter(Filter).SplitBySet(", ").SkipEmpty().Collect(&filterWords);
                     TGroupView groupView;
                     for (TGroup* group : GroupView) {
                         for (const TString& word : filterWords) {

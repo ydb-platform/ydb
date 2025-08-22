@@ -1,6 +1,7 @@
 #include "kqp_finalize_script_actor.h"
 
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
@@ -34,7 +35,7 @@ public:
 
     STRICT_STFUNC(MainState,
         hFunc(TEvents::TEvWakeup, Handle);
-        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+        hFunc(TEvTenantNodeEnumerator::TEvLookupResult, Handle);
         hFunc(TEvRefreshScriptExecutionLeasesResponse, Handle);
     )
 
@@ -53,12 +54,18 @@ public:
         }
     }
 
-    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        const auto nodesCount = ev->Get()->Nodes.size();
+    void Handle(TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
         WaitRefreshNodes = false;
+
+        if (!ev->Get()->Success) {
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Failed to discover tenant nodes");
+            return;
+        }
+
+        const auto nodesCount = ev->Get()->AssignedNodes.size();
         RefreshLeasePeriod = std::max(nodesCount, static_cast<size_t>(1)) * CHECK_PERIOD;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Handle interconnect nodes info, number of nodes #" << nodesCount << ", new RefreshLeasePeriod: " << RefreshLeasePeriod);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Handle discover tenant nodes result, number of nodes #" << nodesCount << ", new RefreshLeasePeriod: " << RefreshLeasePeriod);
     }
 
     void Handle(TEvRefreshScriptExecutionLeasesResponse::TPtr& ev) {
@@ -77,7 +84,7 @@ private:
 
         if (!WaitRefreshNodes) {
             WaitRefreshNodes = true;
-            Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+            Register(CreateTenantNodeEnumerationLookup(SelfId(), AppData()->TenantName));
         }
     }
 

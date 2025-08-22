@@ -49,7 +49,7 @@ ydb admin cluster bridge failover --pile pile-a --new-primary pile-b
 
 ### Проверка результата {#verify}
 
-Проверьте, что недоступный pile переведён в состояние `DISCONNECTED` и (если указан `--new-primary`) выбран новый `PRIMARY` pile с помощью команды [list](list.md):
+С помощью команды [list](list.md) проверьте, что недоступный pile переведён в состояние `DISCONNECTED` и (если был указан `--new-primary`) выбран новый `PRIMARY` pile :
 
 ```bash
 ydb admin cluster bridge list

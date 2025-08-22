@@ -6,7 +6,6 @@
 
 * [Подключение к YDB](#connect-ydb)
 * [Создание таблицы для хранения векторов](#create-table)
-* [Способ конвертации векторов в байты](#convert-vector-to-bytes)
 * [Вставка векторов в таблицу](#insert-vectors)
 * [Добавление векторного индекса](#add-vector-index)
 * [Поиск ближайших векторов](#search-by-vector)
@@ -115,13 +114,21 @@
 {% endlist %}
 
 
-## Способ конвертации векторов в байты {#convert-vector-to-bytes}
+## Вставка векторов {#insert-vectors}
 
-Для дальнейшей работы с векторами может потребоваться их конвертация в байты. Сделать это можно на клиенте (рекомендуется) следующим образом:
+Для вставки векторов необходимо подготовить и выполнить правильный YQL-запрос. Для унификации вставки разных данных он параметризован.
+
+Запрос оперирует контейнерным типом данных `List<Struct<...>>` (список структур), что позволяет передавать через параметры произвольное количество объектов за один раз.
+
+В {{ ydb-short-name }} таблицах же вектора хранятся в виде сериализованной последовательности байт. Конвертацию в такое представление **рекомендуется выполнять на клиенте**. Альтернативный способ — делегировать конвертацию на сервер с помощью функции преобразования [Knn UDF](../../yql/reference/udf/list/knn.md#functions-convert). Ниже будут приведены примеры, демонстрирующие оба подхода.
 
 {% list tabs %}
 
 - Python
+
+    Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста, заранее сериализованное в последовательность байт.
+
+    Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
 
     ```python
     import struct
@@ -129,47 +136,7 @@
     def convert_vector_to_bytes(vector: list[float]) -> bytes:
         b = struct.pack("<f" * len(vector), *vector)
         return b + b"\x01"
-    ```
 
-- C++
-
-    {% note info %}
-
-    В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
-
-    {% endnote %}
-
-    ```cpp
-    std::string ConvertVectorToBytes(const std::vector<float>& vector)
-    {
-        std::string result;
-        for (const auto& value : vector) {
-            const char* bytes = reinterpret_cast<const char*>(&value);
-            result += std::string(bytes, sizeof(float));
-        }
-        return result + "\x01";
-    }
-    ```
-
-{% endlist %}
-
-Альтернативный способ - делегировать конвертацию на сервер с помощью [функции преобразования](../../yql/reference/udf/list/knn.md#functions-convert). Ниже будут приведены примеры, демонстрирующие оба подхода.
-
-## Вставка векторов {#insert-vectors}
-
-Для вставки векторов необходимо подготовить правильный YQL-запрос. Для унификации вставки разных данных он параметризован.
-
-Запрос оперирует контейнерным типом данных `List<Struct<...>>` (список структур), что позволяет передавать произвольное количество объектов за один раз.
-
-{% list tabs %}
-
-- Python
-
-    Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста.
-
-    Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
-
-    ```python
     def insert_items_vector_as_bytes(
         pool: ydb.QuerySessionPool,
         table_name: str,
@@ -213,6 +180,16 @@
 - C++
 
     ```cpp
+    std::string ConvertVectorToBytes(const std::vector<float>& vector)
+    {
+        std::string result;
+        for (const auto& value : vector) {
+            const char* bytes = reinterpret_cast<const char*>(&value);
+            result += std::string(bytes, sizeof(float));
+        }
+        return result + "\x01";
+    }
+
     void InsertItemsAsBytes(
         NYdb::NQuery::TQueryClient& client,
         const std::string& tableName,
@@ -259,7 +236,13 @@
     }
     ```
 
-- Python (alternative)
+    {% note info %}
+
+    В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
+
+    {% endnote %}
+
+- Python (альтернативный)
 
     Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста.
 
@@ -303,7 +286,7 @@
         print(f"{len(items)} items inserted")
     ```
 
-- C++ (alternative)
+- C++ (альтернативный)
 
     ```cpp
     void InsertItemsAsFloatList(

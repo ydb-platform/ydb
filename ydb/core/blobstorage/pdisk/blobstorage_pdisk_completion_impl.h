@@ -76,7 +76,9 @@ class TCompletionChunkWrite : public TCompletionAction {
     std::function<void()> OnDestroy;
     TReqId ReqId;
     NWilson::TSpan Span;
-    std::atomic<ui8> PartsStarted, PartsRemoved, PartsWritten;
+    std::atomic<ui8> PartsStarted;
+    std::atomic<ui8> PartsRemoved;
+    std::atomic<ui8> PartsWritten;
 public:
     bool IsReplied = false;
     ui8 Pieces;
@@ -189,8 +191,10 @@ public:
 
     void RemovePart(TActorSystem *actorSystem) {
         PartsRemoved++;
-        if (PartsRemoved == Pieces) {
-            if (PartsWritten == Pieces) {
+        int pieces = Pieces;
+        int old = PartsRemoved.fetch_add(1, std::memory_order_seq_cst);
+        if (old + 1 == pieces) {
+            if (PartsWritten.load(std::memory_order_seq_cst) == pieces) {
                 Exec(actorSystem);
             } else {
                 Release(actorSystem);

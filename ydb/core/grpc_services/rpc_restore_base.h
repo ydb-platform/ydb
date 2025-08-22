@@ -14,7 +14,7 @@ namespace NKikimr::NGRpcService {
 struct TBackupCollectionRestoreConv: public TOperationConv<NKikimrBackup::TBackupCollectionRestore> {
     static Ydb::TOperationId MakeOperationId(const ui64 id) {
         Ydb::TOperationId operationId;
-        operationId.SetKind(Ydb::TOperationId::INCREMENTAL_RESTORE);
+        operationId.SetKind(Ydb::TOperationId::RESTORE);
         NOperationId::AddOptionalValue(operationId, "id", ToString(id));
         return operationId;
     }

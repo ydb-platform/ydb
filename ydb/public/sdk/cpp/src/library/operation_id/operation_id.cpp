@@ -69,7 +69,7 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::INCREMENTAL_BACKUP:
             res << "ydb://incbackup";
             break;
-        case Ydb::TOperationId::INCREMENTAL_RESTORE:
+        case Ydb::TOperationId::RESTORE:
             res << "ydb://restore";
             break;
         default:

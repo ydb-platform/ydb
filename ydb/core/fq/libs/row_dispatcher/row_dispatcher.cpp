@@ -18,6 +18,8 @@
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/mon/mon.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
@@ -322,7 +324,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TDuration LastUpdateMetricsPeriod;
     };
 
-    NConfig::TRowDispatcherConfig Config;
+    const NKikimrConfig::TSharedReadingConfig Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TActorId CompileServiceActorId;
@@ -414,7 +416,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
 public:
     explicit TRowDispatcher(
-        const NConfig::TRowDispatcherConfig& config,
+        const NKikimrConfig::TSharedReadingConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -496,7 +498,7 @@ public:
 };
 
 TRowDispatcher::TRowDispatcher(
-    const NConfig::TRowDispatcherConfig& config,
+    const NKikimrConfig::TSharedReadingConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -537,7 +539,7 @@ void TRowDispatcher::Bootstrap() {
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
-    Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatistic());
+    Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec() ? Config.GetSendStatusPeriodSec() : 1), new NFq::TEvPrivate::TEvSendStatistic());
 
     if (Monitoring) {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(FQ_ROW_DISPATCHER_PROVIDER));
@@ -1284,7 +1286,7 @@ void TRowDispatcher::UpdateCpuTime() {
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewRowDispatcher(
-    const NConfig::TRowDispatcherConfig& config,
+    const NKikimrConfig::TSharedReadingConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,

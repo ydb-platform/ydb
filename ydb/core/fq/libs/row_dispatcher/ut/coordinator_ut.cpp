@@ -36,7 +36,7 @@ public:
         ReadActor2 = Runtime.AllocateEdgeActor(0);
         NodesManager = Runtime.AllocateEdgeActor(0);
 
-        NConfig::TRowDispatcherCoordinatorConfig config;
+        NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig config;
         config.SetCoordinationNodePath("RowDispatcher");
         config.SetTopicPartitionsLimitPerNode(1);
         auto& database = *config.MutableDatabase();

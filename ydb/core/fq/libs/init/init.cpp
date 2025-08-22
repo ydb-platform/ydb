@@ -233,18 +233,18 @@ void Init(
             nullptr,
             commonTopicClientSettings
         );
-        auto rowDispatcher = NFq::NewRowDispatcherService(
-            protoConfig.GetRowDispatcher(),
-            NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
-            credentialsFactory,
-            tenant,
-            yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
-            pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
-            MakeNodesManagerId(),
-            appData->Mon,
-            appData->Counters);
-        actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
+        // auto rowDispatcher = NFq::NewRowDispatcherService(
+        //     protoConfig.GetRowDispatcher(),
+        //     NKikimr::CreateYdbCredentialsProviderFactory,
+        //     yqSharedResources,
+        //     credentialsFactory,
+        //     tenant,
+        //     yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
+        //     pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
+        //     MakeNodesManagerId(),
+        //     appData->Mon,
+        //     appData->Counters);
+        // actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();

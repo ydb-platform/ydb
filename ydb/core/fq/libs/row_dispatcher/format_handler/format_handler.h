@@ -6,6 +6,10 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/util/rope.h>
 
+namespace NKikimrConfig {
+class TSharedReadingConfig;
+} // namespace NKikimrConfig
+
 namespace NFq::NRowDispatcher {
 
 static constexpr ui64 MAX_BATCH_SIZE = 10_MB;
@@ -68,7 +72,7 @@ struct TFormatHandlerConfig {
 };
 
 ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
-TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, NActors::TActorId compileServiceId);
+TFormatHandlerConfig CreateFormatHandlerConfig(const NKikimrConfig::TSharedReadingConfig& rowDispatcherConfig, NActors::TActorId compileServiceId);
 
 namespace NTests {
 

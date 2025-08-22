@@ -3,6 +3,11 @@
 
 #include "row_dispatcher.h"
 
+namespace NKikimrConfig {
+class TSharedReadingConfig;
+} // namespace NKikimrConfig
+
+
 namespace NFq {
 
 using namespace NActors;
@@ -10,7 +15,7 @@ using namespace NActors;
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewRowDispatcherService(
-    const NConfig::TRowDispatcherConfig& config,
+    const NKikimrConfig::TSharedReadingConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -33,6 +38,11 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
         pqGateway,
         nodesManagerId,
         monitoring);
+}
+
+NActors::TActorId RowDispatcherServiceActorId() {
+    constexpr TStringBuf name = "ROW_DISP_DP";
+    return NActors::TActorId(0, name);
 }
 
 } // namespace NFq

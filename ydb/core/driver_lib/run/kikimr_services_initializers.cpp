@@ -173,6 +173,7 @@
 
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/logs/log.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
@@ -2215,32 +2216,37 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        // const auto& sharedReading = Config.GetQueryServiceConfig().GetSharedReading();
-        // if (sharedReading.GetEnabled()) {
-        //     NYql::TPqGatewayServices pqServices(
-        //         YqSharedResources->UserSpaceYdbDriver,
-        //         nullptr,
-        //         nullptr,
-        //         std::make_shared<NYql::TPqGatewayConfig>(),
-        //         nullptr,
-        //         nullptr,
-        //         commonTopicClientSettings
-        //     );
-        //     auto service = NFq::NewRowDispatcherService(
-        //         protoConfig.GetRowDispatcher(),
-        //         NKikimr::CreateYdbCredentialsProviderFactory,
-        //         YqSharedResources,
-        //         credentialsFactory,
-        //         tenant,
-        //         yqCounters->GetSubgroup("subsystem", "row_dispatcher"),
-        //         pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
-        //         appData->Mon,
-        //         appData->Counters);
+        const auto& sharedReading = Config.GetQueryServiceConfig().GetSharedReading();
+        if (sharedReading.GetEnabled()) {
+            NFq::TYqSharedResources::TPtr yqSharedResources = NFq::TYqSharedResources::Cast(YqSharedResources);
 
-        //     setup->LocalServices.push_back(std::make_pair(
-        //         NFq::RowDispatcherServiceActorId(),
-        //         TActorSetupCmd(service.release(), TMailboxType::HTSwap, appData->UserPoolId)));
-        // }
+            NYql::TPqGatewayServices pqServices(
+                yqSharedResources->UserSpaceYdbDriver,
+                nullptr,
+                nullptr,
+                std::make_shared<NYql::TPqGatewayConfig>(),
+                nullptr,
+                nullptr
+               // commonTopicClientSettings
+            );
+           // FederatedQuerySetup = federatedQuerySetupFactory->Make(ctx.ActorSystem());
+
+            auto service = NFq::NewRowDispatcherService(
+                Config.GetQueryServiceConfig().GetSharedReading(),
+                NKikimr::CreateYdbCredentialsProviderFactory,
+                yqSharedResources,
+                nullptr, //credentialsFactory, todo
+                "tenant",
+                appData->Counters->GetSubgroup("subsystem", "row_dispatcher"),
+                CreatePqNativeGateway(pqServices),
+                NActors::TActorId{},
+                appData->Mon,
+                appData->Counters);
+
+            setup->LocalServices.push_back(std::make_pair(
+                NFq::RowDispatcherServiceActorId(),
+                TActorSetupCmd(service.release(), TMailboxType::HTSwap, appData->UserPoolId)));
+        }
     }
 }
 

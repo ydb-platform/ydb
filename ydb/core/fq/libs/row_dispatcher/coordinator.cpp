@@ -172,7 +172,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
         TTopicMetrics Metrics;
     };
 
-    NConfig::TRowDispatcherCoordinatorConfig Config;
+    NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
     TYqSharedResources::TPtr YqSharedResources;
     TActorId LocalRowDispatcherId;
     NActors::TActorId NodesManagerId;
@@ -189,7 +189,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 public:
     TActorCoordinator(
         NActors::TActorId localRowDispatcherId,
-        const NConfig::TRowDispatcherCoordinatorConfig& config,
+        const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
         const TYqSharedResources::TPtr& yqSharedResources,
         const TString& tenant,
         const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -236,7 +236,7 @@ private:
 
 TActorCoordinator::TActorCoordinator(
     NActors::TActorId localRowDispatcherId,
-    const NConfig::TRowDispatcherCoordinatorConfig& config,
+    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -544,7 +544,7 @@ void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorReques
 
 std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
-    const NConfig::TRowDispatcherCoordinatorConfig& config,
+    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,

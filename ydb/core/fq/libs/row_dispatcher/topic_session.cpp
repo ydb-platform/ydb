@@ -248,7 +248,7 @@ private:
     const NYdb::TDriver Driver;
     const NYql::IPqGateway::TPtr PqGateway;
     const std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    const NConfig::TRowDispatcherConfig Config;
+    const NKikimrConfig::TSharedReadingConfig Config;
     const TFormatHandlerConfig FormatHandlerConfig;
     const i64 BufferSize;
     TString LogPrefix;
@@ -282,7 +282,7 @@ public:
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
-        const NConfig::TRowDispatcherConfig& config,
+        const NKikimrConfig::TSharedReadingConfig& config,
         TActorId rowDispatcherActorId,
         TActorId compileServiceActorId,
         ui32 partitionId,
@@ -364,7 +364,7 @@ TTopicSession::TTopicSession(
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
-    const NConfig::TRowDispatcherConfig& config,
+    const NKikimrConfig::TSharedReadingConfig& config,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
     ui32 partitionId,
@@ -973,7 +973,7 @@ std::unique_ptr<IActor> NewTopicSession(
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
-    const NConfig::TRowDispatcherConfig& config,
+    const NKikimrConfig::TSharedReadingConfig& config,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
     ui32 partitionId,

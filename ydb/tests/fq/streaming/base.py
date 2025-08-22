@@ -34,6 +34,18 @@ class StreamingImportTestBase(object):
         config.yaml_config["query_service_config"]["available_external_data_sources"] = ["ObjectStorage", "Ydb"]
         config.yaml_config["log_config"]["default_level"] = 7
 
+        config.yaml_config["query_service_config"]["shared_reading"] = {}
+        config.yaml_config["query_service_config"]["shared_reading"]["enabled"] = True
+        config.yaml_config["query_service_config"]["shared_reading"]["without_consumer"] = True
+        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"] = {}
+        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["coordination_node_path"] = "path"
+        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["local_mode"] = False
+        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["database"] = {}
+        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["endpoint"] = os.getenv("YDB_ENDPOINT")
+        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["database"] = os.getenv("YDB_DATABASE")
+
+        
+
         return config
 
     @classmethod

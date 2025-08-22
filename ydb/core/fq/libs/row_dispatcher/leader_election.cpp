@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -94,7 +96,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
         WaitSemaphoreCreated,
         Started
     };
-    NFq::NConfig::TRowDispatcherCoordinatorConfig Config;
+    NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
     const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TYdbConnectionPtr YdbConnection;
@@ -124,7 +126,7 @@ public:
     TLeaderElection(
         NActors::TActorId parentId,
         NActors::TActorId coordinatorId,
-        const NConfig::TRowDispatcherCoordinatorConfig& config,
+        const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const TYqSharedResources::TPtr& yqSharedResources,
         const TString& tenant,
@@ -172,7 +174,7 @@ private:
 TLeaderElection::TLeaderElection(
     NActors::TActorId parentId,
     NActors::TActorId coordinatorId,
-    const NConfig::TRowDispatcherCoordinatorConfig& config,
+    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,
@@ -476,7 +478,7 @@ void TLeaderElection::HandleException(const std::exception& e) {
 std::unique_ptr<NActors::IActor> NewLeaderElection(
     NActors::TActorId rowDispatcherId,
     NActors::TActorId coordinatorId,
-    const NConfig::TRowDispatcherCoordinatorConfig& config,
+    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     const TString& tenant,

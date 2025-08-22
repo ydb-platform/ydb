@@ -197,7 +197,7 @@ TClientBlob DeserializeClientBlob(const char* data, ui32 size) {
 // TClientBlob
 //
 
-ui32 TClientBlob::GetBlobSize() const {
+ui32 TClientBlob::GetSerializedSize() const {
     return BlobSize(*this);
 }
 

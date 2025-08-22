@@ -47,7 +47,7 @@ struct TClientBlob {
         const TInstant writeTimestamp, const TInstant createTimestamp,
         const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey);
 
-    ui32 GetBlobSize() const;
+    ui32 GetSerializedSize() const;
     ui16 GetPartNo() const;
     ui16 GetTotalParts() const;
     ui16 GetTotalSize() const;

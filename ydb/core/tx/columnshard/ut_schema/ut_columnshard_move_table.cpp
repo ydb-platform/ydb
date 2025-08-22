@@ -39,8 +39,8 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 srcPathId = 1;
-        TestTableDescription testTabe{};
-        auto planStep = PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
         const ui64 dstPathId = 2;
@@ -55,17 +55,35 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 srcPathId = 1;
-        TestTableDescription testTabe{};
-        auto planStep = PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
         std::vector<ui64> writeIds;
-        const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTabe.Schema), testTabe.Schema, true, &writeIds);
+        const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({0, 100}, testTable.Schema), testTable.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), ++txId);
+        {
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(!ok);
+        }
         PlanSchemaTx(runtime, sender, {planStep, txId});
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+        }
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+        }
+
     }
 
     Y_UNIT_TEST_DUO(WithData, Reboot) {
@@ -75,14 +93,14 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 srcPathId = 1;
-        TestTableDescription testTabe{};
-        auto planStep = PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
         std::vector<ui64> writeIds;
         const bool ok =
-            WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTabe.Schema), testTabe.Schema, true, &writeIds);
+            WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
         planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
         PlanCommit(runtime, sender, planStep, txId);
@@ -101,7 +119,7 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
-            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTabe.Schema));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
@@ -109,7 +127,7 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
-            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTabe.Schema));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
         }
@@ -123,8 +141,8 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 srcPathId = 1;
-        TestTableDescription testTabe{};
-        const auto& planStep = PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        TestTableDescription testTable{};
+        const auto& planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
         Y_UNUSED(planStep);
 
         const ui64 absentPathId = 111;
@@ -140,8 +158,8 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 srcPathId = 1;
-        TestTableDescription testTabe{};
-        const auto& planStep = PrepareTablet(runtime, srcPathId, testTabe.Schema);
+        TestTableDescription testTable{};
+        const auto& planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
         Y_UNUSED(planStep);
         ui64 txId = 10;
         ProposeSchemaTxFail(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, srcPathId, 1), ++txId);

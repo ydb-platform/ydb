@@ -62,7 +62,7 @@ const TIncrementalBackupResponse::TMetadata& TIncrementalBackupResponse::Metadat
 TBackupCollectionRestoreResponse::TBackupCollectionRestoreResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
      : TOperation(std::move(status), std::move(operation))
 {
-    Ydb::Backup::IncrementalRestoreMetadata metadata;
+    Ydb::Backup::RestoreMetadata metadata;
     GetProto().metadata().UnpackTo(&metadata);
 
     Metadata_.Progress = FromProto(metadata.progress());

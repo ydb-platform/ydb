@@ -29,12 +29,12 @@ struct TBackupCollectionRestoreConv: public TOperationConv<NKikimrBackup::TBacku
         }
 
         operation.set_id(NOperationId::ProtoToString(MakeOperationId(in.GetId())));
-        Ydb::Backup::IncrementalRestoreMetadata metadata;
+        Ydb::Backup::RestoreMetadata metadata;
         metadata.set_progress(in.GetProgress());
         metadata.set_progress_percent(in.GetProgressPercent());
         operation.mutable_metadata()->PackFrom(metadata);
 
-        Ydb::Backup::IncrementalRestoreResult result;
+        Ydb::Backup::RestoreResult result;
         operation.mutable_result()->PackFrom(result);
 
         return operation;

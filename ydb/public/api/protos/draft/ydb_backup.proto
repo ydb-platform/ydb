@@ -208,10 +208,10 @@ message RestoreProgress {
     }
 }
 
-message IncrementalRestoreMetadata {
+message RestoreMetadata {
     RestoreProgress.Progress progress = 1;
     int32 progress_percent = 2 [(Ydb.value) = "[0; 100]"];
 }
 
-message IncrementalRestoreResult {
+message RestoreResult {
 }

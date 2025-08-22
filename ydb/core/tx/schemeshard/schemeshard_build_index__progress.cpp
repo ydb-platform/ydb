@@ -2026,6 +2026,11 @@ struct TSchemeShard::TIndexBuilder::TTxReplyValidateUniqueIndex: public TTxShard
 
         Self->PersistBuildIndexShardRange(db, BuildId, shardIdx, shardStatus);
     }
+
+    TBillingStats GetBillingStats() const override {
+        const auto& stats = Response->Get()->Record.GetMeteringStats();
+        return {stats.GetUploadRows(), stats.GetUploadBytes(), stats.GetReadRows(), stats.GetReadBytes()};
+    }
 };
 
 struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDataShard::TEvBuildIndexProgressResponse> {
